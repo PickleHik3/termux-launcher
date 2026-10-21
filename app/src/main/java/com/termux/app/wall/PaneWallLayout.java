@@ -2704,8 +2704,8 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * How far a Workspace page starts below the wall's top (PageTopInsets.workspaceTopInsetPx):
      * the status bar's band while the canvas reaches up under the bar, so the terminal and the
-     * display window keep their place on screen whichever way the canvas stands, while a Home
-     * page starts at the top. 0 while the canvas stands below the bar.
+     * display window keep their place on screen whichever way the canvas stands; a Home page
+     * starts at {@link #mHomeTopInsetPx}. 0 while the canvas stands below the bar.
      */
     private int mWorkspaceTopInsetPx;
 
@@ -2717,9 +2717,27 @@ public final class PaneWallLayout extends ViewGroup {
         requestLayout();
     }
 
+    /**
+     * How far a Home page starts below the wall's top (PageTopInsets.homeTopInsetPx): the band of
+     * the bar Home wears along the top while the canvas reaches up under it, so Home starts below
+     * its bar as a window's page does (#90), and its top border, where the status swipe starts,
+     * is at the bar's foot. 0 for a Home without a bar along the top, and while the canvas stands
+     * below the bar.
+     */
+    private int mHomeTopInsetPx;
+
+    /** See {@link #mHomeTopInsetPx}. */
+    public void setHomeTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mHomeTopInsetPx) return;
+        mHomeTopInsetPx = inset;
+        requestLayout();
+    }
+
     /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
     private int pageTopInsetPx(@NonNull View child) {
-        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx);
+        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
+            mHomeTopInsetPx);
     }
 
     /** The page {@code child} is registered as, or null for a view that is no page. */

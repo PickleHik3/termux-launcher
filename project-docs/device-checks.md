@@ -28,7 +28,7 @@ under twenty items; past that, the oldest are re-judged first.
   text · emulator, also on an upgraded install whose Home layout was kept (Home's own checked).
 - 2026-10-21 · commit "feat(statusbar): remove the house glyph from the bar" (#92) · The bar on
   the Workspace starts with the window chips, no house glyph, nothing clipped at the left; on Home
-  no house beside the clock and the Workspace's mark peeks in at the far end only · emulator.
+  no house beside the clock (since #90 no place mark at all, see the #90 item) · emulator.
 - 2026-10-21 · commit "feat(dock): the Workspace's dock wears the Dock design" (#93) · Pick each
   design on a window's page → Home and the Workspace dock both wear it (Home layout off); Beads,
   Strip and Tray render with the extra keys row (Beads keep the slab while the extra keys or a
@@ -37,6 +37,13 @@ under twenty items; past that, the oldest are re-judged first.
   with the Home layout on and a different design, the bands and beads ease across the seam; the
   Workspace's Tray now has the tray's glass (rim, shelf, reflection) and, with the apps row next
   to the terminal, its dashes above the slab · emulator.
+- 2026-10-21 · commit "feat(chrome): the status bar on Home with the same window chips" (#90) ·
+  Home shows the launcher bar with the same window chips; a chip on Home slides to its window; ×
+  closes it; status swipe works on Home and the shade still pulls from the top strip; no place
+  marks, no gap beside the clock; the bar does not move on the Home↔window swipe; widgets are
+  not covered (Home starts below the bar, lined up with the window's page across the swipe); the
+  bar's + on Home opens a Workspace window and slides to it · emulator, Home layout off, then on
+  with the bar placed apart.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on

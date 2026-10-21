@@ -43,7 +43,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 9;
+    private static final int MIGRATED = 10;
 
     private Application app;
     private SharedPreferences prefs;
@@ -1202,9 +1202,15 @@ public class PlaceLayoutStoreTest {
         assertFalse("seeded from the normal one", store.arrangementsDiffer(
             LayoutVariant.HOME, LayoutVariant.NORMAL));
 
-        // The status bar and the extra keys are not Home's to wear, so they never count.
-        store.setSlot(PORTRAIT, Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
+        // The extra keys are not Home's to wear, so they never count.
         store.setExtraKeys(PORTRAIT, RowPlacement.HIDDEN);
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        // The status bar is (#90), so where it stands counts.
+        Slot bar = store.slot(PORTRAIT, Element.STATUS);
+        store.setSlot(PORTRAIT, Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
+        assertTrue("the bar moved on one layout",
+            store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
+        store.setSlot(PORTRAIT, Element.STATUS, bar);
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
         // The design is not an arrangement.
         home.setDockStyle(DockStyle.LENS_BEADS);
@@ -1237,7 +1243,7 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void aHomeOnTheSharedLayoutResolvesItLessTheExtraKeysAndTheBar() {
+    public void aHomeOnTheSharedLayoutResolvesItLessTheExtraKeys() {
         PlaceLayoutStore store = store();
         store.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
         store.setDockStyle(DockStyle.LENS_BEADS);
@@ -1251,7 +1257,9 @@ public class PlaceLayoutStoreTest {
             window.dockStyle);
 
         assertTrue(home.slot(Element.EXTRA_KEYS).hidden);
-        assertTrue(home.slot(Element.STATUS).hidden);
+        assertEquals("Home wears the window's bar (#90)", window.slot(Element.STATUS),
+            home.slot(Element.STATUS));
+        assertFalse(home.slot(Element.STATUS).hidden);
         assertEquals(window.slot(Element.APPS), home.slot(Element.APPS));
         assertEquals(window.slot(Element.AZ), home.slot(Element.AZ));
         assertEquals(DockStyle.LENS_BEADS, home.dockStyle);
@@ -1358,6 +1366,46 @@ public class PlaceLayoutStoreTest {
         assertFalse(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
         assertEquals("Home keeps its design", DockStyle.LENS_BEADS,
             store.forVariant(LayoutVariant.HOME).dockStyle());
+    }
+
+    /** The bar Home never wore is no difference, and a kept Home layout wears the window's (#90). */
+    @Test
+    public void aKeptHomeLayoutTakesTheWorkspacesBarOnTheUpgrade() {
+        version8WithHomeAsTheWorkspace()
+            .putString("layout.home.portrait.apps_row", "hidden")
+            .putString("layout.landscape.status_bar", "bottom")
+            .commit();
+        PlaceLayoutStore store = store();
+        assertTrue(store.hasHomeLayout());
+        assertEquals("top", prefs.getString("layout.home.portrait.status_bar", null));
+        assertEquals("bottom", prefs.getString("layout.home.landscape.status_bar", null));
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            assertEquals(orientation.name(),
+                store.resolve(orientation, PaneWallPage.TERMINAL).slot(Element.STATUS),
+                store.resolve(orientation, PaneWallPage.WIDGETS).slot(Element.STATUS));
+        }
+    }
+
+    /** A store already on version 9 with a seeded Home layout: its bar put away becomes the window's. */
+    @Test
+    public void aVersion9HomeLayoutTakesTheWorkspacesBar() {
+        SharedPreferences.Editor editor = prefs.edit().putInt("place.migrated", 9)
+            .putBoolean("place.home_layout", true);
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            String o = orientation.storageValue();
+            editor.putString("layout." + o + ".status_bar", "top")
+                .putString("layout.home." + o + ".status_bar", "hidden")
+                .putString("layout.home." + o + ".apps_row", "top");
+        }
+        editor.commit();
+        PlaceLayoutStore store = store();
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+        assertTrue(store.hasHomeLayout());
+        PlaceLayout home = store.resolve(PORTRAIT, PaneWallPage.WIDGETS);
+        assertFalse(home.slot(Element.STATUS).hidden);
+        assertEquals(Edge.TOP, home.slot(Element.STATUS).edge);
+        assertEquals("the rest of Home's layout is kept", Edge.TOP,
+            home.slot(Element.APPS).edge);
     }
 
     @Test

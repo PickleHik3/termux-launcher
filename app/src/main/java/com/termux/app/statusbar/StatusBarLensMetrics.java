@@ -13,6 +13,11 @@ import java.util.List;
  * each mark is, where it sits, how much ink it carries, and the patch of bar a finger may land on
  * to reach it. {@link StatusBarLensView} paints the answer and hit-tests it; it decides none of it.
  *
+ * <p>Since #90 (decided 2026-10-21) the bar wears no place marks on either half: {@link #marks}
+ * answers none and the row keeps no leading cell for one ({@link #leadingCellWidthPx}). The
+ * sizes and the ink below stay as the lens's vocabulary; the notes that follow are the history
+ * of the marks the bar used to wear.
+ *
  * <p>The movement model lives next door in {@link StatusBarLensPolicy} and is untouched here: a
  * place is one bar-width from its neighbours, the two neighbours rest half past the bar's ends, and
  * a drag carries the arriving mark home as the one at home leaves. What this class adds is the part
@@ -302,11 +307,11 @@ public final class StatusBarLensMetrics {
     }
 
     /**
-     * Every mark the bar shows, in the order the places sit side by side. A place that has left —
-     * dissolved past the end it was travelling towards — is simply absent, and nothing on it can be
-     * drawn or tapped. Home never has one ({@link PaneWallPage#WIDGETS}). A wall of one place —
-     * terminal mode — shows no marks at all: there is nowhere to go, so a mark would be a pager for
-     * nothing.
+     * Every mark the bar shows: none. With the status bar on both halves every place mark went
+     * (decided 2026-10-21, #90): the house, the Workspace's prompt beside the clock and the
+     * Display's. The bar is the clock, the readings and the window chips; the swipe and the home
+     * press are the ways between the places. Kept as the lens's one question so its view paints
+     * and hit-tests nothing without a second rule of its own.
      */
     @NonNull
     public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
@@ -321,83 +326,6 @@ public final class StatusBarLensMetrics {
                                    @NonNull PaneWallPage current, float offsetPx, int wallWidthPx,
                                    @NonNull MarkBuffer buffer) {
         buffer.clear();
-        if (bar.widthPx <= 0 || bar.heightPx <= 0 || wallWidthPx <= 0 || pages.size() < 2) {
-            return buffer.marks();
-        }
-        // The two axes the lens is laid out in: the places queue along the bar's length, and the
-        // line they share runs across it. On a row that is x and y; on a column it is y and x.
-        float alongStart = bar.vertical ? bar.alongStartPx : 0f;
-        float along = (bar.vertical ? bar.heightPx : bar.widthPx) - alongStart
-            - (bar.vertical ? bar.alongEndPx : 0f);
-        float across = bar.vertical ? bar.widthPx : bar.heightPx;
-        if (along <= 0f) return buffer.marks();
-
-        // In the expanded bar the home mark takes the clock's band and its line; its neighbours
-        // share the line, smaller, half past the ends. The compact row is the place's own content
-        // and carries no home mark: there the neighbours alone peek in, and a mark fades as it
-        // arrives at home, so the row is never crowded.
-        float expandedHome = bar.homeSizePx > 0f
-            ? Math.min(bar.dp(ICON_DP), bar.homeSizePx) : bar.dp(ICON_DP);
-        float slotMiddle = bar.bottom
-            ? across - bar.dp(SLOT_HEIGHT_DP) / 2f : bar.dp(SLOT_HEIGHT_DP) / 2f;
-        float expandedLine = bar.homeCenterYPx >= 0f && !bar.vertical ? bar.homeCenterYPx : slotMiddle;
-        float homeSize = lerp(bar.dp(COMPACT_ICON_DP), expandedHome, bar.expansion);
-        float peekSize = lerp(bar.dp(COMPACT_ICON_DP), expandedHome * PEEK_SHARE, bar.expansion);
-        // A column's line is simply its middle: there is no clock band beside the marks there.
-        float line = bar.vertical ? across / 2f : lerp(across / 2f, expandedLine, bar.expansion);
-        float homeX = bar.dp(HOME_X_DP);
-        float slop = bar.dp(TOUCH_SLOP_DP);
-        float minTarget = bar.dp(TOUCH_TARGET_DP);
-
-        for (int index = 0; index < pages.size(); index++) {
-            PaneWallPage page = pages.get(index);
-            // Home wears no mark: the bar starts with its window chips, and the home press and the
-            // swipe are the ways there.
-            if (page == PaneWallPage.WIDGETS) continue;
-            float t = StatusBarLensPolicy.distance(pages, current, page, offsetPx, wallWidthPx);
-            float presence = StatusBarLensPolicy.presence(t);
-            // Whole at home only while the bar is expanded; in the compact row the mark at home is
-            // not there, so an arriving mark dissolves over its last stretch.
-            float alpha = StatusBarLensPolicy.alpha(t) * lerp(presence, 1f, bar.expansion);
-            if (alpha <= VANISHED_ALPHA) continue;
-            // A mark on its way between home and an end takes the size of the end it is nearer, so
-            // the arriving one grows as it takes the home spot and the leaving one shrinks.
-            float size = lerp(homeSize, peekSize, presence) * StatusBarLensPolicy.scale(t);
-            float nearPeek = -size / 2f;
-            float farPeek = along - size / 2f;
-            float travelled = alongStart
-                + StatusBarLensPolicy.iconX(t, homeX, nearPeek, farPeek, size) + size / 2f;
-            float centerX = bar.vertical ? line : travelled;
-            float centerY = bar.vertical ? travelled : line;
-
-            float ink = alpha * inkFor(presence);
-            boolean fades = presence > 0.05f && t != 0f;
-            float fadeOuter = fades ? 1f - FADE_DEPTH * presence : 1f;
-            // The glyph is drawn at the mark's middle, which is halfway along the dissolve: that is
-            // the ink a finger's owner actually has to read.
-            float effectiveInk = ink * (fadeOuter + 1f) / 2f;
-            float glow = alpha * (1f - presence) * bar.expansion;
-            float radius = bar.chipRadiusPx >= 0f
-                ? Math.min(size / 2f, bar.chipRadiusPx * (size / bar.dp(COMPACT_ICON_DP)))
-                : size * FALLBACK_RADIUS_SHARE;
-
-            Mark mark = buffer.next();
-            mark.tile.set(centerX - size / 2f, centerY - size / 2f,
-                centerX + size / 2f, centerY + size / 2f);
-            float[] alongSpan = span(travelled, size / 2f + slop, minTarget,
-                alongStart, alongStart + along, buffer.mAlongSpan);
-            float[] acrossSpan = span(line, size / 2f + slop, minTarget, 0f, across,
-                buffer.mAcrossSpan);
-            if (bar.vertical) {
-                mark.target.set(acrossSpan[0], alongSpan[0], acrossSpan[1], alongSpan[1]);
-            } else {
-                mark.target.set(alongSpan[0], acrossSpan[0], alongSpan[1], acrossSpan[1]);
-            }
-
-            mark.set(page, t, presence, page == current, centerX, centerY, size, radius,
-                size * GLYPH_SHARE, alpha * glyphInkFor(presence), ink,
-                effectiveInk, fadeOuter, glow, fades, t < 0f);
-        }
         return buffer.marks();
     }
 
@@ -424,32 +352,11 @@ public final class StatusBarLensMetrics {
     }
 
     /**
-     * One axis of a target: the mark plus its air, kept inside the bar, and then grown until it is
-     * at least {@code minLength} long. Growth goes the way there is room — inward from an end for
-     * the two neighbours, whose outer halves are past the bar and cannot be touched at all.
+     * What the row keeps clear at its start, from the bar's end, for a mark beside the clock:
+     * nothing, since the bar wears none (#90). The gap it held is closed up.
      */
-    private static float[] span(float center, float half, float minLength, float lo, float hi,
-                                float[] out) {
-        float low = Math.max(lo, center - half);
-        float high = Math.min(hi, center + half);
-        float need = Math.min(minLength, hi - lo);
-        if (high - low >= need) return pair(out, low, high);
-        if (low <= lo) return pair(out, lo, Math.min(hi, lo + need));
-        if (high >= hi) return pair(out, Math.max(lo, hi - need), hi);
-        float extra = (need - (high - low)) / 2f;
-        float grown = Math.max(lo, low - extra);
-        return pair(out, grown, Math.min(hi, grown + need));
-    }
-
-    private static float[] pair(float[] out, float first, float second) {
-        out[0] = first;
-        out[1] = second;
-        return out;
-    }
-
-    /** What the row keeps clear at its start, from the bar's end: the home mark and its gap. */
     public static int leadingCellWidthPx(float density) {
-        return Math.round((HOME_X_DP + ICON_DP + ICON_GAP_DP) * density);
+        return 0;
     }
 
     private static float lerp(float from, float to, float fraction) {
