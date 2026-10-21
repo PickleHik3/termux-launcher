@@ -75,7 +75,9 @@ public class TerminalWindowBarMinimisedDotTest {
         float radius = TerminalWindowBar.WindowItem.MINIMISED_DOT_DP * density / 2f;
         float inset = MinimisedDotDrawable.INSET_DP * density;
         int cx = Math.round(strip.getLeft() + pill.getRight() - inset - radius - bar.getScrollX());
-        int cy = Math.round(strip.getTop() + pill.getTop() + inset + radius);
+        android.graphics.Rect cap = new android.graphics.Rect();
+        pill.getPaint().getTextBounds("H", 0, 1, cap);
+        int cy = Math.round(strip.getTop() + pill.getTop() + pill.getBaseline() + cap.top + radius);
         int dotted = withDot.getPixel(cx, cy);
 
         MinimisedDotDrawable.wear(pill, false);
@@ -84,6 +86,40 @@ public class TerminalWindowBarMinimisedDotTest {
                 + pill.getScrollX() + ": " + Integer.toHexString(dotted) + " against "
                 + Integer.toHexString(bare),
             distance(dotted, bare) > 60);
+    }
+
+    @Test
+    public void aMinimisedPill_keepsItsDotClearOfTheLabel_andAnOpenPillKeepsItsPadding() {
+        TerminalWindowBar bar = attachedBar(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("home", "home").withHomeFloat(0, "home 1")
+                .withMinimised(true));
+        ViewGroup strip = (ViewGroup) bar.chipStripView();
+        TextView open = (TextView) strip.getChildAt(0);
+        TextView pill = (TextView) strip.getChildAt(1);
+        float density = bar.getResources().getDisplayMetrics().density;
+        int extra = MinimisedDotDrawable.extraEndPaddingPx(density);
+
+        int openEnd = open.getPaddingEnd();
+        int pillEnd = pill.getPaddingEnd();
+        MinimisedDotDrawable.wear(open, false);
+        assertTrue("an open pill's padding is unchanged", open.getPaddingEnd() == openEnd);
+        MinimisedDotDrawable.wear(pill, true);
+        assertTrue("wearing again does not grow the padding", pill.getPaddingEnd() == pillEnd);
+        MinimisedDotDrawable.wear(pill, false);
+        assertTrue("dropping the dot gives the extra back", pill.getPaddingEnd() == pillEnd - extra);
+        MinimisedDotDrawable.wear(pill, true);
+        assertTrue("restored", pill.getPaddingEnd() == pillEnd);
+
+        // The label is one centred line in the pill's content box; the dot lies in the padding.
+        float textWidth = pill.getPaint().measureText(pill.getText().toString());
+        float contentWidth = pill.getWidth() - pill.getPaddingStart() - pill.getPaddingEnd();
+        float textRight = pill.getWidth() - pill.getPaddingEnd()
+            - Math.max(0f, (contentWidth - textWidth) / 2f);
+        float dotLeft = pill.getWidth() - MinimisedDotDrawable.INSET_DP * density
+            - TerminalWindowBar.WindowItem.MINIMISED_DOT_DP * density;
+        assertTrue("the dot (left " + dotLeft + ") clears the label (right " + textRight + ")",
+            dotLeft >= textRight);
     }
 
     private static int distance(int a, int b) {
