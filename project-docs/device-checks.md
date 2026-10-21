@@ -13,6 +13,9 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(dock): three numbered designs in the picker" (#98) · Layout editor, dock
+  selected: the picker shows #1 Tray, #2 Beads, #3 Strip, then Search and Drawer; fits at 360 dp,
+  default and Large text (no label ellipsized) · emulator.
 - 2026-10-21 · commit "feat(dock): the Drawer tile is a toggle beside any design" (#97) · Drawer
   tile toggle beside Search (Layout editor, dock selected; Row B fits at 360 dp, the "Drawer" label
   not ellipsized, no Taskbar chip); the tile opens the drawer on Home and in a window, with
