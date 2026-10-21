@@ -91,7 +91,7 @@ public class OneByOneFitTest {
             fontScale(scale);
             for (int[] card : CARDS) {
                 String where = "battery 1x1 " + card[0] + "x" + card[1] + "dp at font " + scale;
-                BuiltinWidgetView view = laidOut(BuiltinWidgetKind.BATTERY, card[0], card[1]);
+                BuiltinWidgetView view = laidOut(BuiltinWidgetKind.DEVICE, card[0], card[1]);
                 BatteryRingView ring = (BatteryRingView) only(view, BatteryRingView.class);
                 assertNotNull(where + ": a ring", ring);
                 int side = px(OneByOneFit.artSide(card[0], card[1], OneByOneFit.INSET_DP));
@@ -120,7 +120,7 @@ public class OneByOneFitTest {
         float[] sizes = new float[FONT_SCALES.length];
         for (int i = 0; i < FONT_SCALES.length; i++) {
             fontScale(FONT_SCALES[i]);
-            BuiltinWidgetView view = laidOut(BuiltinWidgetKind.BATTERY, 89, 149);
+            BuiltinWidgetView view = laidOut(BuiltinWidgetKind.DEVICE, 89, 149);
             BatteryRingView ring = (BatteryRingView) only(view, BatteryRingView.class);
             assertNotNull(ring);
             ring.set(1f, 0xFF00FF00, "100", true);

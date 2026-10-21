@@ -6,8 +6,7 @@
     <string name="builtin_widget_glance">Glance</string>
     <string name="builtin_widget_agenda">Agenda</string>
     <string name="builtin_widget_weather">Weather</string>
-    <string name="builtin_widget_battery">Battery</string>
-    <string name="builtin_widget_system">System</string>
+    <string name="builtin_widget_device">Device</string>
     <string name="builtin_widget_media">Media</string>
     <string name="builtin_widget_notifications">Notifications</string>
     <string name="builtin_widget_tasks">Tasks</string>

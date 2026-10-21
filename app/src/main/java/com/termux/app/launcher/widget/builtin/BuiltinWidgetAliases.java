@@ -60,6 +60,15 @@ public final class BuiltinWidgetAliases {
             ClockWidgetSettings.KEY_SECONDS, ClockWidgetSettings.OFF);
     }
 
+    /**
+     * The Device (#117): the battery widget opens on the battery first, which is how Device always
+     * leads, and the system widget as Device. Neither stored a setting Device reads.
+     */
+    static {
+        alias("battery", BuiltinWidgetKind.DEVICE);
+        alias("system", BuiltinWidgetKind.DEVICE);
+    }
+
     /** Files {@code storedId} as opening {@code kind} with {@code keysAndValues} (key, value, ...). */
     private static void alias(@NonNull String storedId, @NonNull BuiltinWidgetKind kind,
                               @NonNull String... keysAndValues) {
