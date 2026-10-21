@@ -35,7 +35,7 @@ public final class PlaceChromeTravel {
         public final boolean minimal;
         /**
          * Whether the page's layout has a status bar at all: a window's does, a Home page's never
-         * ({@link HomeChromePolicy#statusShownAtRest}), so the bar's content fades out on the way
+         * ({@link com.termux.app.chrome.Dress#wears}), so the bar's content fades out on the way
          * to Home and arrives with the window on the way back.
          */
         public final boolean statusShown;

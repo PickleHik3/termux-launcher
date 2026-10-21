@@ -13,7 +13,7 @@ import java.util.Objects;
  * The Style, Corners and Margin one half of the wall wears (ADR 0008): Home's on the Home pages,
  * the Workspace's on the windows. Corners and Margin are in dp as stored, Corners' -1 being the
  * auto token. A value, so the chrome can tell whether crossing between the halves changes its
- * shape at all ({@link HomeChromePolicy#shapeChanges}).
+ * shape at all ({@link com.termux.app.chrome.Dress#shape} on either side).
  */
 public final class WallHalfShape {
 

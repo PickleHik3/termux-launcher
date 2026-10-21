@@ -113,7 +113,7 @@ public final class PaneWallPolicy {
      * border's own air) and that air ({@code terminalFrameAirPx}). A terminal window keeps its
      * whole margin. The display window's card stands at the opening itself, the margin less the
      * air: the wall asks for it as a page it does not know ({@code null}). A Home page
-     * has no frame (HomeChromePolicy#bordersShown), so it stands at none: it reaches the wall's
+     * has no frame, so it stands at none: it reaches the wall's
      * edge and its content keeps Home's Margin as its own rim, the widget grid's, which makes the
      * air from the screen's edge to the first cell exactly one Margin, as the dock's cards and the
      * Home floats' room have it. Standing it in the opening as well had the grid's rim inside the

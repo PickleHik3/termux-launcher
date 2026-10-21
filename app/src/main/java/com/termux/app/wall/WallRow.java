@@ -141,7 +141,7 @@ public final class WallRow {
     /**
      * The kind of page the wall opens on, known before anything is laid out: the half a
      * recreation saved ({@code savedHalf}, {@link #HALF_HOME} or {@link #HALF_WORKSPACE}), else
-     * the page Start in names. Only the half matters to what the chrome wears (HomeChromePolicy),
+     * the page Start in names. Only the half matters to what the chrome wears (the Dress),
      * so a Workspace half is the window page whether it lands on a terminal window, the display
      * window, or waits for the windows to come back. A half this version does not know opens Home, as
      * {@link #restore} does.
