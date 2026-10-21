@@ -69,8 +69,8 @@ public class NotificationsLayoutPlanTest {
     private static List<float[]> sizes(BuiltinWidgetSpan span) {
         List<float[]> out = new ArrayList<>();
         if (span == BuiltinWidgetSpan.ONE_BY_ONE) {
-            float w = NotificationsLayoutPlanner.ONE_BY_ONE_LOGICAL_WIDTH_DP;
-            out.add(new float[] { w, w * 92f / 88f });
+            out.add(new float[] { 88f, 92f });
+            out.add(new float[] { 57f, 57f });
             return out;
         }
         out.add(new float[] { span.widthDp, span.heightDp });
@@ -112,7 +112,9 @@ public class NotificationsLayoutPlanTest {
                         WidgetLayoutPlan p = plan(span, size[0], size[1], scale, groups,
                             content == 3 ? denied : null);
                         check(p, span + " " + size[0] + "x" + size[1] + " @" + scale + " c" + content);
-                        if (content < 2) assertTrue(p.has("body.0.0"));
+                        if (content < 2 && span != BuiltinWidgetSpan.ONE_BY_ONE) {
+                            assertTrue(p.has("body.0.0"));
+                        }
                     }
                 }
             }
@@ -158,6 +160,14 @@ public class NotificationsLayoutPlanTest {
         assertTrue(p.has("title.0"));
         assertTrue(p.has("body.0.0"));
         assertFalse(p.has("body.0.1"));
+    }
+
+    @Test public void oneByOneIsABellWithTheCountAndTheTopSendersName() {
+        WidgetLayoutPlan p = plan(BuiltinWidgetSpan.ONE_BY_ONE, 88f, 92f, 1f, groups(false), null);
+        assertTrue(p.has("glyph"));
+        assertEquals("6", p.part("header.count").text);
+        assertEquals("Mum", p.part("title.0").text);
+        assertFalse(p.has("body.0.0"));
     }
 
     @Test public void noGroupsDrawsTheNoticeNotRows() {
