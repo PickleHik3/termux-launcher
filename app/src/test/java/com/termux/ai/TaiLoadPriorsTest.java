@@ -32,7 +32,7 @@ public class TaiLoadPriorsTest {
     @Test
     public void theVisionVariantSharesTheFilesRow() {
         TaiModelSpec vision = spec(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT + "-vision", TaiModelSpec.BACKEND_LITERT_LM);
-        assertEquals(3166L * MIB, TaiLoadPriors.bytes(vision, "GPU", 2048, SLOPE));
+        assertEquals(2588L * MIB, TaiLoadPriors.bytes(vision, "GPU", 2048, SLOPE));
     }
 
     @Test

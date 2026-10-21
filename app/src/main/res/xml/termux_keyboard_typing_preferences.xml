@@ -9,6 +9,11 @@
             app:summary="@string/settings_keyboard_tap_correction_summary"
             android:defaultValue="false" />
         <Preference
+            app:key="in_app_keyboard_tap_correction_status"
+            app:persistent="false"
+            app:dependency="in_app_keyboard_tap_correction"
+            app:title="@string/settings_keyboard_tap_correction_status_learning" />
+        <Preference
             app:key="in_app_keyboard_tap_correction_reset"
             app:persistent="false"
             app:title="@string/settings_keyboard_tap_correction_reset_title" />

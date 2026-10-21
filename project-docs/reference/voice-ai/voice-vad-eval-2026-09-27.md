@@ -151,7 +151,7 @@ gain)`); the segment, the level meter and the energy fallback see the audio as c
 `scripts/voice-eval/vads.py` `SileroDecider` still feeds Silero the raw audio, i.e. the "before" row; the probe's
 `GainedSilero` is the app's current decision.
 
-Device checks owed: round 3, check 4 in `device-checks-pending-2026-09-27.md`.
+Device checks owed: the Mic sensitivity item in `project-docs/device-checks.md`.
 
 ---
 

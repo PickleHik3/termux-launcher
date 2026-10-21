@@ -14,13 +14,15 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * The watch's decisions from a table. The floors are the relaxed memory limits': hold 0.75 GiB
- * (tier 1), peak 0.5 GiB (tier 2), the same on every RAM class; unrestricted has none.
+ * (tier 1), peak 0.5 GiB (tier 2), critical 448 MiB (tier 3, the guard that stops a busy model),
+ * the same on every RAM class; unrestricted has none.
  */
 public class TaiPressureWatchTest {
 
     private static final long MB = 1024L * 1024L;
     private static final long HOLD = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED);
     private static final long PEAK = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED);
+    private static final long CRITICAL = TaiLoadBudget.criticalFloorBytes(TaiLoadBudget.Conditions.RELAXED);
     private static final long NOW = 1_700_000_000_000L;
 
     // --- tiers ---------------------------------------------------------------------------------
@@ -37,16 +39,35 @@ public class TaiPressureWatchTest {
         assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(600L * MB, false));
         assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(PEAK, false));
         assertEquals(TaiPressureWatch.Tier.CHAT, tier(PEAK - 1L, false));
-        assertEquals(TaiPressureWatch.Tier.CHAT, tier(200L * MB, false));
+        assertEquals(TaiPressureWatch.Tier.CHAT, tier(CRITICAL, false));
+        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, tier(CRITICAL - 1L, false));
+        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, tier(200L * MB, false));
+    }
+
+    /**
+     * The guard behind the eased budget: 448 MiB, under the peak floor so idle residents go first,
+     * and above Android's own low-memory line on pong (315 MB) by more than one fast poll of the
+     * fastest load pong has shown (~90 MB). Under it, a busy model is stopped without waiting for
+     * Android to say so.
+     */
+    @Test
+    public void underTheCriticalFloorABusyModelIsStoppedBeforeAndroidSaysLowMemory() {
+        assertEquals(448L * MB, CRITICAL);
+        assertTrue(CRITICAL < PEAK);
+        long pongThreshold = 315L * MB;
+        long fastestLoadPerPoll = 90L * MB;
+        assertTrue(CRITICAL - fastestLoadPerPoll > pongThreshold);
+        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, tier(431L * MB, false));
+        assertEquals(TaiPressureWatch.Tier.CHAT, tier(480L * MB, false));
     }
 
     /**
      * The 1.25 x threshold line (394 MB on pong, 315 MB threshold) that used to give up chat is
-     * gone: 400 MB free is tier 2 because it is under the peak floor, and 700 MB is only tier 1.
+     * gone: 480 MB free is tier 2 because it is under the peak floor, and 700 MB is only tier 1.
      */
     @Test
     public void theOldThresholdLineIsGone() {
-        assertEquals(TaiPressureWatch.Tier.CHAT, tier(400L * MB, false));
+        assertEquals(TaiPressureWatch.Tier.CHAT, tier(480L * MB, false));
         assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(700L * MB, false));
     }
 
@@ -54,32 +75,58 @@ public class TaiPressureWatchTest {
     public void lowMemoryIsTheLastTierWhateverTheNumbersSay() {
         assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, tier(5_800L * MB, true));
         assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, tier(0L, true));
-        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, TaiPressureWatch.tier(100L * MB, 0L, 0L, true));
+        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, TaiPressureWatch.tier(100L * MB, 0L, 0L, 0L, true));
     }
 
     @Test
     public void unknownFreeMemorySelectsNothingAndAnUnknownFloorIsNoLine() {
         assertEquals(TaiPressureWatch.Tier.NONE, tier(0L, false));
         assertEquals(TaiPressureWatch.Tier.NONE, tier(-1L, false));
-        assertEquals(TaiPressureWatch.Tier.NONE, TaiPressureWatch.tier(100L * MB, 0L, 0L, false));
-        assertEquals(TaiPressureWatch.Tier.AUXILIARY, TaiPressureWatch.tier(100L * MB, HOLD, 0L, false));
+        assertEquals(TaiPressureWatch.Tier.NONE, TaiPressureWatch.tier(100L * MB, 0L, 0L, 0L, false));
+        assertEquals(TaiPressureWatch.Tier.AUXILIARY, TaiPressureWatch.tier(100L * MB, HOLD, 0L, 0L, false));
     }
 
     /**
-     * Unrestricted, the gate admits loads below both relaxed floors, so the watch must not hold
+     * Unrestricted, the gate admits loads below the relaxed floors, so the watch must not hold
      * those lines either or it would unload what was just admitted: only lowMemory acts.
      */
     @Test
     public void unrestrictedLimitsLeaveTheWatchOnlyLowMemory() {
         long hold = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.UNRESTRICTED);
         long peak = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.UNRESTRICTED);
+        long critical = TaiLoadBudget.criticalFloorBytes(TaiLoadBudget.Conditions.UNRESTRICTED);
         assertEquals(0L, hold);
         assertEquals(0L, peak);
-        assertEquals(TaiPressureWatch.Tier.NONE, TaiPressureWatch.tier(100L * MB, hold, peak, false));
-        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, TaiPressureWatch.tier(100L * MB, hold, peak, true));
+        assertEquals(0L, critical);
+        assertEquals(TaiPressureWatch.Tier.NONE, TaiPressureWatch.tier(100L * MB, hold, peak, critical, false));
+        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, TaiPressureWatch.tier(100L * MB, hold, peak, critical, true));
     }
 
-    /** 250 ms while a load or first prefill runs, 2 s otherwise. */
+    /**
+     * A generation is cancelled and unloaded; a native init cannot be cancelled (it would go on
+     * allocating for the rest of an 11-19 s E4B GPU load), so the runtime process exits.
+     */
+    @Test
+    public void releaseAllEndsTheProcessOnlyDuringANativeInit() {
+        assertEquals(TaiPressureWatch.Stop.EXIT_PROCESS, TaiPressureWatch.stopFor(true));
+        assertEquals(TaiPressureWatch.Stop.UNLOAD, TaiPressureWatch.stopFor(false));
+    }
+
+    /**
+     * After a memory stop, an automatic load of that model on that accelerator waits two minutes, so
+     * the next phrase does not reload into the same pressure; the user asking again never waits.
+     */
+    @Test
+    public void aMemoryStopHoldsAutomaticLoadsBackForTwoMinutes() {
+        long stoppedAt = NOW - 60_000L;
+        assertEquals(120_000L, TaiPressureWatch.PRESSURE_COOLDOWN_MS);
+        assertTrue(TaiPressureWatch.heldBackAfterStop(stoppedAt, NOW, false));
+        assertFalse("tai load is the user asking", TaiPressureWatch.heldBackAfterStop(stoppedAt, NOW, true));
+        assertFalse(TaiPressureWatch.heldBackAfterStop(NOW - TaiPressureWatch.PRESSURE_COOLDOWN_MS, NOW, false));
+        assertFalse("no stop on record", TaiPressureWatch.heldBackAfterStop(0L, NOW, false));
+    }
+
+    /** 250 ms while a model loads, waits for its first token or generates; 2 s otherwise. */
     @Test
     public void theWatchPollsFasterWhileALoadOrFirstPrefillRuns() {
         assertEquals(250L, TaiPressureWatch.pollIntervalMs(true));
@@ -202,7 +249,7 @@ public class TaiPressureWatchTest {
     // --- fixtures ------------------------------------------------------------------------------
 
     private static TaiPressureWatch.Tier tier(long availMem, boolean lowMemory) {
-        return TaiPressureWatch.tier(availMem, HOLD, PEAK, lowMemory);
+        return TaiPressureWatch.tier(availMem, HOLD, PEAK, CRITICAL, lowMemory);
     }
 
     /**

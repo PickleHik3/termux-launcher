@@ -365,6 +365,11 @@
             android:foregroundServiceType="specialUse" />
 
         <service
+            android:name=".app.settings.backup.ModelExportService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <service
             android:name=".ai.TaiRuntimeService"
             android:exported="false"
             android:foregroundServiceType="specialUse"

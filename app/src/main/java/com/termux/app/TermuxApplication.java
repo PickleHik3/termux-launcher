@@ -97,8 +97,12 @@ public class TermuxApplication extends Application {
         // Fold the old per-surface glass values into Base plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
-        if (surfacePreferences != null)
+        if (surfacePreferences != null) {
             surfacePreferences.migrateSurfaceInheritance();
+            // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
+            // still on a shipped Look whose values have since moved takes them now.
+            com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
+        }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
         // Init app wide shell manager

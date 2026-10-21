@@ -14,7 +14,6 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.app.TermuxActivity;
@@ -28,24 +27,19 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
 import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
 import com.termux.app.terminal.inappkeyboard.TapModelStore;
-import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
-import com.termux.shared.termux.TermuxConstants;
+import com.termux.app.terminal.inappkeyboard.touch.LearningGate;
+import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.Set;
-
-import juloo.keyboard2.KeyboardData;
 
 /**
  * Standalone settings page for the built-in terminal keyboard: input method, layouts, typing, and
@@ -61,6 +55,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
     private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
     private static final String KEY_DOCS_KEYS = "keyboard_docs_keys";
+    private static final String LOG_TAG = "KeyboardPreferences";
+    private static final String KEY_TAP_CORRECTION_STATUS = "in_app_keyboard_tap_correction_status";
     private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
     private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
     private static final String KEY_VOICE_MODEL = "keyboard_voice_model";
@@ -133,9 +129,16 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         bindLinkPreference(KEY_DOCS_KEYS, DOCS_KEYS_URL);
         bindLinkPreference(KEY_CREDITS_GITHUB, UPSTREAM_GITHUB_URL);
         bindLinkPreference(KEY_CREDITS_PLAY, UPSTREAM_PLAY_URL);
+        Preference tapStatus = findPreference(KEY_TAP_CORRECTION_STATUS);
+        if (tapStatus != null) {
+            tapStatus.setOnPreferenceClickListener(preference -> {
+                resumeTapCorrectionIfPaused(context);
+                return true;
+            });
+        }
+        refreshTapCorrectionRows();
         Preference tapReset = findPreference(KEY_TAP_CORRECTION_RESET);
         if (tapReset != null) {
-            refreshTapCorrectionSummary(tapReset);
             tapReset.setOnPreferenceClickListener(preference -> {
                 new MaterialAlertDialogBuilder(context)
                     .setTitle(R.string.settings_keyboard_tap_correction_reset_confirm_title)
@@ -144,7 +147,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
                     .setPositiveButton(R.string.settings_keyboard_tap_correction_reset_confirm_action,
                         (dialog, which) -> {
                             TapModelStore.delete(TapCorrectionController.modelFile(context));
-                            refreshTapCorrectionSummary(preference);
+                            refreshTapCorrectionRows();
                             // The running keyboard holds its own copy; it re-reads the file on the
                             // way back.
                             TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
@@ -153,12 +156,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
-
-        Preference customLayout = findPreference("in_app_keyboard_custom_layout");
-        if (customLayout != null) customLayout.setOnPreferenceClickListener(preference -> {
-            validateCustomLayout();
-            return true;
-        });
 
         SegmentedPillPreference voiceEngine = findPreference(KEY_VOICE_ENGINE);
         if (voiceEngine != null) {
@@ -226,48 +223,62 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         polishModel.setSummary(spec == null ? getString(R.string.cleanup_model_automatic_title) : spec.displayName);
     }
 
-    private void refreshTapCorrectionSummary(Preference preference) {
+    /** The status row says learning, active or paused and how much was learned; reset follows. */
+    private void refreshTapCorrectionRows() {
         Context context = getContext();
         if (context == null) return;
-        int taps = Math.round(
-            TapModelStore.load(TapCorrectionController.modelFile(context)).totalTaps());
-        if (taps <= 0)
-            preference.setSummary(R.string.settings_keyboard_tap_correction_reset_summary_none);
-        else
-            preference.setSummary(getResources().getQuantityString(
-                R.plurals.settings_keyboard_tap_correction_reset_summary, taps, taps));
+        TapModelStore store = TapModelStore.load(TapCorrectionController.modelFile(context));
+        int taps = (int) Math.min(Integer.MAX_VALUE, store.tapsLearned());
+        Preference status = findPreference(KEY_TAP_CORRECTION_STATUS);
+        if (status != null) {
+            switch (store.state()) {
+                case LearningGate.STATE_ACTIVE:
+                    status.setTitle(R.string.settings_keyboard_tap_correction_status_active);
+                    status.setSummary(getResources().getQuantityString(
+                        R.plurals.settings_keyboard_tap_correction_reset_summary, taps, taps));
+                    break;
+                case LearningGate.STATE_PAUSED:
+                    status.setTitle(R.string.settings_keyboard_tap_correction_status_paused);
+                    status.setSummary(getResources().getQuantityString(
+                        R.plurals.settings_keyboard_tap_correction_status_paused_summary,
+                        taps, taps));
+                    break;
+                default:
+                    status.setTitle(R.string.settings_keyboard_tap_correction_status_learning);
+                    if (taps <= 0)
+                        status.setSummary(
+                            R.string.settings_keyboard_tap_correction_status_learning_none);
+                    else
+                        status.setSummary(getResources().getQuantityString(
+                            R.plurals.settings_keyboard_tap_correction_status_learning_summary,
+                            taps, taps));
+                    break;
+            }
+        }
+        Preference reset = findPreference(KEY_TAP_CORRECTION_RESET);
+        if (reset != null) {
+            reset.setSummary(taps <= 0
+                ? getString(R.string.settings_keyboard_tap_correction_reset_summary_none)
+                : getString(R.string.settings_keyboard_tap_correction_reset_summary_some));
+        }
     }
 
-    private void validateCustomLayout() {
-        Context context = getContext();
-        if (context == null) return;
-        File file = new File(TermuxConstants.TERMUX_DATA_HOME_DIR_PATH,
-            "keyboard/layout.xml");
-        if (!file.isFile()) {
-            AppNotice.show(context, R.string.settings_custom_layout_missing, true);
+    /** Resume restarts the warm-up and keeps what was learned; nothing happens unless paused. */
+    private void resumeTapCorrectionIfPaused(@NonNull Context context) {
+        File file = TapCorrectionController.modelFile(context);
+        TapModelStore store = TapModelStore.load(file);
+        if (store.state() != LearningGate.STATE_PAUSED)
+            return;
+        store.engine().resume();
+        try {
+            TapModelStore.write(file, store.toJson());
+        } catch (IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to resume tap correction", e);
             return;
         }
-        new Thread(() -> {
-            boolean valid = false;
-            try (FileInputStream input = new FileInputStream(file);
-                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[8192];
-                int total = 0, read;
-                while ((read = input.read(buffer)) != -1) {
-                    total += read;
-                    if (total > TermuxInAppKeyboardLayoutLoader.MAX_LAYOUT_BYTES)
-                        throw new IOException("layout too large");
-                    output.write(buffer, 0, read);
-                }
-                KeyboardData.load_string_exn(
-                    new String(output.toByteArray(), StandardCharsets.UTF_8));
-                valid = true;
-            } catch (Exception ignored) {}
-            final int message = valid ? R.string.settings_custom_layout_valid
-                : R.string.settings_custom_layout_invalid;
-            if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() ->
-                AppNotice.show(context, message, true));
-        }, "keyboard-layout-validation").start();
+        refreshTapCorrectionRows();
+        // The running keyboard holds its own copy; it re-reads the file on the way back.
+        TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
     }
 
     private void updateBuiltInKeyboardRows(boolean enabled) {
@@ -293,6 +304,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (getContext() != null) {
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
             refreshPolishModelSummary(getContext());
+            // The keyboard may have learned more, or paused itself, while the screen was away.
+            refreshTapCorrectionRows();
         }
     }
 

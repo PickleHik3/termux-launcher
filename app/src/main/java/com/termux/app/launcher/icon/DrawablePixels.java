@@ -3,11 +3,14 @@ package com.termux.app.launcher.icon;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.DrawableWrapper;
+import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
 
@@ -17,7 +20,8 @@ import androidx.annotation.Nullable;
 /**
  * Pixel accounting for held drawables: how big the bitmaps inside one really are, what they cost,
  * and rasterising one down when it is larger than anything will ever draw it. Shared by every
- * bounded store that keeps artwork, so they all measure the same way.
+ * bounded store that keeps artwork, so they all measure the same way. Also where pack artwork is
+ * measured and redrawn larger ({@link #scaleAboutCentre}), under the same rules.
  */
 public final class DrawablePixels {
 
@@ -63,6 +67,118 @@ public final class DrawablePixels {
         } catch (RuntimeException | OutOfMemoryError e) {
             // Keeping the original costs memory; failing to produce artwork costs the user an icon.
             return source;
+        }
+    }
+
+    /** {@link #stockIconExtent}, measured once per process; 0 until then. */
+    private static volatile float sStockIconExtent;
+
+    /**
+     * How much of its box a stock icon spans: the system's adaptive-icon mask, drawn and
+     * measured on this device, since that mask is what every adaptive app icon fills. The stock
+     * circle and the squircles reach the edges, so this is 1 on most phones; a mask with a
+     * margin of its own is measured as it is. 1 when it cannot be measured.
+     */
+    public static float stockIconExtent() {
+        float cached = sStockIconExtent;
+        if (cached > 0f) return cached;
+        float measured = visibleExtent(new AdaptiveIconDrawable(
+            new ColorDrawable(Color.BLACK), new ColorDrawable(Color.BLACK)));
+        // Unmeasurable: the whole box, which is what the stock masks fill.
+        if (measured <= 0f) measured = 1f;
+        sStockIconExtent = measured;
+        return measured;
+    }
+
+    /**
+     * How much of its box {@code drawable}'s visible artwork spans along its longer side
+     * ({@link ArtworkFootprint#extent}), drawn square at {@link ArtworkFootprint#MEASURE_PX}; 0
+     * when nothing in it is visible or it cannot be drawn. 72 KB of scratch (the bitmap and its
+     * pixels), given back before it returns.
+     */
+    public static float visibleExtent(@NonNull Drawable drawable) {
+        int size = ArtworkFootprint.MEASURE_PX;
+        try {
+            int[] bounds = ArtworkFootprint.visibleBounds(measurePixels(drawable), size, size);
+            return bounds == null ? 0f : ArtworkFootprint.extent(bounds, size, size);
+        } catch (RuntimeException | OutOfMemoryError e) {
+            return 0f;
+        }
+    }
+
+    /**
+     * How far from the centre of its box anything {@code drawable} draws reaches
+     * ({@link ArtworkFootprint#centredExtent} of its {@link ArtworkFootprint#drawnBounds}), drawn
+     * square at {@link ArtworkFootprint#MEASURE_PX}; 0 when nothing in it is drawn or it cannot be
+     * drawn. What {@link ArtworkFootprint#iconScale} holds one icon to. The same 72 KB of scratch
+     * as {@link #visibleExtent}, given back before it returns.
+     */
+    public static float drawnCentredExtent(@NonNull Drawable drawable) {
+        int size = ArtworkFootprint.MEASURE_PX;
+        try {
+            int[] bounds = ArtworkFootprint.drawnBounds(measurePixels(drawable), size, size);
+            return bounds == null ? 0f : ArtworkFootprint.centredExtent(bounds, size, size);
+        } catch (RuntimeException | OutOfMemoryError e) {
+            return 0f;
+        }
+    }
+
+    /**
+     * {@code source} drawn {@code scale} times larger about the centre of its box
+     * ({@link ArtworkFootprint#placementAboutCentre}): the transparent margin falls outside and the
+     * artwork keeps its place relative to the centre. Done once, when the icon is resolved, so
+     * whatever draws the result pays nothing for it.
+     *
+     * <p>Artwork made of pixels is redrawn into a bitmap no larger than the pixels it already
+     * holds and never above {@link LauncherIconStore#MAX_RETAINED_PX}, the size the store would
+     * keep it at anyway, so it costs no more than it did. A vector stays a vector: it is wrapped
+     * in an inset that reaches past its box, which holds no pixels at all.
+     *
+     * @return {@code source} itself at a scale of 1 or less, or when it cannot be redrawn.
+     */
+    @NonNull
+    public static Drawable scaleAboutCentre(@NonNull Resources resources,
+                                            @NonNull Drawable source, float scale) {
+        if (scale <= 1f) return source;
+        float[] place = ArtworkFootprint.placementAboutCentre(scale);
+        try {
+            int largestBitmap = largestBitmapExtent(source, 0);
+            if (largestBitmap <= 0) {
+                return new InsetDrawable(source, place[0], place[1], 1f - place[2],
+                    1f - place[3]);
+            }
+            int edge = Math.min(largestBitmap, LauncherIconStore.MAX_RETAINED_PX);
+            Bitmap scaled = Bitmap.createBitmap(edge, edge, Bitmap.Config.ARGB_8888);
+            Rect previousBounds = new Rect(source.getBounds());
+            try {
+                source.setBounds(Math.round(place[0] * edge), Math.round(place[1] * edge),
+                    Math.round(place[2] * edge), Math.round(place[3] * edge));
+                source.draw(new Canvas(scaled));
+            } finally {
+                source.setBounds(previousBounds);
+            }
+            return new BitmapDrawable(resources, scaled);
+        } catch (RuntimeException | OutOfMemoryError e) {
+            // Drawn at its own margin is a smaller icon; failing to produce one is no icon.
+            return source;
+        }
+    }
+
+    /** {@code drawable} drawn square at the measuring size, as ARGB pixels. */
+    @NonNull
+    private static int[] measurePixels(@NonNull Drawable drawable) {
+        int size = ArtworkFootprint.MEASURE_PX;
+        Bitmap scratch = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Rect previousBounds = new Rect(drawable.getBounds());
+        try {
+            drawable.setBounds(0, 0, size, size);
+            drawable.draw(new Canvas(scratch));
+            int[] pixels = new int[size * size];
+            scratch.getPixels(pixels, 0, size, 0, 0, size, size);
+            return pixels;
+        } finally {
+            drawable.setBounds(previousBounds);
+            scratch.recycle();
         }
     }
 

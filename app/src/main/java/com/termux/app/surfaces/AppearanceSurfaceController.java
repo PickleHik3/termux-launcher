@@ -76,6 +76,11 @@ import java.util.function.Consumer;
  * hidden, as its Back target; the cover lifts once both stand, and an editor that cannot come up
  * gives way to the Overview. After the window it opens as before. A door that names a page opens
  * that page and ignores the memory.</p>
+ *
+ * <p><b>A relaunch.</b> Android rebuilds the activity for new wallpaper colours, a theme or a font
+ * scale whether or not the surface is up. That is not a leave: {@link #carry} hands where it
+ * stands (direct or not) and the editor's session to the next activity, whose
+ * {@link #reopen} brings it back the same covered way, the session's Undo included.</p>
  */
 public final class AppearanceSurfaceController {
     private static final String LOG_TAG = "AppearanceSurface";
@@ -314,6 +319,47 @@ public final class AppearanceSurfaceController {
          * presentation of another page forgets it. Null forgets it now.
          */
         default void restoreNext(@Nullable AppearanceReturnState state) {}
+
+        /**
+         * The presentation's session as it stands (what Undo and Discard return to, this visit's
+         * Custom, the Look stop), for an activity relaunch to hand to the next activity's editor;
+         * the one handed over by {@link #adoptSessionNext} while it is still waiting to be
+         * presented; null while there is neither.
+         */
+        @Nullable
+        default EditorSession carrySession() {
+            return null;
+        }
+
+        /**
+         * The next presentation continues {@code session} (from {@link #carrySession} on the
+         * activity the system relaunched) instead of starting a new one at the live look: the
+         * same Undo, the same unsaved state. Null forgets it.
+         */
+        default void adoptSessionNext(@Nullable EditorSession session) {}
+    }
+
+    /** An editor's session, opaque to the surface; only the editor that made it reads it. */
+    public interface EditorSession {}
+
+    /**
+     * The surface as it stood when the activity went down for a configuration relaunch (new
+     * wallpaper colours, the theme, the font scale): the page and where on it, whether it was
+     * opened straight into an editor, and the editor's session. The process outlives the
+     * relaunch, so it is handed over in memory ({@link #carry}, {@link #reopen}).
+     */
+    public static final class Relaunch {
+        @NonNull public final AppearanceReturnState where;
+        /** Opened straight into an editor: nothing behind it, Done and Back close. */
+        public final boolean direct;
+        @Nullable public final EditorSession editor;
+
+        public Relaunch(@NonNull AppearanceReturnState where, boolean direct,
+                        @Nullable EditorSession editor) {
+            this.where = where;
+            this.direct = direct;
+            this.editor = editor;
+        }
     }
 
     /** What the surface needs from the activity. */
@@ -465,6 +511,8 @@ public final class AppearanceSurfaceController {
     private boolean mRestoring;
     private boolean mRestoreSettled;
     private boolean mRestoreOverviewBuilt;
+    /** The state the page opening under the cover comes from, while {@link #mRestoring}. */
+    @Nullable private AppearanceReturnState mRestoreState;
     private final List<Animator> mRunning = new ArrayList<>();
 
     public AppearanceSurfaceController(@NonNull Host host, @NonNull Editor editor) {
@@ -539,14 +587,7 @@ public final class AppearanceSurfaceController {
         ViewGroup content = mHost.content();
         if (content == null)
             return;
-        mOpen = true;
-        mToken++;
-        mLeaveRemembered = false;
-        final int token = mToken;
-        mEditor.setOnDone(this::onEditorDone);
-        mEditor.beginSession();
-        FrameLayout view = hostView(content);
-        showScrim(content);
+        FrameLayout view = beginOpen(content);
         if (editorPage) {
             // Straight into an editor: nothing behind it. The backdrop is not covered (it is the
             // frame's picture, scaled), the host takes no touches, the bar eases
@@ -561,15 +602,83 @@ public final class AppearanceSurfaceController {
             mEditor.present(modeOf(page), place, section, 0f, 0f, null);
             return;
         }
-        mDirect = false;
-        mShown = PageId.OVERVIEW;
         // Within the window since the person last left, the surface comes back where they were:
         // the Overview is built on the card it had centred, and an editor page they were on is
         // the first thing shown, presented under the cover with the Overview hidden beneath it
         // as its Back target (never a direct open, which would hide the Wallpaper segment and
         // make Done and Back close).
-        final AppearanceReturnState back =
-            AppearanceReturnState.freshFrom(mHost.readReturnState(), mHost.now());
+        openCovered(view, AppearanceReturnState.freshFrom(mHost.readReturnState(), mHost.now()),
+            false);
+    }
+
+    /** Marks the surface open, begins the session, and adds the host view and the scrim. */
+    @NonNull
+    private FrameLayout beginOpen(@NonNull ViewGroup content) {
+        mOpen = true;
+        mToken++;
+        mLeaveRemembered = false;
+        mEditor.setOnDone(this::onEditorDone);
+        mEditor.beginSession();
+        FrameLayout view = hostView(content);
+        showScrim(content);
+        return view;
+    }
+
+    /**
+     * Where the surface stands, for the activity the system is about to relaunch under it; null
+     * while it is closed. A page still opening under the cover is the page it is opening on.
+     */
+    @Nullable
+    public Relaunch carry() {
+        if (!mOpen)
+            return null;
+        AppearanceReturnState where = mRestoring ? mRestoreState : null;
+        if (where == null) {
+            PageId page = shownPage();
+            if (page == null)
+                return null;
+            AppearanceReturnState.Builder out = new AppearanceReturnState.Builder(page);
+            OverviewPage overview = mOverview;
+            if (overview != null)
+                out.wallpaperSlot(overview.centredSlotName());
+            if (isEditorPage(page) && mEditor.isPresented())
+                mEditor.describe(out);
+            where = out.build(mHost.now());
+        }
+        boolean editorPage = isEditorPage(where.page);
+        return new Relaunch(where, mDirect && editorPage,
+            editorPage ? mEditor.carrySession() : null);
+    }
+
+    /**
+     * Opens the surface the way {@code carried} says it stood when the activity before this one
+     * was relaunched: on that page, with the editor's session continued, under the cover that
+     * lifts once the page stands (no hop, no entrance from the launcher). The window of the
+     * remembered place does not apply: the person never left. False when it could not open.
+     */
+    public boolean reopen(@NonNull Relaunch carried) {
+        if (mOpen)
+            return false;
+        ViewGroup content = mHost.content();
+        if (content == null)
+            return false;
+        boolean editorPage = isEditorPage(carried.where.page);
+        FrameLayout view = beginOpen(content);
+        mEditor.adoptSessionNext(editorPage ? carried.editor : null);
+        openCovered(view, carried.where, carried.direct && editorPage);
+        return true;
+    }
+
+    /**
+     * The covered open: an opaque host with the shared bar on it, the remembered editor page (if
+     * {@code back} names one) presented under it, and the Overview built beneath as its Back
+     * target unless the surface is {@code direct}, where nothing stands behind the editor.
+     */
+    private void openCovered(@NonNull FrameLayout view, @Nullable AppearanceReturnState back,
+                             boolean direct) {
+        final int token = mToken;
+        mDirect = direct;
+        mShown = PageId.OVERVIEW;
         final PageId opening = openingPage(back);
         mEditor.restoreNext(isEditorPage(opening) ? back : null);
         // Every Overview open covers at once (2026-10-05, pong): the opaque host hides the
@@ -589,8 +698,12 @@ public final class AppearanceSurfaceController {
             bar.showWallpaper();
         bar.root().setVisibility(View.VISIBLE);
         applyEditorPage(1f, 1f);
-        if (isEditorPage(opening))
-            beginRestore(opening, token);
+        if (isEditorPage(opening)) {
+            // Nothing stands behind a direct editor: the cover lifts on the editor alone.
+            beginRestore(opening, back, token, direct);
+            if (direct)
+                return;
+        }
         mHost.createOverview(mNavigator, back == null ? null : back.wallpaperSlot, overview -> {
             if (!mOpen || token != mToken || mView != view) {
                 overview.release();
@@ -674,10 +787,12 @@ public final class AppearanceSurfaceController {
      * beneath it. Bounded by {@link #RESTORE_BACKSTOP_MS}: an editor that is up by then is shown
      * as it stands, one that is not gives way to the Overview.
      */
-    private void beginRestore(@NonNull PageId page, int token) {
+    private void beginRestore(@NonNull PageId page, @Nullable AppearanceReturnState state,
+                              int token, boolean noOverview) {
         mRestoring = true;
+        mRestoreState = state;
         mRestoreSettled = false;
-        mRestoreOverviewBuilt = false;
+        mRestoreOverviewBuilt = noOverview;
         FrameLayout view = mView;
         if (view != null) {
             view.postDelayed(() -> {
@@ -733,6 +848,7 @@ public final class AppearanceSurfaceController {
     /** The remembered page stands: the cover lifts off it and the host lets taps through. */
     private void finishRestore() {
         mRestoring = false;
+        mRestoreState = null;
         setTakesTouches(false);
         liftCover();
         if (mQueued != null) {
@@ -747,9 +863,19 @@ public final class AppearanceSurfaceController {
      * before there was a memory, now if it is built, else when it arrives.
      */
     private void fallBackToOverview() {
-        Logger.logWarn(LOG_TAG, "The remembered page could not open; opening on the Overview");
         mRestoring = false;
+        mRestoreState = null;
         mEditor.restoreNext(null);
+        mEditor.adoptSessionNext(null);
+        if (mDirect) {
+            // A direct editor has no Overview to give way to: the surface closes instead, and
+            // what the preferences remember of an earlier leave stays as it was.
+            Logger.logWarn(LOG_TAG, "The editor could not open again; closing the surface");
+            mLeaveRemembered = true;
+            closeNow();
+            return;
+        }
+        Logger.logWarn(LOG_TAG, "The remembered page could not open; opening on the Overview");
         mShown = PageId.OVERVIEW;
         setTakesTouches(true);
         AppearanceEditorPage bar = mEditorPage;
@@ -1431,12 +1557,14 @@ public final class AppearanceSurfaceController {
         if (!mLeaveRemembered)
             rememberWhere();
         mEditor.restoreNext(null);
+        mEditor.adoptSessionNext(null);
         mOpen = false;
         mToken++;
         mTransitioning = false;
         mQueued = null;
         mOverviewStanding = false;
         mRestoring = false;
+        mRestoreState = null;
         mRestoreSettled = false;
         mRestoreOverviewBuilt = false;
         for (Animator a : new ArrayList<>(mRunning))

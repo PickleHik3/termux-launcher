@@ -34,23 +34,28 @@ final class PinnedNotificationIconCache {
     Drawable get(@Nullable String packageName) {
         if (packageName == null || packageName.isEmpty()) return null;
         if (mCache.containsKey(packageName)) return mCache.get(packageName);
-        Drawable icon = load(packageName);
-        mCache.put(packageName, icon);
-        return icon;
+        LauncherIconResolver.ResolvedIcon icon = load(packageName);
+        // A stand-in, drawn while the icon pack is read, is asked again next time.
+        if (!icon.provisional) mCache.put(packageName, icon.drawable);
+        return icon.drawable;
     }
 
-    @Nullable
-    private Drawable load(@NonNull String packageName) {
+    @NonNull
+    private LauncherIconResolver.ResolvedIcon load(@NonNull String packageName) {
+        boolean provisional = false;
         try {
             Intent launch = mContext.getPackageManager().getLaunchIntentForPackage(packageName);
             ComponentName component = launch == null ? null : launch.getComponent();
             if (component != null) {
-                Drawable resolved = mResolver.resolve(new AppRef(packageName, component.getClassName()));
-                if (resolved != null) return resolved;
+                LauncherIconResolver.ResolvedIcon resolved = mResolver.resolveDetailed(
+                    new AppRef(packageName, component.getClassName()), null, null);
+                if (resolved.drawable != null) return resolved;
+                provisional = resolved.provisional;
             }
-            return mContext.getPackageManager().getApplicationIcon(packageName);
+            return new LauncherIconResolver.ResolvedIcon(
+                mContext.getPackageManager().getApplicationIcon(packageName), false, provisional);
         } catch (Exception ignored) {
-            return null;
+            return new LauncherIconResolver.ResolvedIcon(null, false, provisional);
         }
     }
 }

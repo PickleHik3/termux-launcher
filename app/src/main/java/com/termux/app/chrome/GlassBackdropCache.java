@@ -100,6 +100,18 @@ public final class GlassBackdropCache {
          * down is still sampled over the wallpaper it really shows.</p>
          */
         @ColorInt int sampleWallpaper(@NonNull Rect screenRect);
+
+        /**
+         * {@link #sampleWallpaper(Rect)} off the wallpaper as blurred at {@code blurRadiusDp}: the
+         * frame a surface drawn at that radius really shows. A row a few dozen dp tall averages
+         * differently under a 7 dp blur than under a 25 dp one, which mixes the rows above and
+         * below into it. {@link #UNREADABLE} while that radius is not resident. By default the
+         * plain sample, for a sampler that keeps one picture.
+         */
+        @ColorInt
+        default int sampleWallpaper(@NonNull Rect screenRect, int blurRadiusDp) {
+            return sampleWallpaper(screenRect);
+        }
     }
 
     /** What a {@link Sampler} returns when it has nothing: fully transparent, so it cannot be a colour. */
@@ -211,6 +223,18 @@ public final class GlassBackdropCache {
     public int sampleUncached(@NonNull Rect rect) {
         if (mSampler == null || rect.isEmpty()) return UNREADABLE;
         int read = mSampler.sampleWallpaper(rect);
+        return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
+    }
+
+    /**
+     * {@link #sampleUncached(Rect)} off the wallpaper as blurred at {@code blurRadiusDp}
+     * ({@link Sampler#sampleWallpaper(Rect, int)}); {@link #UNREADABLE} while that frame is not
+     * resident.
+     */
+    @ColorInt
+    public int sampleUncached(@NonNull Rect rect, int blurRadiusDp) {
+        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
+        int read = mSampler.sampleWallpaper(rect, blurRadiusDp);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
 

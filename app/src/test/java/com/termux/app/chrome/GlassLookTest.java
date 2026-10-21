@@ -4,11 +4,19 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-/** The glass look: scheme + hairline is untouched, Obsidian tint recolours and washes. */
+/**
+ * The glass look: scheme + hairline is untouched, Obsidian recolours and washes, and the Tint
+ * amount mixes the accent into either ink on one axis: 0 is the ink, 35 the Material blend, 100
+ * the accent's container.
+ */
 public class GlassLookTest {
+
+    private static final int CONTAINER = 0xFF4060C0;
+    private static final int ACCENT = 0xFF6080FF;
 
     @Test
     public void theShippedPairIsTheSharedSchemeLookAndNeverChangesAColour() {
@@ -17,6 +25,8 @@ public class GlassLookTest {
         assertEquals(0x80123456, look.tintBase(0x80123456));
         assertEquals(0x80123456, look.flatTint(0x80123456));
         assertSame(GlassLook.SCHEME, GlassLook.of("nonsense", null));
+        assertSame("the legacy family reads as the scheme ink", GlassLook.SCHEME,
+            GlassLook.of("material", "hairline"));
     }
 
     @Test
@@ -29,26 +39,128 @@ public class GlassLookTest {
     }
 
     @Test
-    public void materialTintLiesBetweenSurfaceAndPrimaryContainerWithTheWash() {
+    public void theTintLooksAmountIsTheMaterialBlendBetweenSurfaceAndContainerWithTheWash() {
         int surface = 0x80202020;
-        int container = 0xFF4060C0;
-        int surfaceTint = 0xFF6080FF;
-        GlassLook look = GlassLook.material(false, container, surfaceTint);
+        GlassLook look = GlassLook.SCHEME.withAmountPercent(GlassLook.TINT_LOOK_PERCENT)
+            .withAccentColors(CONTAINER, ACCENT);
         int out = look.tintBase(surface);
         assertEquals("alpha is kept", 0x80, out >>> 24);
-        for (int shift = 16; shift >= 0; shift -= 8) {
-            int s = (surface >> shift) & 0xFF;
-            int c = (container >> shift) & 0xFF;
-            int o = (out >> shift) & 0xFF;
-            assertTrue("channel moved toward the container, not past the surface tint",
-                o >= Math.min(s, c) && o <= Math.max(Math.max(s, c), (surfaceTint >> shift) & 0xFF));
-        }
         // Blue: 0x20 -> 0x20 + 0.35 * (0xC0 - 0x20) = 88, then 14% toward 0xFF = 111.
         assertEquals(111, out & 0xFF, 1);
         assertEquals(out, look.flatTint(surface));
         assertEquals(0, look.flatTint(0x00123456) >>> 24);
-        // Unresolved material degrades to the scheme behaviour.
-        assertEquals(surface, GlassLook.ofRequested("material", "hairline").tintBase(surface));
+    }
+
+    /** The full amount reaches the container, under the Tint Look's wash and no more of it. */
+    @Test
+    public void theFullAmountIsTheContainerUnderTheTintLooksWash() {
+        int surface = 0x80202020;
+        int out = GlassLook.SCHEME.withAmountPercent(100).withAccentColors(CONTAINER, ACCENT)
+            .tintBase(surface);
+        // Blue: all the way to 0xC0 = 192, then 14% toward 0xFF = 200.8.
+        assertEquals(201, out & 0xFF);
+        // Red: 0x40 = 64, then 14% toward 0x60 = 68.5.
+        assertEquals(68, (out >> 16) & 0xFF, 1);
+        assertEquals(0x80, out >>> 24);
+    }
+
+    /**
+     * Every shipped Look draws the colour it drew before the amount: Clear and Solid at 0 are the
+     * scheme ink, Mist at 0 the Obsidian ink with its wash, and Tint at its amount (35 on the
+     * stretched scale, 100 before it) the Material blend, channel for channel the old formula's.
+     */
+    @Test
+    public void everyShippedLookRendersAsBefore() {
+        int[] bases = {0x80202A44, 0xFF141218, 0x99F2F2F2, 0x2EE6E1E5};
+        // What the build before the amount drew, read off its formulas (Obsidian's ink by the
+        // scheme's brightness; the Material blend at strength 1, float for float), as literals.
+        int[] oldMist = {0x80161822, 0xFF161822, 0x99FFFFFF, 0x2EFFFFFF};
+        int[] oldTint = {0x80334684, 0xFF2C396B, 0x99A8B6E5, 0x2EA1ADDE};
+        for (int i = 0; i < bases.length; i++) {
+            int base = bases[i];
+            assertEquals("Clear and Solid", base, GlassLook.SCHEME.withAmountPercent(0)
+                .withAccentColors(CONTAINER, ACCENT).tintBase(base));
+            GlassLook mist = GlassLook.of("obsidian", "gradient").withAccentColors(CONTAINER, ACCENT);
+            assertEquals("Mist", oldMist[i], mist.tintBase(base));
+            GlassLook tint = GlassLook.SCHEME.withAmountPercent(GlassLook.TINT_LOOK_PERCENT)
+                .withAccentColors(CONTAINER, ACCENT);
+            assertEquals("Tint", oldTint[i], tint.tintBase(base));
+            assertEquals("Tint's flat tint", oldTint[i], tint.flatTint(base));
+        }
+    }
+
+    /** The formula the Material family drew at strength {@code s} before the amount existed. */
+    private static int oldMaterial(int base, float s) {
+        int rgb = 0;
+        for (int shift = 16; shift >= 0; shift -= 8) {
+            float c = (base >> shift) & 0xFF;
+            float p = (CONTAINER >> shift) & 0xFF;
+            float t = (ACCENT >> shift) & 0xFF;
+            float blended = c + (p - c) * (0.35f * s);
+            float washed = blended + (t - blended) * (0.14f * s);
+            rgb |= Math.round(Math.max(0f, Math.min(255f, washed))) << shift;
+        }
+        return (base & 0xFF000000) | rgb;
+    }
+
+    /**
+     * A Material look at strength s is the scheme ink at the stretched amount s x 35 / 100: the
+     * migrations' identity. Exact wherever s x 0.35 is a whole percent; within the rounding of
+     * one percent of the blend elsewhere.
+     */
+    @Test
+    public void aMaterialStrengthIsTheScaledAmountOnTheSchemeInk() {
+        int base = 0xC0202A44;
+        for (int percent = 0; percent <= 100; percent += 20) {
+            assertEquals(percent + "%", oldMaterial(base, percent / 100f), GlassLook.SCHEME
+                .withAmountPercent(GlassLook.amountForLegacyPercent(percent))
+                .withAccentColors(CONTAINER, ACCENT).tintBase(base));
+        }
+        for (int percent = 0; percent <= 100; percent += 5) {
+            int old = oldMaterial(base, percent / 100f);
+            int now = GlassLook.SCHEME.withAmountPercent(GlassLook.amountForLegacyPercent(percent))
+                .withAccentColors(CONTAINER, ACCENT).tintBase(base);
+            for (int shift = 16; shift >= 0; shift -= 8)
+                assertEquals(percent + "% at " + shift, (old >> shift) & 0xFF, (now >> shift) & 0xFF, 2);
+        }
+        assertEquals(35, GlassLook.amountForLegacyPercent(100));
+        assertEquals(14, GlassLook.amountForLegacyPercent(40));
+        assertEquals(0, GlassLook.amountForLegacyPercent(0));
+        assertEquals(18, GlassLook.amountForLegacyPercent(50));
+    }
+
+    @Test
+    public void noAmountOrNoResolvedAccentLeavesTheInk() {
+        int surface = 0x80202A44;
+        GlassLook none = GlassLook.SCHEME.withAccentColors(CONTAINER, ACCENT);
+        assertEquals(surface, none.tintBase(surface));
+        assertEquals(surface, none.flatTint(surface));
+        GlassLook unresolved = GlassLook.SCHEME.withAmountPercent(70);
+        assertTrue(unresolved.needsAccentColors());
+        assertFalse(GlassLook.SCHEME.needsAccentColors());
+        assertEquals("waiting for its colours, the glass draws the ink", surface,
+            unresolved.tintBase(surface));
+    }
+
+    /** The slider is alive from every Look: the accent grows with the amount on both inks. */
+    @Test
+    public void theAccentGrowsWithTheAmountOnEitherInk() {
+        int surface = 0xFF202A44;
+        for (GlassLook look : new GlassLook[] {GlassLook.SCHEME, GlassLook.of("obsidian", "gradient")}) {
+            int previous = look.tintBase(surface) & 0xFF;
+            for (int percent = 10; percent <= 100; percent += 10) {
+                int blue = look.withAmountPercent(percent).withAccentColors(CONTAINER, ACCENT)
+                    .tintBase(surface) & 0xFF;
+                assertTrue(percent + "% is no less tinted than the step before", blue >= previous);
+                previous = blue;
+            }
+            assertTrue("the full amount moves the ink visibly", previous - (look.tintBase(surface)
+                & 0xFF) >= 30);
+        }
+        // Mist in a light theme was white with nowhere to go; the accent now reaches it.
+        GlassLook lightMist = GlassLook.of("obsidian", "gradient").withAmountPercent(100)
+            .withAccentColors(CONTAINER, ACCENT);
+        assertNotEquals(0xFFFFFFFF, lightMist.tintBase(0xFFF2F2F2));
     }
 
     @Test
@@ -64,68 +176,21 @@ public class GlassLookTest {
         assertEquals(0, look.flatTint(0x00202020) >>> 24);
     }
 
-    // ------------------------------------------------------------------------ the tint strength
-
     @Test
-    public void fullStrengthIsTheLookAsItWas() {
-        int surface = 0x80202A44;
-        GlassLook material = GlassLook.material(true, 0xFF4060C0, 0xFF6080FF);
-        assertSame(material, material.withStrengthPercent(100));
-        assertEquals(material.tintBase(surface),
-            material.withStrengthPercent(100).tintBase(surface));
-        assertEquals(material.flatTint(surface), material.withStrength(1f).flatTint(surface));
-        assertSame(GlassLook.SCHEME, GlassLook.SCHEME.withStrengthPercent(100));
-        GlassLook obsidian = GlassLook.of("obsidian", "hairline");
-        assertEquals(obsidian.tintBase(surface), obsidian.withStrength(1f).tintBase(surface));
-        assertEquals(obsidian.flatTint(surface), obsidian.withStrength(1f).flatTint(surface));
-    }
-
-    @Test
-    public void noStrengthLeavesTheMaterialLookAsTheUntintedBase() {
-        int surface = 0x80202A44;
-        GlassLook none = GlassLook.material(false, 0xFF4060C0, 0xFF6080FF).withStrengthPercent(0);
-        assertEquals(surface, none.tintBase(surface));
-        assertEquals(surface, none.flatTint(surface));
-        assertEquals(0, none.flatTint(0x00123456) >>> 24);
-    }
-
-    @Test
-    public void theMaterialTintGrowsWithTheStrength() {
-        int surface = 0xFF202A44;
-        GlassLook full = GlassLook.material(false, 0xFF4060C0, 0xFF6080FF);
-        int previous = surface & 0xFF;
-        for (int percent = 10; percent <= 100; percent += 10) {
-            int blue = full.withStrengthPercent(percent).tintBase(surface) & 0xFF;
-            assertTrue(percent + "% is no less tinted than the step before", blue >= previous);
-            previous = blue;
-        }
-        assertTrue(previous > (surface & 0xFF));
-    }
-
-    @Test
-    public void aLessStrongSchemeOrObsidianTintMovesTowardItsGrey() {
-        int surface = 0x80204080;
-        int grey = Math.round(0.299f * 0x20 + 0.587f * 0x40 + 0.114f * 0x80);
-        int out = GlassLook.SCHEME.withStrengthPercent(0).tintBase(surface);
-        assertEquals("alpha is kept", 0x80, out >>> 24);
-        assertEquals(grey, (out >> 16) & 0xFF, 1);
-        assertEquals(grey, (out >> 8) & 0xFF, 1);
-        assertEquals(grey, out & 0xFF, 1);
-        int half = GlassLook.SCHEME.withStrengthPercent(50).tintBase(surface);
-        assertTrue((half & 0xFF) < 0x80 && (half & 0xFF) > grey);
-
-        GlassLook obsidian = GlassLook.of("obsidian", "hairline").withStrengthPercent(0);
-        int ink = obsidian.tintBase(0x99202020);
-        assertEquals((ink >> 16) & 0xFF, ink & 0xFF);
-        assertEquals((ink >> 8) & 0xFF, ink & 0xFF);
-    }
-
-    @Test
-    public void strengthIsPartOfALooksIdentity() {
-        GlassLook full = GlassLook.of("obsidian", "hairline");
-        assertFalse(full.equals(full.withStrengthPercent(40)));
-        assertEquals(full.withStrengthPercent(40), full.withStrengthPercent(40));
-        assertEquals(0.4f, full.withStrengthPercent(40).strength(), 1e-6f);
-        assertEquals(1f, full.withStrengthPercent(400).strength(), 0f);
+    public void amountAndHueArePartOfALooksIdentity() {
+        GlassLook look = GlassLook.of("obsidian", "hairline");
+        assertSame(look, look.withAmountPercent(0));
+        assertFalse(look.equals(look.withAmountPercent(40)));
+        assertEquals(look.withAmountPercent(40), look.withAmountPercent(40));
+        assertEquals(0.4f, look.withAmountPercent(40).amount(), 1e-6f);
+        assertEquals("clamped", 1f, look.withAmountPercent(400).amount(), 0f);
+        assertEquals(GlassLook.Hue.PRIMARY, GlassLook.of("scheme", "hairline", null).hue);
+        assertEquals(GlassLook.Hue.SECONDARY, GlassLook.of("scheme", "hairline", "secondary").hue);
+        assertEquals(GlassLook.Hue.TERTIARY, GlassLook.of("scheme", "hairline", "tertiary").hue);
+        assertEquals(GlassLook.Hue.PRIMARY, GlassLook.Hue.of("magenta"));
+        GlassLook resolved = look.withAccentColors(CONTAINER, ACCENT);
+        assertFalse("a new hue has to resolve its own colours",
+            resolved.withHue(GlassLook.Hue.TERTIARY).accentResolved);
+        assertNotEquals(GlassLook.SCHEME, GlassLook.of("scheme", "hairline", "tertiary"));
     }
 }

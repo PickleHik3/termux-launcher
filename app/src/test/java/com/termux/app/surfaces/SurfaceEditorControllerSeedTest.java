@@ -26,9 +26,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The Look slider's move to Custom ({@link SurfaceEditorController.SessionCustom}): Custom starts
- * from the Look on screen, this visit's Custom values come back after a Look, and the saved
- * Custom is never what the move applies.
+ * The Look slider's move to Custom ({@link SurfaceEditorController.SessionCustom}): this visit's
+ * Custom values come back after a Look, else the saved Custom, and with neither Custom starts
+ * from the Look on screen.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -99,32 +99,48 @@ public class SurfaceEditorControllerSeedTest {
     }
 
     @Test
-    public void theSavedCustomIsNotWhatTheMoveApplies() {
+    public void aNewVisitsMoveToCustomAppliesTheSavedCustom() {
         SurfacePresets.apply(preferences, mist);
         tweak();
         SurfacePresets.saveCustom(preferences);
-        SurfacePresets.apply(preferences, clear);
-        String onScreen = AppearanceSnapshot.signatureOf(preferences);
+        String saved = AppearanceSnapshot.signatureOf(preferences);
+        SurfacePresets.applyLook(preferences, clear);
         SurfaceEditorController.SessionCustom session = new SurfaceEditorController.SessionCustom();
 
         session.enter(preferences);
 
-        assertEquals(onScreen, AppearanceSnapshot.signatureOf(preferences));
-        assertTrue(SurfacePresets.matches(preferences, clear));
+        assertEquals(saved, AppearanceSnapshot.signatureOf(preferences));
+        assertFalse(SurfacePresets.matches(preferences, clear));
+        assertFalse("as applied, Custom is not touched", session.isTouched(preferences));
     }
 
     @Test
     public void undoForgetsTheVisitsCustomValues() {
         SurfacePresets.apply(preferences, clear);
+        String savedAtOpen = preferences.getSurfaceCustomPreset();
         tweak();
         SurfaceEditorController.SessionCustom session = new SurfaceEditorController.SessionCustom();
         session.leave(preferences);
         SurfacePresets.apply(preferences, mist);
 
+        // What the editor's Undo does: the visit's values and the saved Custom as at open.
         session.clear();
+        preferences.setSurfaceCustomPreset(savedAtOpen);
         session.enter(preferences);
 
         assertTrue(SurfacePresets.matches(preferences, mist));
+    }
+
+    @Test
+    public void aSeedLeftUntouchedIsNotSaved() {
+        SurfacePresets.apply(preferences, clear);
+        SurfaceEditorController.SessionCustom session = new SurfaceEditorController.SessionCustom();
+
+        session.seed(preferences);
+        assertFalse(session.isTouched(preferences));
+        session.leave(preferences);
+
+        assertEquals("", preferences.getSurfaceCustomPreset());
     }
 
     @Test

@@ -273,6 +273,19 @@ public final class TerminalView extends View {
     private final MousePoint mMousePointScratch = new MousePoint();
 
     /**
+     * Whether the gesture now down is reported to the program as touches (DECSET 5523), decided
+     * on its first finger so that a mode flipped mid-gesture never hands the gesture recogniser
+     * half a stream. See {@link #handleTouchReports}.
+     */
+    private boolean mTouchReportsGesture;
+
+    /** Bit {@code id} is set while pointer {@code id} of that gesture is down and reported. */
+    private int mTouchReportPointers;
+
+    /** The text-area pixel each reported pointer was last reported at, by pointer id. */
+    private final int[] mTouchReportLastX = new int[Integer.SIZE], mTouchReportLastY = new int[Integer.SIZE];
+
+    /**
      * Keep track of the time when a touch event leading to sending mouse scroll events started.
      */
     private long mMouseStartDownTime = -1;
@@ -2452,6 +2465,8 @@ public final class TerminalView extends View {
             return false;
         if (mEmulator == null)
             return true;
+        if (handleTouchReports(event))
+            return true;
         final int action = event.getAction();
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
             mSmoothDragActive = false;
@@ -2500,6 +2515,92 @@ public final class TerminalView extends View {
         }
         mGestureRecognizer.onTouchEvent(event);
         return true;
+    }
+
+    /**
+     * Touch reports (DECSET 5523): while the program asked for them, every finger on the text
+     * area goes to it as down, move, up and cancel reports at the pixel mode 1016 would report,
+     * and the terminal does nothing else with the gesture - no hold, no taps, no scrolling, no
+     * selection, no pinch zoom; the program recognises gestures itself. A real mouse is left to
+     * the mouse modes, and a finger that lands outside the text area is not reported at all.
+     *
+     * @return whether the event was this gesture's, and so is consumed.
+     */
+    private boolean handleTouchReports(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mTouchReportsGesture = mRenderer != null && mEmulator.isTouchReportsMode()
+                && !event.isFromSource(InputDevice.SOURCE_MOUSE);
+            mTouchReportPointers = 0;
+            if (mTouchReportsGesture) {
+                if (isSelectingText()) stopTextSelectionMode();
+                // The program owns the whole gesture: a pane-wall page swipe or a parent's pinch
+                // must not take it over halfway and cancel it.
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+            }
+        }
+        if (!mTouchReportsGesture) return false;
+        long time = event.getEventTime();
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_POINTER_DOWN: {
+                int index = event.getActionIndex();
+                int id = event.getPointerId(index);
+                float offsetX = textAreaOffsetX(event.getX(index));
+                float offsetY = textAreaOffsetY(event.getY(index));
+                if (id >= 0 && id < Integer.SIZE && offsetX >= 0 && offsetY >= 0
+                    && offsetX < mEmulator.mColumns * mRenderer.mFontWidth
+                    && offsetY < mEmulator.mRows * mRenderer.mFontLineSpacing) {
+                    mTouchReportPointers |= 1 << id;
+                    reportTouch(TerminalEmulator.TOUCH_DOWN, event, index);
+                }
+                break;
+            }
+            case MotionEvent.ACTION_MOVE:
+                for (int index = 0; index < event.getPointerCount(); index++) {
+                    if (isTouchReported(event.getPointerId(index)))
+                        reportTouch(TerminalEmulator.TOUCH_MOVE, event, index);
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_POINTER_UP: {
+                int index = event.getActionIndex();
+                int id = event.getPointerId(index);
+                if (isTouchReported(id)) {
+                    reportTouch(TerminalEmulator.TOUCH_UP, event, index);
+                    mTouchReportPointers &= ~(1 << id);
+                }
+                break;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                for (int id = 0; id < Integer.SIZE; id++) {
+                    if (!isTouchReported(id)) continue;
+                    mEmulator.sendTouchEvent(TerminalEmulator.TOUCH_CANCEL, id,
+                        mTouchReportLastX[id], mTouchReportLastY[id], time);
+                }
+                mTouchReportPointers = 0;
+                break;
+        }
+        return true;
+    }
+
+    private boolean isTouchReported(int pointerId) {
+        return pointerId >= 0 && pointerId < Integer.SIZE && (mTouchReportPointers & (1 << pointerId)) != 0;
+    }
+
+    /**
+     * Report pointer {@code index} of {@code event} where it is now; a move that stays on the
+     * pixel it was last reported at is no news and is not sent. Historical samples are dropped:
+     * the program gets the latest position of each event.
+     */
+    private void reportTouch(int kind, MotionEvent event, int index) {
+        int id = event.getPointerId(index);
+        MousePoint at = pointAt(event.getX(index), event.getY(index), mMousePointScratch);
+        if (kind == TerminalEmulator.TOUCH_MOVE && at.pixelX == mTouchReportLastX[id]
+            && at.pixelY == mTouchReportLastY[id]) return;
+        mTouchReportLastX[id] = at.pixelX;
+        mTouchReportLastY[id] = at.pixelY;
+        mEmulator.sendTouchEvent(kind, id, at.pixelX, at.pixelY, event.getEventTime());
     }
 
     /** A middle click or the accessibility action: the client pastes, as for every other paste. */

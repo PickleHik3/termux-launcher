@@ -80,6 +80,7 @@ public interface PaneSurfaceStyle {
     default boolean paneAttentionPulses() { return true; }
     /** True while {@link #paneGlassRim} would answer, so a re-dress asks for a drawable only then. */
     default boolean paneGlassRimWanted() { return false; }
+
     /** Corner radius of a pane slab, in px. */
     float paneGlassCornerRadiusPx();
     /**
@@ -127,4 +128,14 @@ public interface PaneSurfaceStyle {
      * below API 33. One look for every surface; a slab only applies it at its own corner radius.
      */
     @Nullable default com.termux.app.chrome.GlassRefraction.Look paneGlassRefraction() { return null; }
+
+    /**
+     * Fancier Glass's edge clarity: a clearer frame of the same rect as
+     * {@link #paneGlassBlurFrame()} (the blur cache's one rect at
+     * {@link com.termux.app.chrome.GlassRefraction#CLARITY_RADIUS_DP}) that the slab's bent edge
+     * shows in place of the frost, or null for none — the default, while the look has no clarity,
+     * and while that blur is still in flight. Whoever answers this keeps the frame from being
+     * recycled while a slab holds it, as for the frame itself.
+     */
+    @Nullable default android.graphics.Bitmap paneGlassClearFrame() { return null; }
 }

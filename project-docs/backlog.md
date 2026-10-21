@@ -34,17 +34,12 @@ Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, 
 
 | Item | Size | State |
 |---|---|---|
-| Appearance and Layout editor | L | Spec approved 2026-09-30: `active/appearance-layout-editor/SPEC.md`. Items 1 and 2 of its §7 (Layout mode with handles and no rows; layout canvas from the element pack) are unblocked. Items 3–5 (bands for terminal and keyboard, the editor shell, the Looks) follow in order. |
+| Bump the bootstrap for the eMudhra CA revocation | S | **Must reach the next pre drop and the next stable.** Termux revoked the compromised eMudhra/emSign intermediates in ca-certificates 1:2026.10.20 (2026-10-20); the bootstrap pinned in `app/build.gradle` (2026.02.12-r1, same as upstream termux-app) ships an `etc/tls/cert.pem` dated 2025-12-05 that still trusts them, so a fresh install is exposed until `pkg upgrade`. termux-packages cuts bootstraps weekly (newest seen: 2026.10.18-r1, pre-fix); take the first tag after 2026-10-20, update the version and four sha256 lines in `downloadBootstraps`, delete `app/src/main/cpp/bootstrap-*.zip`, rebuild, and confirm `unzip -l` shows a cert.pem dated on or after 2026-10-20. Copy upstream's hashes if they bump first. Existing users: `pkg update && pkg upgrade`. |
+| Rebuild `libmnnllmapp.so` for MNN diffusion | S | CI or the local recipe, then update the SHA lines in `app/src/main/jniLibs/arm64-v8a/README.md`. Until then image routes answer `501 mnn_image_unavailable`. Record: `reference/voice-ai/mnn-diffusion.md`; its device checks are in `device-checks.md`. |
 
-There is no other unblocked implementation slice left from the feasibility study. The remaining projects
-below are gated on measurements, concrete client demand, security/UX design, or an explicit product
-decision.
-
-## Planned for the next release
-
-| Item | Size | State |
-|---|---|---|
-| In-app animated wallpapers over a live shared frame | L | Moved to the next release on 2026-09-30. Now being built under [#41](https://github.com/PickleHik3/termux-launcher/issues/41) as generated backgrounds with moments (the ten pre-made ones were removed 2026-10-04; living stills are the only animated backgrounds now) and a Material palette, gated behind Fancier Glass (API 34 is its own floor). The specs are `active/animated-wallpaper/SPEC.md` and `generated-backgrounds-issue.md`. Phase 0 (spec §10) comes first: a throwaway prototype whose numbers are measured on the real build on pong, and they decide whether the rest is kept. Spec questions 5, 6 and 8–11 are still open. |
+There is no other unblocked implementation slice left from the feasibility study. The remaining
+projects below are gated on measurements, concrete client demand, security/UX design, or an
+explicit product decision.
 
 ## Deferred on purpose
 
@@ -52,6 +47,7 @@ Not "forgotten" — each has a stated reason to wait.
 
 | Item | Size | Why it waits |
 |---|---|---|
+| Scrollback position across session switches (upstream termux-app 74ab5126c) | S | Upstream caches `TerminalView.mTopRow` on the `TerminalEmulator` (`getTopRow`/`setTopRow`) and restores it in `updateSize()` when the emulator is set, so switching sessions, restarting the activity or opening the soft keyboard keeps the scrollback position instead of snapping to the bottom. Our `TerminalView` keeps `mTopRow` itself and `TerminalEmulator` exposes a `TopRowProvider` (around line 5194) rather than a cached row, so the diff is not a drop-in. To pick up: check what our view does to `mTopRow` on session switch (`TerminalView` ~825, 1006-1039, 2136) and keyboard show/hide, reproduce the snap on pong, then either cache the row per emulator as upstream does or route it through the provider. Diff saved from upstream commit 74ab5126c; also ties into smooth-scroll whole-pixel travel (3aabb3d55). |
 | `androidTest` source set for `terminal-view` | S | `FallbackFontResolver`'s coverage probe is the only font code with no real-`Paint` verification, because the module has only `main` and `test`. The blocker is the missing source set and its build wiring, not the test: once it exists, one instrumentation case per chain-precedence rule plus one `Paint.hasGlyph` fixture covers it. Worth doing before the next font batch rather than after. |
 | Geometric octants and the excluded legacy-computing sub-ranges | M | `U+1CD00-U+1CDE5` (octants, Symbols for Legacy Computing Supplement) is outside the block the geometric batch scoped, and `U+1FB3C-U+1FB6F` (wedges, diagonal fills) plus `U+1FB90-U+1FBFF` (inverse shades, pattern fills, segmented digits) were left to the font. Octants are the valuable half — they are what modern TUI plotters emit — but they need their own `Segments` budget and a genuine 2×4 sub-cell grid, so they are a slice, not a range addition. Wait for a client that emits them. |
 | Iosevka in the font catalog | S | Deliberately dropped: upstream publishes no small per-face artifact, so one family would cost a multi-hundred-megabyte download for four faces. Reopen if upstream ships per-face releases or if the downloader learns partial-archive extraction. |

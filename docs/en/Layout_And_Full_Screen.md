@@ -22,7 +22,7 @@ The canvas fills the editor. Under it is a sheet with two rows:
 
 - **Row A**: the Portrait/Landscape toggle, **Style: Docked / Floating**, and the eye-off **Hidden
   elements** button.
-- **Row B**: **Corners** and **Margin**, or the keyboard's tools while the keyboard is selected.
+- **Row B**: **Corner radius** and **Margin**, or the keyboard's tools while the keyboard is selected.
 
 On a tablet in landscape the sheet becomes a side pane on the right, as on the other Appearance
 tabs (see [Look and themes](Look_And_Themes.md#appearance)), and the **Move** button beside a
@@ -86,7 +86,7 @@ and split keyboards are on [Keyboard](Keyboard.md).
 
 - **Docked** joins the bars into one flush glass frame, with the content as a rounded insert.
 - **Floating** gives each bar its own card.
-- **Corners** ("Corners · N dp") and **Margin** ("Margin · N dp") apply in both styles.
+- **Corner radius** ("Corner radius · N dp") and **Margin** ("Margin · N dp") apply in both styles.
 
 ## Minimal mode
 

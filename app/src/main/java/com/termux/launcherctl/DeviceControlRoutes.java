@@ -15,6 +15,7 @@ import android.os.Environment;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.ManagedWallpaper;
@@ -337,7 +338,7 @@ final class DeviceControlRoutes {
      * {@code both}. It runs the same file-and-system half the in-app picker does
      * ({@link ManagedWallpaper#apply}), so the launcher's stored wallpaper id and exact-picture
      * copy follow; that half needs no Activity, so the wallpaper is always set. The launcher-side
-     * re-dress goes through {@code setWallpaperModeEnabled}, a broadcast plus a next-resume flag:
+     * re-dress goes through the picker's own in-place apply ({@link #homeWallpaperLanded}):
      * {@code launcher_refresh} is {@code live} when the launcher is running and
      * {@code on_next_open} when it is not (the wallpaper itself is set either way). Blocks for as
      * long as {@code setStream} does, on the server's worker thread.
@@ -391,14 +392,22 @@ final class DeviceControlRoutes {
         if ("not_found".equals(failure)) return error(404, "not_found", "No such file: " + path);
         if (failure != null) return error(500, "wallpaper_failed", "Android refused the wallpaper");
         boolean live = TerminalActionDispatcher.getInstance().isAttached();
-        if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
-            // What the picker does once its apply finishes: the picture is ours again, so turn
-            // wallpaper mode on and have the launcher re-dress (now if running, else on resume).
-            TermuxActivity.setWallpaperModeEnabled(app, true);
-        }
+        homeWallpaperLanded(app, flags);
         return ok().put("target", ManagedWallpaper.targetName(flags))
             .put("width", bounds.width()).put("height", bounds.height())
             .put("launcher_refresh", live ? "live" : "on_next_open");
+    }
+
+    /**
+     * What the picker does once its Home apply finishes, for a set that reached Home: the picture
+     * is ours again, so wallpaper mode goes on and the launcher re-dresses through the picker's
+     * own in-place apply (now if on screen, else on its next resume). A recreate only when the
+     * mode switched on; one while it was already on closed an open Look editor.
+     */
+    @VisibleForTesting
+    static void homeWallpaperLanded(@NonNull Context app, int flags) {
+        if ((flags & WallpaperManager.FLAG_SYSTEM) == 0) return;
+        TermuxActivity.onHomeWallpaperApplied(app, true);
     }
 
     /** {@code {"ok":true,"home_id","lock_id","live","managed",...}}: what is on screen now. */
