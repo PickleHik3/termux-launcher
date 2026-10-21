@@ -4,10 +4,8 @@
     <string name="builtin_widget_group">Termux Launcher</string>
     <string name="builtin_widget_clock">Clock</string>
     <string name="builtin_widget_glance">Glance</string>
-    <string name="builtin_widget_agenda">Agenda</string>
     <string name="builtin_widget_weather">Weather</string>
-    <string name="builtin_widget_battery">Battery</string>
-    <string name="builtin_widget_system">System</string>
+    <string name="builtin_widget_device">Device</string>
     <string name="builtin_widget_media">Media</string>
     <string name="builtin_widget_notifications">Notifications</string>
     <string name="builtin_widget_tasks">Tasks</string>
@@ -36,10 +34,11 @@
     <string name="builtin_widget_settings_save">Save</string>
     <string name="builtin_widget_settings_title">%1$s settings</string>
     <string name="builtin_widget_glass">Glass</string>
-    <string name="builtin_widget_glass_summary">Page follows Widgets on glass in the Look. On or Off sets this widget apart.</string>
+    <string name="builtin_widget_glass_summary">Page follows Widgets on glass in the Look. On or Off sets this widget apart. Bare, on Clock and Weather, draws no card at all.</string>
     <string name="builtin_widget_glass_follow">Page</string>
     <string name="builtin_widget_glass_on">On</string>
     <string name="builtin_widget_glass_off">Off</string>
+    <string name="builtin_widget_glass_bare">Bare</string>
 
     <!-- Settings: the look shared by every built-in widget. -->
     <string name="settings_builtin_widget_style_title">Widget numerals</string>

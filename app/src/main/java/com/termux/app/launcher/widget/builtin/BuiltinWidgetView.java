@@ -547,6 +547,11 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      */
     protected boolean asksBare() { return false; }
 
+    /** Whether this widget's own Glass row says Bare (a kind that offers it asks through here). */
+    protected final boolean bareChosen() {
+        return BuiltinWidgetGlass.choseBare(config.getString(BuiltinWidgetGlass.CONFIG_KEY));
+    }
+
     /** Whether the widget is drawn Bare now; see {@link #asksBare}. */
     public final boolean isBare() { return bareWorn; }
 

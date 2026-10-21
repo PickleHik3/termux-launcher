@@ -46,6 +46,9 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         super(context, BuiltinWidgetKind.WEATHER, services, style);
     }
 
+    /** Bare is this widget's own choice, off by default (its Glass row). */
+    @Override protected boolean asksBare() { return bareChosen(); }
+
     // ----- lifecycle ------------------------------------------------------------------------
 
     @Override protected void onStart() {

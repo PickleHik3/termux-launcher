@@ -51,6 +51,9 @@ public class ClockWidgetView extends BuiltinWidgetView {
         ticker = new ClockWidgetSupport.SecondTicker(services.main(), this::onSecond);
     }
 
+    /** Bare is this widget's own choice, off by default (its Glass row). */
+    @Override protected boolean asksBare() { return bareChosen(); }
+
     // ----- settings -------------------------------------------------------------------------
 
     @NonNull private Bundle settings() { return config(); }

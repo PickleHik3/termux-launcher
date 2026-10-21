@@ -15,10 +15,8 @@ public final class BuiltinWidgetFactory {
         switch (kind) {
             case CLOCK: return new ClockWidgetView(context, services, style);
             case GLANCE: return new GlanceWidgetView(context, services, style);
-            case AGENDA: return new AgendaWidgetView(context, services, style);
             case WEATHER: return new WeatherWidgetView(context, services, style);
-            case BATTERY: return new BatteryWidgetView(context, services, style);
-            case SYSTEM: return new SystemWidgetView(context, services, style);
+            case DEVICE: return new DeviceWidgetView(context, services, style);
             case MEDIA: return new MediaWidgetView(context, services, style);
             case NOTIFICATIONS: return new NotificationsWidgetView(context, services, style);
             case TASKS: return new TasksWidgetView(context, services, style);

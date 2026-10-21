@@ -53,7 +53,7 @@ public class BuiltinWidgetZoomReturnTest {
 
         Labelled(@NonNull Context context, @NonNull BuiltinWidgetServices services,
                  @NonNull BuiltinWidgetStyle style) {
-            super(context, BuiltinWidgetKind.BATTERY, services, style);
+            super(context, BuiltinWidgetKind.DEVICE, services, style);
         }
 
         @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,

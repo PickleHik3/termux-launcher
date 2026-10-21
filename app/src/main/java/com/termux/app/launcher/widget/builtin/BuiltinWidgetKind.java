@@ -18,15 +18,15 @@ public enum BuiltinWidgetKind {
     CLOCK("clock", R.string.builtin_widget_clock, 2, 1),
     /** The first look of the day, drawn Bare: the date and the weather, then one thing that matters. */
     GLANCE("glance", R.string.builtin_widget_glance, 4, 1),
-    AGENDA("agenda", R.string.builtin_widget_agenda, 2, 1),
     WEATHER("weather", R.string.builtin_widget_weather, 2, 1),
-    BATTERY("battery", R.string.builtin_widget_battery, 1, 1),
-    SYSTEM("system", R.string.builtin_widget_system, 2, 1),
+    /** The phone's own state, battery first; {@code battery} and {@code system} open as it. */
+    DEVICE("device", R.string.builtin_widget_device, 2, 1),
     MEDIA("media", R.string.builtin_widget_media, 2, 1),
     NOTIFICATIONS("notifications", R.string.builtin_widget_notifications, 2, 2),
     TASKS("tasks", R.string.builtin_widget_tasks, 2, 2),
     NOTES("notes", R.string.builtin_widget_notes, 2, 2),
-    CALENDAR("calendar.month", R.string.builtin_widget_calendar, 2, 2),
+    /** The one Calendar, events first; {@code agenda} and {@code calendar.month} open as it. */
+    CALENDAR("calendar", R.string.builtin_widget_calendar, 2, 2),
     TERMINAL("terminal", R.string.builtin_widget_terminal, 4, 2);
 
     @NonNull public final String id;
