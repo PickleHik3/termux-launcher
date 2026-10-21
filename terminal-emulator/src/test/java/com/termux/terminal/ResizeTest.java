@@ -215,14 +215,14 @@ public class ResizeTest extends TerminalTestCase {
 		// A prompt parked against the bottom edge, with history to pull down, keeps its distance
 		// from that edge as rows arrive.
 		withTerminalSized(cols, 3).enterString("000\r\n111\r\n222\r\n333\r\n$ ").assertCursorAt(2, 2);
-		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
 		assertInvariants();
 		assertCursorAt(4, 2);
 
 		// A cursor at the top — the screen was just cleared, transcript and all — stays
 		// top-anchored like any terminal, rather than floating mid-screen over blank padding.
 		withTerminalSized(cols, 3).enterString("x\033[2J\033[3J\033[H$ ").assertCursorAt(0, 2);
-		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
 		assertInvariants();
 		assertCursorAt(0, 2);
 	}
@@ -232,7 +232,7 @@ public class ResizeTest extends TerminalTestCase {
 		final int cols = 3;
 		withTerminalSized(cols, 3).enterString("111\r\n222\r\n333\r\n444\r\n$ ").assertCursorAt(2, 2)
 			.assertLinesAre("333", "444", "$  ");
-		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
 		assertInvariants();
 		assertCursorAt(4, 2).assertLinesAre("111", "222", "333", "444", "$  ");
 	}
@@ -242,7 +242,7 @@ public class ResizeTest extends TerminalTestCase {
 		final int cols = 3;
 		withTerminalSized(cols, 3).enterString("a\r\nb\r\n$ ").assertCursorAt(2, 2)
 			.assertLinesAre("a  ", "b  ", "$  ");
-		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
 		assertInvariants();
 		assertCursorAt(2, 2).assertLinesAre("a  ", "b  ", "$  ", "   ", "   ");
 		assertEquals(0, mTerminal.getScreen().getActiveTranscriptRows());
@@ -253,7 +253,7 @@ public class ResizeTest extends TerminalTestCase {
 		final int cols = 3;
 		withTerminalSized(cols, 3).enterString("111\r\n222\r\n333\r\n$ ").assertCursorAt(2, 2)
 			.assertLinesAre("222", "333", "$  ");
-		mTerminal.resize(cols, 6, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		mTerminal.resize(cols, 6, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
 		assertInvariants();
 		assertCursorAt(3, 2).assertLinesAre("111", "222", "333", "$  ", "   ", "   ");
 		assertEquals(0, mTerminal.getScreen().getActiveTranscriptRows());
@@ -263,12 +263,12 @@ public class ResizeTest extends TerminalTestCase {
 	public void testBottomAnchoredShrinkIsUnchanged() {
 		final int cols = 3;
 		withTerminalSized(cols, 5).enterString("111\r\n222\r\n333\r\n444\r\n$ ").assertCursorAt(4, 2);
-		mTerminal.resize(cols, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		mTerminal.resize(cols, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
 		assertInvariants();
 		assertCursorAt(2, 2).assertLinesAre("333", "444", "$  ");
 
 		withTerminalSized(cols, 5).enterString("111\r\n$ ").assertCursorAt(1, 2);
-		mTerminal.resize(cols, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		mTerminal.resize(cols, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
 		assertInvariants();
 		assertCursorAt(1, 2).assertLinesAre("111", "$  ", "   ");
 	}

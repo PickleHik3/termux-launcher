@@ -1633,7 +1633,7 @@ public class TerminalPaneController {
         if (mHostSurfaceResizeDepth == 1) setAllPaneSizeUpdatesPaused(true, false);
     }
 
-    /** Finish a host resize while keeping prompt/content attached to the bottom edge. */
+    /** Finish a host resize; the settled takeover may size to zero height. */
     public void finishHostSurfaceResizeKeepingBottom() {
         if (mHostSurfaceResizeDepth == 0) return;
         mHostSurfaceResizeDepth--;
@@ -5657,7 +5657,7 @@ public class TerminalPaneController {
         return x <= pane.centerX() ? CornerZones.TOP_LEFT : CornerZones.TOP_RIGHT;
     }
 
-    private void setAllPaneSizeUpdatesPaused(boolean paused, boolean keepBottom) {
+    private void setAllPaneSizeUpdatesPaused(boolean paused, boolean allowZeroHeight) {
         if (paused) {
             for (TerminalView view : mPaneViews.values())
                 view.setTerminalSizeUpdatesPaused(true, false);
@@ -5673,7 +5673,7 @@ public class TerminalPaneController {
         // old rows in a shorter cell and the rows past the cell, the prompt among them, were cut.
         visible.addAll(shownHostedFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
-            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, keepBottom, cause);
+            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
             else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
     }

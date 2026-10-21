@@ -1048,11 +1048,6 @@ public final class TerminalEmulator {
     }
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
-        resize(columns, rows, cellWidthPixels, cellHeightPixels, false);
-    }
-
-    public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                       boolean keepCursorAtBottom) {
         boolean cellSizeChanged = mCellWidthPixels != cellWidthPixels || mCellHeightPixels != cellHeightPixels;
         this.mCellWidthPixels = cellWidthPixels;
         this.mCellHeightPixels = cellHeightPixels;
@@ -1066,12 +1061,6 @@ public final class TerminalEmulator {
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
         }
-        // Bottom anchoring exists so a prompt parked against the bottom edge stays on that edge as
-        // the screen grows. A cursor higher up means there is no such prompt — after a
-        // transcript-wiping clear it sits at the top — and anchoring then would float it
-        // mid-screen over rows of fresh blank padding, where every other terminal keeps it
-        // top-anchored. Judged against the pre-resize screen, before mRows moves.
-        keepCursorAtBottom &= mCursorRow >= mRows - 2;
         if (mRows != rows) {
             mRows = rows;
             mTopMargin = 0;
@@ -1088,24 +1077,22 @@ public final class TerminalEmulator {
             mLeftMargin = 0;
             mRightMargin = mColumns;
         }
-        resizeScreen(keepCursorAtBottom);
+        resizeScreen();
         sendInBandResizeReport();
     }
 
     /**
      * Where {@link #resize} to {@code rows} rows, at the same columns, would move the rows now on
      * screen: how many rows down each surviving row lands (negative is up), before any resize has
-     * happened. The bottom anchor is judged the way {@link #resize} judges it, against the cursor
-     * on the screen as it is. 0 when the row count does not change, and 0 on the alternate screen:
+     * happened. 0 when the row count does not change, and 0 on the alternate screen:
      * a shrinking alternate buffer keeps its old ring but wraps it at the new, smaller total, so its
      * rows do not land anywhere stable — the full-screen program repaints after the resize anyway.
      *
      * @see TerminalBuffer#predictRowsOnlyResizeShift
      */
-    public int predictRowsOnlyResizeShift(int rows, boolean keepCursorAtBottom) {
+    public int predictRowsOnlyResizeShift(int rows) {
         if (rows == mRows || rows < 2 || mScreen == mAltBuffer) return 0;
-        keepCursorAtBottom &= mCursorRow >= mRows - 2;
-        return mScreen.predictRowsOnlyResizeShift(rows, mCursorRow, keepCursorAtBottom);
+        return mScreen.predictRowsOnlyResizeShift(rows, mCursorRow);
     }
 
     /**
@@ -1229,14 +1216,10 @@ public final class TerminalEmulator {
     }
 
     private void resizeScreen() {
-        resizeScreen(false);
-    }
-
-    private void resizeScreen(boolean keepCursorAtBottom) {
         final int[] cursor = { mCursorCol, mCursorRow };
         int newTotalRows = (mScreen == mAltBuffer) ? mRows : mMainBuffer.mTotalRows;
         mScreen.resize(mColumns, mRows, newTotalRows, cursor, getStyle(),
-            isAlternateBufferActive(), keepCursorAtBottom);
+            isAlternateBufferActive());
         mCursorCol = cursor[0];
         mCursorRow = cursor[1];
         resetGraphemeTracking();
