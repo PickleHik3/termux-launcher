@@ -165,6 +165,7 @@
         <item>@string/termux_top_pane_clock_style_flip</item>
         <item>@string/termux_top_pane_clock_style_lcd</item>
         <item>@string/termux_top_pane_clock_style_minimal</item>
+        <item>@string/termux_top_pane_clock_style_minimal_medium</item>
         <item>@string/termux_top_pane_clock_style_led</item>
         <item>@string/termux_top_pane_clock_style_tape</item>
         <item>@string/termux_top_pane_clock_style_slab</item>
@@ -173,6 +174,7 @@
         <item>flip</item>
         <item>lcd</item>
         <item>minimal</item>
+        <item>minimal_medium</item>
         <item>led</item>
         <item>tape</item>
         <item>slab</item>
