@@ -72,29 +72,46 @@ public final class DressResolver {
     /** The resolver over the launcher's store, whichever variant's view of it is passed. */
     @NonNull
     public static DressResolver of(@NonNull PlaceLayoutStore places) {
+        return over(() -> places);
+    }
+
+    /**
+     * The resolver over whichever store {@code places} answers each time a dress is asked for:
+     * the activity's, which it builds once the preferences are read and builds again when they
+     * are. While it answers null, the dress of a store with nothing in it.
+     */
+    @NonNull
+    public static DressResolver over(
+            @NonNull java.util.function.Supplier<PlaceLayoutStore> places) {
         return new DressResolver(new Source() {
             @Override public boolean minimal() {
-                return places.isMinimal();
+                PlaceLayoutStore store = places.get();
+                return store != null && store.isMinimal();
             }
 
             @Override public boolean homeLayout() {
-                return places.hasHomeLayout();
+                PlaceLayoutStore store = places.get();
+                return store != null && store.hasHomeLayout();
             }
 
             @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
-                return places.forVariant(layout).dockStyle();
+                PlaceLayoutStore store = places.get();
+                return store != null ? store.forVariant(layout).dockStyle() : DockStyle.GLASS_TRAY;
             }
 
             @Override public boolean searchField(@NonNull LayoutVariant layout) {
-                return places.forVariant(layout).searchField();
+                PlaceLayoutStore store = places.get();
+                return store != null && store.forVariant(layout).searchField();
             }
 
             @Override public boolean drawerTile(@NonNull LayoutVariant layout) {
-                return places.forVariant(layout).drawerTile();
+                PlaceLayoutStore store = places.get();
+                return store != null && store.forVariant(layout).drawerTile();
             }
 
             @NonNull @Override public WallHalfShape shape(boolean home) {
-                return places.halfShape(home);
+                PlaceLayoutStore store = places.get();
+                return store != null ? store.halfShape(home) : WallHalfShape.read(null, home);
             }
         });
     }

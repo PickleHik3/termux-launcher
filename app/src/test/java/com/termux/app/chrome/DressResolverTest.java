@@ -471,4 +471,16 @@ public class DressResolverTest {
         }
     }
 
+    /** The activity's resolver before its store is built: the dress of a store with nothing in it. */
+    @Test
+    public void aResolverOverNoStoreYetDressesAsAnEmptyStore() {
+        DressResolver empty = DressResolver.over(() -> null);
+        for (PaneWallPage page : PaneWallPage.values()) {
+            Dress dress = empty.dressOf(page);
+            assertSame(page.name(), LayoutVariant.NORMAL, dress.layout());
+            assertSame(page.name(), DockStyle.GLASS_TRAY, dress.dockDesign());
+            assertFalse(page.name(), dress.searchField());
+            assertEquals(page.name(), WallHalfShape.read(null, false), dress.shape());
+        }
+    }
 }

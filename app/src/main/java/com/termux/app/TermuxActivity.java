@@ -14359,39 +14359,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * nothing in it.
      */
     private final com.termux.app.chrome.DressResolver mDresses =
-        new com.termux.app.chrome.DressResolver(new com.termux.app.chrome.DressResolver.Source() {
-            @Override public boolean minimal() {
-                return isMinimalMode();
-            }
-
-            @Override public boolean homeLayout() {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null && store.hasHomeLayout();
-            }
-
-            @NonNull @Override public com.termux.app.dock.DockStyle dockDesign(
-                    @NonNull com.termux.app.place.LayoutVariant layout) {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null ? store.forVariant(layout).dockStyle()
-                    : com.termux.app.dock.DockStyle.GLASS_TRAY;
-            }
-
-            @Override public boolean searchField(
-                    @NonNull com.termux.app.place.LayoutVariant layout) {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null && store.forVariant(layout).searchField();
-            }
-
-            @Override public boolean drawerTile(
-                    @NonNull com.termux.app.place.LayoutVariant layout) {
-                PlaceLayoutStore store = placeLayoutStore();
-                return store != null && store.forVariant(layout).drawerTile();
-            }
-
-            @NonNull @Override public com.termux.app.place.WallHalfShape shape(boolean home) {
-                return com.termux.app.place.WallHalfShape.read(mPreferences, home);
-            }
-        });
+        com.termux.app.chrome.DressResolver.over(this::placeLayoutStore);
 
     /** What {@code page} wears now. */
     @NonNull
@@ -14450,8 +14418,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the switch once per revision.
      */
     private boolean homeHoldsOwnLayout() {
-        PlaceLayoutStore store = placeLayoutStore();
-        return store != null && store.hasHomeLayout();
+        return mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS)
+            == com.termux.app.place.LayoutVariant.HOME;
     }
 
     /**
