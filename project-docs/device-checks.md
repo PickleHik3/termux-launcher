@@ -32,6 +32,16 @@ under twenty items; past that, the oldest are re-judged first.
   mode off gives parallax "Needs a wallpaper". Searching "Reduce idle activity" and "Low-memory
   preset" lands on the page. The preset's on/off still restyles the launcher as before; Living glass
   off stops the glass flexing on a page swipe · emulator (API 33+), debug build.
+- 2026-10-21 · commits "feat(chrome): the glass treats an app-only wallpaper as the launcher's
+  own" and "feat(wallpaper): a picture for the launcher alone while it is not the home app" · With
+  another launcher as the home app: Appearance shows one card titled "Termux Launcher" with an
+  unticked round "Also set as phone wallpaper" and its line under it; pick a photo, Done: the
+  phone's home and lock wallpapers are unchanged (`ad -s emu` home and lock screenshots before and
+  after), the launcher draws the picture behind the terminal with no flash of the phone's
+  wallpaper on a cold start or a rotation, every glass blurs it and Fancier Glass can be turned
+  on and refracts it. Tick the box and Done again: the phone's wallpaper changes, and the tick is
+  still there on reopening. Then make Termux Launcher the home app: the Home and Lock pair is
+  back, Home showing the launcher's picture, Lock the phone's own · emulator, debug build.
 - 2026-10-21 · commit "fix(chrome): fullscreen claims the status bar's band over the cutout" ·
   With fullscreen on, the window bar sits at the top edge with no empty band, in the terminal and
   the Display place; with it off, nothing moved. Look at where the camera hole lands on the window

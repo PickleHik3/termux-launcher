@@ -1701,6 +1701,22 @@ public final class TermuxPreferenceConstants {
         public static final String VALUE_WALLPAPER_LOCK_SAME_AS_HOME = "same_as_home";
         public static final String VALUE_WALLPAPER_LOCK_PHOTO = "photo";
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
+
+        /**
+         * The launcher wears a picture of its own: the managed exact copy, set from the picker
+         * while the launcher was not the home app, which Android's home and lock screens never got.
+         * While it is set (and the copy is on disk) the launcher draws that copy itself and the
+         * glass treats it as the managed wallpaper, whatever Android shows.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY = "wallpaper_app_only";
+        public static final boolean DEFAULT_VALUE_WALLPAPER_APP_ONLY = false;
+
+        /**
+         * The picker's "Also set as phone wallpaper", remembered. Offered only while the launcher
+         * is not the home app; ticked, a pick goes to Android's wallpapers as well.
+         */
+        public static final String KEY_WALLPAPER_ALSO_SET_PHONE = "wallpaper_also_set_phone";
+        public static final boolean DEFAULT_VALUE_WALLPAPER_ALSO_SET_PHONE = false;
         
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.

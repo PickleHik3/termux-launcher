@@ -26,8 +26,9 @@ public final class FancierGlassPolicy {
     }
 
     /**
-     * Whether the switch can be flipped: it needs a wallpaper set from inside the launcher, whose
-     * exact pixels the glass can read. With any other wallpaper it is shown disabled, with the hint.
+     * Whether the switch can be flipped: it needs a wallpaper set from inside the launcher (on the
+     * phone, or for the launcher alone), whose exact pixels the glass can read. With any other
+     * wallpaper it is shown disabled, with the hint.
      */
     public static boolean flippable(int sdkInt, boolean managedWallpaperOnScreen) {
         return offered(sdkInt) && managedWallpaperOnScreen;
@@ -38,7 +39,9 @@ public final class FancierGlassPolicy {
      *
      * @param toggleOn                 the stored switch
      * @param managedWallpaperOnScreen the wallpaper on screen is the one the in-app picker set,
-     *                                 and its exact copy is still on disk
+     *                                 and its exact copy is still on disk — on the phone, or the
+     *                                 launcher's app-only picture
+     *                                 ({@link WallpaperSourceFacts#managedOnScreen})
      */
     public static boolean active(int sdkInt, boolean toggleOn, boolean managedWallpaperOnScreen) {
         return flippable(sdkInt, managedWallpaperOnScreen) && toggleOn;

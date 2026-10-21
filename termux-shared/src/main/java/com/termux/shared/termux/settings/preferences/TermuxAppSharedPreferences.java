@@ -3585,6 +3585,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
 
+    /** Whether the launcher's wallpaper is its own picture, not the phone's; see {@code KEY_WALLPAPER_APP_ONLY}. */
+    public boolean isWallpaperAppOnly() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_APP_ONLY);
+    }
+
+    public void setWallpaperAppOnly(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY, value, false);
+    }
+
+    /** The picker's remembered "Also set as phone wallpaper". */
+    public boolean isWallpaperAlsoSetPhone() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_ALSO_SET_PHONE,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_ALSO_SET_PHONE);
+    }
+
+    public void setWallpaperAlsoSetPhone(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_ALSO_SET_PHONE, value, false);
+    }
+
     public int getManagedWallpaperLockId() {
         return SharedPreferenceUtils.getInt(
             mSharedPreferences,

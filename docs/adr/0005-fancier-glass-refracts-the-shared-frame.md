@@ -2,6 +2,7 @@
 status: accepted
 date: 2026-09-28
 amends: 0004 (the surfaces that sample the shared frame may draw it through one AGSL refraction)
+amended-by: 0009 (a picture set for the launcher alone counts as a wallpaper set from inside it)
 ---
 
 # Fancier Glass draws the shared frame through one AGSL refraction, as the paint shader
