@@ -198,12 +198,14 @@ final class TasksLayoutPlanner {
             float areaLeft = inner.left + countW + GAP_L;
             int columns = span.columns == 4 ? 2 : 1;
             float columnW = (inner.right() - areaLeft - GAP_L * (columns - 1)) / columns;
-            int lines = Math.max(1, (int) Math.floor((inner.height + 0.01f) / ROW_DP));
-            float used = Math.min(lines, (rows.size() + columns - 1) / columns) * ROW_DP;
+            // A row is 48 dp; in a card with less than that inside its inset it takes what there is.
+            float rowH = Math.min(ROW_DP, inner.height);
+            int lines = Math.max(1, (int) Math.floor((inner.height + 0.01f) / rowH));
+            float used = Math.min(lines, (rows.size() + columns - 1) / columns) * rowH;
             float rowsTop = inner.top + Math.max(0f, (inner.height - used) / 2f);
             for (int i = 0; i < rows.size() && i < lines * columns; i++) {
                 float left = areaLeft + (i % columns) * (columnW + GAP_L);
-                row(i, rows.get(i), left, rowsTop + (i / columns) * ROW_DP, columnW);
+                row(i, rows.get(i), left, rowsTop + (i / columns) * rowH, columnW, rowH);
             }
         }
 
@@ -252,7 +254,7 @@ final class TasksLayoutPlanner {
                 inner.top + titleH / 2f - addGlyph / 2f, addGlyph, addGlyph), GLYPH_ADD, Ink.MOON));
             int fit = Math.max(0, (int) Math.floor((inner.bottom() - rowsTop + 0.01f) / ROW_DP));
             for (int i = 0; i < rows.size() && i < fit; i++) {
-                row(i, rows.get(i), inner.left, rowsTop + i * ROW_DP, inner.width);
+                row(i, rows.get(i), inner.left, rowsTop + i * ROW_DP, inner.width, ROW_DP);
             }
             // The "+" target: 48 dp square, centred on the header, reaching up into the card's
             // inset; added after the rows so it is over the first row's top corner.
@@ -263,10 +265,10 @@ final class TasksLayoutPlanner {
         // ----- a row -------------------------------------------------------------------------
 
         /** One 48 dp row at {@code left, top}, {@code width} wide. */
-        void row(int index, Row row, float left, float top, float width) {
+        void row(int index, Row row, float left, float top, float width, float rowH) {
             String id = "row." + index + ".";
             float box = Math.min(BOX_DP, width);
-            parts.add(Part.glyph(id + "box", new Box(left, top + (ROW_DP - box) / 2f, box, box),
+            parts.add(Part.glyph(id + "box", new Box(left, top + (rowH - box) / 2f, box, box),
                 row.done ? GLYPH_DONE : GLYPH_OPEN, row.done ? Ink.MOON : Ink.SOFT));
             float labelLeft = left + box + GAP_M;
             float right = left + width;
@@ -278,21 +280,21 @@ final class TasksLayoutPlanner {
                 if (right - dueW - GAP_S - labelLeft >= LABEL_MIN_DP) {
                     float dueH = WidgetTokens.lineDp(sp(Role.LABEL));
                     parts.add(Part.text(id + "due", new Box(right - dueW,
-                        top + (ROW_DP - dueH) / 2f, dueW, dueH), due, Role.LABEL, true,
+                        top + (rowH - dueH) / 2f, dueW, dueH), due, Role.LABEL, true,
                         sp(Role.LABEL), Ink.CAUTION));
                     right -= dueW + GAP_S;
                 }
             }
             float labelW = Math.max(0f, right - labelLeft);
-            parts.add(Part.text(id + "label", new Box(labelLeft, top + (ROW_DP - bodyH) / 2f,
+            parts.add(Part.text(id + "label", new Box(labelLeft, top + (rowH - bodyH) / 2f,
                 labelW, bodyH), row.text, Role.BODY, false, bodySp,
                 row.done ? Ink.SOFT : Ink.STRONG));
             if (row.done) {
                 float drawn = Math.min(labelW, width(row.text, Role.BODY, false));
-                parts.add(Part.rule(id + "strike", new Box(labelLeft, top + ROW_DP / 2f, drawn,
+                parts.add(Part.rule(id + "strike", new Box(labelLeft, top + rowH / 2f, drawn,
                     STRIKE_DP)));
             }
-            parts.add(Part.touch(id + "touch", new Box(left, top, width, ROW_DP)));
+            parts.add(Part.touch(id + "touch", new Box(left, top, width, rowH)));
         }
     }
 }

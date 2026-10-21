@@ -83,7 +83,7 @@ public class BuiltinWidgetFillTest {
             View art = shownArt(view);
             assertNotNull("4x2 art at 366x" + height + "dp", art);
             assertEquals("4x2 art at 366x" + height + "dp keeps the card's height",
-                view.getHeight() - 2 * Math.round(12 * DENSITY), art.getHeight(), 2);
+                view.getHeight() - 2 * Math.round(16 * DENSITY), art.getHeight(), 2);
         }
     }
 
