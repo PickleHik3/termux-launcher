@@ -550,6 +550,45 @@ public class ClockWidgetTest {
             answered, "", kept, new HashMap<>()).get(ClockWidgetSettings.KEY_24_HOUR));
     }
 
+    /**
+     * A widget Bare on a dark wallpaper wears the pale ink, but its gear's chips stand on the
+     * sheet: each face's preview ink is the sheet theme's own and holds 3:1 on the chip's surface,
+     * in a light sheet and a dark one.
+     */
+    @Test public void gearChipsDrawInkForTheirOwnSurface() {
+        int[] themes = {com.google.android.material.R.style.Theme_Material3_Light,
+            com.google.android.material.R.style.Theme_Material3_Dark};
+        for (int theme : themes) {
+            for (boolean paleWidget : new boolean[] {true, false}) {
+                BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
+                BuiltinWidgetStyle widget = BuiltinWidgetStyle.resolve(
+                    new android.view.ContextThemeWrapper(context, paleWidget
+                        ? com.google.android.material.R.style.Theme_Material3_Dark
+                        : com.google.android.material.R.style.Theme_Material3_Light),
+                    BuiltinWidgetStyle.Numerals.SANS, false, null);
+                ClockWidgetView view = new ClockWidgetView(context, services, widget);
+                view.setPreview(true);
+                view.bind(null);
+                Context sheet = new android.view.ContextThemeWrapper(context, theme);
+                BuiltinWidgetView.ConfigField faces = null;
+                for (BuiltinWidgetView.ConfigField field : view.configFields()) {
+                    if (ClockWidgetSettings.KEY_FACE.equals(field.key)) faces = field;
+                }
+                assertNotNull(faces);
+                for (BuiltinWidgetView.ConfigField.Option option : faces.options) {
+                    View chip = faces.tiles.make(sheet, option.value);
+                    if (!(chip instanceof ClockFaceView)) continue;
+                    ClockFaceView face = (ClockFaceView) chip;
+                    double ratio = com.termux.app.chrome.OnGlass.ratio(face.inkForTests(),
+                        face.groundForTests());
+                    assertTrue(option.value + " theme " + theme + " widget pale " + paleWidget
+                        + " ratio " + ratio, ratio >= 3d);
+                }
+                services.destroy();
+            }
+        }
+    }
+
     // ----- Minimal's weight -------------------------------------------------------------------
 
     @Test public void minimalsWeightRowShowsOnlyForMinimal() {

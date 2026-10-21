@@ -98,10 +98,18 @@ public class ClockWidgetView extends BuiltinWidgetView {
         return fields;
     }
 
+    /** The look of a gear chip: the widget's numerals on the sheet's own theme and surface. */
+    @NonNull BuiltinWidgetStyle chipStyle(@NonNull Context sheetContext) {
+        return BuiltinWidgetStyle.resolve(sheetContext, style().numeralsChoice, false,
+            services.host().monoTypeface());
+    }
+
     /** One face of the gear's strip, drawn as itself at the sample time. */
     @NonNull private View previewTile(@NonNull Context context, @NonNull String value) {
         ClockFace face = ClockFace.fromKey(value);
-        ClockFaceView tile = new ClockFaceView(context, style());
+        // The chip stands on the sheet's own surface, not on the wallpaper the widget is Bare on:
+        // its ink comes from the sheet's theme, so it reads on the chip in either theme.
+        ClockFaceView tile = new ClockFaceView(context, chipStyle(context));
         tile.configure(face == null ? ClockWidgetSettings.FALLBACK_FACE : face,
             ClockWidgetSettings.medium(settings()), false, is24(), true, true, sampleNow());
         return tile;
