@@ -76,6 +76,20 @@ public final class BuiltinWidgetGlass {
     }
 
     /**
+     * Whether a widget that asks to be drawn Bare (glossary: Bare) is: its ink straight on the
+     * wallpaper, with no card, rim or slab. Only the widget asks (Glance always, Clock and
+     * Weather by their own choice); nothing of the Look turns it on, its Clear stop included,
+     * which is why no Look value is taken here. Where there is no wallpaper behind the widget to
+     * measure (the launcher off the wallpaper) or the system asks for contrast (outline text, high
+     * contrast) the widget wears its solid card instead: legibility wins, as it does over glass.
+     * A picker card draws Bare on the picker's own ground.
+     */
+    public static boolean bareWorn(boolean asked, boolean preview, boolean onWallpaper,
+                                   boolean outlineText, boolean highContrast) {
+        return asked && (preview || onWallpaper) && !outlineText && !highContrast;
+    }
+
+    /**
      * Whether the card is the dark one: the page's pale ink (the polarity the dock is drawn in),
      * or night, which forces it whatever the ink. Unknown polarity (no chrome to ask) keeps the
      * theme's own card.

@@ -171,6 +171,19 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     private int cardFill;
     /** Whether the solid card draws its rim at the outline role, where it would vanish. */
     private boolean edgeRim;
+    /**
+     * Whether the widget is drawn Bare now (glossary: Bare): it asks to be ({@link #asksBare})
+     * and nothing asks for the card instead ({@link BuiltinWidgetGlass#bareWorn}).
+     */
+    private boolean bareWorn;
+    /** What {@link #asksBare} answered at the last bind, so a setting that flips it re-dresses. */
+    private boolean askedBare;
+    /** The soft dim under a Bare widget's ink, as measured; transparent where it reads without. */
+    private int bareDim;
+    /** Whether {@link #bareInks} were measured on the wallpaper, not the theme's own. */
+    private boolean bareMeasured;
+    /** A Bare widget's measured inks: on-surface, on-surface-variant, primary, warm. */
+    private final int[] bareInks = new int[4];
     /** The opaque colour the content stands on, as last measured; the card itself before that. */
     private int groundSurface;
     private final android.graphics.Rect inkRect = new android.graphics.Rect();
@@ -270,8 +283,10 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         this.config = nextConfig;
         if (!changed) return;
         String choice = nextConfig.getString(BuiltinWidgetGlass.CONFIG_KEY);
-        if (!java.util.Objects.equals(choice, glassChoice)) {
+        boolean asked = asksBare();
+        if (!java.util.Objects.equals(choice, glassChoice) || asked != askedBare) {
             glassChoice = choice;
+            askedBare = asked;
             // The re-dress settles the style; the rebuild below builds in it.
             syncGlassRegistration();
         }
@@ -284,6 +299,12 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      */
     private void resolveStyle() {
         BuiltinWidgetStyle onInk = hostStyle.onInk(inkPale);
+        if (bareWorn) {
+            style = bareMeasured
+                ? onInk.bare(bareInks[0], bareInks[1], bareInks[2], bareInks[3])
+                : onInk.bare(onInk.onSurface, onInk.onSurfaceVariant, onInk.primary, onInk.warm);
+            return;
+        }
         style = glassWorn ? onInk.glassVariant(getContext()) : onInk;
     }
 
@@ -488,11 +509,28 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
     // ----- glass ----------------------------------------------------------------------------
 
-    /** Whether this widget's own Glass switch is on. */
+    /**
+     * Whether this widget's own Glass switch is on. Never for a widget that asks to be Bare: it
+     * has no card for the glass to be, and the page asks for no blur frame on its behalf.
+     */
     public final boolean isGlassOn() {
+        if (asksBare()) return false;
         return BuiltinWidgetGlass.resolve(glassChoice,
             glassSource != null && glassSource.widgetsOnGlass());
     }
+
+    /**
+     * Whether this widget asks to be drawn Bare (glossary: Bare): no card, rim or slab, its ink
+     * straight on the wallpaper behind it, measured there on the widget band, with a soft dim of
+     * at most {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM} only where the measurement says
+     * the ink would not read without one ({@link com.termux.app.chrome.OnGlass#resolveBareWidget}).
+     * A kind that is always Bare says yes; one that offers it reads its own setting, which a bind
+     * re-dresses. The Look never answers this: its Clear stop is glass, not Bare.
+     */
+    protected boolean asksBare() { return false; }
+
+    /** Whether the widget is drawn Bare now; see {@link #asksBare}. */
+    public final boolean isBare() { return bareWorn; }
 
     /**
      * The Look, from the page: its glass under the card while Glass is on, and its Corners for
@@ -544,6 +582,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      * Look's tint with the card's fill (the body's lift and its veil) over it.
      */
     protected final int cardAlpha() {
+        if (bareWorn) return android.graphics.Color.alpha(bareDim);
         if (wornLook == null) return 255;
         int fill = android.graphics.Color.alpha(cardFill);
         return 255 - Math.round((255 - wornTintAlpha) * (255 - fill) / 255f);
@@ -623,6 +662,12 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         if (source != null) takeCorner(source);
         com.termux.app.chrome.WidgetInkSource ink = inkSource(source);
         boolean onWallpaper = com.termux.app.terminal.PaneGlass.isActive(source);
+        boolean bare = false;
+        if (asksBare()) {
+            BuiltinWidgetGlass.SystemAsks asks = BuiltinWidgetGlass.SystemAsks.current(getContext());
+            bare = BuiltinWidgetGlass.bareWorn(true, preview, onWallpaper, asks.outlineText,
+                asks.highContrast);
+        }
         boolean glassOn = isGlassOn();
         boolean shown;
         if (BuiltinWidgetGlass.slabShown(glassOn, preview, onWallpaper)) {
@@ -637,15 +682,20 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         boolean pale = ink != null && !preview
             && BuiltinWidgetGlass.darkCard(false, ink.widgetPolarity());
         BuiltinWidgetStyle before = style;
+        boolean bareMoved = bare != bareWorn;
         inkPale = pale;
         glassWorn = shown;
+        bareWorn = bare;
         resolveStyle();
         boolean styleMoved = style != before;
         if (!shown) {
             if (slab != null && slab.getVisibility() != GONE) slab.setVisibility(GONE);
-            boolean chromeMoved = wornLook != null;
+            boolean chromeMoved = wornLook != null || bareMoved;
             wornLook = null;
-            if (measureInk() || chromeMoved || styleMoved) applyChrome();
+            // A Bare widget's inks are measured here, so its style may move again.
+            boolean measured = measureInk();
+            styleMoved = style != before;
+            if (measured || chromeMoved || styleMoved) applyChrome();
             return styleMoved;
         }
         if (slab == null) {
@@ -688,6 +738,7 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      * @return whether the card's fill or rim moved, so it is dressed again
      */
     private boolean measureInk() {
+        if (bareWorn) return measureBare();
         com.termux.app.chrome.WidgetInkSource ink = preview ? null : inkSource(fedLook);
         int lift = glassWorn && wornLook != null
             ? com.termux.app.chrome.OnGlass.withAlpha(style.card,
@@ -717,9 +768,64 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         return moved;
     }
 
-    /** Re-asks the band for where the widget is laid out now, and re-dresses the card if it moved. */
+    /**
+     * A Bare widget's ink, measured on the widget band against the wallpaper behind it
+     * ({@link com.termux.app.chrome.WidgetInkSource#widgetWallpaper}, the band's one memoised
+     * sample): the page's inks where they read, under the least soft dim of the card's colour up
+     * to {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM} where they need one, moved where even
+     * that is short ({@link com.termux.app.chrome.OnGlass#resolveBareWidget}). Text and the
+     * caution ink are held to 4.5:1, the accent's graphics to 3:1. With nothing to measure (a
+     * picker card) the theme's own inks stand. Settles the drawn style on the inks.
+     *
+     * @return whether the dim moved (or the card's fill and rim went), so it is dressed again
+     */
+    private boolean measureBare() {
+        BuiltinWidgetStyle base = hostStyle.onInk(inkPale);
+        com.termux.app.chrome.WidgetInkSource ink = preview ? null : inkSource(fedLook);
+        int dim = android.graphics.Color.TRANSPARENT;
+        int ground = groundSurface;
+        boolean measured = false;
+        if (ink != null && getWidth() > 0 && getHeight() > 0) {
+            com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkLocation,
+                inkRootLocation);
+            inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
+                inkLocation[1] + getHeight());
+            int wallpaper = ink.widgetWallpaper(inkRect);
+            boolean pale = base.dark;
+            double text = com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT;
+            double graphic = com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT;
+            com.termux.app.chrome.OnGlass.Resolution answer =
+                com.termux.app.chrome.OnGlass.resolveBareWidget(wallpaper, base.onSurfaceVariant,
+                    text, base.primary, graphic, base.card, pale);
+            dim = answer.veil;
+            ground = answer.surface;
+            bareInks[0] = com.termux.app.chrome.OnGlass.bareInk(answer, base.onSurface, text, pale);
+            bareInks[1] = com.termux.app.chrome.OnGlass.bareInk(answer, base.onSurfaceVariant, text,
+                pale);
+            bareInks[2] = com.termux.app.chrome.OnGlass.bareInk(answer, base.primary, graphic, pale);
+            // The warm accent is also the caution ink, which is text.
+            bareInks[3] = com.termux.app.chrome.OnGlass.bareInk(answer, base.warm, text, pale);
+            measured = true;
+        }
+        boolean moved = dim != bareDim || cardFill != android.graphics.Color.TRANSPARENT
+            || edgeRim;
+        bareDim = dim;
+        bareMeasured = measured;
+        cardFill = android.graphics.Color.TRANSPARENT;
+        edgeRim = false;
+        groundSurface = ground;
+        resolveStyle();
+        return moved;
+    }
+
+    /**
+     * Re-asks the band for where the widget is laid out now, and re-dresses the card if it moved;
+     * a Bare widget whose inks moved with it is built again in them.
+     */
     private void remeasureInk() {
+        BuiltinWidgetStyle before = style;
         if (measureInk()) applyChrome();
+        if (style != before) restyled();
     }
 
     /**
@@ -858,7 +964,11 @@ public abstract class BuiltinWidgetView extends FrameLayout {
      * Only the drawable changes, so it is safe inside a layout pass.
      */
     private void applyChrome() {
-        if (wornLook != null) {
+        if (bareWorn) {
+            // No card, rim or slab: at most the measured soft dim under the ink.
+            background.setBackground(android.graphics.Color.alpha(bareDim) == 0 ? null
+                : new SoftDim(bareDim));
+        } else if (wornLook != null) {
             if (android.graphics.Color.alpha(cardFill) == 0) {
                 background.setBackground(null);
             } else {
@@ -882,6 +992,38 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         setFocusable(true);
         setOnClickListener(v -> onTap());
         onCardChanged();
+    }
+
+    /**
+     * A Bare widget's dim: the card's colour at the measured alpha, full under the content inset
+     * and feathered to nothing at the widget's edge, so it reads as shade rather than a card.
+     * Read at the card's corner when drawn. Where the canvas cannot blur (hardware drawing before
+     * API 28) the edge is simply hard, inset by the feather.
+     */
+    private final class SoftDim extends android.graphics.drawable.Drawable {
+        private final android.graphics.Paint paint =
+            new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final float feather;
+
+        SoftDim(int color) {
+            paint.setColor(color);
+            feather = WidgetTokens.INSET_COMPACT_DP / 2f * style.density;
+            if (feather > 0f) {
+                paint.setMaskFilter(new android.graphics.BlurMaskFilter(feather,
+                    android.graphics.BlurMaskFilter.Blur.NORMAL));
+            }
+        }
+
+        @Override public void draw(@NonNull android.graphics.Canvas canvas) {
+            android.graphics.Rect bounds = getBounds();
+            float radius = Math.max(0f, cardRadiusPx() - feather);
+            canvas.drawRoundRect(bounds.left + feather, bounds.top + feather,
+                bounds.right - feather, bounds.bottom - feather, radius, radius, paint);
+        }
+
+        @Override public void setAlpha(int alpha) { }
+        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter filter) { }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     /** Whether two settings bundles hold the same settings, the widget's own state left out. */

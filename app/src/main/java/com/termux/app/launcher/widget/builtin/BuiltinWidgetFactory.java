@@ -14,6 +14,7 @@ public final class BuiltinWidgetFactory {
                                                     @NonNull BuiltinWidgetStyle style) {
         switch (kind) {
             case CLOCK: return new ClockWidgetView(context, services, style);
+            case GLANCE: return new GlanceWidgetView(context, services, style);
             case WEATHER: return new WeatherWidgetView(context, services, style);
             case BATTERY: return new BatteryWidgetView(context, services, style);
             case SYSTEM: return new SystemWidgetView(context, services, style);
