@@ -870,7 +870,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, panel.keyboardTools(),
                 panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(),
                 panel.dockStyles(), move,
-                panel.orientationToggle(), panel.homeFilterToggle(), panel.hiddenControl(),
+                panel.orientationToggle(), panel.homeFilterToggle(), panel.homeLayoutToggle(),
+                panel.hiddenControl(),
                 panel.hiddenHighlight(),
                 panel.hiddenTileGroup(), new LayoutEditorController.TilesHost() {
                     @Override public void setHiddenTilesOpen(boolean open) {

@@ -1980,11 +1980,14 @@
                 <!-- The chooser above the miniature. The header already says what is edited, so
                      this row only has to say which of its two layouts is on the picture. -->
                 <string name="termux_layout_editor_orientation">Orientation</string>
-                <!-- The Home filter beside the orientation toggle: on, the picture and every edit
-                     are Home's layout; off, the window's. -->
-                <string name="layout_editor_home_filter">Home layout</string>
-                <!-- The same segment, named for what it is now: the Home layout switch. Off says
-                     what is true, on says what it holds; the label follows the state. -->
+                <!-- The Home filter beside the orientation toggle: on, the picture is a Home page;
+                     off, the window's. Every edit lands on the layout that page wears. -->
+                <string name="layout_editor_home_filter">Show Home</string>
+                <!-- The Home layout line under that row (#89): its label, and its two segments'
+                     words, with their full names for the screen reader and the tooltip. -->
+                <string name="layout_editor_home_layout_label">Layout</string>
+                <string name="layout_editor_home_layout_one">One layout</string>
+                <string name="layout_editor_home_layout_own">Home\'s own</string>
                 <string name="layout_editor_home_layout_off">One layout for every screen</string>
                 <string name="layout_editor_home_layout_on">Home has its own layout</string>
                 <string name="termux_layout_editor_revert">Undo changes</string>

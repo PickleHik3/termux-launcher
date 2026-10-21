@@ -103,4 +103,34 @@ public class LayoutEditorHomeLayoutSwitchTest {
         plan.setHomeLayout(false);
         assertEquals(LayoutVariant.NORMAL, plan.variant());
     }
+
+    /**
+     * The Home filter is a preview of its own beside the choice: with one layout it still shows a
+     * Home page, whose edits land on the shared layout; with Home's own it edits only Home.
+     */
+    @Test
+    public void theHomeFilterPreviewsHomeWhicheverTheChoice() {
+        LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
+        plan.showHome(true);
+        assertTrue(plan.showsHome());
+        assertFalse(plan.hasHomeLayout());
+        assertEquals(LayoutVariant.NORMAL, plan.variant());
+        plan.drop(Bar.APPS_ROW, Edge.TOP);
+        assertEquals(Edge.TOP, places.forVariant(LayoutVariant.NORMAL)
+            .slot(PORTRAIT, Element.APPS).edge);
+
+        plan.setHomeLayout(true);
+        assertTrue(plan.showsHome());
+        assertEquals(LayoutVariant.HOME, plan.variant());
+        plan.drop(Bar.APPS_ROW, Edge.BOTTOM);
+        assertEquals(Edge.BOTTOM, places.forVariant(LayoutVariant.HOME)
+            .slot(PORTRAIT, Element.APPS).edge);
+        assertEquals(Edge.TOP, places.forVariant(LayoutVariant.NORMAL)
+            .slot(PORTRAIT, Element.APPS).edge);
+
+        plan.showHome(false);
+        assertFalse(plan.showsHome());
+        assertTrue(plan.hasHomeLayout());
+        assertEquals(LayoutVariant.NORMAL, plan.variant());
+    }
 }
