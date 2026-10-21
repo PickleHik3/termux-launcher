@@ -7,10 +7,10 @@ This page covers what it shows, how to open it, and its settings under **Setting
 
 ## What it shows
 
-- **Place icon and clock.** The icon beside the clock names the place you are on: a house for Home,
-  a prompt for Terminal, a screen for Display. The other two places peek in from the bar's edges,
-  on the side each one slides in from; tap one to go there. The Display icon reads quieter until a
-  display is running.
+- **Place icon and clock.** On the Workspace the icon beside the clock names the place you are on:
+  a prompt for Terminal, a screen for Display. Home has no icon. The other place peeks in from the
+  bar's edge, on the side it slides in from; tap it to go there. The Display icon reads quieter
+  until a display is running.
 - **The row for this place.** On the terminal: the session number, then a pill for each window,
   then `+` for a new window. On Display: the apps open on the display, front one selected. On
   Home: only the readings and the weather, centred under the clock.

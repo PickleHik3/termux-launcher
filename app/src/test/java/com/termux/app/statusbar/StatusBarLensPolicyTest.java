@@ -230,18 +230,15 @@ public class StatusBarLensPolicyTest {
     @Test public void aNeighboursTargetReachesInwardBecauseItsOuterHalfIsPastTheBar() {
         List<Mark> marks = landscapeMarks(TopStatusBarState.COMPACT);
         // The compact row carries no mark at home, so the two neighbours are all there is.
-        assertEquals(2, marks.size());
-        Mark left = markFor(marks, PaneWallPage.WIDGETS);
+        // Home has no mark, so the far neighbour is all there is.
+        assertEquals(1, marks.size());
         Mark right = markFor(marks, PaneWallPage.DISPLAY);
-        assertEquals(0f, left.centerX, 0.01f);
         assertEquals(BAR_W, right.centerX, 0.01f);
-        assertEquals(0f, left.target.left, 0.01f);
-        assertEquals(96f, left.target.right, 0.01f);
         assertEquals(BAR_W - 96f, right.target.left, 0.01f);
         assertEquals(BAR_W, right.target.right, 0.01f);
         // Across a bar too thin for 48dp the target is the whole thickness.
-        assertEquals(0f, left.target.top, 0.01f);
-        assertEquals(COMPACT_H, left.target.bottom, 0.01f);
+        assertEquals(0f, right.target.top, 0.01f);
+        assertEquals(COMPACT_H, right.target.bottom, 0.01f);
     }
 
     @Test public void aPeekingMarkStaysAboveTheLegibilityFloorInBothFormsOfTheBar() {
@@ -254,7 +251,7 @@ public class StatusBarLensPolicyTest {
                     mark.effectiveInk >= StatusBarLensMetrics.EFFECTIVE_INK_FLOOR);
             }
         }
-        Mark peek = markFor(landscapeMarks(TopStatusBarState.COMPACT), PaneWallPage.WIDGETS);
+        Mark peek = markFor(landscapeMarks(TopStatusBarState.COMPACT), PaneWallPage.DISPLAY);
         assertEquals(0.85f, peek.ink, 0.001f);
         assertEquals(0.5f, peek.fadeOuterAlpha, 0.001f);
         assertEquals(0.6375f, peek.effectiveInk, 0.001f);
@@ -298,12 +295,7 @@ public class StatusBarLensPolicyTest {
         List<Mark> marks = StatusBarLensMetrics.marks(
             Bar.of(columnW, columnH, DENSITY, true, TopStatusBarState.COMPACT),
             ROW, PaneWallPage.TERMINAL, 0f, columnH);
-        assertEquals(2, marks.size());
-        Mark above = markFor(marks, PaneWallPage.WIDGETS);
-        assertEquals(columnW / 2f, above.centerX, 0.01f);
-        assertEquals(0f, above.centerY, 0.01f);
-        assertEquals(96f, above.target.height(), 0.01f);
-        assertEquals(columnW, above.target.width(), 0.01f);
+        assertEquals(1, marks.size());
         Mark below = markFor(marks, PaneWallPage.DISPLAY);
         assertEquals(columnH, below.centerY, 0.01f);
         assertEquals(columnH - 96f, below.target.top, 0.01f);
@@ -315,6 +307,22 @@ public class StatusBarLensPolicyTest {
             Bar.of(BAR_W, EXPANDED_H, DENSITY, false, TopStatusBarState.EXPANDED),
             ROW, PaneWallPage.TERMINAL, BAR_W, BAR_W);
         for (Mark mark : marks) assertTrue(mark.page != PaneWallPage.DISPLAY);
+    }
+
+    @Test public void homeWearsNoMarkWhereverTheWallIs() {
+        // The house glyph is gone from both halves: not at home beside the clock, not peeking in.
+        for (TopStatusBarState state : TopStatusBarState.values()) {
+            int height = state == TopStatusBarState.COMPACT ? COMPACT_H : EXPANDED_H;
+            Bar bar = Bar.of(BAR_W, height, DENSITY, false, state);
+            for (PaneWallPage current : ROW) {
+                for (float offset : new float[] {0f, -BAR_W / 2f, BAR_W / 2f}) {
+                    for (Mark mark : StatusBarLensMetrics.marks(bar, ROW, current, offset, BAR_W)) {
+                        assertTrue(state + " " + current + " " + offset,
+                            mark.page != PaneWallPage.WIDGETS);
+                    }
+                }
+            }
+        }
     }
 
     @Test public void theRowStartsAfterTheHomeMarkAndItsGap() {
