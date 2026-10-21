@@ -42,7 +42,8 @@ wallpaper colours and glass:
 
 | Widget | What it shows |
 |---|---|
-| **Analog clock**, **Digital clock** | The time; up to two more cities or time zones. |
+| **Analog clock** | The time; at the wider sizes, up to two more cities or time zones. |
+| **Digital clock** | The time and the date. |
 | **Agenda** | Your next calendar events. |
 | **Calendar** | A month view. |
 | **Weather** | The weather for the location set in [Status bar](Status_Bar.md#weather). It updates as soon as you come back from picking a place. |
@@ -55,8 +56,8 @@ wallpaper colours and glass:
 
 - Tasks and Scratchpad are plain markdown files, so the shell sees exactly what the card shows. Tap
   the scratchpad to open the file in your editor.
-- The clocks, Tasks and Scratchpad take settings from a cog that appears while you edit the page:
-  the extra time zones, or the file path (the scratchpad can switch between several files).
+- The Analog clock, Tasks and Scratchpad take settings from a cog that appears while you edit the
+  page: the extra time zones, or the file path (the scratchpad can switch between several files).
 - The Calendar's month view has arrows to step to the previous or next month; tap the month's name
   to come back to this one.
 - Agenda and Calendar ask for calendar access on the card itself. Notifications and Media ask for

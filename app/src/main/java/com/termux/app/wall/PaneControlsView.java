@@ -717,6 +717,22 @@ public final class PaneControlsView extends View {
         out.set(mTab);
     }
 
+    /**
+     * Where the tab sits once fully out, while it is out or coming out; false when it is down or
+     * going away. Unlike {@link #tabBounds} this does not follow the slide, so chrome that keeps
+     * clear of the tab does not hop along with it.
+     */
+    public boolean restingTabBounds(@NonNull RectF out) {
+        if (!isControlsShown()) return false;
+        float progress = mProgress;
+        mProgress = 1f;
+        computeGeometry();
+        out.set(mTab);
+        mProgress = progress;
+        computeGeometry();
+        return !out.isEmpty();
+    }
+
     private int indexOf(int id) {
         for (int i = 0; i < mActions.size(); i++) {
             if (mActions.get(i).id == id) return i;
