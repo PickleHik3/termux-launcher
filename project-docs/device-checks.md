@@ -2065,8 +2065,10 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 - 2026-10-21 · commit "fix(place): a fold across the seam lands on Home's own stack" (#94) ·
   pong: Workspace→Home swipe, slow/fast, keyboard up/down: dock never sinks then snaps; only the
   extra keys fold (the emulator had the dock glass end 26 px low with the keyboard up and 10 px
-  high with it down, then jump at settle); Home→window the same, no step on the first frame ·
-  pong, release build.
+  high with it down, then jump at settle); Home→window the same, no step on the first frame.
+  Also: with Home's own on and the apps row hidden on Home, the swipe swaps rows cleanly (the
+  rows dip out and the other half's rise, swapped while hidden; no flash, no step at settle),
+  both ways, keyboard up and down · pong, release build.
 ### Border drag seam band (10-21)
 - 2026-10-21 · feat(wall) seam band (SeamSwipe) · pong: border drag between windows starts
   reliably from on/near the seam (slight diagonal ok); taps/long press on the border, dock app
