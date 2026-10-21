@@ -172,8 +172,8 @@ public class SeamCrossingTest {
             PaneWallPage other = SeamTravel.otherHalfPage(frame, committed);
             if (other != null && other != crossing.other()) {
                 begins++;
-                boolean first = crossing.begin(here, there, stage);
-                if (begins == 1) barFirst = first;
+                crossing.begin(here, there, stage);
+                if (begins == 1) barFirst = crossing.barTakesWorkspaceDressFirst();
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             if (answers.relayout()) crossing.standLayout();
@@ -181,7 +181,7 @@ public class SeamCrossingTest {
             Step step = new Step();
             step.fraction = fraction;
             step.active = crossing.other() != null;
-            step.progress = answers.progress();
+            step.progress = SeamTravel.otherHalfProgress(frame, committed);
             step.dockReveal = answers.dockReveal();
             step.keyboardReveal = answers.keyboardReveal();
             step.extraKeysShare = answers.extraKeysShare();

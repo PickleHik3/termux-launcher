@@ -21997,6 +21997,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // canvas's side of it sink by its hidden part, and the rows between it and the
             // screen's edge stand still, wherever it stands in the stack (#94).
             mTravelFoldShare = seam.extraKeysShare();
+            // A fold in lays the extra keys out on this frame: the sink is re-read once the stack
+            // has laid them out, before the frame is drawn.
+            listenForSeamFold();
             applySeamFoldSink();
         } else {
             mTravelFoldShare = Float.NaN;
@@ -22056,15 +22059,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.SeamCrossing.Half there = com.termux.app.place.SeamCrossing.Half.of(
             other, otherDress, otherLayout, stackDressOf(otherDress, orientation),
             mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other));
-        boolean barFirst = mSeamCrossing.begin(here, there,
+        boolean begins = mSeamCrossing.other() == null;
+        mSeamCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mSeamFrameGlass,
                 isSplitPanesEnabled()));
-        // A fold in lays the extra keys out on this frame: the sink is re-read once the stack has
-        // laid them out, before the frame is drawn.
-        if (mSeamCrossing.folds()) listenForSeamFold();
         // From Home, the bar takes off Home's dress for the Workspace's while it is still hidden,
         // before any pass lays it out over Home.
-        if (barFirst) {
+        if (begins && mSeamCrossing.barTakesWorkspaceDressFirst()) {
             refreshTerminalWindowBar();
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         }
