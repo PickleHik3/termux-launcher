@@ -1268,13 +1268,17 @@ public final class LayoutEditorController {
     @Nullable private Chip mDrawerTileChip;
 
     /**
-     * Whether the dock styles show: in Layout mode on the Home layout, with its dock (the pinned
-     * apps) selected. The Workspace's dock has no style.
+     * Whether the Dock designs show: in Layout mode on any layout, Home's or a window's (#93), with
+     * the dock selected — its pinned apps row, or its A–Z row where the layout shows the index and
+     * not the apps, which makes that row the whole dock.
      */
     @VisibleForTesting
     static boolean showsDockStyles(@Nullable LayoutEditorPlan plan,
                                    @Nullable LayoutCanvasView.Block selected) {
-        return plan != null && selected == LayoutCanvasView.Block.APPS_ROW;
+        if (plan == null) return false;
+        if (selected == LayoutCanvasView.Block.APPS_ROW) return true;
+        return selected == LayoutCanvasView.Block.ALPHABETS_ROW
+            && plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden;
     }
 
     /**
