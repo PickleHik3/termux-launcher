@@ -471,7 +471,7 @@ _Avoid_: Battery widget, System widget (the two it replaces), stats
 
 **Glance**:
 The one-row widget for the first look of the day: the date, the next event, the weather, the next
-alarm and, when low or charging, the battery. It never shows the time, which is the Clock's.
+alarm and, when low and not charging, the battery. It draws **Bare**. It never shows the time, which is the Clock's.
 _Avoid_: At a Glance (Pixel's), summary, today
 
 **Notes**:

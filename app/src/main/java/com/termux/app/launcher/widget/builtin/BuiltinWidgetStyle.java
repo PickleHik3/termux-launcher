@@ -47,6 +47,12 @@ public final class BuiltinWidgetStyle {
      */
     public final boolean glass;
     /**
+     * True while the widget is drawn Bare (glossary: Bare): no card, its ink straight on the
+     * wallpaper, and the text roles below are the ones measured there ({@link #bare}). The card's
+     * colour is then only what a dim under the ink is made of.
+     */
+    public final boolean bare;
+    /**
      * True for the dark card: the theme's night, or the page's pale ink polarity by day
      * ({@link #onInk}). Every role below is on this card's side.
      */
@@ -97,11 +103,14 @@ public final class BuiltinWidgetStyle {
     @Nullable private BuiltinWidgetStyle glassCache;
     /** This look on the dark card, made once ({@link #onInk}). */
     @Nullable private BuiltinWidgetStyle darkCache;
+    /** This look drawn Bare at the inks last asked for ({@link #bare}). */
+    @Nullable private BuiltinWidgetStyle bareCache;
 
     private BuiltinWidgetStyle(@NonNull Context context, @NonNull Numerals numerals,
                                boolean glass, @Nullable Typeface monoFace, float cornerRadiusPx) {
         this.numeralsChoice = numerals;
         this.glass = glass;
+        this.bare = false;
         density = context.getResources().getDisplayMetrics().density;
         this.cornerRadiusPx = cornerRadiusPx;
         barRadiusPx = 99f * density;
@@ -154,6 +163,7 @@ public final class BuiltinWidgetStyle {
     private BuiltinWidgetStyle(@NonNull BuiltinWidgetStyle src, boolean glass, boolean toDark) {
         numeralsChoice = src.numeralsChoice;
         this.glass = glass;
+        bare = false;
         night = src.night;
         dark = src.dark || toDark;
         density = src.density;
@@ -186,6 +196,45 @@ public final class BuiltinWidgetStyle {
         warm = src.warm;
         ringInner = card;
         face = container;
+        sans = src.sans;
+        sansMedium = src.sansMedium;
+        sansBold = src.sansBold;
+        mono = src.mono;
+        monoMedium = src.monoMedium;
+        numerals = src.numerals;
+        nerd = src.nerd;
+    }
+
+    /** {@code src} drawn Bare: every role kept but the four inks measured on the wallpaper. */
+    private BuiltinWidgetStyle(@NonNull BuiltinWidgetStyle src, @ColorInt int onSurface,
+                               @ColorInt int onSurfaceVariant, @ColorInt int primary,
+                               @ColorInt int warm) {
+        numeralsChoice = src.numeralsChoice;
+        glass = false;
+        bare = true;
+        night = src.night;
+        dark = src.dark;
+        density = src.density;
+        cornerRadiusPx = src.cornerRadiusPx;
+        barRadiusPx = src.barRadiusPx;
+        card = src.card;
+        container = src.container;
+        containerHigh = src.containerHigh;
+        this.onSurface = onSurface;
+        this.onSurfaceVariant = onSurfaceVariant;
+        outlineVariant = src.outlineVariant;
+        outline = src.outline;
+        this.primary = primary;
+        onPrimary = src.onPrimary;
+        primaryContainer = src.primaryContainer;
+        onPrimaryContainer = src.onPrimaryContainer;
+        tertiaryContainer = src.tertiaryContainer;
+        onTertiaryContainer = src.onTertiaryContainer;
+        error = src.error;
+        done = src.done;
+        this.warm = warm;
+        ringInner = src.ringInner;
+        face = src.face;
         sans = src.sans;
         sansMedium = src.sansMedium;
         sansBold = src.sansBold;
@@ -269,6 +318,25 @@ public final class BuiltinWidgetStyle {
         if (dark || !paleInk) return this;
         if (darkCache == null) darkCache = new BuiltinWidgetStyle(this, glass, true);
         return darkCache;
+    }
+
+    /**
+     * This look drawn Bare (glossary: Bare): the same card side, scheme and faces, with the text
+     * and accent inks the wallpaper behind the widget was measured to need. The last one asked
+     * for is kept, so a re-dress with the same measurement keeps the same style and builds
+     * nothing again.
+     */
+    @NonNull public BuiltinWidgetStyle bare(@ColorInt int onSurface, @ColorInt int onSurfaceVariant,
+                                            @ColorInt int primary, @ColorInt int warm) {
+        BuiltinWidgetStyle cached = bareCache;
+        if (cached != null && cached.onSurface == onSurface
+            && cached.onSurfaceVariant == onSurfaceVariant && cached.primary == primary
+            && cached.warm == warm) {
+            return cached;
+        }
+        cached = new BuiltinWidgetStyle(this, onSurface, onSurfaceVariant, primary, warm);
+        bareCache = cached;
+        return cached;
     }
 
     public int dp(float value) { return Math.round(value * density); }

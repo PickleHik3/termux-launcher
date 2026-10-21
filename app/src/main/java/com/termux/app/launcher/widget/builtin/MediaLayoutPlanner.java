@@ -106,8 +106,8 @@ final class MediaLayoutPlanner {
         if (artBeside) {
             float side = Math.min(inner.height, inner.width - GAP_L - wanted * CONTROL_DP);
             if (side >= ART_MIN_DP) {
-                parts.add(Part.touch("art", new Box(inner.left,
-                    inner.top + (inner.height - side) / 2f, side, side)));
+                // As tall as the card; narrower than that when the column needs the width.
+                parts.add(Part.touch("art", new Box(inner.left, inner.top, side, inner.height)));
                 column = new Box(inner.left + side + GAP_L, inner.top,
                     inner.width - side - GAP_L, inner.height);
             }

@@ -214,7 +214,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
 
     // ----- layouts --------------------------------------------------------------------------
 
-    /** The plan is laid out at the card's own size (a 1×1 at a 2×1's, scaled), never zoomed. */
+    /** The plan is laid out at the card's own size never zoomed. */
     @Override protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) { return false; }
 
     private void render() {
@@ -244,8 +244,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         NotificationsLayoutPlanner.Words words = words();
         List<NotificationsWidgetData.Group> shown = groups;
         NotificationsLayoutPlanner.Notice message = notice;
-        Card card = new Card(getContext(), ui,
-            span == BuiltinWidgetSpan.ONE_BY_ONE ? NotificationsLayoutPlanner.ONE_BY_ONE_LOGICAL_WIDTH_DP : 0f);
+        Card card = new Card(getContext(), ui);
         card.setPlanView(new WidgetPlanView(getContext(), ui.style, (widthDp, heightDp, measure) ->
             NotificationsLayoutPlanner.plan(span, widthDp, heightDp, fontScale, shown, message,
                 canClear, words, measure)));
@@ -273,22 +272,19 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
 
     /**
      * The card: the plan's view, with what a plan cannot draw laid over it from its parts' boxes —
-     * the apps' icons, the badges' pills (under the numbers) and the rows' taps. A 1×1 is laid
-     * out at {@code logicalWidthDp} and scaled down to the card.
+     * the apps' icons, the badges' pills (under the numbers) and the rows' taps.
      */
     private final class Card extends FrameLayout {
         private final BuiltinWidgetUi ui;
-        private final float logicalWidthDp;
         private final FrameLayout logical;
         private final FrameLayout under;
         private final FrameLayout over;
         @Nullable private WidgetPlanView planView;
         @Nullable private WidgetLayoutPlan synced;
 
-        Card(@NonNull Context context, @NonNull BuiltinWidgetUi ui, float logicalWidthDp) {
+        Card(@NonNull Context context, @NonNull BuiltinWidgetUi ui) {
             super(context);
             this.ui = ui;
-            this.logicalWidthDp = logicalWidthDp;
             logical = new FrameLayout(context);
             under = new FrameLayout(context);
             over = new FrameLayout(context);
@@ -308,16 +304,9 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
 
         @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
             int width = r - l, height = b - t;
-            float density = getResources().getDisplayMetrics().density;
-            float scale = logicalWidthDp > 0f && width > 0 ? width / (logicalWidthDp * density) : 1f;
-            int logicalW = Math.round(width / scale), logicalH = Math.round(height / scale);
-            logical.measure(MeasureSpec.makeMeasureSpec(logicalW, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(logicalH, MeasureSpec.EXACTLY));
-            logical.layout(0, 0, logicalW, logicalH);
-            logical.setPivotX(0f);
-            logical.setPivotY(0f);
-            logical.setScaleX(scale);
-            logical.setScaleY(scale);
+            logical.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+            logical.layout(0, 0, width, height);
             post(this::sync);
         }
 

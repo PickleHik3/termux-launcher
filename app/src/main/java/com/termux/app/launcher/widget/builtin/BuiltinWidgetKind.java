@@ -16,6 +16,8 @@ import com.termux.R;
 public enum BuiltinWidgetKind {
     /** The one Clock, on eight faces; {@code clock.analog} and {@code clock.digital} open as it. */
     CLOCK("clock", R.string.builtin_widget_clock, 2, 1),
+    /** The first look of the day, drawn Bare: the date and the weather, then one thing that matters. */
+    GLANCE("glance", R.string.builtin_widget_glance, 4, 1),
     AGENDA("agenda", R.string.builtin_widget_agenda, 2, 1),
     WEATHER("weather", R.string.builtin_widget_weather, 2, 1),
     /** The phone's own state, battery first; {@code battery} and {@code system} open as it. */

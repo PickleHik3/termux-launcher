@@ -3,6 +3,7 @@
     <!-- The launcher's own widgets, as the picker lists them. -->
     <string name="builtin_widget_group">Termux Launcher</string>
     <string name="builtin_widget_clock">Clock</string>
+    <string name="builtin_widget_glance">Glance</string>
     <string name="builtin_widget_agenda">Agenda</string>
     <string name="builtin_widget_weather">Weather</string>
     <string name="builtin_widget_device">Device</string>
@@ -12,6 +13,18 @@
     <string name="builtin_widget_notes">Notes</string>
     <string name="builtin_widget_calendar">Calendar</string>
     <string name="builtin_widget_terminal">Terminal</string>
+
+    <!-- The Glance widget's second line: one item, the one that matters most now. -->
+    <string name="bw_glance_event_soon">%1$s · %2$s %3$s</string>
+    <string name="bw_glance_event_today">%1$s · %2$s</string>
+    <string name="bw_glance_now">now</string>
+    <string name="bw_glance_in_minutes">in %1$d min</string>
+    <string name="bw_glance_in_hours">in %1$d h</string>
+    <string name="bw_glance_in_hours_minutes">in %1$d h %2$d min</string>
+    <string name="bw_glance_battery_low">Battery %1$d%% · Plug in soon</string>
+    <string name="bw_glance_sample_event">Design review</string>
+    <!-- Spoken: the date, then the weather, then the item; each left out when absent. -->
+    <string name="bw_glance_cd_weather">%1$s degrees</string>
 
     <!-- The Terminal widget. -->
     <string name="terminal_widget_ended">Session ended. Tap to start a new one.</string>
