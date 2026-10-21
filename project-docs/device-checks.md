@@ -53,6 +53,15 @@ under twenty items; past that, the oldest are re-judged first.
   Docked with no Margin and Floating, on Home and a window: the clock clears the left edge and
   the + tile ends clear of the right one, at least 14 dp inside the slab; on a Floating slab the
   clock still lines up with the first icon · emulator.
+- 2026-10-21 · commits "feat(chrome): a minimised Home float is a window chip in the bar" and
+  "feat(chrome): CPU and RAM in the bar on Home, not in the titlebar" (#91) · Minimise a Home
+  float → it flies to its chip in the bar (down and away if the bar is hidden or the chip is
+  scrolled off); tap that chip in the Workspace → Home, the float restored and focused; no chips
+  row above the dock, and floats use the room down to the dock (Glass tray, Beads, Prompt line);
+  CPU/RAM in the bar on Home, not in the focused float's titlebar, whose grip centres in the span
+  the buttons leave; TalkBack on a minimised float's chip says "minimised" · emulator, status bar
+  shown, then with the bar hidden in the layout (a minimised float then has no chip but the
+  Taskbar's or Wall strip's).
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
