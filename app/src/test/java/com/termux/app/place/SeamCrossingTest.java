@@ -336,6 +336,113 @@ public class SeamCrossingTest {
             window.slot(Element.EXTRA_KEYS).withHidden(true));
     }
 
+    // ---- The fold lands on Home's rest: nothing sinks then snaps back at settle ----
+
+    private static final int BOTTOM = 2000;
+    private static final int KEYS = 110;
+    private static final int KEYBOARD = 700;
+    /** The window's rows less the extra keys, and Home's: the A-Z row's 10dp chin taller. */
+    private static final int WINDOW_ROWS = 190;
+    private static final int HOME_ROWS = 218;
+
+    private static Drive foldDrive(@NonNull PaneWallPage from, boolean windowKeyboard) {
+        DressResolver dresses = new DressResolver(new Stored());
+        Dress windowDress = dresses.dressOf(PaneWallPage.TERMINAL);
+        Dress homeDress = dresses.dressOf(PaneWallPage.WIDGETS);
+        SeamCrossing.Half window = SeamCrossing.Half.of(PaneWallPage.TERMINAL, windowDress,
+            window(), stackOf(windowDress), windowKeyboard, WINDOW_ROWS);
+        SeamCrossing.Half home = SeamCrossing.Half.of(PaneWallPage.WIDGETS, homeDress, home(),
+            stackOf(homeDress), false, HOME_ROWS);
+        SeamCrossing.Stage stage = SeamCrossing.Stage.of(false, () -> false, true);
+        return from == PaneWallPage.TERMINAL ? new Drive(window, home, stage)
+            : new Drive(home, window, stage);
+    }
+
+    /**
+     * The dock's top on screen at one step, the window's stack laid out (its flush padding, half
+     * under the rows, and a keyboard in the stack travelling down by its own reveal) and sunk by
+     * the fold, as the activity applies it.
+     */
+    private static float windowStackTop(@NonNull Drive drive, @NonNull Step step, int flush,
+                                        int keyboard) {
+        int pad = flush / 2;
+        float keyboardTravel = PlaceChromeTravel.stackTranslationPx(step.keyboardReveal, 1f,
+            keyboard, WINDOW_ROWS + KEYS);
+        return BOTTOM - keyboard + keyboardTravel - pad - (WINDOW_ROWS + KEYS)
+            + SeamTravel.foldRowsSinkPx(KEYS, step.extraKeysShare, pad,
+                drive.crossing.foldRestGrowthPx());
+    }
+
+    @Test
+    public void workspaceToHomeTheLastFrameStandsTheDockWhereHomesRests() {
+        for (int flush : new int[] {0, 24}) {
+            for (Drive drive : new Drive[] {foldDrive(PaneWallPage.TERMINAL, false).slow(0f, 1f),
+                foldDrive(PaneWallPage.TERMINAL, false).run(0f, 0.3f, 0.9f, 1f)}) {
+                assertEquals(HOME_ROWS - WINDOW_ROWS, drive.crossing.foldRestGrowthPx());
+                assertEquals(0f, drive.last().extraKeysShare, EPSILON);
+                assertEquals("flush " + flush, BOTTOM - HOME_ROWS,
+                    windowStackTop(drive, drive.last(), flush, 0), 0.5f);
+                // And it went there in one direction, never past it.
+                float previous = Float.NEGATIVE_INFINITY;
+                for (Step step : drive.steps) {
+                    if (!step.active) continue;
+                    float top = windowStackTop(drive, step, flush, 0);
+                    assertTrue("backwards at " + step.fraction, top >= previous - 0.5f);
+                    assertTrue("past Home's rest at " + step.fraction,
+                        top <= BOTTOM - HOME_ROWS + 0.5f);
+                    previous = top;
+                }
+                drive.crossing.land();
+                drive.crossing.end();
+                assertEquals("the settle lets the growth go", 0,
+                    drive.crossing.foldRestGrowthPx());
+            }
+        }
+    }
+
+    @Test
+    public void workspaceToHomeWithTheKeyboardUpLandsOnHomesRestToo() {
+        Drive drive = foldDrive(PaneWallPage.TERMINAL, true).slow(0f, 1f);
+        assertTrue(drive.last().folds);
+        assertEquals(0f, drive.last().keyboardReveal, EPSILON);
+        // The keyboard up, the window keeps no flush padding.
+        assertEquals(BOTTOM - HOME_ROWS, windowStackTop(drive, drive.last(), 0, KEYBOARD), 0.5f);
+    }
+
+    @Test
+    public void homeToWorkspaceTheFirstFrameStandsTheDockWhereHomeRests() {
+        for (int flush : new int[] {0, 24}) {
+            Drive drive = foldDrive(PaneWallPage.WIDGETS, false).slow(0f, 1f);
+            assertEquals(HOME_ROWS - WINDOW_ROWS, drive.crossing.foldRestGrowthPx());
+            // The first frame that lays the window's rows out stands them at Home's rest, to
+            // within the little the fold has opened by then.
+            Step first = null;
+            for (Step step : drive.steps) {
+                if (step.relayout) {
+                    first = step;
+                    break;
+                }
+            }
+            assertNotNull(first);
+            float opened = (KEYS + flush / 2f) * first.extraKeysShare;
+            assertEquals("flush " + flush, BOTTOM - HOME_ROWS,
+                windowStackTop(drive, first, flush, 0), opened + 0.5f);
+            // At the window the fold is open: the window's own rest, which the settle keeps.
+            assertEquals(BOTTOM - flush / 2 - WINDOW_ROWS - KEYS,
+                windowStackTop(drive, drive.last(), flush, 0), 0.5f);
+        }
+    }
+
+    @Test
+    public void aCrossingThatDoesNotFoldReadsNoGrowth() {
+        Drive drive = foldDrive(PaneWallPage.TERMINAL, false);
+        drive.run(0f, 0.5f);
+        assertTrue(drive.crossing.foldRestGrowthPx() != 0);
+        // Halves whose rows are not known fold the extra keys alone.
+        assertEquals(0, oneLayout(PaneWallPage.TERMINAL).run(0f, 0.5f).crossing
+            .foldRestGrowthPx());
+    }
+
     @Test
     public void extraKeysInTheMiddleFoldWithTheRowsOutsideThemHeld() {
         PlaceLayout window = windowStacking(Element.AZ, Element.EXTRA_KEYS, Element.APPS);

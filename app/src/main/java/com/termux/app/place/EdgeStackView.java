@@ -58,6 +58,8 @@ public class EdgeStackView extends LinearLayout {
     /** The band a fold across the seam shuts ({@link #holdOutside}), null while none runs. */
     @Nullable private View mFoldRow;
     private float mFoldSinkPx;
+    /** How far {@link #mFoldRow} is cut at its own bottom: its hidden part. */
+    private float mFoldCutPx;
     /** The bands outside the fold, drawn back where they are laid out; reused fold to fold. */
     @NonNull private final java.util.ArrayList<View> mFoldHeld = new java.util.ArrayList<>(2);
     /** The first gap, counted from the first child, whose hairline goes back with them. */
@@ -191,27 +193,44 @@ public class EdgeStackView extends LinearLayout {
      * everything back. Transforms and a clip only: nothing is laid out again.
      */
     public void holdOutside(@Nullable View fold, float sinkPx) {
+        holdOutside(fold, sinkPx, sinkPx);
+    }
+
+    /**
+     * {@link #holdOutside(View, float)} where the bands outside {@code fold} are drawn back up by
+     * {@code holdPx} and {@code fold} is cut by {@code cutPx}, which differ where the fold's rows
+     * travel more than the fold's hidden part (SeamTravel.foldRowsSinkPx): the fold still shuts by
+     * its own hidden part, and the bands outside it go down by the rest.
+     */
+    public void holdOutside(@Nullable View fold, float holdPx, float cutPx) {
         int index = fold != null && mEdge == Edge.BOTTOM ? indexOfChild(fold) : -1;
-        float sink = index >= 0 && index < getChildCount() - 1 ? Math.max(0f, sinkPx) : 0f;
-        View row = sink > 0f ? fold : null;
-        if (row == mFoldRow && sink == mFoldSinkPx) return;
+        boolean inside = index >= 0 && index < getChildCount() - 1;
+        float hold = inside ? holdPx : 0f;
+        float cut = inside ? Math.max(0f, cutPx) : 0f;
+        View row = hold != 0f || cut > 0f ? fold : null;
+        if (row == null) {
+            hold = 0f;
+            cut = 0f;
+        }
+        if (row == mFoldRow && hold == mFoldSinkPx && cut == mFoldCutPx) return;
         if (mFoldRow != null && mFoldRow != row) mFoldRow.setClipBounds(null);
         for (View held : mFoldHeld) held.setTranslationY(0f);
         mFoldHeld.clear();
         mFoldRow = row;
-        mFoldSinkPx = sink;
+        mFoldSinkPx = hold;
+        mFoldCutPx = cut;
         mFoldGapFrom = Integer.MAX_VALUE;
         if (row != null) {
             for (int i = index + 1; i < getChildCount(); i++) {
                 View child = getChildAt(i);
                 mFoldHeld.add(child);
-                if (child.getTranslationY() != -sink) child.setTranslationY(-sink);
+                if (child.getTranslationY() != -hold) child.setTranslationY(-hold);
             }
             int width = Math.max(1, row.getWidth());
             // Generous above and to the sides, as the stack's own clip is: only the bottom is cut.
             mFoldClip.set(-width,
                 -Math.max(row.getHeight(), getResources().getDisplayMetrics().heightPixels),
-                2 * width, Math.max(0, row.getHeight() - Math.round(sink)));
+                2 * width, Math.max(0, row.getHeight() - Math.round(cut)));
             row.setClipBounds(mFoldClip);
         }
         invalidate();

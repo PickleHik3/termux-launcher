@@ -214,6 +214,53 @@ public final class SeamTravel {
     }
 
     /**
+     * How far a fold sinks the dock rows on the canvas's side of the extra keys, so that at Home's
+     * end of the way ({@code share} 0) they stand where Home's own stack rests and the settle moves
+     * nothing. It is more than the extra keys' hidden part ({@link #foldSinkPx}) by what else the
+     * keyless half stands otherwise:
+     *
+     * <ul>
+     *   <li>{@code padUnderRowsPx}, the terminal's flush padding under the window's rows (half of
+     *       it, the stack's bottom padding), which Home, with no terminal rows to land on, does
+     *       not keep: the rows go down to the stack's bottom with it;</li>
+     *   <li>{@code restGrowthPx}, how much taller Home's rows rest than the window's less the extra
+     *       keys: the rows' own air follows their neighbours, so with the extra keys outermost the
+     *       A-Z row stands on the dock's rim on Home and carries its chin there
+     *       ({@code AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx}). The rows go down by
+     *       that much less, and the chin's air opens under them as they go.</li>
+     * </ul>
+     *
+     * The whole of it follows the fold's hidden share, so the rows travel from the window's rest to
+     * Home's in one motion, either way.
+     */
+    public static float foldRowsSinkPx(int extraKeysBandPx, float share, int padUnderRowsPx,
+                                       int restGrowthPx) {
+        return (Math.max(0, extraKeysBandPx) + Math.max(0, padUnderRowsPx) - restGrowthPx)
+            * (1f - clamp01(share));
+    }
+
+    /**
+     * The same for the dock's sheet of glass, which stands the whole flush padding taller than the
+     * rows ({@code flushPx}, its other half over them): it goes down by that much more, so its top
+     * meets Home's at Home's end. Its bottom goes down to the stack's bottom with the padding under
+     * the rows: the sheet is cut that much less than it sinks ({@link #foldHeldSinkPx}).
+     */
+    public static float foldSheetSinkPx(int extraKeysBandPx, float share, int flushPx,
+                                        int restGrowthPx) {
+        return (Math.max(0, extraKeysBandPx) + Math.max(0, flushPx) - restGrowthPx)
+            * (1f - clamp01(share));
+    }
+
+    /**
+     * How far a fold sinks what stands between the extra keys and the screen's bottom edge
+     * ({@link #rowsOutsideExtraKeys}) and the sheet's bottom: only by the padding under the rows,
+     * which Home does not keep ({@link #foldRowsSinkPx}); nothing else of theirs changes.
+     */
+    public static float foldHeldSinkPx(int padUnderRowsPx, float share) {
+        return Math.max(0, padUnderRowsPx) * (1f - clamp01(share));
+    }
+
+    /**
      * Whether the stack stands the other half's rows at {@code progress} into it
      * ({@link #otherHalfProgress}): from the first frame for a slide in, past the midpoint for a
      * dip, and never before settle for a slide out, a fold out or no exchange. A fold in stands

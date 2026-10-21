@@ -2054,6 +2054,12 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 
 ## Developer
 
+- 2026-10-21 · commit "fix(place): a fold across the seam lands on Home's own stack" (#94) ·
+  pong: Workspace→Home swipe, slow/fast, keyboard up/down: dock never sinks then snaps; only the
+  extra keys fold (the emulator had the dock glass end 26 px low with the keyboard up and 10 px
+  high with it down, then jump at settle); Home→window the same, no step on the first frame ·
+  pong, release build.
+
 ### Home dock styles on pong (10-21)
 - 2026-10-21 · feat(dock) five Home dock styles · On pong, build `1.1.0-pre.6+dev.120d6f511`: pick
   each style in the Layout editor (Layout mode on Home, tap the dock, Row B). Taste: does Glass
