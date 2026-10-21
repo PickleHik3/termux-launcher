@@ -116,3 +116,16 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - Typing `\e` into the terminal with `ad type`: pass the backslash unescaped, single-quoted in the shell; a pre-escaped form mangles the printf.
 - `ad long` on a dock icon launched the app instead of opening the Unpin popup (see device-checks.md, 2026-10-21).
 
+
+## Notes from the graphics benchmark check (2026-10-21, emulator)
+
+- Long terminal commands: drive a pane under runas instead of `ad type` (typing after a tap near the
+  dock can switch to the Widgets page): `id=$(launcherctl pane open --print-id --no-focus)`,
+  `launcherctl pane write $id --enter "CMD"`, poll `launcherctl pane read $id`, Ctrl-C with
+  `launcherctl pane write $id "$(printf '\003')"`. `pane wait` caps at 300000 ms.
+- Clipboard: `ad shell cmd clipboard` has no get-primary-clip; read it with `launcherctl clipboard paste` under runas.
+- Benchmark graphics is the last row of Settings → Display → Linux apps → Set up Linux apps; swipe up.
+- The launcher rewrites `termux-x11*` scripts in the prefix only when `X11CliInstaller.VERSION`
+  changes. After installing a build that changed one, check `$PREFIX/bin/termux-x11-gpu-setup`
+  is the new one before testing it.
+- The emulator has no proot-distro, so container checks need a device that has one.
