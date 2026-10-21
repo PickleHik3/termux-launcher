@@ -13,6 +13,13 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(place): Home's own layout keeps the sizes and shape linked to the
+  shared layout" (#84) · Home's own on: change the apps row height / Strip height / keyboard
+  height / corners on Home → the window matches; rows, design and toggles still differ; no size
+  change on the swipe. Also: the Corner radius and Margin legends on Home read without "Home ·";
+  Discard after editing the apps row height on a window and then on Home puts the first height
+  back; an install already on this branch with Home's own on keeps it on, and its Home dock height
+  becomes the window's after the update · emulator.
 - 2026-10-21 · commit "fix(statusbar): a new window joins the session the bar's box shows" ·
   fresh install → on Home tap the bar's '+' → a second window in session 1 (box still '1') and
   you land on it; also check the box before the tap (if it already reads "2" after Welcome →
@@ -25,7 +32,8 @@ under twenty items; past that, the oldest are re-judged first.
   face after picking another in the surface editor, seconds/period, 12 h switch), slides out at 3
   terminals and back at 2, no stutter on Home at rest; Layout editor: select the dock wearing
   #3 → a second handle on the Strip row's top edge, readout "Strip row N dp", 56–128 dp, the
-  clock and tiles follow; a Home layout keeps its own; Undo/Discard put it back; at 56 dp every
+  clock and tiles follow; a Home layout shares the normal layout's (linked since the #84 commit
+  "feat(place): Home's own layout keeps the sizes…"); Undo/Discard put it back; at 56 dp every
   tile and + still opens on a tap · emulator.
 - 2026-10-21 · commit "fix(statusbar): the bar's + opens a window in the current session's row on
   both halves" · on Home with a session up, tap the bar's + (and the Strip's +): the Workspace

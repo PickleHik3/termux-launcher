@@ -14,7 +14,11 @@ Open **Appearance** in any of these ways, then tap **Layout** in the pill at the
 
 Home and the Workspace share one layout, so whatever you arrange lands on both; Home just leaves
 out the extra keys. To give Home a layout of its own, set the **Layout** line in the editor to
-**Home's own** (the default is **One layout**); the house segment in the row then previews Home. The
+**Home's own** (the default is **One layout**); the house segment in the row then previews Home.
+Home's own layout decides which rows Home shows, in what order and on which edge, and its dock
+design, Search field and Drawer tile. The sizes stay shared: the apps row's height, the Strip row's
+height, the keyboard's height and chin, and Style, Corners and Margin are the same on Home and the
+Workspace, whichever one you change them from, so nothing resizes as you swipe. The
 canvas shows the page you opened it from. Portrait and landscape each have their own layout, and the
 canvas draws the other orientation in your device's real shape, so a tablet looks like a tablet.
 

@@ -12,17 +12,29 @@ tile**). It changes the dock-design work in [`home-dock-styles-2026-10-20.md`](h
 
 - One layout dresses both halves of the wall. Home leaves out the extra keys and nothing else.
 - **Home layout** is opt-in: the Layout editor's Layout line ("Layout: One layout | Home's own"; the
-  row's house segment previews Home). It holds Style, Corners, Margin, Dock design and toggles too. While on, a Home page opens the Layout editor on Home's own layout, and the bar
-  and dock may change on the swipe. Off by default.
+  row's house segment previews Home). It holds which rows show, their order, edge and
+  under-keyboard placement, the Dock design and the Search field / Drawer tile toggles. While on,
+  a Home page opens the Layout editor on Home's own layout, and the rows and design may change on
+  the swipe. Off by default.
+- Linked keys (decided 2026-10-21, #84): with Home's own on, the apps row height, the #3 Strip row
+  height, the keyboard's height and chin, and Style, Corners and Margin stay one value on both
+  halves, edited from either half, so nothing resizes on the swipe. The store resolves its linked
+  keys (`PlaceLayoutStore.LINKED_KEYS`) in the normal layout's scope for the Home layout, and the
+  preferences' per-half Style/Corners/Margin accessors answer the Workspace's on either half.
+  Turning Home's own on copies none of them. The keyboard's form stays Home's own. Minimal mode is
+  untouched: the linked values come from the normal layout.
 - Minimal mode stays the Workspace's (amended 2026-10-21): Home wears the normal shared layout, or
   its Home layout, whatever minimal says, because Home has no corner tab to leave minimal by. The
   command palette gains a "Minimal on/off" action that turns it on or off from anywhere (the corner
   tab's button still works in a window). Home ignores minimal altogether.
-- Migration also counts a differing keyboard (height, chin, form) as "Home differs", but only
-  while Home's keyboard is always on.
-- Migration: if a user's saved Home layout (dock rows, dock height, row order, under-keyboard flags)
-  differs from their Workspace layout, turn on the Home layout with those values so nothing visibly
-  changes. Otherwise Home follows the shared layout and its saved keys are dropped.
+- Migration also counts a differing keyboard form as "Home differs", but only while Home's
+  keyboard is always on. The linked sizes (dock height, Strip height, keyboard height and chin)
+  and Home's shape no longer count (#84).
+- Migration: if a user's saved Home layout (dock rows, row order, under-keyboard flags) differs
+  from their Workspace layout, turn on the Home layout with those values so the rows stand where
+  they stood. Otherwise Home follows the shared layout and its saved keys are dropped. Version 13
+  then drops Home's stored sizes and Style/Corners/Margin keys on every install, the ones this
+  branch already took to version 12 included; the Home layout switch is left as it is.
 
 ### Status bar
 
@@ -80,9 +92,9 @@ before the build step that changes behaviour through it.
   out, the Dock design, the Search field and Drawer tile, Style/Corners/Margin, and the keyboard's
   shape (height, chin, rows, form). Whether the keyboard is open is not dress; each half remembers
   that (Home's stays closed, ADR 0003).
-- With the Home layout off, Home's Style, Corners and Margin follow the shared layout (decided
-  2026-10-21; 0008 had made them Home's own). The Home-layout migration also carries a differing
-  Home shape.
+- Home's Style, Corners and Margin follow the shared layout, with the Home layout off (decided
+  2026-10-21; 0008 had made them Home's own) and on (linked, #84). A differing Home shape no
+  longer turns the Home layout on in the migration; version 13 drops Home's shape keys.
 - The activity, the Layout editor (in place of `LayoutVariant.offers` and its Home filter) and later
   the seam crossing all read the dress.
 - `HomeChromePolicy` is deleted. Its call sites (38 in `TermuxActivity`) move to the dress one by
