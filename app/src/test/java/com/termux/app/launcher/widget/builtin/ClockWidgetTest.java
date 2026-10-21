@@ -402,6 +402,54 @@ public class ClockWidgetTest {
             roomy.hourLength < 137.5f / 250f * roomy.radius);
     }
 
+    // ----- 24-hour time ----------------------------------------------------------------------
+
+    /**
+     * A Clock that follows the phone's 12/24-hour format keeps following it when another setting
+     * is saved: the sheet writes the 24-hour switch only once the user has moved it.
+     */
+    @Test public void savingAnotherSettingLeavesTheTwentyFourHourChoiceFollowingThePhone() {
+        BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
+        Bundle config = new Bundle();
+        config.putString(ClockWidgetSettings.KEY_FACE, ClockFace.SLAB.key);
+        ClockWidgetView view = laidOut(services, BuiltinWidgetSpan.TWO_BY_ONE, 184, 92, config);
+        services.destroy();
+        List<BuiltinWidgetView.ConfigField> fields = view.configFields();
+        // The sheet as it opens: every choice and switch at its start value.
+        Map<String, String> chosen = new HashMap<>();
+        for (BuiltinWidgetView.ConfigField field : fields) {
+            if (field.type == BuiltinWidgetView.ConfigField.Type.SWITCH
+                || field.type == BuiltinWidgetView.ConfigField.Type.CHOICE) {
+                chosen.put(field.key, BuiltinWidgetConfigSheet.startValue(field, config));
+            }
+        }
+        chosen.put(ClockWidgetSettings.KEY_FACE, ClockFace.LCD.key);
+        Bundle saved = BuiltinWidgetHost.configOf(BuiltinWidgetConfigSheet.savedValues(fields,
+            config, "", chosen, new HashMap<>()));
+        assertEquals(ClockFace.LCD.key, saved.getString(ClockWidgetSettings.KEY_FACE));
+        assertFalse("the 24-hour choice is not pinned",
+            saved.containsKey(ClockWidgetSettings.KEY_24_HOUR));
+        assertTrue(ClockWidgetSettings.is24Hour(saved, true));
+        assertFalse(ClockWidgetSettings.is24Hour(saved, false));
+
+        // Moved by the user, it is written.
+        String start = chosen.get(ClockWidgetSettings.KEY_24_HOUR);
+        chosen.put(ClockWidgetSettings.KEY_24_HOUR, BuiltinWidgetView.ConfigField.ON.equals(start)
+            ? BuiltinWidgetView.ConfigField.OFF : BuiltinWidgetView.ConfigField.ON);
+        Bundle flipped = BuiltinWidgetHost.configOf(BuiltinWidgetConfigSheet.savedValues(fields,
+            config, "", chosen, new HashMap<>()));
+        assertEquals(chosen.get(ClockWidgetSettings.KEY_24_HOUR),
+            flipped.getString(ClockWidgetSettings.KEY_24_HOUR));
+
+        // An answer the record already stores is kept as stored.
+        Bundle answered = new Bundle(config);
+        answered.putString(ClockWidgetSettings.KEY_24_HOUR, ClockWidgetSettings.OFF);
+        Map<String, String> kept = new HashMap<>(chosen);
+        kept.put(ClockWidgetSettings.KEY_24_HOUR, ClockWidgetSettings.OFF);
+        assertEquals(ClockWidgetSettings.OFF, BuiltinWidgetConfigSheet.savedValues(fields,
+            answered, "", kept, new HashMap<>()).get(ClockWidgetSettings.KEY_24_HOUR));
+    }
+
     // ----- Minimal's weight -------------------------------------------------------------------
 
     @Test public void minimalsWeightRowShowsOnlyForMinimal() {
