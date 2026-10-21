@@ -1,5 +1,7 @@
 # Home dock styles
 
+> **2026-10-21:** changed by [`chrome-unification-2026-10-21.md`](chrome-unification-2026-10-21.md) (ADR 0009): the dock and its design are shared by both halves, Prompt line and Taskbar become the Search field and Drawer tile toggles, the run strip goes, and the designs are #1 Tray, #2 Beads, #3 Strip.
+
 Home is a conventional launcher with no launcher status bar (ADR 0008), so its dock is where the
 command palette, Home floats and Workspace terminals meet Home. This spec turns the dock into a
 choice of five styles, picked in the Layouts menu. The developer chose them over four review rounds

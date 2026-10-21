@@ -52,10 +52,10 @@ _Avoid_: edge swipe, status bar swipe, page swipe
 
 **Chrome**:
 Everything the launcher draws around a page: the status bar, dock, keyboard, borders and corner
-tabs. The **Workspace** wears all of it; a **Home page** wears only the dock (without the extra
-keys) and the keyboard, both as overlays that take no room from the grid, under Android's own
-system bar. It wears no launcher status bar at all (2026-10-19): the focused **Home float**'s
-**titlebar** carries the CPU and RAM readings there, and minimised floats wait in **float chips**.
+tabs. The **Workspace** wears all of it; a **Home page** wears the same status bar and dock
+(without the extra keys) and the keyboard, as overlays that take no room from the grid. The dock and
+status bar are one each across both halves and stay put while the wall moves (decided 2026-10-21,
+replacing the 2026-10-19 Home without a launcher status bar).
 _Avoid_: UI (too wide), decoration
 
 **Display**, **display window**:
@@ -72,9 +72,23 @@ of it, but the window is the display)
 
 **Dock**:
 The band of chrome that carries the pinned-apps row, the A–Z index and the extra keys, along the
-bottom by default. Its shape follows the **Style**. Its rows may stand under the keyboard instead of
-over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
+bottom by default. There is one dock for both halves of the wall, dressed by one **Dock design**;
+only the Workspace's carries the extra keys. Its shape follows the **Style**. Its rows may stand under
+the keyboard instead of over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
 _Avoid_: taskbar, nav bar, hotseat
+
+**Dock design**:
+Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
+**Home layout**): #1 Tray (the default), #2 Beads or #3 Strip (the clock-and-windows row over the
+apps). Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
+the **Drawer tile**, which any design can carry.
+_Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
+Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
+
+**Drawer tile**:
+A dock tile that opens the app drawer, there when the layout turns it on, with any **Dock design**,
+standing at the start, middle or end of the apps row. Once the Taskbar design's (until 2026-10-21).
+_Avoid_: Home tile (it does not go Home), Taskbar
 
 **Grabber**:
 The small pill on a page's bottom or top border that marks the **keyboard swipe** or the **status
@@ -85,8 +99,7 @@ _Avoid_: handle (the Layout editor's size control), pull tab
 **Home**:
 The launcher half of the wall: the **Home pages**, left of the **Workspace**. It is always there,
 and it is where the home press lands. Its chrome is the dock with the pinned-apps row and the A–Z
-index, and the keyboard; it has no borders, and the launcher status bar only while a **Home
-float** exists.
+index, the launcher status bar it shares with the Workspace, and the keyboard; it has no borders.
 _Avoid_: home screen (as a name for the whole launcher), the widgets place, Widgets page
 
 **Home page**:
@@ -110,7 +123,8 @@ A minimised **Home float**'s chip: a small glass chip, like the dock's glass, in
 just above the dock on Home (above the keyboard while one is up), showing the float's glyph and
 short name. A tap brings the float back onto its page; Minimise flies the float into it. While the
 row shows, Home floats keep clear of it. Never on the Workspace, where the window chips stand for
-the floats.
+the floats. To retire (decided 2026-10-21): with the status bar on Home, a minimised float becomes
+a chip in the bar on both halves, like a window's.
 _Avoid_: Home pills (removed 2026-10-19), windows pill, minimised pill
 
 **Keyboard swipe**:
@@ -148,7 +162,8 @@ _Avoid_: custom wallpaper, in-app wallpaper
 A second saved **Workspace** layout, and nothing more. It starts with only each window's content, so
 by default the bars, the A–Z index, the extra keys and the keyboard go away, and it changes no
 behaviour. It is one mode for every window, turned on and off only from the corner tab's minimal
-button, and stays on until turned off; Home has no minimal mode. The Layout editor opened while it
+button, and stays on until turned off; while it is on Home wears the minimal layout too, unless
+Home holds a **Home layout** of its own (decided 2026-10-21). The Layout editor opened while it
 is on edits the **minimal layout**. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: full screen, focus mode, zen mode, zen view
@@ -204,9 +219,14 @@ The one setting that says where a cold start lands: Home (the default) or the Wo
 opens one fresh shell window. It replaces the usage mode's Terminal alone.
 _Avoid_: default place, start page, usage mode
 
+**Search field**:
+The field under the dock's apps row that opens the command palette, there when the layout turns it
+on, with any **Dock design**. It was once a design of its own, Prompt line (until 2026-10-21).
+_Avoid_: Prompt line, Ask, omnibar, search bar
+
 **Status swipe**:
-The keyboard swipe's mirror on the top border: down unfolds the status bar, up folds it. It is there
-only while the status bar stands along the top and can unfold. The bar has these two forms only (a
+The keyboard swipe's mirror on the top border: down unfolds the status bar, up folds it, on Home as
+in the Workspace. It is there only while the status bar stands along the top and can unfold. The bar has these two forms only (a
 third, the capsule, was tried in phase two and removed). A press in Android's own strip at
 the top of the screen is never taken, so the notification shade still pulls down. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
@@ -380,16 +400,22 @@ palette's **Keyboard on/off** flips (`keyboard_turned_off`), shared by both orie
 page; the last write wins, whichever door it came through.
 _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
 
+**Home layout**:
+An opt-in layout of Home's own, for a user who wants Home laid out unlike the Workspace. Off by
+default, when Home wears the one shared layout; while on, the bar and dock may change on the swipe
+between the halves. It is to the layout what a surface's override is to **Base**.
+_Avoid_: Home variant, Home place
+
 **Layout editor**:
 The editor for where the elements sit and how big they are: bars, dock, keyboard, widget grid,
 hidden or shown. It has no rows of controls (spec `project-docs/reference/launcher/appearance-layout-editor/SPEC.md`
 §3.5): a bar moves by pressing it anywhere and dragging, anything is put away by dropping it in the **restore tray** and
 brought back by its chip there, and a tap selects an element and shows its **handle** — the dock's
 height, the keyboard's height and chin, Home's grid cells — with a readout in real units while it
-is held. The selected keyboard shows its type chips (docked, floating, split). There is one layout
-per half of the wall: opened on a window it edits the Workspace layout (normal or minimal variant),
-opened on a Home page it edits the Home layout, whose elements are the dock's rows and the keyboard
-only; the layout canvas shows the page it was opened on, one orientation at a time with a glyph
+is held. The selected keyboard shows its type chips (docked, floating, split), the selected dock
+its **Dock design**. One layout dresses both halves of the wall (decided 2026-10-21): opened on any
+page it edits that layout (normal or minimal variant), and Home simply leaves out the extra keys.
+Only when Home holds a **Home layout** does a Home page open that one instead; the layout canvas shows the page it was opened on, one orientation at a time with a glyph
 toggle to the other. Entered from the corner tab's Layout glyph, the long-press menu, or the Layout
 row in Settings.
 _Avoid_: arrange mode, surface editor, place editor

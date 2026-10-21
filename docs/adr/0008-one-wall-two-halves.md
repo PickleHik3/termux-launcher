@@ -70,6 +70,8 @@ does; the float moves only by its titlebar (spec §2, §4).
 
 ## Amended 2026-10-19: Home wears no status bar
 
+_Superseded 2026-10-21 by ADR 0009 (one chrome across the wall): Home wears the Workspace's bar again, and one layout dresses both halves._
+
 The developer's decision: Home shows no launcher status bar of any kind. The Home pills (a windows
 pill and a stats pill standing in for the bar on Home) are removed, and so is the bar the first
 Home float used to bring down: the Home layout keeps the status slot put away whatever the floats
