@@ -507,6 +507,16 @@ public class ClockWidgetTest {
                 .contains("minimal_medium"));
     }
 
+    /** The picker stands as tall as its rows: no blank strip for a Weight row it does not show. */
+    @Test public void theLooksClockPickerReservesTheWeightRowOnlyForMinimal() {
+        int faces = 6 * 48, row = 56;
+        assertEquals(faces + row, SurfaceEditorController.clockPopupHeightDp("slab"));
+        assertEquals(faces + row, SurfaceEditorController.clockPopupHeightDp(null));
+        assertEquals(faces + row + row, SurfaceEditorController.clockPopupHeightDp("minimal"));
+        assertEquals(faces + row + row,
+            SurfaceEditorController.clockPopupHeightDp("minimal_medium"));
+    }
+
     // ----- helpers --------------------------------------------------------------------------
 
     /** The sizes, in dp, a span is checked at: its minimum, its design and a roomy end. */

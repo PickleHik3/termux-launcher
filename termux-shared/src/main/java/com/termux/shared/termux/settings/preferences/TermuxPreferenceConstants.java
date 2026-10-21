@@ -1396,7 +1396,10 @@ public final class TermuxPreferenceConstants {
         public static final String TOP_PANE_CLOCK_STYLE_FLIP = "flip";
         public static final String TOP_PANE_CLOCK_STYLE_LCD = "lcd";
         public static final String TOP_PANE_CLOCK_STYLE_MINIMAL = "minimal";
-        /** Minimal in a medium weight, for busy wallpapers; no picker offers it yet (#111). */
+        /**
+         * Minimal in a medium weight, for busy wallpapers (#111): set through Minimal's Weight row
+         * in the Look's clock picker, never a face row of its own.
+         */
         public static final String TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM = "minimal_medium";
         public static final String TOP_PANE_CLOCK_STYLE_LED = "led";
         public static final String TOP_PANE_CLOCK_STYLE_TAPE = "tape";
