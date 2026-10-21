@@ -191,6 +191,28 @@ public class ClockWidgetTest {
         }
     }
 
+    @Test public void twentyFourHourTimeAppliesToTheZonesToo() {
+        fontScale(1f);
+        int[] size = sizesFor(BuiltinWidgetSpan.FOUR_BY_ONE)[1];
+        for (boolean is24 : new boolean[] {true, false}) {
+            Bundle config = new Bundle();
+            config.putString(ClockWidgetSettings.KEY_FACE, ClockFace.MINIMAL.key);
+            config.putString(ClockWidgetSettings.KEY_24_HOUR, is24 ? "on" : "off");
+            config.putString(ClockWidgetSettings.KEY_ZONE1, "Tokyo");
+            BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
+            ClockWidgetView view = laidOut(services, BuiltinWidgetSpan.FOUR_BY_ONE, size[0],
+                size[1], config);
+            services.destroy();
+            WidgetLayoutPlan plan = view.plan();
+            assertNotNull(plan);
+            WidgetLayoutPlan.Part time = plan.part("zone.0.time");
+            assertNotNull("Tokyo shows at 4x1", time);
+            assertEquals("Tokyo", plan.part("zone.0.city").text);
+            if (is24) assertTrue(time.text, time.text.matches("\\d\\d:\\d\\d"));
+            else assertTrue(time.text, time.text.matches("\\d{1,2}:\\d\\d [AP]M"));
+        }
+    }
+
     // ----- fit --------------------------------------------------------------------------------
 
     @Test public void everyFaceFitsItsCardAtEverySpan() {

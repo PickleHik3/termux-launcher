@@ -41,6 +41,8 @@ public class ClockWidgetView extends BuiltinWidgetView {
     /** The date and the alarm the current layout was planned with. */
     @NonNull private String shownDate = "";
     @NonNull private String shownAlarm = "";
+    /** The zone columns the current layout was planned with, flattened to one string. */
+    @NonNull private String shownZones = "";
     private boolean shown;
 
     public ClockWidgetView(@NonNull Context context, @NonNull BuiltinWidgetServices services,
@@ -63,7 +65,8 @@ public class ClockWidgetView extends BuiltinWidgetView {
 
     /**
      * The gear: the faces as a strip of live previews, Minimal's weight (only while Minimal is
-     * the face), Seconds and 24-hour time. The time zones are #113's.
+     * the face), Seconds, 24-hour time and the Time zones row (two extra zones, shown at 4×1
+     * and 4×2).
      */
     @NonNull @Override public List<ConfigField> configFields() {
         Context context = getContext();
@@ -87,6 +90,8 @@ public class ClockWidgetView extends BuiltinWidgetView {
             context.getString(R.string.bw_clock_seconds), false));
         fields.add(ConfigField.toggle(ClockWidgetSettings.KEY_24_HOUR,
             context.getString(R.string.bw_clock_24_hour), is24()));
+        fields.add(ConfigField.zones(ClockWidgetSettings.KEY_ZONE1,
+            ClockWidgetSettings.KEY_ZONE2, context.getString(R.string.bw_clock_zones)));
         return fields;
     }
 
@@ -119,26 +124,28 @@ public class ClockWidgetView extends BuiltinWidgetView {
         faceView.setGround(groundSurface());
         String date = ClockWidgetSupport.date("EEEdMMM", now);
         String alarm = span.isTall() ? alarmText(now, is24) : "";
+        List<ClockLayoutPlanner.ZoneColumn> zones = zoneColumns(now, is24, span);
         shownDate = date;
         shownAlarm = alarm;
+        shownZones = zonesKey(zones);
         float fontScale = getResources().getConfiguration().fontScale;
         float density = getResources().getDisplayMetrics().density;
         ClockLayoutPlanner.FaceMeasure faceMeasure = (widthDp, maxHeightDp) ->
             faceView.heightPxFor(widthDp * density, maxHeightDp * density) / density;
         WidgetPlanView planView = new WidgetPlanView(getContext(), style(),
             (widthDp, heightDp, measure) -> ClockLayoutPlanner.plan(span, widthDp, heightDp,
-                fontScale, face, date, alarm, faceMeasure, measure));
+                fontScale, face, date, alarm, zones, faceMeasure, measure));
         ClockCard card = new ClockCard(getContext(), planView, faceView);
         this.faceView = faceView;
         this.planView = planView;
         frame.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT));
-        describe(now, date, alarm, is24);
+        describe(now, date, alarm, zones, is24);
     }
 
     /** "Clock, 13:40, Tuesday 6 October", with the alarm when it shows. */
     private void describe(@NonNull ZonedDateTime now, @NonNull String date, @NonNull String alarm,
-                          boolean is24) {
+                          @NonNull List<ClockLayoutPlanner.ZoneColumn> zones, boolean is24) {
         String time = ClockWidgetFormats.hoursMinutes(now.toLocalTime(), is24) + " "
             + ClockWidgetFormats.amPm(now.toLocalTime(), is24);
         StringBuilder text = new StringBuilder(getContext().getString(R.string.bw_clocks_description,
@@ -146,7 +153,42 @@ public class ClockWidgetView extends BuiltinWidgetView {
         if (!alarm.isEmpty()) {
             text.append(". ").append(getContext().getString(R.string.bw_clock_alarm, alarm));
         }
+        for (ClockLayoutPlanner.ZoneColumn zone : zones) {
+            text.append(". ").append(getContext().getString(R.string.bw_clocks_description_zone,
+                zone.city, zone.time));
+        }
         setContentDescription(text);
+    }
+
+    /** The zones to show at {@code span}: none below 4×1, else the set ones, in the 24-hour habit. */
+    @NonNull private List<ClockLayoutPlanner.ZoneColumn> zoneColumns(@NonNull ZonedDateTime now,
+                                                                     boolean is24,
+                                                                     @NonNull BuiltinWidgetSpan span) {
+        List<ClockLayoutPlanner.ZoneColumn> columns = new ArrayList<>();
+        if (!span.isWide()) return columns;
+        Context context = getContext();
+        for (ZoneId zone : ClockWidgetSettings.zones(settings())) {
+            ZonedDateTime there = now.withZoneSameInstant(zone);
+            String time = (ClockWidgetFormats.hoursMinutes(there.toLocalTime(), is24) + " "
+                + ClockWidgetFormats.amPm(there.toLocalTime(), is24)).trim();
+            String offset = ClockWidgetFormats.offsetLabel(
+                ClockWidgetFormats.offsetMinutes(now, zone), ClockWidgetFormats.dayDelta(now, zone),
+                context.getString(R.string.bw_clocks_today),
+                context.getString(R.string.bw_clocks_offset_tomorrow),
+                context.getString(R.string.bw_clocks_offset_yesterday));
+            columns.add(new ClockLayoutPlanner.ZoneColumn(
+                ClockWidgetFormats.cityName(zone.getId()), time, offset));
+        }
+        return columns;
+    }
+
+    @NonNull private static String zonesKey(@NonNull List<ClockLayoutPlanner.ZoneColumn> zones) {
+        StringBuilder key = new StringBuilder();
+        for (ClockLayoutPlanner.ZoneColumn zone : zones) {
+            key.append(zone.city).append('|').append(zone.time).append('|').append(zone.offset)
+                .append(';');
+        }
+        return key.toString();
     }
 
     @Override protected void onCardChanged() {
@@ -199,14 +241,16 @@ public class ClockWidgetView extends BuiltinWidgetView {
         ZonedDateTime now = now();
         String date = ClockWidgetSupport.date("EEEdMMM", now);
         String alarm = span().isTall() ? alarmText(now, is24()) : "";
-        if (!date.equals(shownDate) || !alarm.equals(shownAlarm)) {
+        List<ClockLayoutPlanner.ZoneColumn> zones = zoneColumns(now, is24(), span());
+        if (!date.equals(shownDate) || !alarm.equals(shownAlarm)
+            || !zonesKey(zones).equals(shownZones)) {
             FrameLayout frame = content();
             frame.removeAllViews();
             render(frame, span());
             return;
         }
         if (faceView != null) faceView.setTime(now);
-        describe(now, date, alarm, is24());
+        describe(now, date, alarm, zones, is24());
     }
 
     private void onSecond() {

@@ -37,13 +37,12 @@ Only a widget bigger than the whole grid is greyed out ("too big for this grid")
 
 ## The launcher's own widgets
 
-Eleven widgets come with the launcher, drawn in the launcher's colours and following its theme,
+Ten widgets come with the launcher, drawn in the launcher's colours and following its theme,
 wallpaper colours and glass:
 
 | Widget | What it shows |
 |---|---|
-| **Analog clock** | The time; at the wider sizes, up to two more cities or time zones. |
-| **Digital clock** | The time and the date. |
+| **Clock** | The time on one of eight faces; the date from 2×1 and the next alarm from 2×2. At 4×1 and 4×2 it also shows up to two more cities or time zones, with how far they are from you at 4×2. |
 | **Agenda** | Your next calendar events. |
 | **Calendar** | A month view. |
 | **Weather** | The weather for the location set in [Status bar](Status_Bar.md#weather). It updates as soon as you come back from picking a place. |
@@ -56,8 +55,9 @@ wallpaper colours and glass:
 
 - Tasks and Notes are plain markdown files, so the shell sees exactly what the card shows. Tap
   the note to open the file in your editor.
-- The Analog clock, Tasks and Notes take settings from a cog that appears while you edit the
-  page: the extra time zones, or the file path (Notes can switch between several files).
+- The Clock, Tasks and Notes take settings from a cog that appears while you edit the
+  page: the Clock's face, seconds, 24-hour time and **Time zones** (a city like "Tokyo" or a zone
+  like "Asia/Kolkata"; leave one empty for none), or the file path (Notes can switch between several files).
 - The Calendar's month view has arrows to step to the previous or next month; tap the month's name
   to come back to this one.
 - Agenda and Calendar ask for calendar access on the card itself. Notifications and Media ask for

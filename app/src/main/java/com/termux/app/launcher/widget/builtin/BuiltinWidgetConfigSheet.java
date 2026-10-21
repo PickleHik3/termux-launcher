@@ -69,6 +69,9 @@ public final class BuiltinWidgetConfigSheet {
                 case CHOICE:
                     row = choiceRow(context, field, current, chosen, syncVisibility);
                     break;
+                case ZONES:
+                    row = zonesRow(context, field, current, inputs);
+                    break;
                 default:
                     row = textBox(context, field, current, inputs);
                     break;
@@ -184,6 +187,82 @@ public final class BuiltinWidgetConfigSheet {
             ViewGroup.LayoutParams.WRAP_CONTENT));
         inputs.add(input);
         return box;
+    }
+
+    /**
+     * The Clock's "Time zones" row: the label, what is set, and a chevron; a tap opens two fields
+     * for a city or a time zone ("Tokyo", "Asia/Kolkata"), and an empty one is none.
+     */
+    @NonNull private static View zonesRow(@NonNull Context context,
+                                          @NonNull BuiltinWidgetView.ConfigField field,
+                                          @NonNull Bundle current,
+                                          @NonNull List<TextInputEditText> inputs) {
+        float density = context.getResources().getDisplayMetrics().density;
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout head = new LinearLayout(context);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        head.setMinimumHeight(Math.round(48 * density));
+        head.setClickable(true);
+        head.setFocusable(true);
+        head.setContentDescription(field.label);
+        TextView label = new TextView(context);
+        label.setText(field.label);
+        label.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_BodyLarge);
+        head.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f));
+        TextView summary = new TextView(context);
+        summary.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_BodyMedium);
+        summary.setTextColor(MaterialColors.getColor(label,
+            com.google.android.material.R.attr.colorOnSurfaceVariant));
+        head.addView(summary, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView chevron = new TextView(context);
+        chevron.setText("\u203A");
+        chevron.setTextSize(24);
+        chevron.setPadding(Math.round(8 * density), 0, 0, 0);
+        head.addView(chevron, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        column.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout fieldsBox = new LinearLayout(context);
+        fieldsBox.setOrientation(LinearLayout.VERTICAL);
+        fieldsBox.setVisibility(View.GONE);
+        List<TextInputEditText> mine = new ArrayList<>();
+        String[] keys = {field.key, field.secondKey == null ? field.key : field.secondKey};
+        int[] hints = {R.string.bw_clocks_zone1_label, R.string.bw_clocks_zone2_label};
+        for (int i = 0; i < 2; i++) {
+            View box = textBox(context, new BuiltinWidgetView.ConfigField(keys[i],
+                context.getString(hints[i]), BuiltinWidgetView.ConfigField.Type.TEXT, ""),
+                current, mine);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.topMargin = Math.round(8 * density);
+            fieldsBox.addView(box, params);
+        }
+        inputs.addAll(mine);
+        column.addView(fieldsBox);
+        Runnable refresh = () -> {
+            List<String> cities = new ArrayList<>();
+            for (TextInputEditText input : mine) {
+                java.time.ZoneId zone = ClockWidgetFormats.resolveZone(
+                    String.valueOf(input.getText()));
+                if (zone != null) cities.add(ClockWidgetFormats.cityName(zone.getId()));
+            }
+            summary.setText(cities.isEmpty() ? context.getString(R.string.bw_clock_zones_none)
+                : android.text.TextUtils.join(", ", cities));
+        };
+        refresh.run();
+        head.setOnClickListener(v -> {
+            boolean open = fieldsBox.getVisibility() != View.VISIBLE;
+            fieldsBox.setVisibility(open ? View.VISIBLE : View.GONE);
+            chevron.setRotation(open ? 90f : 0f);
+            if (!open) refresh.run();
+        });
+        return column;
     }
 
     /** The value a choice or switch starts at: the stored one when it is one it offers. */
