@@ -13,6 +13,7 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · #106 (feat/widget-redesign) · A hosted app widget without its own rounded background has the same corner as the built-ins beside it (up to the system radius), light and dark wallpaper; a provider with its own rounded background keeps its corners; after changing the Look's Corners and returning Home the hosted corner follows (known gap: only re-read on attach) · emulator.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
