@@ -12,6 +12,16 @@
     <string name="builtin_widget_notes">Notes</string>
     <string name="builtin_widget_calendar">Calendar</string>
     <string name="builtin_widget_terminal">Terminal</string>
+    <string name="builtin_widget_clock_description">Keep time on a face you pick, with the date and zones.</string>
+    <string name="builtin_widget_glance_description">Glance at the date, the weather and the one thing that matters.</string>
+    <string name="builtin_widget_weather_description">See the sky now, the coming hours and days.</string>
+    <string name="builtin_widget_device_description">Watch the battery, storage and memory of this phone.</string>
+    <string name="builtin_widget_media_description">Control what is playing, with its art and progress.</string>
+    <string name="builtin_widget_notifications_description">See messages and people first, grouped by app.</string>
+    <string name="builtin_widget_tasks_description">Keep your open tasks in reach and tick them off.</string>
+    <string name="builtin_widget_notes_description">Keep a note on Home and open it to edit.</string>
+    <string name="builtin_widget_calendar_description">See what is next, then the whole month.</string>
+    <string name="builtin_widget_terminal_description">Keep a terminal on Home and type into it.</string>
 
     <!-- The Glance widget's second line: one item, the one that matters most now. -->
     <string name="bw_glance_event_soon">%1$s · %2$s %3$s</string>

@@ -23,8 +23,8 @@ import java.util.List;
 final class ClockLayoutPlanner {
     private ClockLayoutPlanner() { }
 
-    /** The Clock grows to 4×2: the wide spans carry the time zones (#113). */
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}): 4×2, whose wide spans carry the time zones. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.CLOCK.maxSpan;
 
     /** One extra time zone as a column: its city, its time, and (4×2) how it differs from here. */
     static final class ZoneColumn {

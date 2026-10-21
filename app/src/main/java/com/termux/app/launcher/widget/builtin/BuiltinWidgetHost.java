@@ -152,10 +152,10 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
         float density = context.getResources().getDisplayMetrics().density;
         // Spans are asked of the grid in pixels, as an app widget's minWidth is: on a dense grid
         // a widget designed for two 88 dp cells takes however many of its cells make 184 dp.
-        BuiltinWidgetSpan smallest = BuiltinWidgetSpan.ONE_BY_ONE;
-        WidgetGridMetrics.Span minimum = metrics.spanForPixels(
-            Math.round(smallest.widthDp * density), Math.round(smallest.heightDp * density));
         for (BuiltinWidgetKind kind : BuiltinWidgetKind.values()) {
+            WidgetGridMetrics.Span minimum = metrics.spanForPixels(
+                Math.round(kind.minSpan.widthDp * density),
+                Math.round(kind.minSpan.heightDp * density));
             BuiltinWidgetSpan designed = defaultSpan(kind);
             WidgetGridMetrics.Span span = metrics.spanForPixels(
                 Math.round(designed.widthDp * density), Math.round(designed.heightDp * density));
@@ -163,13 +163,24 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
             boolean fits = span.fits && columns <= metrics.definition().columns
                 && rows <= metrics.definition().rows;
             items.add(WidgetProviderItem.builtin(0L, kind.id, context.getString(kind.label),
-                columns, rows, Math.max(1, minimum.columns), Math.max(1, minimum.rows), fits));
+                columns, rows, Math.max(1, minimum.columns), Math.max(1, minimum.rows), fits)
+                .withCard(context.getString(kind.description), sizesText(kind)));
         }
         Drawable icon = null;
         try { icon = context.getPackageManager().getApplicationIcon(context.getPackageName()); }
         catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException ignored) { }
         return new WidgetAppGroup(0L, LauncherWidgetRecord.BUILTIN_PROVIDER_PACKAGE,
             context.getString(R.string.builtin_widget_group), icon, items);
+    }
+
+    /** The kind's sizes grouped for its one card: "2 \u00d7 1 \u00b7 2 \u00d7 2 \u00b7 4 \u00d7 2". */
+    @NonNull public static String sizesText(@NonNull BuiltinWidgetKind kind) {
+        StringBuilder text = new StringBuilder();
+        for (BuiltinWidgetSpan span : kind.sizes()) {
+            if (text.length() > 0) text.append(" \u00b7 ");
+            text.append(span.columns).append(" \u00d7 ").append(span.rows);
+        }
+        return text.toString();
     }
 
     @Override @Nullable public WidgetPreviewArtwork preview(@NonNull WidgetProviderItem item,

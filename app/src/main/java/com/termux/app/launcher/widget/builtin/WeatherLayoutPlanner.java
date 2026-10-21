@@ -22,8 +22,8 @@ import java.util.List;
 final class WeatherLayoutPlanner {
     private WeatherLayoutPlanner() { }
 
-    /** Weather adds nothing past its 4×2. */
-    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetSpan.FOUR_BY_TWO;
+    /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
+    static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.WEATHER.maxSpan;
 
     /** The cloud the empty card shows. */
     static final String GLYPH_NO_WEATHER = "";
