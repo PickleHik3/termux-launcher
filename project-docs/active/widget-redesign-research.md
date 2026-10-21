@@ -33,6 +33,10 @@ suggestions.
    `OnGlass` engine that already holds the dock and the bars to 4.5:1. Today the widgets are not a
    band in that engine. When contrast settings ask for it, or blur is off, a widget falls back to
    a solid card.
+   - The emulator shows what the gap costs: Scratchpad's text vanishes on glass and Terminal's dark
+     words vanish on dark wallpaper by day.
+   - Cards also glare on dark wallpaper by day and disappear on light wallpaper, because they follow
+     day or night instead of the wallpaper (§2.1).
 3. **Fewer, better widgets.** Of the 12 kinds, 9 remain. The two clocks become one **Clock**, Agenda
    and Calendar become one **Calendar**, and Battery and System become one **Device**. Weather,
    Media, Notifications, Tasks and Notes are reworked, and Terminal stays as it is. Every stored
@@ -50,22 +54,129 @@ suggestions.
 
 ### 2.1 On the device
 
-*Pending: the emulator capture of every current widget is in progress. This section will reference
-the screenshots under
-`https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/` once the findings are
-in.*
+Captured 2026-10-21 from a debug build of `1bfba4cd9` on the tl16 emulator, with no crashes.
+Screens are under `https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/`, linked
+below as *S/<file>*. Nothing was checked at the 4× spans (the page was full), with glass on every
+widget, at a large font size, or in rotation.
+
+**Placing and editing**
+
+- **The picker.** Long-press a free cell, then *Add a widget*. Widgets are grouped by app, with
+  "Termux Launcher (12 widgets)" first and the Android app widgets after it. A tap places the
+  widget at its default span; on a full page a tap only shows a toast.
+  ([S/picker_termux-widgets_a.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/picker_termux-widgets_a.png),
+  [S/picker_termux-widgets_b.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/picker_termux-widgets_b.png),
+  [S/picker_apps-list_light.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/picker_apps-list_light.png),
+  [S/picker_search-digital_light.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/picker_search-digital_light.png))
+- **Edit mode.** A widget shows a frame with edge handles, an X and a gear. The "4 × 5 / ✓ / ✗ / ?"
+  toolbar covers the X and gear of widgets at the top right. A drag into an occupied cell snaps back
+  with no feedback.
+  ([S/edit-mode_calendar-selected_colorful.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/edit-mode_calendar-selected_colorful.png),
+  [S/edit-mode_weather-selected_light-wallpaper.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/edit-mode_weather-selected_light-wallpaper.png),
+  [S/weather_grow-blocked-by-neighbour_edit.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/weather_grow-blocked-by-neighbour_edit.png))
+- **The gear.** The gears that were checked offered only the Glass switch. Scratchpad adds File and
+  *More files…*.
+  ([S/config_digital-clock_settings.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/config_digital-clock_settings.png),
+  [S/config_scratchpad_settings.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/config_scratchpad_settings.png))
+- **Hosted app widgets.** They have no gear and ignore the launcher's theme. Their edit frame
+  reaches slightly past their content.
+  ([S/appwidget-system-analog_edit-mode_colorful.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/appwidget-system-analog_edit-mode_colorful.png),
+  [S/appwidget-screentime_edit-mode_colorful.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/appwidget-screentime_edit-mode_colorful.png))
+
+**Each widget at its default span** (overviews:
+[S/batch1_all-defaults-permissions-granted_colorful.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/batch1_all-defaults-permissions-granted_colorful.png),
+[S/batch1_all-defaults-no-permissions_colorful.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/batch1_all-defaults-no-permissions_colorful.png),
+[S/batch2_scratchpad-calendar-terminal_defaults_colorful.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/batch2_scratchpad-calendar-terminal_defaults_colorful.png))
+
+| Widget | What the device shows | Screens |
+|---|---|---|
+| Analog clock 1×1 | Time only. The dial fills about 60 % of the card, with dead space above and below. The picker's preview is a better drawing than the placed widget | [analog-clock_1x1_colorful](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/analog-clock_1x1_colorful.png) |
+| Digital clock 2×1 | Large time and the date, with generous padding: the best of the set. Its gear has no time-zone field, though `docs/en/Widgets.md` promises one | [digital-clock_2x1_colorful](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/digital-clock_2x1_colorful.png), [config_digital-clock_settings](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/config_digital-clock_settings.png) |
+| Agenda 2×1 | The next event, its time and a countdown. The "Wed, Oct 21 · Next" header and the colored time and title are crammed onto one line. Without permission it shows "Allow calendar access" | batch1 (both) |
+| Weather 2×1 and 1×1 | Temperature, condition, high and low. The 1×1 re-lays out well. Without a location it shows "needs a location fix", and the place can only be set in the status bar's settings, not from the widget | [weather_small-1x1_edit_light-wallpaper](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/weather_small-1x1_edit_light-wallpaper.png), batch1 |
+| **Battery 1×1** | **Defect.** The "100" is larger than the ring's inside and overlaps the lower arc in every theme. The card is mostly empty | batch1 |
+| System 2×1 | RAM and temperature bars with no visible labels, so you can't tell which is which. No CPU or storage. Thin, low-contrast bars | batch1 |
+| Media 2×1 | Striped placeholder art, "Nothing play…" truncated, buttons that look disabled. The empty state doesn't read | batch1 |
+| Notifications 2×2 | App icon, title, and a body cut to one word although a second line is free. A red count badge. On rows 4–5 the bottom of the card hides behind the dock | batch1 |
+| Tasks 2×2 | "Today +" and "No tasks yet", mostly empty. The same overlap with the dock | batch1 |
+| **Scratchpad 2×2** | **Defect.** With Glass on, the dark text disappears into dark glass. It is also unreadable on a dark wallpaper in day mode | [scratchpad_2x2_glass-on_colorful](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/scratchpad_2x2_glass-on_colorful.png), [page3_dark-wallpaper_day-mode](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/page3_dark-wallpaper_day-mode.png) |
+| Calendar (month) 2×2 | The title is "Oct" with no year. Day numbers touch each other and sit near the card's edge, and the event dot sits on the digit. Denser than the rest | batch2, [page3_light-wallpaper_day-mode](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/page3_light-wallpaper_day-mode.png) |
+| **Terminal 4×2** | **Defect.** The text fills about 75 % of the width and leaves the right quarter empty. Dark words vanish on a dark wallpaper in day mode. It opens scrolled to the middle | batch2 |
+
+**The status bar's clock faces** (Look → Custom → tap the status pill → Clock; alignment Left,
+Center or Right).
+
+| Face | On the device | Screen |
+|---|---|---|
+| Flip | The ghost fold lines over the digits look messy | [flip](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/statusbar-clock_flip_preview-zoom.png) |
+| LCD | Dark digits on purple glass, very low contrast | [lcd](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/statusbar-clock_lcd_preview-zoom.png) |
+| Minimal | Thin digits, weak on busy wallpapers | [minimal](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/statusbar-clock_minimal_preview-zoom.png) |
+| LED matrix | Legible | [led-matrix](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/statusbar-clock_led-matrix_preview-zoom.png) |
+| Tape | The date sits far right on the same row | [tape](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/statusbar-clock_tape_preview-zoom.png) |
+| Slab (default) | The strongest | [slab](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/statusbar-clock_slab_preview-zoom.png) |
+
+All six show tiny grey seconds and the date in spaced capitals
+([S/statusbar-clock_face-picker_all-six.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/statusbar-clock_face-picker_all-six.png);
+`*_preview-zoom-full.png` has each face at full width).
+
+**Cohesion across the set**
+([S/page1_all-widgets_dark-wallpaper.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/page1_all-widgets_dark-wallpaper.png),
+[S/page1_all-widgets_dark-wallpaper_night-mode.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/page1_all-widgets_dark-wallpaper_night-mode.png),
+[S/page1_light-wallpaper_day-mode.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/page1_light-wallpaper_day-mode.png),
+[S/look-editor_custom-glass-sliders_colorful.png](https://amal-build.taild9c5dc.ts.net/reports/widgets-research/screens/look-editor_custom-glass-sliders_colorful.png))
+
+- Only Digital clock, Weather, Agenda and Calendar share padding and radius. Battery, System and
+  Media look unfinished.
+- The set reads as three type families: sans, mono (Scratchpad, Terminal) and what looks like a
+  third face on the Calendar.
+- On a light wallpaper the cards nearly disappear.
+- On a dark wallpaper in day mode the widgets stay light and glaring. They turn dark only in Night
+  mode.
+- Glass is set per widget.
+- The clock's look and glass settings live somewhere else from the widget's gear.
+
+**What the device findings mean for this note**
+
+- The three defects are the same failure the code reading predicted: no measured ink (§2.2). Text
+  is colored from the day/night theme, never from what is behind it, and it disappears on dark
+  wallpaper by day, on Scratchpad's glass and on Terminal's dark words. This is the strongest
+  argument for §4.4.2.
+- "Cards vanish on light wallpaper" and "light, glaring cards on dark wallpaper by day" both come
+  from the card following the theme rather than the wallpaper. §4.4.2 now also covers the card's
+  polarity, and §4.4.7 adds a card edge rule.
+- **The status bar faces need work before they scale up.** LCD's contrast, Flip's fold lines,
+  Minimal's thin strokes, and the small grey seconds and spaced-capital date (below the 11 sp floor)
+  have to be fixed first. They would only get more visible at widget size. §7 now says so.
+- The rows 4–5 overlap with the dock is a grid problem, not a widget design one, but the redesign
+  must not ship over it.
+
+**Where the device and the code reading disagree** (the device wins)
+
+- **Digital clock zones.** The user docs list "up to two more cities" for both clocks. The code gives
+  zone fields only to Analog (`AnalogClockWidgetView.configFields`, lines 77-83), and the Digital
+  gear on the device has none. The **docs are wrong** for Digital. The code's Analog zone fields
+  and Tasks' path field (`TasksWidgetView.java:133-135`) were not opened on the device, so
+  "only a Glass switch" was not confirmed for those two.
+- **Calendar's "third face".** The code draws the calendar in the same two families: bold sans
+  letters and medium mono digits (`CalendarMonthGridView.java:56-60`). The eye reads a third face
+  because of the mix at 9.5 and 10.5 sp, not because of a third typeface. The fix is the same
+  either way (§4.2).
+- **System 2×1.** The code builds RAM and temperature, plus CPU only with privileged access.
+  Storage starts at 2×2 (`SystemWidgetView.buildTwoByOne`, lines 144-158). The device agrees with
+  this; my first draft of §2.2 wrongly listed storage at 2×1. The rows have labels only as glyphs
+  and content descriptions, which matches "no labels" on screen.
 
 ### 2.2 Inventory, from the code
 
 | Kind id | Default span | What it shows (by span) | Source |
 |---|---|---|---|
-| `clock.analog` | 1×1 | A face with a second hand, plus up to two more zones (defaults London and Kolkata) at the wide spans. | `AnalogClockWidgetView` |
-| `clock.digital` | 2×1 | Time and date. Day and year progress at 2×2 and 4×2, sunrise and sunset at 4×1, seconds at 4×2. | `DigitalClockWidgetView` |
+| `clock.analog` | 1×1 | A face with a second hand, plus up to two more zones (defaults London and Kolkata) at the wide spans. The zones are its only config fields besides Glass. | `AnalogClockWidgetView` (`configFields`, 77-83) |
+| `clock.digital` | 2×1 | Time and date. Day and year progress at 2×2 and 4×2, sunrise and sunset at 4×1, seconds at 4×2. It has no zone fields; the wide header shows only the phone's own offset. | `DigitalClockWidgetView` (167, 238) |
 | `agenda` | 2×1 | Today's date, the count of today's events and the next few. | `AgendaWidgetView` |
 | `calendar.month` | 2×2 | A date band at 1×1, the week at 2×1, the month at 2×2, a fortnight at 4×1, and month plus events at 4×2. | `CalendarWidgetView` |
 | `weather` | 2×1 | Now at 1×1, the next hours from 2×2, the coming days at 4×2. A tap refetches. | `WeatherWidgetView` |
 | `battery` | 1×1 | A ring, then level and charger state, then temperature and power draw, and a 24 h chart at 4×2. | `BatteryWidgetView` |
-| `system` | 2×1 | CPU (only with Shizuku or su), RAM, temperature and storage, and a 32-sample CPU history at 4×2. | `SystemWidgetView` |
+| `system` | 2×1 | RAM and temperature at 2×1, plus CPU when Shizuku or su gives access. Storage from 2×2, and a 32-sample CPU history at 4×2. Rows are labelled only by a Nerd glyph and its content description. | `SystemWidgetView` (`buildTwoByOne`, 144-158) |
 | `media` | 2×1 | A play button over the art at 1×1, up to the full transport at 4×2. | `MediaWidgetView` |
 | `notifications` | 2×2 | A bell with a count, the newest notification, or a short list. | `NotificationsWidgetView` |
 | `tasks` | 2×2 | A markdown checklist (`~/notes/tasks.md`) with checkboxes and an add button. | `TasksWidgetView` |
@@ -85,7 +196,7 @@ never built, and `terminal` stands in its catalogue slot.
   88×92 dp. At that cell size a 2×1 is about 184×92 dp and a 4×2 about 376×192 dp.
 - **Two directions.** Settings has a *Built-in widget style* choice. **Tonal** uses Material
   containers, sans captions and light mono numerals. **Pane** uses a hairline rim, mono captions led
-  by a Nerd glyph and medium numerals (`BuiltinWidgetStyle.java:19-38`).
+  by a Nerd glyph and medium numerals (`BuiltinWidgetStyle.java:19-39`).
 - **Corners.** Every built-in card is cut at the Look's Corners, Base's default being 24 dp
   (`BuiltinWidgetStyle.lookCornerRadiusPx`). Hosted app widgets are clipped at
   `system_app_widget_background_radius` instead, or 16 dp before Android 12
@@ -95,7 +206,7 @@ never built, and `terminal` stands in its catalogue slot.
   is on and the launcher sits on the wallpaper, the widget wears the Look's slab: Base blur,
   opacity, tint, grain, rim and Fancier Glass. The card underneath uses fixed alphas, surface
   container at 55 % dark or 62 % light with a white rim at 12 % or 55 %
-  (`BuiltinWidgetStyle.java:103-110`).
+  (`BuiltinWidgetStyle.java:113-120`).
 - **No measured contrast on widgets.** `launcher/widget/` does not use `ChromeInk` or `OnGlass`
   (the only hit is `HomeFolderPopup`), and `GlassBackdropCache.Band` has no widget band. Ink on a
   widget's glass is never checked against what is behind it, although the dock and bars are held
@@ -104,7 +215,7 @@ never built, and `terminal` stands in its catalogue slot.
 ### 2.3 Type
 
 The app ships no text faces, only `SymbolsNerdFontMono.ttf` for glyphs. Text uses the system sans
-and the terminal's mono (`BuiltinWidgetStyle.java:121-134`), with sizes set per widget:
+and the terminal's mono (`BuiltinWidgetStyle.java:125-132`), with sizes set per widget:
 
 - 10.5 sp mono is the caption size in Battery, Agenda, Analog, Digital, Media, Notifications, Tasks,
   Notes, System, Weather and the calendar support code (`grep '10.5f' launcher/widget/builtin`).
@@ -384,6 +495,11 @@ The warm accent stays, but only for the sun.
    and 3:1 for hero numerals at 24 sp and up and for graphics. This uses the existing machinery,
    so nothing per frame is added. Widgets join the page's single ink polarity, so a light-ink
    widget never sits under a dark-ink dock.
+   - **The solid card's polarity follows the same vote.** On the device, the card follows day or
+     night only. That leaves light, glaring cards on a dark wallpaper by day, and dark text lost on
+     dark wallpaper, glass and terminal (§2.1).
+   - **Proposal:** the card takes the light or dark surface role that matches the page's ink
+     polarity. Night mode still forces dark.
 3. **No glass on glass.** Chips, tracks and art inside a widget are fills.
 4. **Solid fallback.** Draw the solid card instead of glass when any of these hold:
    - The launcher is off the wallpaper.
@@ -401,6 +517,10 @@ The warm accent stays, but only for the sun.
    StandBy treatments [HIG-WIDGETS]. Ink sits straight on the wallpaper, measured by the same
    band, with a dim of up to 35 % drawn only where the measurement asks for it [HIG-MATERIALS].
    It is meant for Clock, Glance and Weather. Off by default.
+7. **The card must show its edge.** On a light wallpaper the cards nearly disappear (§2.1).
+   **Proposal:** when the card and the wallpaper behind it measure under 1.5:1, draw the rim at the
+   outline role. The 1.5 is a design threshold, not a WCAG rule: 1.4.11 asks 3:1 only of boundaries
+   needed to identify a control [WCAG-1411], and a card is not one.
 
 ### 4.5 Content rules
 
@@ -431,7 +551,7 @@ The warm accent stays, but only for the sun.
 | Notifications | **Overhaul, narrowed** | See below |
 | Tasks | **Keep, restyle** | See below |
 | Notes (Scratchpad) | **Keep, restyle** | See below |
-| Terminal | **Keep** | Only the shell rules: outer corner and inset. Its text is the terminal's |
+| Terminal | **Keep, fix** | The shell rules only (outer corner and inset); its text is the terminal's. The device defects come first: the pane fills only about 75 % of the width, dark words vanish on a dark wallpaper by day (its band gets a veil like `TERMINAL_PANE`), and it opens scrolled to the middle (§2.1) |
 
 Kind ids are durable (`BuiltinWidgetKind` javadoc). A merged kind keeps its id as an alias that
 opens the new widget with matching settings, for example `calendar.month` → Calendar with
@@ -451,6 +571,10 @@ view=month and `system` → Device with CPU first.
 | 4×2 | Month and events |
 
 - The next event takes the primary accent.
+- The device findings set the fixes (§2.1):
+  - Give the header its own line rather than squeezing it in beside the event.
+  - The month title carries the year.
+  - Day cells get at least 2 dp between them, and the event dot sits under the digit, not on it.
 - When there are no events, it says "Nothing else today", then tomorrow's first event.
 - Calendar access is still asked for on the card.
 
@@ -465,6 +589,9 @@ and the precipitation chance.
 
 - It shows "Updated 40 min ago" once the 30 min cache TTL has passed
   (`statusbar/WeatherController.java:123`).
+- Without a location it offers "Set a place" on the card, opening the same picker the status bar
+  uses. Today it says "needs a location fix", and the place can be set only in the status bar's
+  settings (§2.1).
 - It is a candidate for one expressive shape at 1×1 [A-STYLE].
 
 **Device** (Battery + System).
@@ -477,6 +604,11 @@ and the precipitation chance.
 | 4×2 | Adds the 24 h battery chart, plus CPU history when Shizuku or su is available |
 
 - CPU never appears as a dash. Its row is absent until access exists, as today.
+- Every bar gets a visible word label ("RAM 3.1/8 GB"), not only a glyph. On the device the 2×1
+  bars could not be told apart.
+- Bars are at least 6 dp and meet 3:1 against their track [WCAG-1411].
+- Fix the 1×1 ring defect: the hero number is fitted to the ring's inner diameter, never to the
+  card (§2.1).
 
 **Media.**
 
@@ -485,12 +617,16 @@ and the precipitation chance.
 - Transport buttons are 48 dp.
 - 1×1 is art with play/pause, as an expressive shape candidate [A-STYLE].
 - When nothing is playing it shows "Resume <last app>" rather than an empty deck (WT-1 [A-QUAL]).
+  The device shows the empty deck today: striped placeholder art, "Nothing play…" cut off, and
+  buttons that look disabled (§2.1).
 
 **Notifications.** It duplicates the shade, so it earns its place only by summarizing.
 
 - Messages and people come first, grouped by app with counts.
 - It drops system and silent notifications, and its minimum span is 2×1.
 - 1×1 is removed: a bell with a number is what the status bar already shows.
+- A body uses every line it has. On the device it is cut to one word although a second line is
+  free.
 - See Q5 on removing it entirely.
 
 **Tasks.**
@@ -499,6 +635,8 @@ and the precipitation chance.
 - Rows are 48 dp checkboxes with text at Title or Body.
 - Due tags use the semantic colors.
 - It is the Android checklist layout [A-LAYOUT].
+- The empty state invites the first task, with "Add a task" as a 48 dp row, and names the file it
+  writes to. On the device, "Today +" over "No tasks yet" leaves the 2×2 mostly blank (§2.1).
 
 **Notes.**
 
@@ -566,7 +704,7 @@ What scaling the bar faces up needs:
 
   | Span | Shows |
   |---|---|
-  | 1×1 | Time only (Analog: the face) |
+  | 1×1 | Time only. Analog's face fills the card to the inset; today it fills about 60 % and draws worse than its picker preview (§2.1) |
   | 2×1 | Time plus date |
   | 2×2 | Adds the next alarm |
   | 4×1 | Time, date and up to two zones in a row |
@@ -574,6 +712,26 @@ What scaling the bar faces up needs:
 
 - **Ink.** The faces already use Material roles, so they take the card's ink. In the Clear
   appearance they take `ChromeInk`'s measured ink like the bar does.
+- **Fix the faces first, in the bar.** The device shows weaknesses that scaling up would only
+  enlarge (§2.1):
+  - LCD: the digits and the glass show very low contrast.
+  - Flip: the ghost fold lines over the digits look messy.
+  - Minimal: the thin strokes are weak on busy wallpaper.
+  - Tape: the date is pushed far right.
+  - All six: the seconds are tiny and grey, and the date is in spaced capitals, both below the
+    11 sp floor.
+
+  Taking the renderer out is the moment to correct these:
+  - Every face's digits are held to 3:1, measured, and its labels to 4.5:1.
+  - Minimal gets a heavier weight option.
+  - The seconds and date follow the Label role.
+
+  These fixes improve the bar too. Slab and LED matrix already read well, so they are the default
+  candidates for a new widget.
+- **One place to configure.** The faces' Look and glass settings sit on the Look page today,
+  separate from the widget's gear (§2.1). A widget's face, seconds and zones live in its gear,
+  with a live preview. The zones also deliver what `docs/en/Widgets.md` already promises for the
+  digital clock and the code never built.
 - **Tap.** A tap opens the clock app; a long press does what the grid does today.
 - **The bar is a separate setting.** Picking a face for a widget does not change the bar's face.
   Q1 asks whether a widget should follow the bar's face by default.
@@ -583,6 +741,15 @@ What scaling the bar faces up needs:
 Each phase is one branch: it builds, gets emulator checks first, and goes to pong in a batch.
 Settings pages are fragile, so each phase's settings footprint stays to one control unless noted.
 
+0. **Device defects, before any redesign** (§2.1):
+   - The Battery 1×1 number overlapping its ring.
+   - The Terminal widget filling 75 % of its width and opening mid-scroll.
+   - Notifications and Tasks hidden behind the dock on rows 4–5.
+   - The edit toolbar covering top-right widgets' X and gear.
+   - No feedback when a drop into an occupied cell snaps back.
+   - The `docs/en/Widgets.md` claim that the digital clock takes time zones.
+
+   These fixes are small and independent of the redesign, and each can be a fixer task.
 1. **Tokens and legibility.**
    - Pure classes: `WidgetTokens` (inset, inner radius, gap, type roles) and `WidgetInk` (the
      `WIDGET` band).
@@ -645,7 +812,9 @@ Settings pages are fragile, so each phase's settings footprint stays to one cont
   assumed [A-SIZE].
 - **The system widget radius on the developer's phones** (pong, the emulator) has not been read off
   either device, so how far it differs from the Look's 24 dp is unknown.
-- **The device capture** (§2.1) is pending.
+- **Device coverage.** The emulator capture (§2.1) did not cover the 4× spans, glass on every
+  widget, large font sizes or rotation. It also did not open Analog's or Tasks' gear. Every
+  proposal about 4×1 and 4×2 layouts is from the code alone.
 
 ## 11. Sources
 
