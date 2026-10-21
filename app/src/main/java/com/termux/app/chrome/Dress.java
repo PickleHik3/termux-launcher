@@ -63,8 +63,8 @@ public final class Dress {
     }
 
     /**
-     * Whether the layout worn holds a Dock design the user picks, so the Layout editor offers its
-     * picker there; a layout that does not wears the tray.
+     * Whether the page draws the Dock design its layout holds, so the Layout editor offers the
+     * picker there: Home, on whichever layout it wears. A window's dock is the tray until #93.
      */
     public boolean picksDockDesign() {
         return mPicksDockDesign;

@@ -14,9 +14,9 @@ import java.util.List;
  * orientations, as one immutable value: what the Layout editor took
  * a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar has
  * been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly as
- * unsaved as a moved bar, and so does the keyboard element's on/off switch. The Home layout's
- * also carries the dock style, so a style picked in the editor is undone and asked about like a
- * move.
+ * unsaved as a moved bar, and so does the keyboard element's on/off switch, with Home's own
+ * (always on), which a Home page edits on whichever layout it wears. Each layout's Dock design
+ * rides along too, so a design picked in the editor is undone and asked about like a move.
  *
  * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
  * a restore writes the value the layout was resolving to whether or not it had a key of its own.
@@ -96,14 +96,21 @@ public final class PlaceArrangeSnapshot {
     @NonNull private final List<Entry> mEntries;
     /** The keyboard element, on or off: one switch for both orientations, captured once. */
     private final boolean mKeyboardShown;
-    /** Home's dock style as picked, both orientations; null on a Workspace variant, which has none. */
-    @Nullable private final DockStyle mDockStyle;
+    /**
+     * Home's keyboard element (always on), which a Home page edits on whichever layout it wears,
+     * so every variant's snapshot keeps it.
+     */
+    private final boolean mHomeAlwaysOn;
+    /** The layout's Dock design as picked, both orientations. */
+    @NonNull private final DockStyle mDockStyle;
 
     private PlaceArrangeSnapshot(@NonNull LayoutVariant variant, @NonNull List<Entry> entries,
-                                 boolean keyboardShown, @Nullable DockStyle dockStyle) {
+                                 boolean keyboardShown, boolean homeAlwaysOn,
+                                 @NonNull DockStyle dockStyle) {
         mVariant = variant;
         mEntries = Collections.unmodifiableList(entries);
         mKeyboardShown = keyboardShown;
+        mHomeAlwaysOn = homeAlwaysOn;
         mDockStyle = dockStyle;
     }
 
@@ -123,7 +130,7 @@ public final class PlaceArrangeSnapshot {
             entries.add(new Entry(layout, orientation));
         // The variant's own keyboard element: the Home layout's is always on, not the switch.
         return new PlaceArrangeSnapshot(variant, entries, layout.isKeyboardShown(),
-            variant == LayoutVariant.HOME ? layout.dockStyle() : null);
+            layout.isHomeKeyboardAlwaysOn(), layout.dockStyle());
     }
 
     /** The variant this snapshot was taken of, and restores onto. */
@@ -136,8 +143,9 @@ public final class PlaceArrangeSnapshot {
     public void restore(@NonNull PlaceLayoutStore places) {
         PlaceLayoutStore layout = places.forVariant(mVariant);
         for (Entry entry : mEntries) entry.restore(layout);
+        layout.setHomeKeyboardAlwaysOn(mHomeAlwaysOn);
         layout.setKeyboardShown(mKeyboardShown);
-        if (mDockStyle != null) layout.setDockStyle(mDockStyle);
+        layout.setDockStyle(mDockStyle);
     }
 
     /** The whole arrangement as one string, for the editor's unsaved-changes comparison. */
@@ -146,8 +154,9 @@ public final class PlaceArrangeSnapshot {
         StringBuilder out = new StringBuilder(128);
         out.append(mVariant).append('/');
         for (Entry entry : mEntries) entry.appendTo(out);
-        out.append("keyboard:").append(mKeyboardShown);
-        if (mDockStyle != null) out.append("|dock:").append(mDockStyle.storageValue());
+        out.append("keyboard:").append(mKeyboardShown)
+            .append("|always:").append(mHomeAlwaysOn)
+            .append("|dock:").append(mDockStyle.storageValue());
         return out.toString();
     }
 }

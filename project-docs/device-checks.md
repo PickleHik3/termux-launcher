@@ -13,6 +13,12 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(chrome): Home follows the Workspace's layout and shape" (#88) · A
+  fresh install shows the same dock rows, dock height and glass shape (Style, Corners, Margin) on
+  Home and on the first window, and the swipe between them does not re-dress the dock; minimal
+  mode on from a window makes Home minimal too; an upgrade from a build whose Home layout or Home
+  shape differed keeps Home exactly as it was (Home layout on) · emulator, fresh install then an
+  install over a pre-#88 build with a Home dock height or Margin set apart.
 - 2026-10-21 · commit "feat(statusbar): remove the house glyph from the bar" (#92) · The bar on
   the Workspace starts with the window chips, no house glyph, nothing clipped at the left; on Home
   no house beside the clock and the Workspace's mark peeks in at the far end only · emulator.

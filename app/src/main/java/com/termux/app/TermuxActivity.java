@@ -832,8 +832,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * minimal mode or of the half the wall rests in is applied once.
      */
     @Nullable private com.termux.app.place.LayoutVariant mAppliedChromeVariant;
+    /**
+     * Whether that arrangement was applied for a Home page, which wears it less what Home leaves
+     * out: on the one shared layout a crossing between the halves keeps the variant and changes
+     * only this.
+     */
+    @Nullable private Boolean mAppliedChromeHome;
     /** The variant the arrangement pass last laid out, so a keyboard element is compared within one. */
     @Nullable private com.termux.app.place.LayoutVariant mAppliedPlaceVariant;
+    /** Whether that pass laid it out for a Home page, whose keyboard element is always on. */
+    private boolean mAppliedPlaceHome;
     /** Always on as last applied to the widget grid; null until the first pass reads it. */
     @Nullable private Boolean mAppliedHomeAlwaysOn;
     /** Always on's notice, held while the editor that turned it on is still up. */
@@ -851,6 +859,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private PlaceLayout mCachedPlaceLayout;
     @Nullable private PlaceOrientation mCachedPlaceLayoutOrientation;
     @Nullable private com.termux.app.place.LayoutVariant mCachedPlaceLayoutVariant;
+    private boolean mCachedPlaceLayoutHome;
     private int mCachedPlaceLayoutRevision;
     /** The arrangement the chrome was last laid out for, so an unchanged one costs nothing. */
     @Nullable private PlaceLayout mAppliedPlaceLayout;
@@ -5913,8 +5922,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean chromeWearsHomeShape(@NonNull com.termux.app.place.SeamDress.Surface surface) {
-        return com.termux.app.place.SeamDress.wearsHome(surface, mLastWallPage, stackDressPage(),
-            mTravelSeamOther != null);
+        // On the one shared layout Home wears the Workspace's shape: there is no other to wear.
+        return homeHoldsOwnLayout()
+            && com.termux.app.place.SeamDress.wearsHome(surface, mLastWallPage, stackDressPage(),
+                mTravelSeamOther != null);
     }
 
     /** The page whose half the stack wears: the committed one, except across the seam. */
@@ -14314,13 +14325,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Home's own Margin in dp, whichever half is in front: what lies on Home (the widget grid's
-     * rim, the Home floats' air) is laid out on Home's terms even while a window is in front.
+     * The Margin Home wears in dp, whichever half is in front: what lies on Home (the widget
+     * grid's rim, the Home floats' air) is laid out on Home's terms even while a window is in
+     * front. The Workspace's on the one shared layout, Home's own while it holds a Home layout.
      */
     private int homeMarginDp() {
         return mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
-            : Math.max(0, mPreferences.getLayoutMarginDp(true));
+            : Math.max(0, mPreferences.getLayoutMarginDp(homeHoldsOwnLayout()));
     }
 
     /**
@@ -14370,9 +14382,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return isMinimalMode();
             }
 
-            @NonNull @Override public com.termux.app.dock.DockStyle homeDockStyle() {
+            @Override public boolean homeLayout() {
                 PlaceLayoutStore store = placeLayoutStore();
-                return store != null ? store.dockStyle() : com.termux.app.dock.DockStyle.GLASS_TRAY;
+                return store != null && store.hasHomeLayout();
+            }
+
+            @NonNull @Override public com.termux.app.dock.DockStyle dockDesign(
+                    @NonNull com.termux.app.place.LayoutVariant layout) {
+                PlaceLayoutStore store = placeLayoutStore();
+                return store != null ? store.forVariant(layout).dockStyle()
+                    : com.termux.app.dock.DockStyle.GLASS_TRAY;
             }
 
             @NonNull @Override public com.termux.app.place.WallHalfShape shape(boolean home) {
@@ -14427,13 +14446,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The layout the chrome on screen is arranged by (the page's Dress): the Home layout while the
-     * wall rests on a Home page, the Workspace's otherwise. Read off the page the chrome is
-     * committed to, so a slide changes it once, at settle (syncWallKeyboard).
+     * The layout the chrome on screen is arranged by (the page's Dress): the Workspace's, normal or
+     * minimal, on every page, and the Home layout while the wall rests on a Home page that holds
+     * one. Read off the page the chrome is committed to, so a slide changes it once, at settle
+     * (syncWallKeyboard).
      */
     @NonNull
     private com.termux.app.place.LayoutVariant chromeVariant() {
         return mDresses.layoutOf(mLastWallPage);
+    }
+
+    /**
+     * Whether Home wears a Home layout of its own, and with it Home's own Style, Corners and
+     * Margin (ADR 0009): off, Home wears the Workspace's. Read on travel frames; the store reads
+     * the switch once per revision.
+     */
+    private boolean homeHoldsOwnLayout() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store != null && store.hasHomeLayout();
     }
 
     /**
@@ -14483,13 +14513,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_PLACE_LAYOUT;
         com.termux.app.place.LayoutVariant variant = chromeVariant();
+        // A Home page wears the layout less what Home leaves out (the page's Dress), so the page's
+        // half is part of what the cached answer was resolved for.
+        boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         if (mCachedPlaceLayout == null
             || mCachedPlaceLayoutOrientation != orientation
             || mCachedPlaceLayoutVariant != variant
+            || mCachedPlaceLayoutHome != home
             || mCachedPlaceLayoutRevision != store.revision()) {
-            mCachedPlaceLayout = store.resolve(orientation, variant);
+            mCachedPlaceLayout = store.resolve(orientation, variant, mLastWallPage);
             mCachedPlaceLayoutOrientation = orientation;
             mCachedPlaceLayoutVariant = variant;
+            mCachedPlaceLayoutHome = home;
             mCachedPlaceLayoutRevision = store.revision();
         }
         return mCachedPlaceLayout;
@@ -15535,13 +15570,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // its new height from what it shows now: started before any pass below lays it out.
         if (dockStyleChanged) beginDockBandEase();
         com.termux.app.place.LayoutVariant variant = chromeVariant();
-        boolean sameVariant = variant == mAppliedPlaceVariant;
+        boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        boolean sameVariant = variant == mAppliedPlaceVariant && home == mAppliedPlaceHome;
         mAppliedPlaceVariant = variant;
+        mAppliedPlaceHome = home;
         // The keyboard element put away in the Layout editor is the keyboard switched off: it
         // goes down here, on the same pass every other element leaves on. Shown again, it waits
         // for the next tap rather than rising behind the editor's sheet; the palette's own
         // Keyboard on/off raises it itself, before this pass ever sees the change. Compared
-        // within one layout: the Home layout's element is always on, not the switch.
+        // within one layout and one half: Home's element is always on, not the switch.
         if (sameVariant && previous != null && previous.keyboardShown && !layout.keyboardShown
             && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
             mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
@@ -16519,10 +16556,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView bar = mSuggestionBarView;
         if (bar == null) return;
         boolean on = mPreferences != null && dockSurfaceSpec().taskbar;
-        PlaceLayoutStore store = placeLayoutStore();
+        PlaceLayoutStore store = homeDockStore();
         bar.setHomeTile(on ? (store != null ? store.taskbarHomeTile()
                 : com.termux.app.dock.TaskbarHomeTilePolicy.DEFAULT) : null,
             on ? mTaskbarHomeTileListener : null);
+    }
+
+    /** The store pinned to the layout Home's dock is dressed by, where its tile is kept. */
+    @Nullable
+    private PlaceLayoutStore homeDockStore() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store == null ? null
+            : store.forVariant(mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS));
     }
 
     /** The Home tile opens the drawer as Home's own drawer entry does, and remembers its place. */
@@ -16534,7 +16579,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void onHomeTileMoved(
                     @NonNull com.termux.app.dock.TaskbarHomeTilePolicy.Position position) {
-                PlaceLayoutStore store = placeLayoutStore();
+                PlaceLayoutStore store = homeDockStore();
                 if (store != null) store.setTaskbarHomeTile(position);
                 syncTaskbarHomeTile();
             }
@@ -22194,7 +22239,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean seamBegins = mTravelSeamOther == null;
             PlaceOrientation orientation = currentPlaceOrientation();
             PlaceLayout committed = committedPlaceLayout(orientation);
-            PlaceLayout otherLayout = store.resolve(orientation, store.variantFor(other));
+            PlaceLayout otherLayout = store.resolve(orientation, other);
             mTravelSeamOther = other;
             mTravelSeamOtherLayout = otherLayout;
             com.termux.app.place.SeamDress.StackDress committedDress =
@@ -22863,8 +22908,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncChromeArrangement() {
         com.termux.app.place.LayoutVariant variant = chromeVariant();
-        if (variant == mAppliedChromeVariant) return;
+        // On the one shared layout a crossing keeps the variant: what Home leaves out is the
+        // change, so the half is compared too.
+        boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        if (variant == mAppliedChromeVariant && Boolean.valueOf(home).equals(mAppliedChromeHome))
+            return;
         mAppliedChromeVariant = variant;
+        mAppliedChromeHome = home;
         syncPlaceLayout();
         applyMinimalStatusChrome();
     }
@@ -23658,8 +23708,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Minimal mode is remembered across launches. The arrangement reads it through
         // currentPlaceLayout on its own; the bar is told once here, and every change after this
         // goes through syncChromeArrangement.
-        if (chromeVariant() != mAppliedChromeVariant) {
+        boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        if (chromeVariant() != mAppliedChromeVariant
+            || !Boolean.valueOf(home).equals(mAppliedChromeHome)) {
             mAppliedChromeVariant = chromeVariant();
+            mAppliedChromeHome = home;
             applyMinimalStatusChrome();
         }
     }

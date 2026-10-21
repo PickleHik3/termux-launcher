@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
 /**
- * The Home layout (ADR 0008): a third variant beside normal and minimal, keyed like minimal,
+ * The Home layout (ADR 0008, opt-in since ADR 0009): a third variant beside normal and minimal, keyed like minimal,
  * seeded from the normal layout with the status bar and the extra keys put away and the keyboard
  * put away, offering only the dock's rows and the keyboard, whose element is always on.
  */
@@ -167,6 +167,9 @@ public class PlaceLayoutHomeLayoutTest {
     @Test
     public void aPageSaysWhichVariantItIsArrangedBy() {
         PlaceLayoutStore store = store();
+        assertEquals("one layout until Home holds its own", LayoutVariant.NORMAL,
+            store.variantFor(PaneWallPage.WIDGETS));
+        store.setHomeLayout(true);
         assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.TERMINAL));
         store.setMinimal(true);

@@ -275,11 +275,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Whether Style, Corners and Margin are Home's here: the editor was opened over a Home page.
-     * Over a window they are the Workspace's, as they always were.
+     * Whether Style, Corners and Margin are Home's own here: the editor was opened over a Home page
+     * that holds a Home layout (ADR 0009). Over a window, and over Home on the one shared layout,
+     * they are the Workspace's.
      */
     private boolean editsHome() {
-        return editedPage() == PaneWallPage.WIDGETS;
+        return wearsHomeShape(editedPage());
+    }
+
+    /** Whether {@code page} wears Home's own Style, Corners and Margin rather than the Workspace's. */
+    private boolean wearsHomeShape(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS
+            && com.termux.app.place.PlaceLayoutStore.hasHomeLayout(prefs());
     }
 
     /** Corners' legend: the scope word on Home, so a Home edit never reads as the Workspace's. */
@@ -3029,7 +3036,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        boolean home = page == PaneWallPage.WIDGETS;
+        boolean home = wearsHomeShape(page);
         layout.setShape(prefs.getLayoutStyle(home),
             AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(home)),
             AppearanceLooks.marginDp(prefs.getLayoutMarginDp(home)));

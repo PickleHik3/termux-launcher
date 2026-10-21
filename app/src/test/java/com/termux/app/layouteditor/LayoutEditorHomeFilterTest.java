@@ -54,6 +54,9 @@ public class LayoutEditorHomeFilterTest {
         places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setAppsRow(LANDSCAPE, RowPlacement.BOTTOM);
+        // The filter moves between two layouts only while Home holds one of its own; on the
+        // shared layout see LayoutEditorSharedLayoutTest.
+        places.setHomeLayout(true);
     }
 
     private PlaceLayoutStore home() {
