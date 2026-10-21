@@ -13,6 +13,7 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · #110 (feat/widget-redesign) · All six bar clock faces, full form alone and beside media, before (280042dd3) and after: pixel for pixel the same, including the date hairline, Flip's load flourish when the bar appears, the seconds animating, and the media art's vertical anchor beside a FULL face · emulator.
 - 2026-10-21 · #102 (feat/widget-redesign) · Battery 1×1 at font 1.0/1.3/2.0, charging and not: "100" and the bolt stay inside the inner disc, ring fills the card less 12 dp; Analog 1×1 dial fills the card width less 12 dp and draws as crisply as the picker preview; other spans and both picker previews unchanged · emulator.
 - 2026-10-21 · #105 (feat/widget-redesign) · Top-right widget in edit mode: X and gear sit below the editing tab and both open; a grow or move into a widget that can't step aside tints it red, fading after release; a move that pushes a neighbour aside shows no tint · emulator.
 - 2026-10-21 · #106 (feat/widget-redesign) · A hosted app widget without its own rounded background has the same corner as the built-ins beside it (up to the system radius), light and dark wallpaper; a provider with its own rounded background keeps its corners; after changing the Look's Corners and returning Home the hosted corner follows (known gap: only re-read on attach) · emulator.
