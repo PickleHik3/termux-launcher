@@ -20,8 +20,8 @@ import java.util.Set;
  * <p>One layout dresses both halves (ADR 0009, build step 1). A <b>window</b> wears the
  * Workspace's layout whole, the minimal one while minimal mode is on (minimal mode is the
  * windows' alone), in the Workspace's Style,
- * Corners and Margin, its dock the tray it has always been (until #93 gives it the layout's
- * design). A <b>Home page</b> wears the normal layout less the extra keys, in the same Style,
+ * Corners and Margin, its dock in the Dock design that layout holds (#93; the minimal layout
+ * holds its own). A <b>Home page</b> wears the normal layout less the extra keys, in the same Style,
  * Corners and Margin, its dock the Dock design that layout holds, unless Home holds a <b>Home
  * layout</b> of its own: then it wears that ({@link LayoutVariant#HOME}), whatever minimal mode
  * says, in Home's own Style, Corners and Margin and the design picked for it. Until the bar on
@@ -96,8 +96,8 @@ public final class DressResolver {
         boolean home = page == PaneWallPage.WIDGETS;
         LayoutVariant layout = layoutOf(page);
         return new Dress(layout, home ? HOME_LEAVES_OUT : NONE_LEFT_OUT,
-            home ? DockStyle.effectiveStyle(mSource.dockDesign(layout)) : DockStyle.GLASS_TRAY,
-            picksDockDesign(page), mSource.shape(home && layout == LayoutVariant.HOME));
+            DockStyle.effectiveStyle(mSource.dockDesign(layout)),
+            mSource.shape(home && layout == LayoutVariant.HOME));
     }
 
     /**
@@ -115,12 +115,11 @@ public final class DressResolver {
 
     /**
      * The Dock design the page draws ({@link Dress#dockDesign}), read without the rest of the
-     * dress: the question the seam's bead melt asks on every frame of a slide. A window reads
-     * nothing: its dock is the tray.
+     * dress: the question the dock's surface asks wherever its glass is built, a key's lens
+     * rebuilding it per frame included. The design the page's layout holds, as it draws.
      */
     @NonNull
     public DockStyle dockDesignOf(@NonNull PaneWallPage page) {
-        if (page != PaneWallPage.WIDGETS) return DockStyle.GLASS_TRAY;
         return DockStyle.effectiveStyle(mSource.dockDesign(layoutOf(page)));
     }
 
@@ -144,38 +143,38 @@ public final class DressResolver {
 
     /**
      * Whether {@code page} draws a Dock design the user picks ({@link Dress#picksDockDesign}):
-     * Home, on whichever layout it wears. A window's dock is the tray until #93.
+     * every page, Home's and the windows' alike, since the layout holds the design for both
+     * halves (#93).
      */
     public static boolean picksDockDesign(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS;
+        return true;
     }
 
     /**
      * The Dock design {@code page} draws ({@link Dress#dockDesign}) when its layout holds
-     * {@code picked}: on Home the one picked, as it draws today ({@link
-     * DockStyle#effectiveStyle}), and on a window the tray.
+     * {@code picked}: the one picked, as it draws today ({@link DockStyle#effectiveStyle}), on
+     * every page.
      */
     @NonNull
     public static DockStyle dockDesignOn(@NonNull PaneWallPage page, @Nullable DockStyle picked) {
-        return picksDockDesign(page) ? DockStyle.effectiveStyle(picked) : DockStyle.GLASS_TRAY;
+        return DockStyle.effectiveStyle(picked);
     }
 
     /**
      * {@link #dockDesignOn(PaneWallPage, DockStyle)} for a layout named without its page, as the
-     * store resolves one: the Home layout's pages are Home pages, the Workspace's are windows.
+     * store resolves one: whichever half wears the layout draws what it holds.
      */
     @NonNull
     public static DockStyle dockDesignOn(@NonNull LayoutVariant layout,
                                          @Nullable DockStyle picked) {
-        return dockDesignOn(layout == LayoutVariant.HOME ? PaneWallPage.WIDGETS
-            : PaneWallPage.TERMINAL, picked);
+        return DockStyle.effectiveStyle(picked);
     }
 
     /**
      * Whether the two pages wear the same dress, so the chrome need not change between them:
-     * any two windows do. Home never quite does a window's, since it leaves out the extra keys
-     * and picks its dock's design; on one layout the two still share the layout and the shape,
-     * which is what the stack's dress across the seam compares.
+     * any two windows do. Home never quite does a window's, since it leaves out the extra keys;
+     * on one layout the two still share the layout, the Dock design and the shape, which is what
+     * the stack's dress and the dock's surface across the seam compare.
      */
     public boolean dressAlike(@NonNull PaneWallPage a, @NonNull PaneWallPage b) {
         return dressOf(a).equals(dressOf(b));

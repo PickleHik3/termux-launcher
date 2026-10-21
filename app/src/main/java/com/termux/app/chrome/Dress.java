@@ -26,16 +26,14 @@ public final class Dress {
     @NonNull private final LayoutVariant mLayout;
     @NonNull private final Set<Element> mLeftOut;
     @NonNull private final DockStyle mDockDesign;
-    private final boolean mPicksDockDesign;
     @NonNull private final WallHalfShape mShape;
 
     Dress(@NonNull LayoutVariant layout, @NonNull Set<Element> leftOut,
-          @NonNull DockStyle dockDesign, boolean picksDockDesign, @NonNull WallHalfShape shape) {
+          @NonNull DockStyle dockDesign, @NonNull WallHalfShape shape) {
         mLayout = layout;
         mLeftOut = leftOut.isEmpty() ? Collections.emptySet()
             : Collections.unmodifiableSet(EnumSet.copyOf(leftOut));
         mDockDesign = dockDesign;
-        mPicksDockDesign = picksDockDesign;
         mShape = shape;
     }
 
@@ -56,7 +54,7 @@ public final class Dress {
         return !mLeftOut.contains(element);
     }
 
-    /** The Dock design the page's dock draws. */
+    /** The Dock design the page's dock draws: the one its layout holds, on either half. */
     @NonNull
     public DockStyle dockDesign() {
         return mDockDesign;
@@ -64,10 +62,10 @@ public final class Dress {
 
     /**
      * Whether the page draws the Dock design its layout holds, so the Layout editor offers the
-     * picker there: Home, on whichever layout it wears. A window's dock is the tray until #93.
+     * picker there: every page, a window's as well as Home's (#93).
      */
     public boolean picksDockDesign() {
-        return mPicksDockDesign;
+        return true;
     }
 
     /** Whether the dock carries the Search field, which opens the command palette. */
@@ -92,19 +90,18 @@ public final class Dress {
         if (!(other instanceof Dress)) return false;
         Dress that = (Dress) other;
         return mLayout == that.mLayout && mLeftOut.equals(that.mLeftOut)
-            && mDockDesign == that.mDockDesign && mPicksDockDesign == that.mPicksDockDesign
-            && mShape.equals(that.mShape);
+            && mDockDesign == that.mDockDesign && mShape.equals(that.mShape);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mLayout, mLeftOut, mDockDesign, mPicksDockDesign, mShape);
+        return Objects.hash(mLayout, mLeftOut, mDockDesign, mShape);
     }
 
     @NonNull
     @Override
     public String toString() {
-        return "Dress{" + mLayout + ", leftOut=" + mLeftOut + ", " + mDockDesign
-            + (mPicksDockDesign ? " (picked)" : "") + ", " + mShape + "}";
+        return "Dress{" + mLayout + ", leftOut=" + mLeftOut + ", " + mDockDesign + ", " + mShape
+            + "}";
     }
 }

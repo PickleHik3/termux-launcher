@@ -3,11 +3,13 @@ package com.termux.app.chrome;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import androidx.annotation.NonNull;
 
 import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.WallHalfShape;
@@ -24,7 +26,8 @@ import java.util.EnumMap;
  * mode is the windows' alone) less the status bar and the extra keys, in the Workspace's Style,
  * Corners and Margin, its dock in the Dock design that layout holds. With the Home layout on, a
  * Home page wears its own copy and its own shape, as ADR 0008 had it. A window wears the
- * Workspace's layout whole, its dock the tray until #93.
+ * Workspace's layout whole, its dock in the Dock design that layout holds (#93), the minimal
+ * layout's own while minimal mode is on.
  */
 public class DressResolverTest {
 
@@ -104,14 +107,41 @@ public class DressResolverTest {
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
     }
 
-    /** Until #93 the Workspace's dock is the tray, whatever its layout holds. */
+    /** #93: the Workspace's dock no longer keeps the tray; it wears what its layout holds. */
     @Test
-    public void aWindowsDockStaysTheTray() {
-        for (LayoutVariant layout : LayoutVariant.values())
-            stored.designs.put(layout, DockStyle.LENS_BEADS);
-        assertEquals(DockStyle.GLASS_TRAY, terminal().dockDesign());
+    public void aWindowWearsItsLayoutsDesign() {
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+        assertEquals(DockStyle.LENS_BEADS, terminal().dockDesign());
+        assertEquals(DockStyle.LENS_BEADS, dresses.dressOf(PaneWallPage.DISPLAY).dockDesign());
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.WALL_STRIP);
+        assertEquals(DockStyle.WALL_STRIP, terminal().dockDesign());
+    }
+
+    @Test
+    public void theMinimalLayoutCarriesItsOwnDesign() {
+        stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+        stored.designs.put(LayoutVariant.MINIMAL, DockStyle.WALL_STRIP);
         stored.minimal = true;
-        assertEquals(DockStyle.GLASS_TRAY, terminal().dockDesign());
+        assertEquals(DockStyle.WALL_STRIP, terminal().dockDesign());
+        assertEquals(DockStyle.WALL_STRIP, dresses.dockDesignOf(PaneWallPage.TERMINAL));
+        assertEquals("minimal is the windows' alone", DockStyle.LENS_BEADS, home().dockDesign());
+    }
+
+    /**
+     * One layout, minimal off: Home and a window draw one design, so the dock's slab is the same
+     * spec on both and a swipe across the seam does not dress the dock again.
+     */
+    @Test
+    public void homeAndAWindowOnOneLayoutDrawOneDesign() {
+        for (DockStyle style : DockStyle.values()) {
+            stored.designs.put(LayoutVariant.NORMAL, style);
+            stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
+            assertEquals(style.name(), dresses.dockDesignOf(PaneWallPage.WIDGETS),
+                dresses.dockDesignOf(PaneWallPage.TERMINAL));
+            assertSame(style.name(),
+                DockSurfaceSpec.forStyle(dresses.dockDesignOf(PaneWallPage.WIDGETS)),
+                DockSurfaceSpec.forStyle(dresses.dockDesignOf(PaneWallPage.TERMINAL)));
+        }
     }
 
     @Test
@@ -158,7 +188,8 @@ public class DressResolverTest {
         stored.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.WALL_STRIP);
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
-        assertEquals(DockStyle.GLASS_TRAY, terminal().dockDesign());
+        assertEquals("a window keeps the Workspace's", DockStyle.WALL_STRIP,
+            terminal().dockDesign());
     }
 
     @Test
@@ -212,16 +243,18 @@ public class DressResolverTest {
         }
     }
 
+    /** The Layout editor offers the picker wherever the dock is selected, a window's page too. */
     @Test
-    public void onlyHomePicksItsDockDesign() {
+    public void thePickerIsOfferedOnAWindow() {
         for (boolean homeLayout : new boolean[] {false, true}) {
             stored.homeLayout = homeLayout;
-            assertTrue(home().picksDockDesign());
-            assertFalse(terminal().picksDockDesign());
-            stored.minimal = true;
-            assertTrue(home().picksDockDesign());
-            assertFalse(terminal().picksDockDesign());
-            stored.minimal = false;
+            for (boolean minimal : new boolean[] {false, true}) {
+                stored.minimal = minimal;
+                for (PaneWallPage page : PaneWallPage.values()) {
+                    assertTrue(page.name(), dresses.dressOf(page).picksDockDesign());
+                    assertTrue(page.name(), DressResolver.picksDockDesign(page));
+                }
+            }
         }
     }
 
@@ -230,12 +263,12 @@ public class DressResolverTest {
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.PROMPT_LINE);
         assertTrue(home().searchField());
         assertFalse(home().drawerTile());
-        assertFalse(terminal().searchField());
+        assertTrue(terminal().searchField());
 
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.TASKBAR);
         assertTrue(home().drawerTile());
         assertFalse(home().searchField());
-        assertFalse(terminal().drawerTile());
+        assertTrue(terminal().drawerTile());
 
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.GLASS_TRAY);
         assertFalse(home().searchField());
@@ -305,18 +338,15 @@ public class DressResolverTest {
     }
 
     @Test
-    public void thePickedDesignIsDrawnOnlyOnHome() {
-        assertTrue(DressResolver.picksDockDesign(PaneWallPage.WIDGETS));
-        assertFalse(DressResolver.picksDockDesign(PaneWallPage.TERMINAL));
-        assertEquals(DockStyle.LENS_BEADS,
-            DressResolver.dockDesignOn(PaneWallPage.WIDGETS, DockStyle.LENS_BEADS));
-        assertEquals(DockStyle.GLASS_TRAY, DressResolver.dockDesignOn(PaneWallPage.WIDGETS, null));
-        assertEquals(DockStyle.GLASS_TRAY,
-            DressResolver.dockDesignOn(PaneWallPage.DISPLAY, DockStyle.LENS_BEADS));
-        // A layout named without its page: the Home layout's pages are Home's, the rest windows.
-        assertEquals(DockStyle.LENS_BEADS,
-            DressResolver.dockDesignOn(LayoutVariant.HOME, DockStyle.LENS_BEADS));
-        assertEquals(DockStyle.GLASS_TRAY,
-            DressResolver.dockDesignOn(LayoutVariant.NORMAL, DockStyle.LENS_BEADS));
+    public void thePickedDesignIsDrawnOnEveryPage() {
+        for (PaneWallPage page : PaneWallPage.values()) {
+            assertEquals(page.name(), DockStyle.LENS_BEADS,
+                DressResolver.dockDesignOn(page, DockStyle.LENS_BEADS));
+            assertEquals(page.name(), DockStyle.GLASS_TRAY, DressResolver.dockDesignOn(page, null));
+        }
+        // A layout named without its page draws what it holds, whichever half wears it.
+        for (LayoutVariant layout : LayoutVariant.values())
+            assertEquals(layout.name(), DockStyle.WALL_STRIP,
+                DressResolver.dockDesignOn(layout, DockStyle.WALL_STRIP));
     }
 }
