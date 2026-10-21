@@ -54,8 +54,9 @@ public class LayoutEditorDrawerTileTest {
             places.setHomeLayout(homeLayout);
             for (PaneWallPage page : PaneWallPage.values()) {
                 LayoutEditorPlan plan = LayoutEditorPlan.enter(places, page, PORTRAIT);
-                assertEquals(page.name(), plan.offersDockStyle(), plan.offersDrawerTile());
-                assertTrue(page.name(), plan.offersDrawerTile());
+                assertEquals(page.name(), LayoutEditorPlan.Drop.LIVE,
+                    plan.setDrawerTile(!plan.drawerTile()));
+                plan.revert();
             }
         }
     }

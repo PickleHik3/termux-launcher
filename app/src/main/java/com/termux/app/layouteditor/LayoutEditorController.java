@@ -1274,7 +1274,7 @@ public final class LayoutEditorController {
     @VisibleForTesting
     static boolean showsDockStyles(@Nullable LayoutEditorPlan plan,
                                    @Nullable LayoutCanvasView.Block selected) {
-        return plan != null && plan.offersDockStyle() && selected == LayoutCanvasView.Block.APPS_ROW;
+        return plan != null && selected == LayoutCanvasView.Block.APPS_ROW;
     }
 
     /**

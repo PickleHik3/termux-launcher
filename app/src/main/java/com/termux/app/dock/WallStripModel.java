@@ -177,7 +177,7 @@ public final class WallStripModel {
                                  @NonNull WindowChips.Surface surface,
                                  @NonNull List<WindowItem> items,
                                  @NonNull String newWindowSpoken) {
-        List<? extends WindowChips.Chip<?>> list = chips.chips(surface);
+        List<? extends WindowChips.Chip<?>> list = chips.chips();
         boolean[] minimised = new boolean[Math.max(0, list.size() - chips.rowCount())];
         for (WindowChips.Chip<?> chip : list) {
             if (chip.kind == WindowChips.Kind.HOME_FLOAT && chip.index >= 0

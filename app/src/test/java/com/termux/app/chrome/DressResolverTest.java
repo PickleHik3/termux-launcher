@@ -236,7 +236,7 @@ public class DressResolverTest {
     public void aHomeLayoutInAnotherShapeNeverDressesLikeAWindow() {
         stored.homeLayout = true;
         assertNotEquals(home().shape(), terminal().shape());
-        assertFalse(dresses.dressAlike(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL));
+        assertNotEquals(home(), terminal());
     }
 
     /** Moved from the Home chrome policy's test: a settle redresses only between halves apart. */
@@ -279,21 +279,6 @@ public class DressResolverTest {
             for (DockStyle style : DockStyle.values()) {
                 for (LayoutVariant layout : LayoutVariant.values()) stored.designs.put(layout, style);
                 assertEquals(DockStyle.effectiveStyle(style), home().dockDesign());
-            }
-        }
-    }
-
-    /** The Layout editor offers the picker wherever the dock is selected, a window's page too. */
-    @Test
-    public void thePickerIsOfferedOnAWindow() {
-        for (boolean homeLayout : new boolean[] {false, true}) {
-            stored.homeLayout = homeLayout;
-            for (boolean minimal : new boolean[] {false, true}) {
-                stored.minimal = minimal;
-                for (PaneWallPage page : PaneWallPage.values()) {
-                    assertTrue(page.name(), dresses.dressOf(page).picksDockDesign());
-                    assertTrue(page.name(), DressResolver.picksDockDesign(page));
-                }
             }
         }
     }
@@ -427,10 +412,9 @@ public class DressResolverTest {
 
     @Test
     public void twoWindowsDressAlike() {
-        assertTrue(dresses.dressAlike(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY));
+        assertEquals(dresses.dressOf(PaneWallPage.TERMINAL), dresses.dressOf(PaneWallPage.DISPLAY));
         stored.minimal = true;
-        assertTrue(dresses.dressAlike(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY));
-        assertTrue(dresses.dressAlike(PaneWallPage.WIDGETS, PaneWallPage.WIDGETS));
+        assertEquals(dresses.dressOf(PaneWallPage.TERMINAL), dresses.dressOf(PaneWallPage.DISPLAY));
     }
 
     @Test
@@ -487,16 +471,4 @@ public class DressResolverTest {
         }
     }
 
-    @Test
-    public void thePickedDesignIsDrawnOnEveryPage() {
-        for (PaneWallPage page : PaneWallPage.values()) {
-            assertEquals(page.name(), DockStyle.LENS_BEADS,
-                DressResolver.dockDesignOn(page, DockStyle.LENS_BEADS));
-            assertEquals(page.name(), DockStyle.GLASS_TRAY, DressResolver.dockDesignOn(page, null));
-        }
-        // A layout named without its page draws what it holds, whichever half wears it.
-        for (LayoutVariant layout : LayoutVariant.values())
-            assertEquals(layout.name(), DockStyle.WALL_STRIP,
-                DressResolver.dockDesignOn(layout, DockStyle.WALL_STRIP));
-    }
 }

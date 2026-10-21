@@ -53,8 +53,9 @@ public class LayoutEditorSearchFieldTest {
             places.setHomeLayout(homeLayout);
             for (PaneWallPage page : PaneWallPage.values()) {
                 LayoutEditorPlan plan = LayoutEditorPlan.enter(places, page, PORTRAIT);
-                assertEquals(page.name(), plan.offersDockStyle(), plan.offersSearchField());
-                assertTrue(page.name(), plan.offersSearchField());
+                assertEquals(page.name(), LayoutEditorPlan.Drop.LIVE,
+                    plan.setSearchField(!plan.searchField()));
+                plan.revert();
             }
         }
     }

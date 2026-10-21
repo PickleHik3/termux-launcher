@@ -170,42 +170,4 @@ public final class DressResolver {
         return layout != LayoutVariant.HOME || !HOME_LEAVES_OUT.contains(element);
     }
 
-    /**
-     * Whether {@code page} draws a Dock design the user picks ({@link Dress#picksDockDesign}):
-     * every page, Home's and the windows' alike, since the layout holds the design for both
-     * halves (#93).
-     */
-    public static boolean picksDockDesign(@NonNull PaneWallPage page) {
-        return true;
-    }
-
-    /**
-     * The Dock design {@code page} draws ({@link Dress#dockDesign}) when its layout holds
-     * {@code picked}: the one picked, as it draws today ({@link DockStyle#effectiveStyle}), on
-     * every page.
-     */
-    @NonNull
-    public static DockStyle dockDesignOn(@NonNull PaneWallPage page, @Nullable DockStyle picked) {
-        return DockStyle.effectiveStyle(picked);
-    }
-
-    /**
-     * {@link #dockDesignOn(PaneWallPage, DockStyle)} for a layout named without its page, as the
-     * store resolves one: whichever half wears the layout draws what it holds.
-     */
-    @NonNull
-    public static DockStyle dockDesignOn(@NonNull LayoutVariant layout,
-                                         @Nullable DockStyle picked) {
-        return DockStyle.effectiveStyle(picked);
-    }
-
-    /**
-     * Whether the two pages wear the same dress, so the chrome need not change between them:
-     * any two windows do. Home never quite does a window's, since it leaves out the extra keys;
-     * on one layout the two still share the layout, the Dock design and the shape, which is what
-     * the stack's dress and the dock's surface across the seam compare.
-     */
-    public boolean dressAlike(@NonNull PaneWallPage a, @NonNull PaneWallPage b) {
-        return dressOf(a).equals(dressOf(b));
-    }
 }

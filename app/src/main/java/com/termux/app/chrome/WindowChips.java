@@ -54,17 +54,13 @@ public final class WindowChips<W> {
         public final int row;
         /** Whether this is a Home float folded into its chip. */
         public final boolean minimised;
-        /** Whether a float stands on a Home page; a row's window always does. */
-        final boolean onPage;
 
-        Chip(@NonNull Kind kind, @Nullable W window, int index, int row, boolean minimised,
-             boolean onPage) {
+        Chip(@NonNull Kind kind, @Nullable W window, int index, int row, boolean minimised) {
             this.kind = kind;
             this.window = window;
             this.index = index;
             this.row = row;
             this.minimised = minimised;
-            this.onPage = onPage;
         }
 
         @NonNull @Override public String toString() {
@@ -149,35 +145,33 @@ public final class WindowChips<W> {
         mDisplayChip = displaySlot >= 0 ? displaySlot : -1;
         for (int i = 0; i < windows; i++) {
             if (i == displaySlot) addDisplay();
-            mChips.add(new Chip<>(Kind.WINDOW, rowWindows.get(i), i, mChips.size(), false, true));
+            mChips.add(new Chip<>(Kind.WINDOW, rowWindows.get(i), i, mChips.size(), false));
         }
         if (displaySlot == windows) addDisplay();
     }
 
     private void addDisplay() {
-        mChips.add(new Chip<>(Kind.DISPLAY, null, -1, mChips.size(), false, true));
+        mChips.add(new Chip<>(Kind.DISPLAY, null, -1, mChips.size(), false));
     }
 
     /**
      * A Home float's chip after the row's and the floats' before it: {@code minimised} while it
-     * is folded into its chip, {@code onPage} while it stands on a Home page, {@code focused}
-     * while it holds the focus.
+     * is folded into its chip, {@code focused} while it holds the focus.
      */
     @NonNull
-    public WindowChips<W> addFloat(@NonNull W window, boolean minimised, boolean onPage,
-                                   boolean focused) {
+    public WindowChips<W> addFloat(@NonNull W window, boolean minimised, boolean focused) {
         if (focused && !minimised) mFocusedChip = mChips.size();
-        mChips.add(new Chip<>(Kind.HOME_FLOAT, window, mFloats++, -1, minimised, onPage));
+        mChips.add(new Chip<>(Kind.HOME_FLOAT, window, mFloats++, -1, minimised));
         return this;
     }
 
-    /** The chips {@code surface} shows, in its order: its index is a place in this list. */
+    /**
+     * The chips, in their order: every surface shows them all, so a surface's index is a place in
+     * this list.
+     */
     @NonNull
-    public List<Chip<W>> chips(@NonNull Surface surface) {
-        switch (surface) {
-            default:
-                return Collections.unmodifiableList(mChips);
-        }
+    public List<Chip<W>> chips() {
+        return Collections.unmodifiableList(mChips);
     }
 
     /** How many chips are the row's windows, the display window's included; the floats follow. */
@@ -252,7 +246,7 @@ public final class WindowChips<W> {
     @Nullable
     private Chip<W> chipAt(@NonNull Surface surface, int index) {
         if (index < 0) return null;
-        List<Chip<W>> chips = chips(surface);
+        List<Chip<W>> chips = chips();
         return index < chips.size() ? chips.get(index) : null;
     }
 

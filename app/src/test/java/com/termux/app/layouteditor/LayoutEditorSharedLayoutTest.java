@@ -121,14 +121,11 @@ public class LayoutEditorSharedLayoutTest {
     @Test
     public void theDesignPickedOnHomeIsTheSharedLayouts() {
         LayoutEditorPlan plan = onHome();
-        assertTrue(plan.offersDockStyle());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
         assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals(DockStyle.LENS_BEADS, plan.shownLayout().dockStyle);
         assertEquals("the windows' dock wears it too", DockStyle.LENS_BEADS,
             places.resolve(PORTRAIT, PaneWallPage.TERMINAL).dockStyle);
-        assertTrue(LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT)
-            .offersDockStyle());
 
         plan.revert();
         assertEquals(DockStyle.GLASS_TRAY, places.forVariant(LayoutVariant.NORMAL).dockStyle());

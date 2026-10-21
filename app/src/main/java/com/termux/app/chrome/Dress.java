@@ -66,14 +66,6 @@ public final class Dress {
     }
 
     /**
-     * Whether the page draws the Dock design its layout holds, so the Layout editor offers the
-     * picker there: every page, a window's as well as Home's (#93).
-     */
-    public boolean picksDockDesign() {
-        return true;
-    }
-
-    /**
      * Whether the dock carries the Search field, which opens the command palette: the toggle the
      * page's layout holds beside its design, with any design (#96).
      */

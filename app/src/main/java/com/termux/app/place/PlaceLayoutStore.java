@@ -569,7 +569,7 @@ public final class PlaceLayoutStore {
                 resolved = resolved.withSlot(element, slot.withHidden(true));
         }
         return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
-            .withDockStyle(DressResolver.dockDesignOn(page, layout.dockStyle()));
+            .withDockStyle(DockStyle.effectiveStyle(layout.dockStyle()));
     }
 
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
@@ -593,8 +593,8 @@ public final class PlaceLayoutStore {
             isKeyboardShown(),
             widgetColumns(orientation),
             widgetRows(orientation),
-            // The Dock design the dress puts on the variant: the one it holds, on either half.
-            DressResolver.dockDesignOn(variant, dockStyle()));
+            // The Dock design the variant draws: the one it holds, on either half.
+            DockStyle.effectiveStyle(dockStyle()));
     }
 
     /**
@@ -654,7 +654,7 @@ public final class PlaceLayoutStore {
     /**
      * The Dock design this view's layout holds, whether or not it is drawn yet; what the Layout
      * editor's picker shows. What a page's dock draws is its dress's ({@link
-     * DressResolver#dockDesignOn}), on the resolved layout as {@link PlaceLayout#dockStyle}. Read
+     * DockStyle#effectiveStyle} of it), on the resolved layout as {@link PlaceLayout#dockStyle}. Read
      * on travel frames (the bead melt), so it is read once per revision.
      */
     @NonNull

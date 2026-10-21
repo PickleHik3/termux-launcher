@@ -17077,7 +17077,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         java.util.List<com.termux.app.chrome.WindowChips.Chip<
             com.termux.app.terminal.TerminalPaneController.Window>> tiles =
-                chips.chips(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP);
+                chips.chips();
         java.util.List<float[]> shapes = new java.util.ArrayList<>(tiles.size());
         java.util.List<Long> keys = new java.util.ArrayList<>(tiles.size());
         for (com.termux.app.chrome.WindowChips.Chip<
@@ -29356,8 +29356,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalPaneController.Window focused =
             mPaneController.focusedHomeFloat();
         for (com.termux.app.terminal.TerminalPaneController.Window window : chipFloats()) {
-            chips.addFloat(window, window.isMinimised(), window.homePage() >= 0,
-                window == focused);
+            chips.addFloat(window, window.isMinimised(), window == focused);
         }
         return chips;
     }
@@ -29377,7 +29376,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull java.util.List<Integer> foregroundPids) {
         java.util.List<com.termux.app.chrome.WindowChips.Chip<
             com.termux.app.terminal.TerminalPaneController.Window>> list =
-                chips.chips(com.termux.app.chrome.WindowChips.Surface.BAR);
+                chips.chips();
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>(list.size());
         if (list.isEmpty() || mPaneController == null) return items;
