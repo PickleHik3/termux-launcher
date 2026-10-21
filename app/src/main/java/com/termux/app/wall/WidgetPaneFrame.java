@@ -63,6 +63,11 @@ public final class WidgetPaneFrame extends PaneContentFrame
         return mStyle == null ? null : mStyle.lookGlass();
     }
 
+    /** The Look's "Widgets on glass", read on each dress pass. */
+    private boolean mWidgetsOnGlass;
+
+    @Override public boolean widgetsOnGlass() { return mWidgetsOnGlass; }
+
     @Override public void addGlassWidget(
             @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
         mGlassWidgets.add(widget);
@@ -662,6 +667,10 @@ public final class WidgetPaneFrame extends PaneContentFrame
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
         float density = getResources().getDisplayMetrics().density;
         float requestedRadiusPx = PaneGlass.radiusPx(style, density);
         // A Home page wears no frame (ADR 0008): no slab, no line, the widgets straight on the

@@ -87,10 +87,12 @@ public class BuiltinWidgetGlassTest {
     private static final class Page extends FrameLayout implements BuiltinWidgetView.GlassSource {
         final Set<BuiltinWidgetView> live = new LinkedHashSet<>();
         @Nullable PaneSurfaceStyle glass;
+        boolean onGlass;
 
         Page(@NonNull Context context) { super(context); }
 
         @Nullable @Override public PaneSurfaceStyle widgetGlassStyle() { return glass; }
+        @Override public boolean widgetsOnGlass() { return onGlass; }
         @Override public void addGlassWidget(@NonNull BuiltinWidgetView widget) { live.add(widget); }
         @Override public void removeGlassWidget(@NonNull BuiltinWidgetView widget) {
             live.remove(widget);
@@ -146,17 +148,62 @@ public class BuiltinWidgetGlassTest {
     }
 
     @Test
-    public void theSwitchIsOffUnlessStoredOn() {
-        assertFalse(BuiltinWidgetGlass.isOn(null));
-        assertFalse(BuiltinWidgetGlass.isOn(""));
-        assertFalse(BuiltinWidgetGlass.isOn("true"));
-        assertTrue(BuiltinWidgetGlass.isOn(BuiltinWidgetGlass.ON));
+    public void aWidgetsChoiceOverridesThePageAndAbsentFollowsIt() {
+        for (boolean page : new boolean[] {false, true}) {
+            assertEquals("absent follows the page", page, BuiltinWidgetGlass.resolve(null, page));
+            assertEquals("empty follows the page", page, BuiltinWidgetGlass.resolve("", page));
+            assertEquals("unknown follows the page", page,
+                BuiltinWidgetGlass.resolve("true", page));
+            assertTrue("on is an explicit on", BuiltinWidgetGlass.resolve(BuiltinWidgetGlass.ON, page));
+            assertFalse("off is an explicit off",
+                BuiltinWidgetGlass.resolve(BuiltinWidgetGlass.OFF, page));
+        }
         Map<String, String> values = new HashMap<>();
-        BuiltinWidgetGlass.write(values, true);
+        BuiltinWidgetGlass.write(values, BuiltinWidgetGlass.ON);
         assertEquals(BuiltinWidgetGlass.ON, values.get(BuiltinWidgetGlass.CONFIG_KEY));
-        BuiltinWidgetGlass.write(values, false);
-        assertFalse("off is stored as nothing",
+        BuiltinWidgetGlass.write(values, BuiltinWidgetGlass.OFF);
+        assertEquals(BuiltinWidgetGlass.OFF, values.get(BuiltinWidgetGlass.CONFIG_KEY));
+        BuiltinWidgetGlass.write(values, "");
+        assertFalse("follow the page is stored as nothing",
             BuiltinWidgetHost.configOf(values).containsKey(BuiltinWidgetGlass.CONFIG_KEY));
+    }
+
+    @Test
+    public void thePagesSwitchDressesWidgetsThatFollowItAndLeavesOverriddenOnesBe() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        Page page = new Page(activity);
+        InkLook look = new InkLook(glass(true, Bitmap.createBitmap(10, 20,
+            Bitmap.Config.ARGB_8888)));
+        page.glass = look;
+        Plain follows = new Plain(activity, services, dayStyle());
+        Plain forcedOn = new Plain(activity, services, dayStyle());
+        Plain forcedOff = new Plain(activity, services, dayStyle());
+        follows.bind(null);
+        forcedOn.bind(glassOn());
+        Bundle off = new Bundle();
+        off.putString(BuiltinWidgetGlass.CONFIG_KEY, BuiltinWidgetGlass.OFF);
+        forcedOff.bind(off);
+        for (Plain view : new Plain[] {follows, forcedOn, forcedOff})
+            page.addView(view, new FrameLayout.LayoutParams(200, 100));
+        activity.setContentView(page);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertFalse(follows.isGlassOn());
+        assertTrue(forcedOn.isGlassOn());
+        assertFalse(forcedOff.isGlassOn());
+
+        page.onGlass = true;
+        for (Plain view : new Plain[] {follows, forcedOn, forcedOff}) view.onGlassStyle(look);
+        assertTrue("follows the page now", follows.isGlassOn());
+        assertTrue(follows.style().glass);
+        assertTrue(forcedOn.isGlassOn());
+        assertFalse("overridden off stays solid", forcedOff.isGlassOn());
+        assertFalse(forcedOff.style().glass);
+
+        page.onGlass = false;
+        for (Plain view : new Plain[] {follows, forcedOn, forcedOff}) view.onGlassStyle(look);
+        assertFalse(follows.isGlassOn());
+        assertFalse(follows.style().glass);
+        assertTrue("overridden on keeps its glass", forcedOn.style().glass);
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.termux.app.launcher.widget.builtin;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -13,7 +14,8 @@ import androidx.annotation.Nullable;
 
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
@@ -80,10 +82,38 @@ public final class BuiltinWidgetConfigSheet {
             column.addView(box, params);
             inputs.add(input);
         }
-        // Every built-in widget's Glass, per widget (BuiltinWidgetGlass): a switch and one line.
-        MaterialSwitch glass = new MaterialSwitch(context);
-        glass.setText(R.string.builtin_widget_glass);
-        glass.setChecked(BuiltinWidgetGlass.isOn(current.getString(BuiltinWidgetGlass.CONFIG_KEY)));
+        // Every built-in widget's Glass, per widget (BuiltinWidgetGlass): follow the page, on or
+        // off, in one row, and one line.
+        LinearLayout glass = new LinearLayout(context);
+        glass.setOrientation(LinearLayout.HORIZONTAL);
+        glass.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView glassLabel = new TextView(context);
+        glassLabel.setText(R.string.builtin_widget_glass);
+        glassLabel.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_BodyLarge);
+        glass.addView(glassLabel, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        MaterialButtonToggleGroup glassChoice = new MaterialButtonToggleGroup(context);
+        glassChoice.setSingleSelection(true);
+        glassChoice.setSelectionRequired(true);
+        String[] glassValues = {"", BuiltinWidgetGlass.ON, BuiltinWidgetGlass.OFF};
+        int[] glassLabels = {R.string.builtin_widget_glass_follow, R.string.builtin_widget_glass_on,
+            R.string.builtin_widget_glass_off};
+        String storedGlass = current.getString(BuiltinWidgetGlass.CONFIG_KEY);
+        int[] glassIds = new int[3];
+        for (int i = 0; i < 3; i++) {
+            MaterialButton button = new MaterialButton(context, null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            button.setId(View.generateViewId());
+            button.setText(glassLabels[i]);
+            glassIds[i] = button.getId();
+            glassChoice.addView(button);
+            if (glassValues[i].equals(storedGlass == null ? "" : storedGlass))
+                glassChoice.check(button.getId());
+        }
+        if (glassChoice.getCheckedButtonId() == View.NO_ID) glassChoice.check(glassIds[0]);
+        glass.addView(glassChoice, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams glassParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         glassParams.topMargin = Math.round((fields.isEmpty() ? 4 : 16) * density);
@@ -92,7 +122,7 @@ public final class BuiltinWidgetConfigSheet {
         glassSummary.setText(R.string.builtin_widget_glass_summary);
         glassSummary.setTextAppearance(com.google.android.material.R.style
             .TextAppearance_Material3_BodySmall);
-        glassSummary.setTextColor(MaterialColors.getColor(glass,
+        glassSummary.setTextColor(MaterialColors.getColor(glassLabel,
             com.google.android.material.R.attr.colorOnSurfaceVariant));
         column.addView(glassSummary, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -110,7 +140,10 @@ public final class BuiltinWidgetConfigSheet {
                     Object kept = current.get(key);
                     if (kept instanceof String) values.put(key, (String) kept);
                 }
-                BuiltinWidgetGlass.write(values, glass.isChecked());
+                String picked = "";
+                for (int i = 0; i < 3; i++)
+                    if (glassChoice.getCheckedButtonId() == glassIds[i]) picked = glassValues[i];
+                BuiltinWidgetGlass.write(values, picked);
                 for (TextInputEditText input : inputs) {
                     CharSequence text = input.getText();
                     values.put(String.valueOf(input.getTag()), text == null ? "" : text.toString().trim());

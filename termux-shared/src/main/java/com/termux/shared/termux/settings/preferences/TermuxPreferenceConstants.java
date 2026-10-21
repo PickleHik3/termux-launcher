@@ -1357,6 +1357,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
 
         /**
+         * Widgets on glass: whether the built-in widgets wear the Look's glass (Base's values).
+         * A widget's own Glass choice (on or off) still overrides it. Off by default.
+         */
+        public static final String KEY_WIDGETS_ON_GLASS = "widgets_on_glass";
+        public static final boolean DEFAULT_VALUE_WIDGETS_ON_GLASS = false;
+
+        /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
          * When off, nothing appears on its own: the {@code ?} cap lights up under the prefix and
          * pressing it opens the full table on demand.
