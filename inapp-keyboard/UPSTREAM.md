@@ -201,16 +201,34 @@ fails when the catalogue has gone stale.
   `InAppKeyboardColorScheme.applyToPalette`, and `KeyboardColorSchemeFragment`'s preview-only
   `withKeyboardBackground` copy) renders function keys like ordinary letter keys instead of
   losing color entirely.
-- Tap correction hook (local addition): `Keyboard2View.TapResolver` plus
-  `setTapResolver`, and the new file `TapGeometry.java`. At `ACTION_DOWN` the
-  view resolves the static grid as upstream does, then lets the host resolver
-  move the press to another key index before `Pointers.onTouchDown`; the raw
-  point still reaches `Pointers`, so swipe directions are unchanged. At
-  `ACTION_UP` the resolver is told the raw key, the down point and whether
-  `TouchFx.swiped` fired. `TouchFx` gained a `rawKey` field for that. The
-  colour-editor paint path (`paintKeyAt`) never consults the resolver. The
-  model itself lives in the launcher
-  (`app/.../terminal/inappkeyboard/TapModel`, `TapModelStore`,
+- Tap correction hook (local addition): `Keyboard2View.TapResolver`,
+  `Keyboard2View.TapRelease` and `setTapResolver`, and the new file
+  `TapGeometry.java`. `ACTION_DOWN` is upstream's: the pointer holds the key
+  under the finger (the raw key), so its highlight, swipe legends, long press
+  and key repeat are always that key's. At `ACTION_UP`, before
+  `Pointers.onTouchUp` sends anything, a press that is still a plain tap
+  (`Pointers.plainTapModifiers`: never left its centre, never long-pressed or
+  repeated, never slid, not a modifier or latched key, and `TouchFx.swiped`
+  never fired) and has neither Ctrl nor Alt held (a shortcut is never
+  corrected) is offered to `resolveTap`; when the host names another key,
+  `Pointers.retargetPlainTap` swaps the pointer's key and value (re-modified
+  under the same modifiers) so that key is sent instead. There is no extra
+  highlight for a corrected tap. Every release, and every press an
+  `ACTION_CANCEL` takes, is reported to `observeTap` as a `TapRelease`: raw and
+  sent key, finger-down point, plain or not, whether Ctrl or Alt was held,
+  down and up times, and `getTouchMajor` at finger-down in key units.
+  `Pointers.Pointer.key` is no longer final and `Pointer` gained a `held` flag
+  set when the long-press timer fires; `TouchFx` holds only the raw key plus
+  its contact size. `TapGeometry` labels each key's role (character, space,
+  Esc, Tab, Backspace, other) and which keys may be corrected: characters,
+  space, Esc and Tab. Its `signature` hashes only the layout's own units —
+  each row's key count, shift and height, each key's shift, width and role —
+  never the rendered key width or row height, so a resize or edge-gap change
+  keeps the host's learned grid and an edit to the keys starts a new one. The
+  coordinates themselves stay in rendered key widths on both axes; the host
+  turns vertical offsets into key heights. The colour-editor paint path (`paintKeyAt`) never
+  consults the resolver. The engine itself lives in the launcher
+  (`app/.../terminal/inappkeyboard/touch/`, adapted by `TapModelStore` and
   `TapCorrectionController`); the module holds no learning logic.
 - Pressed-key popup hook (local addition): `Pointers.IPointerPreview` plus
   `Pointers.setPreviewHandler`, a `slot` field on `Pointer`, and

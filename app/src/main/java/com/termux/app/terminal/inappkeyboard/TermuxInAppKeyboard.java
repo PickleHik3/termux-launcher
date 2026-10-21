@@ -100,6 +100,14 @@ public final class TermuxInAppKeyboard {
     private final ExecutorService mLayoutExecutor;
     private final TapCorrectionController mTapCorrection;
     private TermuxInAppKeyboardLayoutLoader mLayoutLoader;
+    /**
+     * One loader per non-main text layout the keyboard has reached, keyed by id: the file in
+     * {@code ~/.termux/keyboard/layouts/} over the bundled layout it edits, or a user's own.
+     * Created on first use, so a layout never swapped to costs nothing.
+     */
+    private final Map<String, TermuxInAppKeyboardLayoutLoader> mFileLayoutLoaders = new HashMap<>();
+    /** Tests' error sink for layout files; null shows the user-facing notice. */
+    @Nullable private final TermuxInAppKeyboardLayoutLoader.ErrorReporter mLayoutErrorReporter;
 
     private TerminalKeyEventHandler mKeyEventHandler;
     private Keyboard2View mKeyboardView;
@@ -220,6 +228,7 @@ public final class TermuxInAppKeyboard {
         mHost = Objects.requireNonNull(host, "host");
         mPreferences = Objects.requireNonNull(preferences, "preferences");
         mLayoutExecutor = Objects.requireNonNull(layoutExecutor, "layoutExecutor");
+        mLayoutErrorReporter = errorReporter;
 
         Context context = requireContainer().getContext();
         mHardwareKeyboardConnected = () -> KeyboardUtils.isHardKeyboardConnected(context);
@@ -376,6 +385,9 @@ public final class TermuxInAppKeyboard {
             mHost.detachKeyboardView();
         if (mLayoutLoader != null)
             mLayoutLoader.close();
+        for (TermuxInAppKeyboardLayoutLoader loader : mFileLayoutLoaders.values())
+            loader.close();
+        mFileLayoutLoaders.clear();
         mTapCorrection.flush();
         mLayoutExecutor.shutdown();
         destroyKeyPopup();
@@ -401,6 +413,17 @@ public final class TermuxInAppKeyboard {
             return;
         out.putBoolean(STATE_VISIBLE, mVisible);
         out.putString(STATE_SELECTED_LAYOUT, mSelectedLayoutId);
+    }
+
+    /**
+     * What the touch engine files a layout's taps under. Grids are named by key structure, not
+     * pixel size, so portrait and landscape would share one; thumbs land differently in each.
+     */
+    private String tapLayoutKey(String layoutId) {
+        View container = mHost.getKeyboardContainer();
+        boolean landscape = container != null && container.getResources().getConfiguration()
+            .orientation == Configuration.ORIENTATION_LANDSCAPE;
+        return landscape ? layoutId + "|landscape" : layoutId;
     }
 
     /** Rebuilds immutable density metrics while retaining the parsed layout. */
@@ -737,8 +760,9 @@ public final class TermuxInAppKeyboard {
     }
 
     /**
-     * Key-cap opacity preview. Deliberately the cheapest editor control: it repaints only the
-     * keyboard view itself — no geometry sync, no accessory glass re-render.
+     * Key-cap opacity preview (Look › Custom's Keys). Deliberately cheap: it repaints only the
+     * keyboard view itself — no geometry sync, no accessory glass re-render — and re-chooses
+     * the legends on the caps as drawn, handing the view a palette only when one moved.
      */
     public void previewSurfaceEditorKeyOpacity(int opacityPercent) {
         if (!mEnabled || mDestroyed)
@@ -849,8 +873,18 @@ public final class TermuxInAppKeyboard {
         if (mKeyOpacity == clamped)
             return;
         mKeyOpacity = clamped;
-        if (mKeyboardView != null)
-            mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
+        if (mKeyboardView == null || mDestroyed)
+            return;
+        mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
+        // The legends are chosen on the caps as drawn at this opacity: repaint them only when
+        // that moved a colour the keyboard draws.
+        juloo.keyboard2.Theme.Palette next = createPalette();
+        if (mAppliedPalette != null && sameInks(mAppliedPalette, next))
+            return;
+        mKeyboardView.setPalette(next);
+        mAppliedPalette = next;
+        applyCustomColorScheme();
+        if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
     /** Configured absolute key opacity, or the theme's current effective one when unset. */
@@ -863,19 +897,31 @@ public final class TermuxInAppKeyboard {
     }
 
     /**
-     * What a letter key's label is drawn in and the cap it stands on, for the keyboard's legibility
-     * band: {@code {label, cap}}, the cap in its key colour at its live fill alpha (the user's key
-     * opacity, or the theme's own). Null while there is no keyboard view. The labels and caps are
-     * the theme's; the band measures them and veils the host, and never moves either.
+     * What a letter key's label is drawn in and the cap it stands on, then the same for a function
+     * key (Ctrl, Alt, Fn, the arrows), for the keyboard's legibility band:
+     * {@code {label, cap, functionLabel, functionCap}}, each cap in its key colour at its live
+     * fill alpha (the user's key opacity, or the theme's own; a function chip lets through as much
+     * more glass as the palette gives it). Null while there is no keyboard view. The band measures
+     * them and veils the host where no legend tone the palette can choose reads.
      */
     @Nullable
     public int[] letterKeyLegibilityInks() {
         if (mDestroyed || mKeyboardView == null)
             return null;
         juloo.keyboard2.Theme.Palette palette = createPalette();
-        int alpha = Math.round(255f * getEffectiveKeyOpacityPercent() / 100f);
-        int cap = (Math.max(0, Math.min(255, alpha)) << 24) | (palette.keyBackground & 0x00FFFFFF);
-        return new int[] {palette.labelColor | 0xFF000000, cap};
+        int alpha = Math.max(0, Math.min(255,
+            Math.round(255f * getEffectiveKeyOpacityPercent() / 100f)));
+        int cap = (alpha << 24) | (palette.keyBackground & 0x00FFFFFF);
+        // A host-set key opacity fills every cap alike; the theme's own scales each role's alpha.
+        int keyAlpha = android.graphics.Color.alpha(palette.keyBackground);
+        int functionAlpha = mKeyOpacity >= 0 || keyAlpha == 0 ? alpha : Math.max(0, Math.min(255,
+            Math.round(alpha * android.graphics.Color.alpha(palette.functionKeyBackground)
+                / (float) keyAlpha)));
+        int functionCap = (functionAlpha << 24) | (palette.functionKeyBackground & 0x00FFFFFF);
+        // The function legends are drawn secondary (Ctrl, Alt, Fn, Shift, the arrows, 123+), the
+        // tone moved toward mid grey, so the veil is bought for that rendition.
+        return new int[] {palette.labelColor | 0xFF000000, cap,
+            InAppKeyboardPaletteFactory.secondaryOf(palette.functionLabelColor), functionCap};
     }
 
     private void applyKeyCornerRadiusDp(float radiusDp) {
@@ -1050,6 +1096,14 @@ public final class TermuxInAppKeyboard {
     }
 
     /**
+     * Input reached the terminal from somewhere other than a tap on these keys — a hardware key,
+     * a paste from outside the keyboard — so the touch engine reads no take-back across it.
+     */
+    public void onOtherInput() {
+        mTapCorrection.interrupt();
+    }
+
+    /**
      * Paste where the keyboard's own paste key pastes.
      *
      * <p>The extra-keys row carries the same key for when the keyboard is down, and it used to
@@ -1061,6 +1115,7 @@ public final class TermuxInAppKeyboard {
      * @return false when there is no keyboard to route through and the caller should paste itself
      */
     public boolean pasteThroughKeyboard() {
+        onOtherInput();
         KeyValue paste = KeyValue.getKeyByName("paste");
         if (paste == null)
             return false;
@@ -1422,7 +1477,7 @@ public final class TermuxInAppKeyboard {
         configBuilder.symbolFont = bundledSymbolsLabelFont();
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
-            configBuilder.build(), createPalette());
+            configBuilder.build(), recordedPalette());
         mAppliedPaletteInputs = paletteInputsSignature();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
@@ -1430,7 +1485,7 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
-        mTapCorrection.setLayoutId(mSelectedLayoutId);
+        mTapCorrection.setLayoutId(tapLayoutKey(mSelectedLayoutId));
         mKeyboardView.setTapResolver(mTapCorrection);
         mKeyboardView.setPasteShowsPicture(mPasteOffer.showsPicture());
         applyKeyboardToView(getSelectedLayoutData());
@@ -1472,10 +1527,80 @@ public final class TermuxInAppKeyboard {
         mGreekMathKeyboardData = null;
         if (mLayoutLoader != null)
             mLayoutLoader.setLayoutOptions(mLayoutOptions);
+        for (TermuxInAppKeyboardLayoutLoader loader : mFileLayoutLoaders.values())
+            loader.setLayoutOptions(mLayoutOptions);
         if (mKeyboardView != null) {
             resetInputPipeline();
             applyKeyboardToView(getSelectedLayoutData());
         }
+    }
+
+    /**
+     * The glass faces the keys stand on, one per row top to bottom, as the launcher measured them
+     * ({@link #setGlassFaces}); empty until it has, and the palette checks its legends against the
+     * theme's base.
+     */
+    @NonNull private int[] mGlassFaces = new int[0];
+    /** The legend tone the launcher chose ({@link #setGlassFaces(int[], int)}); any until told. */
+    private int mGlassTone = InAppKeyboardPaletteFactory.TONE_ANY;
+
+    /**
+     * The faces under the keys moved (an opacity, Shade, Tint, hue or Glass change, a new
+     * wallpaper, the veil): the legends are re-chosen so they read on every row's face, and the
+     * live keyboard is repainted only when that changed a colour it draws. Called from the
+     * launcher's dress pass, never per frame of drawing; faces that did not move cost one
+     * comparison.
+     */
+    public void setGlassFaces(@NonNull int[] faces) {
+        setGlassFaces(faces, InAppKeyboardPaletteFactory.TONE_ANY);
+    }
+
+    /**
+     * {@link #setGlassFaces(int[])} with the legend tone the launcher chose on the bare face
+     * ({@code ChromeInk#bandTone}): the letters and function legends are held to it.
+     */
+    public void setGlassFaces(@NonNull int[] faces, int tone) {
+        if (java.util.Arrays.equals(faces, mGlassFaces) && tone == mGlassTone)
+            return;
+        mGlassFaces = faces.clone();
+        mGlassTone = tone;
+        if (mDestroyed || mKeyboardView == null)
+            return;
+        juloo.keyboard2.Theme.Palette next = createPalette();
+        if (mAppliedPalette != null && sameInks(mAppliedPalette, next))
+            return;
+        mKeyboardView.setPalette(next);
+        mAppliedPalette = next;
+        applyCustomColorScheme();
+        if (mKeyPopup != null) mKeyPopup.refresh();
+    }
+
+    /** The last palette handed to the view, for {@link #setGlassFace} to compare against. */
+    @Nullable private juloo.keyboard2.Theme.Palette mAppliedPalette;
+
+    /** Whether two palettes draw the same legends and caps, all that a face can move. */
+    static boolean sameInks(@NonNull juloo.keyboard2.Theme.Palette a,
+                            @NonNull juloo.keyboard2.Theme.Palette b) {
+        return a.labelColor == b.labelColor && a.subLabelColor == b.subLabelColor
+            && a.functionLabelColor == b.functionLabelColor
+            // A function chip whose fill was raised for its legend (see
+            // InAppKeyboardPaletteFactory#createGlass) is a move too.
+            && a.functionKeyBackground == b.functionKeyBackground
+            && a.actionLabelColor == b.actionLabelColor
+            && a.actionSubLabelColor == b.actionSubLabelColor
+            && a.activatedLabelColor == b.activatedLabelColor
+            && a.pressedLabelColor == b.pressedLabelColor
+            && a.lockedModifierColor == b.lockedModifierColor
+            && a.borderColor == b.borderColor
+            && a.keyGradientTopOverlay == b.keyGradientTopOverlay
+            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay;
+    }
+
+    /** {@link #createPalette()} for the view, remembered as the one it draws. */
+    @NonNull
+    private juloo.keyboard2.Theme.Palette recordedPalette() {
+        mAppliedPalette = createPalette();
+        return mAppliedPalette;
     }
 
     private juloo.keyboard2.Theme.Palette createPalette() {
@@ -1483,7 +1608,8 @@ public final class TermuxInAppKeyboard {
         String theme = mPreferences.getInAppKeyboardTheme();
         juloo.keyboard2.Theme.Palette palette =
             InAppKeyboardPaletteFactory.createGlass(context, theme,
-                com.termux.app.chrome.GlassLook.of(mPreferences));
+                com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
+                mGlassTone);
         InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
         return scheme.shouldApplyImportedPalette(theme) ? scheme.applyToPalette(palette) : palette;
@@ -1554,7 +1680,7 @@ public final class TermuxInAppKeyboard {
             return;
         }
         mAppliedPaletteInputs = paletteInputs;
-        mKeyboardView.setPalette(createPalette());
+        mKeyboardView.setPalette(recordedPalette());
         if (mKeyPopup != null) mKeyPopup.refresh();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
@@ -1605,7 +1731,7 @@ public final class TermuxInAppKeyboard {
         mAppliedPaletteInputs = paletteInputsSignature();
         // Both of these reload the stored scheme, so dynamic slots re-resolve against the new
         // Material roles while pinned and imported swatches keep their persisted colors.
-        mKeyboardView.setPalette(createPalette());
+        mKeyboardView.setPalette(recordedPalette());
         applyCustomColorScheme();
         if (mKeyPopup != null) mKeyPopup.refresh();
         return true;
@@ -1656,17 +1782,63 @@ public final class TermuxInAppKeyboard {
             }
             requestIntrinsicSizeGeometrySync();
         });
+        // Every ring layout, and the one on screen, rechecks its file too: an edit made in
+        // Settings or in a terminal lands on the same return as the ring itself.
+        for (String id : mLayoutRing)
+            recheckLayoutFile(id);
+        recheckLayoutFile(mActiveTextLayoutId);
+    }
+
+    /**
+     * Rechecks {@code layoutId}'s file — a stat, and a background parse only when it changed —
+     * creating its loader on first use. The launcher layout and the modal pads have their own.
+     */
+    private void recheckLayoutFile(String layoutId) {
+        if (!mEnabled || mDestroyed || layoutId == null || LAYOUT_MAIN.equals(layoutId)
+            || LAYOUT_NUMERIC.equals(layoutId) || LAYOUT_GREEK_MATH.equals(layoutId))
+            return;
+        TermuxInAppKeyboardLayoutLoader loader = mFileLayoutLoaders.get(layoutId);
+        if (loader == null) {
+            LauncherKeyboardLayouts.Layout layout = LauncherKeyboardLayouts.find(
+                requireContainer().getResources(), layoutId);
+            File file = KeyboardLayoutFiles.overrideFile(KeyboardLayoutFiles.defaultHome(),
+                layoutId);
+            if (layout == null || file == null)
+                return;
+            // A user layout has no bundled original; a broken one falls back as layout.xml does.
+            int fallbackResId = layout.xmlResId != 0 ? layout.xmlResId
+                : juloo.keyboard2.R.xml.termux_launcher_qwerty;
+            loader = new TermuxInAppKeyboardLayoutLoader(requireContainer().getContext(), file,
+                fallbackResId, mLayoutExecutor, mHost::runOnMain, mLayoutOptions,
+                mLayoutErrorReporter);
+            mFileLayoutLoaders.put(layoutId, loader);
+        }
+        loader.recheck(data -> {
+            if (mDestroyed || !mEnabled)
+                return;
+            if (LauncherKeyboardLayouts.isUserLayout(layoutId))
+                LauncherKeyboardLayouts.rememberUserLabel(layoutId, data.name);
+            if (layoutId.equals(mSelectedLayoutId)) {
+                resetInputPipeline();
+                applyKeyboardToView(formed(data));
+                requestIntrinsicSizeGeometrySync();
+            }
+        });
     }
 
     private void selectLayout(String layoutId) {
         if (!mEnabled || mDestroyed)
             return;
         String normalizedId = normalizeLayoutId(layoutId);
+        // A layout reached for the first time — a palette row or a binding outside the ring —
+        // gets its loader now, so an edited file replaces the bundled one a frame later.
+        if (!mFileLayoutLoaders.containsKey(normalizedId))
+            recheckLayoutFile(normalizedId);
         KeyboardData data = getLayoutData(normalizedId);
         if (data == null)
             return;
         mSelectedLayoutId = normalizedId;
-        mTapCorrection.setLayoutId(normalizedId);
+        mTapCorrection.setLayoutId(tapLayoutKey(normalizedId));
         resetInputPipeline();
         applyKeyboardToView(data);
         requestIntrinsicSizeGeometrySync();
@@ -1924,6 +2096,17 @@ public final class TermuxInAppKeyboard {
                     mMainKeyboardData = loadBundledLayout(juloo.keyboard2.R.xml.termux_launcher_qwerty);
                 return mMainKeyboardData;
             default:
+                TermuxInAppKeyboardLayoutLoader loader = mFileLayoutLoaders.get(layoutId);
+                KeyboardData fromFile = loader == null ? null : loader.getLastKnownGood();
+                // Reached before its background parse landed: read the file now rather than
+                // flash the layout it falls back to.
+                if (fromFile == null && loader != null) {
+                    fromFile = loader.loadFileNow();
+                    if (fromFile != null && LauncherKeyboardLayouts.isUserLayout(layoutId))
+                        LauncherKeyboardLayouts.rememberUserLabel(layoutId, fromFile.name);
+                }
+                if (fromFile != null)
+                    return fromFile;
                 return getBundledTextLayoutData(layoutId);
         }
     }
@@ -1972,6 +2155,7 @@ public final class TermuxInAppKeyboard {
     }
 
     private void resetInputPipeline() {
+        mTapCorrection.interrupt();
         if (mKeyboardView != null)
             mKeyboardView.resetInputState();
         if (mKeyEventHandler != null)

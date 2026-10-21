@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Dev-loop installer: strips the bundled bootstrap zips from the staging APK to
-# cut adb transfer from ~189MB to ~50MB, re-signs with the repo debug key, and
-# installs. Only for upgrades on devices that already have the Termux prefix
-# extracted — a fresh install from this APK would have no bootstrap.
+# Dev-loop installer: keeps one ABI's native libs to cut the adb transfer, re-signs
+# with the repo test key, and installs, fresh or as an upgrade. No APK carries a
+# bootstrap: the app downloads it on first run.
 #
 # Staging (./gradlew :app:assembleStaging) is the release build's R8 shrinking,
 # still debuggable. BUILD_TYPE=debug installs the unshrunk debug APK instead.

@@ -1,0 +1,486 @@
+package com.termux.app.chrome;
+
+import org.junit.Test;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
+
+/**
+ * Living glass: a pane's bend lags it on an underdamped spring, rocks back once or twice as it
+ * lands and settles to exactly the resting look; a press deforms nothing (there is no dent);
+ * placement never kicks; at rest nothing is asked for. Also the program's Java mirrors of the terms it adds,
+ * and that the program text stays well formed.
+ */
+public class GlassMotionLightTest {
+
+    /** Pong's density, and its 90 Hz frame. */
+    private static final float DENSITY = 2.625f;
+    private static final long FRAME_MS = 11L;
+    /** What reads as visible: 2% of a whole lean. */
+    private static final float VISIBLE_DP = 0.02f * GlassMotionLight.LAG_MAX_DP;
+
+    /** A gate answering a fixed multiplier, counting how often it is asked. */
+    private static final class CountingGate implements GlassMotionLight.Gate {
+        final float answer;
+        int asked;
+
+        CountingGate(float answer) {
+            this.answer = answer;
+        }
+
+        @Override public float multiplier() {
+            asked++;
+            return answer;
+        }
+    }
+
+    /** A pane 400 x 600 px at {@code x}, as a draw at {@code now} sees it. */
+    private static boolean drawAt(GlassMotionLight light, long now, float x) {
+        return light.onDraw(now, x, 100f, x + 400f, 700f);
+    }
+
+    private static float lagDp(GlassMotionLight light) {
+        return light.lagXPx() / DENSITY;
+    }
+
+    /** Slides the pane at {@code dpPerSecond} for {@code frames} frames; the frame time after. */
+    private static long slide(GlassMotionLight light, long start, float x0, float dpPerSecond,
+                              int frames, List<Float> lags) {
+        float pxPerFrame = dpPerSecond * DENSITY * FRAME_MS / 1000f;
+        long now = start;
+        for (int i = 0; i <= frames; i++) {
+            drawAt(light, now, x0 + i * pxPerFrame);
+            if (lags != null) lags.add(lagDp(light));
+            now += FRAME_MS;
+        }
+        return now;
+    }
+
+    private static float endOf(float x0, float dpPerSecond, int frames) {
+        return x0 + frames * dpPerSecond * DENSITY * FRAME_MS / 1000f;
+    }
+
+    // ------------------------------------------------------------------------------- at rest
+
+    @Test
+    public void aStillPaneStaysExactlyAtRestAndNeverAsksTheGate() {
+        CountingGate gate = new CountingGate(1f);
+        GlassMotionLight light = new GlassMotionLight(DENSITY, gate);
+        for (int i = 0; i < 30; i++) assertFalse(drawAt(light, 1000L + i * FRAME_MS, 50f));
+        assertEquals(0f, light.lagXPx(), 0f);
+        assertEquals(0f, light.lagYPx(), 0f);
+        assertFalse(light.isMoving());
+        assertEquals(0, gate.asked);
+    }
+
+    @Test
+    public void afterAnyMotionItLandsOnExactZeroAndStopsAskingForFrames() {
+        CountingGate gate = new CountingGate(1f);
+        GlassMotionLight light = new GlassMotionLight(DENSITY, gate);
+        long now = slide(light, 1000L, 0f, 2500f, 25, null);
+        float x = endOf(0f, 2500f, 25);
+        boolean asked = true;
+        for (int i = 0; i < 120; i++, now += FRAME_MS) asked = drawAt(light, now, x);
+        assertFalse("no frame asked for at rest", asked);
+        assertEquals(0f, light.lagXPx(), 0f);
+        assertEquals(0f, light.lagYPx(), 0f);
+        // Still at rest: more draws neither move it nor ask the gate again.
+        int askedBefore = gate.asked;
+        for (int i = 0; i < 10; i++, now += FRAME_MS) assertFalse(drawAt(light, now, x));
+        assertEquals(askedBefore, gate.asked);
+    }
+
+    // ----------------------------------------------------------------------------------- lag
+
+    @Test
+    public void theBendLagsTheWayThePaneMovesAndMoreForAFlick() {
+        GlassMotionLight slow = new GlassMotionLight(DENSITY, new CountingGate(1f));
+        List<Float> slowLags = new ArrayList<>();
+        slide(slow, 1000L, 0f, 200f, 30, slowLags);
+        GlassMotionLight fast = new GlassMotionLight(DENSITY, new CountingGate(1f));
+        List<Float> fastLags = new ArrayList<>();
+        slide(fast, 1000L, 0f, 2500f, 30, fastLags);
+        float slowMax = max(slowLags), fastMax = max(fastLags);
+        assertTrue("a slow drag barely deforms: " + slowMax,
+            slowMax > 0f && slowMax < 0.12f * GlassMotionLight.LAG_MAX_DP);
+        assertTrue("a flick deforms fully: " + fastMax,
+            fastMax > 0.85f * GlassMotionLight.LAG_MAX_DP);
+        assertTrue("held under the clamp", fastMax <= GlassMotionLight.LAG_MAX_DP + 1e-3f);
+        assertEquals("a horizontal slide lags only across", 0f, fast.lagYPx(), 0f);
+        // Leftward: the lag points left.
+        GlassMotionLight left = new GlassMotionLight(DENSITY, new CountingGate(1f));
+        slide(left, 1000L, 2000f, -1500f, 10, null);
+        assertTrue(left.lagXPx() < 0f);
+    }
+
+    @Test
+    public void onLandingItRocksBackOnceOrTwiceAndSettlesInAboutFourHundredMs() {
+        for (float speed : new float[] {800f, 2500f, 3500f}) {
+            GlassMotionLight light = new GlassMotionLight(DENSITY, new CountingGate(1f));
+            long now = slide(light, 1000L, 0f, speed, 27, null);
+            float x = endOf(0f, speed, 27);
+            long landed = now - FRAME_MS;
+            List<Float> after = new ArrayList<>();
+            long restAt = -1L, lastVisible = landed;
+            for (int i = 0; i < 120; i++, now += FRAME_MS) {
+                boolean more = drawAt(light, now, x);
+                float lag = lagDp(light);
+                after.add(lag);
+                if (Math.abs(lag) > VISIBLE_DP) lastVisible = now;
+                if (!more && restAt < 0L) restAt = now;
+            }
+            // Visible swings past the rest: the overshoot back, and at most one more.
+            int swings = 0;
+            int sign = 1;
+            for (float lag : after) {
+                if (Math.abs(lag) <= VISIBLE_DP) continue;
+                int s = lag > 0f ? 1 : -1;
+                if (s != sign) {
+                    swings++;
+                    sign = s;
+                }
+            }
+            assertTrue(speed + ": rocks back at least once, " + swings, swings >= 1);
+            assertTrue(speed + ": rocks back at most twice, " + swings, swings <= 2);
+            assertTrue(speed + ": the overshoot is smaller than the lag",
+                -min(after) < 0.35f * GlassMotionLight.LAG_MAX_DP);
+            assertTrue(speed + ": visibly still by 400 ms, " + (lastVisible - landed),
+                lastVisible - landed <= 400L);
+            assertTrue(speed + ": stops asking for frames by 550 ms, " + (restAt - landed),
+                restAt > 0L && restAt - landed <= 550L);
+            assertEquals(0f, light.lagXPx(), 0f);
+        }
+    }
+
+    @Test
+    public void theResultDoesNotDependOnTheFrameRate() {
+        // 60 Hz against 120 Hz over the same motion: the spring is solved exactly per interval.
+        float[] lags = new float[2];
+        long[] frames = {16L, 8L};
+        for (int r = 0; r < 2; r++) {
+            GlassMotionLight light = new GlassMotionLight(DENSITY, new CountingGate(1f));
+            long now = 1000L;
+            float pxPerMs = 1500f * DENSITY / 1000f;
+            for (long t = 0; t <= 192L; t += frames[r]) drawAt(light, now + t, t * pxPerMs);
+            for (long t = 192L + frames[r]; t <= 288L; t += frames[r]) drawAt(light, now + t, 192L * pxPerMs);
+            lags[r] = lagDp(light);
+        }
+        assertEquals(lags[0], lags[1], 1e-2f);
+    }
+
+    // ---------------------------------------------------------------- placement, not motion
+
+    @Test
+    public void aPlacementFromRestNeverKicks() {
+        CountingGate gate = new CountingGate(1f);
+        GlassMotionLight light = new GlassMotionLight(DENSITY, gate);
+        drawAt(light, 1000L, 0f);
+        // A jump past JUMP_DP in one frame: the keyboard, a rotation.
+        assertFalse(drawAt(light, 1000L + FRAME_MS, (GlassMotionLight.JUMP_DP + 10f) * DENSITY));
+        assertEquals(0f, light.lagXPx(), 0f);
+        // A move after a pause: the first frame of a motion, or a redraw somewhere else.
+        assertFalse(drawAt(light, 1000L + FRAME_MS + GlassMotionLight.MAX_GAP_MS + 1L, 0f));
+        assertEquals(0f, light.lagXPx(), 0f);
+        assertEquals("placement asks nothing", 0, gate.asked);
+        // A pane that only grows past the jump in one frame was placed as well.
+        GlassMotionLight grow = new GlassMotionLight(DENSITY, new CountingGate(1f));
+        grow.onDraw(1000L, 100f, 100f, 500f, 700f);
+        assertFalse(grow.onDraw(1000L + FRAME_MS, -200f, 100f, 800f, 700f));
+        assertEquals(0f, grow.lagXPx(), 0f);
+    }
+
+    @Test
+    public void aPlacementMidSettleCarriesTheBendWithoutAKick() {
+        GlassMotionLight moved = new GlassMotionLight(DENSITY, new CountingGate(1f));
+        GlassMotionLight kept = new GlassMotionLight(DENSITY, new CountingGate(1f));
+        long now = slide(moved, 1000L, 0f, 2000f, 20, null);
+        slide(kept, 1000L, 0f, 2000f, 20, null);
+        float x = endOf(0f, 2000f, 20);
+        drawAt(moved, now, x);
+        drawAt(kept, now, x);
+        now += FRAME_MS;
+        // One pane is put 300 dp further on; the other stays. Both settle the same.
+        drawAt(moved, now, x + 300f * DENSITY);
+        drawAt(kept, now, x);
+        assertEquals(lagDp(kept), lagDp(moved), 1e-3f);
+        for (int i = 0; i < 10; i++) {
+            now += FRAME_MS;
+            drawAt(moved, now, x + 300f * DENSITY);
+            drawAt(kept, now, x);
+            assertEquals(lagDp(kept), lagDp(moved), 1e-3f);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------- gate
+
+    @Test
+    public void aClosedGateKeepsTheGlassStillAndIsAskedOncePerMotion() {
+        CountingGate gate = new CountingGate(0f);
+        GlassMotionLight light = new GlassMotionLight(DENSITY, gate);
+        long now = slide(light, 1000L, 0f, 3000f, 20, null);
+        assertEquals(0f, light.lagXPx(), 0f);
+        assertEquals("once for the whole motion", 1, gate.asked);
+        float x = endOf(0f, 3000f, 20);
+        assertFalse(drawAt(light, now, x));
+        // The next motion asks afresh: once more, no press between them asking.
+        slide(light, now + FRAME_MS, x, 3000f, 3, null);
+        assertEquals(2, gate.asked);
+    }
+
+    @Test
+    public void animationSpeedStretchesTheSpringsTime() {
+        long[] settle = new long[2];
+        float[] multipliers = {1f, 2f};
+        for (int r = 0; r < 2; r++) {
+            GlassMotionLight light = new GlassMotionLight(DENSITY, new CountingGate(multipliers[r]));
+            // The same travel, taking as much longer as the multiplier says.
+            float speed = 2000f / multipliers[r];
+            int frames = Math.round(20 * multipliers[r]);
+            long now = slide(light, 1000L, 0f, speed, frames, null);
+            float x = endOf(0f, speed, frames);
+            long landed = now - FRAME_MS;
+            for (int i = 0; i < 200; i++, now += FRAME_MS) {
+                if (!drawAt(light, now, x)) {
+                    settle[r] = now - landed;
+                    break;
+                }
+            }
+        }
+        assertTrue("Slower settles about twice as long: " + settle[0] + " / " + settle[1],
+            settle[1] > 1.6f * settle[0] && settle[1] < 2.4f * settle[0]);
+    }
+
+    @Test
+    public void theGateIsZeroForEveryReasonToKeepStill() {
+        assertEquals(1f, GlassMotionGate.multiplier(true, false, true, false, false, 1f), 0f);
+        assertEquals(1.5f, GlassMotionGate.multiplier(true, false, true, false, false, 1.5f), 0f);
+        assertEquals(0f, GlassMotionGate.multiplier(false, false, true, false, false, 1f), 0f);
+        assertEquals(0f, GlassMotionGate.multiplier(true, true, true, false, false, 1f), 0f);
+        assertEquals(0f, GlassMotionGate.multiplier(true, false, false, false, false, 1f), 0f);
+        assertEquals(0f, GlassMotionGate.multiplier(true, false, true, true, false, 1f), 0f);
+        assertEquals(0f, GlassMotionGate.multiplier(true, false, true, false, true, 1f), 0f);
+        assertEquals("Animation speed Off", 0f,
+            GlassMotionGate.multiplier(true, false, true, false, false, 0f), 0f);
+    }
+
+    @Test
+    public void resetGoesToRestAtOnce() {
+        GlassMotionLight light = new GlassMotionLight(DENSITY, new CountingGate(1f));
+        slide(light, 1000L, 0f, 2500f, 10, null);
+        assertTrue(light.isMoving());
+        light.reset();
+        assertEquals(0f, light.lagXPx(), 0f);
+        assertFalse(light.isMoving());
+    }
+
+    // -------------------------------------------------------------- the program's mirrors
+
+    @Test
+    public void theLiveBendThickensTheLeadingEdgeAndThinsTheTrailingOne() {
+        float band = 18f * DENSITY, strength = 27f * DENSITY, big = 1000f;
+        float rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
+        for (float inside : new float[] {rimW, band * 0.25f, band * 0.6f}) {
+            float rest = GlassRefraction.pullPx(inside, band, strength, big, rimW);
+            assertEquals("lean 0 is the resting pull, bit for bit", rest,
+                GlassRefraction.livePullPx(inside, band, strength, big, rimW, 0f), 0f);
+            assertTrue(GlassRefraction.livePullPx(inside, band, strength, big, rimW, 1f) > rest);
+            assertTrue(GlassRefraction.livePullPx(inside, band, strength, big, rimW, -1f) < rest);
+        }
+        // Still held at the half short side.
+        float small = 10f * DENSITY;
+        assertTrue(GlassRefraction.livePullPx(rimW, band, strength, small, rimW, 1f)
+            <= small + 1e-4f);
+        // The lean: a whole lag facing the edge is 1, behind it -1, across it 0.
+        float whole = GlassMotionLight.LAG_MAX_DP * DENSITY;
+        assertEquals(1f, GlassRefraction.lagLean(1f, 0f, whole * 2f, 0f, DENSITY), 0f);
+        assertEquals(-1f, GlassRefraction.lagLean(-1f, 0f, whole * 2f, 0f, DENSITY), 0f);
+        assertEquals(0f, GlassRefraction.lagLean(0f, 1f, whole, 0f, DENSITY), 0f);
+        assertEquals(0.5f, GlassRefraction.lagLean(1f, 0f, whole * 0.5f / GlassRefraction.LAG_LEAN_GAIN, 0f, DENSITY), 1e-6f);
+    }
+
+    @Test
+    public void theProgramTakesTheLiveTermsOnlyWhenLiveAndKeepsTheRestingExpressions() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("uniform float2 uLag;"));
+        // The press's dent is gone with its ripple (the user, 2026-10-20): a rigid slab does
+        // not deform under a finger.
+        for (String gone : new String[] {"uMotion", "uMotionDir", "uSweep", "sweepG", "kSweepGain",
+            "kMotionBend", "kMotionDisp", "kMotionRimSplitDp", "lead", "uDent", "dentOff",
+            "kDentRadiusDp", "kDentPeak", "kDentDepthDp"}) {
+            assertFalse(gone + " is gone", Pattern.compile("\\b" + gone + "\\b").matcher(agsl).find());
+        }
+        assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;"));
+        // The resting expressions are untouched, and every live term sits behind its gate.
+        assertTrue(agsl.contains("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
+        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - n * pull;"));
+        assertTrue(agsl.contains("float split = uDisp > 0.0 ? pull * uDisp * cornerWeight(p, b) : 0.0;"));
+        assertTrue(agsl.contains("float2 sn = n;"));
+        int liveGate = agsl.indexOf("if (live) {");
+        assertTrue(liveGate > 0);
+        assertTrue(agsl.indexOf("pull = bent;") > liveGate);
+        assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : n;") > agsl.lastIndexOf("if (live) {"));
+        // The constants are the Java ones.
+        assertConst(agsl, "kLagMaxDp", GlassMotionLight.LAG_MAX_DP);
+        assertConst(agsl, "kLagLean", GlassRefraction.LAG_LEAN_GAIN);
+        assertConst(agsl, "kLagBend", GlassRefraction.LAG_BEND);
+        assertConst(agsl, "kLagBand", GlassRefraction.LAG_BAND);
+        assertConst(agsl, "kLiveDisp", GlassRefraction.LIVE_DISPERSION);
+    }
+
+    // ------------------------------------------------------------- the live rim's clearer picture
+
+    @Test
+    public void livenessIsTheMostOfAWholeLeanAndNothingAtRest() {
+        float d = 2.625f;
+        float wholeLag = GlassMotionLight.LAG_MAX_DP * d / GlassRefraction.LAG_LEAN_GAIN;
+        assertEquals(0f, GlassRefraction.liveness(0f, 0f, 0f, 0f, d), 0f);
+        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.3f, wholeLag * 0.4f, 0f, 0f, d), 1e-5f);
+        assertEquals(1f, GlassRefraction.liveness(wholeLag * 3f, 0f, 0f, 0f, d), 0f);
+        // The press rig's 1.1 degrees is a quarter of a lean, as the rim's own lean is: a press
+        // counts by its pose alone, there being no dent.
+        float tilt = (float) Math.sin(Math.toRadians(1.1));
+        assertEquals(0.23f, GlassRefraction.liveness(0f, 0f, tilt, 0f, d), 0.005f);
+        // The most, not the sum.
+        float fifthLeanTilt = 0.2f / GlassRefraction.TILT_LEAN_GAIN;
+        assertEquals(0.5f, GlassRefraction.liveness(wholeLag * 0.5f, 0f, fifthLeanTilt, 0f, d), 1e-5f);
+    }
+
+    @Test
+    public void aLiveRimClearsTowardTheClearerFrameAndTheFaceNever() {
+        float clear = 0.76f; // Clear's clarity
+        for (float t = 0f; t <= 1f; t += 0.05f) {
+            float rest = GlassRefraction.liveClarityK(t, clear, GlassRefraction.LIVE_CLARITY, 0f);
+            // At liveness 0 it is the resting term exactly.
+            float x = 1f - t;
+            float old = x > 0f ? x * x * (3f - 2f * x) * clear : 0f;
+            assertEquals("rest at " + t, old, rest, 1e-6f);
+            float live = GlassRefraction.liveClarityK(t, clear, GlassRefraction.LIVE_CLARITY, 1f);
+            assertTrue("clearer while live at " + t, live >= rest - 1e-6f);
+            assertTrue("never past the clearer frame", live <= 1f + 1e-6f);
+        }
+        // The rim is wholly the clearer frame at a whole lean; the outer third of the band too.
+        assertEquals(1f, GlassRefraction.liveClarityK(0f, clear, GlassRefraction.LIVE_CLARITY, 1f), 1e-6f);
+        assertEquals(1f, GlassRefraction.liveClarityK(1f / 3f, clear, GlassRefraction.LIVE_CLARITY, 1f), 1e-5f);
+        // The face (t 1) never, at any liveness; the guardrail under the pane's text.
+        for (float live : new float[] {0f, 0.3f, 1f}) {
+            assertEquals(0f, GlassRefraction.liveClarityK(1f, clear, GlassRefraction.LIVE_CLARITY, live), 0f);
+            assertEquals(0f, GlassRefraction.liveClarityK(1f, 0f, GlassRefraction.LIVE_CLARITY, live), 0f);
+        }
+        // A frosted look clears its rim only while it moves, and only with a clearer frame bound.
+        assertEquals(0f, GlassRefraction.liveClarityK(0f, 0f, GlassRefraction.LIVE_CLARITY, 0f), 0f);
+        assertEquals(0.5f, GlassRefraction.liveClarityK(0f, 0f, GlassRefraction.LIVE_CLARITY, 0.5f), 1e-6f);
+        assertEquals(0f, GlassRefraction.liveClarityK(0f, 0f, 0f, 1f), 0f);
+        // It eases with liveness: no step anywhere.
+        float last = 0f;
+        for (int i = 0; i <= 100; i++) {
+            float k = GlassRefraction.liveClarityK(0.2f, clear, GlassRefraction.LIVE_CLARITY, i / 100f);
+            assertTrue(k >= last - 1e-6f);
+            if (i > 0) assertTrue("eases at " + i, k - last < 0.02f);
+            last = k;
+        }
+    }
+
+    @Test
+    public void aLiveBendMovesFurtherThanTheClearerFramesBlur() {
+        // Research recommendation 2: the bend's change while moving should pass the blur of the
+        // frame the rim samples. At the press rig's 1.1 degrees on Clear (27 dp over 18), a couple
+        // of dp in, the leaned bend moves the picture further than CLARITY_RADIUS_DP.
+        float d = 2.625f;
+        GlassRefraction.Look clear = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
+        float rimW = GlassRefraction.Look.rimWidthPx(d);
+        float lean = GlassRefraction.tiltLean(-1f, 0f, (float) Math.sin(Math.toRadians(1.1)), 0f);
+        float inside = 2f * d;
+        float rest = GlassRefraction.pullPx(inside, clear.bandPx(d), clear.strengthPx(d), 1000f, rimW);
+        float live = GlassRefraction.livePullPx(inside, clear.bandPx(d), clear.strengthPx(d), 1000f,
+            rimW, lean);
+        assertTrue((live - rest) / d + " dp", live - rest > GlassRefraction.CLARITY_RADIUS_DP * d);
+    }
+
+    @Test
+    public void theProgramClearsTheRimOnlyWhenLiveAndOnlyFromItsOwnClearerFrame() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("uniform float uLiveClarity;"));
+        String rest = "float clarityK = uClarity > 0.0 && x > 0.0 ? x * x * (3.0 - 2.0 * x) * uClarity : 0.0;";
+        String gate = "if (live && uLiveClarity > 0.0 && x > 0.0) {";
+        assertTrue("the resting term is untouched", agsl.contains(rest));
+        assertTrue(agsl.indexOf(gate) > agsl.indexOf(rest));
+        assertTrue(agsl.contains("float xl = min(x * (1.0 + kLiveReach * liveK), 1.0);"));
+        assertTrue(agsl.contains(
+            "clarityK = xl * xl * (3.0 - 2.0 * xl) * mix(uClarity, 1.0, uLiveClarity * liveK);"));
+        // liveK is set only inside the live gate, and is 0 otherwise.
+        assertTrue(agsl.contains("float liveK = 0.0;"));
+        assertTrue(agsl.indexOf("liveK = clamp(") > agsl.indexOf("if (live) {"));
+        // Before the samples, so it reuses them: no new eval of either picture.
+        assertTrue(agsl.indexOf(gate) < agsl.indexOf("content.eval("));
+        assertEquals(4, agsl.split("sharp\\.eval\\(", -1).length - 1);
+        assertEquals(4, agsl.split("content\\.eval\\(", -1).length - 1);
+        assertConst(agsl, "kLiveReach", GlassRefraction.LIVE_CLARITY_REACH);
+    }
+
+    private static void assertConst(String agsl, String name, float java) {
+        Matcher m = Pattern.compile("const float " + name + " = ([0-9.]+);").matcher(agsl);
+        assertTrue(name + " is a plain decimal constant", m.find());
+        assertEquals(name, java, Float.parseFloat(m.group(1)), 0f);
+    }
+
+    @Test
+    public void theProgramTextIsBalanced() {
+        String agsl = GlassRefraction.AGSL;
+        int braces = 0, parens = 0;
+        for (int i = 0; i < agsl.length(); i++) {
+            char c = agsl.charAt(i);
+            if (c == '{') braces++;
+            else if (c == '}') braces--;
+            else if (c == '(') parens++;
+            else if (c == ')') parens--;
+            assertTrue("no brace closes before it opens, at " + i, braces >= 0);
+            assertTrue("no paren closes before it opens, at " + i, parens >= 0);
+        }
+        assertEquals(0, braces);
+        assertEquals(0, parens);
+        assertFalse("no exponent a float printed as Java writes it", agsl.matches("(?s).*[0-9]E-?[0-9].*"));
+    }
+
+    @Test
+    public void everyUniformTheProgramDeclaresHasAWriter() throws Exception {
+        File source = new File("src/main/java/com/termux/app/chrome/GlassRefraction.java");
+        if (!source.isFile()) source = new File("app/" + source.getPath());
+        assumeTrue("the source is reachable from the test's directory", source.isFile());
+        String java = new String(Files.readAllBytes(source.toPath()), StandardCharsets.UTF_8);
+        Matcher m = Pattern.compile("uniform (\\w+) (\\w+);").matcher(GlassRefraction.AGSL);
+        int seen = 0;
+        while (m.find()) {
+            seen++;
+            String type = m.group(1), name = m.group(2);
+            String writer = "shader".equals(type) ? "setInputShader(\"" + name + "\""
+                : "setFloatUniform(\"" + name + "\"";
+            assertTrue(name + " has a writer", java.contains(writer));
+            assertTrue(type + " is an AGSL type", type.matches("shader|float[234]?|half[234]?"));
+        }
+        assertTrue(seen > 20);
+    }
+
+    // -------------------------------------------------------------------------------- helpers
+
+    private static float max(List<Float> values) {
+        float m = -Float.MAX_VALUE;
+        for (float v : values) m = Math.max(m, v);
+        return m;
+    }
+
+    private static float min(List<Float> values) {
+        float m = Float.MAX_VALUE;
+        for (float v : values) m = Math.min(m, v);
+        return m;
+    }
+}

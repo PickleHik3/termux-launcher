@@ -83,12 +83,63 @@ Known, left as they are: the live-blur fallbacks of the palette, the sheet, the 
 ## 4. Refraction
 
 - **One shader for every glass surface.** It extends today's `GLASS_AGSL` (`TermuxActivity.java:3399-3495`) and samples the shared frame, or the live-recorded backdrop while a video plays. Per pixel it bends the frame near the rim and adds the rim light.
-- **Controls:** none in the UI since 2026-09-30 (appearance-layout-editor SPEC §4): each Look sets bend / edge width / edge light, Fancier Glass is on wherever supported, and Lazy mode turns it off. The keys and accessors remain.
-  - **Bend** (`uStrength`): how strongly the glass bends the image behind it.
+- **Controls (2026-10-12):** the five keys are back in the Appearance editor, as the **Edge** group of
+  the Custom row's global set (appearance-layout-editor SPEC §3.4): a Surface | Edge toggle in the
+  heading row swaps the six surface sliders for Bend, Edge width, Edge light, Shine and Dispersion.
+  Each Look still sets all five; Fancier Glass is on wherever supported, and Lazy mode turns it off.
+  Between 2026-09-30 and then there was no UI for them.
+  - **Bend** (`uStrength`): how far the picture is pulled in at the rim, along the rounded rect's
+    true outward normal, on a quarter-circle profile (the bevel of a thick slab; Kyant0's
+    AndroidLiquidGlass and QmDeve's AndroidLiquidGlassView use the same curve).
   - **Edge width** (`uBand`): how far in from the rim the bending reaches.
-  - **Edge light** (`uRim`): how bright the rim highlight is.
-  - Defaults are to be tuned on pong. The resting look with Fancier Glass on and the default values must be close to the default mode.
+  - **Edge light** (`uRim`): how bright the hairline along the rim is.
+  - **Shine** (`uSpec`, `uBevel`): a bevel light under the rim, lit from the 45° diagonal so the
+    top-left and bottom-right of the rim catch it; reaches half the edge width in (1–12 dp). 0 in
+    every Look. The earlier specular, a band at one brightness all round, read as a double rim and
+    was dropped; this one is directional.
+  - **Dispersion** (`uDisp`): the chromatic split at the rim, seven spectral taps where it is on
+    and the pixel is in the band, one tap everywhere else. The split grows linearly across the
+    band to 16 dp at the rim at 100% (it followed the bevel profile at 6 dp first, which read as
+    nothing on a phone). 0 in every Look: it is the knob that costs battery, and it is the user's
+    to turn up.
+  - The resting look with the shipped Looks changes only by the profile and the normal; Shine and
+    Dispersion are off in all of them.
 - **Idle cost stays at zero.** Nothing redraws at rest, and uniforms change only while something moves.
+
+### 4.1 Natural glass (2026-10-14)
+
+Four terms were added to the one program so the glass reads as a lit slab rather than a frosted
+polymer with a stroke. Working note: `natural-glass-2026-10-14.md`.
+
+- **Lit rim.** The hairline is lit from above and a little to the left (`kLightUp`, unit
+  (-0.33, -0.944)) with a weaker light answering from below: the top edge takes the full Edge
+  light, the bottom 0.6 of it, and the sides a floor of 0.40, never none, since the hairline is
+  what reads as the edge. Same knob, new distribution.
+- **Thickness.** Across the bend band the picture brightens toward the lit rim (up to +12%) and
+  dims toward the shaded one (up to −6%), multiplicative, fading to nothing at the band's inner
+  edge. Not a knob: it scales with Bend and is full from 8 dp (`Look.thickness`).
+- **Clarity** (`uClarity`, `fancier_glass_clarity`, the sixth Edge slider). A second input,
+  `sharp`, is a clearer frame of the same wallpaper rect, obtained from the blur cache at
+  `GlassRefraction.CLARITY_RADIUS_DP` (2 dp, full size, about 15.5 MB on a 1.5×-wide frame). In
+  the band the bent edge shows it in place of the frost on x² (near the frost over the inner
+  half, half way at the band's middle, the knob's share at the rim): one extra sample, only in the band, only when the Look asks.
+  A surface frosted at 2 dp or less takes none. Until a surface binds one the frost is its own
+  clear picture and the term is zero, so a RenderEffect surface (the dock, the under-pill strip)
+  never reads an unbound shader and has no clarity. Reaches: the painter's frosts (status band,
+  window bar, palette, sheet, drawer, off-dock plank, A–Z capsule), the keyboard host and the
+  under-keyboard card, the pane slabs. Not the corner tabs.
+- **Touch light** (`uTouch*`). A finger resting on glass: the rim nearest it catches 1.5× more of
+  the Edge light, a faint glow (0.045) scatters under the fingertip, and the picture is drawn a
+  tenth of the way toward it (`TOUCH_LENS`). Light, not motion. `chrome/GlassTouchLight` drives
+  it (rise 110 ms, fall 240 ms, follows the finger) on the terminal sheet's centred card rows
+  through `GlassPress`; the dock, whose refraction is a RenderEffect that copies uniforms when
+  built, lights at once on a dock icon's down and fades in four steps 60 ms apart
+  (`chrome/DockTouchFade`), five rebuilds per tap at most. Off under reduced motion, lazy mode,
+  battery saver, and while an extra key's lens is up.
+
+Looks (bend / edge width / edge light / shine / dispersion / clarity): Clear 6/14/40/0/0/70,
+Mist 9/20/30/0/0/60, Tint 6/14/36/0/0/55, Solid unchanged with clarity 0. Preset format 4; a
+look stored earlier reads clarity 0.
 
 ## 5. Wallpapers (Fancier Glass only)
 
@@ -175,11 +226,11 @@ The variants:
 
 ## 11. Window-switch card (2026-09-29)
 
-Switching, creating or closing a window pans a snapshot of the outgoing surface (`captureTerminalDeparture`) away while the wall slides the new page in. The snapshot was drawn on a software canvas, which cannot run the refraction program, so its ground was the shared blur frame painted across the whole terminal rectangle, on an opaque plate with a shadow. The result was a hard-edged block of the wrong backdrop around the panes' rounded frames, riding along with the pan (evidence: `evidence-2026-09-29/`).
+Switching, creating or closing a window pans a snapshot of the outgoing surface (`captureTerminalDeparture`) away while the wall slides the new page in. The snapshot was drawn on a software canvas, which cannot run the refraction program, so its ground was the shared blur frame painted across the whole terminal rectangle, on an opaque plate with a shadow. The result was a hard-edged block of the wrong backdrop around the panes' rounded frames, riding along with the pan (measured from frames since pruned).
 
 Rule: a copy of the glass is clipped to the slabs' own rounded outlines (`PaneGlass.slabOutline`, cut at the radius `PaneGlass.apply` uses), never to a window or page rectangle. The card's gaps and corners stay see-through, so the live wallpaper shows there, and the card carries no plate. The live panes are unaffected: their slabs already re-aim per frame of the page slide (`invalidatePaneGlassPositions`) and draw inside their own rounded frames. The card's slabs show the plain blur rather than the refracted frame while they move; drawing the snapshot from a hardware `RenderNode` (as the split reveal does) would restore it.
 
-**Card rebuilt as the slabs alone (2026-09-30).** A frame-by-frame measurement (`evidence-2026-09-30/`) showed the card still sat on a dark square plate. The card was made by drawing the whole surface host onto a software canvas, which does not run a frame's clip-to-outline: the terminal's square cell fill and the glass tint landed outside the rounded rim, on a plate as large as the host. `terminal/DepartureCard` now draws each slab-wearing frame on its own, at the place `PaneGlass.slabOutline` gives it (one origin, `getLocationOnScreen` differences from the surface), under a clip cut at the slab's radius, over the blur ground, on a bitmap that starts transparent. Nothing else the host holds (border overlay, plank fx, backgrounds) is captured. The card view is bare when translucent: no background, elevation or outline. Glass-off cards keep the previous whole-surface capture. The "second left edge" 28 px apart is two page margins (2 x 14 px): the incoming page's right column against the outgoing pane, which the wall's one-viewport pitch holds constant; the card and the surface share one origin (the card is a child of the view it captures).
+**Card rebuilt as the slabs alone (2026-09-30).** A frame-by-frame measurement (frames since pruned) showed the card still sat on a dark square plate. The card was made by drawing the whole surface host onto a software canvas, which does not run a frame's clip-to-outline: the terminal's square cell fill and the glass tint landed outside the rounded rim, on a plate as large as the host. `terminal/DepartureCard` now draws each slab-wearing frame on its own, at the place `PaneGlass.slabOutline` gives it (one origin, `getLocationOnScreen` differences from the surface), under a clip cut at the slab's radius, over the blur ground, on a bitmap that starts transparent. Nothing else the host holds (border overlay, plank fx, backgrounds) is captured. The card view is bare when translucent: no background, elevation or outline. Glass-off cards keep the previous whole-surface capture. The "second left edge" 28 px apart is two page margins (2 x 14 px): the incoming page's right column against the outgoing pane, which the wall's one-viewport pitch holds constant; the card and the surface share one origin (the card is a child of the view it captures).
 
 ### 11.1 Pane changes: the final rule and every path (2026-09-29)
 

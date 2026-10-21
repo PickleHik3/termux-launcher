@@ -20,7 +20,11 @@ import java.util.concurrent.Executor;
 import juloo.keyboard2.KeyboardData;
 import juloo.keyboard2.LayoutModifier;
 
-/** Loads and caches {@code ~/.termux/keyboard/layout.xml} away from the main thread. */
+/**
+ * Loads and caches a layout file away from the main thread: {@code ~/.termux/keyboard/layout.xml}
+ * for the launcher layout, or one of {@code ~/.termux/keyboard/layouts/<id>.xml} for an edited or
+ * user-made layout. A missing file loads the bundled layout it stands in for.
+ */
 public final class TermuxInAppKeyboardLayoutLoader {
 
     public static final long MAX_LAYOUT_BYTES = 512L * 1024L;
@@ -42,6 +46,8 @@ public final class TermuxInAppKeyboardLayoutLoader {
 
     private final Resources mResources;
     private final File mLayoutFile;
+    /** The bundled layout a missing or broken file falls back to. */
+    private final int mFallbackResId;
     private final Executor mBackgroundExecutor;
     private final MainThread mMainThread;
     private final ErrorReporter mErrorReporter;
@@ -69,6 +75,19 @@ public final class TermuxInAppKeyboardLayoutLoader {
                                     Executor backgroundExecutor, MainThread mainThread,
                                     LayoutModifier.LayoutOptions layoutOptions,
                                     ErrorReporter errorReporter) {
+        this(context, layoutFile, juloo.keyboard2.R.xml.termux_launcher_qwerty,
+            backgroundExecutor, mainThread, layoutOptions, errorReporter);
+    }
+
+    /**
+     * A loader for any layout file over the bundled layout {@code fallbackResId}, reporting
+     * errors through {@code errorReporter}, or the user-facing notice when that is null.
+     */
+    TermuxInAppKeyboardLayoutLoader(Context context, File layoutFile, int fallbackResId,
+                                    Executor backgroundExecutor, MainThread mainThread,
+                                    LayoutModifier.LayoutOptions layoutOptions,
+                                    ErrorReporter errorReporter) {
+        mFallbackResId = fallbackResId;
         Context appContext = Objects.requireNonNull(context, "context").getApplicationContext();
         mResources = context.getResources();
         mLayoutFile = Objects.requireNonNull(layoutFile, "layoutFile");
@@ -113,6 +132,35 @@ public final class TermuxInAppKeyboardLayoutLoader {
         mGeneration++;
     }
 
+    /**
+     * Parses the file on the calling thread when nothing has loaded yet, so the first swap to an
+     * edited or user-made layout shows it straight away instead of its fallback for a frame.
+     * Returns null when there is no file or it does not parse; the background load then falls
+     * back and reports as usual.
+     */
+    public KeyboardData loadFileNow() {
+        Signature signature = Signature.read(mLayoutFile);
+        synchronized (this) {
+            if (mClosed) return null;
+            if (mLastKnownGood != null) return mLastKnownGood;
+        }
+        if (!signature.exists) return null;
+        KeyboardData loaded;
+        try {
+            loaded = loadCustom(signature);
+        } catch (Exception ignored) {
+            return null;
+        }
+        synchronized (this) {
+            if (mClosed) return null;
+            // The pending background parse of this same file has nothing left to add.
+            mLastKnownGood = loaded;
+            mCachedSignature = signature;
+            mGeneration++;
+        }
+        return loaded;
+    }
+
     /** Prevents an in-flight parse from being delivered to a destroyed controller. */
     public synchronized void close() {
         mClosed = true;
@@ -153,10 +201,9 @@ public final class TermuxInAppKeyboardLayoutLoader {
     }
 
     private KeyboardData loadBundled() {
-        KeyboardData bundled = KeyboardData.load(
-            mResources, juloo.keyboard2.R.xml.termux_launcher_qwerty);
+        KeyboardData bundled = KeyboardData.load(mResources, mFallbackResId);
         if (bundled == null)
-            throw new IllegalStateException("Bundled QWERTY layout could not be parsed");
+            throw new IllegalStateException("Bundled layout could not be parsed");
         return LayoutModifier.modify(bundled, mLayoutOptions, mResources);
     }
 

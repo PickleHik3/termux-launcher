@@ -23,26 +23,27 @@ public class TaiModelStoreInstalledSizeTest {
     }
 
     @Test
-    public void packageInModelFolder_countsEveryFile() throws Exception {
+    public void declaredSidecarsCountAndRuntimeCachesDoNot() throws Exception {
         TaiModelStore store = new TaiModelStore(ApplicationProvider.<Context>getApplicationContext());
-        File dir = new File(store.getModelsDirectory(), "kitten-test");
+        File dir = new File(store.getModelsDirectory(), TaiModelCatalog.KITTEN_TTS_NANO_ID);
         dir.mkdirs();
-        File main = new File(dir, "predictor.tflite");
+        File main = new File(dir, KittenTtsRuntime.PREDICTOR_FILE);
         write(main, 100);
-        write(new File(dir, "voices.npz"), 40);
+        write(new File(dir, KittenTtsRuntime.VOICES_FILE), 40);
+        write(new File(dir, "x.litertlm_123_456.xnnpack_cache"), 999);
 
-        assertEquals(140L, store.installedSize("kitten-test", main));
+        assertEquals(140L, store.installedSize(TaiModelCatalog.KITTEN_TTS_NANO_ID, main));
     }
 
     @Test
-    public void fileOutsideModelFolder_countsItself() throws Exception {
+    public void singleFileModelCountsItselfNotItsCache() throws Exception {
         TaiModelStore store = new TaiModelStore(ApplicationProvider.<Context>getApplicationContext());
-        File dir = new File(store.getModelsDirectory(), "shared");
+        File dir = new File(store.getModelsDirectory(), TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID);
         dir.mkdirs();
-        File main = new File(dir, "a.litertlm");
+        File main = new File(dir, "embeddinggemma-2-text-vision-440m.litertlm");
         write(main, 100);
-        write(new File(dir, "b.litertlm"), 40);
+        write(new File(dir, "embeddinggemma.xnnpack_cache"), 999);
 
-        assertEquals(100L, store.installedSize("other-id", main));
+        assertEquals(100L, store.installedSize(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, main));
     }
 }

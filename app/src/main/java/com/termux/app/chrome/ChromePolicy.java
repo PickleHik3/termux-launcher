@@ -144,14 +144,22 @@ public final class ChromePolicy {
         return readDenied && wallpaperPassthrough && !permissionGranted && !alreadyPrompted;
     }
 
-    public static void applyWallpaperModePreferences(@NonNull TermuxAppSharedPreferences preferences,
-                                                     boolean enabled) {
+    /**
+     * Puts the surfaces in the state wallpaper mode {@code enabled} calls for, and says whether
+     * that was a switch of the mode itself. Only a switch changes the window theme (the wallpaper
+     * theme shows the system wallpaper through the window), so only a switch needs the activity
+     * recreated. A new wallpaper set while the mode is already on re-styles in place: a recreate
+     * there closes an open Look editor and rebuilds the views an X11 display pane is drawn into.
+     */
+    public static boolean applyWallpaperModePreferences(@NonNull TermuxAppSharedPreferences preferences,
+                                                        boolean enabled) {
+        boolean wasEnabled = preferences.isUseSystemWallpaperEnabled();
         if (enabled) {
             // Already in wallpaper mode: a new wallpaper applied over the old one, not a switch
             // into the mode. The live values are the user's Look as it stands; the remembered
             // ones are from the last time the mode was off (or the install's first values) and
             // would put a stale blur and opacity over a Look picked since. Nothing to restore.
-            if (preferences.isUseSystemWallpaperEnabled()) return;
+            if (wasEnabled) return false;
             preferences.setUseSystemWallpaperEnabled(true);
             int terminal = preferences.getWallpaperEnabledTerminalBackgroundOpacity();
             int appBar = preferences.getWallpaperEnabledAppBarOpacity();
@@ -188,6 +196,7 @@ public final class ChromePolicy {
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
         }
+        return wasEnabled != enabled;
     }
 
     /**

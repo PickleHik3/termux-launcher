@@ -326,6 +326,41 @@ events off) or `; 1 $ y` (on), so a program can tell the protocol is there befor
 - A refused read and an unset clipboard both reach the terminal as "nothing", so both answer
   `EPERM`; an empty but readable clipboard answers `OK`/`DONE` with no data.
 
+## Touch reports (private mode 5523)
+
+A program that draws its own page, such as a browser shown with kitty graphics, can take the
+fingers raw and recognise taps, drags, flings, pinches and long presses itself. This mode is this
+terminal's own; no other terminal has it.
+
+`CSI ? 5523 h` turns it on, `CSI ? 5523 l` off. It is saved, restored and reset (RIS) like any
+private mode and ends with the session. `CSI ? 5523 $ p` answers `CSI ? 5523 ; 1 $ y` (on) or
+`; 2 $ y` (off), never "not recognised", so a program can probe for it.
+
+While it is on, every finger on the pane is written to the program as
+
+```
+CSI < K ; I ; X ; Y ; T t
+```
+
+- **K**: 0 down, 1 move, 2 up, 3 cancel.
+- **I**: the pointer id, from 0. It stays the same from the finger's down to its up or cancel; a
+  second finger gets another.
+- **X, Y**: the pixel of the text area under the finger, from 1 at the top-left, counted exactly
+  as mode 1016 (SGR-Pixels mouse) counts it, and clamped to the text area.
+- **T**: the event's time in milliseconds on a monotonic clock, masked to 31 bits. Only
+  differences mean anything.
+
+Each finger gets one down when it lands, one move per touch event in which its pixel changed (the
+latest position only, no history), and one up when it lifts. When Android takes the gesture away,
+every finger still down gets a cancel. A finger that lands outside the text area (the padding
+around the grid) is not reported at all.
+
+The terminal does nothing else with these fingers: no tap-to-click, no wheel, no fling, no
+scrollback, no selection, no hold, no pinch font zoom, whatever mouse modes (1000, 1002, 1003,
+1006, 1016) are set. A real mouse or trackpad is not a finger: it keeps reporting through the
+mouse modes, and the keyboard is unchanged. A mode set while a finger is already down takes effect
+from the next touch.
+
 ## kitty's own tools
 
 `kitten` installs from [tlstore](Tlstore.md). `kitten icat` works: it warns that it cannot create

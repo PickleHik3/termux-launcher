@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+    <Preference app:key="settings_backup_export" app:persistent="false"
+        app:title="@string/settings_backup_export_title" app:summary="@string/settings_backup_export_summary" />
+    <Preference app:key="settings_backup_import" app:persistent="false"
+        app:title="@string/settings_backup_import_title" app:summary="@string/settings_backup_import_summary" />
+    <Preference app:key="settings_backup_export_models" app:persistent="false"
+        app:title="@string/settings_backup_export_models_title" app:summary="@string/settings_backup_export_models_summary" />
+    <Preference app:key="settings_backup_import_models" app:persistent="false"
+        app:title="@string/settings_backup_import_models_title" app:summary="@string/settings_backup_import_models_summary" />
+</PreferenceScreen>

@@ -35,6 +35,7 @@ import com.google.android.material.slider.Slider;
 import com.termux.R;
 import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
@@ -332,12 +333,22 @@ public final class LayoutEditorController {
      * @return false where there is no store to edit yet
      */
     public boolean begin(@Nullable PaneWallPage place) {
+        return begin(place, null);
+    }
+
+    /**
+     * {@link #begin(PaneWallPage)}, a new session continuing one whose arrangement at open was
+     * {@code carriedEntry} ({@link #entryArrangement} on the activity a configuration relaunch
+     * replaced): Undo puts back what that session found. Ignored by a session already open.
+     */
+    public boolean begin(@Nullable PaneWallPage place,
+                         @Nullable PlaceArrangeSnapshot carriedEntry) {
         PlaceLayoutStore places = mHost.places();
         if (places == null)
             return false;
         PaneWallPage target = place != null ? place : mHost.placeOnScreen();
         if (mPlan == null) {
-            mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation());
+            mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation(), carriedEntry);
             mExtraKeyCount = mHost.extraKeyCount();
             mKeySlots = mHost.extraKeySlots();
         } else {
@@ -354,6 +365,12 @@ public final class LayoutEditorController {
      */
     public boolean isDirty() {
         return mPlan != null && mPlan.isDirty();
+    }
+
+    /** The arrangement the open session found, or null with none open. */
+    @Nullable
+    public PlaceArrangeSnapshot entryArrangement() {
+        return mPlan == null ? null : mPlan.entry();
     }
 
     /** The dock's height scale in the orientation being edited, or -1 with no session. */

@@ -61,6 +61,15 @@ public final class StatusStatsClusterPolicy {
         return start;
     }
 
+    /**
+     * Whether the CPU widget shows: its switch is on and a privileged backend can read
+     * {@code /proc/stat}. Without one the reading could only ever be a dash, so it hides instead,
+     * and the dots below are fed this rather than the switch so none is left orphaned.
+     */
+    public static boolean cpuShown(boolean cpuEnabled, boolean privilegedAvailable) {
+        return cpuEnabled && privilegedAvailable;
+    }
+
     /** The dot between the CPU and RAM widgets, wherever that pair sits in the row: on only when
      *  CPU shows and something follows it (RAM, or weather standing in for a hidden RAM). */
     public static boolean cpuRamDotVisible(boolean cpuOn, boolean ramOn, boolean weatherOn) {

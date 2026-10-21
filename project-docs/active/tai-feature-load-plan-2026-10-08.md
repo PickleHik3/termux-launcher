@@ -158,5 +158,5 @@ These were review candidates 4 and 5, and stay open.
 
 - The architecture review of 2026-10-08 (scratchpad HTML, not kept).
 - Pong measurements: `project-docs/reference/voice-ai/daytoday-settings-bench-2026-10-05.md`.
-- Tiers: `project-docs/active/tai-device-tiers-2026-10-05.md`. Its lines that say cleanup and
+- Tiers: `project-docs/reference/voice-ai/tai-device-tiers-2026-10-05.md`. Its lines that say cleanup and
   categories send speculative decoding on and leave the window Automatic are superseded here.

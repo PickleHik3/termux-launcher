@@ -486,7 +486,7 @@ public class SurfaceInheritanceTest {
 
     @Test
     public void tint_followsBaseUntilDetachedAndWritesThroughTheLink() {
-        assertEquals("ships at the full tint", 100, preferences.getDockTintStrength());
+        assertEquals("ships with no accent mixed in", 0, preferences.getDockTintStrength());
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 60);
         assertEquals(60, preferences.getDockTintStrength());
         assertEquals(60, preferences.getStatusBarTintStrength());

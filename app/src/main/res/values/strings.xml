@@ -433,6 +433,19 @@
         <item quantity="one">Learned from %1$d tap.</item>
         <item quantity="other">Learned from %1$d taps.</item>
     </plurals>
+    <string name="settings_keyboard_tap_correction_reset_summary_some">Forget what was learned and start again.</string>
+    <string name="settings_keyboard_tap_correction_status_learning">Learning</string>
+    <string name="settings_keyboard_tap_correction_status_active">Active</string>
+    <string name="settings_keyboard_tap_correction_status_paused">Paused</string>
+    <string name="settings_keyboard_tap_correction_status_learning_none">Start typing to begin.</string>
+    <plurals name="settings_keyboard_tap_correction_status_learning_summary">
+        <item quantity="one">%1$d tap so far.</item>
+        <item quantity="other">%1$d taps so far.</item>
+    </plurals>
+    <plurals name="settings_keyboard_tap_correction_status_paused_summary">
+        <item quantity="one">Typing got less accurate. Tap to resume. Learned from %1$d tap.</item>
+        <item quantity="other">Typing got less accurate. Tap to resume. Learned from %1$d taps.</item>
+    </plurals>
     <string name="settings_haptic_feedback_title">Haptic feedback</string>
     <string name="settings_keypress_sound_title">Key sound</string>
     <string name="settings_key_popup_title">Key preview</string>
@@ -673,9 +686,8 @@
     <string name="settings_fancier_glass_header">Fancier Glass</string>
     <string name="settings_fancier_glass_title">Fancier Glass</string>
     <string name="settings_fancier_glass_summary">Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker.</string>
-    <!-- Shown as the summary while the switch is disabled: only a wallpaper picked from inside the
-         launcher can be read exactly enough to bend. -->
-    <string name="settings_fancier_glass_hint">Off: the wallpaper was not set with the in-app wallpaper picker.</string>
+    <string name="settings_motion_light_title">Living glass</string>
+    <string name="settings_motion_light_summary">Glass flexes as panes move and gives a little under your finger.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
@@ -1047,8 +1059,6 @@
                 <string name="termux_in_app_keyboard_key_spacing_slider">Adjust space between keyboard keys</string>
                 <string name="termux_in_app_keyboard_key_corner_radius">Corner radius</string>
                 <string name="termux_in_app_keyboard_key_corner_radius_slider">Adjust keyboard key corner radius</string>
-                <string name="termux_in_app_keyboard_custom_layout_title">Custom layout</string>
-                <string name="termux_in_app_keyboard_custom_layout_summary">Load your own layout from ~/.termux/keyboard/layout.xml</string>
                 <string name="termux_keyboard_docs_layouts_summary">How to write your own layout.xml</string>
                 <string name="settings_keyboard_layouts_title">Layouts</string>
                 <string name="settings_keyboard_layouts_summary">Choose the layouts the keyboard cycles through</string>
@@ -1064,6 +1074,41 @@
                 <string name="settings_keyboard_layouts_full">The cycle holds at most %1$d layouts</string>
                 <string name="settings_keyboard_layouts_last">At least one layout has to stay in the cycle</string>
                 <string name="settings_keyboard_layouts_none_match">No layout matches “%1$s”</string>
+                <string name="settings_keyboard_layouts_yours">Your layouts</string>
+                <string name="settings_keyboard_layouts_yours_empty">None yet. + starts one from a copy of the launcher layout.</string>
+                <string name="settings_keyboard_layouts_new">New layout</string>
+                <string name="settings_keyboard_layouts_edit">Edit %1$s</string>
+                <string name="settings_keyboard_layouts_reset">Reset %1$s</string>
+                <string name="settings_keyboard_layouts_delete">Delete %1$s</string>
+                <string name="settings_keyboard_layouts_edited">Edited</string>
+                <string name="settings_keyboard_layouts_reset_title">Reset %1$s?</string>
+                <string name="settings_keyboard_layouts_reset_message">Your edits are deleted and the shipped layout comes back. This removes %1$s.</string>
+                <string name="settings_keyboard_layouts_reset_action">Reset</string>
+                <string name="settings_keyboard_layouts_delete_title">Delete %1$s?</string>
+                <string name="settings_keyboard_layouts_delete_message">The layout is removed from the cycle and its file, %1$s, is deleted.</string>
+                <string name="settings_keyboard_layouts_delete_action">Delete</string>
+                <string name="settings_keyboard_layouts_file_error">Could not change %1$s</string>
+                <string name="settings_keyboard_layouts_row_expanded">actions shown</string>
+                <string name="settings_keyboard_layouts_row_collapsed">actions hidden</string>
+                <string name="settings_keyboard_layouts_row_expand">Show actions</string>
+                <string name="settings_keyboard_layouts_row_collapse">Hide actions</string>
+                <string name="settings_keyboard_layout_editor_title">Edit layout</string>
+                <string name="settings_keyboard_layout_editor_new_title">New layout</string>
+                <string name="settings_keyboard_layout_editor_name">Name</string>
+                <string name="settings_keyboard_layout_editor_name_required">Give the layout a name</string>
+                <string name="settings_keyboard_layout_editor_name_taken">Another layout already has this name</string>
+                <string name="settings_keyboard_layout_editor_xml">Layout XML</string>
+                <string name="settings_keyboard_layout_editor_file">Saved to %1$s</string>
+                <string name="settings_keyboard_layout_editor_checking">Checking…</string>
+                <string name="settings_keyboard_layout_editor_valid">Valid layout · saved to %1$s</string>
+                <string name="settings_keyboard_layout_editor_load_error">Could not open this layout: %1$s</string>
+                <string name="settings_keyboard_layout_editor_save">Save</string>
+                <string name="settings_keyboard_layout_editor_discard">Discard</string>
+                <string name="settings_keyboard_layout_editor_saved">Layout saved. The keyboard picks it up when you leave Settings.</string>
+                <string name="settings_keyboard_layout_editor_save_error">Could not save the layout: %1$s</string>
+                <string name="settings_keyboard_layout_editor_discard_title">Discard changes?</string>
+                <string name="settings_keyboard_layout_editor_discard_message">Your edits to this layout will be lost.</string>
+                <string name="settings_keyboard_layout_editor_keep_editing">Keep editing</string>
                 <string name="keyboard_layout_ring_single">Only one layout is in the cycle — add more in Settings ▸ Keyboard ▸ Layouts</string>
                 <string name="termux_keyboard_docs_keys_summary">Every key name and value you can use in a layout</string>
                 <string-array name="termux_in_app_keyboard_theme_entries">
@@ -1470,7 +1515,7 @@
         <string name="tai_centre_cancel_message">The %1$s downloaded so far is deleted. Pause keeps it instead.</string>
         <string name="tai_centre_cancel_confirm">Cancel download</string>
         <string name="tai_centre_cancel_keep">Keep</string>
-        <!-- On-device AI › Benchmark: Home, Choose, Check, Run, Cool-down and Result (project-docs/active/benchmark/SPEC.md). -->
+        <!-- On-device AI › Benchmark: Home, Choose, Check, Run, Cool-down and Result (project-docs/reference/voice-ai/benchmark/SPEC.md). -->
         <string name="tai_bench_title">Benchmark</string>
         <string name="tai_bench_pref_summary">Which models this phone runs well</string>
         <string name="tai_bench_pref_summary_run">Best %1$s tok/s · last run %2$s</string>
@@ -1830,12 +1875,6 @@
                 <!-- Two more section names, one word each, naming the thing being changed. -->
                 <string name="termux_surface_editor_section_keys">Keys</string>
                 <string name="termux_surface_editor_section_indicator">Indicator</string>
-                <!-- Fancier Glass's own section on the shared layer, shown only while it is on;
-                     three rows, each naming what it changes about the glass edge. -->
-                <string name="termux_surface_editor_section_refraction">Fancier Glass</string>
-                <string name="termux_surface_editor_bend">Bend</string>
-                <string name="termux_surface_editor_edge_width">Edge width</string>
-                <string name="termux_surface_editor_edge_light">Edge light</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>
@@ -2000,9 +2039,6 @@
     <string name="settings_configure_action">Configure</string>
     <string name="settings_install_action">Install</string>
     <string name="settings_status_available">Available</string>
-    <string name="settings_custom_layout_missing">No custom layout found at ~/.termux/keyboard/layout.xml.</string>
-    <string name="settings_custom_layout_valid">Custom layout is valid and loads automatically.</string>
-    <string name="settings_custom_layout_invalid">Custom layout is invalid. Open Layout documentation for the supported format.</string>
     <string name="settings_status_action_needed">Action needed</string>
 
     <!-- Command palette chrome -->
@@ -2081,6 +2117,8 @@
     <string name="tool_wall_display">Go to Display</string>
     <string name="tool_wall_go">Go to place</string>
     <string name="tool_mouse_toggle">Mouse mode</string>
+    <string name="extra_key_readout_mouse_mode_on">Mouse mode on</string>
+    <string name="extra_key_readout_mouse_mode_off">Mouse mode off</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
@@ -2283,13 +2321,13 @@
     <string name="settings_keyboard_voice_engine_system">Android system</string>
     <string name="settings_keyboard_voice_engine_on_device">On-device</string>
     <string name="settings_keyboard_voice_language_title">Voice language</string>
-    <string name="settings_keyboard_voice_language_auto">Auto</string>
+    <string name="settings_keyboard_voice_language_auto">Auto-detect</string>
     <string name="settings_keyboard_voice_polish_title">Clean up dictation</string>
     <string name="settings_keyboard_voice_polish_summary">Review local corrections before inserting; requires a cleanup model.</string>
     <string name="settings_keyboard_voice_polish_model_title">Cleanup model</string>
     <string name="settings_keyboard_voice_polish_level_title">Cleanup level</string>
-    <string name="settings_keyboard_voice_polish_level_light">Light: punctuation, fillers and grammar, in your words. Runs on this phone.</string>
-    <string name="settings_keyboard_voice_polish_level_polished">Polished: also paragraphs and lists. Uses your remote model when one is set up.</string>
+    <string name="settings_keyboard_voice_polish_level_light">Light: what you meant, as one cleaned-up paragraph.</string>
+    <string name="settings_keyboard_voice_polish_level_polished">Polished: also paragraphs and lists.</string>
     <string name="settings_keyboard_voice_pause_title">Phrase pause</string>
     <string name="settings_keyboard_voice_silence_timeout_title">Stop after silence</string>
     <string name="settings_keyboard_voice_mic_sensitivity_title">Mic sensitivity</string>
@@ -2353,6 +2391,11 @@
     <string name="voice_input_undo">Undo the cleanup</string>
     <string name="voice_input_move_handle">Move the dictation panel. Double-tap to put it back in the corner</string>
     <string name="voice_input_redo">Redo the cleanup</string>
+    <string name="voice_input_editing">Editing</string>
+    <string name="voice_input_edited">Edited</string>
+    <string name="voice_input_before_edit">Before your edit</string>
+    <string name="voice_input_undo_edit">Undo your edit</string>
+    <string name="voice_input_redo_edit">Redo your edit</string>
     <string name="voice_input_insert">Insert at the cursor</string>
     <string name="voice_input_inserted">Inserted</string>
     <string name="voice_input_no_target_copied">Nothing here takes typing, so the dictation was copied instead</string>
@@ -2368,6 +2411,8 @@
     <string name="voice_input_meta_undone">· cleanup undone</string>
     <string name="voice_input_meta_inserted">· at the cursor</string>
     <string name="voice_input_meta_copied">· to the clipboard</string>
+    <!-- The language a dictation was heard in, beside "Listening…" when it is not the keyboard's: "· Spanish" -->
+    <string name="voice_input_meta_language">· %1$s</string>
     <!-- Read aloud's card: the dictation card's shell, reading the terminal selection. -->
     <string name="read_aloud_reading">Reading</string>
     <string name="read_aloud_paused">Paused</string>
@@ -2383,6 +2428,7 @@
     <string name="voice_input_no_model">No speech model installed — using the Android recognizer</string>
     <string name="voice_input_fallback">%1$s — using the Android recognizer</string>
     <string name="voice_input_stopped">Voice input stopped: %1$s</string>
+    <string name="voice_input_runtime_closed">the speech model closed</string>
     <string name="voice_input_mic_unavailable">Microphone unavailable</string>
     <string name="voice_input_permission_denied">Microphone access denied</string>
     <string name="voice_input_permission_title">Microphone for voice input</string>
@@ -3100,4 +3146,70 @@
     <string name="termux_ai_memory_limits_unrestricted">Unrestricted</string>
     <string name="termux_ai_memory_limits_relaxed_summary">Keeps enough memory free for the phone to stay responsive while a model loads.</string>
     <string name="termux_ai_memory_limits_unrestricted_summary">Loads larger models by letting Android close apps in the background. The phone may slow down while a model loads.</string>
+    <!-- Settings › Backup & restore -->
+    <string name="settings_destination_backup_restore">Backup &amp; restore</string>
+    <string name="settings_destination_backup_restore_summary">Move your setup to another phone</string>
+    <string name="settings_backup_export_title">Export settings</string>
+    <string name="settings_backup_export_summary">Save your launcher setup to a file</string>
+    <string name="settings_backup_import_title">Import settings</string>
+    <string name="settings_backup_import_summary">Restore your setup from a saved file</string>
+    <string name="settings_backup_exported">Settings saved</string>
+    <string name="settings_backup_exported_skipped">Settings saved, leaving out files over 20 MB</string>
+    <string name="settings_backup_export_failed">Couldn\'t save your settings.</string>
+    <string name="settings_backup_import_not_backup">This file isn\'t a launcher settings backup.</string>
+    <string name="settings_backup_import_newer">This backup is from a newer version of the launcher.</string>
+    <string name="settings_backup_import_too_large">This backup is too large to restore.</string>
+    <string name="settings_backup_import_read_failed">Couldn\'t open that file.</string>
+    <string name="settings_backup_import_confirm_title">Restore settings from %1$s?</string>
+    <string name="settings_backup_import_confirm_message">Saved by version %1$s. Your settings are replaced and the launcher restarts, closing open terminal sessions. Widgets and permissions need setting up again.</string>
+    <string name="settings_backup_import_confirm_action">Restore</string>
+    <string name="settings_backup_import_partial">Some settings couldn\'t be restored.</string>
+    <!-- Settings › Backup & restore: on-device AI models -->
+    <string name="settings_backup_export_models_title">Export AI models</string>
+    <string name="settings_backup_export_models_summary">Save downloaded models so you don\'t download them again</string>
+    <string name="settings_backup_export_models_none">No downloaded models to save yet</string>
+    <string name="settings_backup_import_models_title">Import AI models</string>
+    <string name="settings_backup_import_models_summary">Add models from a saved folder</string>
+    <string name="settings_backup_models_busy">Your models are already being saved.</string>
+    <string name="settings_backup_models_saving">Saving AI models</string>
+    <string name="settings_backup_models_preparing">Getting ready…</string>
+    <!-- Notification progress: the model being saved, then how much of the whole export is done. -->
+    <string name="settings_backup_models_progress">%1$s · %2$s of %3$s</string>
+    <string name="settings_backup_models_result_title">AI models</string>
+    <plurals name="settings_backup_models_saved">
+        <item quantity="one">%1$d model saved to %2$s</item>
+        <item quantity="other">%1$d models saved to %2$s</item>
+    </plurals>
+    <plurals name="settings_backup_models_stopped">
+        <item quantity="one">Stopped. %1$d model saved.</item>
+        <item quantity="other">Stopped. %1$d models saved.</item>
+    </plurals>
+    <plurals name="settings_backup_models_failed">
+        <item quantity="one">Couldn\'t finish saving. %1$d model saved.</item>
+        <item quantity="other">Couldn\'t finish saving. %1$d models saved.</item>
+    </plurals>
+    <string name="settings_backup_models_no_space">Not enough space. Free up %1$s and try again.</string>
+    <!-- Size line for the saved AI models: "3 models · 6.2 GB". -->
+    <plurals name="settings_backup_models_count">
+        <item quantity="one">%1$d model</item>
+        <item quantity="other">%1$d models</item>
+    </plurals>
+    <string name="settings_backup_models_size">%1$s · %2$s</string>
+    <!-- Model centre folder import of a folder saved by Export AI models. -->
+    <plurals name="tai_import_saved_adding">
+        <item quantity="one">Adding %1$d model…</item>
+        <item quantity="other">Adding %1$d models…</item>
+    </plurals>
+    <plurals name="tai_import_saved_added">
+        <item quantity="one">%1$d model added.</item>
+        <item quantity="other">%1$d models added.</item>
+    </plurals>
+    <plurals name="tai_import_saved_present">
+        <item quantity="one">%1$d was already here.</item>
+        <item quantity="other">%1$d were already here.</item>
+    </plurals>
+    <plurals name="tai_import_saved_failed">
+        <item quantity="one">%1$d couldn\'t be added.</item>
+        <item quantity="other">%1$d couldn\'t be added.</item>
+    </plurals>
 </resources>

@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 
 import org.junit.Test;
@@ -16,6 +17,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.Config;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -64,6 +66,27 @@ public class SuggestionBarIconSizeTest {
         assertTrue("the band decides, not the host",
             tall.iconSizePx() == row.iconSizePx());
         assertTrue(tall.iconSizePx() <= 140);
+    }
+
+    /**
+     * The box the dock hands over is the band less its air, which is the icon itself. A lone row
+     * fills the whole of it, so a row told only the box draws the icon the dock would hand it.
+     */
+    @Test
+    public void aLoneRowsBoxIsItsIconBeforeTheDockHandsTheIconOver() {
+        float density = density();
+        DockLayout lone = DockLayoutPolicy.compute(DockLayoutPolicy.DockInputs.builder()
+            .preferencesAvailable(true)
+            .appsRowEnabledPref(true)
+            .appsRowAlone(true)
+            .appsRowPageStripShown(true)
+            .density(density)
+            .barHeightScale(2.18f)
+            .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
+            .build());
+        SuggestionBarView bar = inHostOf(lone.appsRowBandPx);
+        bar.setDockRowHeightHintPx(lone.appsRowBandHintPx);
+        assertEquals(lone.appsRowIconPx, bar.iconSizePx());
     }
 
     @Test

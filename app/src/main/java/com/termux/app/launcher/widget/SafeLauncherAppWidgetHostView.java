@@ -7,6 +7,8 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Parcelable;
+import android.util.SparseArray;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -78,6 +80,26 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
                                          @Nullable FailureListener failureListener) {
         super(context);
         this.failureListener = failureListener;
+    }
+
+    /**
+     * Keeps this tile out of the activity's view-state save and restore (#83).
+     *
+     * <p>{@link AppWidgetHostView} saves its subtree as a {@link android.os.Bundle} filed under its
+     * view id or, with no id (as every tile here has), under its appWidgetId. Those are small ints
+     * from the same range {@link View#generateViewId()} hands out, so after a relaunch (a wallpaper
+     * change, a Material You or theme recreate) a plain view that drew that generated id was
+     * given the Bundle and threw "Wrong state class, expecting View State". A tile is rebuilt from
+     * its provider's RemoteViews on every relaunch, so there is nothing of it worth restoring.
+     */
+    @Override
+    protected void dispatchSaveInstanceState(@NonNull SparseArray<Parcelable> container) {
+        // Nothing saved, so no Bundle lands under a key another view owns.
+    }
+
+    @Override
+    protected void dispatchRestoreInstanceState(@NonNull SparseArray<Parcelable> container) {
+        // Nothing restored: whatever sits under this tile's key belongs to some other view.
     }
 
     public void setBoundaryProbeForTests(@Nullable BoundaryProbe probe) {

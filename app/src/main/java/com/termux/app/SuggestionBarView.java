@@ -106,6 +106,7 @@ import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.launcher.popup.MenuRowWidths;
 import com.termux.app.launcher.popup.MenuSpec;
+import com.termux.app.launcher.icon.ArtworkFootprint;
 import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.icon.DockIconCache;
 import com.termux.app.launcher.icon.RenderedIconDrawable;
@@ -263,7 +264,18 @@ public final class SuggestionBarView extends GridLayout
         getResources(),
         DockIconCache.memoryClassMb(getContext()),
         () -> getContext().getPackageManager().getDefaultActivityIcon(),
-        entry -> LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry));
+        new DockIconCache.ArtworkSource() {
+            @Nullable @Override
+            public Drawable artwork(@NonNull LauncherAppEntry entry) {
+                return artworkDetailed(entry).drawable;
+            }
+
+            @NonNull @Override
+            public com.termux.app.launcher.icon.LauncherIconStore.Artwork artworkDetailed(
+                    @NonNull LauncherAppEntry entry) {
+                return LauncherAppDataProvider.getInstance(getContext()).icons().artworkDetailed(entry);
+            }
+        });
     /**
      * Binds the dock's and the drawer's icons without rendering on the main thread: an icon the
      * cache holds binds at once, a missing one is rendered on the icon thread — into the same
@@ -942,6 +954,25 @@ public final class SuggestionBarView extends GridLayout
         }
         return false;
     }
+
+    /**
+     * Whether this point, in screen coordinates, lands on one of the row's icons: an app's button
+     * or a folder's shell, not a filler slot or the empty row's hint. The dock's touch light asks
+     * at {@code ACTION_DOWN}; the icon's own listeners are untouched.
+     */
+    public boolean isIconAt(float rawX, float rawY) {
+        for (SlotIcon icon : slotIcons) {
+            if (icon.slot.getParent() != this || icon.slot.getVisibility() != View.VISIBLE
+                || !icon.box.isShown()) continue;
+            icon.box.getLocationOnScreen(iconHitLocation);
+            if (rawX >= iconHitLocation[0] && rawX <= iconHitLocation[0] + icon.box.getWidth()
+                && rawY >= iconHitLocation[1]
+                && rawY <= iconHitLocation[1] + icon.box.getHeight()) return true;
+        }
+        return false;
+    }
+
+    private final int[] iconHitLocation = new int[2];
 
     public void setTextSize(float textSize) {
         this.textSize = textSize;
@@ -2217,28 +2248,10 @@ public final class SuggestionBarView extends GridLayout
         int height = bitmap.getHeight();
         int[] pixels = new int[width * height];
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-        int maxAlpha = 0;
-        for (int pixel : pixels) {
-            maxAlpha = Math.max(maxAlpha, pixel >>> 24);
-        }
-        int threshold = Math.max(8, Math.round(maxAlpha * 0.25f));
-        int left = width;
-        int top = height;
-        int right = -1;
-        int bottom = -1;
-        for (int y = 0; y < height; y++) {
-            int row = y * width;
-            for (int x = 0; x < width; x++) {
-                if ((pixels[row + x] >>> 24) < threshold) continue;
-                left = Math.min(left, x);
-                top = Math.min(top, y);
-                right = Math.max(right, x);
-                bottom = Math.max(bottom, y);
-            }
-        }
-        return right >= left && bottom >= top
-            ? new Rect(left, top, right + 1, bottom + 1)
-            : new Rect();
+        int[] visible = ArtworkFootprint.visibleBounds(pixels, width, height);
+        return visible == null
+            ? new Rect()
+            : new Rect(visible[0], visible[1], visible[2], visible[3]);
     }
 
     private void approximateAzSlotIconBounds(int slot, int slotCount, @NonNull int[] rowLocation,
@@ -4027,15 +4040,23 @@ public final class SuggestionBarView extends GridLayout
         if (entry == null) {
             return entry;
         }
-        Drawable globalArtwork = artworkOrNull(entry);
+        com.termux.app.launcher.icon.LauncherIconStore.Artwork global = entry.icon != null
+            ? com.termux.app.launcher.icon.LauncherIconStore.Artwork.kept(entry.icon)
+            : LauncherAppDataProvider.getInstance(getContext()).icons().artworkDetailed(entry);
+        Drawable globalArtwork = global.drawable;
         String memoKey = pinnedArtworkKey(entry, item);
         LauncherIconResolver.ResolvedIcon resolvedIcon = pinnedArtworkMemo.get(memoKey, globalArtwork);
         if (resolvedIcon == null) {
             resolvedIcon = getIconResolver().resolvePinnedDetailed(
                 entry.appRef, item.iconOverride, globalArtwork, entry.iconPackArtwork);
-            pinnedArtworkMemo.put(memoKey, globalArtwork, resolvedIcon);
+            // A stand-in drawn while a pack is read is not remembered: its landing redraws.
+            if (!resolvedIcon.provisional && !global.provisional)
+                pinnedArtworkMemo.put(memoKey, globalArtwork, resolvedIcon);
         }
         Drawable pinnedIcon = resolvedIcon.drawable;
+        // While the pinned treatment waits on a pack, the row shows the app's own entry: an entry
+        // carrying the stand-in as its icon would have its render kept.
+        if (resolvedIcon.provisional) return entry;
         if ((pinnedIcon == null || pinnedIcon == globalArtwork)
             && resolvedIcon.iconPackArtwork == entry.iconPackArtwork) {
             return entry;
@@ -4139,7 +4160,9 @@ public final class SuggestionBarView extends GridLayout
             }
         }
         LauncherAppEntry built = buildEntryFromPackageManager(ref, defaultComponent);
-        if (built != null) {
+        // An entry built with no artwork of its own (its icon was a stand-in while a pack is
+        // read) is drawn through the icon store and built again next time, after the pack lands.
+        if (built != null && built.icon != null) {
             resolvedRefCache.put(cacheKey, built);
         }
         return built;
@@ -4157,6 +4180,7 @@ public final class SuggestionBarView extends GridLayout
         String label = originalRef.packageName;
         Drawable icon = null;
         boolean iconPackArtwork = false;
+        boolean provisional = false;
 
         try {
             if (component != null) {
@@ -4165,6 +4189,7 @@ public final class SuggestionBarView extends GridLayout
                 LauncherIconResolver.ResolvedIcon resolvedIcon = getIconResolver().resolveDetailed(resolvedRef, null, null);
                 icon = resolvedIcon.drawable;
                 iconPackArtwork = resolvedIcon.iconPackArtwork;
+                provisional = resolvedIcon.provisional;
             }
         } catch (Exception ignored) {
         }
@@ -4177,12 +4202,15 @@ public final class SuggestionBarView extends GridLayout
                 LauncherIconResolver.ResolvedIcon resolvedIcon = getIconResolver().resolveDetailed(originalRef, null, null);
                 icon = resolvedIcon.drawable;
                 iconPackArtwork = resolvedIcon.iconPackArtwork;
+                provisional = resolvedIcon.provisional;
             } catch (Exception ignored) {
                 return null;
             }
         }
 
-        return new LauncherAppEntry(resolvedRef, label, icon, iconPackArtwork);
+        // A stand-in is not carried on the entry, where its render would be kept: the store
+        // draws it instead and keeps nothing until the pack lands.
+        return new LauncherAppEntry(resolvedRef, label, provisional ? null : icon, iconPackArtwork);
     }
 
     @NonNull
@@ -4635,7 +4663,18 @@ public final class SuggestionBarView extends GridLayout
         @NonNull IconOverrideApplier applier
     ) {
         dismissIconPickerPopup();
-        IconPack pack = getIconPackRepository().loadIconPack(packInfo.packageName);
+        IconPackRepository.Lookup lookup = getIconPackRepository().lookupIconPack(packInfo.packageName);
+        if (lookup.pending) {
+            // The main thread never parses a pack: read it on the worker, then open the picker.
+            searchExecutor.execute(() -> {
+                getIconPackRepository().loadIconPack(packInfo.packageName);
+                post(() -> {
+                    if (isAttachedToWindow()) showIconDrawablePicker(item, packInfo, applier);
+                });
+            });
+            return;
+        }
+        IconPack pack = lookup.pack;
         if (pack == null || pack.drawableItems().isEmpty()) {
             showIconPickerMessagePopup(packInfo.label, "This icon pack does not expose selectable icons.");
             return;
@@ -8506,11 +8545,15 @@ public final class SuggestionBarView extends GridLayout
         // band it would be the band less the air less the air again.
         if (dockIconSizePx > 0)
             return dockIconSizePx;
+        // The box the dock hands over is the band less its air, which is the icon itself, alone
+        // or sharing its container; a fill ratio of it would draw a lone row's icons small.
+        int hintPx = rowHeightHintPx();
+        if (hintPx > 0)
+            return hintPx;
         // Only when it has not does the measured host decide, and then it is capped: a plank
         // measured before it was sized, or a stack that swallowed the whole content column, is a
         // host several screens tall and must not scale one pinned icon across it.
-        int availableHeight = rowHeightHintPx();
-        if (availableHeight <= 0) availableHeight = measuredRowHeightPx();
+        int availableHeight = measuredRowHeightPx();
         if (availableHeight <= 0) {
             return Math.max(dp(20), Math.round(24f * iconScale * getResources().getDisplayMetrics().density));
         }

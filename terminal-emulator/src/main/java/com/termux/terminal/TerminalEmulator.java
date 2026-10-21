@@ -349,6 +349,21 @@ public final class TerminalEmulator {
     private static final int DECSET_BIT_PASTE_EVENTS = 1 << 19;
 
     /**
+     * DECSET 5523 - touch reports, a private mode of this terminal. While it is set every finger on
+     * the pane goes to the program as raw pointer events instead of being turned into mouse
+     * clicks, scrolling or selection, so a program that draws its own page (a browser) can
+     * recognise taps, drags and pinches itself; see {@link #sendTouchEvent}. The view reads it
+     * through {@link #isTouchReportsMode()}.
+     */
+    private static final int DECSET_BIT_TOUCH_REPORTS = 1 << 20;
+
+    /** {@link #sendTouchEvent} kinds: a pointer went down, moved, went up, or was cancelled. */
+    public static final int TOUCH_DOWN = 0;
+    public static final int TOUCH_MOVE = 1;
+    public static final int TOUCH_UP = 2;
+    public static final int TOUCH_CANCEL = 3;
+
+    /**
      * How long a synchronized update may hold the screen. The hold is a promise the program has to
      * keep, and a program that dies, blocks or simply forgets between "begin" and "end" would
      * otherwise freeze the pane for good; after this long the held frame is delivered and the mode
@@ -899,6 +914,8 @@ public final class TerminalEmulator {
                 return DECSET_BIT_DICTATION_MARKS;
             case 5522:
                 return DECSET_BIT_PASTE_EVENTS;
+            case 5523:
+                return DECSET_BIT_TOUCH_REPORTS;
             default:
                 return -1;
         }
@@ -1006,6 +1023,28 @@ public final class TerminalEmulator {
                 mSession.write(data, 0, data.length);
             }
         }
+    }
+
+    /**
+     * Report one pointer of a touch to a program in {@link #isTouchReportsMode()} as
+     * {@code CSI < kind ; pointer ; x ; y ; time t}. Nothing is sent while the mode is not set.
+     *
+     * @param kind one of {@link #TOUCH_DOWN}, {@link #TOUCH_MOVE}, {@link #TOUCH_UP} and
+     *             {@link #TOUCH_CANCEL}.
+     * @param pointerId the pointer's id, which stays the same from its down to its up.
+     * @param pixelX the 0-based pixel from the left of the text area, in the cell size the program
+     *               is told, as {@link #sendMouseEvent(int, int, int, int, int, boolean, int)} takes
+     *               it. It is clamped to the text area and goes out 1-based, as SGR-Pixels does.
+     * @param pixelY the same from the top of the text area.
+     * @param timeMillis when the pointer was there, in any monotonic millisecond clock; it goes out
+     *                   masked to 31 bits, so the program only compares times with each other.
+     */
+    public void sendTouchEvent(int kind, int pointerId, int pixelX, int pixelY, long timeMillis) {
+        if (!isTouchReportsMode()) return;
+        pixelX = Math.max(0, Math.min(mColumns * mCellWidthPixels - 1, pixelX));
+        pixelY = Math.max(0, Math.min(mRows * mCellHeightPixels - 1, pixelY));
+        mSession.write(String.format(Locale.US, "\033[<%d;%d;%d;%d;%dt", kind, pointerId,
+            pixelX + 1, pixelY + 1, timeMillis & 0x7fffffffL));
     }
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
@@ -1258,6 +1297,14 @@ public final class TerminalEmulator {
      */
     public boolean isPasteEventsMode() {
         return isDecsetInternalBitSet(DECSET_BIT_PASTE_EVENTS);
+    }
+
+    /**
+     * Whether DECSET 5523, touch reports, is set: fingers on the pane go to the program as
+     * {@link #sendTouchEvent} reports and the view does nothing else with them.
+     */
+    public boolean isTouchReportsMode() {
+        return isDecsetInternalBitSet(DECSET_BIT_TOUCH_REPORTS);
     }
 
     /**
@@ -2602,6 +2649,9 @@ public final class TerminalEmulator {
                 break;
             case 5522:
                 // Paste events - setting bit is enough, the client's paste reads it.
+                break;
+            case 5523:
+                // Touch reports - setting bit is enough, the view's touch handling reads it.
                 break;
             default:
                 unknownParameter(externalBit);

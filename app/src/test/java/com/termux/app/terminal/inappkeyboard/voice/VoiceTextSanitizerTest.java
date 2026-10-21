@@ -47,6 +47,23 @@ public class VoiceTextSanitizerTest {
     }
 
     @Test
+    public void aCleanupKeepsOneLineBreakBetweenParagraphsAndListItems() {
+        assertEquals("Shopping list:\n- milk\n- eggs",
+            VoiceTextSanitizer.cleanLines("Shopping list:\n- milk\n- eggs\n"));
+        assertEquals("First paragraph.\nSecond one.",
+            VoiceTextSanitizer.cleanLines("  First paragraph.  \r\n\r\n\n  Second one. "));
+        assertEquals("a b\nc", VoiceTextSanitizer.cleanLines("a\tb\u0007\rc"));
+        assertEquals("", VoiceTextSanitizer.cleanLines("[Music]\n\n*"));
+        assertEquals("one line", VoiceTextSanitizer.cleanLines("one   line"));
+    }
+
+    @Test
+    public void oneLineJoinsEveryBreakWithASpace() {
+        assertEquals("Shopping list: - milk - eggs", VoiceTextSanitizer.oneLine("Shopping list:\n- milk\r\n- eggs"));
+        assertEquals("plain", VoiceTextSanitizer.oneLine("plain"));
+    }
+
+    @Test
     public void consecutiveTextSegmentsAreJoinedWithOneSpace() {
         assertEquals("ls", VoiceTextSanitizer.join(false, "ls"));
         assertEquals(" -la", VoiceTextSanitizer.join(true, "-la"));
