@@ -90,9 +90,9 @@ public final class WallStripRowView extends View {
         public final long key;
         /** The window's chip, as the window bar counts chips. */
         public final int chipIndex;
-        /** The window's number, as the run strip's badge says it; always drawn. */
+        /** The window's number, as the window chip's badge says it; always drawn. */
         @NonNull public final String number;
-        /** The window's label, plain text ({@link RunStripModel.Entry#shortLabel}). */
+        /** The window's label, plain text ({@link WallStripModel.Entry#shortLabel}). */
         @NonNull public final String label;
         /** The process glyph, a Nerd Font symbol drawn only with the bundled face; or empty. */
         @NonNull public final String glyph;
@@ -150,13 +150,13 @@ public final class WallStripRowView extends View {
     static final long ADD_TILE_KEY = Long.MIN_VALUE;
 
     /**
-     * The tiles for {@code entries}: the row's own ({@link RunStripModel#rowEntries}) or the row's
-     * and the Home floats ({@link RunStripModel#wallEntries}), each with its number, glyph and
+     * The tiles for {@code entries}: the row's own ({@link WallStripModel#rowEntries}) or the row's
+     * and the Home floats ({@link WallStripModel#wallEntries}), each with its number, glyph and
      * distinguishing label, a float marked as one. {@code shapes} runs alongside them
      * ({@link WallStripRowPolicy#splitShape}); a missing or null shape reads as one whole pane.
      */
     @NonNull
-    public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> entries,
+    public static List<Tile> tilesOf(@NonNull List<WallStripModel.Entry> entries,
                                      @Nullable List<float[]> shapes) {
         return tilesOf(entries, shapes, null);
     }
@@ -167,12 +167,12 @@ public final class WallStripRowView extends View {
      * key is the chip's index.
      */
     @NonNull
-    public static List<Tile> tilesOf(@NonNull List<RunStripModel.Entry> entries,
+    public static List<Tile> tilesOf(@NonNull List<WallStripModel.Entry> entries,
                                      @Nullable List<float[]> shapes, @Nullable List<Long> keys) {
         List<Tile> tiles = new ArrayList<>(entries.size());
         for (int i = 0; i < entries.size(); i++) {
-            RunStripModel.Entry entry = entries.get(i);
-            if (entry.kind == RunStripModel.Kind.NEW_WINDOW) continue;
+            WallStripModel.Entry entry = entries.get(i);
+            if (entry.kind == WallStripModel.Kind.NEW_WINDOW) continue;
             float[] shape = shapes != null && i < shapes.size() ? shapes.get(i) : null;
             Long key = keys != null && i < keys.size() ? keys.get(i) : null;
             tiles.add(new Tile(key != null ? key : entry.chipIndex, entry.chipIndex, entry.number,

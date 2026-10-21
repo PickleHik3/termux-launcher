@@ -44,7 +44,7 @@ public class WindowChipsTest {
 
     @Test
     public void theRowsWindowsComeInRowOrder_theDisplayAtItsPlace_thenTheFloats() {
-        List<WindowChips.Chip<String>> chips = home().chips(Surface.RUN_STRIP);
+        List<WindowChips.Chip<String>> chips = home().chips(Surface.WALL_STRIP);
         assertEquals(5, chips.size());
         assertEquals(Kind.WINDOW, chips.get(0).kind);
         assertEquals("a", chips.get(0).window);
@@ -101,7 +101,7 @@ public class WindowChipsTest {
             .addFloat("f", false, true, false);
         assertEquals(0, chips.rowCount());
         assertEquals(-1, chips.displayChip());
-        List<WindowChips.Chip<String>> strip = chips.chips(Surface.RUN_STRIP);
+        List<WindowChips.Chip<String>> strip = chips.chips(Surface.WALL_STRIP);
         assertEquals(1, strip.size());
         assertEquals("f", strip.get(0).window);
     }
@@ -160,13 +160,6 @@ public class WindowChipsTest {
         assertEquals("f", bar.get(0).window);
     }
 
-    @Test
-    public void theStripsShowEveryChip_wallStripTheSameAsTheRunStrip() {
-        WindowChips<String> chips = home();
-        assertEquals(chips.chips(Surface.RUN_STRIP), chips.chips(Surface.WALL_STRIP));
-        assertEquals(5, chips.chips(Surface.WALL_STRIP).size());
-    }
-
     // ---------------------------------------------------------------- selection
 
     @Test
@@ -195,17 +188,17 @@ public class WindowChipsTest {
 
     @Test
     public void theStripsSelect_theFocusedFloat_elseTheRowsWindowInFront() {
-        assertEquals("g", 4, home().selected(Surface.RUN_STRIP));
+        assertEquals("g", 4, home().selected(Surface.WALL_STRIP));
         assertEquals(4, home().selected(Surface.WALL_STRIP));
         WindowChips<String> noFocus = new WindowChips<>(true, true, AB, 1, 2)
             .addFloat("f", true, true, false);
-        assertEquals(2, noFocus.selected(Surface.RUN_STRIP));
+        assertEquals(2, noFocus.selected(Surface.WALL_STRIP));
         WindowChips<String> focusedButMinimised = new WindowChips<>(true, true, AB, 1, 0)
             .addFloat("f", true, true, true);
-        assertEquals(0, focusedButMinimised.selected(Surface.RUN_STRIP));
+        assertEquals(0, focusedButMinimised.selected(Surface.WALL_STRIP));
         assertEquals("no row, no float in focus", -1,
             new WindowChips<String>(true, false, AB, -1, 0).addFloat("f", false, true, false)
-                .selected(Surface.RUN_STRIP));
+                .selected(Surface.WALL_STRIP));
     }
 
     // ---------------------------------------------------------------- what a tap means
@@ -225,7 +218,7 @@ public class WindowChipsTest {
         Meaning<String> bar = workspace().tap(Surface.BAR, 4);
         assertEquals(Meaning.Action.RESTORE_FLOAT, bar.action);
         assertEquals("g", bar.window);
-        Meaning<String> strip = home().tap(Surface.RUN_STRIP, 3);
+        Meaning<String> strip = home().tap(Surface.WALL_STRIP, 3);
         assertEquals(Meaning.Action.RESTORE_FLOAT, strip.action);
         assertEquals("f", strip.window);
         assertEquals("g", home().tap(Surface.WALL_STRIP, 4).window);
@@ -245,13 +238,13 @@ public class WindowChipsTest {
     /** The strips stand on Home: a float's tile restores it where it is. */
     @Test
     public void aFloatsTileOnAStrip_restoresInPlace() {
-        assertFalse(home().tap(Surface.RUN_STRIP, 3).travel);
+        assertFalse(home().tap(Surface.WALL_STRIP, 3).travel);
         assertFalse(home().tap(Surface.WALL_STRIP, 4).travel);
     }
 
     @Test
     public void aTapOnAStripsWindow_slidesTheWorkspaceInOnIt() {
-        Meaning<String> display = home().tap(Surface.RUN_STRIP, 1);
+        Meaning<String> display = home().tap(Surface.WALL_STRIP, 1);
         assertEquals(Meaning.Action.SHOW_WINDOW, display.action);
         assertEquals(1, display.row);
         assertTrue(display.travel);
