@@ -23,7 +23,7 @@ These may change or be dropped before they reach a stable release.
 
 - Linux apps whose installer left a placeholder in place of their command, such as Termux's Chromium, now open from the drawer; an app whose command is missing says which one instead of a generic error. (merge 7940a21ed on `pre`) <!-- stays: P1, P2 -->
 - Benchmark graphics, under Settings → Display → Linux apps → Set up Linux apps → Graphics, tries every graphics option this phone has and keeps the fastest. (merge d55271a54 on `pre`) <!-- stays: P1, P2 -->
-- Full screen now uses the whole screen: the empty band left where the status bar was is gone. (commit on `pre`) <!-- stays: P1, P2 -->
+- Full screen now uses the whole screen: the empty band left where the status bar was is gone. (280ced3f7 on `pre`) <!-- stays: P1, P2 -->
 
 ## Editions
 <!-- Only what is exclusive to the Nix or VAJ build of this drop; say so when nothing is. -->
