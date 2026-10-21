@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(settings): a Benchmark graphics row" · Settings → Display → Linux apps →
+  Set up Linux apps → Graphics shows "Benchmark graphics"; tapping it copies exactly
+  `termux-x11-gpu-setup` (no newline) and the toast reads "Benchmark command copied. Paste it into
+  the terminal and press Enter."; the row is hidden on the Nix edition · pong (release build).
 - 2026-10-21 · merge 7940a21ed "launch apps whose desktop file ships an unfilled Exec placeholder" ·
   With the stock x11 `chromium` (Exec=@@desktop_exec) Chromium opens from the drawer; an app whose
   command is missing shows "<app> could not start: its command <x> is not installed." once, with no
