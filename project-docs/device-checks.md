@@ -13,6 +13,13 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "feat(dock): the Search field is a toggle beside any design" (#96) · Search
+  field toggle beside the design picker (Layout editor, dock selected; Row B fits at 360 dp, the
+  "Search" label not ellipsized, no Prompt line chip, no "Ask" anywhere); field under the apps row
+  with Tray, Beads, Strip on Home and a window, no clipping (Strip + field is the tallest; Beads
+  give way to the slab while the field is on, by design — judge the look); tapping it opens the
+  palette; Prompt line users land on Tray with the field · emulator, fresh install then an install
+  over a build with Prompt line picked.
 - 2026-10-21 · commit "refactor(dock): remove the run strip" (#95) · Taskbar design: no run strip above
   the dock; the drawer tile still opens the drawer; Wall strip tiles still follow open windows ·
   emulator.
