@@ -17,6 +17,21 @@ under twenty items; past that, the oldest are re-judged first.
   Passed on the emulator 2026-10-21 for the crashing case (a fresh built-in Battery widget, long-press
   drag held in the right band: two turns, a clean drop). Still owed: a system app widget, two or
   more pages, the left edge, carrying it back to the first page before dropping · emulator, debug build.
+- 2026-10-21 · commit "feat(settings): a Battery & performance page for the presets and the
+  motion they trim" · Settings › App › Battery & performance opens with Presets (Reduce idle
+  activity, Low-memory preset) and Smoother motion (Glass refraction, Living glass, Wallpaper
+  parallax, Cursor trail, Terminal effect); App behavior's link row opens the same page; Appearance
+  no longer shows Wallpaper parallax. Cursor trail off here stops the trail in the terminal on
+  return (also check an unfocused pane of a split: only the focused pane is re-read on resume).
+  Live greying: Low-memory preset on greys parallax, Cursor trail and Terminal effect ("Set by
+  Low-memory preset", parallax and trail off, effect "Set by Low-memory preset · None") and the glass rows ("Off while Reduce
+  idle activity is on", shown off); off again brings back the look, the glass switches as they
+  were, and the stored fancier_glass is never written by the greying. Reduce idle activity alone
+  greys only the glass. Glass refraction off gives Living glass "Needs Glass refraction"; with a
+  wallpaper not picked in the launcher both say "Needs a wallpaper picked in Appearance"; wallpaper
+  mode off gives parallax "Needs a wallpaper". Searching "Reduce idle activity" and "Low-memory
+  preset" lands on the page. The preset's on/off still restyles the launcher as before; Living glass
+  off stops the glass flexing on a page swipe · emulator (API 33+), debug build.
 - 2026-10-21 · commit "fix(chrome): fullscreen claims the status bar's band over the cutout" ·
   With fullscreen on, the window bar sits at the top edge with no empty band, in the terminal and
   the Display place; with it off, nothing moved. Look at where the camera hole lands on the window
