@@ -190,12 +190,22 @@ final class ClockFaceView extends View {
         return low;
     }
 
+    /**
+     * The numerals' run as painted: the time, then the gap and the meta. The last glyph counts to
+     * its ink where that passes its advance (Libron's serifs can), so a kept period is never
+     * shaved at the box's edge.
+     */
     private float numeralsWidth(@NonNull String time, @NonNull String meta, float sizePx) {
-        float width = libronMeasure.widthPx(time, sizePx);
-        if (!meta.isEmpty()) {
-            width += sizePx * NUMERALS_META_GAP + libronMeasure.widthPx(meta, metaPx(sizePx));
-        }
-        return width;
+        if (meta.isEmpty()) return runWidth(time, sizePx);
+        return libronMeasure.widthPx(time, sizePx) + sizePx * NUMERALS_META_GAP
+            + runWidth(meta, metaPx(sizePx));
+    }
+
+    /** A Libron run's advance, or its ink's right edge where that is further. */
+    private float runWidth(@NonNull String text, float sizePx) {
+        float advance = libronMeasure.widthPx(text, sizePx);
+        paint.getTextBounds(text, 0, text.length(), bounds);
+        return Math.max(advance, bounds.right);
     }
 
     /** The numerals face's seconds and period size for a time {@code sizePx} tall: Label at least. */

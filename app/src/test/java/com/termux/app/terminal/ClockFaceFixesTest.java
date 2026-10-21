@@ -201,6 +201,56 @@ public class ClockFaceFixesTest {
         }
     }
 
+    /** A light theme: near-black ink on a pale base, its primary a mid violet. */
+    private static final ClockFaceRenderer.Palette LIGHT_PALETTE = new ClockFaceRenderer.Palette(
+        0xFF1C1B1F, 0xFF625B71, 0xFF6750A4, 0xFFFFFBFE, 0xFFF7F2FA, 0xFFECE6F0, 0xFFE6E0E9,
+        0xFFCAC4D0, 0xFF49454F);
+
+    /**
+     * A light theme's faces on a dark wallpaper's bar (emulator, build 7dbf41b90): the ink crosses
+     * to the pale side as the theme's dark scheme would set it, not just to the 3:1 floor, where
+     * Slab, Minimal, LED and Tape drew a dim grey. Unfed, every face still reads on its own dark
+     * base.
+     */
+    @Test
+    public void aLightThemesFacesReadOnADarkBar() {
+        String date = ClockFaceRenderer.dateText(WALL, TimeZone.getTimeZone("UTC"), Locale.UK);
+        for (String face : FACES) {
+            ClockFaceRenderer renderer = renderer(face);
+            renderer.setPalette(LIGHT_PALETTE);
+            renderer.setBandInk(DARK_GLASS, PALE_INK);
+            renderer.setForm(TopPaneClockForm.FULL);
+            Recorder recorder = drawFull(renderer, 340f, 49f);
+            String label = face + ", light theme on dark glass: ";
+            assertTrue(label + "seconds", ratio(recorder.colorOf("6"), DARK_GLASS)
+                >= OnGlass.TARGET_BODY_TEXT - .01);
+            assertTrue(label + "date", ratio(recorder.colorOf(date), DARK_GLASS)
+                >= OnGlass.TARGET_BODY_TEXT - .01);
+            if (face.equals("minimal") || face.equals("minimal_medium")
+                || face.equals("slab") || face.equals("tape")) {
+                double digits = ratio(recorder.colorOf("4"), DARK_GLASS);
+                assertTrue(label + "digits at " + digits, digits >= 7d);
+            }
+        }
+        // The crossing ink is the mirrored role, well clear of the floor; the LED's dots too.
+        assertTrue(OnGlass.ratio(ClockFaceRenderer.faceInk(DARK_GLASS, 0xFF1C1B1F,
+            OnGlass.TARGET_LARGE_TEXT, true), DARK_GLASS) >= 7d);
+        // Unfed: a dark theme's faces on its own dark base.
+        for (String face : FACES) {
+            ClockFaceRenderer renderer = renderer(face);
+            renderer.setForm(TopPaneClockForm.FULL);
+            Recorder recorder = drawFull(renderer, 340f, 49f);
+            int base = PALETTE.surfaceBase;
+            assertTrue(face + " unfed: seconds", ratio(recorder.colorOf("6"), base)
+                >= OnGlass.TARGET_LARGE_TEXT - .01);
+            if (face.equals("minimal") || face.equals("minimal_medium")
+                || face.equals("slab") || face.equals("tape")) {
+                assertTrue(face + " unfed: digits", ratio(recorder.colorOf("4"), base)
+                    >= OnGlass.TARGET_LARGE_TEXT - .01);
+            }
+        }
+    }
+
     @Test
     public void flipDrawsOneSeamPerCardAndNoHingeClips() {
         ClockFaceRenderer renderer = renderer("flip");

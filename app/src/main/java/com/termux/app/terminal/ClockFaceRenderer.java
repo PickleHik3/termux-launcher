@@ -581,17 +581,34 @@ public final class ClockFaceRenderer {
         int backdrop = backdrop();
         int sideInk = mHasBand ? mBandInk : mOnSurface;
         boolean pale = SchemeTone.tone(sideInk) > SchemeTone.tone(backdrop);
-        mDigitInk = OnGlass.inkOn(backdrop, mOnSurface, OnGlass.TARGET_LARGE_TEXT, pale);
-        mAccentInk = OnGlass.inkOn(backdrop, mPrimary, OnGlass.TARGET_LARGE_TEXT, pale);
+        mDigitInk = faceInk(backdrop, mOnSurface, OnGlass.TARGET_LARGE_TEXT, pale);
+        mAccentInk = faceInk(backdrop, mPrimary, OnGlass.TARGET_LARGE_TEXT, pale);
         mLcdGhost = alpha(mAccentInk, LCD_GHOST_ALPHA);
-        mSecondsInk = OnGlass.inkOn(backdrop, mSecondary, OnGlass.TARGET_BODY_TEXT, pale);
-        mDateInk = OnGlass.inkOn(backdrop, mOnSurfaceVariant, OnGlass.TARGET_BODY_TEXT, pale);
-        mPeriodInk = OnGlass.inkOn(backdrop, mPrimary, OnGlass.TARGET_BODY_TEXT, pale);
+        mSecondsInk = faceInk(backdrop, mSecondary, OnGlass.TARGET_BODY_TEXT, pale);
+        mDateInk = faceInk(backdrop, mOnSurfaceVariant, OnGlass.TARGET_BODY_TEXT, pale);
+        mPeriodInk = faceInk(backdrop, mPrimary, OnGlass.TARGET_BODY_TEXT, pale);
         mPrimaryLine = alpha(mPeriodInk, .45f);
         // The flip digits stand on their card, not on the glass: measure them on what the card's
         // two passes leave of the backdrop, taking whichever side of it reads.
         int card = ColorUtils.compositeColors(alpha(mSurfacePanelHigh, FLIP_CARD_COVER), backdrop);
         mFlipDigitInk = OnGlass.inkOn(card, mOnSurface, OnGlass.TARGET_LARGE_TEXT);
+    }
+
+    /**
+     * A role's ink on the backdrop, on the {@code pale} side. A role already on that side keeps
+     * its tone and moves only as far as {@code target} asks. A role on the other side (a light
+     * theme's dark ink over a dark wallpaper's band) is first mirrored across the tone axis, as
+     * the theme's opposite scheme would set it: walked only to the target, a light theme's
+     * near-black digits stopped at 3:1, a dim grey on the dark bar.
+     */
+    @ColorInt
+    @VisibleForTesting
+    static int faceInk(@ColorInt int backdrop, @ColorInt int seed, double target, boolean pale) {
+        double seedTone = SchemeTone.tone(seed);
+        if (!OnGlass.onSide(SchemeTone.tone(backdrop), seedTone, pale)) {
+            seed = SchemeTone.toneShift(seed, (100d - seedTone) - seedTone);
+        }
+        return OnGlass.inkOn(backdrop, seed, target, pale);
     }
 
     /**
@@ -704,13 +721,13 @@ public final class ClockFaceRenderer {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
                 return dp(94f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                return spacedTextWidth(timeText(), minimalTypeface(), 38f, -.02f) + gap;
+                return glyphRunWidth(timeText(), minimalTypeface(), 38f, -.02f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
                 return dotTextWidth(timeText(), LED_CELL_FRACTION * dp(26f)) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + gap;
+                return glyphRunWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + gap;
+                return glyphRunWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + gap;
             default:
                 return dp(flipRowWidthDp(FULL_FLIP_CARD_DP, FULL_FLIP_DIGIT_GAP_DP)) + gap;
         }
@@ -788,13 +805,13 @@ public final class ClockFaceRenderer {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
                 return dp(61f) + dp(5f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                return spacedTextWidth(timeText(), minimalTypeface(), 26f, -.02f) + dp(5f);
+                return glyphRunWidth(timeText(), minimalTypeface(), 26f, -.02f) + dp(5f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
                 return dotTextWidth(timeText(), LED_CELL_FRACTION * dp(16f)) + dp(5f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 18f, -.02f) + dp(4f);
+                return glyphRunWidth(timeText(), Typeface.MONOSPACE, 18f, -.02f) + dp(4f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f);
+                return glyphRunWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f);
             default:
                 // The cards, then the gap to the meta column plus the ink that glyphs and the card
                 // shadow carry past their advance.
@@ -2283,6 +2300,25 @@ public final class ClockFaceRenderer {
         mPaint.setTextSize(sp(textDp));
         float width = mTextWidths.width(text, typeface, mPaint.getTextSize(), letterSpacing,
             mMeasure);
+        mPaint.setLetterSpacing(0f);
+        return width;
+    }
+
+    /**
+     * Width of {@code text} as {@link #drawFadingTime} paints it: a glyph at a time, so no pair is
+     * kerned. Measuring the whole run kerned it ("11" sits tighter in Roboto), and once the face
+     * was scaled up to fill a widget the gap the model missed pushed the period off the box's
+     * edge, clipped to "P".
+     */
+    private float glyphRunWidth(String text, Typeface typeface, float textDp, float letterSpacing) {
+        mPaint.setTypeface(typeface);
+        mPaint.setLetterSpacing(letterSpacing);
+        mPaint.setTextSize(sp(textDp));
+        float width = 0f;
+        for (int i = 0; i < text.length(); i++) {
+            width += mTimeAdvances.advance(text.charAt(i), typeface, mPaint.getTextSize(),
+                letterSpacing, mMeasure);
+        }
         mPaint.setLetterSpacing(0f);
         return width;
     }

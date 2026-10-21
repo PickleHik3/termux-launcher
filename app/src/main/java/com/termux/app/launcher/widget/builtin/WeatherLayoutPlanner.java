@@ -393,7 +393,7 @@ final class WeatherLayoutPlanner {
         /** The widest of the condition, the details and the sun lines. */
         float naturalWidth(@NonNull WeatherWidgetModel m) {
             List<Line> lines = new ArrayList<>();
-            addNowLines(lines, m);
+            addNowLines(lines, m, Float.MAX_VALUE);
             float widest = 0f;
             for (Line line : lines) widest = Math.max(widest, width(line.text, line.role, false));
             return widest;
@@ -404,7 +404,7 @@ final class WeatherLayoutPlanner {
                         boolean withPlace) {
             List<Line> lines = new ArrayList<>();
             if (withPlace) lines.add(new Line("place", placeName(m), Role.TITLE, Ink.STRONG, 1, 0f));
-            addNowLines(lines, m);
+            addNowLines(lines, m, room);
             addStale(lines, m, 0);
             List<Row> rows = rowsOf(lines);
             fit(rows, inner.height, 0f, 0f);
@@ -430,7 +430,7 @@ final class WeatherLayoutPlanner {
             lines.add(new Line("place", placeName(m), Role.TITLE, Ink.STRONG, 1, 0f));
             Line heroLine = new Line("hero", m.temp, Role.HERO, Ink.STRONG, ESSENTIAL, GAP_S);
             lines.add(heroLine);
-            addNowLines(lines, m);
+            addNowLines(lines, m, box.width);
             List<Row> rows = rowsOf(lines);
             HourColumns strip = withHours && !m.hours.isEmpty()
                 ? hourColumns(m.hours, box.width) : null;
@@ -645,11 +645,11 @@ final class WeatherLayoutPlanner {
         // ----- lines ------------------------------------------------------------------------
 
         /** The condition, today's details and the next sun time, where the model has them. */
-        void addNowLines(@NonNull List<Line> lines, @NonNull WeatherWidgetModel m) {
+        void addNowLines(@NonNull List<Line> lines, @NonNull WeatherWidgetModel m, float room) {
             if (!m.condition.isEmpty()) {
                 lines.add(new Line("condition", m.condition, Role.TITLE, Ink.STRONG, 4, GAP_M));
             }
-            String details = details(m);
+            String details = details(m, room);
             if (!details.isEmpty()) {
                 lines.add(new Line("details", details, Role.BODY, Ink.SOFT, 3, GAP_S));
             }
@@ -666,10 +666,29 @@ final class WeatherLayoutPlanner {
         }
 
         /** "H 24 · L 15 · 10% rain"; a dry hour says nothing about rain. */
-        @NonNull String details(@NonNull WeatherWidgetModel m) {
+        /**
+         * The details at the longest form that fits {@code room} at the Body role, never cut: the
+         * whole line, then without the rain chance, then the range alone ("24 / 15"). A 2×1 cut
+         * "H 12 · L 9 · 5% rain" to "H 12 · L 9 · 5%…".
+         */
+        @NonNull String details(@NonNull WeatherWidgetModel m, float room) {
+            String full = details(m, true, false);
+            if (width(full, Role.BODY, false) <= room + WidgetLayoutPlan.EPSILON) return full;
+            String dry = details(m, false, false);
+            if (dry.isEmpty() || width(dry, Role.BODY, false) <= room + WidgetLayoutPlan.EPSILON) {
+                return dry;
+            }
+            String brief = details(m, false, true);
+            return width(brief, Role.BODY, false) <= room + WidgetLayoutPlan.EPSILON ? brief : "";
+        }
+
+        @NonNull private String details(@NonNull WeatherWidgetModel m, boolean rain,
+                                        boolean brief) {
             StringBuilder text = new StringBuilder();
-            if (m.hasRange()) text.append(words.highLow(m.high, m.low));
-            if (m.rainPct > 0) {
+            if (m.hasRange()) {
+                text.append(brief ? words.range(m.high, m.low) : words.highLow(m.high, m.low));
+            }
+            if (rain && m.rainPct > 0) {
                 if (text.length() > 0) text.append(" · ");
                 text.append(words.rain(m.rainPct));
             }

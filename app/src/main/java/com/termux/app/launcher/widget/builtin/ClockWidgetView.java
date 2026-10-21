@@ -126,6 +126,9 @@ public class ClockWidgetView extends BuiltinWidgetView {
             span == BuiltinWidgetSpan.ONE_BY_ONE, lazy(), now);
         faceView.setGround(groundSurface());
         String date = ClockWidgetSupport.date("EEEdMMM", now);
+        // The date's shorter forms, for a line too narrow for the whole one: never cut.
+        List<String> dates = java.util.Arrays.asList(date,
+            ClockWidgetSupport.date("dMMM", now), ClockWidgetSupport.date("EEEd", now));
         String alarm = span.isTall() ? alarmText(now, is24) : "";
         List<ClockLayoutPlanner.ZoneColumn> zones = zoneColumns(now, is24, span);
         shownDate = date;
@@ -137,7 +140,7 @@ public class ClockWidgetView extends BuiltinWidgetView {
             faceView.heightPxFor(widthDp * density, maxHeightDp * density) / density;
         WidgetPlanView planView = new WidgetPlanView(getContext(), style(),
             (widthDp, heightDp, measure) -> ClockLayoutPlanner.plan(span, widthDp, heightDp,
-                fontScale, face, date, alarm, zones, faceMeasure, measure));
+                fontScale, face, dates, alarm, zones, faceMeasure, measure));
         ClockCard card = new ClockCard(getContext(), planView, faceView);
         this.faceView = faceView;
         this.planView = planView;
@@ -204,9 +207,9 @@ public class ClockWidgetView extends BuiltinWidgetView {
         return isPreview() ? sampleNow() : ZonedDateTime.now(ZoneId.systemDefault());
     }
 
-    /** The design's sample moment in the phone's zone, so a preview reads 13:40 wherever it is. */
+    /** The design's sample moment, today at 13:40 in the phone's zone. */
     @NonNull static ZonedDateTime sampleNow() {
-        return ClockWidgetSupport.SAMPLE_NOW.toLocalDateTime().atZone(ZoneId.systemDefault());
+        return ClockWidgetSupport.sampleNow();
     }
 
     private boolean lazy() {

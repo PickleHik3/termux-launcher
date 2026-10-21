@@ -356,6 +356,106 @@ public class ClockWidgetTest {
         }
     }
 
+    /**
+     * A 12-hour period is drawn whole inside the face's box or not at all: no face paints ink past
+     * its box's right edge, which the card would clip to "P" or "PN" (emulator, build 7dbf41b90:
+     * Slab 2×1, Minimal 2×2 and 4×1, Numerals 4×1). Checked at the sample time and at the widest
+     * 12-hour time, "11:12 PM", reached by a tick after the box was laid out.
+     */
+    @Test public void aPeriodIsDrawnWholeOrNotAtAll() {
+        List<String> failures = new ArrayList<>();
+        ClockFace[] faces = {ClockFace.NUMERALS, ClockFace.SLAB, ClockFace.MINIMAL,
+            ClockFace.TAPE, ClockFace.LED, ClockFace.LCD, ClockFace.FLIP};
+        java.time.ZonedDateTime wide = ClockWidgetView.sampleNow().withHour(23).withMinute(12);
+        for (float scale : new float[] {1f, 2f}) {
+            fontScale(scale);
+            for (ClockFace face : faces) {
+                for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+                    for (int[] size : sizesFor(span)) {
+                        for (boolean seconds : new boolean[] {false, true}) {
+                            Bundle config = new Bundle();
+                            config.putString(ClockWidgetSettings.KEY_FACE, face.key);
+                            config.putString(ClockWidgetSettings.KEY_SECONDS,
+                                seconds ? "on" : "off");
+                            config.putString(ClockWidgetSettings.KEY_24_HOUR, "off");
+                            String where = face + " " + span + " " + size[0] + "x" + size[1]
+                                + "dp font " + scale + (seconds ? " seconds" : "");
+                            BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
+                            ClockWidgetView view = laidOut(services, span, size[0], size[1], config);
+                            services.destroy();
+                            ClockFaceView faceView = view.faceView();
+                            if (faceView == null || faceView.getWidth() <= 0) continue;
+                            checkInkInside(faceView, where + " 1:40 PM", failures);
+                            faceView.setTime(wide);
+                            checkInkInside(faceView, where + " 11:12 PM", failures);
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue("faces that paint past their box:\n" + String.join("\n", failures),
+            failures.isEmpty());
+    }
+
+    /**
+     * The date takes the longest of its forms that fits its line, never cut (emulator, build
+     * 7dbf41b90, font 2.0: "Wed, Oct…"); at every span, size and font scale.
+     */
+    @Test public void theDateTakesAShorterFormRatherThanBeingCut() {
+        WidgetLayoutPlan.Measure measure = (text, role, numeric, size) -> {
+            float em = 0f;
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                em += Character.isDigit(c) ? 0.57f : c == ' ' ? 0.28f : 0.6f;
+            }
+            return em * size;
+        };
+        List<String> dates = Arrays.asList("Wed, Oct 21", "Oct 21", "Wed 21");
+        ClockLayoutPlanner.FaceMeasure faceMeasure = (widthDp, maxHeightDp) ->
+            Math.min(maxHeightDp, widthDp / 3f);
+        boolean shortened = false;
+        for (float scale : FONT_SCALES) {
+            for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+                for (int[] size : sizesFor(span)) {
+                    WidgetLayoutPlan plan = ClockLayoutPlanner.plan(span, size[0], size[1],
+                        scale, ClockFace.SLAB, dates, "", new ArrayList<>(), faceMeasure,
+                        measure);
+                    WidgetLayoutPlan.Part date = plan.part(ClockLayoutPlanner.DATE);
+                    if (date == null) continue;
+                    String where = span + " " + size[0] + "x" + size[1] + " font " + scale
+                        + ": " + date.text;
+                    assertTrue(where, dates.contains(date.text));
+                    if (!date.text.equals(dates.get(0))) shortened = true;
+                    if (date.text.equals(dates.get(dates.size() - 1))) continue;
+                    assertTrue(where + " is cut to " + date.box.width, measure.widthDp(date.text,
+                        date.role, false, date.sizeDp) <= date.box.width + 0.01f);
+                }
+            }
+        }
+        assertTrue("some line is narrow enough to shorten the date", shortened);
+    }
+
+    /** Draws the face into a canvas wider than its box and finds any ink past the box's edge. */
+    private static void checkInkInside(@NonNull ClockFaceView faceView, @NonNull String where,
+                                       @NonNull List<String> failures) {
+        int w = faceView.getWidth(), h = faceView.getHeight();
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(w + 400, h,
+            android.graphics.Bitmap.Config.ARGB_8888);
+        faceView.draw(new android.graphics.Canvas(bitmap));
+        int furthest = -1;
+        // Past a 2 px fringe: a flip card's shadow or an LCD segment's glow may bleed one pixel.
+        for (int x = w + 2; x < bitmap.getWidth(); x++) {
+            for (int y = 0; y < h; y++) {
+                if (android.graphics.Color.alpha(bitmap.getPixel(x, y)) > 40) {
+                    furthest = x;
+                    break;
+                }
+            }
+        }
+        bitmap.recycle();
+        if (furthest >= 0) failures.add(where + ": ink to " + furthest + "px of " + w);
+    }
+
     // ----- the 1×1 dial -----------------------------------------------------------------------
 
     @Test public void theOneByOneDialSetsTheFourCardinalNumeralsAtTheFloor() {
