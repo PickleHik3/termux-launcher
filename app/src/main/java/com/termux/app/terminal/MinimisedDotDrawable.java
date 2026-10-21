@@ -13,7 +13,7 @@ import androidx.annotation.Nullable;
 
 /**
  * The one mark a minimised Home float's chip wears (#91): a small dot in the chip's top end
- * corner, in the chip's own ink. The bar's pills and the status column's chips both wear it.
+ * corner, in the chip's own ink, solid. The bar's pills and the status column's chips both wear it.
  *
  * <p>Built once per chip and handed to it as its foreground. The ink is read from the chip at draw
  * time, so a chip that changes colour — a selection slide, a re-measured band — never has to touch
@@ -55,8 +55,11 @@ public final class MinimisedDotDrawable extends Drawable {
     @Override
     public void draw(@NonNull Canvas canvas) {
         int ink = mHost.getCurrentTextColor();
-        mPaint.setColor(ink);
-        mPaint.setAlpha(android.graphics.Color.alpha(ink) * mAlpha / 255);
+        // The ink's RGB only: an unselected title's ink is translucent (alpha ~58%), and under the
+        // chip's own 0.75 rest alpha the dot came out too faint to see. The mark is the one thing
+        // on the chip that must read, so it is drawn solid.
+        mPaint.setColor(ink | 0xFF000000);
+        mPaint.setAlpha(mAlpha);
         boolean rtl = mHost.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
         float radius = mSizePx / 2f;
         float cx = rtl ? getBounds().left + mInsetPx + radius
