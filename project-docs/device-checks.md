@@ -19,6 +19,11 @@ under twenty items; past that, the oldest are re-judged first.
   mode on from a window makes Home minimal too; an upgrade from a build whose Home layout or Home
   shape differed keeps Home exactly as it was (Home layout on) · emulator, fresh install then an
   install over a pre-#88 build with a Home dock height or Margin set apart.
+- 2026-10-21 · commit "feat(layout-editor): the Home layout switch" (#89) · Layout menu shows
+  the Home layout choice; on → editing on Home changes only Home; off → Home matches the
+  Workspace again; the menu's look is unchanged otherwise (the choice is the one segment beside
+  Style, named "One layout for every screen" / "Home has its own layout" by state) · emulator,
+  also on an upgraded install whose Home layout was kept (the segment shows on).
 - 2026-10-21 · commit "feat(statusbar): remove the house glyph from the bar" (#92) · The bar on
   the Workspace starts with the window chips, no house glyph, nothing clipped at the left; on Home
   no house beside the clock and the Workspace's mark peeks in at the far end only · emulator.
