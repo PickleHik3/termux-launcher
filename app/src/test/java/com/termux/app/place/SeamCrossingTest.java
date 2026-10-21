@@ -490,6 +490,25 @@ public class SeamCrossingTest {
         assertEquals(1f, drive.last().beadShare, EPSILON);
     }
 
+    @Test
+    public void theSearchFieldKeepsHomesBeadsSoTheyMeltInAsHomeArrives() {
+        // #84: Lens beads with the Search field keep their beads (the field in a capsule of its
+        // own under them), so a slide in from the window's slab melts them in as Home comes.
+        Stored stored = homeLayoutOn();
+        stored.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
+        stored.searchFields.put(LayoutVariant.HOME, true);
+        // Home's row alone on its dock (the index put away), where it wears beads.
+        PlaceLayout beadedHome = home().withSlot(Element.AZ,
+            Slot.on(Edge.BOTTOM, Element.AZ).withHidden(true));
+        Drive drive = drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+            beadedHome, false, false).slow(0f, 1f);
+        assertTrue("the beads melt in with Home's half",
+            drive.count(s -> !Float.isNaN(s.beadShare)) > 0);
+        float last = Float.NaN;
+        for (Step step : drive.steps) if (!Float.isNaN(step.beadShare)) last = step.beadShare;
+        assertEquals("whole beads once Home has come", 1f, last, 0.05f);
+    }
+
     // ---- (c) Minimal mode on in a window ----
 
     @Test

@@ -4729,6 +4729,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (int i = 0; i < centers.length; i++) centers[i] = inGlass.centerX(i);
             program.setBeads(centers, centers.length, inGlass.centerY, inGlass.radiusPx,
                 inGlass.iconHalfPx);
+            // The Search field's capsule under them (#84): one more shape of the same glass.
+            if (inGlass.hasCapsule()) {
+                program.setBeadCapsule(inGlass.capsuleLeft, inGlass.capsuleTop,
+                    inGlass.capsuleRight, inGlass.capsuleBottom);
+            } else {
+                program.clearBeadCapsule();
+            }
         } else {
             // A row the beads cannot draw keeps the slab, and the slab the tray's own band.
             float softRim = spec.beads
@@ -4748,8 +4755,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // so it leaves with them rather than staying behind.
         float rowOffset = mSuggestionBarView != null ? mSuggestionBarView.drawnPageOffsetPx() : 0f;
         // Under the Search field the lower bevel shows the icons as the tray's would, aimed that
-        // much lower, and nowhere over the field or the icons themselves, with any design.
-        int belowPx = mAppliedPromptFieldBandPx;
+        // much lower, and nowhere over the field or the icons themselves, with any design. Beads
+        // keep their own reflection, the field's capsule none (GlassRefraction's capsule).
+        int belowPx = beads != null ? 0 : mAppliedPromptFieldBandPx;
         // The Wall strip holds its reflection under the tray's (spec.reflectionScale), and its
         // tiles stand over the icons: its reflection is the lower bevel's alone.
         reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop,
@@ -5079,6 +5087,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (modeChanged && host != null && mDockShapeCut)
             applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
+        // The Search field's well nests in its capsule, or in the slab again.
+        syncPromptFieldWell();
         return true;
     }
 
@@ -5087,13 +5097,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * keeps its slab: a style that is not beads; the row not standing alone on the dock (another
      * band on the same glass, the keyboard sharing it, a joined Docked frame being the glass);
      * or a row the beads cannot draw ({@link com.termux.app.dock.LensBeadGeometry#compute}).
+     * The Search field under the row is no band of that kind: it stands in a glass capsule of
+     * its own under the beads (#84).
      */
     @Nullable
     private com.termux.app.dock.LensBeadGeometry.Beads resolveDockBeads() {
         if (!dockBeadsWanted()) return null;
-        // The Search field is another band on the dock's glass, which beads cannot draw: the row
-        // keeps the slab, so the field is never clipped to the beads (#96).
-        if (mAppliedPromptFieldBandPx > 0) return null;
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
@@ -5122,8 +5131,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boxes[i * 4 + 2] = mDockBeadBoxes[i * 4 + 2] + dx;
             boxes[i * 4 + 3] = mDockBeadBoxes[i * 4 + 3] + dy;
         }
-        return com.termux.app.dock.LensBeadGeometry.compute(boxes, count, 0f, 0f,
-            host.getWidth(), host.getHeight(), getResources().getDisplayMetrics().density);
+        float density = getResources().getDisplayMetrics().density;
+        // The Search field under the row (#84): the beads are held to the row's own band, as
+        // they are without it, and the field stands in a glass capsule of its own under them,
+        // its view's bounds (LensBeadGeometry.withCapsule).
+        float[] fieldAt = null;
+        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+        if (mAppliedPromptFieldBandPx > 0 && field != null && field.getVisibility() == View.VISIBLE
+            && field.getParent() == findViewById(R.id.apps_bar_row_host)) {
+            fieldAt = layoutOffsetIn(field, container);
+        }
+        float bottom = host.getHeight();
+        if (fieldAt != null) {
+            fieldAt[0] -= hostAt[0];
+            fieldAt[1] -= hostAt[1];
+            int topPad = ((ViewGroup.MarginLayoutParams) field.getLayoutParams()).topMargin;
+            bottom = Math.min(bottom, fieldAt[1] - topPad);
+        }
+        com.termux.app.dock.LensBeadGeometry.Beads beads =
+            com.termux.app.dock.LensBeadGeometry.compute(boxes, count, 0f, 0f, host.getWidth(),
+                bottom, density);
+        if (beads == null || fieldAt == null) return beads;
+        return com.termux.app.dock.LensBeadGeometry.withCapsule(beads, fieldAt[0], fieldAt[1],
+            fieldAt[0] + field.getWidth(), fieldAt[1] + field.getHeight(), density);
     }
 
     /**
@@ -16321,12 +16351,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? layout.appsRowPaddingBesideTicksPx() : layout.appsTopPaddingPx;
         int appsBottomPadding = ticksLeadDockRow
             ? layout.appsBottomPaddingPx : layout.appsRowPaddingBesideTicksPx();
-        // The apps row reads with more side padding than the A–Z row because its icons are
-        // space-between (half a slot of empty space at each edge). Trim the apps-row inset ~18%
-        // so the icons sit closer to the edges and line up better with the A–Z row's letter span.
-        // Lens beads narrow the row's slots a little more, so the end beads stand clear of the
-        // screen's edges (LensBeadGeometry.ROW_SIDE_INSET_DP); every other dock adds nothing.
-        int appsContentInset = Math.round(contentInset * 0.82f) + layout.appsRowExtraSideInsetPx();
+        // The apps row's inset, trimmed from the content inset so its space-between icons line up
+        // with the A–Z row's letters, and narrowed under Lens beads so the end beads stand clear
+        // of the screen's edges (DockLayoutPolicy.appsRowSideInsetPx); the Search field's capsule
+        // under the beads is as wide as this.
+        int appsContentInset = layout.appsRowSideInsetPx();
         // And hold the icons to what a bead covers in those narrower slots: held only to the
         // slot less its 4 dp of air, a bead could not keep its gap and the dock fell back to
         // the slab on every default install.
@@ -16553,7 +16582,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // design: where the page's layout turns it on (Dress.searchField) the command palette's
     // field stands under the apps row on the same slab (DockLayout.promptFieldBandPx), in the
     // row's own host, so the dock's one glass, its shelf and its reflection are the taller slab's
-    // (Lens beads give way to the slab while it stands there); the Workspace's extra keys stay a
+    // (under Lens beads the row keeps its beads and the field stands in a glass capsule of its
+    // own under them, LensBeadGeometry.withCapsule, #84); the Workspace's extra keys stay a
     // band of their own beside it. The toggle, or a Dock style picked, in the Layout editor eases
     // the slab's height in or out over a short run of frames, each a dock pass and one re-cut of
     // its glass; nothing runs before or after it.
@@ -16744,11 +16774,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) field.getLayoutParams();
         int inset = layout.promptFieldSideInsetPx;
         if (params.height != layout.promptFieldHeightPx || params.leftMargin != inset
-            || params.rightMargin != inset || params.topMargin != 0
+            || params.rightMargin != inset || params.topMargin != layout.promptFieldTopPadPx
             || params.bottomMargin != layout.promptFieldBottomPadPx) {
             params.width = ViewGroup.LayoutParams.MATCH_PARENT;
             params.height = layout.promptFieldHeightPx;
-            params.setMargins(inset, 0, inset, layout.promptFieldBottomPadPx);
+            params.setMargins(inset, layout.promptFieldTopPadPx, inset,
+                layout.promptFieldBottomPadPx);
             field.setLayoutParams(params);
             moved = true;
         }
@@ -16762,9 +16793,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The well nests in the slab: the dock's radius less the air between them.
         float dockRadius = isRoundedDockStyle() ? resolveDockCapsuleCornerRadiusPx(
             layout.appsBarHeightPx + layout.promptFieldFullBandPx) : 0f;
-        field.setWellRadiusPx(com.termux.app.dock.WallStripRowPolicy.tileRadiusPx(dockRadius,
-            layout.promptFieldWellGapPx));
+        mPromptFieldSlabWellRadiusPx = com.termux.app.dock.WallStripRowPolicy.tileRadiusPx(
+            dockRadius, layout.promptFieldWellGapPx);
+        syncPromptFieldWell();
         return moved;
+    }
+
+    /** The well's corner radius in the slab, as the last pass laid the field out. */
+    private float mPromptFieldSlabWellRadiusPx;
+
+    /**
+     * Nests the field's well in the glass it stands on: in the slab, its corners the dock's less
+     * the air between them and the well as wide as the field; in its own capsule under Lens
+     * beads (LensBeadGeometry.withCapsule), where the field's view is the capsule, as far in from
+     * its sides as from its top and bottom, with the capsule's corners less that. Only the field
+     * redraws, and only on a change.
+     */
+    private void syncPromptFieldWell() {
+        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+        if (field == null) return;
+        com.termux.app.dock.LensBeadGeometry.Beads beads = mDockBeads;
+        if (beads != null && beads.hasCapsule()) {
+            float inset = com.termux.app.dock.DockLayoutPolicy.promptFieldWellInsetPx(
+                getResources().getDisplayMetrics().density);
+            field.setWellSideInsetPx(inset);
+            field.setWellRadiusPx(Math.max(0f, beads.capsuleRadiusPx() - inset));
+            return;
+        }
+        field.setWellSideInsetPx(0f);
+        field.setWellRadiusPx(mPromptFieldSlabWellRadiusPx);
     }
 
     /**

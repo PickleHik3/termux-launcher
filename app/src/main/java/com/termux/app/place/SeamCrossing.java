@@ -337,8 +337,9 @@ public final class SeamCrossing {
             && there.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
         // Beads melt only where one half's dock draws them and the other's does not: the
         // committed half's as they lie now, the other's as its layout lays its row out (the
-        // Workspace's extra keys, or a keyboard in the stack, keep the slab there).
-        boolean otherBeads = mOtherDesign == DockStyle.LENS_BEADS && !mOtherSearchField
+        // Workspace's extra keys, or a keyboard in the stack, keep the slab there). The Search
+        // field keeps the beads, in a capsule of its own under them (#84).
+        boolean otherBeads = mOtherDesign == DockStyle.LENS_BEADS
             && LensBeadGeometry.rowWearsBeads(there,
                 !stackDressedApart(committed.page) && stage.frameGlass.standsDown(),
                 mOtherKeyboard);
