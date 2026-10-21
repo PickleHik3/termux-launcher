@@ -511,6 +511,11 @@ public final class X11LinuxAppRunner {
                 // A desktop's exit is news whenever it comes, not only inside the window: it is
                 // what says the display is free again and the window manager can come back.
                 if (app.session) onSessionExited(app, exitCode, windowManagerRestart);
+                // 127 is the shell's "command not found": a flag cannot fix that, so no retry.
+                if (!app.session && exitCode == COMMAND_NOT_FOUND) {
+                    commandMissing();
+                    return;
+                }
                 resolve(isQuickFailure(exitCode));
             });
             if (started) {
@@ -524,6 +529,15 @@ public final class X11LinuxAppRunner {
             decided = true;
             Logger.logWarn(LOG_TAG, "No shell to run " + app.id + " in; nothing was started");
             notice(failureNotice(app));
+        }
+
+        /** The command is not installed: settle without retrying or touching the sandbox store. */
+        private void commandMissing() {
+            if (decided) return;
+            decided = true;
+            handler.removeCallbacks(timeout);
+            notice(context.getString(com.termux.R.string.termux_x11_app_command_missing,
+                app.name, LinuxAppCatalog.execBinary(app.exec)));
         }
 
         /**
@@ -566,6 +580,9 @@ public final class X11LinuxAppRunner {
             new Watch(app, display, env, null).start(script(app, display, env, true), true);
         }
     }
+
+    /** What a POSIX shell exits with when the command it was asked to run is not there. */
+    private static final int COMMAND_NOT_FOUND = 127;
 
     /** A process that has already exited with a non-zero code within the quick-fail window. */
     static boolean isQuickFailure(int exitCode) {
