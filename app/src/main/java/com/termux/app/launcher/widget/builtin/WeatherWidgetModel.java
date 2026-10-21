@@ -89,12 +89,24 @@ final class WeatherWidgetModel {
     @NonNull final String sunTime;
     @NonNull final List<Hour> hours;
     @NonNull final List<Day> days;
+    /** Minutes since the data was fetched once it is older than the cache lifetime, else -1. */
+    final int staleMinutes;
 
     WeatherWidgetModel(@NonNull String place, @NonNull String temp, @NonNull String tempBare,
                        @NonNull String condition, @NonNull String glyph, @NonNull Tone tone,
                        @NonNull String high, @NonNull String low, int humidityPct, int windKmh,
                        int rainPct, @NonNull Sun sun, @NonNull String sunTime,
                        @NonNull List<Hour> hours, @NonNull List<Day> days) {
+        this(place, temp, tempBare, condition, glyph, tone, high, low, humidityPct, windKmh,
+            rainPct, sun, sunTime, hours, days, -1);
+    }
+
+    WeatherWidgetModel(@NonNull String place, @NonNull String temp, @NonNull String tempBare,
+                       @NonNull String condition, @NonNull String glyph, @NonNull Tone tone,
+                       @NonNull String high, @NonNull String low, int humidityPct, int windKmh,
+                       int rainPct, @NonNull Sun sun, @NonNull String sunTime,
+                       @NonNull List<Hour> hours, @NonNull List<Day> days, int staleMinutes) {
+        this.staleMinutes = staleMinutes;
         this.place = place; this.temp = temp; this.tempBare = tempBare;
         this.condition = condition; this.glyph = glyph; this.tone = tone;
         this.high = high; this.low = low;
@@ -141,9 +153,11 @@ final class WeatherWidgetModel {
         int rain = -1;
         int thisHour = isos.indexOf(hourIso);
         if (thisHour >= 0) rain = weather.hourly.get(thisHour).precipProb;
-        Sun sun = nextSun(weather.sunrise, weather.sunset, now);
-        String sunTime = ClockWidgetFormats.clockText(
-            sun == Sun.RISE ? weather.sunrise : sun == Sun.SET ? weather.sunset : "", is24Hour);
+        Sun sun = nextSun(weather.sunrise, weather.sunset, weather.sunriseTomorrow, now);
+        String sunClock = sun == Sun.SET ? weather.sunset
+            : sun == Sun.RISE ? (isBefore(now, weather.sunrise) ? weather.sunrise
+                : weather.sunriseTomorrow) : "";
+        String sunTime = ClockWidgetFormats.clockText(sunClock, is24Hour);
 
         // The coming days from tomorrow, on one scale so a bar means the same thing on every row.
         List<Day> days = new ArrayList<>();
@@ -173,7 +187,19 @@ final class WeatherWidgetModel {
             Double.isNaN(weather.humidityPct) ? -1 : (int) Math.round(weather.humidityPct),
             Double.isNaN(weather.windKmh) ? -1 : (int) Math.round(weather.windKmh),
             rain, sun, sunTime,
-            Collections.unmodifiableList(hours), Collections.unmodifiableList(days));
+            Collections.unmodifiableList(hours), Collections.unmodifiableList(days),
+            staleMinutes(weather.fetchedAtMs, now.getTimeInMillis()));
+    }
+
+    /**
+     * Minutes since {@code fetchedAtMs} at {@code nowMs} once the data is older than the cache
+     * lifetime (at least 1), else -1: a fresh forecast says nothing about its age.
+     */
+    static int staleMinutes(long fetchedAtMs, long nowMs) {
+        if (fetchedAtMs <= 0L) return -1;
+        long age = nowMs - fetchedAtMs;
+        if (age < WeatherController.CACHE_TTL_MS) return -1;
+        return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, age / 60000L));
     }
 
     /** The design's sample: Kuwait City at 13:40 on a sunny Tuesday, the sun setting at 17:12. */
@@ -242,11 +268,25 @@ final class WeatherWidgetModel {
      */
     @NonNull static Sun nextSun(@NonNull String sunrise, @NonNull String sunset,
                                 @NonNull Calendar now) {
+        return nextSun(sunrise, sunset, "", now);
+    }
+
+    /**
+     * As {@link #nextSun(String, String, Calendar)}, but after today's sunset the answer is the
+     * sunrise tomorrow, when {@code sunriseTomorrow} ("HH:mm") is known.
+     */
+    @NonNull static Sun nextSun(@NonNull String sunrise, @NonNull String sunset,
+                                @NonNull String sunriseTomorrow, @NonNull Calendar now) {
+        if (isBefore(now, sunrise)) return Sun.RISE;
+        if (isBefore(now, sunset)) return Sun.SET;
+        return sunriseTomorrow.length() == 5 ? Sun.RISE : Sun.NONE;
+    }
+
+    /** Whether {@code now}'s clock is before {@code hhmm}; false when that is not "HH:mm". */
+    private static boolean isBefore(@NonNull Calendar now, @NonNull String hhmm) {
         String clock = String.format(Locale.ROOT, "%02d:%02d", now.get(Calendar.HOUR_OF_DAY),
             now.get(Calendar.MINUTE));
-        if (sunrise.length() == 5 && clock.compareTo(sunrise) < 0) return Sun.RISE;
-        if (sunset.length() == 5 && clock.compareTo(sunset) < 0) return Sun.SET;
-        return Sun.NONE;
+        return hhmm.length() == 5 && clock.compareTo(hhmm) < 0;
     }
 
     /**

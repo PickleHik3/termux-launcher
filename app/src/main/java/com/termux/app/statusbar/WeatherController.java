@@ -105,6 +105,8 @@ public final class WeatherController {
         /** Today's local sunrise/sunset as {@code HH:mm}, empty when unknown. */
         @NonNull public String sunrise = "";
         @NonNull public String sunset = "";
+        /** Tomorrow's local sunrise as {@code HH:mm}, empty when unknown: the next one after dark. */
+        @NonNull public String sunriseTomorrow = "";
         /** Nearest place name for the fix, empty when reverse geocoding is unavailable. */
         @NonNull public String locationName = "";
         /**
@@ -120,7 +122,8 @@ public final class WeatherController {
         void onWeatherUpdated(@NonNull Weather weather);
     }
 
-    private static final long CACHE_TTL_MS = 30 * 60 * 1000L;
+    /** How long a forecast is replayed before it is fetched again; older data is stale. */
+    public static final long CACHE_TTL_MS = 30 * 60 * 1000L;
 
     /**
      * The place picked in Settings: the label the header shows and the coordinates the forecast is
@@ -381,6 +384,7 @@ public final class WeatherController {
             // Today's pair only: the card draws the daylight track for the day it is showing.
             w.sunrise = clockOf(daily.optJSONArray("sunrise"));
             w.sunset = clockOf(daily.optJSONArray("sunset"));
+            w.sunriseTomorrow = clockOf(daily.optJSONArray("sunrise"), 1);
             JSONArray uv = daily.optJSONArray("uv_index_max");
             if (uv != null && uv.length() > 0) w.uvIndexMax = uv.optDouble(0, Double.NaN);
         }
@@ -389,8 +393,14 @@ public final class WeatherController {
     /** {@code HH:mm} out of the first entry of an Open-Meteo local-ISO array. */
     @NonNull
     private static String clockOf(@Nullable JSONArray isoTimes) {
-        if (isoTimes == null || isoTimes.length() == 0) return "";
-        String iso = isoTimes.optString(0, "");
+        return clockOf(isoTimes, 0);
+    }
+
+    /** {@code HH:mm} out of entry {@code index} of an Open-Meteo local-ISO array. */
+    @NonNull
+    private static String clockOf(@Nullable JSONArray isoTimes, int index) {
+        if (isoTimes == null || isoTimes.length() <= index) return "";
+        String iso = isoTimes.optString(index, "");
         int t = iso.indexOf('T');
         return t >= 0 && iso.length() >= t + 6 ? iso.substring(t + 1, t + 6) : "";
     }
@@ -532,6 +542,7 @@ public final class WeatherController {
         dst.feelsLikeC = src.feelsLikeC;
         dst.sunrise = src.sunrise;
         dst.sunset = src.sunset;
+        dst.sunriseTomorrow = src.sunriseTomorrow;
         dst.locationName = src.locationName;
         dst.requestedPlace = src.requestedPlace;
         dst.currentCode = src.currentCode;

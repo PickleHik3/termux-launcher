@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.fragments.settings.termux.WeatherPlacePickerDialog;
 import com.termux.app.statusbar.WeatherController;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -37,6 +38,7 @@ public class WeatherWidgetView extends BuiltinWidgetView {
     private long shownFetchedAt = -1L;
     private boolean shownFahrenheit;
     @NonNull private String shownHour = "";
+    private int shownStale = -1;
     @Nullable private String shownError;
 
     public WeatherWidgetView(@NonNull Context context, @NonNull BuiltinWidgetServices services,
@@ -61,6 +63,14 @@ public class WeatherWidgetView extends BuiltinWidgetView {
 
     @Override protected void onTap() {
         if (isPreview()) return;
+        if (latest == null && "no-location".equals(error)) {
+            // No fix to refresh from: offer the status bar's place picker, then fetch for it.
+            WeatherPlacePickerDialog.show(getContext(), () -> {
+                WeatherController c = controller;
+                if (c != null) c.forceRefresh();
+            });
+            return;
+        }
         WeatherController current = controller;
         if (current != null) current.forceRefresh();
     }
@@ -70,7 +80,8 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         if (weather.valid) {
             boolean unchanged = weather == latest && weather.fetchedAtMs == shownFetchedAt
                 && fahrenheit() == shownFahrenheit
-                && currentHour().equals(shownHour);
+                && currentHour().equals(shownHour)
+                && staleNow(weather) == shownStale;
             latest = weather;
             error = null;
             if (unchanged) return;
@@ -89,7 +100,12 @@ public class WeatherWidgetView extends BuiltinWidgetView {
 
     /** The strip is "the next hours": move it on when the hour turns. */
     private void onTick() {
-        if (latest != null && !currentHour().equals(shownHour)) redraw();
+        if (latest != null && (!currentHour().equals(shownHour)
+            || staleNow(latest) != shownStale)) redraw();
+    }
+
+    private static int staleNow(@NonNull WeatherController.Weather weather) {
+        return WeatherWidgetModel.staleMinutes(weather.fetchedAtMs, System.currentTimeMillis());
     }
 
     private void redraw() {
@@ -131,6 +147,7 @@ public class WeatherWidgetView extends BuiltinWidgetView {
             shownFetchedAt = latest.fetchedAtMs;
             shownFahrenheit = fahrenheit;
             shownHour = WeatherWidgetModel.currentHourIso(now);
+            shownStale = model.staleMinutes;
         }
         String empty = "";
         if (model == null) {
@@ -145,9 +162,10 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         String message = empty;
         float fontScale = getResources().getConfiguration().fontScale;
         WeatherLayoutPlanner.Words words = words();
+        boolean offerPlace = model == null && !isPreview() && "no-location".equals(error);
         frame.addView(new WidgetPlanView(getContext(), style(), (widthDp, heightDp, measure) ->
-            WeatherLayoutPlanner.plan(span, widthDp, heightDp, fontScale, shown, message, words,
-                measure)), matchParent());
+            WeatherLayoutPlanner.plan(span, widthDp, heightDp, fontScale, shown, message,
+                offerPlace, words, measure)), matchParent());
     }
 
     /** The plan's words, from the app's strings. */
@@ -175,6 +193,12 @@ public class WeatherWidgetView extends BuiltinWidgetView {
             @NonNull @Override public String nextDays(int count) {
                 return context.getResources().getQuantityString(
                     R.plurals.bw_feeds_weather_next_days, count, count);
+            }
+            @NonNull @Override public String updatedAgo(int minutes) {
+                return context.getString(R.string.bw_feeds_weather_updated_ago, minutes);
+            }
+            @NonNull @Override public String setAPlace() {
+                return context.getString(R.string.bw_feeds_weather_set_place);
             }
             @NonNull @Override public String tapToRefresh() {
                 return context.getString(R.string.bw_feeds_weather_tap_refresh);
