@@ -219,7 +219,8 @@ public class WeatherLayoutPlanTest {
     @Test public void theTwoByOneAddsTheConditionTheDetailsAndTheNextSunTime() {
         WidgetLayoutPlan plan = design(BuiltinWidgetSpan.TWO_BY_ONE, typical());
         assertEquals("Partly cloudy", plan.part("condition").text);
-        assertEquals("H 24 · L 15 · 10% rain", plan.part("details").text);
+        // The whole line is wider than the design 2×1's column: the rain chance goes, not cut.
+        assertEquals("H 24 · L 15", plan.part("details").text);
         assertEquals("Sunset 19:42", plan.part("sun").text);
         assertTrue(plan.partsStartingWith("hour.").isEmpty());
         assertTrue(plan.partsStartingWith("day.").isEmpty());
@@ -272,6 +273,39 @@ public class WeatherLayoutPlanTest {
             t.glyph, t.tone, t.high, t.low, t.humidityPct, t.windKmh, 0, t.sun, t.sunTime, t.hours,
             t.days);
         assertEquals("H 24 · L 15", design(BuiltinWidgetSpan.TWO_BY_ONE, dry).part("details").text);
+    }
+
+    /**
+     * The details line is never cut (emulator, build 7dbf41b90: a 2×1 showed "H 12 · L 9 · 5%…"):
+     * where the whole line does not fit it drops the rain chance, then takes the short range, then
+     * goes. Checked at every span, size and font scale.
+     */
+    @Test public void theDetailsTakeAShorterFormRatherThanBeingCut() {
+        WeatherWidgetModel t = typical();
+        List<String> forms = Arrays.asList("H 24 · L 15 · 10% rain", "H 24 · L 15", "24 / 15");
+        boolean shortened = false;
+        for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+            for (float[] size : sizes(span)) {
+                for (float scale : FONT_SCALES) {
+                    for (WeatherWidgetModel model : Arrays.asList(t, longWords())) {
+                        WidgetLayoutPlan plan = plan(span, size[0], size[1], scale, model);
+                        Part details = plan.part("details");
+                        if (details == null) continue;
+                        String where = span + " " + size[0] + "x" + size[1] + " font " + scale
+                            + ": " + details.text;
+                        float natural = MEASURE.widthDp(details.text, details.role,
+                            details.numeric, details.sizeDp);
+                        assertTrue(where + " is cut to " + details.box.width,
+                            natural <= details.box.width + WidgetLayoutPlan.EPSILON);
+                        if (model == t) {
+                            assertTrue(where, forms.contains(details.text));
+                            if (!details.text.equals(forms.get(0))) shortened = true;
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue("some card is narrow enough to shorten the line", shortened);
     }
 
     @Test public void theEmptyCardSaysWhyAndHowToRetry() {
