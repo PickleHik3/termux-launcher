@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "fix(chrome): fullscreen claims the status bar's band over the cutout" ·
+  With fullscreen on, the window bar sits at the top edge with no empty band, in the terminal and
+  the Display place; with it off, nothing moved. Look at where the camera hole lands on the window
+  bar's chips and say whether anything is covered · pong (punch-hole), release build.
 - 2026-10-21 · commit "fix(x11): termux-x11-gpu-setup puts back only what it installed, also when
   stopped" · Passed on the emulator (apt) 2026-10-21: a full run, Ctrl-C after glmark2 went in and
   Ctrl-C during the apt install all left the package list as before. Still owed: (a) pacman: the
