@@ -721,13 +721,13 @@ public final class ClockFaceRenderer {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
                 return dp(94f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                return spacedTextWidth(timeText(), minimalTypeface(), 38f, -.02f) + gap;
+                return glyphRunWidth(timeText(), minimalTypeface(), 38f, -.02f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
                 return dotTextWidth(timeText(), LED_CELL_FRACTION * dp(26f)) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + gap;
+                return glyphRunWidth(timeText(), Typeface.MONOSPACE, 28f, -.02f) + gap;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + gap;
+                return glyphRunWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + gap;
             default:
                 return dp(flipRowWidthDp(FULL_FLIP_CARD_DP, FULL_FLIP_DIGIT_GAP_DP)) + gap;
         }
@@ -805,13 +805,13 @@ public final class ClockFaceRenderer {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD:
                 return dp(61f) + dp(5f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
-                return spacedTextWidth(timeText(), minimalTypeface(), 26f, -.02f) + dp(5f);
+                return glyphRunWidth(timeText(), minimalTypeface(), 26f, -.02f) + dp(5f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED:
                 return dotTextWidth(timeText(), LED_CELL_FRACTION * dp(16f)) + dp(5f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
-                return spacedTextWidth(timeText(), Typeface.MONOSPACE, 18f, -.02f) + dp(4f);
+                return glyphRunWidth(timeText(), Typeface.MONOSPACE, 18f, -.02f) + dp(4f);
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
-                return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f);
+                return glyphRunWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f);
             default:
                 // The cards, then the gap to the meta column plus the ink that glyphs and the card
                 // shadow carry past their advance.
@@ -2300,6 +2300,25 @@ public final class ClockFaceRenderer {
         mPaint.setTextSize(sp(textDp));
         float width = mTextWidths.width(text, typeface, mPaint.getTextSize(), letterSpacing,
             mMeasure);
+        mPaint.setLetterSpacing(0f);
+        return width;
+    }
+
+    /**
+     * Width of {@code text} as {@link #drawFadingTime} paints it: a glyph at a time, so no pair is
+     * kerned. Measuring the whole run kerned it ("11" sits tighter in Roboto), and once the face
+     * was scaled up to fill a widget the gap the model missed pushed the period off the box's
+     * edge, clipped to "P".
+     */
+    private float glyphRunWidth(String text, Typeface typeface, float textDp, float letterSpacing) {
+        mPaint.setTypeface(typeface);
+        mPaint.setLetterSpacing(letterSpacing);
+        mPaint.setTextSize(sp(textDp));
+        float width = 0f;
+        for (int i = 0; i < text.length(); i++) {
+            width += mTimeAdvances.advance(text.charAt(i), typeface, mPaint.getTextSize(),
+                letterSpacing, mMeasure);
+        }
         mPaint.setLetterSpacing(0f);
         return width;
     }
