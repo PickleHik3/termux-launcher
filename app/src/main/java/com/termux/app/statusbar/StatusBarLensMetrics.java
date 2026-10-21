@@ -304,8 +304,9 @@ public final class StatusBarLensMetrics {
     /**
      * Every mark the bar shows, in the order the places sit side by side. A place that has left —
      * dissolved past the end it was travelling towards — is simply absent, and nothing on it can be
-     * drawn or tapped. Home never has one ({@link PaneWallPage#WIDGETS}). A wall of one place — terminal mode — shows no marks at all: there is
-     * nowhere to go, so a mark would be a pager for nothing.
+     * drawn or tapped. Home never has one ({@link PaneWallPage#WIDGETS}). A wall of one place —
+     * terminal mode — shows no marks at all: there is nowhere to go, so a mark would be a pager for
+     * nothing.
      */
     @NonNull
     public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
@@ -350,8 +351,8 @@ public final class StatusBarLensMetrics {
 
         for (int index = 0; index < pages.size(); index++) {
             PaneWallPage page = pages.get(index);
-            // Home wears no mark: the bar starts with its window chips, and the home press, the
-            // swipe and the Drawer tile are the ways there.
+            // Home wears no mark: the bar starts with its window chips, and the home press and the
+            // swipe are the ways there.
             if (page == PaneWallPage.WIDGETS) continue;
             float t = StatusBarLensPolicy.distance(pages, current, page, offsetPx, wallWidthPx);
             float presence = StatusBarLensPolicy.presence(t);
