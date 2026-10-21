@@ -62,9 +62,16 @@ public final class MinimisedDotDrawable extends Drawable {
         mPaint.setAlpha(mAlpha);
         boolean rtl = mHost.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
         float radius = mSizePx / 2f;
-        float cx = rtl ? getBounds().left + mInsetPx + radius
-            : getBounds().right - mInsetPx - radius;
-        canvas.drawCircle(cx, getBounds().top + mInsetPx + radius, radius, mPaint);
+        // A view's foreground scrolls with its content, and a chip's title is one centred line,
+        // which a TextView lays out very wide and scrolls into view: the chip sits half a million
+        // pixels in, and the dot drawn at its bounds alone landed far outside the chip (the
+        // 10-21 emulator check's dimmed chip with no dot). The background is put back in place
+        // for the scroll by the view itself; the foreground is not, so the mark does it.
+        float sx = mHost.getScrollX();
+        float sy = mHost.getScrollY();
+        float cx = sx + (rtl ? getBounds().left + mInsetPx + radius
+            : getBounds().right - mInsetPx - radius);
+        canvas.drawCircle(cx, sy + getBounds().top + mInsetPx + radius, radius, mPaint);
     }
 
     @Override public void setAlpha(int alpha) {
