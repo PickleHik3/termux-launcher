@@ -16,9 +16,12 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-21 · commit "feat(chrome): Home follows the Workspace's layout and shape" (#88) · A
   fresh install shows the same dock rows, dock height and glass shape (Style, Corners, Margin) on
   Home and on the first window, and the swipe between them does not re-dress the dock; minimal
-  mode on from a window makes Home minimal too; an upgrade from a build whose Home layout or Home
+  mode on from a window leaves Home as it was (see the next item); an upgrade from a build whose Home layout or Home
   shape differed keeps Home exactly as it was (Home layout on) · emulator, fresh install then an
   install over a pre-#88 build with a Home dock height or Margin set apart.
+- 2026-10-21 · commit "fix(chrome): Home ignores minimal mode; the palette's Minimal action" · Minimal
+  on in a window, then swipe Home: Home keeps its dock and layout; the palette's Minimal action
+  toggles minimal from Home and from a window · emulator.
 - 2026-10-21 · commit "feat(layout-editor): the Home layout switch" (#89) · Layout menu shows
   the Home layout choice; on → editing on Home changes only Home; off → Home matches the
   Workspace again; the menu's look is unchanged otherwise (the choice is the one segment beside

@@ -126,6 +126,8 @@ public final class ExtraKeyEligibility {
         // Dictation types wherever the keyboard would, a Home search or a display as much as a
         // shell, and copies where nothing takes typing.
         tools.put(LauncherToolRegistry.TOOL_VOICE_DICTATE, Band.LAUNCHER);
+        // Minimal mode is the windows', but the switch is the launcher's, on every page.
+        tools.put(LauncherToolRegistry.TOOL_MINIMAL_TOGGLE, Band.LAUNCHER);
         // The dock and the key row are chrome every place wears.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_EXTRA_KEYS_EDIT, Band.LAUNCHER);

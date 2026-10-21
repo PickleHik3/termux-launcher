@@ -22836,20 +22836,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * works as it does in the normal layout.
      */
     void setMinimalMode(boolean minimal) {
-        // Home has no minimal mode: the Workspace's flag is not changed from a Home page.
-        if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS) return;
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null || store.isMinimal() == minimal) return;
         com.termux.app.wall.PaneWallPage place = mLastWallPage;
+        // Home ignores minimal mode (it is the windows' alone), so from Home only the flag moves:
+        // Home's keyboard is its own, and the window's memory stays as it was left.
+        boolean onHome = place == com.termux.app.wall.PaneWallPage.WIDGETS;
         // Recorded before the mode is on, since minimal mode records nothing.
-        if (minimal) rememberPlaceKeyboard(place);
+        if (minimal && !onHome) rememberPlaceKeyboard(place);
         store.setMinimal(minimal);
-        if (minimal && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+        if (minimal && !onHome && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
             mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .HideReason.KEYBOARD_ACTION);
         }
         syncChromeArrangement();
-        if (!minimal) applyPlaceKeyboard(place);
+        if (!minimal && !onHome) applyPlaceKeyboard(place);
         invalidateMinimalModeGlyphs();
     }
 
@@ -30984,6 +30985,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean toggleDisplayFrameKeyboard() {
             return TermuxActivity.this.toggleDisplayFrameKeyboard();
+        }
+
+        @Override public boolean toggleMinimalMode() {
+            setMinimalMode(!TermuxActivity.this.isMinimalMode());
+            return TermuxActivity.this.isMinimalMode();
         }
 
         @Override public boolean toggleVoiceDictation() {

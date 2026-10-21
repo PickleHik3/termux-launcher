@@ -2244,6 +2244,8 @@
     <string name="tool_keyboard_hide">Hide keyboard</string>
     <string name="tool_keyboard_clipboard">Clipboard history</string>
     <string name="tool_keyboard_toggle_enabled">Keyboard on/off</string>
+    <string name="tool_minimal_toggle">Minimal on/off</string>
+    <string name="tool_desc_minimal_toggle">Turn minimal mode on or off. Only the windows wear it; Home keeps its layout.</string>
     <string name="tool_voice_dictate">Dictate</string>
     <string name="tool_desc_voice_dictate">Start dictating, or stop. The text waits in the panel until you insert or copy it.</string>
     <string name="tool_desc_keyboard_clipboard">Open or close the list of things you copied.</string>

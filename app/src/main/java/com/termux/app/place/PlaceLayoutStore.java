@@ -353,7 +353,7 @@ public final class PlaceLayoutStore {
     /**
      * The variant a page's chrome is arranged by, and the one the Layout editor opened on it
      * edits: the layout the page's dress wears ({@link DressResolver#layoutOf}), the Workspace's
-     * (normal or minimal) on every page, Home's own on a Home page while it holds a Home layout.
+     * (normal or minimal) on a window, the normal one or Home's own on a Home page while it holds a Home layout.
      */
     @NonNull
     public LayoutVariant variantFor(@NonNull PaneWallPage page) {
@@ -389,14 +389,14 @@ public final class PlaceLayoutStore {
 
     /**
      * Turns the Home layout on or off. Turned on, Home's copy starts as what Home wore on the
-     * shared layout (the Workspace's layout as minimal mode has it, its Dock design, toggles and
+     * shared layout (the Workspace's normal layout, its Dock design, toggles and
      * Style, Corners and Margin), so nothing on screen moves until the user edits it; the widget
      * grid and always on are Home's either way and are left alone. Turned off, Home wears the
      * shared layout again and its copy is no longer read.
      */
     public void setHomeLayout(boolean on) {
         if (mStore == null || hasHomeLayout() == on) return;
-        if (on) copyIntoHomeLayout(LayoutVariant.of(isMinimal()));
+        if (on) copyIntoHomeLayout(LayoutVariant.NORMAL);
         writeBoolean(homeLayoutKey(), on);
     }
 
@@ -453,6 +453,24 @@ public final class PlaceLayoutStore {
             }
             if (Float.compare(first.dockHeightScale(orientation),
                     second.dockHeightScale(orientation)) != 0)
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether two layouts hold a different keyboard, in either orientation: its height, its chin
+     * and its form. Apart from {@link #arrangementsDiffer}, which leaves them out, since only the
+     * migration to one layout asks, and only while Home's keyboard is always on.
+     */
+    private boolean keyboardsDiffer(@NonNull LayoutVariant a, @NonNull LayoutVariant b) {
+        PlaceLayoutStore first = forVariant(a);
+        PlaceLayoutStore second = forVariant(b);
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            if (Float.compare(first.keyboardHeightScale(orientation),
+                    second.keyboardHeightScale(orientation)) != 0
+                || first.keyboardChinDp(orientation) != second.keyboardChinDp(orientation)
+                || first.keyboardForm(orientation) != second.keyboardForm(orientation))
                 return true;
         }
         return false;
@@ -1339,8 +1357,9 @@ public final class PlaceLayoutStore {
     /**
      * Version 9: one layout dresses both halves (ADR 0009). Home's saved arrangement (in either
      * orientation, where the dock's rows stand, whether each is put away, their order, which
-     * stand under the keyboard, and the dock's height: {@link #arrangementsDiffer}) and Home's
-     * Style, Corners and Margin are compared with the Workspace's normal ones. Where anything
+     * stand under the keyboard, and the dock's height: {@link #arrangementsDiffer}; and, only
+     * while Home's keyboard is always on, the keyboard's height, chin and form: {@link
+     * #keyboardsDiffer}) and Home's Style, Corners and Margin are compared with the Workspace's normal ones. Where anything
      * differs the Home layout is turned on and Home keeps every value it had, so nothing on screen
      * changes. Where nothing does, Home wears the shared layout and its own arrangement and shape
      * keys go; the widget grid and always on are Home's either way and stay. The Dock design is
@@ -1354,7 +1373,9 @@ public final class PlaceLayoutStore {
         String style = mStore.getString(legacyStyle, null);
         String tile = mStore.getString(legacyTile, null);
         boolean differs = homeHoldsArrangement()
-            && arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL);
+            && (arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL)
+                || (isHomeKeyboardAlwaysOn()
+                    && keyboardsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL)));
         differs |= !halfShape(true).equals(halfShape(false));
 
         SharedPreferences.Editor editor = mStore.edit();

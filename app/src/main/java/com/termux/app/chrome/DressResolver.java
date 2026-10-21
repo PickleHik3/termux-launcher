@@ -18,9 +18,10 @@ import java.util.Set;
  * asked here rather than as a page check per surface (ADR 0009, "Deepenings").
  *
  * <p>One layout dresses both halves (ADR 0009, build step 1). A <b>window</b> wears the
- * Workspace's layout whole, the minimal one while minimal mode is on, in the Workspace's Style,
+ * Workspace's layout whole, the minimal one while minimal mode is on (minimal mode is the
+ * windows' alone), in the Workspace's Style,
  * Corners and Margin, its dock the tray it has always been (until #93 gives it the layout's
- * design). A <b>Home page</b> wears the same layout less the extra keys, in the same Style,
+ * design). A <b>Home page</b> wears the normal layout less the extra keys, in the same Style,
  * Corners and Margin, its dock the Dock design that layout holds, unless Home holds a <b>Home
  * layout</b> of its own: then it wears that ({@link LayoutVariant#HOME}), whatever minimal mode
  * says, in Home's own Style, Corners and Margin and the design picked for it. Until the bar on
@@ -101,11 +102,14 @@ public final class DressResolver {
 
     /**
      * The layout the page wears ({@link Dress#layout}), read without the rest of the dress: the
-     * question the stack's sizes ask on every pass. Home's own only while it holds one.
+     * question the stack's sizes ask on every pass. Home's own only while it holds one, else the
+     * normal layout: minimal mode is the windows' alone.
      */
     @NonNull
     public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS && mSource.homeLayout()) return LayoutVariant.HOME;
+        if (page == PaneWallPage.WIDGETS) {
+            return mSource.homeLayout() ? LayoutVariant.HOME : LayoutVariant.NORMAL;
+        }
         return LayoutVariant.of(mSource.minimal());
     }
 
