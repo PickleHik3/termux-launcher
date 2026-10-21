@@ -21847,6 +21847,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (it only acts on a change), as the settle from the Workspace's window always did.
         if (!commitWallPage(page) && !remember) syncChromeArrangement();
         applyPlaceKeyboard(page);
+        // Wherever the wall came to rest, a restored float's landing has been had.
+        mKeyboardForRestoredFloat = false;
     }
 
     /**
@@ -22949,8 +22951,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mInAppKeyboard != null && mInAppKeyboard.isVisible() && !mTravelKeyboardPreRolled;
     }
 
+    /**
+     * A float's chip sent the wall to Home to bring the float back focused, with the keyboard up
+     * (showHomeFloat): Home wants its keyboard on this one landing. Cleared when the wall rests.
+     */
+    private boolean mKeyboardForRestoredFloat;
+
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
+        if (mKeyboardForRestoredFloat && place == com.termux.app.wall.PaneWallPage.WIDGETS)
+            return true;
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && com.termux.app.place.PlaceKeyboard.keyboardOnEnter(place,
             store.wasKeyboardOpen(place), store.isMinimal(), store.isHomeKeyboardAlwaysOn());
@@ -28361,6 +28371,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The empty Home page's hint steps out from under the drawer and the palette, both
+     * see-through, as it does from under a float (WidgetEmptyHintPolicy).
+     */
+    private void attachWidgetHintCover() {
+        View view = findViewById(R.id.widget_pane);
+        if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
+        ((com.termux.app.launcher.widget.WidgetPaneView) view).setEmptyHintCover(
+            new com.termux.app.launcher.widget.WidgetPaneView.HintCover() {
+                @Override public boolean drawerUp() { return isAppDrawerEngaged(); }
+                @Override public boolean paletteUp() { return isCommandPaletteOpen(); }
+            });
+    }
+
+    /**
      * Where the wall starts: the row position a recreation saved, or on a cold start the page
      * Start in names (Home page 1, or the Workspace). After the widget pane controller exists, so
      * Home can be turned to the right page, and where Home's swipe is given the seam.
@@ -28370,6 +28394,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) {
             mWidgetPaneController.setSeam(mPaneWallController.homeSeam());
         }
+        attachWidgetHintCover();
         Bundle state = mPendingWallState;
         mPendingWallState = null;
         if (mPaneWallController.restoreInstanceState(state)) return;
@@ -29388,6 +29413,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mPaneWallController != null
             && mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS) {
+            // Home comes back with its keyboard down, so the slide's landing put away the one this
+            // asks for and the float grew back to its own shape, taller than it was minimised.
+            // This landing keeps it: the slide carries it to Home, and the float meets it there.
+            mKeyboardForRestoredFloat = true;
             mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
         }
         mPaneController.restoreHomeFloat(window);
