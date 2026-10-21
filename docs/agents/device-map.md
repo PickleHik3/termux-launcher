@@ -129,3 +129,7 @@ ad -s emu runas com.termux 'launcherctl pane list'
   changes. After installing a build that changed one, check `$PREFIX/bin/termux-x11-gpu-setup`
   is the new one before testing it.
 - The emulator has no proot-distro, so container checks need a device that has one.
+- The X11 installer's marker is `$PREFIX/libexec/termux-launcher/x11/.installed` ("… v14").
+- Each `ad runas` call is a new shell: keep a pane id in a file (`$HOME/pid`) between calls.
+- The Benchmark graphics toast shows on the launcher after Settings closes: `ad frames 6 <dir> --
+  tap "Benchmark graphics"` and read the last frames.
