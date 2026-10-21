@@ -136,4 +136,19 @@ public class ClockZonesPlanTest {
         assertTrue("a Clock with no zone stored shows none",
             ClockWidgetSettings.zones(new Bundle()).isEmpty());
     }
+
+    /** Clearing both zones in the sheet and saving stores the "none", so the old cities stay gone. */
+    @Test public void aMigratedAnalogWhoseZonesAreClearedInTheSheetStaysCleared() {
+        java.util.Map<String, String> saved = new java.util.LinkedHashMap<>();
+        saved.put(ClockWidgetSettings.KEY_FACE, ClockFace.ANALOG.key);
+        saved.put(ClockWidgetSettings.KEY_ZONE1, "");
+        saved.put(ClockWidgetSettings.KEY_ZONE2, "");
+        saved.put(BuiltinWidgetGlass.CONFIG_KEY, "");
+        Bundle stored = BuiltinWidgetHost.configOf(saved);
+        assertFalse("an empty non-zone field is still left out",
+            stored.containsKey(BuiltinWidgetGlass.CONFIG_KEY));
+        Bundle opened = BuiltinWidgetAliases.settings("clock.analog", stored);
+        assertTrue("no London or Kolkata merged back",
+            ClockWidgetSettings.zones(opened).isEmpty());
+    }
 }
