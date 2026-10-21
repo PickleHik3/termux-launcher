@@ -14,7 +14,7 @@ import java.util.List;
  * order, the display window's chip at its place among the terminal windows' like any window's
  * (ADR 0008, amended 2026-10-19), then the Home floats in the order they were opened, each marked
  * minimised or not. Every surface that shows window chips adapts this list ({@link Surface}): the
- * bar and its window column, Home's Taskbar run strip and the Wall strip's tiles. A minimised
+ * bar and its window column, the Wall strip's tiles. A minimised
  * float folds into its chip in the bar, on both halves (#91), and comes back from it. This is
  * also the one place that says which chip is selected and what a tap or a close on a chip means
  * ({@link Meaning}); the activity carries the meaning out.
@@ -36,9 +36,7 @@ public final class WindowChips<W> {
          * Workspace in, a float's in the Workspace travels Home.
          */
         BAR,
-        /** Home's Taskbar run strip: every chip; a window's tap slides the Workspace in. */
-        RUN_STRIP,
-        /** The Wall strip's tiles: as the run strip. */
+        /** The Wall strip's tiles: every chip; a window's tap slides the Workspace in. */
         WALL_STRIP
     }
 
@@ -232,7 +230,7 @@ public final class WindowChips<W> {
         if (chip.kind == Kind.HOME_FLOAT)
             return new Meaning<>(Meaning.Action.RESTORE_FLOAT, -1, chip.window, !mHome);
         return new Meaning<>(Meaning.Action.SHOW_WINDOW, chip.row, null,
-            surface == Surface.RUN_STRIP || surface == Surface.WALL_STRIP
+            surface == Surface.WALL_STRIP
                 || surface == Surface.BAR && mHome);
     }
 

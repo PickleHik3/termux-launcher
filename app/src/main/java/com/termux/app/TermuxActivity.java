@@ -1844,7 +1844,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
-                    || frame == mFrameGutterBackdropBitmap || frame == mRunStripBackdropBitmap
+                    || frame == mFrameGutterBackdropBitmap
                     || (mLookGlass != null && mLookGlass.holds(frame))
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
@@ -3187,18 +3187,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.redressFromState();
         applyTerminalSurfaceAppearance();
         updateTerminalGlassFrost();
-        refreshRunStripLook(true);
-    }
-
-    /**
-     * The run strip follows a theme, scheme or Material You change made without recreating the
-     * activity: its ink re-reads the theme, and its glass rebuilds ({@code force}, from a chrome
-     * restyle) or rebuilds when the theme's glass base moved.
-     */
-    private void refreshRunStripLook(boolean force) {
-        if (mRunStrip == null) return;
-        mRunStrip.refreshTheme();
-        applyRunStripGlass(force);
     }
 
     private void applyTerminalSurfaceAppearance() {
@@ -3223,8 +3211,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // applyInAppKeyboardSurfaceState — stays glass. doApplyChromeSpec owns extrakeys_background
         // and builds it from the glass model; nothing else may write it.
         applyGlassSurfaceColor(R.id.activity_termux_bottom_space_background, accessoryBaseColor);
-        // The run strip stands on the dock's glass: it follows the same base.
-        refreshRunStripLook(false);
 
         if (wallpaperMode) {
             boolean showSurface = shouldShowTerminalOverlaySurface();
@@ -4170,8 +4156,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View gutterBody = frameGlassHost();
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
-        // So does the run strip, and it lets go of it once it is off screen.
-        applyRunStripGlass(false);
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -16523,7 +16507,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleDockSurface() {
         if (mPreferences == null || mChrome == null) return;
         syncDockBeadsListeners();
-        // The Taskbar's Home tile and run strip come and go with the spec.
+        // The Taskbar's Home tile comes and go with the spec.
         syncTaskbar();
         // The glass is re-cut even where the geometry did not move: its features are the spec's.
         mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
@@ -16539,48 +16523,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     //
     // The Taskbar (DockSurfaceSpec.TASKBAR): the dock row holds a Home tile among the apps
     // (SuggestionBarView.setHomeTile, where it stands persisted in PlaceLayoutStore) on whichever
-    // half's dock wears the design (#93), and on Home the run strip (RunStripView) floats above
-    // the dock on its own thin glass while anything runs. The strip rides in Home's float layer,
-    // so it slides with Home and is never on the Workspace (it goes in #95); it is fed from the same window chips as the Workspace's
-    // bar (syncWindowBarItems), built on Home too. Nothing here runs at rest.
+    // half's dock wears the design (#93). Windows live in the status bar's window chips alone
+    // (#95): nothing stands above the dock for them. Nothing here runs at rest.
 
-    /** The run strip, built with Home's float layer; null before. */
-    @Nullable private com.termux.app.dock.RunStripView mRunStrip;
-    /** Whether the floats' room last gave up the strip's band ({@link #syncHomeFloatObstructions}). */
-    private boolean mRunStripBandTaken;
-    /** Whether the strip is fading out because nothing runs any more. */
-    private boolean mRunStripLeaving;
-    /** The shared frame the strip's glass draws, for the blur cache's in-use scan. */
-    @Nullable private Bitmap mRunStripBackdropBitmap;
-    /** What the strip's glass was last built from; null while it has none. */
-    @Nullable private List<Object> mRunStripGlassKey;
-
-    /** The air between the strip and the edge under it (the dock's dashes, or the keyboard). */
-    private static final float RUN_STRIP_AIR_DP = 6f;
-    /**
-     * The strip's corner radius: an entry's own (RunStripView.ENTRY_RADIUS_DP, 9 dp) and the
-     * 7 dp between an entry and the strip's edge, so the lit entry nests in the slab.
-     */
-    private static final float RUN_STRIP_RADIUS_DP = 16f;
-    /** The least air the strip keeps from the screen's sides, where the dock's slab has none. */
-    private static final float RUN_STRIP_SIDE_DP = 8f;
-
-    /** Whether Home's dock wears the Taskbar, so its run strip is wanted (Home's alone, #95). */
-    private boolean runStripWanted() {
-        return mPreferences != null && isSplitPanesEnabled()
-            && mDresses.dockDesignOf(com.termux.app.wall.PaneWallPage.WIDGETS)
-                == com.termux.app.dock.DockStyle.TASKBAR;
-    }
-
-    /** The Home tile and the run strip follow the dock's spec: both on the Taskbar, neither elsewhere. */
+    /** The Home tile follows the dock's spec: on the Taskbar, none elsewhere. */
     private void syncTaskbar() {
         syncTaskbarHomeTile();
-        if (!runStripWanted()) {
-            setRunStripEntries(java.util.Collections.emptyList());
-        } else {
-            com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
-            if (bar != null && isWidgetsPageShowing()) syncWindowBarItems(bar);
-        }
     }
 
     /**
@@ -16621,186 +16569,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 syncTaskbarHomeTile();
             }
         };
-
-    /**
-     * Feeds the run strip on Home from the window chips ({@code chips}, dressed as {@code items}
-     * by {@link #windowChipItems}): the row's windows, the display window's at its place, then
-     * the Home floats, a minimised one marked; the lit entry is the Home float in focus, else the
-     * window the Workspace has in front.
-     */
-    private void syncRunStrip(@NonNull com.termux.app.chrome.WindowChips<
-                com.termux.app.terminal.TerminalPaneController.Window> chips,
-            @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items) {
-        if (mRunStrip == null) return;
-        if (!runStripWanted() || mPaneController == null) {
-            setRunStripEntries(java.util.Collections.emptyList());
-            return;
-        }
-        setRunStripEntries(com.termux.app.dock.RunStripModel.of(chips,
-            com.termux.app.chrome.WindowChips.Surface.RUN_STRIP, items,
-            getString(R.string.launcher_entry_new_window)));
-    }
-
-    /**
-     * The strip shows {@code entries}: it eases in as the first window starts, and eases away
-     * when nothing runs any more; between, the entries change in place.
-     */
-    private void setRunStripEntries(
-            @NonNull java.util.List<com.termux.app.dock.RunStripModel.Entry> entries) {
-        com.termux.app.dock.RunStripView strip = mRunStrip;
-        if (strip == null) return;
-        boolean show = com.termux.app.dock.RunStripModel.isShown(entries);
-        boolean reduced = isReducedMotionEnabled();
-        if (show) {
-            boolean arriving = strip.getVisibility() != View.VISIBLE || mRunStripLeaving;
-            if (mRunStripLeaving) {
-                mRunStripLeaving = false;
-                strip.animate().cancel();
-            }
-            strip.setEntries(entries);
-            if (!arriving) return;
-            if (!reduced) {
-                if (strip.getAlpha() >= 1f) strip.setAlpha(0f);
-                strip.animate().alpha(1f).setDuration(180L)
-                    .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
-            } else {
-                strip.setAlpha(1f);
-            }
-            onRunStripShownChanged();
-            return;
-        }
-        if (strip.getVisibility() != View.VISIBLE || mRunStripLeaving) return;
-        if (reduced) {
-            strip.setEntries(entries);
-            onRunStripShownChanged();
-            return;
-        }
-        mRunStripLeaving = true;
-        strip.animate().cancel();
-        strip.animate().alpha(0f).setDuration(160L)
-            .setInterpolator(new android.view.animation.AccelerateInterpolator())
-            .withEndAction(() -> {
-                if (!mRunStripLeaving) return;
-                mRunStripLeaving = false;
-                strip.setEntries(java.util.Collections.emptyList());
-                strip.setAlpha(1f);
-                onRunStripShownChanged();
-            })
-            .start();
-    }
-
-    /** The strip came or went: its glass is dressed or let go of, and the floats' room re-measured. */
-    private void onRunStripShownChanged() {
-        applyRunStripGlass(false);
-        boolean shown = mRunStrip != null && mRunStrip.getVisibility() == View.VISIBLE;
-        if (shown != mRunStripBandTaken) syncHomeFloatObstructions();
-    }
-
-    /** The band the floats' room gives up to the strip while it shows, px. */
-    private int runStripBandPx(boolean shown) {
-        if (!shown) return 0;
-        return Math.round(dpToPx(com.termux.app.dock.RunStripView.HEIGHT_DP + RUN_STRIP_AIR_DP));
-    }
-
-    /**
-     * Stands the strip {@link #RUN_STRIP_AIR_DP} above the edge that covers Home from below (the
-     * keyboard's top while one is up, else the dock's top, its dashes included, so the strip never
-     * covers the dashes), and as far in from the screen's sides as the dock's slab; set only on a
-     * change. The edges are in the float layer's pixels, as laid out
-     * ({@link #homeEdgesInFloatLayer}, {@link com.termux.app.dock.RunStripPlacement}). Whether
-     * the strip shows.
-     */
-    private boolean placeRunStrip(int dockTopPx, int keyboardTopPx) {
-        com.termux.app.dock.RunStripView strip = mRunStrip;
-        com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
-            : mPaneController.homeFloatLayer();
-        if (strip == null || layer == null || strip.getVisibility() != View.VISIBLE) return false;
-        float y = com.termux.app.dock.RunStripPlacement.translationYPx(dockTopPx, keyboardTopPx,
-            runStripBandPx(true), strip.getTop());
-        if (strip.getTranslationY() != y) strip.setTranslationY(y);
-        int side = Math.max(Math.round(dpToPx(RUN_STRIP_SIDE_DP)),
-            getDockLayout().horizontalInsetPx);
-        if (strip.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams params =
-                (ViewGroup.MarginLayoutParams) strip.getLayoutParams();
-            if (params.leftMargin != side || params.rightMargin != side) {
-                params.leftMargin = side;
-                params.rightMargin = side;
-                strip.setLayoutParams(params);
-            }
-        }
-        return true;
-    }
-
-    /**
-     * The strip stands on a thin glass slab of its own, the dock's material at the dock's values:
-     * the frost sampled at its place, the narrow ring of its outline, no shelf, no foot and no
-     * reflection of anything (a low slab). Below Android 13 it is the plain frost. Rebuilt when a
-     * value, the frame or the theme's glass base moves, or on {@code force}; let go of while the
-     * strip is off screen.
-     */
-    private void applyRunStripGlass(boolean force) {
-        com.termux.app.dock.RunStripView strip = mRunStrip;
-        if (strip == null) return;
-        if (!strip.isShown() || mPreferences == null || mChrome == null) {
-            if (mRunStripGlassKey != null) strip.setBackground(null);
-            mRunStripGlassKey = null;
-            mRunStripBackdropBitmap = null;
-            return;
-        }
-        float opacity = mPreferences.getAppBarOpacity() / 100f;
-        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        int grain = mPreferences.getDockGlassGrain();
-        int tint = mPreferences.getDockTintStrength();
-        Bitmap frame = null;
-        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (shouldUseWallpaperPassthroughMode() && ChromePolicy.dockBlurEnabled(blurRadiusDp)
-                && wallpaperFrame != null) {
-            frame = mChrome.blurCache().obtain(blurRadiusDp, wallpaperFrame);
-            if (frame != null && frame.isRecycled()) frame = null;
-        }
-        Rect frameRect = new Rect(mChrome.blurCache().frameRectRef());
-        float density = getResources().getDisplayMetrics().density;
-        float radius = RUN_STRIP_RADIUS_DP * density;
-        List<Object> key = Arrays.asList(frame, frameRect, blurRadiusDp, opacity, grain, tint,
-            mFancierGlassLook, resolveAccessoryGlassBaseColor(), radius);
-        if (!force && key.equals(mRunStripGlassKey)) return;
-        mRunStripGlassKey = key;
-        mRunStripBackdropBitmap = frame;
-        com.termux.app.chrome.SharedFrameDrawable backdrop = null;
-        if (frame != null) {
-            backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame, frameRect,
-                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(strip));
-            backdrop.setClearFrame(glassClearFrame(blurRadiusDp));
-        }
-        // A card all round with its own ring, and no foot: the low slab's dim lower edge.
-        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec
-            .of(blurRadiusDp, opacity, grain, radius, mFancierGlassLook)
-            .withRim(true)
-            .withSlice(1f, false)
-            .withTintStrength(tint);
-        strip.setBackground(com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
-            backdrop));
-        // The frost under the ring is a rectangle: the strip is cut to its own rounded outline,
-        // so no square corner of glass shows past the ring.
-        clipRunStripToOutline(strip, radius);
-    }
-
-    /** The radius the run strip's outline was last cut to; NaN before. */
-    private float mRunStripOutlineRadiusPx = Float.NaN;
-
-    /** Cuts the strip, its glass and its entries, to its rounded outline; set only on a change. */
-    private void clipRunStripToOutline(@NonNull View strip, float radiusPx) {
-        if (Float.compare(mRunStripOutlineRadiusPx, radiusPx) == 0 && strip.getClipToOutline())
-            return;
-        mRunStripOutlineRadiusPx = radiusPx;
-        strip.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View view, android.graphics.Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radiusPx);
-            }
-        });
-        strip.setClipToOutline(true);
-    }
 
     // ------------------------------------------------------------------ Prompt line
     //
@@ -17074,7 +16842,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // Workspace's terminal windows as tiles and a + tile) stands over the apps row in the row's
     // own host, on the same slab (DockLayout.wallStripBandPx), so the dock's one glass, shelf and
     // outline are the taller slab's; the Workspace's extra keys stay a band of their own beside
-    // it. Its tiles are fed from the same window chips as the Taskbar's run strip and the
+    // it. Its tiles are fed from the same window chips as the
     // Workspace's bar (syncWindowBarItems, built on Home too); a tile's tap brings the Workspace
     // in on its window. A style switch eases the slab with the Prompt line's ease; nothing here
     // runs at rest but the clock's minute, which redraws the clock alone.
@@ -17274,7 +17042,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Feeds the row, on either half, from the window chips ({@code chips}, dressed as
      * {@code items} by {@link #windowChipItems}): the row's terminal windows and the display window's at its
-     * place, then Home's floats (as the Taskbar's run strip lists them), each with its split
+     * place, then Home's floats, each with its split
      * shape; the ringed tile is the Home float in focus, else the window the Workspace has in
      * front.
      */
@@ -17306,14 +17074,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             shapes.add(com.termux.app.dock.WallStripRowPolicy.splitShape(cells));
             keys.add((long) System.identityHashCode(chip.window));
         }
-        java.util.List<com.termux.app.dock.RunStripModel.Entry> entries =
-            com.termux.app.dock.RunStripModel.of(chips,
+        java.util.List<com.termux.app.dock.WallStripModel.Entry> entries =
+            com.termux.app.dock.WallStripModel.of(chips,
                 com.termux.app.chrome.WindowChips.Surface.WALL_STRIP, items,
                 getString(R.string.launcher_entry_new_window));
         // Every entry but + is a tile (tilesOf leaves + out): the row's windows, then the floats,
         // in the chips' order, as the shapes and keys were laid down above.
         row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(
-            com.termux.app.dock.RunStripModel.wallEntries(entries), shapes, keys));
+            com.termux.app.dock.WallStripModel.wallEntries(entries), shapes, keys));
     }
 
     /**
@@ -22046,9 +21814,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The bar's readings are the same on both halves (#91); whether the bar shows decides
         // whether the sampler runs.
         syncStatsConsumer();
-        // The run strip's glass is built on arrival at Home and let go of on leaving it,
-        // whatever the frost pass's timing.
-        applyRunStripGlass(false);
         return true;
     }
 
@@ -25223,23 +24988,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
         com.termux.app.terminal.HomeFloatLayer layer =
             new com.termux.app.terminal.HomeFloatLayer(this);
-        // The Taskbar's run strip rides in the float layer, under the floats, so it slides with
-        // Home and is never on the Workspace. A minimised float folds into its chip in the bar
-        // (#91), on both halves: no row of chips of its own above the dock.
-        com.termux.app.dock.RunStripView strip = new com.termux.app.dock.RunStripView(this);
-        strip.setListener(new com.termux.app.dock.RunStripView.Listener() {
-            @Override public void onWindowTapped(int chipIndex) {
-                onWindowChip(com.termux.app.chrome.WindowChips.Surface.RUN_STRIP, chipIndex,
-                    false);
-            }
-            @Override public void onNewWindowTapped() { createNewWindow(); }
-        });
-        android.widget.FrameLayout.LayoutParams stripParams =
-            new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                Math.round(dpToPx(com.termux.app.dock.RunStripView.HEIGHT_DP)),
-                android.view.Gravity.TOP);
-        layer.addView(strip, stripParams);
-        mRunStrip = strip;
+        // A minimised float folds into its chip in the bar (#91), on both halves: no row of
+        // chips of its own above the dock.
         ((com.termux.app.launcher.widget.WidgetPaneView) view).setPagePinnedLayer(layer);
         mPaneController.setHomeFloatLayer(layer);
         syncHomeFloatObstructions();
@@ -25533,15 +25283,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mHomeFloatImePushPx);
         int keyboardTop = KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
             mHomeFloatImePushPx, stackBottom, mHomeFloatStackPx);
-        // The same two edges in the float layer's own pixels, for the run strip that stands on
-        // them: read from where the stack and the layer are laid out, not where
-        // they show, so a pass made while the editor's frame is scaled (a Dock style picked in
-        // the Layout editor) or the page is posed places them where they belong once that
-        // transform is gone (RunStripPlacement).
-        int[] inLayer = homeEdgesInFloatLayer(root, stack, unlaidStackShift, dockTop,
-            keyboardTop);
-        int dockTopInLayer = inLayer[0];
-        int keyboardTopInLayer = inLayer[1];
         root.getLocationOnScreen(at);
         int roomTop = at[1];
         androidx.core.view.WindowInsetsCompat insets =
@@ -25561,55 +25302,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 currentPlaceLayout(), PlaceLayout.Edge.TOP, buildEdgeStackMetrics()));
         }
         // Minimised floats fold into their chips in the bar (#91): nothing stands above the dock
-        // for them, and the floats' room keeps no band clear. The Taskbar's run strip stands
-        // just above the dock, or above the keyboard while one is up, and while it shows the
-        // floats' room ends above it.
-        boolean stripShown = placeRunStrip(dockTopInLayer, keyboardTopInLayer);
-        mRunStripBandTaken = stripShown;
-        int stripBand = runStripBandPx(stripShown);
-        dockTop -= stripBand;
-        if (keyboardTop >= 0) keyboardTop -= stripBand;
+        // for them, and the floats' room keeps no band clear.
         // The floats breathe Home's Margin inside all that, the same air as the widget grid's
         // rim: Home's own, read explicitly, since floats are laid out while a window is in front.
         mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop,
             Math.round(dpToPx(homeMarginDp())));
-    }
-
-    /**
-     * The dock's resting top and the keyboard's top (-1 while none is up) in the float layer's
-     * pixels, from the stack's and the layer's laid-out tops under the root
-     * ({@link com.termux.app.dock.RunStripPlacement#laidTopIn}), the stack's bottom moved by
-     * {@code unlaidStackShiftPx} as the next layout will move it. Where either is not under the
-     * root, from the on-screen edges ({@code dockTopOnScreenPx}, {@code keyboardTopOnScreenPx})
-     * less the layer's on-screen top, as before.
-     */
-    @NonNull
-    private int[] homeEdgesInFloatLayer(@NonNull View root, @NonNull View stack,
-                                        int unlaidStackShiftPx, int dockTopOnScreenPx,
-                                        int keyboardTopOnScreenPx) {
-        com.termux.app.terminal.HomeFloatLayer layer = mPaneController == null ? null
-            : mPaneController.homeFloatLayer();
-        if (layer == null) return new int[]{dockTopOnScreenPx, keyboardTopOnScreenPx};
-        int notUnder = com.termux.app.dock.RunStripPlacement.NOT_UNDER;
-        int layerTop = notUnder;
-        int stackTop = notUnder;
-        if (root instanceof ViewGroup) {
-            layerTop = com.termux.app.dock.RunStripPlacement.laidTopIn((ViewGroup) root, layer);
-            stackTop = com.termux.app.dock.RunStripPlacement.laidTopIn((ViewGroup) root, stack);
-        }
-        if (layerTop == notUnder || stackTop == notUnder) {
-            int[] at = new int[2];
-            layer.getLocationOnScreen(at);
-            return new int[]{dockTopOnScreenPx - at[1], keyboardTopOnScreenPx < 0 ? -1
-                : Math.max(0, keyboardTopOnScreenPx - at[1])};
-        }
-        int stackBottom = stackTop + stack.getHeight() + unlaidStackShiftPx;
-        int dockTop = KeyboardOverlayPolicy.homeDockRestTopPx(stackBottom, mHomeFloatDockPx,
-            mHomeFloatImePushPx) - layerTop;
-        int keyboardTop = KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
-            mHomeFloatImePushPx, stackBottom, mHomeFloatStackPx);
-        if (keyboardTop >= 0) keyboardTop = Math.max(0, keyboardTop - layerTop);
-        return new int[]{dockTop, keyboardTop};
     }
 
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
@@ -26734,7 +26431,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * A tap, or a close ({@code close}, the × on a chip), on the window chip at {@code index} of
-     * {@code surface}: the bar's row or its column, Home's run strip or a Wall strip tile. The
+     * {@code surface}: the bar's row or its column, or a Wall strip tile. The
      * window chips say what it means ({@link
      * com.termux.app.chrome.WindowChips#tap}, {@link com.termux.app.chrome.WindowChips#close}),
      * each surface counting its own index, and this carries it out: a window is brought in front
@@ -27345,9 +27042,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         syncBorderStatusSwipe(visible);
         if (!visible) {
-            // With the bar put away the Taskbar's run strip and the Wall strip's tiles still read
+            // With the bar put away the Wall strip's tiles still read
             // the same windows, on Home as on a window.
-            if (isWidgetsPageShowing() ? runStripWanted() || homeWallStrip()
+            if (isWidgetsPageShowing() ? homeWallStrip()
                 : wallStripOn(mLastWallPage))
                 syncWindowBarItems(bar);
             applyTerminalSurfaceAppearance();
@@ -27490,17 +27187,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             windowChipItems(chips, com.termux.app.chrome.WindowChips.Surface.BAR, foregroundPids);
         if (home) {
-            // Home's dock may show the same chips too: the Taskbar's run strip or the Wall
-            // strip's tiles. Seen from Home nobody looks at a row window, so the bar's chips are
+            // Home's dock may show the same chips too: the Wall strip's
+            // tiles. Seen from Home nobody looks at a row window, so the bar's chips are
             // dressed as the strips' are and serve them as they stand.
-            syncRunStrip(chips, items);
             syncWallStrip(chips, items);
         } else {
             // A window whose dock wears the Wall strip shows the row over its apps (#93): its
             // tiles follow the windows here too, dressed as the strip dresses them.
             if (wallStripFed() && wallStripOn(mLastWallPage))
                 syncWallStrip(chips, windowChipItems(chips,
-                    com.termux.app.chrome.WindowChips.Surface.RUN_STRIP,
+                    com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
                     new java.util.ArrayList<>()));
         }
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);

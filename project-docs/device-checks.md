@@ -13,6 +13,9 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-21 · commit "refactor(dock): remove the run strip" (#95) · Taskbar design: no run strip above
+  the dock; the drawer tile still opens the drawer; Wall strip tiles still follow open windows ·
+  emulator.
 - 2026-10-21 · commit "feat(chrome): Home follows the Workspace's layout and shape" (#88) · A
   fresh install shows the same dock rows, dock height and glass shape (Style, Corners, Margin) on
   Home and on the first window, and the swipe between them does not re-dress the dock; minimal

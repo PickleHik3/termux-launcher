@@ -21,7 +21,7 @@ import com.termux.app.chrome.GlassRefraction;
  * a round bead of glass ({@link LensBeadGeometry}). {@link #PROMPT_LINE} is the tray made one
  * taller slab: the apps row, then the command palette's field ({@link PromptLineFieldView}) on
  * a darker well, both on the same glass. {@link #TASKBAR} is the tray holding a Home tile among
- * the apps, with the run strip of running windows above it. {@link #WALL_STRIP} is the tray made
+ * the apps. {@link #WALL_STRIP} is the tray made
  * the expanded dock: a first row for the Workspace over the apps row, both on one tall slab. A
  * later style is one more constant here, and {@link #forStyle} picks it.</p>
  */
@@ -73,8 +73,7 @@ public final class DockSurfaceSpec {
     /**
      * Home's Taskbar: the tray's slab (dashes above, equal air, soft rim, shelf, shadow) holding
      * only tiles, a Home tile that opens the drawer among the apps
-     * ({@link TaskbarHomeTilePolicy}), with the run strip floating above it on its own thin glass
-     * ({@link RunStripView}). The icons' reflection is held to a low slab's strength
+     * ({@link TaskbarHomeTilePolicy}). The icons' reflection is held to a low slab's strength
      * ({@link #TASKBAR_REFLECTION_SCALE}).
      */
     @NonNull public static final DockSurfaceSpec TASKBAR =
@@ -126,8 +125,7 @@ public final class DockSurfaceSpec {
      */
     public final boolean promptField;
     /**
-     * The row holds the Taskbar's Home tile among the apps, and the run strip floats above the
-     * dock while anything runs.
+     * The row holds the Taskbar's Home tile among the apps.
      */
     public final boolean taskbar;
     /** How strongly the icons are reflected in the glass, of the tray's own strength, 0..1. */

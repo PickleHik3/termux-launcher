@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * The Taskbar's run strip (spec "Taskbar"): one numbered entry per running window, then {@code +}
+ * The Wall strip's entries (spec "Taskbar" and "Wall strip"): one numbered entry per running window, then {@code +}
  * for a new window, built from the same chips the Workspace's window bar shows.
  *
  * <p>The chips come in the window chips' order ({@link WindowChips}): the row's windows, the
@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  *
  * <p>Pure: the activity hands it the chips and the counts, and the view draws the entries.</p>
  */
-public final class RunStripModel {
+public final class WallStripModel {
 
     /** What an entry stands for. */
     public enum Kind { WINDOW, DISPLAY, HOME_FLOAT, NEW_WINDOW }
@@ -121,7 +121,7 @@ public final class RunStripModel {
         }
     }
 
-    private RunStripModel() {}
+    private WallStripModel() {}
 
     /**
      * The strip for {@code chips}.
@@ -168,7 +168,7 @@ public final class RunStripModel {
     }
 
     /**
-     * The strip for the window chips {@code chips} as {@code surface} (the run strip, or the Wall
+     * The strip for the window chips {@code chips} as {@code surface} (the Wall
      * strip's tiles) shows them, {@code items} each chip dressed for the bar, in the same order:
      * the entry in front is the one {@code surface} selects, a minimised float is marked.
      */
@@ -199,11 +199,6 @@ public final class RunStripModel {
         return chip.busy || chip.agentState == AgentStatus.State.WORKING;
     }
 
-    /** Whether the strip shows: only while something runs. */
-    public static boolean isShown(@NonNull List<Entry> entries) {
-        return !entries.isEmpty();
-    }
-
     /**
      * The Wall strip's terminals: every window entry in chip order, the row's own and then the
      * Home floats (a float is a terminal window of the same session), {@code +} left out.
@@ -225,55 +220,6 @@ public final class RunStripModel {
             if (entry.kind == Kind.WINDOW || entry.kind == Kind.DISPLAY) row.add(entry);
         }
         return row;
-    }
-
-    /**
-     * How much room each label gets when the labels share {@code room}: each wants its
-     * {@code demands} (held to {@code max}); when they do not all fit, the short ones keep what
-     * they want and the long ones split the rest equally, so a short label is never cut to make
-     * room nobody uses. When that equal part falls below {@code min} no label says anything
-     * useful, and every room is zero: the entries show their numbers alone. A demand of zero
-     * gets zero.
-     */
-    @NonNull
-    static float[] labelRooms(@NonNull float[] demands, float room, float max, float min) {
-        int n = demands.length;
-        float[] wants = new float[n];
-        float total = 0f;
-        int labelled = 0;
-        for (int i = 0; i < n; i++) {
-            wants[i] = Math.max(0f, Math.min(max, demands[i]));
-            total += wants[i];
-            if (wants[i] > 0f) labelled++;
-        }
-        if (labelled == 0) return new float[n];
-        if (total <= room) return wants;
-        if (room <= 0f) return new float[n];
-        Integer[] order = new Integer[n];
-        for (int i = 0; i < n; i++) order[i] = i;
-        java.util.Arrays.sort(order, (a, b) -> Float.compare(wants[a], wants[b]));
-        float[] rooms = new float[n];
-        float left = room;
-        int remaining = labelled;
-        float level = 0f;
-        boolean levelled = false;
-        for (int index : order) {
-            if (wants[index] <= 0f) continue;
-            float share = left / remaining;
-            if (!levelled && wants[index] <= share) {
-                rooms[index] = wants[index];
-                left -= wants[index];
-                remaining--;
-            } else {
-                if (!levelled) {
-                    level = share;
-                    levelled = true;
-                }
-                rooms[index] = level;
-            }
-        }
-        if (levelled && level < min) return new float[n];
-        return rooms;
     }
 
     // ---------------------------------------------------------------- labels

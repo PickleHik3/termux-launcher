@@ -2170,9 +2170,8 @@
     <string name="palette_home_go_to_workspace">Go to Workspace</string>
     <string name="palette_home_go_to_workspace_hint">Slide over to your windows</string>
     <string name="palette_home_new_window">New window</string>
-    <!-- Home's dock styles: the Prompt line's field, the run strip and the Wall strip's tiles. -->
+    <!-- Home's dock styles: the Prompt line's field and the Wall strip's tiles. -->
     <string name="dock_prompt_line_hint">Search apps, commands, settings</string>
-    <string name="dock_run_strip_minimised">%1$s, minimised</string>
     <string name="dock_run_strip_attention">%1$s, needs attention</string>
     <string name="dock_wall_strip_new_terminal">New terminal</string>
     <!-- The Taskbar's Home tile, spoken: it opens the app drawer; hold to move it. -->
