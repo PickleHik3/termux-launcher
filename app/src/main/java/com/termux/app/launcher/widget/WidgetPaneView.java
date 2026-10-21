@@ -227,7 +227,7 @@ public final class WidgetPaneView extends FrameLayout {
         // The page dots sit in a band below the grid, never over its last row. The band is kept
         // whether or not the dots show, so adding a page does not shrink every cell.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-        gridParams.bottomMargin = dp(DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP);
+        gridParams.bottomMargin = gridBottomInsetPx(0, getResources().getDisplayMetrics().density);
         addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
@@ -371,6 +371,41 @@ public final class WidgetPaneView extends FrameLayout {
         applyContentShift();
     }
     @NonNull public WidgetGridView grid() { return grid; }
+
+    /** The band at the pane's bottom the dock takes at rest; see {@link #setDockReservePx}. */
+    private int dockReservePx;
+
+    /**
+     * The band at the pane's bottom the dock stands over at rest
+     * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page dots and the grid stand
+     * above it, so the grid's last row is never behind the dock. The grid's rows are cut from what
+     * is left.
+     */
+    public void setDockReservePx(int px) {
+        int wanted = Math.max(0, px);
+        if (dockReservePx == wanted) return;
+        dockReservePx = wanted;
+        float density = getResources().getDisplayMetrics().density;
+        LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
+        gridParams.bottomMargin = gridBottomInsetPx(wanted, density);
+        grid.setLayoutParams(gridParams);
+        LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
+        dotsParams.bottomMargin = wanted + Math.round(DOTS_BOTTOM_MARGIN_DP * density);
+        dots.setLayoutParams(dotsParams);
+    }
+
+    public int dockReservePx() {
+        return dockReservePx;
+    }
+
+    /**
+     * How far above the pane's bottom the grid ends: the dock's band, then the page dots' band
+     * (kept whether or not the dots show, so adding a page does not shrink every cell).
+     */
+    static int gridBottomInsetPx(int dockReservePx, float density) {
+        return Math.max(0, dockReservePx)
+            + Math.round((DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP) * density);
+    }
 
     /**
      * A pane corner may still claim the finger that is down, so nothing in the grid runs a long

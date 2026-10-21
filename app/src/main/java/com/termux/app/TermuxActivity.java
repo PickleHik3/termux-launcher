@@ -16103,6 +16103,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean stackShown = shouldShowAccessoryStack(state.toolbarShown, state.keyboardShown,
             statusBandPx > 0);
         int contentEdgeGapPx = stackShown ? 0 : accessoryBottomMarginPx;
+        // On a Home page the dock floats over the grid, so the grid ends above the dock's rows at
+        // rest and the edge gap under them (#104): its last row is never behind the dock, and a
+        // keyboard still floats over it. On the Workspace the content ends at the stack, and
+        // nothing is reserved. A slide keeps what the content was committed with, as above.
+        View widgetPane = mTravelHoldsContent ? null : findViewById(R.id.widget_pane);
+        if (widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
+                KeyboardOverlayPolicy.homeGridDockReservePx(dockOverlays && stackShown,
+                    dockContentHeightPx, stackEdgeGapPx));
+        }
         boolean overlapChanged = applyContentBottomMargin(contentEdgeGapPx, keyboardOverlapPx);
         int contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
             combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
