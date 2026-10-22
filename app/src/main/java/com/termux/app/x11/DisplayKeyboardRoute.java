@@ -27,6 +27,16 @@ public final class DisplayKeyboardRoute {
         return onDisplayPlace && displayRunning && builtInEnabled;
     }
 
+    /**
+     * Whether the drawer closing puts back down the keyboard its search raised. Only one it raised
+     * itself, that the user has not claimed since (by pinning or hiding it by hand), and that is
+     * still up: a keyboard that was there first, or that the user took over, is theirs to close.
+     */
+    public static boolean drawerCloseLowers(boolean raisedByDrawer, boolean userTouchedSince,
+                                            boolean stillUp) {
+        return raisedByDrawer && !userTouchedSince && stillUp;
+    }
+
     /** The keyboard a request lands on. */
     public enum Target {
         /** The phone's own keyboard, typing into the display's view. */
