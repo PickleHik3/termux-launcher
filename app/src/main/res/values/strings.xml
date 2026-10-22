@@ -600,8 +600,8 @@
     <string name="settings_drawer_az_side_off">Off</string>
     <string name="settings_app_drawer_search_on_open_title">Open keyboard automatically</string>
     <string name="settings_app_drawer_search_on_open_summary">When the app drawer opens.</string>
-    <string name="settings_app_drawer_search_android_keyboard_title">Search keyboard</string>
-    <string name="settings_app_drawer_search_android_keyboard_summary">Use the Android keyboard, with its suggestions and swipe typing.</string>
+    <string name="settings_app_drawer_search_android_keyboard_title">Use system keyboard</string>
+    <string name="settings_app_drawer_search_android_keyboard_summary">Search with the phone\'s own keyboard instead of the launcher\'s, with its suggestions and swipe typing.</string>
     <string name="settings_app_drawer_category_sort_title">Category sorting</string>
     <string name="settings_app_drawer_category_sort_summary">Choose how apps are grouped.</string>
     <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>
