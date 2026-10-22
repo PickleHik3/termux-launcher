@@ -7,15 +7,18 @@ package com.termux.app.chrome.scene;
  * <p>{@code debug.tl.scene}: unset or {@code off} is today's launcher, {@code contour} the scene.
  * {@code debug.tl.scene_rate}: ambient frames per second when nothing is happening, {@code 30}
  * (default), {@code 90}, or {@code 0} for no ambient motion. {@code debug.tl.scene_glass}:
- * {@code lowres} (default) or {@code still}.</p>
+ * {@code lowres} (default) or {@code still}. {@code debug.tl.scene_glass_rate}: the low-res
+ * pass's frames per second, 15 by default, 0 for none.</p>
  */
 public final class SceneFramePolicy {
 
     public static final String PROP_SCENE = "debug.tl.scene";
     public static final String PROP_RATE = "debug.tl.scene_rate";
     public static final String PROP_GLASS = "debug.tl.scene_glass";
+    public static final String PROP_GLASS_RATE = "debug.tl.scene_glass_rate";
 
     public static final int DEFAULT_RATE_HZ = 30;
+    public static final int DEFAULT_GLASS_RATE_HZ = 15;
     /** A callback may land this much before the period is up and still draw: vsync jitter. */
     static final long SLACK_NS = 4_000_000L;
 
@@ -35,6 +38,17 @@ public final class SceneFramePolicy {
     /** True for {@code lowres} and anything unrecognised; false only for {@code still}. */
     public static boolean glassLowRes(String value) {
         return !"still".equals(value);
+    }
+
+    /** The low-resolution glass pass's own rate: 0..90, anything unreadable reads as 15. */
+    public static int parseGlassRate(String value) {
+        if (value == null) return DEFAULT_GLASS_RATE_HZ;
+        try {
+            int hz = Integer.parseInt(value.trim());
+            return hz < 0 ? DEFAULT_GLASS_RATE_HZ : Math.min(hz, 90);
+        } catch (NumberFormatException e) {
+            return DEFAULT_GLASS_RATE_HZ;
+        }
     }
 
     /** The ambient period: 0 draws on every vsync, {@link Long#MAX_VALUE} never. */
