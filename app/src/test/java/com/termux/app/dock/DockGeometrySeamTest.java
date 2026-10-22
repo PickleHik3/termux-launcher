@@ -43,6 +43,10 @@ public class DockGeometrySeamTest {
     private static final PlaceLayout HOME = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
         false, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
         PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    /** A Home layout that puts the pinned apps away: no dock rows at all. */
+    private static final PlaceLayout HOME_BARE = new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN,
+        false, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED, 4, 5);
     /** The Workspace's layout as Home wears it on One layout: without the extra keys. */
     private static final PlaceLayout HOME_ON_ONE_LAYOUT = WINDOW_APPS.withSlot(Element.EXTRA_KEYS,
         WINDOW_APPS.slot(Element.EXTRA_KEYS).withHidden(true));
@@ -200,6 +204,39 @@ public class DockGeometrySeamTest {
                         }
     }
 
+    @Test
+    public void aRowHomePutsAwayKeepsTheWorkspacesIcon() {
+        // The other way round: the Workspace shows the row, Home's layout puts it away.
+        for (float density : DENSITIES)
+            for (boolean capsule : STYLES)
+                for (float scale : sizes(capsule))
+                    for (int slots : SLOTS)
+                        for (boolean workspaceBeads : new boolean[] {true, false}) {
+                            String at = at(density, capsule, scale, slots)
+                                + (workspaceBeads ? " workspace beads" : " home beads");
+                            Half workspace = half(WINDOW_APPS, capsule, scale,
+                                workspaceBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY,
+                                false);
+                            Half home = half(HOME_BARE, capsule,
+                                DockLayoutPolicy.minUsefulScale(),
+                                workspaceBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
+                                true);
+                            Snapshot.Builder device = device(home, workspace, density, slots);
+                            DockLayout workspaceRest = rest(device, Side.WORKSPACE);
+                            DockLayout onHome = rest(device, Side.HOME);
+                            assertSameRow(at + " on Home", workspaceRest, onHome);
+                            // Its band stays Home's: none.
+                            assertEquals(at, 0, onHome.appsRowBandPx);
+                            assertEquals(at, 0, onHome.appsBarHeightPx);
+                            // And the slide from Home that brings it in hands it the same.
+                            DockLayout sliding = DockGeometry.compute(device
+                                .rows(Side.WORKSPACE)
+                                .arrangement(SeamTravel.withDockOf(HOME_BARE, WINDOW_APPS))
+                                .build());
+                            assertSameRow(at + " sliding in", workspaceRest, sliding);
+                        }
+    }
+
     // ---- 4. A squeeze changes the band at most, never the icon ----
 
     @Test
@@ -237,60 +274,98 @@ public class DockGeometrySeamTest {
         for (float density : DENSITIES)
             for (boolean capsule : STYLES)
                 for (float scale : sizes(capsule))
-                    for (int slots : SLOTS) {
-                        String at = at(density, capsule, scale, slots);
-                        // Halves that differ: a window on Beads, Home on Tray with a field.
-                        Half workspace = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
-                            false);
-                        Half home = half(HOME, capsule, scale, DockStyle.GLASS_TRAY, true);
-                        assertEachFrameHoldsItsHalf(at, device(home, workspace, density, slots),
-                            slots, false);
-                        // One layout: one width and one pitch from the first frame to the last.
-                        Half shared = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
-                            false);
-                        Half sharedHome = Half.builder(HOME_ON_ONE_LAYOUT).floating(capsule)
-                            .dockHeightScale(scale).design(DockStyle.LENS_BEADS).build();
-                        assertEachFrameHoldsItsHalf(at + " one layout",
-                            device(sharedHome, shared, density, slots), slots, true);
-                    }
+                    for (int slots : SLOTS)
+                        for (DockStyle[] designs : new DockStyle[][] {
+                                {DockStyle.LENS_BEADS, DockStyle.GLASS_TRAY},
+                                {DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS},
+                                {DockStyle.LENS_BEADS, DockStyle.WALL_STRIP},
+                                {DockStyle.WALL_STRIP, DockStyle.GLASS_TRAY}}) {
+                            String at = at(density, capsule, scale, slots) + " window "
+                                + designs[0] + " home " + designs[1];
+                            // Halves that differ: their designs, Home a size up with a field.
+                            Half workspace = half(WINDOW_APPS, capsule, scale, designs[0], false);
+                            Half home = half(HOME, capsule,
+                                Math.min(DockLayoutPolicy.maxUsefulScale(capsule), scale + 0.23f),
+                                designs[1], true);
+                            Snapshot.Builder device = device(home, workspace, density, slots);
+                            assertEachFrameHoldsItsHalf(at + " toward Home", device,
+                                Side.WORKSPACE);
+                            assertEachFrameHoldsItsHalf(at + " toward a window", device,
+                                Side.HOME);
+                        }
     }
 
     /**
-     * A slide from a window to Home, frame by frame: the rows switch halves halfway, the Search
-     * field eases with the page. Every frame's row is as wide, and its slots as far apart, as the
-     * row of the half it shows at rest; with {@code constant}, as each other's too.
+     * A slide from {@code from}'s half to the other, frame by frame: every ease goes the whole
+     * way (the Search field and the Wall strip's row from the departing half's to the arriving
+     * half's), and the rows swap halves halfway, the seam then standing the arriving half's rows
+     * in the departing arrangement. Every frame, the row the frame shows is as wide, and its slots
+     * as far apart, as that half's row at rest, and draws the same icon.
      */
-    private static void assertEachFrameHoldsItsHalf(String at, Snapshot.Builder device, int slots,
-                                                    boolean constant) {
+    private static void assertEachFrameHoldsItsHalf(String at, Snapshot.Builder device,
+                                                    Side from) {
         Snapshot base = device.build();
-        DockLayout workspaceRest = DockGeometry.compute(base.restOf(Side.WORKSPACE));
-        DockLayout homeRest = DockGeometry.compute(base.restOf(Side.HOME));
-        float fieldFrom = base.workspace.searchField ? 1f : 0f;
-        float fieldTo = base.home.searchField ? 1f : 0f;
-        PlaceLayout towardHome = SeamTravel.withDockOf(base.workspace.layout, base.home.layout);
-        int firstWidth = -1;
+        Side to = from == Side.HOME ? Side.WORKSPACE : Side.HOME;
+        Half departing = base.half(from);
+        Half arriving = base.half(to);
+        PlaceLayout seam = SeamTravel.withDockOf(departing.layout, arriving.layout);
+        float fieldFrom = departing.searchField ? 1f : 0f;
+        float fieldTo = arriving.searchField ? 1f : 0f;
+        float stripFrom = departing.design == DockStyle.WALL_STRIP ? 1f : 0f;
+        float stripTo = arriving.design == DockStyle.WALL_STRIP ? 1f : 0f;
         for (int step = 0; step <= 10; step++) {
             float p = step / 10f;
-            boolean homeRows = p >= 0.5f;
-            DockLayout frame = DockGeometry.compute(base.toBuilder()
-                .rows(homeRows ? Side.HOME : Side.WORKSPACE)
-                .arrangement(homeRows ? towardHome : base.workspace.layout)
+            Side shown = p >= 0.5f ? to : from;
+            Snapshot frameSnapshot = base.toBuilder()
+                .rows(shown)
+                .arrangement(shown == to ? seam : departing.layout)
                 .fieldReveal(fieldFrom + (fieldTo - fieldFrom) * p)
-                .build());
-            DockLayout rest = homeRows ? homeRest : workspaceRest;
-            String what = at + " at " + p;
+                .stripReveal(stripFrom + (stripTo - stripFrom) * p)
+                .build();
+            DockLayout frame = DockGeometry.compute(frameSnapshot);
+            // The rest is the shown half's own snapshot, worked out apart from the frame.
+            Snapshot restSnapshot = base.restOf(shown);
+            DockLayout rest = DockGeometry.compute(restSnapshot);
+            String what = at + " at " + p + " showing " + shown;
             assertTrue(what, frame.appsRowUsableWidthPx > 0);
             assertEquals(what + ": the row's width", rest.appsRowUsableWidthPx,
                 frame.appsRowUsableWidthPx);
-            assertEquals(what + ": the pitch", rest.appsRowUsableWidthPx / slots,
-                frame.appsRowUsableWidthPx / slots);
+            // The pitch the row lays its slots at: its width over the slots a page holds, each
+            // read from its own snapshot (the Drawer tile takes one of those slots).
+            assertEquals(what + ": the pitch",
+                pitchPx(rest, restSnapshot), pitchPx(frame, frameSnapshot), 0f);
             assertEquals(what + ": the slot's icon", rest.slotIconPx, frame.slotIconPx);
-            if (constant) {
-                if (firstWidth < 0) firstWidth = frame.appsRowUsableWidthPx;
-                assertEquals(what + ": one width across the slide", firstWidth,
-                    frame.appsRowUsableWidthPx);
-            }
         }
+    }
+
+    /** The distance between two slots' centres as the row lays them out. */
+    private static float pitchPx(DockLayout layout, Snapshot snapshot) {
+        return layout.appsRowUsableWidthPx / (float) Math.max(1, snapshot.pinnedSlotCount);
+    }
+
+    @Test
+    public void onOneLayoutTheRowsWidthNeverStepsAcrossASlide() {
+        for (float density : DENSITIES)
+            for (boolean capsule : STYLES)
+                for (float scale : sizes(capsule))
+                    for (int slots : SLOTS) {
+                        String at = at(density, capsule, scale, slots) + " one layout";
+                        Half workspace = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
+                            false);
+                        Half home = Half.builder(HOME_ON_ONE_LAYOUT).floating(capsule)
+                            .dockHeightScale(scale).design(DockStyle.LENS_BEADS).build();
+                        Snapshot base = device(home, workspace, density, slots).build();
+                        int width = DockGeometry.compute(base.restOf(Side.WORKSPACE))
+                            .appsRowUsableWidthPx;
+                        PlaceLayout seam = SeamTravel.withDockOf(WINDOW_APPS, HOME_ON_ONE_LAYOUT);
+                        for (int step = 0; step <= 10; step++) {
+                            boolean homeRows = step >= 5;
+                            DockLayout frame = DockGeometry.compute(base.toBuilder()
+                                .rows(homeRows ? Side.HOME : Side.WORKSPACE)
+                                .arrangement(homeRows ? seam : WINDOW_APPS).build());
+                            assertEquals(at + " at " + step, width, frame.appsRowUsableWidthPx);
+                        }
+                    }
     }
 
     // ---- The memo ----
