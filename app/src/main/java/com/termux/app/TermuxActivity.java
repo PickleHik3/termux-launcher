@@ -16309,9 +16309,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 dockHalf(com.termux.app.wall.PaneWallPage.WIDGETS, orientation, arrangement),
                 dockHalf(com.termux.app.wall.PaneWallPage.TERMINAL, orientation, arrangement))
             .preferencesAvailable(mPreferences != null)
-            .rows(rowsPage == com.termux.app.wall.PaneWallPage.WIDGETS
-                ? com.termux.app.dock.DockGeometry.Side.HOME
-                : com.termux.app.dock.DockGeometry.Side.WORKSPACE)
+            .rows(com.termux.app.dock.DockGeometry.Side.of(rowsPage))
             .arrangement(arrangement)
             .density(metrics.density)
             .widthPx(dockRowsWidthPx(metrics))
@@ -22094,7 +22092,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A half's rest is its own (Stack layout): its rows in its dress, its Search field and
         // Wall strip wholly in or out, nothing squeezed, whichever half is committed.
         return com.termux.app.place.StackLayout.restDockRowsPx(
-            dockSnapshot(layout, page), dockSideOf(page));
+            dockSnapshot(layout, page), com.termux.app.dock.DockGeometry.Side.of(page));
     }
 
     /** {@link #frameStandsDown} as the seam's crossing asks it, bound once rather than per gesture. */
@@ -22360,7 +22358,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ChromeSpec spec = buildChromeSpec();
         com.termux.app.place.StackLayout.RestInput in =
             new com.termux.app.place.StackLayout.RestInput(
-                dockSnapshot(currentPlaceLayout(), stackDressPage()), dockSideOf(place));
+                dockSnapshot(currentPlaceLayout(), stackDressPage()), com.termux.app.dock.DockGeometry.Side.of(place));
         in.toolbarShown = toolbarShown;
         in.extraKeysRowEnabled = spec.extraKeysRowEnabled;
         in.toolbarHeightPx = appliedToolbarHeightPx();
@@ -22386,15 +22384,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The room the stack last took from the content root; -1 until the first pass. */
     private int appliedContentReservationPx() {
         return mAppliedStack == null ? -1 : mAppliedStack.contentReservationPx;
-    }
-
-    /** The half of the dock's snapshot a wall page's rows belong to. */
-    @NonNull
-    private static com.termux.app.dock.DockGeometry.Side dockSideOf(
-            @NonNull com.termux.app.wall.PaneWallPage page) {
-        return page == com.termux.app.wall.PaneWallPage.WIDGETS
-            ? com.termux.app.dock.DockGeometry.Side.HOME
-            : com.termux.app.dock.DockGeometry.Side.WORKSPACE;
     }
 
     /**

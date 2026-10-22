@@ -8,6 +8,7 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
@@ -36,7 +37,15 @@ import java.util.Objects;
 public final class DockGeometry {
 
     /** The two halves of the wall. */
-    public enum Side { HOME, WORKSPACE }
+    public enum Side {
+        HOME, WORKSPACE;
+
+        /** The half a wall page belongs to: Home's pages are Home's, every window the Workspace's. */
+        @NonNull
+        public static Side of(@NonNull PaneWallPage page) {
+            return page == PaneWallPage.WIDGETS ? HOME : WORKSPACE;
+        }
+    }
 
     /** The halves asked, in order, for the pinned-apps row a layout puts away: Home first. */
     private static final Side[] PUT_AWAY_ROW_OWNERS = {Side.HOME, Side.WORKSPACE};
