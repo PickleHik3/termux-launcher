@@ -771,7 +771,7 @@ presentation, so that is the developer's call.
 ### Press highlight experiment (2026-10-22, `d4a47f503`)
 
 Same method, Terminal effect off, inline echo removed. Each run used one `debug.tl.press_fx` mode:
-`legacy` (today), `overlay` (pressed caps in their own RenderNode, so the keyboard is not
+`legacy` (the default until `overlay` became it), `overlay` (pressed caps in their own RenderNode, so the keyboard is not
 re-recorded while a press animates), and `nofade` (the highlight clears at commit).
 
 | Mode (keys) | Commit → drawn p50 / p90 | Drawn → presented p50 / p90 | Main `Record View#draw` avg | Traversal avg | Frames (per key) |
