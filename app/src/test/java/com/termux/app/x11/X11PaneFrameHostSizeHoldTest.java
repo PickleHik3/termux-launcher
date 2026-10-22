@@ -49,13 +49,30 @@ public class X11PaneFrameHostSizeHoldTest {
     }
 
     @Test
-    public void theSwitchsHoldLetsGoAFrameAfterTheNewHeight() {
+    public void theSwitchsHoldLetsGoOnceTheNewHeightHasSettled() {
         page.holdHostSizeOverNextLayout(600, 800);
         assertTrue(page.isHostSizeHeld());
 
         page.layout(0, 0, 600, 560);
         assertTrue("held through the pass that moved it", page.isHostSizeHeld());
         idle(0);
+        assertTrue("and a frame on, in case another pass follows", page.isHostSizeHeld());
+        idle(60);
+        assertFalse(page.isHostSizeHeld());
+    }
+
+    @Test
+    public void aHeightThatSettlesOverSeveralPassesIsOneResize() {
+        page.holdHostSizeOverNextLayout(600, 800);
+
+        // The pad host, the accessory stack and the overlay decision land in separate passes.
+        int[] heights = {560, 900, 560, 560};
+        for (int h : heights) {
+            page.layout(0, 0, 600, h);
+            idle(20);
+            assertTrue("held while the height is still moving (" + h + ")", page.isHostSizeHeld());
+        }
+        idle(60);
         assertFalse(page.isHostSizeHeld());
     }
 
