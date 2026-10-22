@@ -2472,3 +2472,54 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   judge whether that reads as the intended ~200 ms. TalkBack reads "name, second line, actions
   hidden" and offers Show/Hide. Typing in the layout editor with the phone's keyboard shrinks the
   XML field above it · pong, by hand.
+
+## Ported from 1.3.0-pre.2: display keyboard
+
+Ported onto v2-redesign 2026-10-23 from pre (1.3.0-pre.2). Every item passed or was owed on pre;
+on v2 each is owed again, on the display window (a Workspace window) rather than pre's Display
+place. Agent items first, then the developer's.
+
+- 2026-10-23 · port of 05222d909 "an open layer takes Back, keys and focus over the display window" ·
+  With the display window in front and a display running: open the drawer, the palette and a sheet
+  over it in turn; Back closes each layer and never reaches the X app; keys typed on the launcher
+  keyboard and the phone keyboard go to the layer, and to X again once it closes (also after a
+  rotation and after a display restart); the display's view does not take focus back from a layer
+  or a launcher text field · emulator (debug build).
+- 2026-10-23 · port of 24155ae6a/d563501c7 · Drawer search over a running display window raises the
+  launcher's keyboard (or swaps the touchpad frame to it), and closing the drawer lowers it unless it
+  was up first or was pinned meanwhile; with the keyboard switched off (palette "Keyboard on/off")
+  the search turns it back on; with "only without a hardware keyboard" and one attached, no keyboard
+  appears and keys still reach the search · emulator (debug build).
+- 2026-10-23 · port of f0b4a7c56, 592ce8d6f, b4c1812e4, 4a2e3ee9d, c4b9bf2e3 · In portrait the
+  keyboard floats over a running X app with no X screen resize (no "window changed"), and a stored
+  Resize still resizes; OSK auto-show is enabled in all three touch modes and a tap over a GTK text
+  field raises the keyboard in Trackpad (at the pointer) and Direct touch; the touchpad's mode
+  button is hidden over a floating keyboard and switches with exactly one X resize per switch,
+  also during a status-bar fold · emulator (debug build), then pong.
+- 2026-10-23 · port of cd7a337e4, d1a9d1ae1, 9beac6da8, GuiAppsSetup fcitx5 · Set up Linux apps'
+  command installs fcitx5, fcitx5-gtk3, fcitx5-qt; after installing this build
+  `$PREFIX/bin/termux-x11-im` exists (X11CliInstaller v17 rewrote the scripts) and
+  `$PREFIX/tmp/termux-x11-im-bus-0.log` says "fcitx5 on :0, ui virtualkeyboard"; focusing a field
+  in a drawer-launched mousepad shows the keyboard with no tap, typing keeps it up, leaving hides it
+  after 150 ms, field to field logs "hide cancelled: focus in"; a quick display restart and
+  `termux-x11 :0` twice leave one helper; without fcitx5 nothing starts · emulator (debug build).
+- 2026-10-23 · port of 3235cd097 "repair an unsubstituted Exec template" · With the stock x11
+  `chromium` (Exec=@@desktop_exec) Chromium opens from the drawer; an app whose command is missing
+  shows "<app> could not start: its command <x> is not installed." once, with no --no-sandbox retry
+  in logcat; a desktop session and an app exiting non-127 behave as before · pong (release build),
+  logcat `Termux.X11LinuxAppRunner`.
+- 2026-10-23 · port of 9310cb5ad, 8c0db921e · Settings → Terminal → Linux apps → Set up Linux apps
+  → Graphics shows "Benchmark graphics"; tapping it copies exactly `termux-x11-gpu-setup` (no
+  newline) and the toast reads "Benchmark command copied. Paste it into the terminal and press
+  Enter."; the row is hidden on the Nix edition. Record `apt list --installed`, run
+  `termux-x11-gpu-setup --yes` to the end: the list is the one before plus the kept packages
+  (x11-repo, xkeyboard-config, the winner's drivers) and what they need; run again and Ctrl-C
+  during a driver install: "Stopped before the end", and only x11-repo and xkeyboard-config are
+  added · emulator (debug build).
+- 2026-10-23 · port of 09efef49f "repin the bootstrap to 2026.10.18-r1" · A fresh install
+  (`ad install <apk> --fresh`) extracts the bootstrap and opens a working shell · emulator.
+- 2026-10-23 · port of 4b1c011b8/cb63996b7 (Developer) · On pong in daily use with a real GPU and
+  Firefox: the display keyboard and touchpad above, the touchpad mode button's look in light and
+  dark and TalkBack "Keyboard mode, Overlay", a Qt app's focus, a dialog entry's focus, and drawer
+  search from Keyboard off; known gap from pre to look at: after a GTK focus-out, a text tap in
+  xterm or a proot app shows nothing · pong, release build.
