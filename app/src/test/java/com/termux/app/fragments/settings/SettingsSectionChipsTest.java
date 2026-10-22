@@ -179,7 +179,7 @@ public class SettingsSectionChipsTest {
         // Hiding every row of the battery section (as a page's own gating logic would) empties
         // it, so this also exercises "the selected section disappeared -> back to All" in the
         // same test.
-        Preference clipboardRow = fragment.findPreference("lazy_mode");
+        Preference clipboardRow = fragment.findPreference("performance_link");
         assertNotNull(clipboardRow);
         PreferenceCategory clipboardSection = SettingsSectionChips.topCategoryOf(clipboardRow, screen);
         assertNotNull(clipboardSection);
@@ -189,7 +189,6 @@ public class SettingsSectionChipsTest {
         assertEquals(clipboardSection, SettingsSectionChips.topCategoryOf(adapter.getItem(0), screen));
 
         clipboardRow.setVisible(false);
-        fragment.findPreference("low_memory_preset").setVisible(false);
         idle(); // let PreferenceGroupAdapter's deferred sync run and notify our wrapper.
 
         // The section has no visible rows, so it no longer qualifies: the filter must have fallen
