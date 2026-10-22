@@ -8,6 +8,7 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerHold;
@@ -880,21 +881,40 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * folding). The display keeps the size it has, pinned to the page's bottom edge, so the X
      * screen is resized once at the end instead of on every frame; until then the bar simply
      * covers it.
+     *
+     * <p>A {@link #holdHostSizeOverNextLayout} hold still waiting for its layout is taken over:
+     * the size stays held, and from here on it is this caller's {@link #finishHostResize} that
+     * lets it go, not the hold's own release.
      */
     public void beginHostResize() {
-        if (mDisplay == null || mDisplay.getWidth() <= 0 || mDisplay.getHeight() <= 0) return;
+        if (mDisplay == null) return;
+        beginHostResize(mDisplay.getWidth(), mDisplay.getHeight());
+    }
+
+    /** {@link #beginHostResize()} for a display of this size; the seam the tests hold through. */
+    @VisibleForTesting
+    void beginHostResize(int width, int height) {
+        if (width <= 0 || height <= 0) return;
+        dropNextLayoutHold();
         if (mFrozenWidth < 0) {
-            mFrozenWidth = mDisplay.getWidth();
-            mFrozenHeight = mDisplay.getHeight();
+            mFrozenWidth = width;
+            mFrozenHeight = height;
         }
     }
 
     /** The frame has its final height: the display takes it, in one resize. */
     public void finishHostResize() {
+        dropNextLayoutHold();
         if (mFrozenWidth < 0) return;
         mFrozenWidth = -1;
         mFrozenHeight = -1;
         requestLayout();
+    }
+
+    /** True while the display keeps a size of its own rather than following the frame. */
+    @VisibleForTesting
+    boolean isHostSizeHeld() {
+        return mFrozenWidth >= 0;
     }
 
     /**
@@ -902,19 +922,28 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * rather than over many frames — the keyboard mode switched under the touchpad. Taken now,
      * and let go a frame after the frame has laid out at a new height, so whatever the passes
      * after the first still move lands before the X screen is resized, once. A frame whose height
-     * never moves lets go after {@link #NEXT_LAYOUT_BACKSTOP_MS}. A hold that is already taken —
-     * the status bar folding — is left to whoever took it.
+     * never moves lets go after {@link #NEXT_LAYOUT_BACKSTOP_MS}; the caller leaves the hold out
+     * altogether when it knows the height cannot move. A hold that is already taken — the status
+     * bar folding — is left to whoever took it, and one that begins while this waits takes it
+     * over ({@link #beginHostResize()}).
      */
     public void holdHostSizeOverNextLayout() {
+        if (mDisplay == null) return;
+        holdHostSizeOverNextLayout(mDisplay.getWidth(), mDisplay.getHeight());
+    }
+
+    /** {@link #holdHostSizeOverNextLayout()} for a display of this size; the tests' seam. */
+    @VisibleForTesting
+    void holdHostSizeOverNextLayout(int width, int height) {
         if (mFrozenWidth >= 0) return;
-        beginHostResize();
+        beginHostResize(width, height);
         if (mFrozenWidth < 0) return;
         final int heldHeight = getHeight();
         final Runnable release = new Runnable() {
             @Override
             public void run() {
+                // Only its own hold: one that was taken over or finished meanwhile is not this.
                 if (mNextLayoutRelease != this) return;
-                dropNextLayoutHold();
                 finishHostResize();
             }
         };
