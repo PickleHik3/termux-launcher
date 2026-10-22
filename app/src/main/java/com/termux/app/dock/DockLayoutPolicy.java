@@ -2,11 +2,14 @@ package com.termux.app.dock;
 
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.paging.PageTickStrip;
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
+
+import java.util.List;
 
 /**
  * Pure dock sizing. Everything the dock's geometry depends on arrives as a plain value in
@@ -162,7 +165,9 @@ public final class DockLayoutPolicy {
         public final boolean appsOnRail;
         /**
          * The row shares its container with nothing else — the only dock row on the bottom edge, or
-         * the only bar on its plank off the dock, which a rail always is. It swaps the dock's own
+         * the only bar on its plank off the dock, which a rail always is. The extra keys beside it
+         * do not count ({@link #appsRowAloneOnDock}), so the row is the same band on Home and in
+         * a window while the keys fold in and out. It swaps the dock's own
          * paddings for {@link #LONE_ROW_AIR_DP}, and lets the icon fill the preset's whole
          * baseline rather than a share of it ({@link #iconPxForScale}).
          */
@@ -538,6 +543,26 @@ public final class DockLayoutPolicy {
             PlaceLayout.Edge.TOP, capsule, true, density);
 
         return out.build();
+    }
+
+    /**
+     * Whether the pinned-apps row lying along the bottom stands alone on the dock's sheet, read
+     * off the resolved bottom stack ({@code EdgeStackPolicy.stack(layout, BOTTOM)}): no band
+     * beside it on the sheet but the extra keys.
+     *
+     * <p>The extra keys do not count. They are the Workspace's own and fold in and out with the
+     * swipe (ADR 0009), so counting them made the row a shared one on one half and a lone one on
+     * the other, and its icons shrank as the keys folded in. The row keeps the band it has
+     * without them — the same icon and the same air — and the dock grows by the keys' row
+     * instead.
+     */
+    public static boolean appsRowAloneOnDock(List<Element> bottomStack) {
+        boolean apps = false;
+        for (Element band : AccessoryStackLayoutPolicy.plankBands(bottomStack)) {
+            if (band == Element.APPS) apps = true;
+            else if (band != Element.EXTRA_KEYS) return false;
+        }
+        return apps;
     }
 
     /**
