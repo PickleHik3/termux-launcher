@@ -628,6 +628,19 @@ public final class SeamCrossing {
         return mRun.committedDesign;
     }
 
+    /**
+     * The Dock design of the half whose dock rows the stack stands on this frame: the other
+     * half's from the frame the crossing stands its rows ({@link #layout}), the committed half's
+     * before that. It is the design the rows are laid out in (Lens beads' fit and side inset), so
+     * the rows a slide brings in wear their own half's geometry from their first frame rather than
+     * the committed half's until the settle. The slab and the beads themselves keep
+     * {@link #committedDesign} and their melt. Null while no crossing holds the designs.
+     */
+    @Nullable
+    public DockStyle rowsDesign() {
+        return mRun.dockShown ? mRun.otherDesign : mRun.committedDesign;
+    }
+
     /** The committed half's Search field as the crossing read it, while it holds a design. */
     public boolean committedSearchField() {
         return mRun.committedSearchField;

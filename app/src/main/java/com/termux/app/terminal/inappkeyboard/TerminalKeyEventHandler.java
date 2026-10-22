@@ -470,6 +470,13 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
 
         @Override
         public void write(String text) {
+            // Through the view when there is one, so a string key ends a selection and snaps the
+            // scrolled view to the bottom like a typed character; the session alone cannot.
+            TerminalView view = mTerminalView.get();
+            if (view != null && view.getCurrentSession() == mCurrentSession.get()) {
+                view.inputText(text);
+                return;
+            }
             TerminalSession session = mCurrentSession.get();
             if (session != null)
                 session.write(text);

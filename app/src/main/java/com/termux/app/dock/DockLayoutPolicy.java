@@ -240,8 +240,23 @@ public final class DockLayoutPolicy {
          * ({@link WallStripRowPolicy#clampHeightDp}).
          */
         public final int wallStripHeightDp;
+        /**
+         * Where this place's layout puts the pinned-apps row away ({@link #appsRowEnabledPref}
+         * false), how the half that does show it measures it: that half's Style, its dock size
+         * and whether the row stands alone there. The row stays in the dock's view while it is put
+         * away, and a slide brings it back with the icons it already has; handed no icon here it
+         * sized them from its own host, a fill ratio a few dp smaller, and they grew at the settle.
+         * {@link Float#NaN} for the scale while no half shows the row. Read for nothing else: the
+         * band of a row put away stays zero.
+         */
+        public final boolean hiddenRowCapsule;
+        public final float hiddenRowBarHeightScale;
+        public final boolean hiddenRowAlone;
 
         private DockInputs(Builder b) {
+            this.hiddenRowCapsule = b.hiddenRowCapsule;
+            this.hiddenRowBarHeightScale = b.hiddenRowBarHeightScale;
+            this.hiddenRowAlone = b.hiddenRowAlone;
             this.promptFieldReveal = b.promptFieldReveal;
             this.wallStripReveal = b.wallStripReveal;
             this.wallStripHeightDp = b.wallStripHeightDp;
@@ -304,6 +319,17 @@ public final class DockLayoutPolicy {
             private float promptFieldReveal;
             private float wallStripReveal;
             private int wallStripHeightDp;
+            private boolean hiddenRowCapsule;
+            private float hiddenRowBarHeightScale = Float.NaN;
+            private boolean hiddenRowAlone;
+
+            /** {@link DockInputs#hiddenRowCapsule} and its pair, from the half that shows the row. */
+            public Builder hiddenRowAsShown(boolean capsule, float barHeightScale, boolean alone) {
+                this.hiddenRowCapsule = capsule;
+                this.hiddenRowBarHeightScale = barHeightScale;
+                this.hiddenRowAlone = alone;
+                return this;
+            }
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
             public Builder promptFieldReveal(float v) { this.promptFieldReveal = v; return this; }
@@ -434,8 +460,11 @@ public final class DockLayoutPolicy {
                 ? iconBaselinePx(capsule, in.barHeightScale, in.baseToolbarHeightPx, density,
                     in.additionalAppsBarHeightPx)
                 : 0;
-            out.appsRowIconPx =
-                rowIconPx(iconBaselinePx, out.iconScale, in.appsRowAlone, density);
+            // A row this layout puts away keeps the icon the half that shows it draws, so it comes
+            // back at its own size rather than growing into it at the settle. Its band stays zero.
+            out.appsRowIconPx = in.appsRowEnabledPref
+                ? rowIconPx(iconBaselinePx, out.iconScale, in.appsRowAlone, density)
+                : hiddenRowIconPx(in, density);
             // The band a lying-down apps row claims, whichever edge it lies on: the icon and the
             // air either side of it, and nothing else. The dock's own height is that band while
             // the row is the dock's; a row standing along the top is the same band in another
@@ -715,6 +744,17 @@ public final class DockLayoutPolicy {
     private static int rowIconPx(int baselinePx, float iconScale, boolean alone, float density) {
         if (baselinePx <= 0) return 0;
         return alone ? baselinePx : dockIconSizePx(baselinePx, iconScale, density);
+    }
+
+    /**
+     * The icon of a pinned-apps row this place's layout puts away: exactly the one the half that
+     * shows it draws there at rest ({@link #iconPxForScale}, from {@link
+     * DockInputs#hiddenRowAsShown}), or none while no half shows the row.
+     */
+    private static int hiddenRowIconPx(DockInputs in, float density) {
+        if (Float.isNaN(in.hiddenRowBarHeightScale)) return 0;
+        return iconPxForScale(in.hiddenRowCapsule, in.hiddenRowAlone,
+            in.hiddenRowBarHeightScale, in.baseToolbarHeightPx, density);
     }
 
     /**

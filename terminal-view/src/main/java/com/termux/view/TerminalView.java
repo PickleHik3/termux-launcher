@@ -2141,6 +2141,18 @@ public final class TerminalView extends View {
      * Scroll to the bottom of the transcript on user-initiated input, so typed characters are
      * visible even when the user had scrolled up (matching desktop terminals' scroll-on-keystroke).
      */
+    /**
+     * Writes {@code text} to the session as typed input: a selection ends and the view snaps to
+     * the bottom first, as for a typed code point. For the in-app keyboard's string keys, which
+     * used to write to the session directly and so left a scrolled or selecting view where it was.
+     */
+    public void inputText(@NonNull String text) {
+        if (mTermSession == null) return;
+        if (isSelectingText()) stopTextSelectionMode();
+        snapToBottomForInput();
+        mTermSession.write(text);
+    }
+
     private void snapToBottomForInput() {
         if (mTopRow != 0) {
             mTopRow = 0;
@@ -2865,6 +2877,12 @@ public final class TerminalView extends View {
         }
         if (mTermSession == null)
             return;
+        // A key typed while text is selected ends the selection, as a hardware key does in
+        // onKeyDown: the in-app keyboard reaches this entry directly, and a selection it left
+        // standing kept pinning the screen to the selected rows while the shell went on printing,
+        // so the typed keys landed but nothing new showed until something resized the view.
+        if (isSelectingText())
+            stopTextSelectionMode();
         // Ensure cursor is shown when a key is pressed down like long hold on (arrow) keys
         if (mEmulator != null)
             mEmulator.setCursorBlinkState(true);

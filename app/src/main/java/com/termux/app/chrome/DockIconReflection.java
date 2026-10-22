@@ -266,8 +266,11 @@ public final class DockIconReflection {
                         float belowPx, float strengthScale, boolean lowerBevelOnly) {
         BitmapShader shader = mShader;
         // While a swipe fades it out the picture is still bound, at the fade's strength.
-        if (!mEnabled || shader == null || mStrength <= 0f
-            || mRow.getVisibility() != View.VISIBLE) {
+        // The row has to be on screen, not only visible itself: a place without the dock's apps
+        // row (a terminal window in front) hides the row's pager and leaves the row VISIBLE at
+        // its stale Home offset, which aimed the icons' mirror into the keyboard's top rows
+        // through the unified dock+keyboard glass.
+        if (!mEnabled || shader == null || mStrength <= 0f || !mRow.isShown()) {
             program.clearReflection();
             return false;
         }
