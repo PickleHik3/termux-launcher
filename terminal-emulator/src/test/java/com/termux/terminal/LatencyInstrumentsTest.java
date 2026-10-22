@@ -11,30 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class LatencyInstrumentsTest {
 
     @Test
-    public void echoInsideWindowIsInline() {
-        assertTrue(EchoInlineGate.shouldRedrawInline(true, 1_030L, 1_000L, 0L));
-        assertTrue(EchoInlineGate.shouldRedrawInline(true, 1_050L, 1_000L, 0L));
-    }
-
-    @Test
-    public void outputOutsideWindowOrWithoutWriteIsNot() {
-        assertFalse(EchoInlineGate.shouldRedrawInline(true, 1_051L, 1_000L, 0L));
-        assertFalse(EchoInlineGate.shouldRedrawInline(true, 1_010L, 0L, 0L));
-        assertFalse(EchoInlineGate.shouldRedrawInline(true, 990L, 1_000L, 0L));
-    }
-
-    @Test
-    public void switchOffAlwaysPosts() {
-        assertFalse(EchoInlineGate.shouldRedrawInline(false, 1_010L, 1_000L, 0L));
-    }
-
-    @Test
-    public void floodsCoalesceBetweenInlineDraws() {
-        assertFalse(EchoInlineGate.shouldRedrawInline(true, 1_010L, 1_000L, 1_005L));
-        assertTrue(EchoInlineGate.shouldRedrawInline(true, 1_013L, 1_000L, 1_005L));
-    }
-
-    @Test
     public void switchDefaultsAndReadsAtMostOncePerSecond() {
         AtomicInteger reads = new AtomicInteger();
         String[] value = {null};

@@ -71,15 +71,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
 
-    /**
-     * Whether a keystroke's echo is drawn at once rather than through a post:
-     * {@code adb shell setprop debug.tl.echo_inline 0} restores the post, so before and after are
-     * measured on one build. On unless set.
-     */
-    private static final com.termux.terminal.DebugSwitch ECHO_INLINE = new com.termux.terminal.DebugSwitch(
-        "debug.tl.echo_inline", true, com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
-    /** When the last echo was drawn inline, so a flood still coalesces; see EchoInlineGate. */
-    private long mLastInlineRedrawMs;
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
@@ -291,15 +282,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         mTerminalScreenUpdatePending = true;
         Runnable redraw = () -> redrawChangedSession(changedSession);
-        // Output within a few tens of ms of a keystroke is its echo: drawn now, not after whatever
-        // the main thread has queued. Output that is not an echo, and floods, take the post below.
-        long nowMs = android.os.SystemClock.uptimeMillis();
-        if (com.termux.terminal.EchoInlineGate.shouldRedrawInline(ECHO_INLINE.isOn(nowMs), nowMs,
-                changedSession.getLastWriteUptimeMs(), mLastInlineRedrawMs)) {
-            mLastInlineRedrawMs = nowMs;
-            redraw.run();
-            return;
-        }
         // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
         // posted decides how it interleaves with that parsing. Measured over four configurations:
         //
