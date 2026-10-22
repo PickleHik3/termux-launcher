@@ -52,9 +52,12 @@ public class X11LinuxAppRunnerTest {
             + "/fcitx5";
         String bus = com.termux.shared.termux.TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH
             + "/termux-x11-im-bus-1";
-        // fcitx5 installed and its helper's bus up for this display: the toolkits load fcitx5's
-        // module and find it on the same bus. Anything less and the app runs exactly as before.
-        String block = "if [ -x '" + fcitx5 + "' ] && [ -S '" + bus + "' ]; then\n"
+        // fcitx5 installed, its helper's bus up for this display and the helper that made it
+        // still alive: the toolkits load fcitx5's module and find it on the same bus. Anything
+        // less and the app runs exactly as before.
+        String block = "if [ -x '" + fcitx5 + "' ] && [ -S '" + bus + "' ]"
+            + " && { read -r termux_x11_im_pid < '" + bus + ".pid'; } 2>/dev/null"
+            + " && kill -0 \"$termux_x11_im_pid\" 2>/dev/null; then\n"
             + "export GTK_IM_MODULE=fcitx\n"
             + "export QT_IM_MODULE=fcitx\n"
             + "export XMODIFIERS=@im=fcitx\n"

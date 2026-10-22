@@ -21903,7 +21903,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (store == null) return;
         com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
             ? null : mPaneWallController.displayPage();
-        if (frame != null) frame.holdHostSizeOverNextLayout();
+        // Only a docked keyboard frame on screen moves the display's height when the mode flips;
+        // without one the switch is a saved setting, and holding the size would only freeze it.
+        if (frame != null && isInAppKeyboardShown()
+                && com.termux.app.x11.DisplayTouchpadPlacement.offersModeSwitch(
+                    inAppKeyboardForm())) {
+            frame.holdHostSizeOverNextLayout();
+        }
         PlaceLayout.KeyboardMode mode = com.termux.app.x11.DisplayTouchpadPlacement
             .switchKeyboardMode(store, currentPlaceOrientation());
         Logger.logInfo(LOG_TAG, "Touchpad switched the keyboard mode to " + mode);

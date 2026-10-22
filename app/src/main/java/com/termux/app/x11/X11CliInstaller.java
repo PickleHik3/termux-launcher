@@ -44,7 +44,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 15;
+    @VisibleForTesting static final int VERSION = 16;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -373,8 +373,9 @@ public final class X11CliInstaller {
      * The socket of the session bus the helper runs for {@code display} ({@code :1} and the like).
      * One per display, because a second display — the GPU setup's test display above all — runs
      * through the same server script, and two helpers sharing one socket would take each other's
-     * bus away. The helper works the same name out of the server's own arguments; an app's
-     * script is handed it by {@link X11LinuxAppRunner}, so the two meet on one bus.
+     * bus away. The helper is handed the display by the server script ({@link #IM_DISPLAY_PICK})
+     * and works the same name out of it; an app's script is handed it by
+     * {@link X11LinuxAppRunner}, so the two meet on one bus.
      */
     @NonNull
     static String imBusPath(@NonNull String display) {
@@ -382,6 +383,16 @@ public final class X11CliInstaller {
         int screen = number.indexOf('.');
         if (screen >= 0) number = number.substring(0, screen);
         return IM_BUS_PATH_PREFIX + "-" + (number.isEmpty() ? "0" : number);
+    }
+
+    /**
+     * Where the helper for {@code display} keeps its pid while it runs: beside its bus, removed
+     * with it. A helper killed outright leaves its socket behind, so the socket alone does not
+     * say anybody answers on it; a live pid here does.
+     */
+    @NonNull
+    static String imHelperPidPath(@NonNull String display) {
+        return imBusPath(display) + ".pid";
     }
 
     /** True once this launcher's own commands are in place. */
@@ -578,10 +589,33 @@ public final class X11CliInstaller {
         String helper = ProotDistro.singleQuote(IM_FOCUS_SCRIPT_PATH);
         return "if [ \"${TERMUX_X11_IM:-1}\" != 0 ] && [ -x " + ProotDistro.singleQuote(FCITX5_PATH)
             + " ] && [ -x " + helper + " ]; then\n"
+            + IM_DISPLAY_PICK
             + "  (" + helper + " \"$$\" " + ProotDistro.singleQuote(IM_BUS_PATH_PREFIX)
-            + " \"$@\" < /dev/null > /dev/null 2>&1 &)\n"
+            + " \"$termux_x11_im_display\" < /dev/null > /dev/null 2>&1 &)\n"
             + "fi\n";
     }
+
+    /**
+     * The display the server is handed, for the helper: the first argument that is a bare
+     * {@code :N} or {@code :N.S}, the way a display is written first on every command line the
+     * launcher makes and the docs show; {@code :0}, the server's own default, when there is none.
+     * The server script hands the helper this one name rather than its whole argument list, so
+     * an option's value that happens to look like a display is never taken for it. The bus it
+     * leads to is {@link #imBusPath} of the same name.
+     */
+    @VisibleForTesting
+    static final String IM_DISPLAY_PICK = "  termux_x11_im_display=:0\n"
+        + "  for termux_x11_im_arg in \"$@\"; do\n"
+        + "    case \"$termux_x11_im_arg\" in\n"
+        + "      :[0-9]*)\n"
+        + "        termux_x11_im_number=${termux_x11_im_arg#:}\n"
+        + "        case \"${termux_x11_im_number%%.*}\" in\n"
+        + "          *[!0-9]*) ;;\n"
+        + "          *) termux_x11_im_display=$termux_x11_im_arg; break ;;\n"
+        + "        esac\n"
+        + "        ;;\n"
+        + "    esac\n"
+        + "  done\n";
 
     /**
      * The lines that build {@code -fp} out of whatever font packages this phone's nix store has,
