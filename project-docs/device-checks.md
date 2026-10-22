@@ -13,6 +13,12 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · commit "feat(appearance): a Split gap slider on the Terminal tap" · Appearance ›
+  tap the terminal: the row reads Glass, Opacity, Tint, Contrast, Split gap. In a 2-pane and a
+  4-pane window set Split gap to 0, 4 and 24 dp: screenshot each; the gutter between panes follows,
+  the terminal resizes once on release (not per tick), and the divider still drags. Drag Margin:
+  the gap does not move. Undo (or leaving without Done) puts the gap back. An install from before
+  this change shows its old gap on the slider and nothing moves until the slider is touched.
 - 2026-10-22 · commit "feat(widgets): Home widgets follow the Text size" · Home with a Clock, a
   Battery and a Weather widget at 1x1, 2x1 and 2x2; Appearance > Base, Text size at 80%, 100% and
   150%, once dragging live (the widgets behind the card re-set within a frame of each tick, no

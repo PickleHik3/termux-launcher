@@ -80,6 +80,7 @@
     <!-- Layout mode's global shape: no Look sets these. -->
     <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
     <string name="appearance_editor_corners_description">Corner radius</string>
+    <string name="appearance_editor_split_gap">Split gap · %1$d dp</string>
     <string name="appearance_editor_margin">Margin · %1$d dp</string>
     <string name="appearance_editor_margin_description">Margin</string>
 
