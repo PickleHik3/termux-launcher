@@ -16426,6 +16426,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #handleAppDrawerCodePoint}.
      */
     private void requestAppDrawerSearchKeyboard() {
+        // Over a running display the focus is the display's, so the system keyboard below is
+        // refused as "not served" and the search would have no keyboard at all: raise the
+        // launcher's, which the drawer types through, in whatever frame the place keeps it.
+        if (com.termux.app.x11.DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(
+                isDisplayPageShowing(), isEmbeddedDisplayRunning(),
+                mInAppKeyboard != null && mInAppKeyboard.isEnabled())) {
+            if (isDisplayTouchpadFrame()) {
+                applyDisplayFrameDecision(mFrameContent.onKeyboardIntent(true));
+            } else {
+                mInAppKeyboard.show(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            }
+            return;
+        }
         onSystemImeRequested();
         KeyboardUtils.showSoftKeyboard(this, mTerminalView);
     }
