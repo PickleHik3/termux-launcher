@@ -16417,16 +16417,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }, -1, null, -1, null, null);
     }
 
-    /**
-     * Summons the system IME for the drawer's search, with <b>no focus change</b>.
-     *
-     * <p>The obvious call here would be {@code beginExternalTextInput()}, and it is exactly wrong:
-     * it runs {@code requestAccessoryGeometrySync()}, and the accessory stack's geometry is frozen
-     * for the life of the drawer transition. Thawing it mid-reveal relayouts the stack under an open
-     * plane and the dock visibly jumps on close. Focus stays on the terminal view, which keeps
-     * owning the input connection; the committed text reaches the drawer through
-     * {@link #handleAppDrawerCodePoint}.
-     */
     /** The display keyboard the drawer's search raised, and whether the user has claimed it since. */
     private boolean mDrawerRaisedKeyboard;
     private boolean mDrawerRaisedKeyboardClaimed;
@@ -16445,6 +16435,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Summons the system IME for the drawer's search, with <b>no focus change</b>.
+     *
+     * <p>The obvious call here would be {@code beginExternalTextInput()}, and it is exactly wrong:
+     * it runs {@code requestAccessoryGeometrySync()}, and the accessory stack's geometry is frozen
+     * for the life of the drawer transition. Thawing it mid-reveal relayouts the stack under an open
+     * plane and the dock visibly jumps on close. Focus stays on the terminal view, which keeps
+     * owning the input connection; the committed text reaches the drawer through
+     * {@link #handleAppDrawerCodePoint}.
+     */
     private void requestAppDrawerSearchKeyboard() {
         // Over a running display the focus is the display's, so the system keyboard below is
         // refused as "not served" and the search would have no keyboard at all: raise the
