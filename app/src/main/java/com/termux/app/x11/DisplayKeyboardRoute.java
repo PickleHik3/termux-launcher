@@ -16,6 +16,27 @@ public final class DisplayKeyboardRoute {
 
     private DisplayKeyboardRoute() {}
 
+    /**
+     * Whether the drawer's search has to raise the launcher's keyboard itself. Its request is a
+     * system-keyboard ask aimed at the terminal view, which is served everywhere but over a
+     * running display: there the display's view holds the focus and the ask is dropped, so
+     * nothing appears.
+     */
+    public static boolean drawerSearchRaisesBuiltIn(boolean onDisplayPlace, boolean displayRunning,
+                                                    boolean builtInEnabled) {
+        return onDisplayPlace && displayRunning && builtInEnabled;
+    }
+
+    /**
+     * Whether the drawer closing puts back down the keyboard its search raised. Only one it raised
+     * itself, that the user has not claimed since (by pinning or hiding it by hand), and that is
+     * still up: a keyboard that was there first, or that the user took over, is theirs to close.
+     */
+    public static boolean drawerCloseLowers(boolean raisedByDrawer, boolean userTouchedSince,
+                                            boolean stillUp) {
+        return raisedByDrawer && !userTouchedSince && stillUp;
+    }
+
     /** The keyboard a request lands on. */
     public enum Target {
         /** The phone's own keyboard, typing into the display's view. */
