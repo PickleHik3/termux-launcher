@@ -1395,6 +1395,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bitmap mWallBehindFrame;
     /** The self-drawn wallpaper behind everything; see {@link WallpaperBackdropPolicy}. */
     @Nullable private WallpaperBackdropView mWallpaperBackdropView;
+    /** The wallpaper scene prototype (debug.tl.scene); inert while that property is unset. */
+    @Nullable private com.termux.app.chrome.scene.SceneController mScene;
     /**
      * The wallpaper's live x-offset, shared by every glass surface; see
      * {@link com.termux.app.chrome.WallpaperParallax}. Written by {@link #syncWallpaperParallax}
@@ -1972,6 +1974,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxActivityRootView.setBottomMarginWriter(this::requestRootBottomMargin);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
+        View sceneContainer = findViewById(R.id.terminal_root_container);
+        if (sceneContainer instanceof android.widget.FrameLayout) {
+            mScene = new com.termux.app.chrome.scene.SceneController(this,
+                (android.widget.FrameLayout) sceneContainer, mWallpaperBackdropView,
+                new com.termux.app.chrome.scene.SceneController.Host() {
+                    @NonNull @Override public java.util.List<TerminalView> paneViews() {
+                        return getTerminalPaneViews();
+                    }
+                    @Nullable @Override public TerminalView focusedPane() {
+                        return getTerminalView();
+                    }
+                    @Override public boolean lazyMode() {
+                        return isLazyModeEnabled();
+                    }
+                });
+        }
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
         mTermuxActivityRootView.setOnApplyWindowInsetsListener(new TermuxActivityRootView.WindowInsetsListener());
         View content = findViewById(android.R.id.content);
@@ -2261,6 +2279,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onStart() {
         super.onStart();
         com.termux.app.terminal.TouchDownHint.attach(this);
+        if (mScene != null) mScene.attach();
         // Both arrivals the launcher has: unlocking the phone, and switching back from another
         // app. Each ends in onStart, because the keyguard stops this activity too.
         View arrivalHost = findViewById(android.R.id.content);
@@ -2418,6 +2437,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Seen before any view acts on it: a tap off the dictation card's text ends its edit.
         if (mVoiceCardEdit != null)
             mVoiceCardEdit.onWindowTouch(ev.getActionMasked(), ev.getRawX(), ev.getRawY());
+        if (mScene != null) mScene.onWindowTouch(ev);
         feedDockPlank(ev);
         feedDockTouchLight(ev);
         if (!mAzTabTouch) feedTerminalPlank(ev);
@@ -9985,6 +10005,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onStop() {
         super.onStop();
         com.termux.app.terminal.TouchDownHint.detach(this);
+        if (mScene != null) mScene.detach();
         mHomePress.onStop();
         Logger.logDebug(LOG_TAG, "onStop");
         // The Appearance surface survives a stop (the overlay registry's STOP keeps it, as it kept
@@ -27593,6 +27614,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void noteShellAttention(@NonNull TerminalSession session) {
         int pid = session.getPid();
         if (pid < 1 || mPaneController == null) return;
+        if (mScene != null) mScene.onBell(mPaneController.getViewForSession(session));
         // The pane's own border glows until the user focuses it; every bell, OSC 9/777/99 message
         // and launcherctl notify lands here.
         mPaneController.setPaneAttention(session,
