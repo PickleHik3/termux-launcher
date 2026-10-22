@@ -148,3 +148,17 @@ ad -s emu runas com.termux 'launcherctl pane list'
   (`launcherctl keyboard show` under runas), then `tap 40 1625` and `swipe 900 1520 900 2000 600`.
   The drawer is open while `ad find app_drawer_host` shows that node. If Back leaves it open,
   `ad home` then the `am start` above closes it.
+- `ad install <apk> --fresh` (the flag after the path; before it, ad reads it as the file). First run
+  logs under `Termux.TermuxInstaller`; extraction takes about 8 s on the emulator, with the Welcome
+  sheet over the "Installing bootstrap packages…" dialog ("Skip the tour" / Start at about 895,1476).
+- `launcherctl keyboard show` pins the keyboard: X11TextFocus then logs "ignored: pinned". Run
+  `launcherctl keyboard hide` before testing focus-driven show/hide.
+- Mousepad in the drawer: `ad find Mousepad` (an ImageView, about 100,949). A tap into its text area
+  at about 330,480 focuses it. Drawer apps get the fcitx5 environment from the launcher; one started
+  by hand needs `GTK_IM_MODULE=fcitx XMODIFIERS=@im=fcitx
+  DBUS_SESSION_BUS_ADDRESS=unix:path=$PREFIX/tmp/termux-x11-im-bus-0`.
+- Rotate: `settings put system accelerometer_rotation 0` + `user_rotation 1`; restore 1 / 0. Keyboard
+  off is the palette's "Keyboard on/off" entry, not the dock key (which only hides/shows).
+- Stop the display with `kill <termux-x11 pid>` under runas (it restarts on its own); never
+  `pkill -f termux-x11` inside a runas string, it kills your own shell. `ps -o` fails in the
+  prefix: read `/proc/*/cmdline`.
