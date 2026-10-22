@@ -3,11 +3,15 @@ package com.termux.app.chrome.scene;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.HardwareRenderer;
 import android.graphics.Paint;
+import android.graphics.RenderNode;
 import android.os.Build;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.view.Choreographer;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -18,10 +22,12 @@ import com.termux.terminal.FrameProbe;
 import java.util.function.BooleanSupplier;
 
 /**
- * The wallpaper scene layer: one full-window view, drawn by the launcher behind every surface, that
- * paints the Contour scene with a single RuntimeShader on a full-screen Paint (not a RenderEffect).
- * The view holds a hardware layer, so when other surfaces repaint at 90 Hz the scene is blitted from
- * its texture and the shader only runs on the frames this class asks for.
+ * The wallpaper scene layer: one full-window {@link SurfaceView} at the default Z order, so the
+ * display composites the launcher window over it and a scene frame never repaints the window. The
+ * Contour scene is one RuntimeShader on a full-surface Paint, drawn into the view's Surface by a
+ * dedicated {@link HardwareRenderer} whose content root is a single {@link RenderNode}: a frame
+ * updates the uniforms, re-records that node and asks for {@code syncAndDraw}; the GPU work runs
+ * on the renderer's own thread. No view of the launcher window is invalidated for a scene frame.
  *
  * <p>Frame policy: a {@link Choreographer} frame callback runs while the layer could be seen. A
  * reaction (see {@link SceneEvents}) animates at the full vsync rate until it has decayed; with
@@ -32,7 +38,7 @@ import java.util.function.BooleanSupplier;
  * <p>Coordinates are the window's own: the controller sizes and offsets this view to the decor, so
  * a touch's raw position and a pane's on-screen rect are scene pixels as they are.</p>
  */
-public final class SceneLayerView extends View {
+public final class SceneLayerView extends SurfaceView implements SurfaceHolder.Callback {
 
     /** The pane rects the basins are pressed under, and a changing set may be re-read at this pace. */
     private static final long BASIN_REFRESH_MS = 250L;
@@ -47,6 +53,12 @@ public final class SceneLayerView extends View {
 
     @NonNull private final SceneEvents mEvents = new SceneEvents();
     @NonNull private final Paint mPaint = new Paint();
+    @NonNull private final RenderNode mNode = new RenderNode("SceneContour");
+    @Nullable private HardwareRenderer mRenderer;
+    private int mSurfaceW, mSurfaceH;
+    private boolean mSurfaceReady;
+    /** The surface has no frame of ours yet (new or resized): draw once even when ambient is off. */
+    private boolean mSurfaceBlank;
     @NonNull private final float[] mBasinScratch = new float[SceneEvents.MAX_BASINS * 4];
     @NonNull private final BooleanSupplier mLazyMode;
     @Nullable private final PaneSource mPanes;
@@ -55,6 +67,8 @@ public final class SceneLayerView extends View {
     private final float mDensity;
 
     private long mPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_RATE_HZ);
+    private long mGlassPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ);
+    private long mLastLowNs = Long.MIN_VALUE / 2;
     private boolean mGlassLowRes = true;
     private boolean mPosted;
     private boolean mAnimatorsOn = true;
@@ -81,10 +95,10 @@ public final class SceneLayerView extends View {
         mDensity = context.getResources().getDisplayMetrics().density;
         mFrozenTimeMs = SystemClock.uptimeMillis();
         mTimeMs = mFrozenTimeMs;
-        setWillNotDraw(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // A texture of its own: other surfaces repainting do not re-run the shader.
-        setLayerType(LAYER_TYPE_HARDWARE, null);
+        // Default Z order on purpose (no setZOrderOnTop / media overlay): the surface sits below
+        // the window, which the display composites over it.
+        getHolder().addCallback(this);
         mPaint.setAntiAlias(false);
     }
 
@@ -96,6 +110,10 @@ public final class SceneLayerView extends View {
         if (period == Long.MAX_VALUE) mFrozenTimeMs = SystemClock.uptimeMillis();
         mPeriodNs = period;
         kick();
+    }
+
+    public void setGlassRateHz(int hz) {
+        mGlassPeriodNs = SceneFramePolicy.ambientPeriodNs(hz);
     }
 
     public void setGlassLowRes(boolean lowRes) {
@@ -146,7 +164,7 @@ public final class SceneLayerView extends View {
 
     private boolean shouldRun() {
         return !mDestroyed && mScreenOn && isShown() && getWindowVisibility() == VISIBLE
-            && getWidth() > 0 && !mLazy;
+            && mSurfaceReady && !mLazy;
     }
 
     /** Starts the callback if nothing is waiting and there is a reason to run. */
@@ -180,18 +198,21 @@ public final class SceneLayerView extends View {
             basinsMoved = refreshBasins();
         }
         if (SceneFramePolicy.shouldDraw(active, period, mLastDrawNs, frameTimeNanos)
-            || basinsMoved) {
+            || basinsMoved || mSurfaceBlank) {
+            mSurfaceBlank = false;
             mLastDrawNs = frameTimeNanos;
             mTimeMs = period == Long.MAX_VALUE ? mFrozenTimeMs : nowMs;
             // Re-set the reaction uniforms while they animate, once more when the last one has
             // decayed (so it ends at zero), and when the panes moved; never on a plain ambient frame.
             mEventsStale |= active || mWasActive || basinsMoved;
             mWasActive = active;
-            if (mGlassLowRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (mGlassLowRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && SceneFramePolicy.shouldDraw(false, mGlassPeriodNs, mLastLowNs, frameTimeNanos)) {
+                mLastLowNs = frameTimeNanos;
                 renderLowRes(nowMs);
             }
             FRAMES.tick();
-            invalidate();
+            drawScene(frameTimeNanos);
         }
         if (active || period != Long.MAX_VALUE) {
             mPosted = true;
@@ -206,7 +227,7 @@ public final class SceneLayerView extends View {
     }
 
     private void renderLowRes(long nowMs) {
-        int w = getWidth(), h = getHeight();
+        int w = mSurfaceW, h = mSurfaceH;
         if (w <= 0 || h <= 0) return;
         SceneLowRes low = mLowRes;
         if (low == null) {
@@ -224,11 +245,12 @@ public final class SceneLayerView extends View {
 
     // ---- Drawing -----------------------------------------------------------------------------
 
-    @Override
-    protected void onDraw(@NonNull Canvas canvas) {
+    /** One scene frame: uniforms, one node re-recorded, one render request. Main thread. */
+    private void drawScene(long frameTimeNanos) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
-        int w = getWidth(), h = getHeight();
-        if (w <= 0 || h <= 0) return;
+        HardwareRenderer renderer = mRenderer;
+        int w = mSurfaceW, h = mSurfaceH;
+        if (renderer == null || !mSurfaceReady || w <= 0 || h <= 0) return;
         Trace.beginSection("Scene.contour.draw");
         try {
             ContourProgram program = mProgram;
@@ -244,17 +266,70 @@ public final class SceneLayerView extends View {
                 program.setEvents(mEvents, SystemClock.uptimeMillis(), mDensity);
                 mEventsStale = false;
             }
-            canvas.drawRect(0f, 0f, w, h, mPaint);
+            Canvas c = mNode.beginRecording(w, h);
+            c.drawRect(0f, 0f, w, h, mPaint);
+            mNode.endRecording();
+            renderer.createRenderRequest().setVsyncTime(frameTimeNanos).syncAndDraw();
         } finally {
             Trace.endSection();
         }
     }
 
+    // ---- Surface lifecycle ---------------------------------------------------------------------
+
     @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        closeLowRes();
+    public void surfaceCreated(@NonNull SurfaceHolder holder) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        Trace.beginSection("Scene.surface");
+        try {
+            HardwareRenderer renderer = mRenderer;
+            if (renderer == null) {
+                renderer = new HardwareRenderer();
+                renderer.setName("SceneContour");
+                renderer.setOpaque(true);
+                mNode.setPosition(0, 0, 1, 1);
+                renderer.setContentRoot(mNode);
+                mRenderer = renderer;
+            }
+            renderer.setSurface(holder.getSurface());
+            mSurfaceReady = true;
+            mSurfaceBlank = true;
+            mEventsStale = true;
+        } finally {
+            Trace.endSection();
+        }
         kick();
+    }
+
+    @Override
+    public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        Trace.beginSection("Scene.surface");
+        try {
+            mSurfaceW = width;
+            mSurfaceH = height;
+            mNode.setPosition(0, 0, width, height);
+            mSurfaceBlank = true;
+            closeLowRes();
+        } finally {
+            Trace.endSection();
+        }
+        kick();
+    }
+
+    @Override
+    public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
+        Trace.beginSection("Scene.surface");
+        try {
+            mSurfaceReady = false;
+            Choreographer.getInstance().removeFrameCallback(mFrame);
+            mPosted = false;
+            HardwareRenderer renderer = mRenderer;
+            if (renderer != null) renderer.setSurface(null);
+            closeLowRes();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     @Override
@@ -291,11 +366,20 @@ public final class SceneLayerView extends View {
         if (mScreenOn) kick();
     }
 
-    /** Called when the controller removes the layer: stops frames and frees the offscreen target. */
+    /** Called when the controller removes the layer: stops frames, frees the renderer and the offscreen target. */
     public void destroy() {
         mDestroyed = true;
+        mSurfaceReady = false;
         Choreographer.getInstance().removeFrameCallback(mFrame);
         mPosted = false;
         closeLowRes();
+        HardwareRenderer renderer = mRenderer;
+        mRenderer = null;
+        if (renderer != null) {
+            Trace.beginSection("Scene.surface");
+            renderer.destroy();
+            Trace.endSection();
+        }
+        mNode.discardDisplayList();
     }
 }
