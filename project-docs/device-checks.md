@@ -2573,3 +2573,27 @@ checked against pre's Settings; these name v2's pages.
   files dir) then returning to the launcher puts Android's colours back. With the launcher as the
   home app nothing changes from before. Logcat shows "App-only wallpaper seed" once per pick and no
   repeated "Wallpaper colours moved" lines (no recreate loop) · emulator (API 31+), debug build.
+
+## X11 audio for Linux apps
+
+Sound for Linux apps with no shell step (the launcher starts PulseAudio and sets `PULSE_SERVER`).
+Agent items first, then the developer's.
+
+- 2026-10-23 · commit "feat(x11): start PulseAudio for Linux apps and point them at it" · Fresh
+  install, Set up Linux apps with Chromium ticked (the command now lists `pulseaudio`); open
+  Chromium from the drawer in the prefix and play a video: sound comes out, `pulseaudio` is
+  running afterwards (it stays up) and Chromium was never started from a shell · emulator (no mic
+  needed, check the sink is not muted; if the emulator has no audio, check `pactl info` instead).
+- 2026-10-23 · same · The same in a Debian container (Chromium or any app that plays sound from
+  the drawer): sound comes out over `tcp:127.0.0.1:4713`; kill the server, tap the app again and
+  it comes back; with a server from a shell (`pulseaudio --start`, TMPDIR=$PREFIX/tmp) already
+  running, ours still starts in `$PREFIX/tmp/termux-launcher-pulse`; the tcp module is listed once
+  after two container launches and not at all after prefix-only launches · emulator.
+- 2026-10-23 · same · A shell with a custom TMPDIR (`export TMPDIR=$HOME/.tmp` in the shell
+  config, restart Termux): a drawer-launched Chromium still has sound, and with a desktop (XFCE)
+  open, an app inside it plays sound too (the desktop's own XDG_RUNTIME_DIR does not hide the
+  server) · emulator.
+- 2026-10-23 · same (Developer) · On pong: remove `~/.config/pulse/client.conf` and
+  `~/.config/pulse/daemon.conf` (the stopgaps), stop the hand-started server, restart Termux, run
+  Set up Linux apps (or `pkg install pulseaudio`), open Chromium from the drawer and play a video:
+  sound works · pong, release build.

@@ -43,7 +43,8 @@ public class X11LinuxAppRunnerTest {
         assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
             + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.inputMethodBlock(":1")
-            + "cd \"$HOME\"\nexec firefox --new-window\n", script);
+            + "cd \"$HOME\"\n" + X11LinuxAppRunner.audioBlock(false)
+            + "exec firefox --new-window\n", script);
     }
 
     @Test public void anAppInThePrefixMeetsFcitx5OnTheDisplaysBusWhenBothAreThere() {
@@ -81,6 +82,78 @@ public class X11LinuxAppRunnerTest {
             .contains("IM_MODULE"));
         assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
             Collections.emptyList(), null).contains("IM_MODULE"));
+    }
+
+    @Test public void anAppIsGivenAPulseServerInItsOwnRuntimeDirWhenPulseaudioIsInstalled() {
+        String bin = com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
+        String dir = "'" + X11LinuxAppRunner.PULSE_RUNTIME_DIR + "'";
+        String socket = "'unix:" + X11LinuxAppRunner.PULSE_SOCKET + "'";
+        String check = "PULSE_CLIENTCONFIG=/dev/null PULSE_SERVER=" + socket + " '" + bin
+            + "/pactl' info > /dev/null 2>&1";
+        String block = X11LinuxAppRunner.audioBlock(false);
+
+        // Guarded on the binary, so a prefix without pulseaudio runs exactly as before.
+        assertTrue(block.startsWith("if [ -x '" + bin + "/pulseaudio' ]; then\n"));
+        assertTrue(block.endsWith("fi\n"));
+        // Started only when nothing answers, in a runtime dir of its own so a server already in
+        // the shell's never refuses it, detached, kept up, past a client.conf's default-server.
+        assertTrue(block.contains("if ! " + check + "; then\nmkdir -p " + dir + " && chmod 700 "
+            + dir + "\nXDG_RUNTIME_DIR=" + dir + " PULSE_CLIENTCONFIG=/dev/null '" + bin
+            + "/pulseaudio' --start --exit-idle-time=-1 > /dev/null 2>&1\nfi\n"));
+        // The socket is the default one of that dir, fixed whatever the shell's TMPDIR says.
+        assertEquals(X11LinuxAppRunner.PULSE_RUNTIME_DIR + "/pulse/native",
+            X11LinuxAppRunner.PULSE_SOCKET);
+        assertTrue(X11LinuxAppRunner.PULSE_RUNTIME_DIR.startsWith(
+            com.termux.shared.termux.TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/"));
+        assertFalse(block.contains("TMPDIR"));
+        assertTrue(block.contains("export PULSE_SERVER=" + socket + "\n"));
+        assertTrue(block.contains("if ! " + check + "; then unset PULSE_SERVER\n"));
+        // A prefix app never opens a loopback port, and nothing is on the daemon's command line.
+        assertFalse(block.contains("module-native-protocol-tcp"));
+        assertFalse(block.contains(" -L "));
+
+        String script = X11LinuxAppRunner.script(app("chromium"), ":1", Collections.emptyList());
+        assertTrue(script.contains(block));
+        assertTrue("before the app runs", script.indexOf(block) < script.indexOf("exec "));
+    }
+
+    @Test public void aDesktopGetsTheServerBeforeItsRuntimeDirChangesWhereLibpulseLooks() {
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null);
+        String block = X11LinuxAppRunner.audioBlock(false);
+
+        // PULSE_SERVER is exported ahead of sessionBody's XDG_RUNTIME_DIR, and wins over it.
+        assertTrue(script.contains(block));
+        assertTrue(script.indexOf(block) < script.indexOf("export XDG_RUNTIME_DIR="));
+        assertFalse(X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE"))
+            .contains("PULSE_SERVER"));
+    }
+
+    @Test public void aContainerLaunchLoadsTheLoopbackListenerOnceTheServerAnswers() {
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        LinuxAppCatalog.LinuxApp inDebian = new LinuxAppCatalog.LinuxApp(debian, "chromium",
+            "chromium", "chromium", "", "", "", false);
+        String bin = com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
+        String block = X11LinuxAppRunner.audioBlock(true);
+
+        // Only after the server answers (the else of the "does not answer" test), skipped when
+        // already loaded, and a busy port never fails the launch.
+        assertTrue(block.contains("then unset PULSE_SERVER\nelse\n"
+            + "PULSE_CLIENTCONFIG=/dev/null '" + bin + "/pactl' list short modules 2> /dev/null"
+            + " | grep -q module-native-protocol-tcp || PULSE_CLIENTCONFIG=/dev/null '" + bin
+            + "/pactl' load-module module-native-protocol-tcp listen=127.0.0.1"
+            + " auth-ip-acl=127.0.0.1 auth-anonymous=1 port=4713 > /dev/null 2>&1 || true\nfi\nfi\n"));
+        assertTrue(X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList())
+            .contains(block));
+        assertTrue(X11LinuxAppRunner.sessionScript(
+            session(debian, "xfce", "startxfce4", "XFCE"), ":1", Collections.emptyList(), null)
+            .contains(block));
+        // The container is handed the TCP address with -e; no host variable crosses a login.
+        assertEquals("tcp:127.0.0.1:4713", X11LinuxAppRunner.PULSE_SERVER_TCP);
+        assertTrue(ProotDistro.loginCommand(debian, "chromium")
+            .contains(" -e PULSE_SERVER=tcp:127.0.0.1:4713 "));
+        assertTrue(ProotDistro.FORWARDED_ENV.contains("PULSE_SERVER=tcp:127.0.0.1:4713"));
     }
 
     @Test public void theNoSandboxOverloadAppendsTheFlagToTheAppsOwnCommand() {
@@ -134,9 +207,10 @@ public class X11LinuxAppRunnerTest {
             + "export XDG_SESSION_TYPE=x11\n"
             + "export XDG_CURRENT_DESKTOP='XFCE'\n"));
         assertTrue("the desktop is what the shell becomes", script.endsWith("exec startxfce4\n"));
-        // An app's own script is untouched by any of it.
+        // An app's own script exports none of it (the XDG_RUNTIME_DIR in the audio block is set
+        // for the sound server's start line alone).
         assertFalse(X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList())
-            .contains("XDG_"));
+            .contains("export XDG_"));
     }
 
     @Test public void aDesktopThatNamesNoDesktopNamesIsToldNothingAboutItself() {

@@ -63,6 +63,8 @@ public final class GuiAppsSetup {
      * installed later reports focus too rather than leaving taps in it to the cursor alone.
      */
     private static final String[] INPUT_METHOD_PACKAGES = {"fcitx5", "fcitx5-gtk3", "fcitx5-qt"};
+    /** The sound server the launcher starts for the apps it opens. */
+    private static final String AUDIO_PACKAGE = "pulseaudio";
 
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
@@ -360,6 +362,9 @@ public final class GuiAppsSetup {
         // field takes focus. GTK3 because the starter apps are GTK3. Termux's x11 repository
         // only; VAJ's repository has not been checked for them.
         if (!vaj) packages.addAll(Arrays.asList(INPUT_METHOD_PACKAGES));
+        // Sound: the launcher starts this server for the apps it opens
+        // (X11LinuxAppRunner#audioBlock). Termux's repository only; VAJ's has not been checked.
+        if (!vaj) packages.add(AUDIO_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
             if (vaj && app == StarterApp.BROWSER) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));

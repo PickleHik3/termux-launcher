@@ -278,7 +278,8 @@ public class ProotDistroTest {
 
         assertNotNull(debian);
         assertEquals("proot-distro login debian -u amal --shared-x11"
-                + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1 -- /bin/sh -c 'gimp'",
+                + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+                + " -e PULSE_SERVER=tcp:127.0.0.1:4713 -- /bin/sh -c 'gimp'",
             ProotDistro.loginCommand(debian, "gimp"));
         // Nothing of the host's environment crosses, so what a prefix app gets exported is
         // passed in by hand instead.

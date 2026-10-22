@@ -35,13 +35,16 @@ public final class ProotDistro {
      * — not even {@code DISPLAY} — so everything an app needs is passed with {@code -e}. The
      * display is taken from the shell the script runs in, which
      * {@link X11LinuxAppRunner#script} has just exported; the rest mirrors
-     * {@link X11LinuxAppRunner#TOUCH_ENV}, which does the same job for a prefix app.
+     * {@link X11LinuxAppRunner#TOUCH_ENV}, which does the same job for a prefix app. Sound goes
+     * over loopback TCP ({@link X11LinuxAppRunner#audioBlock} starts the server on the host): the
+     * prefix's tmp, where the unix socket lives, is not bound into a container.
      *
      * <p>The GPU profile is deliberately not forwarded: it names drivers installed in the prefix,
      * and whether the container has its own is a separate question the spec parks.
      */
     static final List<String> FORWARDED_ENV = Collections.unmodifiableList(Arrays.asList(
-        "DISPLAY=${DISPLAY:-:0}", "MOZ_USE_XINPUT2=1"));
+        "DISPLAY=${DISPLAY:-:0}", "MOZ_USE_XINPUT2=1",
+        "PULSE_SERVER=" + X11LinuxAppRunner.PULSE_SERVER_TCP));
 
     /**
      * What a container name or a user name may contain. Both go on a command line unquoted, and
