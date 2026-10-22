@@ -663,17 +663,21 @@ public final class X11LinuxAppRunner {
      * to fcitx5 over D-Bus alone, so an app on any other bus never reaches it, and its text
      * fields never report focus.
      *
-     * <p>Only when fcitx5 is installed and the helper's bus for this display is actually up: the
-     * socket only exists while the helper runs, and an app given a bus nobody answers on is worse
-     * off than one given none. Without fcitx5 the app is run exactly as it always was. Pure, so
-     * the composition is tested.
+     * <p>Only when fcitx5 is installed and the helper's bus for this display is actually up: its
+     * socket is there and the helper that made it is still alive, by the pid it keeps beside it.
+     * A helper killed outright leaves the socket behind, and an app given a bus nobody answers on
+     * is worse off than one given none. The test is shell builtins only, no process started.
+     * Without fcitx5 the app is run exactly as it always was. Pure, so the composition is tested.
      */
     @NonNull
     static String inputMethodBlock(@NonNull String display) {
         String bus = X11CliInstaller.imBusPath(display);
+        String pid = X11CliInstaller.imHelperPidPath(display);
         StringBuilder block = new StringBuilder();
         block.append("if [ -x ").append(ProotDistro.singleQuote(X11CliInstaller.FCITX5_PATH))
-            .append(" ] && [ -S ").append(ProotDistro.singleQuote(bus)).append(" ]; then\n");
+            .append(" ] && [ -S ").append(ProotDistro.singleQuote(bus)).append(" ]")
+            .append(" && { read -r termux_x11_im_pid < ").append(ProotDistro.singleQuote(pid))
+            .append("; } 2>/dev/null && kill -0 \"$termux_x11_im_pid\" 2>/dev/null; then\n");
         for (String line : INPUT_METHOD_ENV) block.append("export ").append(line).append('\n');
         block.append("export DBUS_SESSION_BUS_ADDRESS=")
             .append(ProotDistro.singleQuote("unix:path=" + bus)).append('\n');
