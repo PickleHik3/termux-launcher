@@ -255,6 +255,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         dismissPaneMenu();
         if (currentPage != 0) { currentPage = 0; render(); }
     }
+    /** Whether the pane's menu or its editor is up over the widgets. */
+    public boolean isLayerOpen() {
+        return (paneMenu != null && paneMenu.isShowing()) || pane.widgetEditActive();
+    }
     public boolean onBackPressed() {
         if (paneMenu != null && paneMenu.isShowing()) { dismissPaneMenu(); return true; }
         if (pane.widgetEditActive()) { exitEditMode(); return true; }
@@ -1001,7 +1005,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             cell.setTranslationZ(0f);
             cell.setVisibility(View.VISIBLE);
         }
-        pane.grid().setDragPinned(-1);
+        pane.grid().setDragPinned(WidgetGridView.NO_DRAG_PIN);
         if (edit != null) edit.lifted = false;
     }
 

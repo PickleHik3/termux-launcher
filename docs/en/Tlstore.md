@@ -41,7 +41,7 @@ Ten items; each brings whatever it needs along with it. Ask about any of them fi
 | `sigye` | A clock for the terminal. |
 | `termux-api-shims` | The Termux:API commands, working without the Termux:API app. See [Termux API commands](#termux-api-commands). Launcher only. |
 
-The coding agents' own updaters are switched off; `tlstore update` is how they get new versions.
+The coding agents' own updaters are switched off; `tlstore upgrade` is how they get new versions.
 **dawn** asks the launcher's AI with `Ctrl+/`, using the model picked for **Assistant and
 endpoint** in the [Model centre](On_Device_AI.md#functions), and finds notes by meaning through the
 **Dawn notes integration** function.
@@ -58,11 +58,12 @@ set up from **Tools that follow the terminal colours** in **Settings → Appeara
 | `tlstore list` | Everything in the store; `*` marks what you have. `-i` only installed, `-a` only not installed |
 | `tlstore search fish` | Find an item by name or description |
 | `tlstore info fish-shell` | What an item is, its version, and where it goes |
-| `tlstore install kitten sigye` | Install items by name; with no name, open the picker |
+| `tlstore install kitten sigye` | Install items by name, from the newest item list; with no name, open the picker |
 | `tlstore remove kitten` | Remove an item tlstore installed |
-| `tlstore update` | Bring everything up to date. `--check` only lists what is out of date; `--offline` uses the item list you already have |
+| `tlstore update` | Fetch the newest item list and show what can be upgraded, tlstore included; installs nothing. `--offline` uses the item list you already have |
+| `tlstore upgrade` | Bring everything up to date, tlstore itself too; `tlstore upgrade codex` does just that item |
 | `tlstore rollback codex` | Go back one version and hold the item there |
-| `tlstore hold codex` / `tlstore unhold codex` | Keep an item at its version when you update, or let it update again |
+| `tlstore hold codex` / `tlstore unhold codex` | Keep an item at its version when you upgrade, or let it upgrade again |
 | `tlstore refresh` | Fetch the newest item list without changing anything installed |
 | `tlstore display` | Set up graphics for Linux apps on the display |
 | `tlstore doctor` | Check that everything is in place |
@@ -71,23 +72,25 @@ set up from **Tools that follow the terminal colours** in **Settings → Appeara
 | `tlstore version` | The tlstore and item-list versions |
 | `tlstore readme kitten` | Where a copy of the item's README is saved |
 
-- `--dry-run` on `install`, `remove`, `update` and `rollback` shows what would happen and changes
+- `--dry-run` on `install`, `remove`, `upgrade` and `rollback` shows what would happen and changes
   nothing.
 - `-y` says yes to everything except replacing a config file of yours; `--configs` on `install`
-  and `update` answers that one too, for scripts.
+  and `upgrade` answers that one too, for scripts.
 - `--tsv` on `list`, `search`, `info` and `update --check` prints tab-separated columns for a
   program to read.
+- `tlstore update <name>` still works, as `tlstore upgrade <name>`, for scripts written before
+  tlstore 0.21.
 - Exit status: 0 done, 1 something failed, 2 a mistake in what you typed.
 - `tlstore shell` is gone; it is now `tlstore install fish-shell`.
 
 ## Going back a version
 
 `tlstore rollback <name>` puts an item back at the version it had before its last update, then
-holds it there so the next `tlstore update` does not undo it.
+holds it there so the next `tlstore upgrade` does not undo it.
 
-- A held item is skipped by `tlstore update` and marked in `tlstore list -i` and `tlstore info`.
-- `tlstore update <name>` updates it anyway and releases the hold. `tlstore unhold <name>` releases
-  it without updating.
+- A held item is skipped by `tlstore upgrade` and marked in `tlstore list -i` and `tlstore info`.
+- `tlstore upgrade <name>` upgrades it anyway and releases the hold. `tlstore unhold <name>` releases
+  it without upgrading.
 - Rollback goes one step only, to a version tlstore recorded.
 - Package items, bundles and fish plugins cannot go back.
 

@@ -301,8 +301,9 @@ The Display place exists only while **Settings → Display → Display** is on, 
 - **Apps cannot open the display from a proot.** Log in with `--shared-x11`, and check
   `echo $DISPLAY` inside.
 - **Nothing is accelerated.** `glmark2-es2` names the renderer in its first lines; `llvmpipe`
-  means a profile variable is missing or the profile does not fit this GPU. Run
-  `termux-x11-gpu-setup` (or `tlstore display`): it tries every graphics profile that fits the phone
+  means a profile variable is missing or the profile does not fit this GPU. Tap
+  **Benchmark graphics** under Settings → Display → Linux apps → Set up Linux apps → Graphics, or run
+  `termux-x11-gpu-setup` in the terminal: it tries every graphics profile that fits the phone
   and keeps the best. `launcherctl x11 gpu` says which profile fits.
 - **`termux-x11-gpu-setup` says even software rendering did not finish.** The test could not talk
   to a display at all; the first two causes above are the usual ones, and the full log it names

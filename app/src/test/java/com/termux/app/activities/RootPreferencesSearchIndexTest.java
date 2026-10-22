@@ -44,7 +44,7 @@ public class RootPreferencesSearchIndexTest {
     private static final String[][] EXPECTED_ROWS = {
         {"wallpaper_style", "launcher_apps", "status_bar", "notifications"},
         {"terminal", "keyboard_input", "display", "on_device_ai"},
-        {"app_behavior", "backup_restore", "services_permissions", "advanced_diagnostics", "about_support"}
+        {"performance", "app_behavior", "backup_restore", "services_permissions", "advanced_diagnostics", "about_support"}
     };
 
     private SettingsActivity.RootPreferencesFragment launch() {
@@ -131,14 +131,24 @@ public class RootPreferencesSearchIndexTest {
     }
 
     @Test
-    public void searchingALazyModeTermFindsAppBehaviorNotStatusBar() {
+    public void searchingTheIdleAndPresetRowsFindsBatteryAndPerformance() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
         assertTrue(search.getOnQueryChangedListener() != null);
-        search.getOnQueryChangedListener().onQueryChanged("lazy mode");
+        search.getOnQueryChangedListener().onQueryChanged("reduce idle activity");
 
-        assertTrue("Lazy mode lives on App behavior now", isVisible(root, "app_behavior"));
-        assertFalse("status bar page has no lazy mode row", isVisible(root, "status_bar"));
+        assertTrue("idle activity lives on Battery & performance now", isVisible(root, "performance"));
+        assertFalse("status bar page has no idle activity row", isVisible(root, "status_bar"));
+        assertFalse("App behavior only links to it", isVisible(root, "app_behavior"));
+
+        search.getOnQueryChangedListener().onQueryChanged("lazy mode");
+        assertTrue("the old name is a search term of its own", isVisible(root, "performance"));
+
+        search.getOnQueryChangedListener().onQueryChanged("low-memory preset");
+        assertTrue(isVisible(root, "performance"));
+        assertEquals("the hit opens the page itself",
+            "com.termux.app.fragments.settings.termux.PerformancePreferencesFragment",
+            root.findPreference("performance").getFragment());
     }
 
     @Test

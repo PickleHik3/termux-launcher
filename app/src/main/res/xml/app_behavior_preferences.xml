@@ -1,20 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One home for the switches that cut across the launcher: power saving, vibration and Recents.
-     Every key is the one it always was; only the page that edits it moved. -->
+<!-- One home for the switches that cut across the launcher: vibration and Recents, with a way to
+     Battery & performance. Every key is the one it always was; only the page that edits it moved. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Idle activity and the Low-memory preset live on Battery & performance now. -->
     <PreferenceCategory app:title="@string/settings_behavior_battery_header">
-        <SwitchPreferenceCompat
-            app:key="lazy_mode"
-            app:title="@string/settings_behavior_idle_title"
-            app:summary="@string/settings_behavior_idle_summary"
-            app:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="low_memory_preset"
-            app:title="@string/settings_behavior_low_memory_title"
-            app:summary="@string/settings_behavior_low_memory_summary"
-            app:defaultValue="false" />
+        <Preference
+            app:key="performance_link"
+            app:persistent="false"
+            app:title="@string/settings_destination_performance"
+            app:summary="@string/settings_destination_performance_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.PerformancePreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_behavior_vibration_header">

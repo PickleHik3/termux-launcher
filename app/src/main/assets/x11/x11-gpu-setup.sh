@@ -18,6 +18,9 @@
 #   6. Keeps the best one and saves it.
 #   7. If a Debian container (proot-distro) is installed, repeats the test inside it.
 #   8. Removes the test program and the drivers that lost, unless you asked to keep them.
+#      Only what this run installed goes, with the dependencies nothing else needs any more;
+#      nothing that was there before is touched. A run that stops early (an error, Ctrl-C, a
+#      closed terminal) puts things back the same way, keeping only the display's own packages.
 #
 # Options:
 #   --keep        leave every installed package in place afterwards
@@ -82,12 +85,43 @@ installed_before() {
 pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else pkg update -y && pkg upgrade -y; fi; }
 pm_refresh() { if [ $PM = pacman ]; then pacman -Sy --noconfirm; else apt-get update; fi; }
 pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else pkg install -y "$@"; fi; }
-pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else pkg uninstall -y "$@" && apt-get autoremove -y; fi; }
 # With apt the X11 packages live in a repository that is itself a package; pacman has it built in.
 REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
 
-# Keep track of what we install so it can be removed again. A package that was already on the
-# phone before we started is never touched.
+# Installed package names, space-separated. With apt, a package that an install cut off halfway
+# left unpacked counts as installed, so it goes again like the rest. Given "pd": the Debian
+# container's (proot-distro quotes each word, so the format string arrives intact).
+installed_now() {
+  if [ $# = 0 ] && [ $PM = pacman ]; then pacman -Qq 2>/dev/null | tr '\n' ' '; return; fi
+  # shellcheck disable=SC2016
+  "$@" dpkg-query -W -f '${Status} ${Package}\n' 2>/dev/null | awk '{ sub(/\r$/, "") }
+    $1 ~ /^(unknown|install|hold|deinstall|purge)$/ && $3 != "not-installed" && $3 != "config-files" {
+      sub(/:.*/, "", $4); printf "%s ", $4 }'
+}
+# Set arithmetic on space-separated names; each prints one space-separated line, no repeats.
+set_minus() {
+  local -A drop=(); local w out=()
+  for w in $2; do drop[$w]=1; done
+  for w in $1; do [ -n "${drop[$w]:-}" ] || { drop[$w]=1; out+=("$w"); }; done
+  echo "${out[*]}"
+}
+set_and() {
+  local -A have=(); local w out=()
+  for w in $2; do have[$w]=1; done
+  for w in $1; do [ "${have[$w]:-}" = 1 ] && { have[$w]=2; out+=("$w"); }; done
+  echo "${out[*]}"
+}
+# apt_sim [pd] ARGS... -> the names an "apt-get -s ARGS" would take out. Fails when apt cannot
+# even plan, e.g. after an install was cut off and dpkg first wants "dpkg --configure -a".
+apt_sim() {
+  local run=(); [ "$1" = pd ] && { run=(pd); shift; }
+  "${run[@]}" apt-get -s "$@" 2>/dev/null |
+    awk '{ sub(/\r$/, "") } $1 == "Remv" || $1 == "Purg" { sub(/:.*/, "", $2); printf "%s ", $2 }'
+}
+
+# Keep track of what we install, for the summary in step 3. What is removed again at the end is
+# worked out from the package list itself (see take_out below), so an install that was cut off
+# or only partly worked is covered too.
 WE_INSTALLED=(); NOT_AVAILABLE=()
 install_pkgs() {
   local missing=()
@@ -111,8 +145,129 @@ stop_display() {
   [ -n "$SERVER_PID" ] && { kill "$SERVER_PID" 2>/dev/null; sleep 1; rm -f "$TMPDIR/.X11-unix/X$DISPLAY_NO"; }
   SERVER_PID=""; true
 }
-cleanup_processes() { stop_virgl; stop_display; }
-trap cleanup_processes EXIT
+
+# ---------------------------------------------------------------------------------------------
+# Putting things back. BEFORE is the package list taken just before the first install (step 3),
+# PROOT_BEFORE the container's, taken just before its install (step 7). Whatever is installed at
+# the end and was not in that list is this run's. Empty means "nothing to put back".
+BEFORE=""; PROOT_BEFORE=""; PROOT_TEST_PKGS="glmark2-es2 libgl1-mesa-dri"
+ALL_PKGS=""; CHOSEN=""; PROOT_WINNER=""; FINISHED=0; CLEANED=0; TOOK_OUT=0
+
+# take_out WHERE NEW NAMED KEEP — remove this run's packages from WHERE ("" = Termux, "pd" = the
+# Debian container). NEW: this run's packages there; NAMED: the ones the script asks for by
+# name; KEEP: names that stay. What goes:
+#   targets = NAMED that are NEW, minus KEEP (pacman: plus NEW packages left as dependencies of
+#             nothing, which an install cut off halfway can leave)
+#   plan    = what the package manager's own dry run takes out with the targets: them, plus the
+#             dependencies nothing that stays needs (pacman -Rsp, apt-get -s --auto-remove)
+#   remove  = plan that is NEW, minus KEEP
+# A package that was there before is never NEW, so it stays, even an unneeded one the user
+# already had. A kept package's dependencies are needed by something that stays, so they are
+# never in the plan. apt would also take out whatever depends on a removed package, so its
+# exact removal is dry-run once more and refused if it reaches anything outside "remove".
+take_out() {
+  local where=$1 new=$2 named=$3 keep=$4 verb=remove hand targets plan remove extra
+  [ -n "$where" ] && verb=purge   # inside Debian, purge as before: nothing of these was there
+  if [ -z "$where" ] && [ $PM = pacman ]; then
+    hand="pacman -R"
+    targets=$(set_minus "$(set_and "$named" "$new") $(set_and "$(pacman -Qdtq 2>/dev/null)" "$new")" "$keep")
+    [ -z "$targets" ] && return 0
+    # shellcheck disable=SC2086
+    plan=$(pacman -Rsp --print-format %n $targets 2>/dev/null | tr '\n' ' ') || plan="?"
+  else
+    hand="apt-get $verb"; [ -n "$where" ] && hand="proot-distro login debian -- apt-get $verb"
+    targets=$(set_minus "$(set_and "$named" "$new")" "$keep")
+    # With no named target left, there may still be dependencies of an install that was cut off.
+    # shellcheck disable=SC2086
+    if [ -n "$targets" ]; then plan=$(apt_sim $where --auto-remove $verb $targets) || plan="?"
+    else plan=$(apt_sim $where autoremove) || plan="?"; fi
+  fi
+  TOOK_OUT=1
+  if [ "$plan" = "?" ]; then
+    detail "The package manager could not work out what to remove (it may still be busy, or an"
+    detail "install was cut off). Once it works again, remove these by hand: $hand $targets"
+    return 1
+  fi
+  remove=$(set_minus "$(set_and "$plan" "$new")" "$keep")
+  [ -z "$remove" ] && { TOOK_OUT=0; return 0; }
+  if [ $PM = apt ] || [ -n "$where" ]; then
+    # shellcheck disable=SC2086
+    extra=$(set_minus "$(apt_sim $where $verb $remove)" "$remove")
+    if [ -n "$extra" ]; then
+      detail "Not removing $remove: apt would take $extra with it, and that stays."
+      return 1
+    fi
+  fi
+  if [ -n "$where" ]; then detail "Removing the test program from Debian again: $remove"
+  else detail "Removing what was only needed for the tests: $remove"; fi
+  printf '\n### %s: removing %s; left in place: %s\n' "${where:-termux}" "$remove" "$(set_minus "$new" "$remove")" >>"$LOG"
+  # A held lock (another install running) or a half-done install makes this fail cleanly with
+  # the package manager's own message; nothing is removed then, and the line below says what to.
+  # shellcheck disable=SC2086
+  if [ -n "$where" ]; then "$where" apt-get purge -y $remove
+  elif [ $PM = pacman ]; then pacman -R --noconfirm $remove
+  else apt-get remove -y $remove; fi || {
+    detail "Some packages could not be removed (see the output above). If another install was"
+    detail "running or was cut off, finish it first (apt: dpkg --configure -a), then: $hand $remove"
+    return 1
+  }
+}
+
+cleanup_container() {
+  [ -n "$PROOT_BEFORE" ] || return 0
+  local before=$PROOT_BEFORE; PROOT_BEFORE=""   # once only
+  take_out pd "$(set_minus "$(installed_now pd)" "$before")" "$PROOT_TEST_PKGS" ""
+}
+
+# What stays: the display's own packages, the winner's drivers and, when the container chose
+# virgl, its helper. A run that stops before step 6 has written its result has no winner, and
+# keeps only x11-repo and xkeyboard-config: the script says up front that those stay, the
+# display needs them, and the launcher would install them for it anyway.
+cleanup_prefix() {
+  [ -n "$BEFORE" ] || return 0
+  local before=$BEFORE new keep_new; BEFORE=""   # once only
+  KEEP_PKGS="$REPO_PKG xkeyboard-config"
+  [ -n "$CHOSEN" ] && KEEP_PKGS="$KEEP_PKGS ${PKGS[$CHOSEN]}"
+  [ "$PROOT_WINNER" = virgl ] && KEEP_PKGS="$KEEP_PKGS virglrenderer-android"
+  new=$(set_minus "$(installed_now)" "$before")
+  # A kept package that first came in as another's dependency is marked as wanted for itself, so
+  # neither this dry run nor a later autoremove counts it, or what it needs, as left over.
+  keep_new=$(set_and "$KEEP_PKGS" "$new")
+  if [ -n "$keep_new" ]; then
+    # shellcheck disable=SC2086
+    if [ $PM = pacman ]; then pacman -D --asexplicit $keep_new >/dev/null 2>&1
+    else apt-mark manual $keep_new >/dev/null 2>&1; fi
+  fi
+  TOOK_OUT=0
+  if [ -n "$new" ]; then take_out "" "$new" "$ALL_PKGS" "$KEEP_PKGS"; fi
+  [ $FINISHED = 1 ] && [ $TOOK_OUT = 0 ] && detail "Nothing to remove."
+  [ $FINISHED = 1 ] && detail "Kept:$( for p in $KEEP_PKGS; do printf ' %s' "$p"; done )"
+  true
+}
+
+# Runs once: at the end of step 8, or on the way out of a run that stopped early. While it
+# runs, Ctrl-C and the like are ignored (and so by the package manager it starts), so a
+# removal is never cut in half. A package manager interrupted earlier has already exited by
+# then: the shell runs this only after the foreground command is gone, and apt and pacman
+# release their locks when they stop on a signal.
+cleanup() {
+  [ $CLEANED = 1 ] && return 0; CLEANED=1
+  trap '' INT TERM HUP
+  stop_virgl; stop_display
+  if [ $FINISHED = 0 ] && { [ -n "$BEFORE" ] || [ -n "$PROOT_BEFORE" ]; }; then
+    if [ $KEEP = 1 ]; then say "Stopped before the end. Leaving every installed package in place, as asked."; return 0; fi
+    say "Stopped before the end. Putting back what this run installed."
+  fi
+  if [ $KEEP = 1 ]; then [ $FINISHED = 1 ] && detail "Keeping every package, as asked."; return 0; fi
+  cleanup_container
+  cleanup_prefix
+}
+trap cleanup EXIT
+# Ctrl-C, a kill, or a closed terminal end the run through the EXIT trap above, with the usual
+# exit codes. With the terminal gone, what cleanup says goes to the log instead.
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exec </dev/null >>"$LOG" 2>&1; exit 129' HUP
 
 # ---------------------------------------------------------------------------------------------
 step 1 "Looking at the phone's graphics chip"
@@ -198,6 +353,11 @@ fi
 step 3 "Installing the test program and drivers"
 detail "Bringing the installed packages up to date."
 pm_upgrade || { say "The packages could not be brought up to date (see the output above), so nothing new was installed."; exit 1; }
+# What is on the phone now stays, whatever happens next. Taken after the upgrade, not before it:
+# a dependency an upgraded package newly pulled in belongs to that package, and taking it out
+# again would break it. Without this list nothing could be told apart, so nothing is removed.
+BEFORE=$(installed_now)
+[ -z "$BEFORE" ] && detail "Could not list the installed packages, so nothing will be removed at the end."
 if [ $PM = apt ]; then
   install_pkgs x11-repo || { say "The X11 package repository could not be added, so the drivers cannot be installed."; exit 1; }
 elif ! grep -q '^\[x11\]' "$PREFIX/etc/pacman.conf"; then
@@ -239,7 +399,8 @@ else
   if ! command -v termux-x11 >/dev/null; then
     say "The display command (termux-x11) is not installed. Turn the Linux display on in the launcher's settings first."; exit 1
   fi
-  termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
+  # A display only for measuring: no fcitx5 beside it, however it is set up for the real one.
+  TERMUX_X11_IM=0 termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 20); do [ -S "$SOCKET" ] && break; sleep 0.5; done
   if [ ! -S "$SOCKET" ]; then
@@ -318,12 +479,13 @@ mkdir -p "$OUT_DIR"
   for kv in ${ENV[$WINNER]}; do echo "export $kv"; done
   [ "${HELPER[$WINNER]}" != "-" ] && echo "# Keep this running in Termux first:  ${HELPER[$WINNER]} &"
 } > "$OUT_FILE"
+CHOSEN=$WINNER   # from here on, a run that stops early keeps the winner's drivers too
 detail "Saved to $OUT_FILE."
 detail "Apps started from the launcher's drawer pick the installed drivers on their own; for a shell, run: source $OUT_FILE"
 
 # ---------------------------------------------------------------------------------------------
 step 7 "The Debian container"
-PROOT_WINNER=""; PROOT_BASE=0; PROOT_SCORE=0; PROOT_INSTALLED_TEST=0
+PROOT_WINNER=""; PROOT_BASE=0; PROOT_SCORE=0
 if [ $SKIP_PROOT = 1 ]; then
   detail "Skipped, as asked."
 elif [ ! -d "$DISTRO_ROOT" ] || ! command -v proot-distro >/dev/null; then
@@ -336,11 +498,11 @@ else
     :
   else
     detail "Installing the test program inside Debian."
-    if pd sh -c 'apt-get update && apt-get install -y glmark2-es2 libgl1-mesa-dri'; then
-      PROOT_INSTALLED_TEST=1
-    else
+    # The container's own list, so only what this install adds is purged again.
+    PROOT_BEFORE=$(installed_now pd)
+    [ -z "$PROOT_BEFORE" ] && detail "Could not list Debian's packages, so the test program will stay there."
+    pd sh -c "apt-get update && apt-get install -y $PROOT_TEST_PKGS" ||
       detail "Could not install it (see the output above); skipping the container."
-    fi
   fi
   if pd sh -c 'command -v glmark2-es2' >/dev/null 2>&1; then
     pd_test() { # ENV-STRING -> RENDERER SCORE STATUS
@@ -373,9 +535,7 @@ else
         detail "virgl's helper is not installed on the Termux side, so software is the only option inside Debian."
       fi
     fi
-    if [ $PROOT_INSTALLED_TEST = 1 ] && [ $KEEP = 0 ]; then
-      pd sh -c 'apt-get purge -y glmark2-es2 && apt-get autoremove -y' && detail "Removed the test program from Debian again."
-    fi
+    [ $KEEP = 0 ] && cleanup_container
   fi
   if [ -n "$PROOT_WINNER" ]; then
     {
@@ -394,24 +554,8 @@ fi
 
 # ---------------------------------------------------------------------------------------------
 step 8 "Cleaning up"
-stop_display
-if [ $KEEP = 1 ]; then
-  detail "Keeping every package, as asked."
-else
-  KEEP_PKGS="$REPO_PKG xkeyboard-config ${PKGS[$WINNER]}"
-  [ "$PROOT_WINNER" = virgl ] && KEEP_PKGS="$KEEP_PKGS virglrenderer-android"
-  REMOVE=()
-  for p in "${WE_INSTALLED[@]}"; do
-    case " $KEEP_PKGS " in *" $p "*) ;; *) REMOVE+=("$p") ;; esac
-  done
-  if [ ${#REMOVE[@]} -gt 0 ]; then
-    detail "Removing what was only needed for the tests: ${REMOVE[*]}"
-    pm_remove "${REMOVE[@]}" || detail "Some packages could not be removed (see the output above)."
-  else
-    detail "Nothing to remove."
-  fi
-  detail "Kept:$( for p in $KEEP_PKGS; do printf ' %s' "$p"; done )"
-fi
+FINISHED=1
+cleanup
 
 say "Done. Summary:"
 detail "Graphics chip: $GPU_NAME"
