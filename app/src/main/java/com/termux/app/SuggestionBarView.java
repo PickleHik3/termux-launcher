@@ -317,8 +317,14 @@ public final class SuggestionBarView extends GridLayout
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
     private int dockRowHeightHintPx = 0;
-    /** The icon size the dock resolved for the lying-down form; 0 until it has said. */
+    /**
+     * The icon one slot draws lying down, as the dock resolved it: final, its slot fit and bead
+     * fit already applied (DockLayout#slotIconPx); 0 until it has said.
+     */
     private int dockIconSizePx = 0;
+    /** The rail's icon and the length of one of its slots, as the dock resolved them; 0 until then. */
+    private int dockRailIconPx = 0;
+    private int dockRailSlotLengthPx = 0;
     private List<String> defaultButtonStrings = new ArrayList<>();
     private final Map<String, WeakReference<View>> launchTargetViews = new HashMap<>();
     private final Map<String, WeakReference<View>> launchTargetViewsByPackage = new HashMap<>();
@@ -1556,6 +1562,48 @@ public final class SuggestionBarView extends GridLayout
         requestLayout();
         invalidate();
         scheduleStableDrawReleaseIfPossible();
+        // The slots already built keep the size they were built at until something resizes
+        // them; nothing else re-renders the row when only the dock's size moved.
+        scheduleSlotIconResize();
+    }
+
+    /**
+     * The dock's answer for this pass, and the one place the row is told its sizes: the band it
+     * lies in (its hint), the icon one of its slots draws lying down, and the rail's icon and slot
+     * standing up. The row draws exactly these and works none of them out of its own.
+     */
+    public void setDockLayout(@NonNull com.termux.app.dock.DockLayout layout) {
+        int hint = Math.max(0, layout.appsRowBandHintPx);
+        int icon = Math.max(0, layout.slotIconPx);
+        int railIcon = Math.max(0, layout.railIconSizePx);
+        int railSlot = Math.max(0, layout.railSlotLengthPx);
+        boolean scaleChanged = Math.abs(iconScale - layout.iconScale) >= 0.0001f;
+        boolean hintChanged = hint != dockRowHeightHintPx;
+        boolean iconChanged = icon != dockIconSizePx;
+        boolean railChanged = railIcon != dockRailIconPx || railSlot != dockRailSlotLengthPx;
+        if (!scaleChanged && !hintChanged && !iconChanged && !railChanged) return;
+        iconScale = layout.iconScale;
+        dockRowHeightHintPx = hint;
+        dockIconSizePx = icon;
+        dockRailIconPx = railIcon;
+        dockRailSlotLengthPx = railSlot;
+        if (vertical && !railChanged) return;
+        // A new hint is a new question, so it is asked afresh even if the last one was overruled.
+        if (hintChanged) {
+            rowHeightHintWaived = false;
+            renderDeferredSinceUptimeMs = 0L;
+        }
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
+        invalidate();
+        scheduleStableDrawReleaseIfPossible();
+        if (vertical) {
+            // A rail pages by its slot's length, so its pages are counted again.
+            railPagedAtLengthPx = 0;
+            post(this::reload);
+            return;
+        }
         // The slots already built keep the size they were built at until something resizes
         // them; nothing else re-renders the row when only the dock's size moved.
         scheduleSlotIconResize();
@@ -4323,11 +4371,13 @@ public final class SuggestionBarView extends GridLayout
 
     /** How much of the rail's axis one icon takes: the icon, and its air above and below. */
     private int railSlotLengthPx() {
+        if (dockRailSlotLengthPx > 0) return dockRailSlotLengthPx;
         return com.termux.app.dock.DockLayoutPolicy.railSlotLengthPx(screenDensity());
     }
 
     /** One rail icon, across the rail. */
     private int railIconSizePx() {
+        if (dockRailIconPx > 0) return dockRailIconPx;
         return com.termux.app.dock.DockLayoutPolicy.railIconSizePx(screenDensity());
     }
 
@@ -9218,6 +9268,9 @@ public final class SuggestionBarView extends GridLayout
         // A rail icon is a fixed size on every side: its column has no row height to be a share of.
         if (vertical)
             return railIconSizePx();
+        // The dock's answer is final: it already holds the icon to its slot and to its bead.
+        if (dockIconSizePx > 0)
+            return dockIconSizePx;
         // Lying down the slots share the row's width, so the icon is held to one slot's share of
         // it, less a little air: a large size with many apps would otherwise cover its neighbours.
         int rowWidth = getWidth() - getPaddingLeft() - getPaddingRight();
