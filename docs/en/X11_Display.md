@@ -73,10 +73,11 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 - **The keyboard follows text fields.** In Touchscreen touch mode, tapping a text field on the
   display brings the keyboard up and tapping elsewhere puts it down; see
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).
-- **The keyboard floats.** In landscape the keyboard comes up over the display instead of
-  squeezing it, so the picture keeps the size it was given and nothing on it moves as you type. In
-  portrait the display makes room for the keyboard instead. Either orientation can be set the other
-  way in the Layout editor on the display, after switching to the orientation you want it for.
+- **The keyboard floats.** In either orientation the keyboard comes up over the display instead
+  of squeezing it, so the picture keeps the size it was given and nothing on it moves as you type,
+  whether the keyboard came up from a text field or by hand. Either orientation can be set to make
+  room for the keyboard instead in the Layout editor on the display, after switching to the
+  orientation you want it for.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts, stops or turns on the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap

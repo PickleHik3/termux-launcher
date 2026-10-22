@@ -65,13 +65,12 @@ public class KeyboardOverlayPolicyTest {
     // ------------------------------------------------------------------ when it applies
 
     @Test
-    public void outOfTheBoxTheHomePlaceAndTheDisplayInLandscapeFloatTheKeyboard() {
+    public void outOfTheBoxEveryPlaceThatReadsTheModeFloatsTheKeyboardInBothOrientations() {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 boolean expected = place == PaneWallPage.WIDGETS
-                    || (place == PaneWallPage.DISPLAY
-                        && orientation == PlaceOrientation.LANDSCAPE);
+                    || place == PaneWallPage.DISPLAY;
                 assertEquals(place + " " + orientation, expected,
                     overlays(store, place, orientation));
             }
@@ -89,6 +88,14 @@ public class KeyboardOverlayPolicyTest {
         }
         assertTrue(KeyboardOverlayPolicy.overlays(PaneWallPage.WIDGETS,
             layout(KeyboardMode.RESIZE)));
+    }
+
+    @Test
+    public void aStoredResizeKeepsTheDisplayResizingInPortraitToo() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.RESIZE);
+        assertFalse(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
