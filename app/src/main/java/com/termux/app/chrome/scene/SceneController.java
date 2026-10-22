@@ -143,7 +143,9 @@ public final class SceneController implements LatencyProbe.CommitListener {
         installInvalTrace(layer);
     }
 
-    /** Debug builds with debug.tl.scene_trace_inval=1: wrap the content root in the invalidation recorder. */
+    @Nullable private java.util.List<android.view.ViewGroup.LayoutParams> mInvalTraceParams;
+
+    /** Debug builds with debug.tl.scene_trace_inval=1: wrap the content root's children in the invalidation recorder. */
     private void installInvalTrace(@NonNull SceneLayerView layer) {
         if (mInvalTrace != null || !"1".equals(TRACE_INVAL.get(SystemClock.uptimeMillis()))) return;
         if ((mActivity.getApplicationInfo().flags
@@ -151,14 +153,25 @@ public final class SceneController implements LatencyProbe.CommitListener {
             return;
         }
         android.view.ViewGroup content = mActivity.findViewById(android.R.id.content);
-        if (content == null || content.getChildCount() != 1) return;
-        View child = content.getChildAt(0);
-        android.view.ViewGroup.LayoutParams clp = child.getLayoutParams();
+        if (content == null || content.getChildCount() == 0) return;
+        // The content root can hold overlays beside the main tree: the recorder wraps them all.
         SceneInvalTrace trace = new SceneInvalTrace(mActivity, layer::drawCount);
-        content.removeView(child);
-        trace.addView(child, new FrameLayout.LayoutParams(clp.width, clp.height));
-        content.addView(trace, clp);
+        java.util.ArrayList<View> children = new java.util.ArrayList<>();
+        java.util.ArrayList<android.view.ViewGroup.LayoutParams> params = new java.util.ArrayList<>();
+        for (int i = 0; i < content.getChildCount(); i++) {
+            children.add(content.getChildAt(i));
+            params.add(content.getChildAt(i).getLayoutParams());
+        }
+        content.removeAllViews();
+        for (int i = 0; i < children.size(); i++) {
+            android.view.ViewGroup.LayoutParams clp = params.get(i);
+            trace.addView(children.get(i), new FrameLayout.LayoutParams(clp.width, clp.height));
+        }
+        content.addView(trace, new FrameLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         mInvalTrace = trace;
+        mInvalTraceParams = params;
+        android.util.Log.i("TLSceneInval", "recorder attached over " + children.size() + " content children");
     }
 
     private void removeInvalTrace() {
@@ -166,12 +179,14 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (trace == null) return;
         mInvalTrace = null;
         android.view.ViewGroup content = (android.view.ViewGroup) trace.getParent();
-        if (content == null || trace.getChildCount() != 1) return;
-        View child = trace.getChildAt(0);
-        android.view.ViewGroup.LayoutParams clp = trace.getLayoutParams();
-        trace.removeView(child);
+        java.util.List<android.view.ViewGroup.LayoutParams> params = mInvalTraceParams;
+        mInvalTraceParams = null;
+        if (content == null || params == null || trace.getChildCount() != params.size()) return;
+        java.util.ArrayList<View> children = new java.util.ArrayList<>();
+        for (int i = 0; i < trace.getChildCount(); i++) children.add(trace.getChildAt(i));
+        trace.removeAllViews();
         content.removeView(trace);
-        content.addView(child, clp);
+        for (int i = 0; i < children.size(); i++) content.addView(children.get(i), params.get(i));
     }
 
     private void removeLayer() {
