@@ -59,10 +59,17 @@ public class SuggestionBarRailFormTest {
         return out;
     }
 
-    private SuggestionBarView render(boolean vertical, int count, int width, int height) {
+    /** A bar handed its sizes, as the dock hands them: a bar handed none draws no icons (#135). */
+    private SuggestionBarView sized() {
         SuggestionBarView bar = new SuggestionBarView(context, null);
-        // The dock hands a row lying down its icon; a row handed no size draws none (#135).
         bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
+        bar.setDockRailSizePx(DockLayoutPolicy.railIconSizePx(density()),
+            DockLayoutPolicy.railSlotLengthPx(density()));
+        return bar;
+    }
+
+    private SuggestionBarView render(boolean vertical, int count, int width, int height) {
+        SuggestionBarView bar = sized();
         bar.setVerticalForm(vertical);
         bar.setMaxButtonCount(count);
         measureAndLayout(bar, width, height);
@@ -184,7 +191,7 @@ public class SuggestionBarRailFormTest {
 
     @Test
     public void theRenderGateFollowsTheAxis() {
-        SuggestionBarView rail = new SuggestionBarView(context, null);
+        SuggestionBarView rail = sized();
         rail.setVerticalForm(true);
         measureAndLayout(rail, railBarWidthPx(), RAIL_HEIGHT);
         assertTrue("a rail's own band is bounds enough", stableRenderBounds(rail));
@@ -193,10 +200,16 @@ public class SuggestionBarRailFormTest {
         measureAndLayout(row, railBarWidthPx(), ROW_HEIGHT);
         assertFalse("lying down that is still a squeezed row", stableRenderBounds(row));
 
-        SuggestionBarView stub = new SuggestionBarView(context, null);
+        SuggestionBarView stub = sized();
         stub.setVerticalForm(true);
         measureAndLayout(stub, 1, 1);
         assertFalse("a column with no bounds at all is still refused", stableRenderBounds(stub));
+
+        SuggestionBarView unsized = new SuggestionBarView(context, null);
+        unsized.setVerticalForm(true);
+        measureAndLayout(unsized, railBarWidthPx(), RAIL_HEIGHT);
+        assertFalse("a rail handed no size draws no icons, as a row", stableRenderBounds(unsized));
+        assertEquals(0, (int) ReflectionHelpers.callInstanceMethod(unsized, "iconSizePx"));
     }
 
     @Test
@@ -217,7 +230,7 @@ public class SuggestionBarRailFormTest {
     public void theRailPagesByTheColumnItWasGiven() {
         // Was "the rail is one page": one page holding every pinned item ran past the bottom of
         // the canvas and the icons down there were clipped away with nothing able to reach them.
-        SuggestionBarView rail = new SuggestionBarView(context, null);
+        SuggestionBarView rail = sized();
         rail.setVerticalForm(true);
         rail.setMaxButtonCount(4);
         ReflectionHelpers.setField(rail, "pinnedItems", pinned(11));
@@ -235,9 +248,7 @@ public class SuggestionBarRailFormTest {
     public void reloadingWhileStandingUpKeepsTheColumn() {
         // `termux-reload-settings` comes back through reloadWithInput. It used to defer, leaving
         // the rail blank until something else rebuilt it.
-        SuggestionBarView bar = new SuggestionBarView(context, null);
-        // The dock hands a row lying down its icon; a row handed no size draws none (#135).
-        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
+        SuggestionBarView bar = sized();
         seedPinned(bar, 5);
         bar.setMaxButtonCount(5);
         measureAndLayout(bar, ROW_WIDTH, ROW_HEIGHT);

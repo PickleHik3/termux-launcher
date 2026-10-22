@@ -13,9 +13,12 @@ import java.util.Objects;
 /**
  * Dock rows: the one adapter between the activity and the dock's accessory views (ADR 0011). Handed
  * the chrome spec and the applied DockLayout, it writes which of the views show (the stack, the
- * dock's glass host and its sheet, the pinned apps' pager and their page band, the A–Z row and its
- * effect layers, the extra keys, the bands under the keyboard) and how tall the rows are, and it
- * answers whether an Element's row is on screen and which design dresses the rows shown.
+ * dock's glass host and its sheet, the shelf under it, the pinned apps' pager and their page band,
+ * the A–Z row and its effect layers, the extra keys, the bands under the keyboard, the status bar)
+ * and how tall the rows are, and it answers whether an Element's row is on screen and which design
+ * dresses the rows shown. The keyboard's column has no presence of its own to write: it holds the
+ * keyboard, whose own view is the keyboard's to show, and the bands under it, and it lays out at no
+ * height while both are gone.
  *
  * <p>Nothing else reads the views' visibility to learn this: a reader asks here, or subscribes
  * ({@link Listener}) and is told once per change. Subscribers are told before the views are
@@ -23,7 +26,8 @@ import java.util.Objects;
  *
  * <p>The design is the applied layout's ({@link DockLayout#surface}), which Dock geometry measured
  * for the half whose rows the frame shows. The rows never learn which half is committed, so a
- * crossing that stands the other half's rows is dressed as that half from its first frame.</p>
+ * crossing that stands the other half's rows is dressed as that half from its first frame
+ * ({@link #wornSurface}).</p>
  *
  * <p>The Android views are the production adapter ({@link Views}); tests hand a fake.</p>
  */
@@ -50,6 +54,8 @@ public final class DockRows {
         void setSurfaceShown(boolean shown);
         /** The dock's own sheet of glass inside that host. */
         void setDockGlassShown(boolean shown);
+        /** The shelf under the dock's glass: its contact shadow and glow. */
+        void setShelfShown(boolean shown);
         /** The pager of {@link Element#APPS}, the row of {@link Element#AZ}, or the extra keys. */
         void setRowShown(@NonNull Element row, boolean shown);
         /** The pinned apps' page band; {@link PageBand#TICKS} hands it to the row's ticks. */
@@ -58,7 +64,12 @@ public final class DockRows {
         void setAzLayersShown(boolean shown);
         /** The stack under the keyboard; answers whether it moved. */
         boolean setUnderKeyboardShown(boolean shown);
-        /** The height of {@link Element#APPS}' pager or {@link Element#AZ}'s row; whether it moved. */
+        /** The status bar, wherever it stands; answers whether it moved. */
+        boolean setStatusBarShown(boolean shown);
+        /**
+         * The height of {@link Element#APPS}' pager, {@link Element#AZ}'s row or
+         * {@link Element#EXTRA_KEYS}' row; whether it moved.
+         */
         boolean setRowHeight(@NonNull Element row, int px);
         /** The pinned apps' page band's height; whether it moved. */
         boolean setPageBandHeight(int px);
@@ -102,6 +113,20 @@ public final class DockRows {
             this.surface = surface;
         }
 
+        /** This with bands standing under the keyboard or not. */
+        @NonNull
+        Shown withUnderKeyboard(boolean shown) {
+            return new Shown(stack, surfaceHost, dockGlass, apps, az, extraKeys, shown,
+                statusOnStack, pageBand, surface);
+        }
+
+        /** This dressed in {@code design}. */
+        @NonNull
+        Shown withSurface(@Nullable DockSurfaceSpec design) {
+            return new Shown(stack, surfaceHost, dockGlass, apps, az, extraKeys, underKeyboard,
+                statusOnStack, pageBand, design);
+        }
+
         /**
          * Whether {@code element}'s row is on screen in the dock's stack. An Element standing on
          * another edge has no row here.
@@ -125,13 +150,13 @@ public final class DockRows {
                 && dockGlass == that.dockGlass && apps == that.apps && az == that.az
                 && extraKeys == that.extraKeys && underKeyboard == that.underKeyboard
                 && statusOnStack == that.statusOnStack && pageBand == that.pageBand
-                && surface == that.surface;
+                && Objects.equals(surface, that.surface);
         }
 
         @Override
         public int hashCode() {
             return Objects.hash(stack, surfaceHost, dockGlass, apps, az, extraKeys, underKeyboard,
-                statusOnStack, pageBand, surface == null ? null : surface.name);
+                statusOnStack, pageBand, surface);
         }
     }
 
@@ -139,6 +164,8 @@ public final class DockRows {
     @NonNull private final List<Listener> mListeners = new ArrayList<>();
     @NonNull private Shown mShown;
     @Nullable private DockLayout mLayout;
+    private boolean mShelfShown;
+    private boolean mStatusBarShown;
 
     public DockRows(@NonNull Views views) {
         mViews = views;
@@ -192,12 +219,14 @@ public final class DockRows {
     /**
      * One chrome pass: the views shown as {@code chrome} says, written every pass (some are
      * shared — the letters' slot with the keybind strip, the band with the row's ticks — and the
-     * pass has always put them back), and the subscribers told first when anything changed.
+     * pass has always put them back), and the subscribers told first when anything changed. A
+     * status bar is on the stack while it is shown ({@link #setStatusBarShown}) and stands along
+     * the bottom ({@code statusBarOnBottomEdge}).
      */
-    public void apply(@NonNull ChromeSpec chrome, boolean bottomStatusBar,
+    public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
                       boolean glassOnNavStrip) {
-        Shown shown = presence(chrome, bottomStatusBar, glassOnNavStrip, mShown.underKeyboard,
-            mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
+        Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge, glassOnNavStrip,
+            mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
         announce(shown);
         mViews.setStackShown(shown.stack);
         mViews.setDockGlassShown(shown.dockGlass);
@@ -217,15 +246,20 @@ public final class DockRows {
     public boolean applyLayout(@NonNull DockLayout layout) {
         mLayout = layout;
         Shown shown = mShown;
-        if (shown.surface != layout.surface) {
-            announce(new Shown(shown.stack, shown.surfaceHost, shown.dockGlass, shown.apps,
-                shown.az, shown.extraKeys, shown.underKeyboard, shown.statusOnStack,
-                shown.pageBand, layout.surface));
-        }
+        if (shown.surface != layout.surface) announce(shown.withSurface(layout.surface));
         boolean moved = mViews.setRowHeight(Element.APPS, layout.appsBarHeightPx);
         moved |= mViews.setPageBandHeight(layout.indicatorBandHeightPx);
         moved |= mViews.setRowHeight(Element.AZ, layout.azRowHeightPx);
         return moved;
+    }
+
+    /**
+     * The extra-keys row's height for this pass, 0 while the row is off.
+     *
+     * @return whether it moved
+     */
+    public boolean setExtraKeysHeight(int px) {
+        return mViews.setRowHeight(Element.EXTRA_KEYS, Math.max(0, px));
     }
 
     /**
@@ -235,11 +269,25 @@ public final class DockRows {
      */
     public boolean setUnderKeyboardBands(boolean shown) {
         Shown now = mShown;
-        if (now.underKeyboard != shown) {
-            announce(new Shown(now.stack, now.surfaceHost, now.dockGlass, now.apps, now.az,
-                now.extraKeys, shown, now.statusOnStack, now.pageBand, now.surface));
-        }
+        if (now.underKeyboard != shown) announce(now.withUnderKeyboard(shown));
         return mViews.setUnderKeyboardShown(shown);
+    }
+
+    /** Whether the shelf under the dock's glass is up: its contact shadow and glow. */
+    public void setShelfShown(boolean shown) {
+        mShelfShown = shown;
+        mViews.setShelfShown(shown);
+    }
+
+    /**
+     * Whether the status bar is shown, wherever it stands. Along the bottom it is a band of the
+     * stack, so the next chrome pass ({@link #apply}) counts it there.
+     *
+     * @return whether it moved
+     */
+    public boolean setStatusBarShown(boolean shown) {
+        mStatusBarShown = shown;
+        return mViews.setStatusBarShown(shown);
     }
 
     /** Whether {@code element}'s row is on screen in the dock's stack. */
@@ -262,6 +310,16 @@ public final class DockRows {
         return mShown.underKeyboard;
     }
 
+    /** Whether the shelf under the dock's glass is up. */
+    public boolean shelfShown() {
+        return mShelfShown;
+    }
+
+    /** Whether the status bar is shown, wherever it stands. */
+    public boolean statusBarShown() {
+        return mStatusBarShown;
+    }
+
     /**
      * The design the rows on screen are dressed in: the applied layout's, measured for the half
      * whose rows the frame shows. Null before a layout was applied.
@@ -269,6 +327,20 @@ public final class DockRows {
     @Nullable
     public DockSurfaceSpec surface() {
         return mShown.surface;
+    }
+
+    /**
+     * The design the readers of the dock's dressing draw (the slab's glass program, its contact
+     * shadow, the beads). While a crossing stands it is the applied layout's, the half whose rows
+     * the frame shows, and {@code committed} is never worn: a crossing that stands the other
+     * half's rows is dressed as that half. At rest it is {@code committed}, the committed half's
+     * dress, so a design just picked in the Layout editor is worn before the pass that lays it
+     * out; and before any layout was applied there is nothing else to wear.
+     */
+    @NonNull
+    public DockSurfaceSpec wornSurface(@NonNull DockSurfaceSpec committed, boolean crossing) {
+        DockSurfaceSpec shown = mShown.surface;
+        return crossing && shown != null ? shown : committed;
     }
 
     /** What the dock shows now. */

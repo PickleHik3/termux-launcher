@@ -13,6 +13,28 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · #133 review fixes (commits "fix(dock): the Drawer tile follows…" and
+  "refactor(dock): every writer reads the one applied DockLayout…") · Home with the Drawer tile
+  on, the window without: swipe window → Home past halfway and back quickly (and with reduced
+  motion on, and with the drawer pulled during the slide) → the window's row never keeps Home's
+  tile after the settle; change Margin, Corners and Dock design in the Layout editor on Home and in
+  a window → the dock's glass, the border, the A–Z pull tab and the status strip over the sheet
+  take the new inset in the same frame as the rows (they now read the pass's applied dock; look
+  for a one-frame lag) · emulator.
+- 2026-10-22 · #133 review fixes (commit "refactor(dock-rows): the status bar, the shelf…") · A
+  status bar along the bottom, then put away in the Layout editor, then back, both Styles → the
+  stack's height drops and returns with the bar and nothing else moves; the Floating Tray's shelf
+  (contact shadow and glow) still shows under the slab and goes with the keyboard up; the bead
+  shadows follow the beads on a page swipe; the extra keys row keeps its height through a keyboard
+  swipe; a fold Workspace → Home with the extra keys sinks as before · emulator.
+- 2026-10-22 · #133 review fixes (commit "fix(stack): a half's rest is measured in its own
+  Style…") · Home Floating with a status bar along the bottom, the window Docked with it along
+  the top: swipe Home → window with the window's pane not shown before → the pane meets the dock
+  with no gap and no jump at the settle (before, the window's room was read in Home's Style and
+  with Home's status band: 16 px off on a 2.625 density, plus the bar) · emulator.
+- 2026-10-22 · #133 review fixes (commit "fix(rail): a rail handed no size draws no icons…") ·
+  Move the pinned apps to a side rail and back, and cold-start with the rail on → the rail's icons
+  appear at 38 dp without a frame at another size; no empty rail longer than a frame · emulator.
 - 2026-10-22 · #135 stage 1, Dock geometry (commits "feat(dock): Dock geometry…" to "refactor(dock):
   the row draws only the size it is handed") · A Home layout with Beads, the Search field and the
   Drawer tile on Home, the Workspace on Tray (then the reverse), Docked and Floating, portrait and

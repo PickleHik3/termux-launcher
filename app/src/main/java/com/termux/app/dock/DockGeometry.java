@@ -8,6 +8,7 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
@@ -36,7 +37,15 @@ import java.util.Objects;
 public final class DockGeometry {
 
     /** The two halves of the wall. */
-    public enum Side { HOME, WORKSPACE }
+    public enum Side {
+        HOME, WORKSPACE;
+
+        /** The half a wall page belongs to: Home's pages are Home's, every window the Workspace's. */
+        @NonNull
+        public static Side of(@NonNull PaneWallPage page) {
+            return page == PaneWallPage.WIDGETS ? HOME : WORKSPACE;
+        }
+    }
 
     /** The halves asked, in order, for the pinned-apps row a layout puts away: Home first. */
     private static final Side[] PUT_AWAY_ROW_OWNERS = {Side.HOME, Side.WORKSPACE};
@@ -52,10 +61,13 @@ public final class DockGeometry {
         /** Its Margin and Corners in dp, as stored (-1 Corners is the auto token). */
         public final int marginDp;
         public final int cornersDp;
-        /** Its Dock design, and the Search field and Drawer tile its layout turns on. */
+        /**
+         * Its Dock design, and the Search field its layout turns on. The Drawer tile is not a fact
+         * of the dock's measurements: it takes one of the row's slots, which share the row's width
+         * as they would without it, so the rows draw it ({@code SuggestionBarView#setDrawerTile}).
+         */
         @NonNull public final DockStyle design;
         public final boolean searchField;
-        public final boolean drawerTile;
         /** The Wall strip's row height its layout keeps, dp; zero or less for the shipped one. */
         public final int wallStripHeightDp;
 
@@ -67,7 +79,6 @@ public final class DockGeometry {
             cornersDp = b.cornersDp;
             design = b.design;
             searchField = b.searchField;
-            drawerTile = b.drawerTile;
             wallStripHeightDp = b.wallStripHeightDp;
         }
 
@@ -81,7 +92,7 @@ public final class DockGeometry {
         public Builder toBuilder() {
             return new Builder(layout).floating(floating).dockHeightScale(dockHeightScale)
                 .marginDp(marginDp).cornersDp(cornersDp).design(design).searchField(searchField)
-                .drawerTile(drawerTile).wallStripHeightDp(wallStripHeightDp);
+                .wallStripHeightDp(wallStripHeightDp);
         }
 
         @Override
@@ -95,7 +106,6 @@ public final class DockGeometry {
                 && cornersDp == that.cornersDp
                 && design == that.design
                 && searchField == that.searchField
-                && drawerTile == that.drawerTile
                 && wallStripHeightDp == that.wallStripHeightDp
                 && layout.equals(that.layout);
         }
@@ -103,7 +113,7 @@ public final class DockGeometry {
         @Override
         public int hashCode() {
             return Objects.hash(layout, floating, dockHeightScale, marginDp, cornersDp, design,
-                searchField, drawerTile, wallStripHeightDp);
+                searchField, wallStripHeightDp);
         }
 
         public static final class Builder {
@@ -116,7 +126,6 @@ public final class DockGeometry {
             private int cornersDp = -1;
             @NonNull private DockStyle design = DockStyle.GLASS_TRAY;
             private boolean searchField;
-            private boolean drawerTile;
             private int wallStripHeightDp;
 
             private Builder(@NonNull PlaceLayout layout) {
@@ -129,7 +138,6 @@ public final class DockGeometry {
             public Builder cornersDp(int v) { cornersDp = v; return this; }
             public Builder design(@NonNull DockStyle v) { design = v; return this; }
             public Builder searchField(boolean v) { searchField = v; return this; }
-            public Builder drawerTile(boolean v) { drawerTile = v; return this; }
             public Builder wallStripHeightDp(int v) { wallStripHeightDp = v; return this; }
 
             @NonNull
@@ -141,8 +149,9 @@ public final class DockGeometry {
 
     /**
      * Everything the dock's measurements are a function of, for one frame: both halves, which
-     * half's rows it shows and the arrangement it stands them in, the keyboard, the device, the
-     * pinned slot count and the live eases, and how much the stack must shed to fit.
+     * half's rows it shows and the arrangement it stands them in, the device, the pinned slot
+     * count and the live eases, and how much the stack must shed to fit. The keyboard is not one:
+     * whether it is up changes the stack (Stack layout), never the dock's rows.
      */
     public static final class Snapshot {
         /** False before the preference store is attached; the rows collapse to zero then. */
@@ -156,8 +165,6 @@ public final class DockGeometry {
          * the layout the seam stands with the other half's rows ({@code SeamCrossing#layout}).
          */
         @NonNull public final PlaceLayout arrangement;
-        /** Whether the in-app keyboard is up in the stack. */
-        public final boolean keyboardShown;
         public final float density;
         /** The width the dock's rows span: the content's, between the display cutouts. */
         public final int widthPx;
@@ -180,7 +187,6 @@ public final class DockGeometry {
             workspace = b.workspace;
             rows = b.rows;
             arrangement = b.arrangement != null ? b.arrangement : half(b.rows, b.home, b.workspace).layout;
-            keyboardShown = b.keyboardShown;
             density = b.density;
             widthPx = b.widthPx;
             cutoutLeftPx = b.cutoutLeftPx;
@@ -231,7 +237,7 @@ public final class DockGeometry {
         @NonNull
         public Builder toBuilder() {
             return new Builder(home, workspace).preferencesAvailable(preferencesAvailable)
-                .rows(rows).arrangement(arrangement).keyboardShown(keyboardShown)
+                .rows(rows).arrangement(arrangement)
                 .density(density).widthPx(widthPx).cutouts(cutoutLeftPx, cutoutRightPx)
                 .baseToolbarHeightPx(baseToolbarHeightPx).landscape(landscape)
                 .pinnedSlotCount(pinnedSlotCount).fieldReveal(fieldReveal)
@@ -245,7 +251,6 @@ public final class DockGeometry {
             Snapshot that = (Snapshot) other;
             return preferencesAvailable == that.preferencesAvailable
                 && rows == that.rows
-                && keyboardShown == that.keyboardShown
                 && Float.compare(density, that.density) == 0
                 && widthPx == that.widthPx
                 && cutoutLeftPx == that.cutoutLeftPx
@@ -263,8 +268,7 @@ public final class DockGeometry {
 
         @Override
         public int hashCode() {
-            return Objects.hash(preferencesAvailable, home, workspace, rows, arrangement,
-                keyboardShown, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
+            return Objects.hash(preferencesAvailable, home, workspace, rows, arrangement, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
                 landscape, pinnedSlotCount, fieldReveal, stripReveal, squeezePx);
         }
 
@@ -274,7 +278,6 @@ public final class DockGeometry {
             private boolean preferencesAvailable = true;
             @NonNull private Side rows = Side.WORKSPACE;
             @Nullable private PlaceLayout arrangement;
-            private boolean keyboardShown;
             private float density = 1f;
             private int widthPx;
             private int cutoutLeftPx;
@@ -294,7 +297,6 @@ public final class DockGeometry {
             public Builder preferencesAvailable(boolean v) { preferencesAvailable = v; return this; }
             public Builder rows(@NonNull Side v) { rows = v; return this; }
             public Builder arrangement(@Nullable PlaceLayout v) { arrangement = v; return this; }
-            public Builder keyboardShown(boolean v) { keyboardShown = v; return this; }
             public Builder density(float v) { density = v; return this; }
             public Builder widthPx(int v) { widthPx = v; return this; }
             public Builder cutouts(int left, int right) {

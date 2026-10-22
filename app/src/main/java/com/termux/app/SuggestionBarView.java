@@ -4371,16 +4371,38 @@ public final class SuggestionBarView extends GridLayout
         return param;
     }
 
-    /** How much of the rail's axis one icon takes: the icon, and its air above and below. */
+    /**
+     * How much of the rail's axis one icon takes, as the dock handed it: the icon, and its air
+     * above and below. Zero while it has handed none.
+     */
     private int railSlotLengthPx() {
-        if (dockRailSlotLengthPx > 0) return dockRailSlotLengthPx;
-        return com.termux.app.dock.DockLayoutPolicy.railSlotLengthPx(screenDensity());
+        return dockRailSlotLengthPx;
     }
 
-    /** One rail icon, across the rail. */
+    /**
+     * One rail icon, across the rail, as the dock handed it. Zero while it has handed none, and a
+     * rail with no size draws no icons, as a row does ({@link #hasStableRenderBounds}).
+     */
     private int railIconSizePx() {
-        if (dockRailIconPx > 0) return dockRailIconPx;
-        return com.termux.app.dock.DockLayoutPolicy.railIconSizePx(screenDensity());
+        return dockRailIconPx;
+    }
+
+    /**
+     * The rail's icon and slot length, standing up. The activity hands them over with the rest of
+     * the dock's answer ({@link #setDockLayout}); a rail with no dock behind it, as the tests build
+     * one, is handed them here.
+     */
+    void setDockRailSizePx(int iconPx, int slotLengthPx) {
+        int icon = Math.max(0, iconPx);
+        int slot = Math.max(0, slotLengthPx);
+        if (icon == dockRailIconPx && slot == dockRailSlotLengthPx) return;
+        dockRailIconPx = icon;
+        dockRailSlotLengthPx = slot;
+        if (!vertical) return;
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
+        invalidate();
     }
 
     /** The dock row's height hint, which only the form that lies down is sized by. */

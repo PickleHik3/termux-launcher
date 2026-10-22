@@ -196,6 +196,9 @@ public class TermuxActivityRailPagingTest {
         int columnPx = host.getHeight();
 
         SuggestionBarView rail = new SuggestionBarView(activity, null);
+        // The dock hands a rail its icon and slot; a rail handed none draws no icons (#133).
+        rail.setDockRailSizePx(DockLayoutPolicy.railIconSizePx(density(activity)),
+            DockLayoutPolicy.railSlotLengthPx(density(activity)));
         rail.setVerticalForm(true);
         rail.setMaxButtonCount(4);
         ReflectionHelpers.setField(rail, "pinnedItems", pinned(14));

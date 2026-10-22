@@ -53,7 +53,7 @@ public class DockRowsSeamTest {
 
     /** The accessory views as a test sees them: their state, and every write in order. */
     private static final class FakeViews implements DockRows.Views {
-        boolean stack, surface, dockGlass, azLayers = true, underKeyboard;
+        boolean stack, surface, dockGlass, azLayers = true, underKeyboard, shelf, statusBar;
         final Map<Element, Boolean> rows = new EnumMap<>(Element.class);
         final Map<Element, Integer> heights = new EnumMap<>(Element.class);
         int pageBandHeight = -1;
@@ -64,6 +64,13 @@ public class DockRowsSeamTest {
         @Override public void setStackShown(boolean shown) { stack = shown; log.add("stack"); }
         @Override public void setSurfaceShown(boolean shown) { surface = shown; log.add("surface"); }
         @Override public void setDockGlassShown(boolean shown) { dockGlass = shown; log.add("glass"); }
+        @Override public void setShelfShown(boolean shown) { shelf = shown; log.add("shelf"); }
+        @Override public boolean setStatusBarShown(boolean shown) {
+            boolean moved = statusBar != shown;
+            statusBar = shown;
+            log.add("status");
+            return moved;
+        }
         @Override public void setRowShown(@NonNull Element row, boolean shown) {
             rows.put(row, shown);
             log.add("row " + row);
@@ -212,10 +219,63 @@ public class DockRowsSeamTest {
         assertTrue("the keyboard stands in the stack", views.stack);
         assertFalse("but the dock's rows stay away", views.surface);
 
+        rows.setStatusBarShown(true);
         rows.apply(chrome(WINDOW_BARE, false), true, false);
         assertTrue("a status bar along the bottom keeps the stack up", views.stack);
         assertTrue(rows.isRowOnScreen(Element.STATUS));
         assertFalse(views.surface);
+    }
+
+    // ---- the status bar, the shelf and the extra keys' height ----
+
+    @Test
+    public void theStatusBarIsOnTheStackWhileItShowsAlongTheBottom() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        assertTrue("shown, it is written", rows.setStatusBarShown(true));
+        assertTrue(views.statusBar);
+        assertTrue(rows.statusBarShown());
+        assertFalse("shown again, nothing moves", rows.setStatusBarShown(true));
+
+        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        assertFalse("along the top it is no band of the stack",
+            rows.isRowOnScreen(Element.STATUS));
+        assertFalse(views.stack);
+
+        rows.apply(chrome(WINDOW_BARE, false), true, false);
+        assertTrue("along the bottom it is", rows.isRowOnScreen(Element.STATUS));
+        assertTrue(views.stack);
+
+        // Put away in the Layout editor: gone, and gone from the stack at the next pass.
+        assertTrue(rows.setStatusBarShown(false));
+        assertFalse(views.statusBar);
+        rows.apply(chrome(WINDOW_BARE, false), true, false);
+        assertFalse(rows.isRowOnScreen(Element.STATUS));
+        assertFalse("nothing stands in the stack", views.stack);
+    }
+
+    @Test
+    public void theShelfIsWrittenAndAnsweredHere() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        assertFalse(rows.shelfShown());
+        rows.setShelfShown(true);
+        assertTrue(views.shelf);
+        assertTrue(rows.shelfShown());
+        rows.setShelfShown(false);
+        assertFalse(views.shelf);
+        assertFalse(rows.shelfShown());
+    }
+
+    @Test
+    public void theExtraKeysRowsHeightIsWrittenHereAndReportsWhetherItMoved() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        assertTrue(rows.setExtraKeysHeight(150));
+        assertEquals(150, (int) views.heights.get(Element.EXTRA_KEYS));
+        assertFalse("the same height moves nothing", rows.setExtraKeysHeight(150));
+        assertTrue("off, the row is no height", rows.setExtraKeysHeight(-4));
+        assertEquals(0, (int) views.heights.get(Element.EXTRA_KEYS));
     }
 
     @Test
@@ -279,6 +339,38 @@ public class DockRowsSeamTest {
                 rows.surface());
             assertSame(rows.surface(), rows.shown().surface);
         }
+    }
+
+    @Test
+    public void whileACrossingStandsTheRowsWearTheirOwnHalfsDesignNeverTheCommittedOne() {
+        for (boolean homeBeads : new boolean[] {true, false}) {
+            DockStyle homeDesign = homeBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY;
+            DockStyle windowDesign = homeBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS;
+            DockSurfaceSpec home = DockSurfaceSpec.forStyle(homeDesign);
+            DockSurfaceSpec window = DockSurfaceSpec.forStyle(windowDesign);
+            Snapshot.Builder device = device(half(HOME, homeDesign), half(WINDOW, windowDesign));
+            DockRows rows = new DockRows(new FakeViews());
+
+            // At rest in a window the committed dress is worn, so a design just picked in the
+            // Layout editor is worn before the pass that lays it out.
+            rows.applyLayout(rest(device, Side.WORKSPACE));
+            assertSame(window, rows.wornSurface(window, false));
+            assertSame("a pick not laid out yet", home, rows.wornSurface(home, false));
+
+            // A slide toward Home stands Home's rows while the window is committed: the
+            // window's design, which the activity hands as the committed one, is never worn.
+            rows.applyLayout(DockGeometry.compute(device.rows(Side.HOME)
+                .arrangement(SeamTravel.withDockOf(WINDOW, HOME)).build()));
+            assertSame("home beads " + homeBeads, home, rows.wornSurface(window, true));
+
+            // And back from Home: the window's rows wear the window's design.
+            rows.applyLayout(DockGeometry.compute(device.rows(Side.WORKSPACE)
+                .arrangement(SeamTravel.withDockOf(HOME, WINDOW)).build()));
+            assertSame(window, rows.wornSurface(home, true));
+        }
+        // Before any layout a crossing has nothing else to wear.
+        DockSurfaceSpec committed = DockSurfaceSpec.forStyle(DockStyle.GLASS_TRAY);
+        assertSame(committed, new DockRows(new FakeViews()).wornSurface(committed, true));
     }
 
     // ---- the listener ----
