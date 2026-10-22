@@ -955,9 +955,10 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             int now = b - t;
             if (now == last[0]) return;
             last[0] = now;
-            // The height settles over several passes (the pad's host, the accessory stack, the
-            // overlay decision), each its own layout; every one that moves it starts the wait
-            // again, so the release falls after the last, never between two.
+            // A docked keyboard moves the height once; the wait is for a height that takes more
+            // than one pass to land (the pad's host, the accessory stack, the overlay decision),
+            // each its own layout. Every one that moves it starts the wait again, so the release
+            // falls after the last, never between two.
             removeCallbacks(release);
             postDelayed(release, Math.max(0L,
                 Math.min(NEXT_LAYOUT_SETTLE_MS, backstopAt - SystemClock.uptimeMillis())));
@@ -985,10 +986,31 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         mNextLayoutFollower = null;
     }
 
+    /**
+     * A held display is measured at its held size and never at the frame's. The display sends the
+     * X server every size it is measured at, so measuring it at the frame's new height first and
+     * putting the held one back after resized the X screen there and back on every held pass.
+     */
+    @Override
+    protected void measureChildWithMargins(View child, int parentWidthMeasureSpec, int widthUsed,
+                                           int parentHeightMeasureSpec, int heightUsed) {
+        if (mFrozenWidth > 0 && child.getId() == R.id.x11_display_view) {
+            child.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
+            return;
+        }
+        super.measureChildWithMargins(child, parentWidthMeasureSpec, widthUsed,
+            parentHeightMeasureSpec, heightUsed);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        if (mFrozenWidth > 0 && mDisplay != null) {
+        // A frame measured other than exactly re-measures its match-parent children directly,
+        // past measureChildWithMargins; the wall measures its pages exactly, so this is a guard.
+        if (mFrozenWidth > 0 && mDisplay != null
+            && (mDisplay.getMeasuredWidth() != mFrozenWidth
+                || mDisplay.getMeasuredHeight() != mFrozenHeight)) {
             mDisplay.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
         }
