@@ -2036,6 +2036,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 // restored backup could hold any number in range.
                 return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
                     / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
+            case SPLIT_GAP:
+                return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
             case CONTRAST:
             default:
                 return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
@@ -2073,6 +2075,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case EDGE: return getString(R.string.appearance_editor_edge, value);
             case DEPTH: return getString(R.string.appearance_editor_depth, value);
             case TEXT_SIZE: return getString(R.string.appearance_editor_text_size, value);
+            case SPLIT_GAP: return getString(R.string.appearance_editor_split_gap, value);
             case CONTRAST:
             default:
                 if (!enabled)
@@ -2321,8 +2324,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case TEXT_SIZE:
                 writeTextSize(value);
                 break;
+            case SPLIT_GAP:
+                writeSplitGap(value);
+                break;
             default: break;
         }
+    }
+
+    /**
+     * Split gap: the gutter between split panes, the terminal's own number. Pane geometry, so
+     * mid-drag the terminal is not resized; the release commits it once.
+     */
+    private void writeSplitGap(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int written = Control.SPLIT_GAP.clamp(value);
+        if (prefs.getTerminalPaneGap() == written)
+            return;
+        prefs.setTerminalPaneGap(written);
+        requestGeometryPreview();
     }
 
     /**
@@ -2976,7 +2997,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         int margin = AppearanceLooks.marginDp(value);
         prefs.setLayoutMarginDp(false, margin);
-        prefs.setTerminalPaneGap(AppearanceLooks.terminalMarginDp(margin));
         if (mPanel != null)
             mPanel.setMarginLabel(marginLabel(margin));
         requestGeometryPreview();
@@ -3002,8 +3022,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         int corners = AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
         panel.setCorners(cornersLabel(corners), corners, AppearanceLooks.CORNERS_MAX_DP);
-        int margin = AppearanceLooks.marginValueFor(mHost.isFloatingDock(),
-            prefs.getLayoutMarginDp(false), prefs.getTerminalPaneGap());
+        int margin = AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false));
         panel.setMargin(marginLabel(margin), margin, AppearanceLooks.MARGIN_MAX_DP);
     }
 

@@ -94,6 +94,28 @@ public class AppearanceSnapshotTest {
         assertEquals(TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT, preferences.getTextSizePercent());
     }
 
+    /**
+     * Margin writes the layout margin and nothing of the pane gap: a store that holds a gap keeps
+     * it, a fresh one is not given one, and Split gap's own write dirties the editor and Undo
+     * restores it.
+     */
+    @Test
+    public void marginLeavesTheSplitGapAlone() {
+        assertFalse(store.contains(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        preferences.setLayoutMarginDp(false, 30);
+        assertFalse(store.contains(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        assertEquals(TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP, preferences.getTerminalPaneGap());
+
+        preferences.setTerminalPaneGap(9);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        preferences.setLayoutMarginDp(false, 5);
+        assertEquals(9, preferences.getTerminalPaneGap());
+        preferences.setTerminalPaneGap(20);
+        assertNotEquals(entry.signature(), AppearanceSnapshot.signatureOf(preferences));
+        entry.restore(preferences);
+        assertEquals(9, preferences.getTerminalPaneGap());
+    }
+
     /** The Text size slider dirties the editor, and its way back cleans it again. */
     @Test
     public void theSignatureSeesTheTextSize() {

@@ -92,7 +92,7 @@ public class AppearanceLooksTest {
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
             Control.ICON_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.CONTRAST), AppearanceLooks.controls(Target.TERMINAL));
+            Control.CONTRAST, Control.SPLIT_GAP), AppearanceLooks.controls(Target.TERMINAL));
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT),
             AppearanceLooks.controls(Target.STATUS));
         for (Target target : Target.values()) {
@@ -356,22 +356,12 @@ public class AppearanceLooksTest {
         assertEquals(48, AppearanceLooks.marginDp(90));
     }
 
-    /** The terminal's own margin never goes past 24, however much air Margin asks for. */
+    /** Split gap is the terminal's own slider, 0 to 24 dp in whole dp, last in its row. */
     @Test
-    public void marginCapsTheTerminalsShareAtTwentyFour() {
-        assertEquals(0, AppearanceLooks.terminalMarginDp(0));
-        assertEquals(12, AppearanceLooks.terminalMarginDp(12));
-        assertEquals(24, AppearanceLooks.terminalMarginDp(24));
-        assertEquals(24, AppearanceLooks.terminalMarginDp(40));
-        assertEquals(24, AppearanceLooks.terminalMarginDp(200));
-    }
-
-    /** Margin reads the side gap under both Styles: air under Floating, the gutter under Docked. */
-    @Test
-    public void marginReadsTheSideGapUnderBothStyles() {
-        assertEquals(30, AppearanceLooks.marginValueFor(true, 30, 6));
-        assertEquals(30, AppearanceLooks.marginValueFor(false, 30, 6));
-        assertEquals(48, AppearanceLooks.marginValueFor(true, 99, 6));
+    public void splitGapIsTheTerminalsLastSlider() {
+        assertEquals(0, Control.SPLIT_GAP.min);
+        assertEquals(24, Control.SPLIT_GAP.max);
+        assertEquals(1, Control.SPLIT_GAP.step);
     }
 
     // --------------------------------------------------------------------------- Soft and Dim

@@ -132,7 +132,8 @@ public final class AppearanceLooks {
      * Depth are the glass edge's: Edge the stored dispersion itself, 0 (no fringe) to 100 (a bold
      * coloured edge), Glint at 40; Depth 0 to 100 over the bend and the edge width
      * ({@link GlassEdgeControls}). Text size is the shared size of the type the launcher draws, in
-     * percent of each surface's own, 80 to 150 in steps of 5.
+     * percent of each surface's own, 80 to 150 in steps of 5. Split gap is the terminal's own: the
+     * gutter between split panes, 0 to 24 dp.
      */
     public enum Control {
         GLASS(GlassControls.GLASS_MIN, GlassControls.GLASS_MAX, 1),
@@ -149,7 +150,8 @@ public final class AppearanceLooks {
         APP_ICONS(APP_ICONS_MIN, APP_ICONS_MAX, 1),
         CONTRAST(0, 2, 1),
         DEPTH(GlassEdgeControls.MIN, GlassEdgeControls.MAX, 1),
-        TEXT_SIZE(TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT, 5);
+        TEXT_SIZE(TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT, 5),
+        SPLIT_GAP(0, TERMUX_APP.MAX_TERMINAL_PANE_GAP, 1);
 
         public final int min;
         public final int max;
@@ -221,7 +223,7 @@ public final class AppearanceLooks {
                     Control.ICON_SIZE, Control.APP_ICONS);
             case TERMINAL:
                 return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-                    Control.CONTRAST);
+                    Control.CONTRAST, Control.SPLIT_GAP);
             case STATUS:
             default:
                 return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT);
@@ -443,28 +445,12 @@ public final class AppearanceLooks {
     /** Margin: all the air on screen. */
     public static final int MARGIN_MAX_DP = 48;
 
-    /** The terminal's own margin ceiling, which the shared Margin never writes past. */
-    public static final int TERMINAL_MARGIN_MAX_DP = 24;
-
     public static int cornersDp(int value) {
         return clamp(value, 0, CORNERS_MAX_DP);
     }
 
     public static int marginDp(int value) {
         return clamp(value, 0, MARGIN_MAX_DP);
-    }
-
-    /** The terminal's margin (its pane gap) a Margin value writes. */
-    public static int terminalMarginDp(int margin) {
-        return Math.min(TERMINAL_MARGIN_MAX_DP, marginDp(margin));
-    }
-
-    /**
-     * Where Margin stands: the side gap under both Styles, the air round Floating cards and the
-     * gutter round the Docked insert. The Style and the pane gap no longer change the read.
-     */
-    public static int marginValueFor(boolean floating, int sideGap, int paneGap) {
-        return marginDp(sideGap);
     }
 
     /** Legibility's three segments, in order. */
