@@ -76,7 +76,8 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   of squeezing it, so the picture keeps the size it was given and nothing on it moves as you type,
   whether the keyboard came up from a text field or by hand. Either orientation can be set to make
   room for the keyboard instead in the Layout editor opened on a display window, after switching
-  to the orientation you want it for.
+  to the orientation you want it for. Settings → Terminal → Linux apps → Input → Keyboard over
+  display switches both orientations at once.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts or stops the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap

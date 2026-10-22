@@ -2597,3 +2597,9 @@ Agent items first, then the developer's.
   `~/.config/pulse/daemon.conf` (the stopgaps), stop the hand-started server, restart Termux, run
   Set up Linux apps (or `pkg install pulseaudio`), open Chromium from the drawer and play a video:
   sound works · pong, release build.
+
+## Keyboard over display row
+
+- 2026-10-23 · commit "feat(settings): Keyboard over display row on the Linux apps Input page" · Settings → Terminal → Linux apps → Input: under Keyboard, "Keyboard over display" shows "Overlay"; pick "Resize display", open a Linux display window and raise the keyboard: the display shrinks above it; pick "Overlay": it floats again. The page looks as before otherwise (rows, spacing, dividers unchanged) · emulator.
+- 2026-10-23 · same · With the display open and its touchpad's mode button, switch the keyboard mode in one orientation only, go back to Settings → Input: the row's summary reads "Portrait: Overlay · Landscape: Resize display" (or the reverse) and shows no checked choice; pick one: both orientations take it and the summary shows the single choice · emulator.
+- 2026-10-23 · same · Search Settings for "keyboard over display": the hit opens the Input page at the row · emulator.
