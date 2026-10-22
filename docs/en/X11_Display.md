@@ -70,13 +70,17 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   left) to step through the apps the status bar lists, in the same order as its chips. The same
   actions on the extra-keys row, a key chord or `launcherctl` do the same while the Display place
   is up.
-- **The keyboard follows text fields.** In Touchscreen touch mode, tapping a text field on the
+- **The keyboard follows text fields.** Tapping a text field on the
   display brings the keyboard up and tapping elsewhere puts it down; see
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).
-- **The keyboard floats.** In landscape the keyboard comes up over the display instead of
-  squeezing it, so the picture keeps the size it was given and nothing on it moves as you type. In
-  portrait the display makes room for the keyboard instead. Either orientation can be set the other
-  way in the Layout editor on the display, after switching to the orientation you want it for.
+- **The keyboard floats.** In either orientation the keyboard comes up over the display instead of
+  squeezing it, so the picture keeps the size it was given and nothing on it moves as you type,
+  whether the keyboard came up from a text field or by hand. The touchpad's keyboard mode button,
+  shown on the pad while the keyboard is docked, switches the orientation you are in to making room
+  for the keyboard instead, and back. **Settings → Display → Input → Keyboard over display** makes
+  the same choice for both orientations at once. An older build could have saved Resize for portrait
+  without your choosing it; this release puts Overlay back once, and the button or that setting
+  switches it again.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts, stops or turns on the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
@@ -140,9 +144,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## The keyboard follows text fields
 
 Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
-again. It is on by default (**Settings → Display → Input → OSK auto-show**) and it only applies
-in **Touchscreen** touch mode, where a tap lands where you put it. Trackpad and
-Direct touch are unchanged.
+again. It is on by default (**Settings → Display → Input → OSK auto-show**) and it works in every
+touch mode. A tap counts where its click lands: under your finger in Touchscreen and Direct touch,
+at the pointer in Trackpad.
 
 A keyboard you opened yourself is yours: it stays until you close it, and taps on the desktop
 never take it away. Only a keyboard that came up for a text field is put away for one.
@@ -150,8 +154,7 @@ never take it away. Only a keyboard that came up for a text field is put away fo
 With mouse mode on, the keyboard and the touchpad share one frame, so the field brings the keyboard
 to the front of it and the touchpad waits behind rather than going away. Tap somewhere that is not
 text, or press the mouse key, and the touchpad is back where it was. A tap on the touchpad counts as
-a tap on whatever the pointer is standing on, so this works in every touch mode while the touchpad
-is up.
+a tap on whatever the pointer is standing on.
 
 Two signals tell the launcher that a text field is under your finger.
 
@@ -165,41 +168,60 @@ GTK and Qt apps pick up the Adwaita theme that ships with them; core X apps such
 use it with `XCURSOR_THEME=Adwaita` in their environment (or a `default` cursor theme that
 inherits it).
 
-**Your input method's own focus.** Exact, and opt in. Two commands feed the same behaviour from a
-shell, so anything that knows when a field takes focus can drive it:
+**Your input method's own focus.** Exact, and on by itself once fcitx5 is installed. fcitx5 knows
+when a text field takes focus and when it loses it, whether you tapped, pressed Tab, or a dialog
+put the cursor in its entry, and the launcher listens to it:
+
+```sh
+pkg install fcitx5 fcitx5-gtk3 fcitx5-qt
+```
+
+(`fcitx5-gtk4` and `fcitx5-gtk2` are there too, for apps on those toolkits.) Then turn the
+display off and on again. From then on, whenever the display starts:
+
+- a small helper, `termux-x11-im`, starts beside it, with a session bus of the display's own and
+  fcitx5 on it. The helper stands in for fcitx5's virtual keyboard, so fcitx5 tells it when a
+  field takes and loses focus, and it passes that on to the launcher;
+- every app you start from the drawer is given `GTK_IM_MODULE=fcitx`, `QT_IM_MODULE=fcitx`,
+  `XMODIFIERS=@im=fcitx` and that bus, so its text fields report to fcitx5.
+
+Without fcitx5 nothing starts and nothing changes. Two limits: an app you start yourself from a
+shell gets none of this unless you export the same variables and
+`DBUS_SESSION_BUS_ADDRESS=unix:path=$PREFIX/tmp/termux-x11-im-bus-0` (the last number is the
+display's), and apps inside a proot container keep the pointer's shape for now. The helper writes
+what it did to `$PREFIX/tmp/termux-x11-im-bus-0.log`; it says `focus in` and `focus out` as it
+passes them on. This is not yet device-verified.
+
+This section is for the Termux edition. On the Nix edition the helper is not started yet; see
+[Exact text-field focus](Nix_Package_Management.md#exact-text-field-focus).
+
+**Once focus is heard, it decides.** From the first `focus in` or `focus out` that reaches the
+launcher while you are on the display, until you leave it or switch the setting off:
+
+- a field taking focus brings the keyboard up, tap or no tap;
+- a field losing focus puts it away 150 ms later, unless another field takes focus first, so
+  moving from one field to the next leaves the keyboard where it is;
+- a tap over a text cursor only brings the keyboard back if a field has focus, so tapping a
+  terminal or the text of a page no longer opens it;
+- a tap or a scroll anywhere else leaves the keyboard alone; losing focus is what puts it away.
+
+Until the first focus signal of a visit, and always without fcitx5, the pointer's shape decides as
+above. A keyboard you opened yourself, and a keyboard you switched off, win over focus as they do
+over taps. Under `adb logcat -s X11TextFocus` every decision names the signal behind it:
+`focus in -> show`, `focus out -> hide in 150 ms`, `hide cancelled: focus in`,
+`tap over xterm ignored: no focus`.
+
+The helper sends the same two commands you can send from a shell yourself, so anything else that
+knows when a field takes focus can drive the keyboard too:
 
 ```sh
 launcherctl keyboard show --source focus
 launcherctl keyboard hide --source focus
 ```
 
-They are read as a signal, not an order: on the display they go through the same rules as a tap,
-and elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
+They are read as a signal, not an order: on the display they go through the rules above, and
+elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
 asking, which pins the keyboard until you put it down again.
-
-With fcitx5, tell your toolkits to use it and run a small watcher beside your session:
-
-```sh
-pkg install fcitx5
-export GTK_IM_MODULE=fcitx
-export QT_IM_MODULE=fcitx
-export XMODIFIERS=@im=fcitx
-```
-
-```sh
-# focus-keyboard.sh: run it in the background: sh focus-keyboard.sh &
-dbus-monitor --session "type='method_call',interface='org.fcitx.Fcitx.InputContext1'" |
-while read -r line; do
-    case "$line" in
-        *FocusIn*)  launcherctl keyboard show --source focus ;;
-        *FocusOut*) launcherctl keyboard hide --source focus ;;
-    esac
-done
-```
-
-This recipe is documented, not device-verified: it needs a session D-Bus running in the same
-session as fcitx5, and the interface name is fcitx5's own. If nothing happens, check that
-`dbus-monitor` prints anything at all while you move between fields.
 
 ## GPU acceleration for your apps
 
@@ -223,14 +245,14 @@ installed, and `launcherctl x11 gpu --env` prints the exports to paste or `eval`
 → Set up Linux apps → Graphics**: **Graphics acceleration** shows what the phone can do, and **Copy
 the graphics command** puts the install line and the exports for this phone on the clipboard.
 
-Or let the phone decide by trying: `termux-x11-gpu-setup` installs the drivers for every row that
-fits this phone, runs a short 3D test with each on a private display, keeps the one that really
-uses the GPU and is clearly faster than software, and removes the rest again. It explains each
+Or let the phone decide by trying: **Benchmark graphics** on the same screen copies
+`termux-x11-gpu-setup`, which you paste into the terminal and run. It installs the drivers for
+every row that fits this phone, runs a short 3D test with each on a private display, keeps the one
+that really uses the GPU and is clearly faster than software, and removes the rest again. It explains each
 step as it goes, asks before installing anything, and writes what it decided to
 `~/.config/termux-launcher/x11-gpu.env`. With a Debian proot installed it repeats the test inside
 the container. `--keep` leaves every package in place, `--skip-proot` skips the container,
 `--yes` skips the question, and `--display=N` runs the tests on display `:N` (`:7` by default).
-`tlstore display` runs the same script.
 
 Check what you got with `glmark2-es2` (from `x11-repo`): its first lines name the renderer, and
 the score with the Display place *showing* is the one that means anything; hidden, the server has

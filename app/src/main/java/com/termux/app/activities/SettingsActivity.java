@@ -147,6 +147,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         } else if ((PAGES + "X11DisplayPreferencesFragment").equals(className)) {
             switch (scrollToKey) {
                 case "touchMode": case "x11_android_keyboard": case "x11_keyboard_follows_text":
+                case "x11_keyboard_over_display":
                 case "clipboardEnable":
                     page = "X11DisplayInputPreferencesFragment"; break;
                 case "displayResolutionMode": case "displayScale": case "displayResolutionExact":
@@ -161,6 +162,12 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                     page = "X11DisplayLinuxAppsPreferencesFragment"; break;
                 default: break;
             }
+        } else if ((PAGES + "AppBehaviorPreferencesFragment").equals(className)) {
+            if (scrollToKey.equals("lazy_mode") || scrollToKey.equals("low_memory_preset"))
+                page = "PerformancePreferencesFragment";
+        } else if ((PAGES + "TermuxStylePreferencesFragment").equals(className)) {
+            if (scrollToKey.equals("wallpaper_parallax") || scrollToKey.equals("fancier_glass_motion_light"))
+                page = "PerformancePreferencesFragment";
         } else if ((PAGES + "TaiPreferencesFragment").equals(className)) {
             switch (scrollToKey) {
                 case "tai_runtime_actions": case "tai_runtime_stop": case "tai_runtime_unload":
@@ -230,6 +237,15 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         } else {
             updateTitleForCurrentStack();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // The launcher's app-only picture can be set, replaced or ended while this page sits
+        // behind it (Appearance opened from here), and Android sends no configuration change for
+        // a picture it never got: re-theme here when the colours it gave no longer apply.
+        TermuxThemeManager.recreateIfWallpaperColorsMoved(this);
     }
 
     @Override
@@ -618,6 +634,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 R.xml.launcher_preferences, R.xml.launcher_dock_preferences,
                 R.xml.launcher_search_preferences, R.xml.launcher_lock_preferences,
                 R.xml.app_drawer_preferences});
+            CHILD_XML_RESOURCES.put("performance", new int[]{
+                R.xml.performance_preferences});
             CHILD_XML_RESOURCES.put("app_behavior", new int[]{
                 R.xml.app_behavior_preferences});
             CHILD_XML_RESOURCES.put("backup_restore", new int[]{
@@ -965,8 +983,12 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 CharSequence title = child.getTitle();
                 CharSequence summary = child.getSummary();
                 String titleText = title == null ? "" : title.toString();
-                String searchable = (titleText + " " + (summary == null ? "" : summary.toString()))
-                    .trim().toLowerCase(Locale.ROOT);
+                // An <extra android:name="search_terms"> in the XML: words a row is found by without
+                // showing them, such as a feature's old name.
+                String terms = child.peekExtras() == null ? null
+                    : child.peekExtras().getString("search_terms");
+                String searchable = (titleText + " " + (summary == null ? "" : summary.toString())
+                    + " " + (terms == null ? "" : terms)).trim().toLowerCase(Locale.ROOT);
                 if (!searchable.isEmpty()) {
                     out.add(new ChildSearchEntry(titleText, searchable, page));
                 }

@@ -266,6 +266,14 @@ public final class TermuxInAppKeyboard {
         mHardwareKeyboardConnected = Objects.requireNonNull(detector, "detector");
     }
 
+    /**
+     * Whether this keyboard is standing aside for a physical one right now: the setting asks it to
+     * stay away while one is attached, and one is. A person asking for it still raises it.
+     */
+    public boolean yieldsToHardwareKeyboard() {
+        return mEnabled && shouldHideForHardwareKeyboard();
+    }
+
     /** Whether the setting asks this keyboard to stay away while a hardware keyboard is attached. */
     private boolean shouldHideForHardwareKeyboard() {
         return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware()

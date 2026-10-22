@@ -204,8 +204,10 @@ public class TermuxApplication extends Application {
         Configuration effectiveConfig = withPinnedNightMode(newConfig);
         ThemeTemplates.exportPaletteAndRunPassAsync(context, () -> {
             Context configuredContext = context.createConfigurationContext(effectiveConfig);
-            Context themedContext = new ContextThemeWrapper(configuredContext,
-                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            // In the app-only picture's colours while the launcher wears them (ADR 0009).
+            Context themedContext = com.termux.app.theme.AppOnlyWallpaperColors.wrap(
+                new ContextThemeWrapper(configuredContext,
+                    R.style.Theme_TermuxActivity_DayNight_NoActionBar));
             // No pane can be measured from here: the active palette stands on the ground the
             // activity last measured, so a flip does not undo a wallpaper's polarity.
             return MaterialTerminalColorScheme.createPaletteSetOnLastGround(themedContext, level);

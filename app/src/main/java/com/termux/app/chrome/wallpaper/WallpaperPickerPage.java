@@ -13,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -72,6 +73,11 @@ import java.util.function.Supplier;
  * the strip holds Same as Home (Lock only) then the photos last applied, evenly spaced across the
  * row. There are no pre-made backgrounds. More settings opens the old Look page.</p>
  *
+ * <p>While the launcher is not the phone's home app the pager holds one card instead, the Home
+ * slot labelled as the launcher's own, with "Also set as phone wallpaper" under it: unticked
+ * (the default, remembered), Done sets the picture for the launcher alone
+ * ({@link Slots#applyAppOnly}); ticked, it goes to the phone as a Home apply always did.</p>
+ *
  * <p>Tests build the page on its own with
  * {@link #WallpaperPickerPage(Context, Slots, Listener, Runnable, ReturnState)}, which loads
  * synchronously.</p>
@@ -93,6 +99,26 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
         /** A pending photo the page will not apply: its file goes (only a pending file ever does). */
         default void discardPhoto(@NonNull File photo) {}
+
+        /**
+         * Whether the launcher is the phone's home app: the page shows the Home and Lock pair only
+         * then, and otherwise the launcher's own card. Read off the main thread, with the slots.
+         */
+        default boolean isHomeApp() {
+            return true;
+        }
+
+        /** The remembered "Also set as phone wallpaper". */
+        default boolean alsoSetPhone() {
+            return false;
+        }
+
+        default void setAlsoSetPhone(boolean on) {}
+
+        /** Sets {@code choice}'s picture for the launcher alone; the phone's wallpapers stay. */
+        default void applyAppOnly(@NonNull WallpaperSlots.Choice choice, @Nullable WallpaperSlots.Callback cb) {
+            if (cb != null) cb.onDone(false, "unsupported");
+        }
     }
 
     /** What the host does. Every call is on the main thread. */
@@ -177,6 +203,23 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             @Override public void discardPhoto(@NonNull File photo) {
                 WallpaperSlots.discardPendingPhoto(activity, photo);
             }
+
+            @Override public boolean isHomeApp() {
+                return WallpaperSlots.launcherIsHomeApp(activity);
+            }
+
+            @Override public boolean alsoSetPhone() {
+                return WallpaperSlots.alsoSetPhone(activity);
+            }
+
+            @Override public void setAlsoSetPhone(boolean on) {
+                WallpaperSlots.setAlsoSetPhone(activity, on);
+            }
+
+            @Override public void applyAppOnly(@NonNull WallpaperSlots.Choice choice,
+                                               @Nullable WallpaperSlots.Callback cb) {
+                WallpaperSlots.applyAppOnly(activity, choice, cb);
+            }
         };
     }
 
@@ -237,10 +280,21 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     public static final class Loaded {
         @NonNull final WallpaperSlots.State state;
         @NonNull final List<File> recents;
+        /** The launcher is the home app: the Home and Lock pair; otherwise the launcher's own card. */
+        final boolean homeApp;
+        /** The remembered "Also set as phone wallpaper". */
+        final boolean alsoPhone;
 
         Loaded(@NonNull WallpaperSlots.State state, @NonNull List<File> recents) {
+            this(state, recents, true, false);
+        }
+
+        Loaded(@NonNull WallpaperSlots.State state, @NonNull List<File> recents, boolean homeApp,
+               boolean alsoPhone) {
             this.state = state;
             this.recents = recents;
+            this.homeApp = homeApp;
+            this.alsoPhone = alsoPhone;
         }
     }
 
@@ -265,7 +319,15 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             Logger.logStackTraceWithMessage(LOG_TAG, "Reading the recent photos failed", e);
             recents = Collections.emptyList();
         }
-        return new Loaded(state, new ArrayList<>(recents));
+        boolean homeApp = true;
+        boolean alsoPhone = false;
+        try {
+            homeApp = slots.isHomeApp();
+            alsoPhone = slots.alsoSetPhone();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Reading the home app failed", e);
+        }
+        return new Loaded(state, new ArrayList<>(recents), homeApp, alsoPhone);
     }
 
     private static final String LOG_TAG = "WallpaperPickerPage";
@@ -302,6 +364,13 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final View mStripCard;
     /** "Set your wallpaper here…": shown while the launcher's own wallpaper is not on screen. */
     private final View mGlassHint;
+    /**
+     * The launcher is not the home app: one card (the Home slot, labelled as the launcher's own)
+     * and under it {@link #mAlsoPhone}. Fixed for the page's life.
+     */
+    private final boolean mLauncherOnly;
+    /** "Also set as phone wallpaper": unticked, the launcher's card goes to the launcher alone. */
+    private final CompoundButton mAlsoPhone;
     @Nullable private Drawable mBackground;
 
     @NonNull private WallpaperSlots.State mStored;
@@ -385,6 +454,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mThumbW = WallpaperPickerLogic.thumbWidth(mThumbH, dm.widthPixels, dm.heightPixels);
 
         mStored = loaded.state;
+        mLauncherOnly = !loaded.homeApp;
         mPending[WallpaperSlots.Slot.HOME.ordinal()] = mStored.home;
         mPending[WallpaperSlots.Slot.LOCK.ordinal()] = mStored.lock;
         if (restore != null) {
@@ -392,6 +462,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             mPending[WallpaperSlots.Slot.LOCK.ordinal()] = restore.pendingLock;
             mCentred = restore.centred;
         }
+        // The launcher's own card is the Home slot; there is no Lock card to stand on.
+        if (mLauncherOnly) mCentred = WallpaperSlots.Slot.HOME;
 
         mRoot = LayoutInflater.from(context).inflate(R.layout.wallpaper_picker_page, null, false);
         mStripCard = mRoot.findViewById(R.id.wallpaper_picker_strip_card);
@@ -400,7 +472,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mStrip = mRoot.findViewById(R.id.wallpaper_picker_strip);
         mPhoto = mRoot.findViewById(R.id.wallpaper_picker_photo);
         mGlassHint = mRoot.findViewById(R.id.wallpaper_picker_glass_hint);
+        mAlsoPhone = mRoot.findViewById(R.id.wallpaper_picker_also_phone);
         applyGlassHint();
+        bindAlsoPhone(loaded.alsoPhone);
 
         // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame:
         // Done applies what the cards hold; the page has nothing above or under them but the strip.
@@ -411,7 +485,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mPager.setAdapter(new CardAdapter());
         // Start laid out at the centred card (Home): the first layout pass must not centre the
         // Lock card at position 0, which is bound and played for a frame before sizeCards scrolls.
-        mPagerLayout.scrollToPositionWithOffset(initialPosition(mCentred), 0);
+        mPagerLayout.scrollToPositionWithOffset(posOf(mCentred), 0);
         mSnap.attachToRecyclerView(mPager);
         mPager.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
@@ -464,9 +538,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @Nullable
     @Override
     public View sharedCard() {
-        WallpaperPreviewView card = mCards[mCentred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME];
-        if (card == null) card = mCards[POS_HOME];
-        if (card == null) card = mCards[POS_LOCK];
+        WallpaperPreviewView card = card(mCentred);
+        if (card == null) card = card(WallpaperSlots.Slot.HOME);
+        if (card == null) card = card(WallpaperSlots.Slot.LOCK);
         return card != null && isSized(card) ? card : null;
     }
 
@@ -497,8 +571,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             dropReadyListener();
             return false;
         }
-        int pos = mCentred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME;
-        WallpaperPreviewView card = mCards[pos];
+        int pos = posOf(mCentred);
+        WallpaperPreviewView card = pos < 0 ? null : mCards[pos];
         if (card == null || !isSized(card) || !mPictureSettled[pos]) return false;
         mWhenReady = null;
         dropReadyListener();
@@ -579,7 +653,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     /** Centres {@code slot}'s card, as a swipe that settled there would. */
     @MainThread
     public void centre(@NonNull WallpaperSlots.Slot slot) {
-        int pos = slot == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME;
+        int pos = posOf(slot);
+        if (pos < 0) return;
         if (mCardW > 0) {
             // The neighbour is already in view, so a plain smoothScrollToPosition would not move:
             // scroll by the snap helper's own distance to centre it.
@@ -637,6 +712,44 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         if (mGlassHint.getVisibility() != visibility) mGlassHint.setVisibility(visibility);
     }
 
+    /**
+     * Shows "Also set as phone wallpaper" under the launcher's card, round and tinted like the
+     * page's other controls, at its remembered state; every tick is remembered at once. Hidden
+     * while the page shows the Home and Lock pair.
+     */
+    private void bindAlsoPhone(boolean checked) {
+        View row = mRoot.findViewById(R.id.wallpaper_picker_app_only_row);
+        row.setVisibility(mLauncherOnly ? View.VISIBLE : View.GONE);
+        androidx.core.widget.CompoundButtonCompat.setButtonTintList(mAlsoPhone, new ColorStateList(
+            new int[][] {{android.R.attr.state_checked}, {}},
+            new int[] {
+                MaterialColors.getColor(mContext, androidx.appcompat.R.attr.colorPrimary, 0),
+                MaterialColors.getColor(mContext, com.google.android.material.R.attr.colorOnSurfaceVariant, 0),
+            }));
+        mAlsoPhone.setChecked(checked);
+        mAlsoPhone.setOnCheckedChangeListener((button, on) -> {
+            if (mReleased) return;
+            try {
+                mSlots.setAlsoSetPhone(on);
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Remembering Also set as phone wallpaper failed", e);
+            }
+        });
+    }
+
+    /** "Also set as phone wallpaper", for tests. */
+    @VisibleForTesting
+    @NonNull
+    CompoundButton alsoPhone() {
+        return mAlsoPhone;
+    }
+
+    /** Whether the page shows the launcher's one card instead of the Home and Lock pair. */
+    @VisibleForTesting
+    boolean launcherOnly() {
+        return mLauncherOnly;
+    }
+
     /** The hint line under Choose photo, for tests. */
     @VisibleForTesting
     @NonNull
@@ -682,8 +795,12 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     /** Whether either card holds a choice that is not what the slots store: what Done would apply. */
     @Override
     public boolean hasPendingChanges() {
-        return !mReleased
-            && (WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.HOME,
+        if (mReleased) return false;
+        if (mLauncherOnly) {
+            return WallpaperPickerLogic.launcherCardApplies(mPending[WallpaperSlots.Slot.HOME.ordinal()],
+                mStored, mAlsoPhone.isChecked());
+        }
+        return (WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.HOME,
                     mPending[WallpaperSlots.Slot.HOME.ordinal()], mStored.home)
                 || WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.LOCK,
                     mPending[WallpaperSlots.Slot.LOCK.ordinal()], mStored.lock));
@@ -711,14 +828,39 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             return;
         }
         setBusy(true);
-        applyPending(WallpaperSlots.Slot.HOME, () -> applyPending(WallpaperSlots.Slot.LOCK, () -> {
+        Runnable finished = () -> {
             if (mReleased) return;
             setBusy(false);
             refreshCards();
             refreshSameAsHomeThumb();
             refreshSelection();
             onDone.run();
-        }, onFailed), onFailed);
+        };
+        if (mLauncherOnly) {
+            applyLauncherCard(finished, onFailed);
+            return;
+        }
+        applyPending(WallpaperSlots.Slot.HOME, () -> applyPending(WallpaperSlots.Slot.LOCK, finished,
+            onFailed), onFailed);
+    }
+
+    /**
+     * The launcher's one card: to the launcher alone, or with Also set as phone wallpaper ticked,
+     * to the phone the way a Home apply always went (the Lock slot following it when it is Same
+     * as Home). Ticked over the stored app-only picture, that picture goes to the phone.
+     */
+    private void applyLauncherCard(@NonNull Runnable next, @NonNull Runnable failed) {
+        final WallpaperSlots.Slot slot = WallpaperSlots.Slot.HOME;
+        final WallpaperSlots.Choice choice = mPending[slot.ordinal()];
+        final boolean toPhone = mAlsoPhone.isChecked();
+        if (!WallpaperPickerLogic.launcherCardApplies(choice, mStored, toPhone)) {
+            next.run();
+            return;
+        }
+        runApply(slot, choice, !toPhone, () -> {
+            mPending[slot.ordinal()] = choice.photo ? stored(slot) : choice;
+            next.run();
+        }, failed);
     }
 
     /** Applies {@code slot}'s pending choice when it differs from what is stored, then {@code next}. */
@@ -729,16 +871,20 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             next.run();
             return;
         }
-        runApply(slot, choice, () -> {
+        runApply(slot, choice, false, () -> {
             // A photo is stored as the slot's own kept copy, not the pending file.
             mPending[slot.ordinal()] = choice.photo ? stored(slot) : choice;
             next.run();
         }, failed);
     }
 
-    /** Applies one slot; {@code next} runs on success, and a failure ends the run with an error. */
+    /**
+     * Applies one slot; {@code next} runs on success, and a failure ends the run with an error.
+     * {@code launcherAlone} sets the picture for the launcher only (the Home slot, while the
+     * launcher is not the home app and Also set as phone wallpaper is not ticked).
+     */
     private void runApply(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice,
-                          @NonNull Runnable next, @NonNull Runnable failed) {
+                          boolean launcherAlone, @NonNull Runnable next, @NonNull Runnable failed) {
         WallpaperSlots.Callback done = (ok, error) -> {
             if (!ok) {
                 Logger.logError(LOG_TAG, "Applying to " + slot + " failed: " + error);
@@ -754,7 +900,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             reloadStored(next);
         };
         try {
-            mSlots.apply(slot, choice, done);
+            if (launcherAlone) mSlots.applyAppOnly(choice, done);
+            else mSlots.apply(slot, choice, done);
         } catch (RuntimeException e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Applying to " + slot + " failed", e);
             done.onDone(false, e.getMessage());
@@ -812,6 +959,19 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         return centred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME;
     }
 
+    /** {@code slot}'s pager position; -1 for Lock while the launcher's one card stands alone. */
+    private int posOf(@NonNull WallpaperSlots.Slot slot) {
+        if (mLauncherOnly) return slot == WallpaperSlots.Slot.HOME ? 0 : -1;
+        return initialPosition(slot);
+    }
+
+    /** The slot at pager position {@code pos}. */
+    @NonNull
+    private WallpaperSlots.Slot slotAt(int pos) {
+        if (mLauncherOnly) return WallpaperSlots.Slot.HOME;
+        return pos == POS_LOCK ? WallpaperSlots.Slot.LOCK : WallpaperSlots.Slot.HOME;
+    }
+
     private void sizeCards(int pagerW, int pagerH) {
         if (pagerW <= 0 || pagerH <= 0) return;
         // The small label over the card takes its own height out of the card's.
@@ -829,7 +989,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             mPager.setPaddingRelative(side, 0, side, 0);
             RecyclerView.Adapter<?> adapter = mPager.getAdapter();
             if (adapter != null) adapter.notifyDataSetChanged();
-            mPagerLayout.scrollToPositionWithOffset(mCentred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME, 0);
+            mPagerLayout.scrollToPositionWithOffset(posOf(mCentred), 0);
         });
     }
 
@@ -838,7 +998,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         if (snap == null) return;
         int pos = mPagerLayout.getPosition(snap);
         if (pos == RecyclerView.NO_POSITION) return;
-        setCentred(pos == POS_LOCK ? WallpaperSlots.Slot.LOCK : WallpaperSlots.Slot.HOME);
+        setCentred(slotAt(pos));
     }
 
     /** The label over a card and the gap under it, px. */
@@ -883,14 +1043,16 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             lp.width = Math.max(1, mCardW);
             lp.height = Math.max(1, mCardH);
             holder.card.setLayoutParams(lp);
-            final WallpaperSlots.Slot slot = position == POS_LOCK ? WallpaperSlots.Slot.LOCK : WallpaperSlots.Slot.HOME;
+            final WallpaperSlots.Slot slot = slotAt(position);
             for (int i = 0; i < mCards.length; i++) if (mCards[i] == holder.card) mCards[i] = null;
             mCards[position] = holder.card;
-            holder.label.setText(slot == WallpaperSlots.Slot.LOCK
-                ? R.string.wallpaper_picker_slot_lock : R.string.wallpaper_picker_slot_home);
+            // The launcher's one card stands where Home screen and Lock screen do, in their style.
+            int label = mLauncherOnly ? R.string.wallpaper_picker_slot_launcher
+                : slot == WallpaperSlots.Slot.LOCK ? R.string.wallpaper_picker_slot_lock
+                : R.string.wallpaper_picker_slot_home;
+            holder.label.setText(label);
             holder.card.setLock(slot == WallpaperSlots.Slot.LOCK);
-            holder.card.setContentDescription(mContext.getString(slot == WallpaperSlots.Slot.LOCK
-                ? R.string.wallpaper_picker_slot_lock : R.string.wallpaper_picker_slot_home));
+            holder.card.setContentDescription(mContext.getString(label));
             holder.card.setOnClickListener(v -> {
                 if (mCentred != slot) centre(slot);
                 // A card with no photo of the app's on it has nothing to show but the way to one.
@@ -901,7 +1063,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
         @Override
         public int getItemCount() {
-            return 2;
+            return mLauncherOnly ? 1 : 2;
         }
     }
 
@@ -923,7 +1085,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private void bindCard(int position) {
         final WallpaperPreviewView card = mCards[position];
         if (card == null) return;
-        WallpaperSlots.Slot slot = position == POS_LOCK ? WallpaperSlots.Slot.LOCK : WallpaperSlots.Slot.HOME;
+        WallpaperSlots.Slot slot = slotAt(position);
         WallpaperSlots.Choice c = shown(slot);
         if (c.photo) {
             bindPhotoCard(position, card, slot, c);
@@ -1106,7 +1268,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @VisibleForTesting
     @Nullable
     WallpaperPreviewView card(@NonNull WallpaperSlots.Slot slot) {
-        return mCards[slot == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME];
+        int pos = posOf(slot);
+        return pos < 0 ? null : mCards[pos];
     }
 
     /** Back, as the arrow would close the surface. */
@@ -1119,7 +1282,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @VisibleForTesting
     @Nullable
     TextView cardLabel(@NonNull WallpaperSlots.Slot slot) {
-        WallpaperPreviewView card = mCards[slot == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME];
+        WallpaperPreviewView card = card(slot);
         if (card == null || !(card.getParent() instanceof LinearLayout)) return null;
         View first = ((LinearLayout) card.getParent()).getChildAt(0);
         return first instanceof TextView ? (TextView) first : null;

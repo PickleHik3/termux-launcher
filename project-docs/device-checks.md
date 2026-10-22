@@ -13,6 +13,63 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · branch feat/display-keyboard (spec #125, layers, drawer search, touchpad switch) ·
+  Passed on the emulator 2026-10-22: portrait keyboard over an X app with no resize; text-field
+  auto-show in all three touch modes; the touchpad button switching with exactly one X resize per
+  switch; fcitx5 focus (no-tap show, typing keeps it up, 150 ms hide, one helper after a restart)
+  for a drawer-launched mousepad; Back and typing go to the drawer and palette over the display
+  window and typing returns to X after they close (also after rotation and a display restart);
+  drawer search; a fresh install with bootstrap 2026.10.18. Still owed on pong (release build,
+  real GPU and Firefox): the same in daily use, the touchpad button's look in light/dark and
+  TalkBack, a Qt app's focus, a dialog entry's focus, and drawer search from Keyboard off · pong.
+- 2026-10-21 · commit "fix(widgets): a carried built-in widget keeps its cell through a page turn" ·
+  Passed on the emulator 2026-10-21 for the crashing case (a fresh built-in Battery widget, long-press
+  drag held in the right band: two turns, a clean drop). Still owed: a system app widget, two or
+  more pages, the left edge, carrying it back to the first page before dropping · emulator, debug build.
+- 2026-10-21 · commit "feat(settings): a Battery & performance page for the presets and the
+  motion they trim" · Settings › App › Battery & performance opens with Presets (Reduce idle
+  activity, Low-memory preset) and Smoother motion (Glass refraction, Living glass, Wallpaper
+  parallax, Cursor trail, Terminal effect); App behavior's link row opens the same page; Appearance
+  no longer shows Wallpaper parallax. Cursor trail off here stops the trail in the terminal on
+  return (also check an unfocused pane of a split: only the focused pane is re-read on resume).
+  Live greying: Low-memory preset on greys parallax, Cursor trail and Terminal effect ("Set by
+  Low-memory preset", parallax and trail off, effect "Set by Low-memory preset · None") and the glass rows ("Off while Reduce
+  idle activity is on", shown off); off again brings back the look, the glass switches as they
+  were, and the stored fancier_glass is never written by the greying. Reduce idle activity alone
+  greys only the glass. Glass refraction off gives Living glass "Needs Glass refraction"; with a
+  wallpaper not picked in the launcher both say "Needs a wallpaper picked in Appearance"; wallpaper
+  mode off gives parallax "Needs a wallpaper". Searching "Reduce idle activity" and "Low-memory
+  preset" lands on the page. The preset's on/off still restyles the launcher as before; Living glass
+  off stops the glass flexing on a page swipe · emulator (API 33+), debug build.
+- 2026-10-21 · commits "feat(chrome): the glass treats an app-only wallpaper as the launcher's
+  own" and "feat(wallpaper): a picture for the launcher alone while it is not the home app" · With
+  another launcher as the home app: Appearance shows one card titled "Termux Launcher" with an
+  unticked round "Also set as phone wallpaper" and its line under it; pick a photo, Done: the
+  phone's home and lock wallpapers are unchanged (`ad -s emu` home and lock screenshots before and
+  after), the launcher draws the picture behind the terminal with no flash of the phone's
+  wallpaper on a cold start or a rotation, every glass blurs it and Fancier Glass can be turned
+  on and refracts it. Tick the box and Done again: the phone's wallpaper changes, and the tick is
+  still there on reopening. Then make Termux Launcher the home app: the Home and Lock pair is
+  back, Home showing the launcher's picture, Lock the phone's own · emulator, debug build.
+- 2026-10-21 · commit "fix(chrome): fullscreen claims the status bar's band over the cutout" ·
+  With fullscreen on, the window bar sits at the top edge with no empty band, in the terminal and
+  the Display place; with it off, nothing moved. Look at where the camera hole lands on the window
+  bar's chips and say whether anything is covered · pong (punch-hole), release build.
+- 2026-10-21 · commit "fix(x11): termux-x11-gpu-setup puts back only what it installed, also when
+  stopped" · Passed on the emulator (apt) 2026-10-21: a full run, Ctrl-C after glmark2 went in and
+  Ctrl-C during the apt install all left the package list as before. Still owed: (a) pacman: the
+  same full run and Ctrl-C with `pacman -Qq` before and after; (b) a Debian container:
+  `proot-distro login debian -- dpkg -l` unchanged after a run without --skip-proot; (c) a
+  closed terminal mid-run (HUP or a kill?) · pong (pacman, has proot-distro) with the developer's
+  go-ahead, release build with X11CliInstaller v14.
+- 2026-10-21 · commit "feat(settings): a Benchmark graphics row" · Passed on the emulator
+  2026-10-21 (row, copied text, toast). Still owed: the row is hidden on the Nix edition · a Nix
+  build.
+- 2026-10-21 · merge 7940a21ed "launch apps whose desktop file ships an unfilled Exec placeholder" ·
+  With the stock x11 `chromium` (Exec=@@desktop_exec) Chromium opens from the drawer; an app whose
+  command is missing shows "<app> could not start: its command <x> is not installed." once, with no
+  --no-sandbox retry in logcat; a desktop session and an app exiting non-127 behave as before ·
+  pong (release build), logcat `Termux.X11LinuxAppRunner`.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
@@ -407,6 +464,7 @@ under twenty items; past that, the oldest are re-judged first.
   read that as the bug.)
 
 ## Developer
+- 2026-10-21 · v1.2.0 release smoke on the emulator · Long-press a pinned icon on the glass dock on pong: the glass lights under the finger and the Unpin popup opens. On the emulator an injected long press (`ad long`) lifted the icon, showed no popup and launched the app on release; artefact of the injected gesture or a real miss · pong, by hand.
 ### Flick on a mouse-tracking TUI (10-20)
 - 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
   in landscape and portrait: repeated short and long flicks scroll it and never raise the
@@ -555,3 +613,18 @@ under twenty items; past that, the oldest are re-judged first.
   judge whether that reads as the intended ~200 ms. TalkBack reads "name, second line, actions
   hidden" and offers Show/Hide. Typing in the layout editor with the phone's keyboard shrinks the
   XML field above it · pong, by hand.
+
+## Display keyboard Resize reset
+- 2026-10-23 · branch fix/display-keyboard-resize-reset (one-time portrait Resize reset, Layout editor
+  revert no longer saves the keyboard mode) · Emulator: in `shared_prefs`, seed
+  `layout.portrait.keyboard_mode` = `resize` and remove `place_keyboard_overlay_reset_done`, install,
+  open a Linux app in portrait and raise the keyboard: it floats, the key is gone and the flag is
+  set. Set Resize with the touchpad's mode button afterwards and relaunch: it stays Resize. Then open
+  the Layout editor on the display in portrait and Discard: no `keyboard_mode` key appears in the
+  prefs file · emulator.
+- 2026-10-23 · Settings row "Keyboard over display" (Display → Input → Keyboard) · Emulator: open it,
+  pick Resize display and open a Linux app in portrait and then landscape: the keyboard makes room in
+  both. Pick Overlay: it floats in both. Switch one orientation with the touchpad's mode button and
+  reopen the row: the summary reads "Portrait: … · Landscape: …" and nothing is ticked. Change it
+  while a display is on screen, return to the launcher: the pad's mode button and the keyboard follow
+  without a restart · emulator.

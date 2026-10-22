@@ -16,7 +16,9 @@ import java.util.List;
  * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
  * a restore writes the value the layout was resolving to whether or not it had a key of its own.
  * That materialises a key the global value was answering for, at the value it was answering with:
- * the same arrangement, spelled out.
+ * the same arrangement, spelled out. The keyboard mode is the exception: it is put back as
+ * stored or as absent, because a Resize spelled out for a mode that was only defaulting looks, from
+ * then on, like the user's choice.
  *
  * <p>A snapshot remembers its variant and restores onto it, whatever the store is on by then, so a
  * Discard puts back the layout that was being edited and never the other one.
@@ -41,6 +43,11 @@ public final class PlaceArrangeSnapshot {
          */
         final Slot[] slots;
         final PlaceLayout.KeyboardMode keyboardMode;
+        /**
+         * Whether the keyboard mode had a key of its own. Restore writes it only then: the default
+         * is not a choice, and spelling it out would pin it against a later change of default.
+         */
+        final boolean keyboardModeStored;
         final PlaceLayout.KeyboardForm keyboardForm;
         final int widgetColumns;
         final int widgetRows;
@@ -54,6 +61,7 @@ public final class PlaceArrangeSnapshot {
             for (Element element : Element.values())
                 slots[element.ordinal()] = places.slot(orientation, element);
             keyboardMode = places.keyboardMode(orientation);
+            keyboardModeStored = places.hasStoredKeyboardMode(orientation);
             keyboardForm = places.keyboardForm(orientation);
             widgetColumns = places.widgetColumns(orientation);
             widgetRows = places.widgetRows(orientation);
@@ -65,7 +73,8 @@ public final class PlaceArrangeSnapshot {
         void restore(@NonNull PlaceLayoutStore places) {
             for (Element element : Element.values())
                 places.setSlot(orientation, element, slots[element.ordinal()]);
-            places.setKeyboardMode(orientation, keyboardMode);
+            if (keyboardModeStored) places.setKeyboardMode(orientation, keyboardMode);
+            else places.clearKeyboardMode(orientation);
             places.setKeyboardForm(orientation, keyboardForm);
             places.setWidgetColumns(orientation, widgetColumns);
             places.setWidgetRows(orientation, widgetRows);

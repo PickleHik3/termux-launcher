@@ -58,6 +58,12 @@ public final class GuiAppsSetup {
      */
     public static final String WINDOW_MANAGER_PACKAGE = "openbox";
 
+    /**
+     * fcitx5 and its toolkit modules: GTK 3, which every starter app uses, and Qt, so a Qt app
+     * installed later reports focus too rather than leaving taps in it to the cursor alone.
+     */
+    private static final String[] INPUT_METHOD_PACKAGES = {"fcitx5", "fcitx5-gtk3", "fcitx5-qt"};
+
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
 
@@ -350,6 +356,10 @@ public final class GuiAppsSetup {
         // mattered, so there it is asked for on its own after the rest, and a repository without
         // it stops nothing.
         if (!vaj) packages.add(WINDOW_MANAGER_PACKAGE);
+        // Exact text-field focus: fcitx5 and its GTK3 and Qt modules tell the display when a text
+        // field takes focus. GTK3 because the starter apps are GTK3. Termux's x11 repository
+        // only; VAJ's repository has not been checked for them.
+        if (!vaj) packages.addAll(Arrays.asList(INPUT_METHOD_PACKAGES));
         for (StarterApp app : StarterApp.values()) {
             if (vaj && app == StarterApp.BROWSER) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
