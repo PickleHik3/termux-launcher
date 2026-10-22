@@ -13028,6 +13028,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mRaisingDisplayFrameKeyboard) return;
             // A keyboard the wall's slide raised or put away on its own is nobody's intent either.
             if (mQuietKeyboardChange) return;
+            mDrawerRaisedKeyboardClaimed = true;
             if (mX11Display != null) mX11Display.onUserKeyboardIntent(shown);
         });
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
@@ -18093,6 +18094,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void restoreSystemKeyboard() {
+            lowerDrawerSearchKeyboard();
             if (!mSystemImeHiddenForDrawer) return;
             mSystemImeHiddenForDrawer = false;
             if (getWindow() == null || isSystemImeSuppressedByInAppKeyboard()) return;
@@ -18993,6 +18995,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }, -1, null, -1, null, null);
     }
 
+    /** The display keyboard the drawer's search raised, and whether the user has claimed it since. */
+    private boolean mDrawerRaisedKeyboard;
+    private boolean mDrawerRaisedKeyboardClaimed;
+
+    /** The drawer closed: put back down what its search raised over the display, quietly. */
+    private void lowerDrawerSearchKeyboard() {
+        boolean raised = mDrawerRaisedKeyboard;
+        mDrawerRaisedKeyboard = false;
+        if (!com.termux.app.x11.DisplayKeyboardRoute.drawerCloseLowers(raised,
+                mDrawerRaisedKeyboardClaimed, mInAppKeyboard != null && mInAppKeyboard.isVisible()))
+            return;
+        if (isDisplayTouchpadFrame() && mFrameContent.isKeyboardContent()) {
+            applyDisplayFrameDecision(mFrameContent.onTextFocus(false));
+        } else {
+            lowerDisplayFrameKeyboard();
+        }
+    }
+
     /**
      * Summons the system IME for the drawer's search, with <b>no focus change</b>.
      *
@@ -19004,6 +19024,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #handleAppDrawerCodePoint}.
      */
     private void requestAppDrawerSearchKeyboard() {
+        // Over a running display the focus is the display's, so the system keyboard below is
+        // refused as "not served" and the search would have no keyboard at all: raise the
+        // launcher's, which the drawer types through, in whatever frame the place keeps it.
+        if (com.termux.app.x11.DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(
+                isDisplayWindowShowing(), isEmbeddedDisplayRunning(),
+                mInAppKeyboard != null && mInAppKeyboard.isEnabled())) {
+            // The drawer's raise is nobody's pin: it goes down again with the drawer
+            // (lowerDrawerSearchKeyboard) unless the keyboard was up first or the user claims it.
+            if (isDisplayTouchpadFrame()) {
+                if (mFrameContent.isKeyboardContent()) return;
+                applyDisplayFrameDecision(mFrameContent.onTextFocus(true));
+                mDrawerRaisedKeyboard = true;
+                mDrawerRaisedKeyboardClaimed = false;
+            } else if (!mInAppKeyboard.isVisible()) {
+                raiseDisplayFrameKeyboard();
+                mDrawerRaisedKeyboard = true;
+                mDrawerRaisedKeyboardClaimed = false;
+            }
+            return;
+        }
         onSystemImeRequested();
         KeyboardUtils.showSoftKeyboard(this, mTerminalView);
     }
@@ -26051,6 +26091,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (decision.releaseFrame) lowerDisplayFrameKeyboard();
         syncMouseModeMark();
         if (mX11Display == null) return;
+        if (decision.intent != com.termux.app.x11.DisplayFrameContentPolicy.Intent.NONE)
+            mDrawerRaisedKeyboardClaimed = true;
         switch (decision.intent) {
             case PIN:
                 // A keyboard the user asked for is theirs — but only if one is actually up: the
