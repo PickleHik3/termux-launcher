@@ -3,6 +3,7 @@ package com.termux.app.x11;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -920,8 +921,9 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /**
      * Holds the display's size over a change of the frame's height that lands in a pass or two
      * rather than over many frames — the keyboard mode switched under the touchpad. Taken now,
-     * and let go a frame after the frame has laid out at a new height, so whatever the passes
-     * after the first still move lands before the X screen is resized, once. A frame whose height
+     * and let go once the frame's height has held still for {@link #NEXT_LAYOUT_SETTLE_MS} after
+     * its last move, so whatever the passes after the first still move lands before the X screen
+     * is resized, once. A frame whose height
      * never moves lets go after {@link #NEXT_LAYOUT_BACKSTOP_MS}; the caller leaves the hold out
      * altogether when it knows the height cannot move. A hold that is already taken — the status
      * bar folding — is left to whoever took it, and one that begins while this waits takes it
@@ -947,11 +949,18 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                 finishHostResize();
             }
         };
+        final long backstopAt = SystemClock.uptimeMillis() + NEXT_LAYOUT_BACKSTOP_MS;
+        final int[] last = {heldHeight};
         View.OnLayoutChangeListener follower = (v, l, t, r, b, ol, ot, or, ob) -> {
-            if (b - t == heldHeight) return;
-            // One frame on, so a pass that follows this layout lands under the hold too.
+            int now = b - t;
+            if (now == last[0]) return;
+            last[0] = now;
+            // The height settles over several passes (the pad's host, the accessory stack, the
+            // overlay decision), each its own layout; every one that moves it starts the wait
+            // again, so the release falls after the last, never between two.
             removeCallbacks(release);
-            post(release);
+            postDelayed(release, Math.max(0L,
+                Math.min(NEXT_LAYOUT_SETTLE_MS, backstopAt - SystemClock.uptimeMillis())));
         };
         mNextLayoutRelease = release;
         mNextLayoutFollower = follower;
@@ -965,6 +974,9 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * not keep the display frozen.
      */
     private static final long NEXT_LAYOUT_BACKSTOP_MS = 160L;
+
+    /** How long the frame's height must hold still, after its last move, before the hold lets go. */
+    private static final long NEXT_LAYOUT_SETTLE_MS = 48L;
 
     private void dropNextLayoutHold() {
         if (mNextLayoutRelease != null) removeCallbacks(mNextLayoutRelease);
