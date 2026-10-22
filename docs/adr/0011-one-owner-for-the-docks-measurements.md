@@ -17,7 +17,10 @@ the slide came back with a 213 px wallpaper gap under its pane. Four fixes went 
 and nothing tested the assembly, so the next reader would bite the same way.
 
 We decided that the dock's measurements and dressing have one owner, and that a slide is an input to
-it, never a path of its own.
+it, never a path of its own. It builds on 0003, where the geometry is shared so the chrome can
+travel with the slide and the settle lands the rest once, and on 0007, where one pure model answers
+the chrome's shapes for every reader instead of each cutting its own: Dock geometry is that model
+for the dock's sizes, and a half's dress is one of its inputs.
 
 1. **Dock geometry.** A pure module takes one snapshot of both halves (each half's layout, **Dock
    design**, **Search field** and **Drawer tile**, which half's rows the frame shows, keyboard,
