@@ -36,6 +36,19 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-22 · #135 stage 1 · Cold start and return from the app drawer and from Settings: the
   dock row never shows an empty frame longer than before and never draws icons at a guessed size
   first (the row's own fallback sizing is deleted; it now waits for the dock's size) · emulator.
+- 2026-10-22 · #136 stage 2, Dock rows (commits "feat(dock): Dock rows…" onward) · A Home layout
+  with Beads, the Search field and the Drawer tile on Home, the Workspace on Tray (then the
+  reverse), Floating: screenshot mid-swipe both ways just after the rows change halves → the slab's
+  rim, shelf, contact shadow and icon reflection are the arriving half's from that frame (before:
+  the departing half's until the settle); Home's Drawer tile is in its slot when Home's rows come
+  in, and a swipe cut short leaves the window's row without it · emulator.
+- 2026-10-22 · #136 stage 2 · Dock visibility through Dock rows: a window with every dock row put
+  away (keyboard up, then down), a status bar along the bottom with no dock rows, the extra keys
+  under the keyboard, then back to the shipped layout → the stack, the glass sheet, the apps row,
+  the A–Z row, the extra keys and the bands under the keyboard show exactly as before; a pinned
+  icon dragged while a layout change hides the apps row is dropped cleanly; the page ticks show on
+  a dock with two pages after the row comes back; the icon reflection never shows with the row
+  away (Android 13+) · emulator.
 - 2026-10-22 · commit "feat(appearance): a Split gap slider on the Terminal tap" · Appearance ›
   tap the terminal: the row reads Glass, Opacity, Tint, Contrast, Split gap. In a 2-pane and a
   4-pane window set Split gap to 0, 4 and 24 dp: screenshot each; the gutter between panes follows,
