@@ -52,6 +52,9 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private static final DebugChoice GLASS_RATE =
         new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE, "15", DebugSwitch.SYSTEM_PROPERTIES);
 
+    private static final DebugChoice TRACE_INVAL =
+        new DebugChoice("debug.tl.scene_trace_inval", "0", DebugSwitch.SYSTEM_PROPERTIES);
+
     @NonNull private final Activity mActivity;
     @NonNull private final FrameLayout mContainer;
     @Nullable private final View mBackdrop;
@@ -60,6 +63,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @NonNull private final int[] mLoc = new int[2];
     @Nullable private SceneLayerView mLayer;
     private boolean mAttached;
+    @Nullable private SceneInvalTrace mInvalTrace;
 
     private final View.OnLayoutChangeListener mPlace =
         (v, l, t, r, b, ol, ot, or, ob) -> place();
@@ -136,6 +140,38 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mContainer.addView(layer, Math.max(0, index), lp);
         mContainer.addOnLayoutChangeListener(mPlace);
         place();
+        installInvalTrace(layer);
+    }
+
+    /** Debug builds with debug.tl.scene_trace_inval=1: wrap the content root in the invalidation recorder. */
+    private void installInvalTrace(@NonNull SceneLayerView layer) {
+        if (mInvalTrace != null || !"1".equals(TRACE_INVAL.get(SystemClock.uptimeMillis()))) return;
+        if ((mActivity.getApplicationInfo().flags
+            & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
+            return;
+        }
+        android.view.ViewGroup content = mActivity.findViewById(android.R.id.content);
+        if (content == null || content.getChildCount() != 1) return;
+        View child = content.getChildAt(0);
+        android.view.ViewGroup.LayoutParams clp = child.getLayoutParams();
+        SceneInvalTrace trace = new SceneInvalTrace(mActivity, layer::drawCount);
+        content.removeView(child);
+        trace.addView(child, new FrameLayout.LayoutParams(clp.width, clp.height));
+        content.addView(trace, clp);
+        mInvalTrace = trace;
+    }
+
+    private void removeInvalTrace() {
+        SceneInvalTrace trace = mInvalTrace;
+        if (trace == null) return;
+        mInvalTrace = null;
+        android.view.ViewGroup content = (android.view.ViewGroup) trace.getParent();
+        if (content == null || trace.getChildCount() != 1) return;
+        View child = trace.getChildAt(0);
+        android.view.ViewGroup.LayoutParams clp = trace.getLayoutParams();
+        trace.removeView(child);
+        content.removeView(trace);
+        content.addView(child, clp);
     }
 
     private void removeLayer() {
@@ -143,6 +179,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (layer == null) return;
         mLayer = null;
         mContainer.removeOnLayoutChangeListener(mPlace);
+        removeInvalTrace();
         layer.destroy();
         mContainer.removeView(layer);
     }
