@@ -115,7 +115,9 @@ public final class StackLayout {
         public final int homeFloatImePushPx;
 
         private Result(@NonNull Input in, @NonNull DockGeometry geometry) {
-            DockGeometry.Snapshot unsqueezed = in.dock.toBuilder().squeezePx(0).build();
+            // The caller's snapshot carries the last pass's squeeze; most passes have none.
+            DockGeometry.Snapshot unsqueezed = in.dock.squeezePx == 0 ? in.dock
+                : in.dock.toBuilder().squeezePx(0).build();
             DockLayout probe = geometry.layout(unsqueezed);
             Base base = new Base(probe, in.roundedDockStyle, in.dock.arrangement, in.toolbarShown,
                 in.keyboardShown, in.imeLiftPx);
