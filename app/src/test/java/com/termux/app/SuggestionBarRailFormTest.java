@@ -61,6 +61,8 @@ public class SuggestionBarRailFormTest {
 
     private SuggestionBarView render(boolean vertical, int count, int width, int height) {
         SuggestionBarView bar = new SuggestionBarView(context, null);
+        // The dock hands a row lying down its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         bar.setVerticalForm(vertical);
         bar.setMaxButtonCount(count);
         measureAndLayout(bar, width, height);
@@ -234,6 +236,8 @@ public class SuggestionBarRailFormTest {
         // `termux-reload-settings` comes back through reloadWithInput. It used to defer, leaving
         // the rail blank until something else rebuilt it.
         SuggestionBarView bar = new SuggestionBarView(context, null);
+        // The dock hands a row lying down its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         seedPinned(bar, 5);
         bar.setMaxButtonCount(5);
         measureAndLayout(bar, ROW_WIDTH, ROW_HEIGHT);

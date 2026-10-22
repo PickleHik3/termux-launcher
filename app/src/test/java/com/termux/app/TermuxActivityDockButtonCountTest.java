@@ -51,6 +51,8 @@ public class TermuxActivityDockButtonCountTest {
         FrameLayout host = new FrameLayout(window.get());
         window.get().setContentView(host);
         row = new SuggestionBarView(window.get(), null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        row.setDockIconSizePx(Math.round(24f * row.getResources().getDisplayMetrics().density));
         host.addView(row, new ViewGroup.LayoutParams(ROW_WIDTH, ROW_HEIGHT));
         row.measure(
             View.MeasureSpec.makeMeasureSpec(ROW_WIDTH, View.MeasureSpec.EXACTLY),

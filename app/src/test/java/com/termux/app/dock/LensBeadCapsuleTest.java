@@ -65,12 +65,15 @@ public class LensBeadCapsuleTest {
             + beads.promptFieldHeightPx + beads.promptFieldBottomPadPx);
         assertEquals(slab.combinedHeight(BASE_TOOLBAR_PX, false) + pad,
             beads.combinedHeight(BASE_TOOLBAR_PX, false));
-        // Every other number is the slab's with the field, the field's sides aside.
+        // Every other number is the slab's with the field, the field's sides aside, and the
+        // row's side inset, which the beads narrow (#135 measures the row's width with it).
         for (Field field : DockLayout.class.getFields()) {
             if (Modifier.isStatic(field.getModifiers()) || field.getName().equals("surface")
-                || field.getName().startsWith("promptField")) continue;
+                || field.getName().startsWith("promptField")
+                || field.getName().equals("appsRowEdgeInsetPx")) continue;
             assertEquals(field.getName(), field.get(slab), field.get(beads));
         }
+        assertEquals(beads.appsRowSideInsetPx(), beads.appsRowEdgeInsetPx);
     }
 
     @Test

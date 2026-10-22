@@ -38,11 +38,17 @@ public class DockSurfaceSpecLayoutTest {
             .baseToolbarHeightPx(BASE_TOOLBAR_PX);
     }
 
-    /** Every public number of two layouts, field by field, the spec itself aside. */
-    private static void assertSameGeometry(String what, DockLayout expected, DockLayout actual)
+    /**
+     * Every public number of two layouts, field by field, the spec itself aside, and any
+     * {@code designOwn} field the design decides by its nature.
+     */
+    private static void assertSameGeometry(String what, DockLayout expected, DockLayout actual,
+                                           String... designOwn)
         throws IllegalAccessException {
+        java.util.List<String> skipped = java.util.Arrays.asList(designOwn);
         for (Field field : DockLayout.class.getFields()) {
-            if (Modifier.isStatic(field.getModifiers()) || field.getName().equals("surface")) continue;
+            if (Modifier.isStatic(field.getModifiers()) || field.getName().equals("surface")
+                || skipped.contains(field.getName())) continue;
             assertEquals(what + " " + field.getName(), field.get(expected), field.get(actual));
         }
         assertEquals(what, expected.appsRowViewBandPx(), actual.appsRowViewBandPx());
@@ -168,8 +174,14 @@ public class DockSurfaceSpecLayoutTest {
                             .surface(DockSurfaceSpec.GLASS_TRAY).build());
                         DockLayout beads = DockLayoutPolicy.compute(inputs(capsule, alone, next, scale)
                             .surface(DockSurfaceSpec.LENS_BEADS).build());
-                        assertSameGeometry("capsule=" + capsule + " alone=" + alone + " next="
-                            + next + " preset=" + preset, tray, beads);
+                        String what = "capsule=" + capsule + " alone=" + alone + " next="
+                            + next + " preset=" + preset;
+                        // The row's side inset is the one number the beads move: they narrow its
+                        // slots so the end beads clear the screen's edges (#135 measures the
+                        // row's width with it).
+                        assertSameGeometry(what, tray, beads, "appsRowEdgeInsetPx");
+                        assertEquals(what, beads.appsRowSideInsetPx(), beads.appsRowEdgeInsetPx);
+                        assertEquals(what, tray.appsRowSideInsetPx(), tray.appsRowEdgeInsetPx);
                         assertSame(DockSurfaceSpec.LENS_BEADS, beads.surface);
                     }
                 }

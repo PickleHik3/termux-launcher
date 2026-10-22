@@ -16436,7 +16436,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return DockLayoutPolicy.baseToolbarHeightPx(getResources().getDisplayMetrics().density);
     }
 
-    /** Dock geometry (ADR 0010): the one owner of the dock's measurements, memoised per snapshot. */
+    /** Dock geometry (ADR 0011): the one owner of the dock's measurements, memoised per snapshot. */
     private final com.termux.app.dock.DockGeometry mDockGeometry =
         new com.termux.app.dock.DockGeometry();
 
@@ -22199,8 +22199,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int dockRowsAtRestPx(@NonNull com.termux.app.wall.PaneWallPage page,
                                  @NonNull PlaceLayout layout) {
         if (mPreferences == null) return -1;
-        // Its own half's dress; worked out apart from the memo, which keeps the frame's answers.
-        return com.termux.app.dock.DockGeometry.compute(dockSnapshot(layout, page))
+        // Its own half's dress, unsqueezed: a rest is what the rows take before the stack sheds
+        // anything. The eases stay the live ones, as the rest was measured before Dock geometry;
+        // Snapshot#restOf would also swap them for the half's own Search field and Wall strip.
+        // Worked out apart from the memo, which keeps the frame's answers.
+        return com.termux.app.dock.DockGeometry.compute(
+                dockSnapshot(layout, page).toBuilder().squeezePx(0).build())
             .combinedHeight(0, false);
     }
 

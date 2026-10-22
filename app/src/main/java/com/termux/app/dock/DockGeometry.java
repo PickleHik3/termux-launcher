@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Dock geometry: the one owner of the dock's measurements (ADR 0010). One {@link Snapshot} of both
+ * Dock geometry: the one owner of the dock's measurements (ADR 0011). One {@link Snapshot} of both
  * halves of the wall goes in, one {@link DockLayout} comes out, with no reference into the
  * activity. The snapshot carries raw facts — each half's stored layout and dress, which half's
  * rows the frame shows, the device and the live eases — and everything else is derived here:
