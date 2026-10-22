@@ -780,6 +780,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.place.SeamCrossing mSeamCrossing =
         new com.termux.app.place.SeamCrossing();
+    /** The chrome's clock through a slide with no finger on it, under a turning transition. */
+    private final com.termux.app.place.ChromeSettle mChromeSettle =
+        new com.termux.app.place.ChromeSettle();
     /** Where the status bar was last drawn from its rest as it travels with the Workspace's page. */
     private float mStatusTravelXPx;
     /** Something was moved or faded during this slide, so settle has transforms to put back. */
@@ -21959,10 +21962,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void doSyncChromeTravel(float offsetPx) {
         if (mPaneWallController == null) return;
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+        // With no finger on the wall, under a page transition that turns the pages, the chrome
+        // keeps the slide's clock to its last frame (ChromeSettle). Fed every frame, rests and
+        // finger frames included, so a slide never carries on from a stale one.
+        mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
+            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE,
+            currentWallPlace() == mLastWallPage);
         // A keyboard swipe drives the same travel by its finger while the wall stands still; the
         // layout passes it causes must not write the wall's resting frame over it.
         if (mKeyboardSwipeTravel) return;
-        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
         // At rest there is nothing to travel: the settle that follows the last frame owns the
         // chrome, and a wall that never moved has no transforms to put back.
         if (!wall.isMoving() && offsetPx == 0f && !mChromeTravelMoved) return;
@@ -21977,10 +21986,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         // A slide toward another window of the Workspace stays on its place: the wall's offset
         // alone reads the previous window as Home, the place on the left.
+        com.termux.app.wall.PaneWallPage place = currentWallPlace();
+        com.termux.app.place.PlaceChromeTravel.InnerPages inner =
+            mPaneWallController::showsInnerPage;
+        float chromeOffsetPx = mChromeSettle.chromeOffsetPx();
         com.termux.app.place.PlaceChromeTravel.Frame frame =
-            com.termux.app.place.PlaceChromeTravel.at(pages, currentWallPlace(),
-                offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage,
-                mPaneWallController::showsInnerPage);
+            com.termux.app.place.PlaceChromeTravel.at(pages, place, chromeOffsetPx,
+                mChromeSettle.keyboardOffsetPx(), wall.getWidth(), mChromeRestStates,
+                mLastWallPage, inner);
+        // The status bar rides with the Workspace's page, so it reads where the wall stands.
+        com.termux.app.place.PlaceChromeTravel.Frame wallFrame = chromeOffsetPx == offsetPx
+            ? frame : com.termux.app.place.PlaceChromeTravel.at(pages, place, offsetPx,
+                wall.getWidth(), mChromeRestStates, mLastWallPage, inner);
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);
@@ -22054,7 +22071,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The status bar travels with the Workspace's page wherever the frame reaches Home; it
         // fades in place only where it cannot ride (a bar on a side or the bottom edge).
-        boolean barRides = syncStatusTravel(frame, seam);
+        boolean barRides = syncStatusTravel(wallFrame, seam);
         float statusAlpha = barRides ? 1f : frame.statusReveal;
         // The status strip's content and the side and top bars fade as the places' rests say;
         // the minimal layout's bars fade like the normal one's.

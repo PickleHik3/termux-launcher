@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · commit "fix(place): the chrome lands with the wall on a turning settle" · Page
+  transition = Carousel (then Depth, Fade, Stack): tap Home → window and Back to Home, and a fling
+  each way. The keyboard and dock start on the slide's first frame and finish on its last; closing,
+  no turned sliver of the window is left once the keyboard is gone; a drag, and Slide, look as
+  before; the bar rides with the window's page · emulator (screenrecord, step frames).
 - 2026-10-22 · PR #99 (244fcf46a, migrations 9–13) · Upgrade: install over a release from before
   this branch with a Home dock height, Corners or Margin set apart from the Workspace's and a
   Prompt line or Taskbar dock style picked → Home keeps its rows (Home's own on only if rows

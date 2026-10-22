@@ -231,6 +231,20 @@ public final class PlaceChromeTravel {
     public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
                            float offsetPx, int widthPx, @NonNull States states,
                            @Nullable PaneWallPage leaving, @Nullable InnerPages inner) {
+        return at(pages, current, offsetPx, offsetPx, widthPx, states, leaving, inner);
+    }
+
+    /**
+     * The same, with the keyboard being put away read at {@code keyboardOffsetPx} rather than at
+     * {@code offsetPx}: a settle the chrome keeps the wall's clock through ({@link ChromeSettle})
+     * moves the two on their own ways, so each lands as the wall does. Everything else, and a
+     * keyboard on the chrome's way, reads {@code offsetPx}.
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
+                           float offsetPx, float keyboardOffsetPx, int widthPx,
+                           @NonNull States states, @Nullable PaneWallPage leaving,
+                           @Nullable InnerPages inner) {
         if (widthPx <= 0 || offsetPx == 0f || Float.isNaN(offsetPx)) {
             return rest(current, states.restOf(current));
         }
@@ -268,7 +282,10 @@ public final class PlaceChromeTravel {
             if (left.keyboardReveal() > 0f && other.keyboardReveal() <= 0f) {
                 // The committed place's keyboard is being put away: it goes over the first half
                 // of the way out from that place, whichever side of the frame the place is.
-                float hidden = keyboardHideFraction(leaving == from ? fraction : 1f - fraction);
+                // Measured from the same near place as the frame, so both read one pair of places.
+                float way = Float.isNaN(keyboardOffsetPx) || keyboardOffsetPx == offsetPx
+                    ? fraction : clamp01(-keyboardOffsetPx / widthPx - near);
+                float hidden = keyboardHideFraction(leaving == from ? way : 1f - way);
                 keyboardT = leaving == from ? hidden : 1f - hidden;
             }
         }
