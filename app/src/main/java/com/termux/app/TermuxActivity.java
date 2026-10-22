@@ -16509,8 +16509,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A row that lies down carries the ticks in its own air; a rail's stand in a column
             // beside it, so its cross-axis keeps the plain air of a lone row.
             .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
-            // The committed page's Dock design, on either half (#93).
-            .surface(dockSurfaceSpec())
+            // The Dock design of the half whose rows this layout stands (#93): the committed
+            // page's, or mid-slide the other half's once the seam stands its rows.
+            .surface(dockRowsSurfaceSpec(layout))
             // The Search field under the apps row: all of it while the page's layout turns it on,
             // between while the toggle, the palette or a slide across the seam eases the slab.
             .promptFieldReveal(promptFieldReveal())
@@ -16578,6 +16579,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec() {
         return com.termux.app.dock.DockSurfaceSpec.forStyle(committedDockDesign());
+    }
+
+    /**
+     * The design the dock lays {@code layout}'s rows out in: the half's whose rows they are. While
+     * the seam stands the other half's rows ({@link com.termux.app.place.SeamCrossing#layout})
+     * that is the other half's design, so a row slid in from Home on Tray is not held to the
+     * Workspace's Lens bead fit and narrower slots until the settle (the icons grew 118 to 143 px
+     * there). Everywhere else, the committed page's ({@link #dockSurfaceSpec()}).
+     */
+    @NonNull
+    private com.termux.app.dock.DockSurfaceSpec dockRowsSurfaceSpec(@NonNull PlaceLayout layout) {
+        com.termux.app.dock.DockStyle rows = layout == mSeamCrossing.layout()
+            ? mSeamCrossing.rowsDesign() : null;
+        return rows != null ? com.termux.app.dock.DockSurfaceSpec.forStyle(rows)
+            : dockSurfaceSpec();
     }
 
     /** The slab the dock wears on {@code page}: its Dock design's. */
