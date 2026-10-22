@@ -2470,6 +2470,7 @@ public final class TerminalView extends View {
         if (action == MotionEvent.ACTION_CANCEL && !mSmoothFlingActive && !mSmoothSettleActive)
             retireScrollCache();
         if (action == MotionEvent.ACTION_DOWN) {
+            com.termux.terminal.TouchDownListener.fire();
             mTouchDownX = event.getX();
             mTouchDownY = event.getY();
             mScrollDelivery.reset();

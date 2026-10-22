@@ -1724,6 +1724,7 @@ public class Keyboard2View extends View
         float ty = event.getY(p);
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
+        com.termux.terminal.TouchDownListener.fire();
         android.os.Trace.beginSection("Keyboard.down");
         try
         {
