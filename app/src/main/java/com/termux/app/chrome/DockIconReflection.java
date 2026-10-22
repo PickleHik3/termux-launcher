@@ -63,6 +63,11 @@ public final class DockIconReflection {
         (v, l, t, r, b, ol, ot, or, ob) -> requestCapture();
 
     private boolean mEnabled;
+    /**
+     * Whether the row is on screen in the dock, as Dock rows announced it
+     * ({@code DockRows.Listener}); the row's own view state is not read for it.
+     */
+    private boolean mRowOnScreen;
     /** True while a page swipe carries the icons: the reflection is put away until it settles. */
     private boolean mSuspended;
     @Nullable private Bitmap mBitmap;
@@ -108,6 +113,16 @@ public final class DockIconReflection {
 
     public boolean isEnabled() {
         return mEnabled;
+    }
+
+    /**
+     * Whether the row stands on screen in the dock, as Dock rows announces it. A place without
+     * the dock's apps row (a terminal window in front) hides the row's pager and leaves the row
+     * itself at its stale Home offset, so off screen nothing is reflected: the icons' mirror
+     * would otherwise be aimed into the keyboard's top rows through the unified glass.
+     */
+    public void setRowOnScreen(boolean onScreen) {
+        mRowOnScreen = onScreen;
     }
 
     /** Whether this is the reflection of {@code row}. */
@@ -265,12 +280,9 @@ public final class DockIconReflection {
                         @NonNull View commonAncestor, float originX, float originY,
                         float belowPx, float strengthScale, boolean lowerBevelOnly) {
         BitmapShader shader = mShader;
-        // While a swipe fades it out the picture is still bound, at the fade's strength.
-        // The row has to be on screen, not only visible itself: a place without the dock's apps
-        // row (a terminal window in front) hides the row's pager and leaves the row VISIBLE at
-        // its stale Home offset, which aimed the icons' mirror into the keyboard's top rows
-        // through the unified dock+keyboard glass.
-        if (!mEnabled || shader == null || mStrength <= 0f || !mRow.isShown()) {
+        // While a swipe fades it out the picture is still bound, at the fade's strength. The row
+        // has to be on screen in the dock (setRowOnScreen), not only visible itself.
+        if (!mEnabled || shader == null || mStrength <= 0f || !mRowOnScreen) {
             program.clearReflection();
             return false;
         }
