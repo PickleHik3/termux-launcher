@@ -189,6 +189,9 @@ display's), and apps inside a proot container keep the pointer's shape for now. 
 what it did to `$PREFIX/tmp/termux-x11-im-bus-0.log`; it says `focus in` and `focus out` as it
 passes them on. This is not yet device-verified.
 
+This section is for the Termux edition. On the Nix edition the helper is not started yet; see
+[Exact text-field focus](Nix_Package_Management.md#exact-text-field-focus).
+
 The helper sends the same two commands you can send from a shell yourself, so anything else that
 knows when a field takes focus can drive the keyboard too:
 
