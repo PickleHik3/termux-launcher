@@ -22437,9 +22437,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
                                         boolean toolbarShown, boolean keyboardShown) {
         ChromeSpec spec = buildChromeSpec();
+        com.termux.app.dock.DockGeometry.Side side = com.termux.app.dock.DockGeometry.Side.of(place);
+        com.termux.app.dock.DockGeometry.Snapshot snapshot =
+            dockSnapshot(currentPlaceLayout(), stackDressPage());
         com.termux.app.place.StackLayout.RestInput in =
-            new com.termux.app.place.StackLayout.RestInput(
-                dockSnapshot(currentPlaceLayout(), stackDressPage()), com.termux.app.dock.DockGeometry.Side.of(place));
+            new com.termux.app.place.StackLayout.RestInput(snapshot, side);
         in.toolbarShown = toolbarShown;
         in.extraKeysRowEnabled = spec.extraKeysRowEnabled;
         in.toolbarHeightPx = appliedToolbarHeightPx();
@@ -22447,7 +22449,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         in.imeLiftPx = mImeLiftPx;
         in.keyboardShown = keyboardShown;
         in.keyboardHeightPx = Math.max(0, mKeyboardGeometry.desiredHeightPx());
-        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, currentPlaceLayout());
+        // The place's own arrangement decides it, like its Style: the one on screen when it is the
+        // committed place, else its half's stored layout.
+        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, place == mLastWallPage
+            ? currentPlaceLayout() : snapshot.half(side).layout);
         in.flushPaddingPx = place == com.termux.app.wall.PaneWallPage.TERMINAL
             && place == mLastWallPage && !keyboardShown && mAppliedStack != null
             ? mAppliedStack.flushPaddingPx : 0;
