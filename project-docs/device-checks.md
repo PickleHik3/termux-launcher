@@ -622,3 +622,9 @@ under twenty items; past that, the oldest are re-judged first.
   set. Set Resize with the touchpad's mode button afterwards and relaunch: it stays Resize. Then open
   the Layout editor on the display in portrait and Discard: no `keyboard_mode` key appears in the
   prefs file · emulator.
+- 2026-10-23 · Settings row "Keyboard over display" (Display → Input → Keyboard) · Emulator: open it,
+  pick Resize display and open a Linux app in portrait and then landscape: the keyboard makes room in
+  both. Pick Overlay: it floats in both. Switch one orientation with the touchpad's mode button and
+  reopen the row: the summary reads "Portrait: … · Landscape: …" and nothing is ticked. Change it
+  while a display is on screen, return to the launcher: the pad's mode button and the keyboard follow
+  without a restart · emulator.

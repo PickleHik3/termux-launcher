@@ -22,6 +22,7 @@ Latest stable: v1.2.0.
 - The keyboard floats over the Linux display in portrait, follows text fields in every touch mode, and with fcitx5 follows text-field focus exactly.
 - The keyboard floats over the Linux display in portrait again on installs an older Layout editor visit had switched to making room.
 - The touchpad can switch the keyboard between floating and making room.
+- Keyboard over display in the Display Input settings switches the keyboard between floating over the Linux display and making it resize.
 - The drawer, palette and sheets over the Linux display take Back and typing.
 - "Use system keyboard" replaces "Search keyboard" in the drawer settings.
 - Fresh installs start from a newer Termux base.
