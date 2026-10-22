@@ -16481,6 +16481,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The committed page's Drawer tile as the last place pass saw it; null before one. */
     @Nullable private Boolean mAppliedDrawerTile;
 
+    /** The page whose half's rows the Drawer tile was last laid out for; null before one. */
+    @Nullable private com.termux.app.wall.PaneWallPage mDrawerTileRowsPage;
+
     /**
      * The dock row holds the Drawer tile where the layout of the half whose rows it stands turns
      * it on, on either half, with whichever design, and none elsewhere: the committed page's at
@@ -16491,6 +16494,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView bar = mSuggestionBarView;
         if (bar == null) return;
         com.termux.app.wall.PaneWallPage rowsPage = stackDressPage();
+        mDrawerTileRowsPage = rowsPage;
         boolean on = mPreferences != null && mDresses.drawerTileOf(rowsPage);
         PlaceLayoutStore store = dockStoreOf(rowsPage);
         bar.setDrawerTile(on ? (store != null ? store.drawerTilePosition()
@@ -17257,6 +17261,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean applyDockLayout(@NonNull DockLayout layout) {
         // The rows' heights, and the design the shown rows wear, through Dock rows.
         boolean moved = mDockRows.applyLayout(layout);
+        // The Drawer tile follows whichever half's rows are shown: a pass that lays out the other
+        // half's rows than the tile was laid out for, by whatever path the rows swapped (a
+        // crossing's stand, its landing, a slide cut short), lays the tile out for them.
+        if (mDrawerTileRowsPage != stackDressPage()) syncDrawerTile();
         // The dock's chin is the dock's row's; a bar standing elsewhere carries the one its own
         // host was sized for, and must not have it taken away because the dock has no row. The
         // pull tab's letters on the bottom edge are such a bar: they keep their own chin.
@@ -22785,6 +22793,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (seamLanding.redressesBack(mLastWallPage)) {
                 restyleStackForDress(seamLanding.shapeDiffered());
                 syncPlaceLayout();
+                // And its rows carry their own half's Drawer tile again.
+                syncDrawerTile();
             }
             // Resting on the Workspace, the canvas comes back down below the bar, its pages out of
             // the band with it, so nothing on screen moves (PageTopInsets).
