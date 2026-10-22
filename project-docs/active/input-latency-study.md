@@ -829,6 +829,32 @@ pauses split the input into many short bursts, which drain the queue, and that f
 above: the stuffing persists while frames run back to back. The remaining lever on pong is fix 2
 there: less GPU time per frame, so a burst's first frame meets its deadline.
 
+### Contour scene prototype (2026-10-22, `b9245fc18`)
+
+Synthetic typing (same script with the coordinates updated for the dockless Home layout). The
+Contour prototype was drawn as an opaque view with a hardware layer inside the launcher window, above
+the wallpaper backdrop. Glass was not wired to it: the low-res pass was rendered for its cost only.
+
+| Run | Frames/s | Stuffed | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | RenderThread DrawFrame avg |
+|---|---|---|---|---|---|
+| Scene off | 62 | 14% | 17.7 / 20.7 | 9.9 / 10.8 | 6.05 ms |
+| Contour, ambient 30 | 86 | 97% | 16.8 / 20.8 | 19.8 / 25.9 | 9.68 ms |
+| Contour, ambient 90 | 89 | 100% | 16.1 / 18.3 | 25.2 / 26.4 | 11.08 ms |
+| Contour 30 + low-res pass | 84 | 97% | 17.4 / 24.5 | 19.8 / 20.9 | 4.66 ms (two renderers) |
+
+- The scene adds about 10-15 ms of GPU per frame before the buffer is ready, which is about one more
+  vsync per typed character, and it brings back near-total Buffer Stuffing.
+- **Cause (inference from the design plus the RenderThread numbers):** the scene is a view in the
+  launcher's own window, so each scene frame is a whole-window frame. HWUI repaints the entire
+  window on the GPU, including every glass surface's refraction shader, the keyboard and the chrome.
+  The scene's own CPU record is cheap (`Scene.contour.draw` 0.09-0.16 ms avg).
+- While typing, the reactions (hills relax over about 1 s) keep the scene at full rate, so 30 and 90
+  ambient differ little here. The ambient gate is untested at rest.
+- Direction: draw the scene on its own surface behind the window (a `SurfaceView` placed below the
+  window, as a wallpaper is), so scene frames cost only the scene. The window repaints only when the
+  UI changes or when glass's low-res texture updates, at the glass rate. Re-measure Contour that way
+  before building Filament.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
