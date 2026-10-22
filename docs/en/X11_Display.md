@@ -75,11 +75,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).
 - **The keyboard floats.** In either orientation the keyboard comes up over the display instead
   of squeezing it, so the picture keeps the size it was given and nothing on it moves as you type,
-  whether the keyboard came up from a text field or by hand. Either orientation can be set to make
-  room for the keyboard instead in the Layout editor on the display, after switching to the
-  orientation you want it for.
-  An older Layout editor visit could have saved Resize for portrait without your choosing it; this
-  release puts Overlay back once, and the touchpad's mode button switches it again.
+  whether the keyboard came up from a text field or by hand. The touchpad's keyboard mode button, shown
+  on the pad while the keyboard is docked, switches the orientation you are in to making room for
+  the keyboard instead, and back. An older build could have saved Resize for portrait without your
+  choosing it; this release puts Overlay back once, and the button switches it again.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts, stops or turns on the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
