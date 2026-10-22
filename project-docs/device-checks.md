@@ -13,31 +13,15 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
-- 2026-10-22 · branch feat/display-keyboard (spec #125, tickets #126–#132) · Keyboard and touchpad:
-  in portrait the keyboard floats over a running X app with no X screen resize (no "window changed"),
-  and a stored Resize still resizes; "Keyboard follows text fields" is enabled in all three touch
-  modes and a tap over a GTK text field raises the keyboard in Trackpad (at the pointer) and Direct
-  touch; the touchpad's mode button in light and dark, docked and in a split gap, clear of the scroll
-  strip, hidden over a floating keyboard, TalkBack "Keyboard mode, Overlay"; one X resize per switch,
-  also during a status-bar fold; bottom corners reachable under Resize · pong, release build.
-- 2026-10-22 · branch feat/display-keyboard (#129–#131) · fcitx5 focus: Set up Linux apps' command
-  installs fcitx5, fcitx5-gtk3, fcitx5-qt; `$PREFIX/tmp/termux-x11-im-bus-0.log` says "fcitx5 on :0,
-  ui virtualkeyboard" (dbus-test-tool present); focusing a field in a GTK and a Qt app shows the
-  keyboard with no tap (Tab, a dialog entry) and leaving hides it; typing never drops it; field to
-  field logs "hide cancelled: focus in"; a tap on terminal or page text logs "ignored: no focus";
-  without fcitx5 nothing starts; quick display restart and `termux-x11 :0` twice leave one helper;
-  `kill -9` of the helper gives new apps no fcitx5 env; the GPU benchmark still works. Known gap to
-  look at: after a GTK focus-out, a text tap in xterm or a proot app shows nothing · pong, release build.
-- 2026-10-21 · commit "feat(theme): an app-only wallpaper's colours stand in for Android's" ·
-  With another launcher as the home app, a blue phone wallpaper and Wallpaper colours on: set a red
-  photo for the launcher alone (Also set as phone wallpaper unticked): the launcher recreates once
-  and its theme (dock, drawer, status bar accents), Settings and the terminal's colours turn
-  red-based; `~/.termux/material-colors.properties` turns red-based too. A second app-only photo
-  (green) re-themes again, once. Tick "Also set as phone wallpaper" and apply: the colours follow
-  the phone's (new) wallpaper. Deleting the exact copy (`run-as` the files dir) then returning to
-  the launcher puts Android's colours back. With the launcher as the home app nothing changes from
-  before. Logcat shows "App-only wallpaper seed" once per pick and no repeated "Wallpaper colours
-  moved" lines (no recreate loop) · emulator (API 31+), debug build.
+- 2026-10-22 · branch feat/display-keyboard (spec #125, layers, drawer search, touchpad switch) ·
+  Passed on the emulator 2026-10-22: portrait keyboard over an X app with no resize; text-field
+  auto-show in all three touch modes; the touchpad button switching with exactly one X resize per
+  switch; fcitx5 focus (no-tap show, typing keeps it up, 150 ms hide, one helper after a restart)
+  for a drawer-launched mousepad; Back and typing go to the drawer and palette over the display
+  window and typing returns to X after they close (also after rotation and a display restart);
+  drawer search; a fresh install with bootstrap 2026.10.18. Still owed on pong (release build,
+  real GPU and Firefox): the same in daily use, the touchpad button's look in light/dark and
+  TalkBack, a Qt app's focus, a dialog entry's focus, and drawer search from Keyboard off · pong.
 - 2026-10-21 · commit "fix(widgets): a carried built-in widget keeps its cell through a page turn" ·
   Passed on the emulator 2026-10-21 for the crashing case (a fresh built-in Battery widget, long-press
   drag held in the right band: two turns, a clean drop). Still owed: a system app widget, two or
