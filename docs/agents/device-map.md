@@ -107,3 +107,58 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - A theme (`cmd uimode night yes`) or font-scale change recreates the activity and closes the
   Appearance editor: live edits stay applied, no Keep/Discard. Same on pre; reopen and check there.
 - Swipes near the dock toggle the Ctrl/Alt/Fn latches and the F-key layer; a force-stop clears them.
+
+## Notes from the v1.2.0 release smoke (2026-10-21, emulator)
+
+- Pong is often asleep (`dumpsys power | grep mWakefulness` not Awake, keyguard up). Check that before taking a lease; a run that finds it asleep reports so at once instead of waking it.
+- Appearance editor: the page icons shift per page (the Look icon sits near x 390 on the Wallpaper page and near x 612 on Layout). On the Look page, tapping the terminal pane in the preview shows Cursor trail and Terminal effect; tapping the keyboard shows Keys, Radius and Spacing; tapping the dock shows Glass, Opacity, Tint, Icon size and App icons. "All surfaces" is a label, not a control.
+- Backup & restore is the last row of Settings, below App behavior. Export settings goes through the system Save picker with a default name (`termux-launcher-settings-<date>.zip`); Save sits near 927,2273 on the emulator.
+- Typing `\e` into the terminal with `ad type`: pass the backslash unescaped, single-quoted in the shell; a pre-escaped form mangles the printf.
+- `ad long` on a dock icon launched the app instead of opening the Unpin popup (see device-checks.md, 2026-10-21).
+
+
+## Notes from the graphics benchmark check (2026-10-21, emulator)
+
+- Long terminal commands: drive a pane under runas instead of `ad type` (typing after a tap near the
+  dock can switch to the Widgets page): `id=$(launcherctl pane open --print-id --no-focus)`,
+  `launcherctl pane write $id --enter "CMD"`, poll `launcherctl pane read $id`, Ctrl-C with
+  `launcherctl pane write $id "$(printf '\003')"`. `pane wait` caps at 300000 ms.
+- Clipboard: `ad shell cmd clipboard` has no get-primary-clip; read it with `launcherctl clipboard paste` under runas.
+- Benchmark graphics is the last row of Settings → Display → Linux apps → Set up Linux apps; swipe up.
+- The launcher rewrites `termux-x11*` scripts in the prefix only when `X11CliInstaller.VERSION`
+  changes. After installing a build that changed one, check `$PREFIX/bin/termux-x11-gpu-setup`
+  is the new one before testing it.
+- The emulator has no proot-distro, so container checks need a device that has one.
+- The X11 installer's marker is `$PREFIX/libexec/termux-launcher/x11/.installed` ("… v14").
+- Each `ad runas` call is a new shell: keep a pane id in a file (`$HOME/pid`) between calls.
+- The Benchmark graphics toast shows on the launcher after Settings closes: `ad frames 6 <dir> --
+  tap "Benchmark graphics"` and read the last frames.
+
+## The display window on the emulator (2026-10-22)
+
+- First run needs `xkeyboard-config`: the display window offers an "Install xkeyboard-config" button
+  (`x11_pane_install`), which opens a terminal window that closes itself after about 90 s.
+- Turn the display on: Settings → Display, the switch at about 969,458. Back to the launcher with
+  `ad shell am start -n com.termux/.app.TermuxActivity`; the red monitor glyph in the dock (about
+  694,1699 with the keyboard up) shows the display window (the wall pages widgets, terminal, display).
+  "No display is running" → `ad tap "Start display"`, about 15 s until `x11_display_view` appears.
+- No X client is installed on the emulator (no xterm, xeyes, xclock); the bare display surface is
+  enough for input checks.
+- The drawer route above needs the dock at y≈1531: on the display window, raise the keyboard first
+  (`launcherctl keyboard show` under runas), then `tap 40 1625` and `swipe 900 1520 900 2000 600`.
+  The drawer is open while `ad find app_drawer_host` shows that node. If Back leaves it open,
+  `ad home` then the `am start` above closes it.
+- `ad install <apk> --fresh` (the flag after the path; before it, ad reads it as the file). First run
+  logs under `Termux.TermuxInstaller`; extraction takes about 8 s on the emulator, with the Welcome
+  sheet over the "Installing bootstrap packages…" dialog ("Skip the tour" / Start at about 895,1476).
+- `launcherctl keyboard show` pins the keyboard: X11TextFocus then logs "ignored: pinned". Run
+  `launcherctl keyboard hide` before testing focus-driven show/hide.
+- Mousepad in the drawer: `ad find Mousepad` (an ImageView, about 100,949). A tap into its text area
+  at about 330,480 focuses it. Drawer apps get the fcitx5 environment from the launcher; one started
+  by hand needs `GTK_IM_MODULE=fcitx XMODIFIERS=@im=fcitx
+  DBUS_SESSION_BUS_ADDRESS=unix:path=$PREFIX/tmp/termux-x11-im-bus-0`.
+- Rotate: `settings put system accelerometer_rotation 0` + `user_rotation 1`; restore 1 / 0. Keyboard
+  off is the palette's "Keyboard on/off" entry, not the dock key (which only hides/shows).
+- Stop the display with `kill <termux-x11 pid>` under runas (it restarts on its own); never
+  `pkill -f termux-x11` inside a runas string, it kills your own shell. `ps -o` fails in the
+  prefix: read `/proc/*/cmdline`.

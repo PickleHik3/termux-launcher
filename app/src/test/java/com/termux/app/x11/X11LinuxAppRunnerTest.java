@@ -42,7 +42,45 @@ public class X11LinuxAppRunnerTest {
 
         assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
-            + "export TU_DEBUG=noconform\ncd \"$HOME\"\nexec firefox --new-window\n", script);
+            + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.inputMethodBlock(":1")
+            + "cd \"$HOME\"\nexec firefox --new-window\n", script);
+    }
+
+    @Test public void anAppInThePrefixMeetsFcitx5OnTheDisplaysBusWhenBothAreThere() {
+        String script = X11LinuxAppRunner.script(app("gedit"), ":1", Collections.emptyList());
+        String fcitx5 = com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH
+            + "/fcitx5";
+        String bus = com.termux.shared.termux.TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH
+            + "/termux-x11-im-bus-1";
+        // fcitx5 installed, its helper's bus up for this display and the helper that made it
+        // still alive: the toolkits load fcitx5's module and find it on the same bus. Anything
+        // less and the app runs exactly as before.
+        String block = "if [ -x '" + fcitx5 + "' ] && [ -S '" + bus + "' ]"
+            + " && { read -r termux_x11_im_pid < '" + bus + ".pid'; } 2>/dev/null"
+            + " && kill -0 \"$termux_x11_im_pid\" 2>/dev/null; then\n"
+            + "export GTK_IM_MODULE=fcitx\n"
+            + "export QT_IM_MODULE=fcitx\n"
+            + "export XMODIFIERS=@im=fcitx\n"
+            + "export DBUS_SESSION_BUS_ADDRESS='unix:path=" + bus + "'\n"
+            + "fi\n";
+        assertTrue(script.contains(block));
+        assertTrue("set before the app runs", script.indexOf(block) < script.indexOf("exec "));
+        assertEquals("the helper and the runner name the same bus", bus,
+            X11CliInstaller.imBusPath(":1"));
+        assertEquals("each display has its own", bus.substring(0, bus.length() - 1) + "0",
+            X11CliInstaller.imBusPath(":0"));
+    }
+
+    @Test public void aContainerAppAndADesktopAreNotGivenTheInputMethod() {
+        // The helper's fcitx5 is the prefix's; a container has neither it nor its modules.
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        LinuxAppCatalog.LinuxApp inDebian = new LinuxAppCatalog.LinuxApp(debian, "gedit",
+            "gedit", "gedit", "", "", "", false);
+        assertFalse(X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList())
+            .contains("IM_MODULE"));
+        assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null).contains("IM_MODULE"));
     }
 
     @Test public void theNoSandboxOverloadAppendsTheFlagToTheAppsOwnCommand() {

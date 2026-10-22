@@ -84,6 +84,8 @@ public class LorieView extends SurfaceView implements InputStub {
     private float inputSourceLeft = 0.f, inputSourceTop = 0.f;
     private float inputSourceWidth = 0.f, inputSourceHeight = 0.f;
     private boolean dimensionsFrozen = false;
+    /** Only a window change unlike the last one sent reaches the server; see UPSTREAM.md. */
+    private final WindowChangeGate windowChangeGate = new WindowChangeGate();
     boolean commitedText = false;
     private final InputConnection mConnection = new BaseInputConnection(this, false) {
         private CharSequence currentComposingText = null;
@@ -161,6 +163,8 @@ public class LorieView extends SurfaceView implements InputStub {
         }
 
         void sendKey(int k) {
+            // A launcher layer open over the display types first, as over a terminal.
+            if (activity != null && activity.offerKeyToLauncher(k)) return;
             LorieView.this.sendKeyEvent(0, k, true);
             LorieView.this.sendKeyEvent(0, k, false);
         }
@@ -198,6 +202,12 @@ public class LorieView extends SurfaceView implements InputStub {
          * But we can simply send text we want and erase it in the case if user does not need it.
          *
          * @noinspection SameReturnValue*/
+        /** Text for X, less whatever a launcher layer open over the display takes. */
+        void sendText(CharSequence text) {
+            String rest = activity == null ? text.toString() : activity.textLeftForX(text.toString());
+            if (!rest.isEmpty()) sendTextEvent(rest.getBytes(UTF_8));
+        }
+
         boolean replaceText(CharSequence newText, boolean reuse) {
             int oldLen = currentComposingText != null ? currentComposingText.length() : 0;
             int newLen = newText != null ? newText.length() : 0;
@@ -206,12 +216,12 @@ public class LorieView extends SurfaceView implements InputStub {
                 for (int i=0; i < oldLen - newLen; i++)
                     sendKey(KeyEvent.KEYCODE_DEL);
                 for (int i=oldLen; i<newLen; i++)
-                    sendTextEvent(String.valueOf(newText.charAt(i)).getBytes(UTF_8));
+                    sendText(String.valueOf(newText.charAt(i)));
             } else {
                 for (int i = 0; i < oldLen; i++)
                     sendKey(KeyEvent.KEYCODE_DEL);
                 if (newText != null)
-                    sendTextEvent(newText.toString().getBytes(UTF_8));
+                    sendText(newText);
             }
 
             currentComposingText = reuse ? newText : null;
@@ -340,8 +350,16 @@ public class LorieView extends SurfaceView implements InputStub {
     }
 
     public void triggerCallback() {
-        requestFocus();
+        takeFocus();
         updateViewport();
+    }
+
+    /**
+     * The view's own grab for the focus. The launcher can have something typed into open over the
+     * display — a layer, a text field — and the focus is then not ours to take back.
+     */
+    private void takeFocus() {
+        if (activity == null || activity.mayTakeFocus()) requestFocus();
     }
 
     /** Shows or hides the soft keyboard for this view, the same way focusing an editable field would. */
@@ -433,6 +451,8 @@ public class LorieView extends SurfaceView implements InputStub {
         else
             name = "external";
 
+        if (!windowChangeGate.shouldSend(p.x, p.y, framerate, name))
+            return;
         sendWindowChange(mNativeContext, p.x, p.y, framerate, name);
     }
 
@@ -683,7 +703,7 @@ public class LorieView extends SurfaceView implements InputStub {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
 
-        requestFocus();
+        takeFocus();
 
         // Registration belongs to the page (setClipboardSyncActive), so a window that loses and
         // regains focus — the screen going off, a dialog over the wall — only re-checks what the
@@ -781,7 +801,11 @@ public class LorieView extends SurfaceView implements InputStub {
     @FastNative private native void sendSync(long ptr, int serial);
 
     // Public API stays free of the native pointer; it's threaded through to an overload below.
-    public void connect(int fd) { connect(mNativeContext, fd); }
+    public void connect(int fd) {
+        // A new connection (or none) has heard no size yet.
+        windowChangeGate.forget();
+        connect(mNativeContext, fd);
+    }
     @FastNative private static native void connect(long ptr, int fd);
 
     // The zero check is the launcher's: a page of the pane wall is asked whether it is connected

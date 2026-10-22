@@ -233,7 +233,7 @@ Files:
 - The shell environment is not scripted from this directory: `setup-launcher` (shipped in the nix base environment) installs the flake template and switches, and `setup-toolkits` (shipped by that template) picks the toolkits — shell, eye candy, editor, build, node, go, python. See [Nix package management](Nix_Package_Management.md).
 - `config.fish`, `conf.d-personal.fish`, and `aliens-material.omp.json`: optional Fish and Oh My Posh defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. It is the Termux-edition copy — the Nix edition ships its own, with nix-on-droid shortcuts in place of the `pkg`/`pacman` ones.
 
-Refresh installed files after an APK or docs update with `tlstore update`.
+Refresh installed files after an APK or docs update with `tlstore upgrade`.
 
 ## Shizuku and rish
 

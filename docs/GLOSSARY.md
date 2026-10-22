@@ -92,12 +92,25 @@ keyboard itself has no swipe of its own. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: pull-up, keyboard gesture, hide swipe (the retired swipe on the keyboard's top edge)
 
+**Keyboard mode** (the **display window**):
+Whether an open keyboard, or the touchpad that stands in its place, floats over the **display
+window** (**Overlay**) or takes its room so the display shrinks to what is left (**Resize**). One
+value per orientation, whatever brought the keyboard up. Only the display window has one; a
+terminal's text always makes room.
+_Avoid_: pan, adjust resize, keyboard covers display
+
 **Always on** (the Home keyboard):
 The Home layout's keyboard element shown rather than put away: the keyboard stays up on every Home
 page and the widget grid gives it the rows, with the earlier arrangement kept so that turning it
 off puts things back if nothing was edited meanwhile. With it on, a typed key opens the command
 palette with that key, after the bound keys have had their turn.
 _Avoid_: persistent keyboard, keyboard lock
+
+**Layer**, **open layer**:
+Launcher UI that opens over a page and closes again: the app drawer, the command palette, a sheet,
+help, the widget editor. While a layer is open it takes Back and the keys first, over the
+**display window** as over a terminal window; what it does not take reaches the page below.
+_Avoid_: overlay (a **keyboard mode** value), popup, modal
 
 **Linux app**:
 An app installed in the prefix or in a `proot-distro` container, read from its desktop file and

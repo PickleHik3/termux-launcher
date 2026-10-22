@@ -12,9 +12,9 @@
     <!-- App behavior -->
     <string name="settings_behavior_battery_header">Battery and motion</string>
     <string name="settings_behavior_idle_title">Reduce idle activity</string>
-    <string name="settings_behavior_idle_summary">Lazy mode. Pause idle animations and update status less often.</string>
+    <string name="settings_behavior_idle_summary">Saves battery while you\'re away. Idle animations pause, status updates slow down and glass stops bending.</string>
     <string name="settings_behavior_low_memory_title">Low-memory preset</string>
-    <string name="settings_behavior_low_memory_summary">Solid look, opaque terminal, no cursor trail or effects, and less idle activity. Turn off to get your look back.</string>
+    <string name="settings_behavior_low_memory_summary">Smoothest and lightest. Switches to the Solid look and an opaque terminal, and turns off the trail, effects, parallax and glass motion. Turn off to get your look back.</string>
     <string name="settings_behavior_vibration_header">Vibration</string>
     <string name="settings_behavior_vibration_title">Allow vibration</string>
     <string name="settings_behavior_vibration_summary">Master control. Turn off to silence launcher and keyboard vibration.</string>
