@@ -768,6 +768,26 @@ key's own bounds, removes the Buffer Stuffing and the extra vsync. Spec decision
 effect as a Paint overlay) was gated on missed frames; it misses none, but it adds about 5 ms to
 presentation, so that is the developer's call.
 
+### Press highlight experiment (2026-10-22, `d4a47f503`)
+
+Same method, Terminal effect off, inline echo removed. Each run used one `debug.tl.press_fx` mode:
+`legacy` (today), `overlay` (pressed caps in their own RenderNode, so the keyboard is not
+re-recorded while a press animates), and `nofade` (the highlight clears at commit).
+
+| Mode (keys) | Commit → drawn p50 / p90 | Drawn → presented p50 / p90 | Main `Record View#draw` avg | Traversal avg | Frames (per key) |
+|---|---|---|---|---|---|
+| legacy (139) | 17.1 / 22.1 | 15.6 / 19.8 | 2.35 ms | 3.52 ms | 2700 (19.4) |
+| overlay (134) | 18.2 / 22.6 | **13.5 / 15.4** | **1.19 ms** | **2.33 ms** | 2075 (15.5) |
+| nofade (168) | 17.7 / 24.1 | 13.3 / 17.1 | 1.59 ms | 2.73 ms | 2759 (16.4) |
+
+- `overlay` halves the main thread's per-frame draw, cuts traversal by a third, and brings drawn →
+  presented down about 2 ms (p90 about 4 ms). Commit → drawn moved within noise (the shell round
+  trip was 1 ms slower in that run). The developer saw no visual difference and felt the presses
+  were "a bit snappier".
+- Buffer Stuffing stays on nearly every frame in all three modes, so the press stream is **not** its
+  cause; the remaining extra vsync before presentation has another source **(unverified)**.
+- `nofade` gains about the same as `overlay` but changes the look and missed more app deadlines (45).
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
