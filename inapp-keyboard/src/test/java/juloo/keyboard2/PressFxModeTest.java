@@ -8,14 +8,14 @@ import org.junit.Test;
 public class PressFxModeTest
 {
   @Test
-  public void namesParseAndAnythingElseIsLegacy()
+  public void namesParseAndAnythingElseIsOverlay()
   {
     assertEquals(PressFxMode.Mode.OVERLAY, PressFxMode.parse("overlay"));
     assertEquals(PressFxMode.Mode.NOFADE, PressFxMode.parse("nofade"));
     assertEquals(PressFxMode.Mode.LEGACY, PressFxMode.parse("legacy"));
-    assertEquals(PressFxMode.Mode.LEGACY, PressFxMode.parse(""));
-    assertEquals(PressFxMode.Mode.LEGACY, PressFxMode.parse(null));
-    assertEquals(PressFxMode.Mode.LEGACY, PressFxMode.parse("Overlay "));
+    assertEquals(PressFxMode.Mode.OVERLAY, PressFxMode.parse(""));
+    assertEquals(PressFxMode.Mode.OVERLAY, PressFxMode.parse(null));
+    assertEquals(PressFxMode.Mode.OVERLAY, PressFxMode.parse("Legacy "));
   }
 
   @Test

@@ -4,7 +4,8 @@ import com.termux.terminal.DebugSwitch;
 
 /**
  * How a key press highlight is animated, chosen at run time without UI so the options can be
- * measured on one build: {@code adb shell setprop debug.tl.press_fx legacy|overlay|nofade}. The
+ * measured on one build: {@code adb shell setprop debug.tl.press_fx legacy|overlay|nofade}; unset
+ * means overlay. The
  * property is re-read at most once per {@link DebugSwitch#REREAD_MS}; between reads
  * {@link #current} is a field read.
  */
@@ -23,7 +24,7 @@ final class PressFxMode
   static final String PROPERTY = "debug.tl.press_fx";
 
   private final DebugSwitch.Reader _reader;
-  private Mode _mode = Mode.LEGACY;
+  private Mode _mode = Mode.OVERLAY;
   private long _readAtMs = Long.MIN_VALUE;
 
   PressFxMode(DebugSwitch.Reader reader)
@@ -31,14 +32,14 @@ final class PressFxMode
     _reader = reader;
   }
 
-  /** Anything that is not a mode name, unset included, is {@link Mode#LEGACY}. */
+  /** {@code legacy} and {@code nofade} are names; anything else, unset included, is {@link Mode#OVERLAY}. */
   static Mode parse(String value)
   {
-    if ("overlay".equals(value))
-      return Mode.OVERLAY;
+    if ("legacy".equals(value))
+      return Mode.LEGACY;
     if ("nofade".equals(value))
       return Mode.NOFADE;
-    return Mode.LEGACY;
+    return Mode.OVERLAY;
   }
 
   Mode current(long nowMs)

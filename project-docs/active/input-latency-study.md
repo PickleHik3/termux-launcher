@@ -771,7 +771,7 @@ presentation, so that is the developer's call.
 ### Press highlight experiment (2026-10-22, `d4a47f503`)
 
 Same method, Terminal effect off, inline echo removed. Each run used one `debug.tl.press_fx` mode:
-`legacy` (today), `overlay` (pressed caps in their own RenderNode, so the keyboard is not
+`legacy` (the default until `overlay` became it), `overlay` (pressed caps in their own RenderNode, so the keyboard is not
 re-recorded while a press animates), and `nofade` (the highlight clears at commit).
 
 | Mode (keys) | Commit → drawn p50 / p90 | Drawn → presented p50 / p90 | Main `Record View#draw` avg | Traversal avg | Frames (per key) |
@@ -787,6 +787,25 @@ re-recorded while a press animates), and `nofade` (the highlight clears at commi
 - Buffer Stuffing stays on nearly every frame in all three modes, so the press stream is **not** its
   cause; the remaining extra vsync before presentation has another source **(unverified)**.
 - `nofade` gains about the same as `overlay` but changes the look and missed more app deadlines (45).
+
+### Buffer Stuffing analysis (2026-10-22, `tl-overlay.pftrace`, 2075 app frames)
+
+- **Earlier "drawn → presented" was drawn → buffer ready.** An app surface frame's actual end in
+  `actual_frame_timeline_slice` is when its acquire fence signals, not the present. Joined to the
+  display frame by `display_frame_token`, app vsync start → present is **42.5 ms** (p10 42.1, p90 42.7)
+  on Buffer Stuffing frames and 31.5 ms on the 7 frames that were not stuffed: one vsync (11.1 ms) apart.
+- **Stuffing here is a real standing queue, not an artefact.** AOSP `SurfaceFrame::classifyJankLocked`
+  flags it when the frame's predicted end is at or before the layer's last latch time. Counters agree:
+  `BufferTX` 2 on 1.9k of 2.1k samples, `QueuedBuffer` 3–4, buffer ready → SF wake 11.4 ms p50 (2.3 ms
+  on non-stuffed frames). RenderThread `dequeueBuffer` averaged 0.17 ms, so the app never blocks.
+- **Likely origin (inference):** 11 of 12 bursts start with an App Deadline Missed frame (ready 16 ms
+  after start against 9–15 ms predicted; RenderThread draw 9.7 ms against 4–5 ms steady, cold clocks).
+  It misses its SF slot, and every later frame, though on time, queues behind it. At one frame per
+  vsync the queue never drains; only gaps of 3+ vsyncs ended it (3 of 3 such frames were not stuffed).
+- **Platform offsets:** `VsyncWorkDuration-app` 16.2 ms and `-sf` 16.1 ms at 90 Hz, so even a perfect
+  frame is on glass about 31 ms after its vsync start. HWC composites the layer (`gpu_composition` 0,
+  `hasClientComposition` 0), and the wallpaper-backed window is not the cause.
+- Scripts: `~/.cache/tl-latency/queueing/`.
 
 ## What could not be verified from a primary source
 
