@@ -13,19 +13,8 @@ Latest stable: v1.2.0.
 ## New in this drop
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
 
-- Linux apps whose desktop entry carries an unfilled command, such as Termux's Chromium, open from the drawer.
-- Benchmark graphics in Set up Linux apps finds this phone's fastest graphics option.
-- Full screen uses the whole screen.
-- Dragging a launcher widget across pages no longer crashes.
-- When another app is your home screen, the launcher can have a wallpaper of its own, and its colours theme the launcher.
-- Battery & performance in Settings gathers the power presets and the motion effects they turn off.
-- The keyboard floats over the Linux display in portrait, follows text fields in every touch mode, and with fcitx5 follows text-field focus exactly.
-- The keyboard floats over the Linux display in portrait again on installs an older Layout editor visit had switched to making room.
-- The touchpad can switch the keyboard between floating and making room.
-- Keyboard over display in the Display Input settings switches the keyboard between floating over the Linux display and making it resize.
-- The drawer, palette and sheets over the Linux display take Back and typing.
-- "Use system keyboard" replaces "Search keyboard" in the drawer settings.
-- Fresh installs start from a newer Termux base.
+- The keyboard floats over the Linux display in portrait again on installs where an older Layout editor visit had switched it to making room.
+- Keyboard over display, in Settings → Display → Input, switches the keyboard between floating over the Linux display and making the display resize.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
@@ -46,6 +35,8 @@ These may change or be dropped before they reach a stable release.
 - The app drawer, the command palette and sheets opened over the Linux display take Back and your typing, as they do over the terminal; the drawer's search there brings up the keyboard. (branch `feat/display-keyboard`) <!-- stays: P1, P2 -->
 - The drawer's "Search keyboard" setting is now "Use system keyboard". (branch `feat/display-keyboard`) <!-- stays: P1, P2 -->
 - Fresh installs start from a newer Termux base (bootstrap 2026.10.18). (branch `feat/display-keyboard`) <!-- stays: P1, P2 -->
+- On installs where an older Layout editor visit had saved "make room" for portrait without the user choosing it, the keyboard floats over the Linux display again; leaving the Layout editor without saving no longer saves the keyboard mode. (PR #138) <!-- stays: P1, P2 -->
+- Settings → Display → Input → Keyboard over display: Overlay or Resize display, for both orientations at once; the touchpad's button still switches one orientation. (PR #138) <!-- stays: P1, P2 -->
 
 ## Editions
 <!-- Only what is exclusive to the Nix or VAJ build of this drop; say so when nothing is. -->
