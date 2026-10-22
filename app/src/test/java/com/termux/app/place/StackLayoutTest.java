@@ -37,6 +37,14 @@ public class StackLayoutTest {
     private static final PlaceLayout HOME = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
         false, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
         PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    /** The same Home layout with its status bar along the bottom. */
+    private static final PlaceLayout HOME_STATUS_BOTTOM = new PlaceLayout(Edge.BOTTOM,
+        RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.HIDDEN,
+        PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    /** The window with its status bar along the bottom. */
+    private static final PlaceLayout WINDOW_STATUS_BOTTOM = new PlaceLayout(Edge.BOTTOM,
+        RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.BOTTOM,
+        PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5);
 
     private static Half half(PlaceLayout layout, boolean searchField) {
         return Half.builder(layout).floating(false).dockHeightScale(1.95f)
@@ -316,18 +324,59 @@ public class StackLayoutTest {
             fromHome);
     }
 
+    /**
+     * Home Floating with a Search field and its status bar along the bottom, the window Docked
+     * with its bar along the top, committed to {@code committed}: the two halves differ in Style,
+     * field and status band, so a rest read off the half on screen comes out wrong.
+     */
+    private static Snapshot apartCommittedTo(Side committed) {
+        Half home = Half.builder(HOME_STATUS_BOTTOM).floating(true).dockHeightScale(1.95f)
+            .design(DockStyle.GLASS_TRAY).searchField(true).build();
+        Half window = half(WINDOW, false);
+        return device(home, window).rows(committed)
+            .arrangement(committed == Side.HOME ? HOME_STATUS_BOTTOM : WINDOW)
+            .fieldReveal(committed == Side.HOME ? 1f : 0f).build();
+    }
+
+    /** A status bar's band in a Style: thicker Floating, so a Style mixed up shows. */
+    private static final StackLayout.StatusBand STATUS_BAND = floating -> floating ? 61 : 47;
+
     @Test
     public void aWindowNotShownDuringASlideMeasuresTheSameAsTheOneShown() {
-        // The pane gap: the window's room was read off the stack Home's rows made, 213 px short.
-        StackLayout.RestInput shown = rest(committedTo(Side.WORKSPACE, 0f), Side.WORKSPACE);
-        StackLayout.RestInput notShown = rest(committedTo(Side.HOME, 1f), Side.WORKSPACE);
-        assertTrue(StackLayout.restReservationPx(shown) > 0);
-        assertEquals(StackLayout.restReservationPx(shown),
+        // The pane gap: the window's room was read off the stack Home's rows made, 213 px short,
+        // in Home's Style (Floating keeps the edge gap under the stack, Docked none) and with
+        // Home's status band.
+        StackLayout.RestInput shown = rest(apartCommittedTo(Side.WORKSPACE), Side.WORKSPACE);
+        StackLayout.RestInput notShown = rest(apartCommittedTo(Side.HOME), Side.WORKSPACE);
+        shown.statusBand = STATUS_BAND;
+        notShown.statusBand = STATUS_BAND;
+        // The window as a pass lays it out at rest: Docked, no status band on the stack.
+        int laidOut = run(window(false)).contentReservationPx;
+        assertTrue(laidOut > 0);
+        assertEquals(laidOut, StackLayout.restReservationPx(shown));
+        assertEquals("the window's rest is its own while Home is committed", laidOut,
             StackLayout.restReservationPx(notShown));
         shown.keyboardShown = true;
         notShown.keyboardShown = true;
+        assertEquals(run(window(true)).contentReservationPx,
+            StackLayout.restReservationPx(notShown));
         assertEquals(StackLayout.restReservationPx(shown),
             StackLayout.restReservationPx(notShown));
+    }
+
+    @Test
+    public void aWindowsRestCarriesItsOwnStatusBandInItsOwnStyle() {
+        // A window that stands its bar along the bottom, while Floating Home is committed: its
+        // own band, in its own Style, Docked.
+        Half home = Half.builder(HOME).floating(true).dockHeightScale(1.95f)
+            .design(DockStyle.GLASS_TRAY).build();
+        Half window = half(WINDOW_STATUS_BOTTOM, false);
+        Snapshot fromHome = device(home, window).rows(Side.HOME).arrangement(HOME).build();
+        StackLayout.RestInput barred = rest(fromHome, Side.WORKSPACE);
+        barred.statusBand = STATUS_BAND;
+        StackLayout.RestInput bare = rest(fromHome, Side.WORKSPACE);
+        assertEquals("the window's band in its own Style, Docked", 47,
+            StackLayout.restReservationPx(barred) - StackLayout.restReservationPx(bare));
     }
 
     @Test

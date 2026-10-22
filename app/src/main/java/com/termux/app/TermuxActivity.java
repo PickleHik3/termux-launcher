@@ -15790,6 +15790,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The band a status bar along the bottom claims at rest in a Style, as {@link
+     * #bottomStatusBandPx} measures the one on screen: the bar at its Style's thickness and the
+     * air a Floating bar keeps under it. Zero while the window bar is switched off. A half's rest
+     * reads it in its own Style (Stack layout's StatusBand).
+     */
+    private int bottomStatusBandAtRestPx(boolean floating) {
+        if (!isSplitPanesEnabled()) return 0;
+        return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(PlaceLayout.Edge.BOTTOM,
+                floating, isStatusBarCompact(), getResources().getDisplayMetrics().density)
+            + (floating ? Math.round(dpToPx(2)) : 0);
+    }
+
+    /**
      * How far the dock's own sheet of glass starts below the top of the accessory stack: the band
      * of a bottom status bar that kept a sheet of its own, and the band of page dashes a style
      * floats above its slab (the Glass tray, {@link DockLayout#slabTopInsetPx}). Zero everywhere
@@ -22362,8 +22375,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         in.toolbarShown = toolbarShown;
         in.extraKeysRowEnabled = spec.extraKeysRowEnabled;
         in.toolbarHeightPx = appliedToolbarHeightPx();
-        in.statusBandPx = bottomStatusBandPx();
-        in.roundedDockStyle = isRoundedDockStyle();
+        in.statusBand = this::bottomStatusBandAtRestPx;
         in.imeLiftPx = mImeLiftPx;
         in.keyboardShown = keyboardShown;
         in.keyboardHeightPx = Math.max(0, mKeyboardGeometry.desiredHeightPx());

@@ -246,15 +246,27 @@ public final class StackLayout {
         return DockGeometry.compute(snapshot.restOf(side)).combinedHeight(0, false);
     }
 
-    /** What a half's rest reservation is read from, besides the snapshot. */
+    /**
+     * The band a status bar standing along the bottom claims in a Style: the bar and the air the
+     * Style keeps under it, or 0 while the bar is switched off. A rule the activity hands in, since
+     * the bar's own geometry is the status bar's.
+     */
+    public interface StatusBand {
+        int px(boolean floating);
+    }
+
+    /**
+     * What a half's rest reservation is read from, besides the snapshot. The half's Style and
+     * whether its layout stands the status bar along the bottom are its own, read from the
+     * snapshot's half, never from the half on screen.
+     */
     public static final class RestInput {
         @NonNull public final DockGeometry.Snapshot dock;
         @NonNull public final Side side;
         public boolean toolbarShown;
         public boolean extraKeysRowEnabled;
         public int toolbarHeightPx;
-        public int statusBandPx;
-        public boolean roundedDockStyle;
+        @NonNull public StatusBand statusBand = floating -> 0;
         public int imeLiftPx;
         /** Whether the half wants its keyboard up, and how tall it stands. */
         public boolean keyboardShown;
@@ -270,17 +282,25 @@ public final class StackLayout {
 
     /**
      * The room {@code side}'s chrome leaves the content at rest, built from the stack's parts the
-     * way {@link #layout} builds them: its own dock rows, the terminal's padding, the keyboard
-     * when it is up and the margin under all of that. Home's chrome takes none.
+     * way {@link #layout} builds them: its own dock rows in its own Style, its own status band,
+     * the terminal's padding, the keyboard when it is up and the margin under all of that. Home's
+     * chrome takes none.
      */
     public static int restReservationPx(@NonNull RestInput in) {
+        DockGeometry.Half half = in.dock.half(in.side);
         DockLayout rest = DockGeometry.compute(in.dock.restOf(in.side));
-        Base base = new Base(rest, in.roundedDockStyle, in.dock.half(in.side).layout,
-            in.toolbarShown, in.keyboardShown, in.imeLiftPx);
+        Base base = new Base(rest, half.floating, half.layout, in.toolbarShown, in.keyboardShown,
+            in.imeLiftPx);
+        int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
-            in.extraKeysRowEnabled, in.statusBandPx);
+            in.extraKeysRowEnabled, statusBandPx);
         return KeyboardOverlayPolicy.restReservationPx(in.side == Side.HOME, dockContentPx,
             in.flushPaddingPx, in.keyboardShown, in.keyboardOverlays,
             Math.max(0, in.keyboardHeightPx), base.marginPx);
+    }
+
+    /** Whether {@code layout} stands the status bar along the bottom, a band of the stack. */
+    private static boolean statusAlongTheBottom(@NonNull PlaceLayout layout) {
+        return EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM).contains(Element.STATUS);
     }
 }
