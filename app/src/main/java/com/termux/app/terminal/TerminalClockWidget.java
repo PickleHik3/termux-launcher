@@ -215,12 +215,16 @@ public final class TerminalClockWidget extends View {
      * its curve — is a function of the clock, not of the frame count.
      */
     private void requestAnimationFrame() {
+        FRAMES.tick();
         if (isHighRefreshDisplay()) {
             postInvalidateDelayed(HIGH_REFRESH_FRAME_MS);
         } else {
             postInvalidateOnAnimation();
         }
     }
+
+    /** Frame-source counter for the idle audit: clockFlip. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("clockFlip");
 
     /** One 60 Hz frame, the cadence a flip is drawn at on faster panels. */
     private static final long HIGH_REFRESH_FRAME_MS = 16L;

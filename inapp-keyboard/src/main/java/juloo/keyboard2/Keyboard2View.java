@@ -1641,14 +1641,30 @@ public class Keyboard2View extends View
   {
     // [key_up] must be called before [updateFlags]. The latter might disable
     // flags.
-    _config.handler.key_up(k, mods);
+    android.os.Trace.beginSection("Keyboard.commit");
+    try
+    {
+      _config.handler.key_up(k, mods);
+    }
+    finally
+    {
+      android.os.Trace.endSection();
+    }
     updateFlags();
     invalidate();
   }
 
   public void onPointerHold(KeyValue k, Pointers.Modifiers mods)
   {
-    _config.handler.key_up(k, mods);
+    android.os.Trace.beginSection("Keyboard.commit");
+    try
+    {
+      _config.handler.key_up(k, mods);
+    }
+    finally
+    {
+      android.os.Trace.endSection();
+    }
     updateFlags();
   }
 
@@ -1691,13 +1707,21 @@ public class Keyboard2View extends View
         float ty = event.getY(p);
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
-        KeyboardData.Key key = getKeyAtPosition(tx, ty);
-        if (key != null)
+        android.os.Trace.beginSection("Keyboard.down");
+        try
         {
-          startTouchFx(event.getPointerId(p), key, tx, ty, event.getTouchMajor(p));
-          _pointers.onTouchDown(tx, ty, event.getPointerId(p), key);
-          if (_config.swipeTrailEnabled)
-            _trails.put(event.getPointerId(p), new Trail(tx, ty));
+          KeyboardData.Key key = getKeyAtPosition(tx, ty);
+          if (key != null)
+          {
+            startTouchFx(event.getPointerId(p), key, tx, ty, event.getTouchMajor(p));
+            _pointers.onTouchDown(tx, ty, event.getPointerId(p), key);
+            if (_config.swipeTrailEnabled)
+              _trails.put(event.getPointerId(p), new Trail(tx, ty));
+          }
+        }
+        finally
+        {
+          android.os.Trace.endSection();
         }
         break;
       case MotionEvent.ACTION_MOVE:

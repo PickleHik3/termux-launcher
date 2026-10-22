@@ -65,6 +65,9 @@ public final class BorderGlow {
      */
     public static final float TAPER_DP = 24f;
 
+    /** Frame-source counter for the idle audit: borderGlow. */
+    private static final com.termux.terminal.FrameProbe.Source BORDERGLOW = com.termux.terminal.FrameProbe.source("borderGlow");
+
     private enum Phase { REST, RISING, FULL, FADING }
 
     @NonNull private final View mHost;
@@ -283,7 +286,10 @@ public final class BorderGlow {
         canvas.drawRoundRect(mRect, radius, radius, mPaint);
         canvas.restoreToCount(save);
         boolean more = needsFrame(nowMs);
-        if (more) mHost.postInvalidateOnAnimation();
+        if (more) {
+            BORDERGLOW.tick();
+            mHost.postInvalidateOnAnimation();
+        }
         return more;
     }
 

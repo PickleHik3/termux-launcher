@@ -70,6 +70,16 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
+
+    /**
+     * Whether a keystroke's echo is drawn at once rather than through a post:
+     * {@code adb shell setprop debug.tl.echo_inline 0} restores the post, so before and after are
+     * measured on one build. On unless set.
+     */
+    private static final com.termux.terminal.DebugSwitch ECHO_INLINE = new com.termux.terminal.DebugSwitch(
+        "debug.tl.echo_inline", true, com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
+    /** When the last echo was drawn inline, so a flood still coalesces; see EchoInlineGate. */
+    private long mLastInlineRedrawMs;
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
@@ -280,22 +290,16 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
         mTerminalScreenUpdatePending = true;
-        Runnable redraw = () -> {
-            mPendingScreenUpdateSessions.remove(changedSession);
-            mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
-            if (!mHost.isVisible())
-                return;
-            // The wall left for another place between the post and this frame: hand the pane to
-            // the deferred set rather than drawing it, so the one redraw happens on return.
-            com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
-            if (view == null)
-                return;
-            if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
-                mDeferredScreenUpdateSessions.add(changedSession);
-                return;
-            }
-            drawScreen(view);
-        };
+        Runnable redraw = () -> redrawChangedSession(changedSession);
+        // Output within a few tens of ms of a keystroke is its echo: drawn now, not after whatever
+        // the main thread has queued. Output that is not an echo, and floods, take the post below.
+        long nowMs = android.os.SystemClock.uptimeMillis();
+        if (com.termux.terminal.EchoInlineGate.shouldRedrawInline(ECHO_INLINE.isOn(nowMs), nowMs,
+                changedSession.getLastWriteUptimeMs(), mLastInlineRedrawMs)) {
+            mLastInlineRedrawMs = nowMs;
+            redraw.run();
+            return;
+        }
         // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
         // posted decides how it interleaves with that parsing. Measured over four configurations:
         //
@@ -315,6 +319,24 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         } else {
             mUiHandler.post(redraw);
         }
+    }
+
+    /** Draws the pane a pending screen update was for, if it is still there to be seen. */
+    private void redrawChangedSession(@NonNull TerminalSession changedSession) {
+        mPendingScreenUpdateSessions.remove(changedSession);
+        mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
+        if (!mHost.isVisible())
+            return;
+        // The wall left for another place between the post and this frame: hand the pane to
+        // the deferred set rather than drawing it, so the one redraw happens on return.
+        com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
+        if (view == null)
+            return;
+        if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
+            mDeferredScreenUpdateSessions.add(changedSession);
+            return;
+        }
+        drawScreen(view);
     }
 
     /**
