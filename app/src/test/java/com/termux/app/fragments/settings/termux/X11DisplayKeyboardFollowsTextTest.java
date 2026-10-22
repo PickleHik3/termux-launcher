@@ -27,7 +27,7 @@ import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
-/** The Display page's "Keyboard follows text fields" row: default on, live only in Touchscreen. */
+/** The Display page's "Keyboard follows text fields" row: default on, live in every touch mode. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
@@ -67,25 +67,14 @@ public class X11DisplayKeyboardFollowsTextTest {
     }
 
     @Test
-    public void inTouchscreen_theRowIsLiveAndSaysWhatItDoes() {
-        setTouchMode("2");
-        Preference row = launch().getPreferenceScreen().findPreference(KEY);
-        assertNotNull(row);
-        assertTrue(row.isEnabled());
-        assertEquals(RuntimeEnvironment.getApplication()
-                .getString(R.string.settings_x11_keyboard_follows_text_summary),
-            row.getSummary());
-    }
-
-    @Test
-    public void inTheOtherTouchModes_theRowIsDimmedAndSaysWhy() {
+    public void inEveryTouchMode_theRowIsLiveAndSaysWhatItDoes() {
         Application app = RuntimeEnvironment.getApplication();
-        for (String mode : new String[]{"1", "3"}) {
+        for (String mode : new String[]{"1", "2", "3"}) {
             setTouchMode(mode);
             Preference row = launch().getPreferenceScreen().findPreference(KEY);
             assertNotNull(row);
-            assertFalse("touch mode " + mode, row.isEnabled());
-            assertEquals(app.getString(R.string.settings_x11_keyboard_follows_text_unavailable),
+            assertTrue("touch mode " + mode, row.isEnabled());
+            assertEquals(app.getString(R.string.settings_x11_keyboard_follows_text_summary),
                 row.getSummary());
         }
     }
