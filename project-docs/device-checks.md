@@ -50,6 +50,27 @@ under twenty items; past that, the oldest are re-judged first.
   a dock with two pages after the row comes back and after a Look or accent change (they are no
   longer republished every pass); the icon reflection never shows with the row
   away (Android 13+) · emulator.
+- 2026-10-22 · #137 stage 3, Stack layout (commits "feat(place): Stack layout…" and "refactor(stack):
+  the activity writes…") · Pane gap: a window that was not on screen during a slide (Home → window
+  with the window's pane never shown), settle on it → the pane meets the dock with no wallpaper
+  gap under it (was 213 px, Home's apps row plus index); repeat with Home carrying a Search field,
+  and from a window with the keyboard up · emulator.
+- 2026-10-22 · #137 stage 3 · Widgets jump: Home with a Search field, swipe window → Home slowly
+  and release → the widgets do not jump upward at the settle (the fold's rest now comes from each
+  half's own field and strip); also Home → window with a Wall strip on the window · emulator.
+- 2026-10-22 · #137 stage 3 · Stack at rest is unchanged: Home and a window, both Styles, keyboard
+  up and down, a status bar along the bottom, the extra keys under the keyboard, a bar standing on
+  the dock's plank → screenshot against the build before this stage: the stack's height, the gap
+  under it, the content's bottom edge and the terminal's last row are the same; rotate with the
+  keyboard up (the stack squeezes against its ceiling) → the terminal keeps its usable slice ·
+  emulator.
+- 2026-10-22 · #137 stage 3 · Slide and keyboard swipe: window → Home → window with the keyboard
+  up on the window, and swipe the keyboard down and up on a window → the content gives and takes
+  its room as before, no jump at the settle, the terminal's PTY hears one size · emulator.
+- 2026-10-22 · #137 stage 3 · Frame measurement against the baseline: a slide to Home with
+  Beads, Search field and Drawer tile on, Nothing Phone 2, `dumpsys gfxinfo` before the stage
+  (median 17 ms, 90th 24 ms, 99th 57 ms, 16.5 % janky) and after (fewer passes per frame; the
+  plain-setup baseline is 15 to 16 ms median) → record both in the stage's merge note · pong.
 - 2026-10-22 · commit "feat(appearance): a Split gap slider on the Terminal tap" · Appearance ›
   tap the terminal: the row reads Glass, Opacity, Tint, Contrast, Split gap. In a 2-pane and a
   4-pane window set Split gap to 0, 4 and 24 dp: screenshot each; the gutter between panes follows,
