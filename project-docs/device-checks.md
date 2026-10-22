@@ -2597,3 +2597,24 @@ Agent items first, then the developer's.
   `~/.config/pulse/daemon.conf` (the stopgaps), stop the hand-started server, restart Termux, run
   Set up Linux apps (or `pkg install pulseaudio`), open Chromium from the drawer and play a video:
   sound works · pong, release build.
+
+## Display keyboard Resize reset
+
+A portrait keyboard mode stored as Resize by an older Layout editor's revert is reset to Overlay
+once per install (flag `place_keyboard_overlay_reset_done`), and the editor's revert no longer
+writes a keyboard mode the layout never stored. Agent items.
+
+- 2026-10-23 · commit "fix(place): the display keyboard floats in portrait again for upgraded
+  installs" · Install the previous build, open the display once, force-stop, then seed a stored
+  portrait Resize: `run-as <pkg> sed -i
+  's#</map>#<string name="layout.portrait.keyboard_mode">resize</string></map>#'
+  shared_prefs/<pkg>_preferences.xml` (check it is in the file once). Install this build over it,
+  open a display window in portrait and bring the keyboard up: it floats over the picture, which
+  keeps its size. The preferences file has no `layout.portrait.keyboard_mode` and holds
+  `place_keyboard_overlay_reset_done` = true; a landscape `keyboard_mode` seeded the same way is
+  still there · emulator, debug build.
+- 2026-10-23 · same · After the reset, switch portrait to Resize with the touchpad's keyboard mode
+  button, force-stop and reopen: it still makes room (the reset does not run twice) · emulator.
+- 2026-10-23 · same · With no `keyboard_mode` key in the preferences file, open the Layout editor,
+  move a bar, then Back → Discard (and once more with the revert tap): the file still has no
+  `layout.portrait.keyboard_mode` or `layout.landscape.keyboard_mode` · emulator.
