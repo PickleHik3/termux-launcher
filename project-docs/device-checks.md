@@ -47,7 +47,8 @@ under twenty items; past that, the oldest are re-judged first.
   under the keyboard, then back to the shipped layout → the stack, the glass sheet, the apps row,
   the A–Z row, the extra keys and the bands under the keyboard show exactly as before; a pinned
   icon dragged while a layout change hides the apps row is dropped cleanly; the page ticks show on
-  a dock with two pages after the row comes back; the icon reflection never shows with the row
+  a dock with two pages after the row comes back and after a Look or accent change (they are no
+  longer republished every pass); the icon reflection never shows with the row
   away (Android 13+) · emulator.
 - 2026-10-22 · commit "feat(appearance): a Split gap slider on the Terminal tap" · Appearance ›
   tap the terminal: the row reads Glass, Opacity, Tint, Contrast, Split gap. In a 2-pane and a
