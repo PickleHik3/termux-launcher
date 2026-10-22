@@ -62,8 +62,9 @@ public final class GuiAppsSetup {
      * fcitx5 and its toolkit modules: GTK 3, which every starter app uses, and Qt, so a Qt app
      * installed later reports focus too rather than leaving taps in it to the cursor alone.
      */
-    private static final String AUDIO_PACKAGE = "pulseaudio";
     private static final String[] INPUT_METHOD_PACKAGES = {"fcitx5", "fcitx5-gtk3", "fcitx5-qt"};
+    /** The sound server the launcher starts for the apps it opens. */
+    private static final String AUDIO_PACKAGE = "pulseaudio";
 
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
