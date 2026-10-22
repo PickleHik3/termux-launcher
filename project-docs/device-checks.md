@@ -2487,3 +2487,10 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   trace, then the log lines come out again. (4) commit "fix(terminal-view): a key typed on the
   in-app keyboard ends a selection and unpins the screen" was verified on the emulator (long
   press on a streaming pane, then a typed key brings the picture back) · pong, by hand.
+- 2026-10-22 · branch `fix/round-2026-10-22`, second drop · commit "fix(panes): a window switch
+  takes the wall's travel cover off the window that left" — on Home's own layout: Home, window 2's
+  chip, then window 1's chip: window 1's pane ends 11 px above the extra-keys row, no wallpaper
+  gap; the same with a split window; window switches by chip inside the Workspace unchanged.
+  Commit "fix(dock): a put-away apps row keeps the icon Home draws" — slide from a window (no apps
+  row, keyboard up) to Home: the pinned icons arrive at their final size, Docked and Floating; Home
+  to window and back; Lens beads on Home during the slide and at the settle · pong, by hand.
