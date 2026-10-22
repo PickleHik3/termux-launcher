@@ -15284,15 +15284,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether the pinned-apps row shares its container with another band: the dock's other rows
-     * along the bottom — a status bar ordered onto the same plank counts as one of them — or the
-     * index riding its plank off the dock. A rail shares one with nothing.
+     * along the bottom — a status bar ordered onto the same plank counts as one of them, the extra
+     * keys do not ({@link DockLayoutPolicy#appsRowAloneOnDock}) — or the index riding its plank
+     * off the dock. A rail shares one with nothing.
      * It is what decides the air around the row's icons and its ticks.
      */
     private boolean isAppsRowAlone(@NonNull PlaceLayout layout) {
         if (!PlaceChromePolicy.appsShown(layout)) return false;
         if (PlaceChromePolicy.appsEdge(layout) == PlaceLayout.Edge.BOTTOM)
-            return AccessoryStackLayoutPolicy.plankBands(
-                EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM)).size() <= 1;
+            return DockLayoutPolicy.appsRowAloneOnDock(
+                EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM));
         return offDockPlankElements(layout, offDockPlankEdge(layout)).size() <= 1;
     }
 

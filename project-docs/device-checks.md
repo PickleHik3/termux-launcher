@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · commit "fix(dock): the extra keys never make the apps row a shared one" · With
+  the A–Z row off (and again with it on), Docked and Floating, portrait and landscape: screenshot
+  the dock on Home, on a window with the keyboard down and with it up, and mid-swipe → the pinned
+  icons are the same size in every shot and the window's dock is Home's plus the extra-keys row;
+  in landscape with the keyboard up the terminal still shows several lines · emulator.
 - 2026-10-22 · PR #99 (244fcf46a, migrations 9–13) · Upgrade: install over a release from before
   this branch with a Home dock height, Corners or Margin set apart from the Workspace's and a
   Prompt line or Taskbar dock style picked → Home keeps its rows (Home's own on only if rows
