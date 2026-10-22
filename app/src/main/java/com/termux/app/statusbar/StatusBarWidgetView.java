@@ -23,6 +23,7 @@ import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.theme.TextScale;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 /**
@@ -30,7 +31,7 @@ import com.termux.shared.termux.font.NerdFontSpans;
  * percentage or a temperature. Sized to sit on the same row as the window pills. Tapping it
  * is expected to open an anchored detail card; the widget itself is the anchor view.
  */
-public final class StatusBarWidgetView extends LinearLayout {
+public final class StatusBarWidgetView extends LinearLayout implements TextScale.Follower {
 
     public enum ColorRole { PRIMARY, SECONDARY, TERTIARY }
 
@@ -389,13 +390,16 @@ public final class StatusBarWidgetView extends LinearLayout {
         mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
     }
 
+    @Override public void onTextScaleChanged() {
+        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
+    }
+
     /**
      * The tier's weight and size. Since 2026-09-17 all three tiers share the temperature's, so
      * this is one answer applied three times; the hierarchy is hue and order.
      */
     private void applyTier() {
-        mValue.setTextSize(TypedValue.COMPLEX_UNIT_SP,
-            StatusBarInk.textSizeSpFor(mColorRole));
+        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
         int weight = StatusBarInk.weightFor(mColorRole);
         // The two-argument form so a heavy tier would be bold even where the platform has no bold
         // cut of the medium face: TextView then asks the paint for it rather than dropping it. At

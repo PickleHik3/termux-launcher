@@ -24,6 +24,7 @@ import com.termux.app.chrome.GlassBackdropCache;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.terminal.TerminalWindowBar.WindowItem;
 import com.termux.app.terminal.WindowChipInk;
+import com.termux.app.theme.TextScale;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +38,7 @@ import java.util.Locale;
  * label — working, asking, finished — become the chip's own rim. The selected window's chip is
  * filled in the place's accent, exactly as its pill is on the row.
  */
-public final class StatusBarWindowColumn extends ScrollView {
+public final class StatusBarWindowColumn extends ScrollView implements TextScale.Follower {
 
     public interface OnWindowSelectedListener {
         void onWindowSelected(int index);
@@ -45,6 +46,9 @@ public final class StatusBarWindowColumn extends ScrollView {
 
     private static final float CHIP_SIZE_DP = 26f;
     private static final float CHIP_GAP_DP = 4f;
+    /** A chip's label before the shared Text size. */
+    private static final float CHIP_TEXT_SP = 11f;
+    private static final int CHIP_TEXT_MIN_SP = 8;
 
     private final LinearLayout mStack;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
@@ -262,6 +266,27 @@ public final class StatusBarWindowColumn extends ScrollView {
         rebuild();
     }
 
+    @Override public void onTextScaleChanged() {
+        for (int i = 0; i < mStack.getChildCount(); i++) {
+            View child = mStack.getChildAt(i);
+            if (child instanceof TextView)
+                fitChipText((TextView) child);
+        }
+    }
+
+    /**
+     * The chip's one glyph shrinks to fit its box, from the label size at the shared Text size
+     * down to 8 sp: a raised font scale is what clips fixed chrome, and the box does not grow.
+     */
+    private static void fitChipText(@NonNull TextView chip) {
+        int max = Math.max(CHIP_TEXT_MIN_SP + 1, Math.round(TextScale.sp(CHIP_TEXT_SP)));
+        if (androidx.core.widget.TextViewCompat.getAutoSizeMaxTextSize(chip) == Math.round(TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP, max, chip.getResources().getDisplayMetrics())))
+            return;
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(chip,
+            CHIP_TEXT_MIN_SP, max, 1, TypedValue.COMPLEX_UNIT_SP);
+    }
+
     private void rebuild() {
         measureBand();
         mStack.removeAllViews();
@@ -275,7 +300,7 @@ public final class StatusBarWindowColumn extends ScrollView {
             chip.setText(chipText(item, i));
             chip.setGravity(Gravity.CENTER);
             chip.setMaxLines(1);
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, CHIP_TEXT_SP);
             chip.setTypeface(Typeface.DEFAULT_BOLD);
             String agentWord = com.termux.app.terminal.TerminalWindowBar.agentStateWord(
                 getContext(), item.agentState);
@@ -293,8 +318,7 @@ public final class StatusBarWindowColumn extends ScrollView {
             });
             // A raised font scale is what clips fixed chrome; the chip's one glyph shrinks to fit
             // its box rather than spilling out of it.
-            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(chip,
-                8, 11, 1, TypedValue.COMPLEX_UNIT_SP);
+            fitChipText(chip);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
             params.topMargin = i == 0 ? 0 : gap;
             mStack.addView(chip, params);

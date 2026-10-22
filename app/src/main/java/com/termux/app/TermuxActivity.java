@@ -1918,6 +1918,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Load preferences BEFORE setting theme (needed to check wallpaper preference)
         mPreferences = buildPlaceScopedPreferences(false);
+        // Before any chrome is built: every label reads the shared Text size as it is made.
+        com.termux.app.theme.TextScale.sync(mPreferences);
 
         // Apply wallpaper or normal theme based on preference
         setActivityThemeAndWindow();
@@ -1934,6 +1936,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
         if (mPreferences == null) {
             mPreferences = buildPlaceScopedPreferences(true);
+            com.termux.app.theme.TextScale.sync(mPreferences);
         }
         if (mPreferences == null) {
             // An AlertDialog should have shown to kill the app, so we don't continue running activity code
@@ -13467,6 +13470,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // terminal resize (a SIGWINCH into the shell per reflow) waits for the release.
             setTerminalToolbarHeight(commit);
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        }
+
+        /** The Text size the panes were last re-stamped at here; NaN until the first time. */
+        private float mPaneTextScale = Float.NaN;
+
+        @Override public void applyTextSizePreview(boolean terminal) {
+            if (mPreferences == null) return;
+            if (com.termux.app.theme.TextScale.sync(mPreferences))
+                com.termux.app.theme.TextScale.dispatch(getWindow().getDecorView());
+            if (mInAppKeyboard != null) mInAppKeyboard.applyTextScale();
+            float scale = com.termux.app.theme.TextScale.get();
+            if (terminal && mTermuxTerminalViewClient != null
+                    && Float.compare(mPaneTextScale, scale) != 0) {
+                mPaneTextScale = scale;
+                mTermuxTerminalViewClient.applyGlobalFontSize();
+            }
         }
 
         @Override public void applyGlassPreview() {
@@ -29882,7 +29901,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void configurePaneView(TerminalView view) {
             view.setTerminalViewClient(mTermuxTerminalViewClient);
             if (getPreferences() != null) {
-                view.setTextSize(getPreferences().getFontSize());
+                view.setTextSize(getPreferences().textScaledFontSize(
+                    getPreferences().getFontSize()));
                 view.setKeepScreenOn(getPreferences().shouldKeepScreenOn());
             }
             if (mTermuxTerminalViewClient != null) {
@@ -29906,11 +29926,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A pane view built after a program asked for a mouse pointer shape must wear it too.
             if (session != null && session.getEmulator() != null)
                 view.setRequestedPointerShape(session.getEmulator().getPointerShape());
-            view.setTextSize(pinnedFontSize > 0 ? pinnedFontSize
+            // The pane's own size (its zoom, the scratchpad's, or the default) at the shared
+            // Text size.
+            view.setTextSize(getPreferences().textScaledFontSize(pinnedFontSize > 0
+                ? pinnedFontSize
                 : com.termux.app.terminal.TerminalPaneController
                 .isScratchpadShellName(session == null ? null : session.mSessionName)
                 ? getPreferences().getScratchpadFontSize()
-                : getPreferences().getFontSize());
+                : getPreferences().getFontSize()));
         }
 
         @Override public void removeShell(TerminalSession session) {

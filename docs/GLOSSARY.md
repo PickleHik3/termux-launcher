@@ -335,6 +335,14 @@ Look › Custom's saturation of what the glass shows, 0.7x to 1.5x: baked once i
 the glass samples, never into the bare wallpaper. 1.0x in every Look.
 _Avoid_: saturation of the wallpaper
 
+**Text size**:
+Look › Custom's last global slider, 80% to 150%: one size for the type the launcher draws itself,
+the terminal font, the keyboard's key legends and the chrome labels (status bar figures, window
+chips, the dock strip's titles, Home's app labels). Each is drawn at its own size times it, so a
+surface's own size stays an offset: pane zoom and the terminal font setting, Home's label size.
+100% is every install's sizes as they were (`text_size_percent`, unset until moved).
+_Avoid_: font scale (Android's own, which still applies on top), zoom (the terminal's pinch)
+
 **Lazy mode**:
 The Battery setting that stops the launcher animating while nobody is watching: the clock swaps its
 digits instead of folding them, a working window's rim holds lit, and the status readings are sampled

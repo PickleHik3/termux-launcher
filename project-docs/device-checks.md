@@ -13,6 +13,14 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · commit "feat(appearance): one Text size slider" · Appearance › Custom with
+  nothing tapped, Text size at 80%, 100% and 150%, keyboard up: screenshot the terminal, the key
+  legends, the status bar figures and window chips, the dock strip titles and Home's app labels →
+  all grow and shrink together, nothing clips in the bar, the chips or the Home cells, and the
+  terminal reflows once on release (not per tick); Undo and Done-then-reopen keep or restore the
+  value; a split with one zoomed pane keeps the zoomed pane larger at every size. Light and dark
+  theme, and again at system font scale 1.3 (force-stop after the change). Widgets are not scaled
+  yet · emulator.
 - 2026-10-22 · commit "fix(dock): the extra keys never make the apps row a shared one" · With
   the A–Z row off (and again with it on), Docked and Floating, portrait and landscape: screenshot
   the dock on Home, on a window with the keyboard down and with it up, and mid-swipe → the pinned

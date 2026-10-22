@@ -61,6 +61,7 @@ public class AppearanceSnapshotTest {
         preferences.setTerminalContrastLevel("harder");
         preferences.setTerminalCursorTrailStyle("comet");
         preferences.setTerminalRetroEffect("crt_amber");
+        preferences.setTextSizePercent(130);
         // Layout mode's Corners and Margin.
         int corners = preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
         int sideGap = preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
@@ -90,6 +91,17 @@ public class AppearanceSnapshotTest {
         assertEquals("default", preferences.getTerminalContrastLevel().value);
         assertEquals("default", preferences.getTerminalCursorTrailStyle());
         assertEquals("none", preferences.getTerminalRetroEffect());
+        assertEquals(TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT, preferences.getTextSizePercent());
+    }
+
+    /** The Text size slider dirties the editor, and its way back cleans it again. */
+    @Test
+    public void theSignatureSeesTheTextSize() {
+        String before = AppearanceSnapshot.signatureOf(preferences);
+        preferences.setTextSizePercent(115);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        preferences.setTextSizePercent(TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT);
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
 
     /**

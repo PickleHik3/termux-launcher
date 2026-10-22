@@ -24,13 +24,14 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.terminal.TerminalNamePolicy;
+import com.termux.app.theme.TextScale;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 /**
  * Session label sitting to the left of the window pills. Named sessions show their name; unnamed
  * sessions show their one-based number. Tapping it opens the session switcher.
  */
-public final class SessionsIndicatorView extends LinearLayout {
+public final class SessionsIndicatorView extends LinearLayout implements TextScale.Follower {
 
     /**
      * How much of the mode's own panel colour the chip carries. Kept from the shape this chip has
@@ -39,6 +40,8 @@ public final class SessionsIndicatorView extends LinearLayout {
      * actually leaves rather than against the fill alone.
      */
     static final int CONTAINER_ALPHA = 198;
+    /** The label's size before the shared Text size. */
+    private static final float LABEL_SP = 10.5f;
 
     private final AppCompatTextView mLabel;
     private boolean mCapsuleSurface;
@@ -58,6 +61,10 @@ public final class SessionsIndicatorView extends LinearLayout {
         this(context, null);
     }
 
+    @Override public void onTextScaleChanged() {
+        TextScale.apply(mLabel, LABEL_SP);
+    }
+
     public SessionsIndicatorView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         setOrientation(HORIZONTAL);
@@ -72,7 +79,7 @@ public final class SessionsIndicatorView extends LinearLayout {
         mLabel = new InkCenteredTextView(context);
         mLabel.setGravity(Gravity.CENTER);
         mLabel.setTextAlignment(TEXT_ALIGNMENT_CENTER);
-        mLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+        TextScale.apply(mLabel, LABEL_SP);
         mLabel.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         mLabel.setIncludeFontPadding(false);
         mLabel.setSingleLine(true);

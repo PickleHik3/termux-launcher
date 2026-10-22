@@ -1618,6 +1618,19 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_SURFACE_GLASS_VIBRANCY = 150;
 
         /**
+         * Text size: one multiplier, in percent, on the type the launcher draws itself. The
+         * terminal font, the keyboard's key legends and the chrome labels are each drawn at their
+         * own size times this, so each surface's own size (the terminal font and pane zoom, Home's
+         * label size) stays an offset from the shared one. Never move the default: 100 is what
+         * every install that has not touched the slider reads, so it keeps exactly the sizes it
+         * had; ship another size by writing it for fresh installs only, as the Clear look is.
+         */
+        public static final String KEY_TEXT_SIZE_PERCENT = "text_size_percent";
+        public static final int DEFAULT_TEXT_SIZE_PERCENT = 100;
+        public static final int MIN_TEXT_SIZE_PERCENT = 80;
+        public static final int MAX_TEXT_SIZE_PERCENT = 150;
+
+        /**
          * Where the Look editor's Glass slider was left, 0 to 100: Base's under this key, each
          * surface's under the key plus {@code _} and the surface's name. Blur and grain stay the
          * stored glass; this only says which of the positions that write the same pair the slider

@@ -68,6 +68,7 @@ public class Keyboard2View extends View
 
   /** Host-owned multiplier for both Config key-margin ratios. */
   private float _keyMarginScale = 1f;
+  private float _labelScale = 1f;
 
   /** Host-owned radius override in px, or -1 to use Config/palette geometry. */
   private float _keyCornerRadiusOverridePx = -1f;
@@ -906,6 +907,29 @@ public class Keyboard2View extends View
   public float getKeyMarginScale()
   {
     return _keyMarginScale;
+  }
+
+  /**
+   * Scales the key legends (main labels and sublabels) without touching key
+   * geometry. The sizes are derived during measurement, so a change asks for
+   * one layout; the same scale again does nothing.
+   */
+  public void setLabelScale(float labelScale)
+  {
+    requireMainThread();
+    if (Float.isNaN(labelScale) || Float.isInfinite(labelScale)
+        || labelScale <= 0f)
+      throw new IllegalArgumentException("labelScale must be finite and positive");
+    if (Float.compare(_labelScale, labelScale) == 0)
+      return;
+    _labelScale = labelScale;
+    requestLayout();
+    invalidate();
+  }
+
+  public float getLabelScale()
+  {
+    return _labelScale;
   }
 
   /** Overrides key corner radius in px; -1 restores Config/palette geometry. */
@@ -1981,7 +2005,7 @@ public class Keyboard2View extends View
     float labelBaseSize = Math.min(
         _tc.row_height - _tc.vertical_margin,
         (width / 10f - _tc.horizontal_margin) * 3f / 2f)
-        * _config.characterSize;
+        * _config.characterSize * _labelScale;
     _mainLabelSize = labelBaseSize * _config.labelSizeRatio;
     _subLabelSize = labelBaseSize * _config.sublabelSizeRatio;
     int desiredHeight = (int)Math.ceil(

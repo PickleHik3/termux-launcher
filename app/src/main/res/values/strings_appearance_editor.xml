@@ -71,6 +71,9 @@
     <string name="appearance_editor_vibrancy">Vibrancy · %1$s×</string>
     <!-- The global set's last slider, while the glass edge is drawn: how thick it looks. -->
     <string name="appearance_editor_depth">Depth · %1$d%%</string>
+    <!-- The global set's last slider: the size of the terminal text, the key legends and the
+         labels together, as a percent of each one's own size. -->
+    <string name="appearance_editor_text_size">Text size · %1$d%%</string>
     <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 

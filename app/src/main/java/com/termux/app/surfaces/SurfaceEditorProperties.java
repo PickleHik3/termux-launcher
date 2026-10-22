@@ -27,6 +27,10 @@ public final class SurfaceEditorProperties {
      * one settle, not one per tick.
      */
     public static final int PREVIEW_GEOMETRY_COMMIT = 1 << 5;
+    /** The shared Text size on the chrome labels and the key legends. */
+    public static final int PREVIEW_TEXT = 1 << 6;
+    /** The shared Text size on the panes: a resize, so a drag waits for the release. */
+    public static final int PREVIEW_TEXT_TERMINAL = 1 << 7;
     public static final int PREVIEW_ALL = PREVIEW_GLASS | PREVIEW_BLUR | PREVIEW_GEOMETRY
         | PREVIEW_SURFACES | PREVIEW_KEYBOARD;
 }

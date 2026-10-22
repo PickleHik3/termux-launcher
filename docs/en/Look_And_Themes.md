@@ -51,6 +51,9 @@ At **Custom**, vertical sliders appear:
   carries the same faint line of light along its top. Depth shows only while the glass edge is
   drawn: Android 13 or newer, **Fancier Glass** on, Lazy mode off, and a wallpaper set from the
   Wallpaper tab (see [Glass](#glass)).
+  The last of these sliders, **Text size**, makes the terminal text, the keyboard's letters and
+  the labels on the status bar, the dock and Home larger or smaller together. Each keeps its own
+  size on top of it: a pinch still zooms a terminal pane, and Home's label size still applies.
 - Tap an element in the frame to tune it on its own:
   - **Status bar**: the four glass sliders, plus a **Clock** button for the face and alignment
     (see [Status bar](Status_Bar.md#clock)).
