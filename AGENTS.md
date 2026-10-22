@@ -197,14 +197,28 @@ compatible with AGP 8.13.2; the code targets Java 11.
 - `./gradlew :app:verifyReleaseHardening` — release build safety settings.
 - `scripts/dev-install.sh` — installs the arm64 staging APK, fresh or as an upgrade. Target the
   device with `DEVICE=<serial>`; `BUILD_TYPE=debug` installs the debug APK instead.
-- **Installing on pong** (only when the developer asks): pong runs release builds.
-  `BUILD_TYPE=release DEVICE=<pong> scripts/dev-install.sh` builds one versioned
-  `<versionName>+dev.<sha>` from HEAD and installs it. Do not `adb install` the release
-  APK by hand: a local release build has no ABI splits (one ~100 MB universal APK with every
-  ABI's native libraries) and is **unsigned** unless the CI's `TERMUX_RELEASE_*` variables are
-  set, which fails as `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. The script keeps only arm64-v8a,
-  signs with the test key every build shares, installs with `--no-incremental` and checks the
-  launcher came back up.
+- **Installing on pong** (only when the developer asks), in three tiers:
+  1. *Development* runs a **staging** build, `DEVICE=<pong> scripts/dev-install.sh` (the default),
+     named `<versionName>+dev.<sha>` so tlstore's `min-launcher` gating sees the same version
+     string a release dev build shows. `run-as` works and stack traces are readable.
+  2. A *drop candidate* gets a **release** build of the candidate commit,
+     `BUILD_TYPE=release DEVICE=<pong> scripts/dev-install.sh`, for a day of real use before a
+     pre-release cut. It builds one versioned `<versionName>+dev.<sha>` from HEAD. Do not
+     `adb install` the release APK by hand: a local release build has no ABI splits (one ~100 MB
+     universal APK with every ABI's native libraries) and is **unsigned** unless the CI's
+     `TERMUX_RELEASE_*` variables are set, which fails as `INSTALL_PARSE_FAILED_NO_CERTIFICATES`.
+  3. A *shipped* build is the **CI artifact from the GitHub release**, installed through
+     Obtainium, never a local build: only that exercises the real signing key, the ABI splits
+     and the bootstrap download on the phone.
+
+  The script keeps only arm64-v8a, signs with the test key every build shares, installs with
+  `--no-incremental` and checks the launcher came back up. Why staging is enough for
+  development: it differs from release only in `debuggable` and the signing key (the sixteen
+  branches on `BuildConfig.DEBUG` / the debuggable flag are the only behaviour a release build
+  adds), and the user bugs that never showed on pong came from fresh installs, upgrades across
+  migrations, other densities and font scales and other editions, which a release build on one
+  long-lived phone cannot show either. Those are checked on the emulator per drop
+  (`docs/agents/releasing.md`).
 - `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug or staging
   build.
 
@@ -236,8 +250,8 @@ before you hand work over. CI owns the rest.
   user-facing summary and the `device-checks.md` items, never the diff, and reports pass or fail
   with crops. Take the device's lease for the whole session, and batch pong items into one ask.
   This launcher becomes the emulator's home screen when installed: set the stock launcher back
-  as home before you hand the emulator over. Swap checks (stable → drop → stable) need release
-  builds of both, which install over each other because every build shares one signing key.
+  as home before you hand the emulator over. Swap checks (stable → drop → stable) still need
+  release builds of both, which install over each other because every build shares one signing key.
 - **Tear the test setup down when you are done.** The emulator holds this host's RAM and GPU for
   as long as it runs. When the testing is finished, force-stop the app, release the lease (which
   stops an emulator it started), and stop any background monitor or logcat loop you left behind.
