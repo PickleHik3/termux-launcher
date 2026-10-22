@@ -4875,13 +4875,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && (isRoundedDockStyle() || beads) && shownDockSurfaceSpec().contactShadow;
         shelf.setBeads(show ? dockBeadsShadowed() : null);
         shelf.setBeadShelfAlpha(dockBeadShelfAlpha());
-        if (!show) {
-            shelf.follow(null);
-            if (shelf.getVisibility() != View.INVISIBLE) shelf.setVisibility(View.INVISIBLE);
-            return;
-        }
-        shelf.follow(host);
-        if (shelf.getVisibility() != View.VISIBLE) shelf.setVisibility(View.VISIBLE);
+        shelf.follow(show ? host : null);
+        mDockRows.setShelfShown(show);
     }
 
     // ------------------------------------------------------------------ Lens beads
@@ -5004,7 +4999,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
         if (shelf != null) {
-            if (shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
+            if (mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
             shelf.setBeadShelfAlpha(dockBeadShelfAlpha());
         }
         if (modeChanged) {
@@ -5059,7 +5054,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
         DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
-        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
+        if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
         rebuildBackdropGlassEffectForLens();
     }
     /** The row's icon boxes, read into this; one icon more than the beads hold says "too many". */
@@ -5127,7 +5122,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!refreshDockBeads()) return;
         rebuildBackdropGlassEffectForLens();
         DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
-        if (shelf != null && shelf.getVisibility() == View.VISIBLE) shelf.setBeads(dockBeadsShadowed());
+        if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
         if (wereBeads != (mDockBeads != null) && mChrome != null)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -9016,7 +9011,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // ticks, the icon reflection) hear a change before the views move, so a drag is cancelled
         // while its source is still on screen. Under the navigation strip's glass a Docked dock's
         // own sheet stands down.
-        mDockRows.apply(state, bottomStatusBandPx() > 0, useDecorSurface && !isRoundedDockStyle());
+        mDockRows.apply(state, mStatusBarEdge == PlaceLayout.Edge.BOTTOM,
+            useDecorSurface && !isRoundedDockStyle());
         if (state.toolbarShown && !state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
             // The letters keep their scrub without the apps row — it just shows its matches on the
@@ -15713,17 +15709,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(host instanceof ViewGroup)) return;
         // Put away in the Layout editor: the bar and its fold go, and the content takes the band.
         if (layout.slot(Element.STATUS).hidden) {
-            if (host.getVisibility() != View.GONE) {
+            if (mDockRows.statusBarShown()) {
                 cancelTopStatusBarAnimator();
                 finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
-                host.setVisibility(View.GONE);
+                // Through Dock rows, which counts a bar along the bottom as a band of the stack.
+                mDockRows.setStatusBarShown(false);
                 applyTerminalWindowBarBackdropInsets();
                 if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
             }
             return;
         }
-        if (host.getVisibility() != View.VISIBLE && isSplitPanesEnabled()) {
-            host.setVisibility(View.VISIBLE);
+        if (!mDockRows.statusBarShown() && isSplitPanesEnabled()) {
+            mDockRows.setStatusBarShown(true);
             applyTerminalWindowBarBackdropInsets();
             setTopStatusBarCollapsed(isStatusBarCompact(), false);
             refreshTerminalWindowBar();
@@ -15780,9 +15777,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * follow it frame by frame instead of jumping to where it will end up.
      */
     private int bottomStatusBandPx() {
-        if (mStatusBarEdge != PlaceLayout.Edge.BOTTOM) return 0;
+        if (mStatusBarEdge != PlaceLayout.Edge.BOTTOM || !mDockRows.statusBarShown()) return 0;
         View host = findViewById(R.id.terminal_window_bar_host);
-        if (host == null || host.getVisibility() != View.VISIBLE) return 0;
+        if (host == null) return 0;
         ViewGroup.LayoutParams params = host.getLayoutParams();
         int thicknessPx = params != null && params.height > 0
             ? params.height : targetStatusBarHeightPx(isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), isStatusBarCompact());
@@ -15882,8 +15879,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // that the capture then reads back, and the row would stay collapsed for the session.
         if (mTerminalToolbarDefaultHeight <= 0)
             return false;
-        ViewGroup.LayoutParams toolbarLayoutParams = terminalToolbarViewPager.getLayoutParams();
-
         int matrix = 0;
         if (mTermuxTerminalExtraKeys != null && mTermuxTerminalExtraKeys.getExtraKeysInfo() != null) {
             matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
@@ -15910,11 +15905,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The keyboard coming and going is also when the place's claim on the system IME changes.
         applyPlaceSystemImeOwner();
         int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
-        boolean toolbarHeightChanged = toolbarLayoutParams.height != toolbarHeightPx;
-        if (toolbarHeightChanged) {
-            toolbarLayoutParams.height = toolbarHeightPx;
-            terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
-        }
+        boolean toolbarHeightChanged = mDockRows.setExtraKeysHeight(toolbarHeightPx);
 
         // The whole bottom stack from one snapshot (Stack layout): the squeeze is worked out there
         // and flows into Dock geometry's snapshot, so this pass applies one dock.
@@ -16419,16 +16410,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The design the dock's rows on screen wear, for the readers of its dressing — the slab's glass
-     * program, its contact shadow, the beads. While a crossing stands, it is the applied layout's
-     * ({@link com.termux.app.dock.DockRows#surface}), measured for the half whose rows the frame
-     * shows, so the committed half is never read for it mid-slide. At rest that half is the
-     * committed one, read off its dress, so a design just picked in the Layout editor is worn
-     * before the pass that lays it out.
+     * program, its contact shadow, the beads. Dock rows decides it
+     * ({@link com.termux.app.dock.DockRows#wornSurface}): while a crossing stands, the applied
+     * layout's, measured for the half whose rows the frame shows; at rest the committed half's
+     * dress, so a design just picked in the Layout editor is worn before the pass that lays it out.
      */
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec shownDockSurfaceSpec() {
-        com.termux.app.dock.DockSurfaceSpec shown = mDockRows.surface();
-        return shown != null && mSeamCrossing.committedDesign() != null ? shown : dockSurfaceSpec();
+        return mDockRows.wornSurface(dockSurfaceSpec(), mSeamCrossing.committedDesign() != null);
     }
 
     /** The slab the dock wears on {@code page}: its Dock design's. */
@@ -16662,7 +16651,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View stack = findViewById(R.id.accessory_stack_container);
         View rowHost = findViewById(R.id.apps_bar_row_host);
         if (stack == null || rowHost == null || !mDockRows.stackShown()
-            || rowHost.getVisibility() != View.VISIBLE || stack.getHeight() <= 0
+            || !mDockRows.isRowOnScreen(Element.APPS) || stack.getHeight() <= 0
             || rowHost.getParent() != findViewById(R.id.accessory_row_stack)) return false;
         android.animation.ValueAnimator ease = android.animation.ValueAnimator.ofFloat(0f, 1f);
         ease.setDuration(Math.round(PROMPT_FIELD_EASE_MS
@@ -22577,7 +22566,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View rowStack = hotView(R.id.accessory_row_stack);
         View keys = hotView(R.id.terminal_toolbar_host);
         boolean keysInStack = rowStack != null && keys != null && keys.getParent() == rowStack
-            && keys.getVisibility() == View.VISIBLE;
+            && mDockRows.isRowOnScreen(Element.EXTRA_KEYS);
         if (!keysInStack) {
             applySeamRowSink(0f);
             return;

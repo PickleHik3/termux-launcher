@@ -46,6 +46,22 @@ public final class DockRowViews implements DockRows.Views {
         show(R.id.extrakeys_background, shown);
     }
 
+    @Override public void setShelfShown(boolean shown) {
+        View shelf = mFinder.find(R.id.accessory_shelf_fx);
+        // Invisible rather than gone, as the layout rests it: the shelf follows the glass host.
+        int visibility = shown ? View.VISIBLE : View.INVISIBLE;
+        if (shelf != null && shelf.getVisibility() != visibility) shelf.setVisibility(visibility);
+    }
+
+    @Override public boolean setStatusBarShown(boolean shown) {
+        View bar = mFinder.find(R.id.terminal_window_bar_host);
+        if (bar == null) return false;
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        if (bar.getVisibility() == visibility) return false;
+        bar.setVisibility(visibility);
+        return true;
+    }
+
     @Override public void setRowShown(@NonNull Element row, boolean shown) {
         int id = rowId(row);
         if (id != 0) show(id, shown);
