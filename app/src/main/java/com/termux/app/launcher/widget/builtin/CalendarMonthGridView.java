@@ -3,76 +3,69 @@ package com.termux.app.launcher.widget.builtin;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Path;
-import android.util.TypedValue;
+import android.graphics.RectF;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Box;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.Locale;
 import java.util.Map;
 
 /**
- * The calendar's month: a row of weekday letters, then the days in a 7×5 (or 7×6) grid. Today
- * is a filled circle in the accent; a day with events carries a 2dp sliver along the bottom of
- * its circle in the first event's colour; weekend columns are in the variant colour. One view,
- * one draw pass, nothing allocated while drawing.
+ * The Calendar's month: the column names, then the weeks the plan's {@link
+ * CalendarLayoutPlanner.Grid} has room for, each day's digit with its event dot under it in the
+ * day's first event colour. Today is a pill in the accent over its digit and dot. The geometry is
+ * the planner's, so what is tested is what draws. Nothing is allocated while drawing.
  */
 final class CalendarMonthGridView extends View {
-    private final BuiltinWidgetStyle style;
-    private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint dayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Path circle = new Path();
-    private final float lettersGapPx;
-    private final float cellGapPx;
-    private final float markPx;
-
     private static final String[] DAY_LABELS = new String[32];
     static {
         for (int i = 1; i < DAY_LABELS.length; i++) DAY_LABELS[i] = Integer.toString(i);
     }
 
+    private final BuiltinWidgetStyle style;
+    private final float density;
+    private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint dayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint.FontMetrics metrics = new Paint.FontMetrics();
-    @NonNull private final String[] letters = new String[7];
-    /** Per day of the month, the colour of its sliver, or 0 for none. */
+    private final RectF rect = new RectF();
+
+    @Nullable private CalendarLayoutPlanner.Grid grid;
+    @NonNull private final String[] names = new String[7];
+    /** Per day of the month, its dot's colour, or 0 for none. */
     @NonNull private final int[] dayMarks = new int[32];
     private final boolean[] weekendColumns = new boolean[7];
     private int days = 30;
     private int todayDay = -1;
     private int lead;
-    private int rows = 5;
 
-    CalendarMonthGridView(@NonNull Context context, @NonNull BuiltinWidgetStyle style,
-                          int lettersGapDp) {
+    CalendarMonthGridView(@NonNull Context context, @NonNull BuiltinWidgetStyle style) {
         super(context);
         this.style = style;
-        lettersGapPx = style.dp(lettersGapDp);
-        cellGapPx = Math.max(1, style.dp(1));
-        markPx = style.dp(2);
-        letterPaint.setTypeface(style.sansBold);
-        letterPaint.setTextSize(sp(9.5f));
-        letterPaint.setColor(style.onSurfaceVariant);
+        density = context.getResources().getDisplayMetrics().density;
         letterPaint.setTextAlign(Paint.Align.CENTER);
-        dayPaint.setTypeface(style.monoMedium);
-        dayPaint.setTextSize(sp(10.5f));
         dayPaint.setTextAlign(Paint.Align.CENTER);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
-    private float sp(float value) {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value,
-            getResources().getDisplayMetrics());
-    }
-
-    /** Shows {@code month} with {@code today} filled and a sliver under every day in {@code marks}. */
-    void set(@NonNull YearMonth month, @NonNull LocalDate today, @NonNull DayOfWeek first,
-             @NonNull Map<LocalDate, Integer> marks, @NonNull Locale locale) {
+    /**
+     * Shows {@code month} laid out by {@code grid}, {@code today} as the pill, a dot under every
+     * day in {@code marks}; {@code shortNames} and {@code narrowNames} name the columns from
+     * {@code first}.
+     */
+    void set(@NonNull CalendarLayoutPlanner.Grid grid, @NonNull YearMonth month,
+             @NonNull LocalDate today, @NonNull DayOfWeek first,
+             @NonNull Map<LocalDate, Integer> marks, @NonNull String[] shortNames,
+             @NonNull String[] narrowNames) {
+        this.grid = grid;
         for (int i = 0; i < 7; i++) {
-            letters[i] = CalendarWidgetFormats.weekdayLetter(first.plus(i), locale);
+            names[i] = grid.shortNames ? shortNames[i] : narrowNames[i];
             weekendColumns[i] = CalendarWidgetFormats.isWeekend(first.plus(i));
         }
         days = month.lengthOfMonth();
@@ -82,76 +75,68 @@ final class CalendarMonthGridView extends View {
             dayMarks[day] = mark == null ? 0 : mark;
         }
         lead = CalendarWidgetFormats.leadingBlanks(month, first);
-        int nextRows = CalendarWidgetFormats.monthRows(month, first);
-        if (nextRows != rows) {
-            rows = nextRows;
-            requestLayout();
+        CalendarWidgetSupport.dressNumerals(dayPaint, style, grid.digitRole,
+            grid.digitSizeDp * density);
+        if (grid.letterRole != null) {
+            letterPaint.setTypeface(style.sansMedium);
+            letterPaint.setTextSize(grid.letterSizeDp * density);
         }
         invalidate();
     }
 
-    private float lettersHeight() {
-        letterPaint.getFontMetrics(metrics);
-        return metrics.descent - metrics.ascent;
-    }
-
-    @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        dayPaint.getFontMetrics(metrics);
-        float minRow = Math.max(style.dp(18), (metrics.descent - metrics.ascent) + style.dp(4));
-        int wanted = Math.round(lettersHeight() + lettersGapPx + rows * minRow
-            + (rows - 1) * cellGapPx);
-        int width = MeasureSpec.getSize(widthMeasureSpec);
-        setMeasuredDimension(resolveSize(width, widthMeasureSpec),
-            resolveSize(wanted, heightMeasureSpec));
-    }
-
     @Override protected void onDraw(@NonNull Canvas canvas) {
-        float width = getWidth() - getPaddingLeft() - getPaddingRight();
-        float left = getPaddingLeft();
-        float top = getPaddingTop();
-        float colWidth = (width - 6 * cellGapPx) / 7f;
-        if (colWidth <= 0) return;
-
-        letterPaint.getFontMetrics(metrics);
-        float letterBaseline = top - metrics.ascent;
-        for (int col = 0; col < 7; col++) {
-            float cx = left + col * (colWidth + cellGapPx) + colWidth / 2f;
-            canvas.drawText(letters[col], cx, letterBaseline, letterPaint);
+        CalendarLayoutPlanner.Grid grid = this.grid;
+        if (grid == null) return;
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        float width = getWidth();
+        if (grid.letterRole != null) {
+            letterPaint.setColor(style.onSurfaceVariant);
+            for (int col = 0; col < 7 && col < grid.letters.size(); col++) {
+                drawText(canvas, names[col], grid.letters.get(col), letterPaint, rtl, width);
+            }
         }
-
-        float gridTop = top + lettersHeight() + lettersGapPx;
-        float gridHeight = getHeight() - getPaddingBottom() - gridTop;
-        float rowHeight = (gridHeight - (rows - 1) * cellGapPx) / rows;
-        if (rowHeight <= 0) return;
-        float radius = Math.min(colWidth, rowHeight) / 2f;
-        dayPaint.getFontMetrics(metrics);
-        float baselineOffset = -(metrics.ascent + metrics.descent) / 2f;
-        for (int cell = 0; cell < rows * 7; cell++) {
-            int day = cell - lead + 1;
+        for (int i = 0; i < grid.cells.size(); i++) {
+            int row = i / 7 + grid.firstRow;
+            int col = i % 7;
+            int day = row * 7 + col - lead + 1;
             if (day < 1 || day > days) continue;
-            int col = cell % 7, row = cell / 7;
-            float cx = left + col * (colWidth + cellGapPx) + colWidth / 2f;
-            float cy = gridTop + row * (rowHeight + cellGapPx) + rowHeight / 2f;
             boolean isToday = day == todayDay;
             if (isToday) {
+                set(rect, grid.selectedDisc(i), rtl, width);
+                float radius = Math.min(rect.width(), rect.height()) / 2f;
                 fillPaint.setColor(style.primary);
-                canvas.drawCircle(cx, cy, radius, fillPaint);
-            } else {
-                int mark = dayMarks[day];
-                if (mark != 0) {
-                    circle.rewind();
-                    circle.addCircle(cx, cy, radius, Path.Direction.CW);
-                    canvas.save();
-                    canvas.clipPath(circle);
-                    fillPaint.setColor(mark);
-                    canvas.drawRect(cx - radius, cy + radius - markPx, cx + radius, cy + radius,
-                        fillPaint);
-                    canvas.restore();
-                }
+                canvas.drawRoundRect(rect, radius, radius, fillPaint);
             }
             dayPaint.setColor(isToday ? style.onPrimary
                 : weekendColumns[col] ? style.onSurfaceVariant : style.onSurface);
-            canvas.drawText(DAY_LABELS[day], cx, cy + baselineOffset, dayPaint);
+            drawText(canvas, DAY_LABELS[day], grid.digits.get(i), dayPaint, rtl, width);
+            int mark = dayMarks[day];
+            if (mark != 0) {
+                set(rect, grid.dots.get(i), rtl, width);
+                fillPaint.setColor(isToday ? style.onPrimary : mark);
+                canvas.drawCircle(rect.centerX(), rect.centerY(), rect.width() / 2f, fillPaint);
+            }
         }
+    }
+
+    /** {@code text} centred in {@code box}, the box mirrored for a right-to-left layout. */
+    private void drawText(@NonNull Canvas canvas, @NonNull String text, @NonNull Box box,
+                          @NonNull Paint paint, boolean rtl, float width) {
+        set(rect, box, rtl, width);
+        paint.getFontMetrics(metrics);
+        float baseline = rect.top + (rect.height() - (metrics.descent - metrics.ascent)) / 2f
+            - metrics.ascent;
+        canvas.drawText(text, rect.centerX(), baseline, paint);
+    }
+
+    private void set(@NonNull RectF out, @NonNull Box box, boolean rtl, float width) {
+        float left = box.left * density;
+        float right = left + box.width * density;
+        if (rtl) {
+            float mirrored = width - right;
+            right = width - left;
+            left = mirrored;
+        }
+        out.set(left, box.top * density, right, (box.top + box.height) * density);
     }
 }

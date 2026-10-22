@@ -171,10 +171,10 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
-        /** How the launcher's own widgets are drawn: {@code tonal} or {@code pane}. */
+        /** The numerals of the launcher's own widgets: {@code sans} or {@code mono}. */
         public static final String KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE =
             "app_launcher_builtin_widget_style";
-        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "tonal";
+        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "sans";
 
         /** The widget pane's grid: how many columns across and rows down a page has. */
         public static final String KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS = "app_launcher_widget_grid_columns";
@@ -1357,6 +1357,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
 
         /**
+         * Widgets on glass: whether the built-in widgets wear the Look's glass (Base's values).
+         * A widget's own Glass choice (on or off) still overrides it. Off by default.
+         */
+        public static final String KEY_WIDGETS_ON_GLASS = "widgets_on_glass";
+        public static final boolean DEFAULT_VALUE_WIDGETS_ON_GLASS = false;
+
+        /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
          * When off, nothing appears on its own: the {@code ?} cap lights up under the prefix and
          * pressing it opens the full table on demand.
@@ -1389,6 +1396,11 @@ public final class TermuxPreferenceConstants {
         public static final String TOP_PANE_CLOCK_STYLE_FLIP = "flip";
         public static final String TOP_PANE_CLOCK_STYLE_LCD = "lcd";
         public static final String TOP_PANE_CLOCK_STYLE_MINIMAL = "minimal";
+        /**
+         * Minimal in a medium weight, for busy wallpapers (#111): set through Minimal's Weight row
+         * in the Look's clock picker, never a face row of its own.
+         */
+        public static final String TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM = "minimal_medium";
         public static final String TOP_PANE_CLOCK_STYLE_LED = "led";
         public static final String TOP_PANE_CLOCK_STYLE_TAPE = "tape";
         public static final String TOP_PANE_CLOCK_STYLE_SLAB = "slab";

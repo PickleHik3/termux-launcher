@@ -3369,14 +3369,52 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // the sliders, opening the six faces upward, drawn as themselves, with the face's position
     // beneath them. Live like every other editor control, and gated by Done.
 
-    /** Package-private so a test can hold it against the settings list's own entry values. */
+    /**
+     * Every stored clock style, Minimal's medium weight included. Package-private so a test can
+     * hold it against the settings list's own entry values.
+     */
     static final String[] CLOCK_STYLES = {
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
+
+    /**
+     * The faces the picker lists, one row each: every style but Minimal's medium weight, which is
+     * Minimal's row with the Weight row under it ({@link #clockWeightRow}).
+     */
+    static final String[] CLOCK_FACES = {
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
+
+    /** Whether {@code style} is Minimal, in either weight. */
+    static boolean isMinimalStyle(@Nullable String style) {
+        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style)
+            || TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(style);
+    }
+
+    /**
+     * The picker's rows for the bar's {@code current} style: the faces, then the Weight row while
+     * Minimal is the face, then the position row. Public for the Clock widget's test.
+     */
+    @NonNull
+    public static String[] clockDropdownRows(@Nullable String current) {
+        java.util.List<String> rows = new java.util.ArrayList<>(java.util.Arrays.asList(CLOCK_FACES));
+        if (isMinimalStyle(current)) rows.add(CLOCK_ROW_WEIGHT);
+        rows.add(CLOCK_ROW_POSITION);
+        return rows.toArray(new String[0]);
+    }
+
+    /** The picker's two rows that are not faces. */
+    public static final String CLOCK_ROW_WEIGHT = "@weight";
+    public static final String CLOCK_ROW_POSITION = "@position";
 
     /** Package-private so a test can hold it against the settings list's own segment values. */
     static final String[] CLOCK_ALIGNMENTS = {
@@ -3401,6 +3439,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return R.string.termux_top_pane_clock_style_lcd;
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style))
             return R.string.termux_top_pane_clock_style_minimal;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(style))
+            return R.string.termux_top_pane_clock_style_minimal_medium;
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(style))
             return R.string.termux_top_pane_clock_style_led;
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(style))
@@ -3426,41 +3466,52 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private ListPopupWindow mClockDropdown;
 
     /**
-     * The drop-down's rows: the six faces, then one row for the face's place in the pane. A real
-     * list popup, so the theme's popup style gives it its surface, shape and elevation.
+     * The drop-down's rows: the six faces, Minimal's Weight row while Minimal is the face, then one
+     * row for the face's place in the pane ({@link #clockDropdownRows}). A real list popup, so the
+     * theme's popup style gives it its surface, shape and elevation.
      */
     private final class ClockDropdownAdapter extends BaseAdapter {
         private final String mCurrent;
+        private final String[] mRows;
 
         ClockDropdownAdapter(@NonNull String current) {
             mCurrent = current;
+            mRows = clockDropdownRows(current);
         }
 
-        @Override public int getCount() { return CLOCK_STYLES.length + 1; }
+        @Override public int getCount() { return mRows.length; }
 
         @Override public Object getItem(int position) {
-            return position < CLOCK_STYLES.length ? CLOCK_STYLES[position] : null;
+            return isFaceRow(position) ? mRows[position] : null;
         }
 
         @Override public long getItemId(int position) { return position; }
 
-        @Override public int getViewTypeCount() { return 2; }
+        @Override public int getViewTypeCount() { return 3; }
 
         @Override public int getItemViewType(int position) {
-            return position < CLOCK_STYLES.length ? 0 : 1;
+            if (isFaceRow(position)) return 0;
+            return CLOCK_ROW_WEIGHT.equals(mRows[position]) ? 2 : 1;
         }
 
         @Override public boolean areAllItemsEnabled() { return false; }
 
-        /** The position row is made of controls of its own; the list only takes the faces. */
-        @Override public boolean isEnabled(int position) { return position < CLOCK_STYLES.length; }
+        /** The weight and position rows are made of controls of their own; the list takes faces. */
+        @Override public boolean isEnabled(int position) { return isFaceRow(position); }
+
+        boolean isFaceRow(int position) {
+            return position >= 0 && position < mRows.length
+                && !mRows[position].startsWith("@");
+        }
 
         @Override public View getView(int position, @Nullable View convertView,
                                       @NonNull ViewGroup parent) {
             Context context = parent.getContext();
-            if (position >= CLOCK_STYLES.length)
+            if (CLOCK_ROW_POSITION.equals(mRows[position]))
                 return clockPositionRow(context);
-            return clockFaceRow(context, CLOCK_STYLES[position], mCurrent);
+            if (CLOCK_ROW_WEIGHT.equals(mRows[position]))
+                return clockWeightRow(context);
+            return clockFaceRow(context, mRows[position], mCurrent);
         }
     }
 
@@ -3492,14 +3543,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int roomBelow = anchor.getRootView().getHeight() - mNavInsetPx
             - (anchorAt[1] + anchor.getHeight()) - dp(FRAME_GAP_DP);
         int room = Math.max(dp(CLOCK_POPUP_MIN_HEIGHT_DP), mSidePane ? roomBelow : roomAbove);
-        int height = Math.min(dp(CLOCK_POPUP_HEIGHT_DP), room);
+        int height = Math.min(dp(clockPopupHeightDp(prefs().getTopPaneClockStyle())), room);
         popup.setHeight(height);
         popup.setVerticalOffset(mSidePane ? 0 : -(anchor.getHeight() + height));
         popup.setOnDismissListener(() -> mClockDropdown = null);
-        popup.setAdapter(new ClockDropdownAdapter(prefs().getTopPaneClockStyle()));
+        ClockDropdownAdapter adapter = new ClockDropdownAdapter(prefs().getTopPaneClockStyle());
+        popup.setAdapter(adapter);
         popup.setOnItemClickListener((parent, view, position, id) -> {
-            if (position < CLOCK_STYLES.length) {
-                pickClockStyle(CLOCK_STYLES[position]);
+            Object face = adapter.getItem(position);
+            if (face instanceof String) {
+                // Minimal's row keeps the weight it has; the Weight row moves between the two.
+                if (!(isMinimalStyle((String) face)
+                    && isMinimalStyle(prefs() == null ? null : prefs().getTopPaneClockStyle())))
+                    pickClockStyle((String) face);
                 popup.dismiss();
             }
         });
@@ -3510,8 +3566,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         popup.show();
     }
 
-    /** Six 48dp face rows and the position row, as the popup wants to stand. */
-    private static final int CLOCK_POPUP_HEIGHT_DP = 6 * 48 + 56;
+    /**
+     * The popup's height as it wants to stand: six 48dp face rows and the 56dp position row, and
+     * the 56dp weight row only while Minimal is the face ({@link #clockDropdownRows}), so no
+     * blank strip is left where it is not shown.
+     */
+    public static int clockPopupHeightDp(@Nullable String current) {
+        return 6 * 48 + (isMinimalStyle(current) ? 56 : 0) + 56;
+    }
+
     private static final int CLOCK_POPUP_MIN_HEIGHT_DP = 160;
 
     private void dismissClockDropdown() {
@@ -3538,7 +3601,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(48));
         row.setPaddingRelative(dp(16), 0, dp(16), 0);
-        boolean selected = style.equals(current);
+        boolean selected = style.equals(current)
+            || (isMinimalStyle(style) && isMinimalStyle(current));
 
         TextView name = new TextView(context);
         name.setText(clockStyleLabel(style));
@@ -3553,7 +3617,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         row.addView(name);
 
         TerminalClockWidget preview = new TerminalClockWidget(context, null);
-        applyClockPreview(preview, style);
+        // Minimal's row draws the weight the bar wears.
+        applyClockPreview(preview, selected && isMinimalStyle(style) ? current : style);
         preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         preview.setLayoutParams(new LinearLayout.LayoutParams(0, dp(30), 1f));
         row.addView(preview);
@@ -3637,6 +3702,61 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         prefs().setTopPaneClockAlignment(alignment);
         mHost.refreshTerminalWindowBar();
         syncDirty();
+    }
+
+    /**
+     * Minimal's weight, Thin or Medium, as the theme's segmented buttons under the faces while
+     * Minimal is the face. Like the position row, the popup stays open for a second look.
+     */
+    @NonNull
+    private View clockWeightRow(@NonNull Context context) {
+        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
+        group.setSingleSelection(true);
+        group.setSelectionRequired(true);
+        group.setContentDescription(getString(R.string.termux_surface_tuning_clock_weight));
+        String current = prefs() == null ? null : prefs().getTopPaneClockStyle();
+        String[] styles = {TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
+            TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM};
+        int[] labels = {R.string.termux_surface_tuning_clock_weight_thin,
+            R.string.termux_surface_tuning_clock_weight_medium};
+        final java.util.Map<Integer, String> styleOf = new java.util.HashMap<>();
+        int currentId = View.NO_ID;
+        for (int i = 0; i < styles.length; i++) {
+            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
+                .inflate(R.layout.segment_button, group, false);
+            button.setId(View.generateViewId());
+            button.setText(labels[i]);
+            button.setMaxLines(1);
+            button.setContentDescription(getString(
+                R.string.termux_surface_tuning_clock_weight_description, getString(labels[i])));
+            button.setLayoutParams(new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            group.addView(button);
+            styleOf.put(button.getId(), styles[i]);
+            if (styles[i].equals(current))
+                currentId = button.getId();
+        }
+        if (currentId != View.NO_ID)
+            group.check(currentId);
+        group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
+            String style = styleOf.get(checkedId);
+            if (isChecked && style != null)
+                pickClockStyle(style);
+        });
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(4), dp(16), dp(4));
+        TextView name = new TextView(context);
+        name.setText(R.string.termux_surface_tuning_clock_weight);
+        applyTextAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
+        name.setTextColor(EditorM3.color(row, com.google.android.material.R.attr.colorOnSurface));
+        name.setLayoutParams(new LinearLayout.LayoutParams(dp(84),
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(name);
+        row.addView(group, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
     }
 
     private void pickClockStyle(@NonNull String style) {

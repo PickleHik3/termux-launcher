@@ -52,7 +52,7 @@ public class BuiltinWidgetMeasureTest {
 
         Counting(@NonNull Context context, @NonNull BuiltinWidgetServices services,
                  @NonNull BuiltinWidgetStyle style) {
-            super(context, BuiltinWidgetKind.BATTERY, services, style);
+            super(context, BuiltinWidgetKind.DEVICE, services, style);
         }
 
         @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,
@@ -81,7 +81,7 @@ public class BuiltinWidgetMeasureTest {
         metrics.scaledDensity = DENSITY;
         metrics.densityDpi = 320;
         services = new BuiltinWidgetServices(context, HOST);
-        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Direction.values()[0],
+        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Numerals.values()[0],
             false, null);
     }
 

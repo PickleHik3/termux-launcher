@@ -63,6 +63,56 @@ public final class WidgetPaneFrame extends PaneContentFrame
         return mStyle == null ? null : mStyle.lookGlass();
     }
 
+    /**
+     * The Look's "Widgets on glass". Read once while the page is attached and kept in step by the
+     * store's listener, since a dress pass runs on every slider tick; read on each pass while
+     * detached, when nothing watches the store.
+     */
+    private boolean mWidgetsOnGlass;
+    /** Whether {@link #mWidgetsOnGlass} is kept in step by {@link #mWidgetsOnGlassListener}. */
+    private boolean mWidgetsOnGlassWatched;
+    @Nullable private android.content.SharedPreferences mWidgetsOnGlassStore;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
+        mWidgetsOnGlassListener = (store, key) -> {
+            if (key != null && !com.termux.shared.termux.settings.preferences
+                    .TermuxPreferenceConstants.TERMUX_APP.KEY_WIDGETS_ON_GLASS.equals(key)) {
+                return;
+            }
+            boolean before = mWidgetsOnGlass;
+            readWidgetsOnGlass();
+            if (mWidgetsOnGlass != before) redressWidgets();
+        };
+
+    @Override public boolean widgetsOnGlass() { return mWidgetsOnGlass; }
+
+    private void readWidgetsOnGlass() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
+    }
+
+    private void watchWidgetsOnGlass() {
+        unwatchWidgetsOnGlass();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(getContext(), false);
+        android.content.SharedPreferences store = prefs == null ? null
+            : prefs.getSharedPreferences();
+        mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
+        if (store == null) return;
+        store.registerOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+        mWidgetsOnGlassStore = store;
+        mWidgetsOnGlassWatched = true;
+    }
+
+    private void unwatchWidgetsOnGlass() {
+        if (mWidgetsOnGlassStore != null)
+            mWidgetsOnGlassStore.unregisterOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+        mWidgetsOnGlassStore = null;
+        mWidgetsOnGlassWatched = false;
+    }
+
     @Override public void addGlassWidget(
             @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
         mGlassWidgets.add(widget);
@@ -75,13 +125,46 @@ public final class WidgetPaneFrame extends PaneContentFrame
         syncLookWorn();
     }
 
-    /** The Look holds a blur frame for these widgets only while one of them wears its glass. */
+    /**
+     * Battery saver, outline text and the system contrast, watched while the page is attached:
+     * a change re-dresses its widgets at once instead of at the next dress pass.
+     */
+    @Nullable private com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.SystemWatch
+        mSystemWatch;
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (mSystemWatch == null) {
+            mSystemWatch = new com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass
+                .SystemWatch(getContext(), this::redressWidgets);
+        }
+        mSystemWatch.start();
+        watchWidgetsOnGlass();
+    }
+
+    /**
+     * A system ask for the solid card or the "Widgets on glass" switch changed: the frame is held
+     * or let go, the widgets re-dress.
+     */
+    private void redressWidgets() {
+        syncLookWorn();
+        PaneSurfaceStyle look = widgetGlassStyle();
+        for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget
+                : new java.util.ArrayList<>(mGlassWidgets))
+            widget.onGlassStyle(look);
+    }
+
+    /**
+     * The Look holds a blur frame for these widgets only while one of them would wear its glass:
+     * not for a widget that battery saver, outline text or high contrast draws solid.
+     */
     private void syncLookWorn() {
         com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
         if (look == null) return;
         boolean worn = false;
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets) {
-            if (widget.isGlassOn()) {
+            if (widget.wantsGlassFrame()) {
                 worn = true;
                 break;
             }
@@ -160,6 +243,8 @@ public final class WidgetPaneFrame extends PaneContentFrame
     private float mDownX, mDownY;
     /** True only inside {@link #cancelGridGesture()}: that cancel is the grid's, not the page's. */
     private boolean mCancellingGrid;
+    /** Scratch for the editing tab's resting bounds, asked from the overlay's draw and touch path. */
+    private final RectF mEditTab = new RectF();
 
     public WidgetPaneFrame(Context context) {
         super(context);
@@ -182,6 +267,30 @@ public final class WidgetPaneFrame extends PaneContentFrame
         mControls.setListener(this::runControl);
         addView(mControls, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         applyRestingActions();
+        if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid)
+                .setWidgetEditReservedArea(this::fillEditTabInPane);
+        }
+    }
+
+    /**
+     * The editing tab, where it rests once out, in the widget pane's coordinates: the edit chips
+     * of a widget in that corner move below it, since the tab is drawn over them and takes the
+     * taps there for the whole session.
+     */
+    private boolean fillEditTabInPane(@NonNull android.graphics.Rect out) {
+        if (!mEditing || mControls == null || mGrid == null) return false;
+        RectF tab = mEditTab;
+        if (!mControls.restingTabBounds(tab)) return false;
+        tab.offset(mControls.getLeft() - mGrid.getLeft(), mControls.getTop() - mGrid.getTop());
+        tab.roundOut(out);
+        return !out.isEmpty();
+    }
+
+    private void invalidateWidgetEditChrome() {
+        if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).invalidateWidgetEditChrome();
+        }
     }
 
     public void setHost(@Nullable Host host) {
@@ -211,6 +320,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
             applyRestingActions();
             mControls.dismiss();
         }
+        invalidateWidgetEditChrome();
     }
 
     /** Put the controls away, for a host that moved the wall on. */
@@ -297,6 +407,8 @@ public final class WidgetPaneFrame extends PaneContentFrame
                 getContext().getString(R.string.pane_controls_discard_changes)),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
+        // The read-out's width follows the grid's size, and the chips clear the tab it is on.
+        invalidateWidgetEditChrome();
     }
 
     /** The tick, in the same hand-drawn family the panes' own close and maximise marks use. */
@@ -551,6 +663,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
         if (mControls == null || mPressedCorner == CornerZones.NONE) return;
         if (!mShownAtDown || mShownCornerAtDown != mPressedCorner) mControls.show(mPressedCorner);
         else dismissControls();
+        invalidateWidgetEditChrome();
     }
 
     private void cancelHold() {
@@ -634,6 +747,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
+        if (!mWidgetsOnGlassWatched) readWidgetsOnGlass();
         float density = getResources().getDisplayMetrics().density;
         float requestedRadiusPx = PaneGlass.radiusPx(style, density);
         // A Home page wears no frame (ADR 0008): no slab, no line, the widgets straight on the
@@ -672,6 +786,11 @@ public final class WidgetPaneFrame extends PaneContentFrame
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget
                 : new java.util.ArrayList<>(mGlassWidgets))
             widget.onGlassStyle(look);
+        // The hosted app widgets' cells take the same corner in the same pass.
+        if (look != null && mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView) {
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).grid()
+                .setCellCornerRadius(PaneGlass.radiusPx(look, density));
+        }
     }
 
     /**
@@ -693,6 +812,8 @@ public final class WidgetPaneFrame extends PaneContentFrame
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (mSystemWatch != null) mSystemWatch.stop();
+        unwatchWidgetsOnGlass();
         cancelHold();
         dismissGridSizePopup();
         mRim.cancel();

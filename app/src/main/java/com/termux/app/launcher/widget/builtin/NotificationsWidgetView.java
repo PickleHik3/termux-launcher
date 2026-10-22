@@ -58,10 +58,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     private static final int LIMIT = 50;
     private static final long DEBOUNCE_MS = 300L;
     private static final int ICON_ENTRIES = 12;
-    /** The largest an app icon is drawn (inside the 4×1 avatar disc); icons are kept at this size. */
-    private static final int ICON_DP = 28;
-    private static final String BELL = "\uf0f3";
-    private static final String CLEAR_TAG = "clear";
+    /** The largest an app icon is drawn (the one-row layout's); icons are kept at this size. */
+    private static final int ICON_DP = 36;
 
     private final LruCache<String, Drawable> icons = new LruCache<>(ICON_ENTRIES);
     private final Runnable reload = this::reload;
@@ -71,6 +69,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     };
 
     @Nullable private FrameLayout frame;
+    /** The rows the card was last drawn from, for the icons and taps laid over its plan. */
+    @NonNull private List<NotificationsWidgetData.Group> shownGroups = new ArrayList<>();
     private boolean access;
     /** Null until the first read lands. */
     @Nullable private NotificationsWidgetData.Snapshot snapshot;
@@ -139,7 +139,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         try {
             services.io().execute(() -> {
                 NotificationsWidgetData.Snapshot next =
-                    NotificationsWidgetData.select(readRows(context), System.currentTimeMillis(), LIMIT);
+                    NotificationsWidgetData.select(readRows(context), System.currentTimeMillis(), LIMIT,
+                        LauncherCtlNotificationListener.activeSilentKeys());
                 loadIcons(context, next.iconPackages(6), icons, iconPx);
                 services.main().post(() -> apply(ticket, next));
             });
@@ -213,6 +214,9 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
 
     // ----- layouts --------------------------------------------------------------------------
 
+    /** The plan is laid out at the card's own size never zoomed. */
+    @Override protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) { return false; }
+
     private void render() {
         FrameLayout target = frame;
         if (target == null) return;
@@ -220,229 +224,159 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         BuiltinWidgetUi ui = ui();
         NotificationsWidgetData.Snapshot data = snapshot == null
             ? NotificationsWidgetData.Snapshot.EMPTY : snapshot;
-        View root;
+        Resources res = getResources();
+        NotificationsLayoutPlanner.Notice notice = null;
+        List<NotificationsWidgetData.Group> groups = data.groups;
         if (!access) {
-            root = buildNotice(span(), ui, true);
+            notice = new NotificationsLayoutPlanner.Notice(
+                res.getString(R.string.bw_signals_notifications_allow),
+                res.getString(R.string.bw_signals_notifications_allow_hint));
+            groups = new ArrayList<>();
         } else if (data.count() == 0) {
-            root = buildNotice(span(), ui, false);
-        } else {
-            switch (span()) {
-                case ONE_BY_ONE: root = oneByOne(data, ui); break;
-                case TWO_BY_ONE: root = twoByOne(data, ui); break;
-                case TWO_BY_TWO: root = twoByTwo(data, ui); break;
-                case FOUR_BY_ONE: root = fourByOne(data, ui); break;
-                default: root = fourByTwo(data, ui); break;
-            }
+            notice = new NotificationsLayoutPlanner.Notice(snapshot == null ? ""
+                : res.getString(R.string.bw_signals_notifications_empty), "");
+            groups = new ArrayList<>();
         }
-        target.addView(root, new FrameLayout.LayoutParams(
+        shownGroups = groups;
+        BuiltinWidgetSpan span = span();
+        float fontScale = res.getConfiguration().fontScale;
+        boolean canClear = isPreview() || LauncherCtlNotificationListener.isListenerConnected();
+        NotificationsLayoutPlanner.Words words = words();
+        List<NotificationsWidgetData.Group> shown = groups;
+        NotificationsLayoutPlanner.Notice message = notice;
+        Card card = new Card(getContext(), ui);
+        card.setPlanView(new WidgetPlanView(getContext(), ui.style, (widthDp, heightDp, measure) ->
+            NotificationsLayoutPlanner.plan(span, widthDp, heightDp, fontScale, shown, message,
+                canClear, words, measure)));
+        target.addView(card, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentDescription(describe(data));
     }
 
-    /** The no-access ({@code denied}) and nothing-new states: a quiet bell and one line. */
-    @NonNull
-    private View buildNotice(@NonNull BuiltinWidgetSpan span, @NonNull BuiltinWidgetUi ui, boolean denied) {
-        BuiltinWidgetStyle s = ui.style;
+    /** The plan's words, from the app's strings. */
+    @NonNull private NotificationsLayoutPlanner.Words words() {
         Resources res = getResources();
-        boolean loading = !denied && snapshot == null;
-        if (span == BuiltinWidgetSpan.ONE_BY_ONE) {
-            String line = loading ? "" : res.getString(denied
-                ? R.string.bw_signals_notifications_allow_short : R.string.bw_signals_notifications_empty_short);
-            TextView label = ui.text(line, 11f, s.sansBold, denied ? s.primary : s.onSurfaceVariant);
-            LinearLayout column = ui.column(6, ui.glyph(BELL, 26f, s.onSurfaceVariant), label);
-            column.setGravity(Gravity.CENTER);
-            inset(column, 8, 0, 8, 0, ui);
-            return column;
-        }
-        String line = loading ? "" : res.getString(denied
-            ? R.string.bw_signals_notifications_allow : R.string.bw_signals_notifications_empty);
-        TextView title = ui.text(line, 12.5f, s.sansBold, denied ? s.primary : s.onSurfaceVariant);
-        View body;
-        if (denied) {
-            TextView hint = ui.text(res.getString(R.string.bw_signals_notifications_allow_hint), 11f,
-                s.sans, s.onSurfaceVariant);
-            body = ui.column(3, title, hint);
-        } else {
-            body = title;
-        }
-        if (!span.isTall()) {
-            LinearLayout row = ui.row(12, ui.glyph(BELL, 22f, s.onSurfaceVariant), BuiltinWidgetUi.flex(body));
-            inset(row, span.isWide() ? 16 : 14, 0, 14, 0, ui);
-            return row;
-        }
-        LinearLayout centre = ui.column(8, ui.glyph(BELL, 26f, s.onSurfaceVariant), body);
-        centre.setGravity(Gravity.CENTER);
-        if (body instanceof LinearLayout) ((LinearLayout) body).setGravity(Gravity.CENTER_HORIZONTAL);
-        LinearLayout column = ui.column(8, wide(header(ui, span, null)), BuiltinWidgetUi.flexTall(centre));
-        inset(column, span.isWide() ? 16 : 12, 12, span.isWide() ? 16 : 12, 12, ui);
-        return column;
-    }
-
-    @NonNull
-    private View oneByOne(@NonNull NotificationsWidgetData.Snapshot data, @NonNull BuiltinWidgetUi ui) {
-        BuiltinWidgetStyle s = ui.style;
-        FrameLayout bell = new FrameLayout(getContext());
-        FrameLayout.LayoutParams glyphParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
-        // The badge hangs 6dp above and 12dp right of the bell; the same margin on the other
-        // sides keeps the bell itself centred.
-        glyphParams.setMargins(ui.dp(12), ui.dp(6), ui.dp(12), ui.dp(6));
-        bell.addView(ui.glyph(BELL, 26f, s.onSurface), glyphParams);
-        TextView badge = ui.text(SignalsWidgetFormats.badge(data.count()), 10.5f,
-            SignalsWidgetKit.monoBold(s), onBadge(s));
-        badge.setGravity(Gravity.CENTER);
-        badge.setMinWidth(ui.dp(18));
-        badge.setPadding(ui.dp(4), 0, ui.dp(4), 0);
-        badge.setBackground(ui.rounded(s.error, ui.dp(9)));
-        bell.addView(badge, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(18), Gravity.TOP | Gravity.END));
-        TextView apps = ui.mono(appsLabel(data.apps), 10.5f);
-        LinearLayout column = ui.column(6, bell, apps);
-        column.setGravity(Gravity.CENTER);
-        return column;
-    }
-
-    @NonNull
-    private View twoByOne(@NonNull NotificationsWidgetData.Snapshot data, @NonNull BuiltinWidgetUi ui) {
-        BuiltinWidgetStyle s = ui.style;
-        NotificationsWidgetData.Item item = data.items.get(0);
-        TextView app = ui.text(item.app, 11f, s.sansBold, s.onSurfaceVariant);
-        LinearLayout appRow = ui.row(6, icon(item, 16, 11f, ui), BuiltinWidgetUi.flex(app),
-            ui.mono(time(item), 10.5f));
-        TextView who = ui.sans(item.who, 13f, true);
-        TextView text = ui.text(item.text, 11.5f, s.sans, s.onSurfaceVariant);
-        LinearLayout column = ui.column(5, wide(appRow), who, text);
-        column.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-        inset(column, 14, 0, 14, 0, ui);
-        clickable(column, item);
-        return column;
-    }
-
-    @NonNull
-    private View twoByTwo(@NonNull NotificationsWidgetData.Snapshot data, @NonNull BuiltinWidgetUi ui) {
-        BuiltinWidgetStyle s = ui.style;
-        FitStack list = FitStack.column(getContext());
-        for (int i = 0; i < Math.min(3, data.count()); i++) {
-            NotificationsWidgetData.Item item = data.items.get(i);
-            LinearLayout lines = ui.column(0,
-                ui.text(item.who, 11.5f, s.sansBold, s.onSurface),
-                ui.text(item.text, 10.5f, s.sans, s.onSurfaceVariant));
-            View icon = icon(item, 18, 14f, ui);
-            icon.setPadding(0, ui.dp(1), 0, 0);
-            LinearLayout card = ui.row(8, icon, BuiltinWidgetUi.flex(lines));
-            card.setGravity(Gravity.TOP);
-            card.setBackground(ui.innerRounded(s.container, 12));
-            card.setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7));
-            clickable(card, item);
-            list.addRow(card, ui.dp(8));
-        }
-        LinearLayout column = ui.column(8, wide(header(ui, BuiltinWidgetSpan.TWO_BY_TWO, data)),
-            BuiltinWidgetUi.flexTall(list));
-        inset(column, 12, 12, 12, 12, ui);
-        return column;
-    }
-
-    @NonNull
-    private View fourByOne(@NonNull NotificationsWidgetData.Snapshot data, @NonNull BuiltinWidgetUi ui) {
-        BuiltinWidgetStyle s = ui.style;
-        NotificationsWidgetData.Item item = data.items.get(0);
-        SpannableStringBuilder head = new SpannableStringBuilder();
-        SignalsWidgetKit.append(head, item.who, s.sansBold, 1f, s.onSurface);
-        head.append("  ");
-        SignalsWidgetKit.append(head, getResources().getString(R.string.bw_signals_notifications_app_time,
-            item.app, time(item)), s.monoMedium, 10.5f / 13f, s.onSurfaceVariant);
-        TextView headline = ui.text(head, 13f, s.sansBold, s.onSurface);
-        TextView text = ui.text(item.text, 12f, s.sans, s.onSurfaceVariant);
-        LinearLayout lines = ui.column(3, headline, text);
-        LinearLayout newest = ui.row(12, disc(item, 40, 28, 18f, false, ui), BuiltinWidgetUi.flex(lines));
-        clickable(newest, item);
-        List<View> right = new ArrayList<>();
-        List<NotificationsWidgetData.Item> others = data.otherApps(2);
-        if (!others.isEmpty()) {
-            LinearLayout stack = ui.row(0);
-            for (int i = 0; i < others.size(); i++) {
-                FrameLayout small = disc(others.get(i), 22, 14, 10f, true, ui);
-                if (i > 0) ((LinearLayout.LayoutParams) small.getLayoutParams()).leftMargin = -ui.dp(6);
-                stack.addView(small);
+        return new NotificationsLayoutPlanner.Words() {
+            @NonNull @Override public String headerMessages() {
+                return res.getString(R.string.bw_signals_notifications_header_messages);
             }
-            right.add(stack);
-        }
-        String more = SignalsWidgetFormats.overflow(data.count() - 1);
-        if (!more.isEmpty()) right.add(ui.text(more, 11f, SignalsWidgetKit.monoBold(s), s.onSurfaceVariant));
-        LinearLayout row = right.isEmpty()
-            ? ui.row(12, BuiltinWidgetUi.flex(newest))
-            : ui.row(12, BuiltinWidgetUi.flex(newest), ui.row(6, right.toArray(new View[0])));
-        inset(row, 16, 0, 16, 0, ui);
-        return row;
-    }
-
-    @NonNull
-    private View fourByTwo(@NonNull NotificationsWidgetData.Snapshot data, @NonNull BuiltinWidgetUi ui) {
-        BuiltinWidgetStyle s = ui.style;
-        FitStack list = FitStack.column(getContext());
-        for (int i = 0; i < Math.min(4, data.count()); i++) {
-            NotificationsWidgetData.Item item = data.items.get(i);
-            SpannableStringBuilder head = new SpannableStringBuilder();
-            SignalsWidgetKit.append(head, item.who, s.sansBold, 1f, s.onSurface);
-            head.append("  ");
-            SignalsWidgetKit.append(head, item.app, s.monoMedium, 10f / 12f, s.onSurfaceVariant);
-            LinearLayout lines = ui.column(0, ui.text(head, 12f, s.sansBold, s.onSurface),
-                ui.text(item.text, 11f, s.sans, s.onSurfaceVariant));
-            LinearLayout line = ui.row(10, icon(item, 18, 14f, ui), BuiltinWidgetUi.flex(lines),
-                ui.mono(time(item), 10.5f));
-            line.setPadding(0, ui.dp(5), 0, ui.dp(5));
-            LinearLayout entry = ui.column(0, ui.divider(false), wide(line));
-            clickable(entry, item);
-            list.addRow(entry, ui.dp(2));
-        }
-        LinearLayout header = header(ui, BuiltinWidgetSpan.FOUR_BY_TWO, data);
-        header.setPadding(0, 0, 0, ui.dp(4));
-        LinearLayout column = ui.column(2, wide(header), BuiltinWidgetUi.flexTall(list));
-        inset(column, 16, 12, 16, 12, ui);
-        View clear = header.findViewWithTag(CLEAR_TAG);
-        if (clear != null) SignalsWidgetKit.expandTouch(column, clear, ui);
-        return column;
+            @NonNull @Override public String headerNotifications() {
+                return res.getString(R.string.bw_signals_notifications_caption);
+            }
+            @NonNull @Override public String clearAll() {
+                return res.getString(R.string.bw_signals_notifications_clear_all);
+            }
+            @NonNull @Override public String count(int count) { return SignalsWidgetFormats.badge(count); }
+        };
     }
 
     /**
-     * The caption row of the tall layouts: the count in red on the right at 2×2, "Clear all" at
-     * 4×2 when there is something to clear and the listener can clear it.
+     * The card: the plan's view, with what a plan cannot draw laid over it from its parts' boxes —
+     * the apps' icons, the badges' pills (under the numbers) and the rows' taps.
      */
-    @NonNull
-    private LinearLayout header(@NonNull BuiltinWidgetUi ui, @NonNull BuiltinWidgetSpan span,
-                                @Nullable NotificationsWidgetData.Snapshot data) {
-        BuiltinWidgetStyle s = ui.style;
-        Resources res = getResources();
-        View caption = ui.caption(res.getString(R.string.bw_signals_notifications_caption), BELL,
-            res.getString(span.isWide() ? R.string.bw_signals_notifications_pane
-                : R.string.bw_signals_notifications_pane_short));
-        LinearLayout header;
-        if (data == null || data.count() == 0) {
-            header = ui.row(8, BuiltinWidgetUi.flex(caption));
-        } else if (span.isWide()) {
-            boolean canClear = isPreview() || LauncherCtlNotificationListener.isListenerConnected();
-            if (canClear) {
-                TextView clear = ui.text(res.getString(R.string.bw_signals_notifications_clear_all), 11f,
-                    s.sansBold, s.primary);
-                if (!isPreview()) {
-                    clear.setTag(CLEAR_TAG);
-                    clear.setClickable(true);
-                    clear.setFocusable(true);
-                    clear.setContentDescription(
-                        res.getString(R.string.bw_signals_notifications_clear_all_description));
-                    clear.setOnClickListener(v -> clearAll());
-                }
-                header = ui.row(8, BuiltinWidgetUi.flex(caption), clear);
-            } else {
-                header = ui.row(8, BuiltinWidgetUi.flex(caption));
-            }
-        } else {
-            TextView count = ui.text(SignalsWidgetFormats.badge(data.count()), 10.5f,
-                SignalsWidgetKit.monoBold(s), s.error);
-            header = ui.row(8, BuiltinWidgetUi.flex(caption), count);
+    private final class Card extends FrameLayout {
+        private final BuiltinWidgetUi ui;
+        private final FrameLayout logical;
+        private final FrameLayout under;
+        private final FrameLayout over;
+        @Nullable private WidgetPlanView planView;
+        @Nullable private WidgetLayoutPlan synced;
+
+        Card(@NonNull Context context, @NonNull BuiltinWidgetUi ui) {
+            super(context);
+            this.ui = ui;
+            logical = new FrameLayout(context);
+            under = new FrameLayout(context);
+            over = new FrameLayout(context);
+            addView(logical);
+            logical.addView(under, matchParent());
         }
-        if (!span.isWide()) header.setPadding(ui.dp(2), 0, ui.dp(2), 0);
-        return header;
+
+        void setPlanView(@NonNull WidgetPlanView view) {
+            planView = view;
+            logical.addView(view, matchParent());
+            logical.addView(over, matchParent());
+        }
+
+        @Override protected void onMeasure(int widthSpec, int heightSpec) {
+            setMeasuredDimension(MeasureSpec.getSize(widthSpec), MeasureSpec.getSize(heightSpec));
+        }
+
+        @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            int width = r - l, height = b - t;
+            logical.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+            logical.layout(0, 0, width, height);
+            post(this::sync);
+        }
+
+        /** Lays the overlays out for the plan the view last drew, once per plan. */
+        private void sync() {
+            WidgetPlanView view = planView;
+            WidgetLayoutPlan plan = view == null ? null : view.plan();
+            if (plan == null || plan == synced) return;
+            synced = plan;
+            under.removeAllViews();
+            over.removeAllViews();
+            float density = getResources().getDisplayMetrics().density;
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int widthPx = logical.getWidth();
+            for (WidgetLayoutPlan.Part part : plan.parts) {
+                int n = indexOf(part.id);
+                if (part.id.startsWith("badge.")) {
+                    View pill = new View(getContext());
+                    pill.setBackground(ui.rounded(
+                        ColorUtils.setAlphaComponent(ui.style.primary, 48),
+                        part.box.height * density / 2f));
+                    under.addView(pill, place(part.box, density, rtl, widthPx));
+                } else if (part.id.startsWith("icon.") && n >= 0 && n < shownGroups.size()) {
+                    float side = Math.min(part.box.width, part.box.height);
+                    over.addView(icon(shownGroups.get(n).newest, Math.round(side),
+                        side * 0.7f, ui), place(part.box, density, rtl, widthPx));
+                } else if (part.id.startsWith("row.") && n >= 0 && n < shownGroups.size()) {
+                    if (!isPreview()) {
+                        View tap = new View(getContext());
+                        clickable(tap, shownGroups.get(n).newest);
+                        over.addView(tap, place(part.box, density, rtl, widthPx));
+                    }
+                } else if (part.id.equals("clear.touch") && !isPreview()) {
+                    View tap = new View(getContext());
+                    tap.setClickable(true);
+                    tap.setFocusable(true);
+                    tap.setContentDescription(getResources().getString(
+                        R.string.bw_signals_notifications_clear_all_description));
+                    tap.setOnClickListener(v -> clearAll());
+                    over.addView(tap, place(part.box, density, rtl, widthPx));
+                }
+            }
+        }
+
+        private int indexOf(@NonNull String id) {
+            int dot = id.indexOf('.');
+            if (dot < 0) return -1;
+            String rest = id.substring(dot + 1);
+            int next = rest.indexOf('.');
+            try {
+                return Integer.parseInt(next < 0 ? rest : rest.substring(0, next));
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+
+        @NonNull private FrameLayout.LayoutParams place(@NonNull WidgetLayoutPlan.Box box,
+                                                        float density, boolean rtl, int widthPx) {
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                Math.round(box.width * density), Math.round(box.height * density));
+            params.leftMargin = Math.round(rtl ? widthPx - (box.left + box.width) * density
+                : box.left * density);
+            params.topMargin = Math.round(box.top * density);
+            return params;
+        }
+    }
+
+    @NonNull private static FrameLayout.LayoutParams matchParent() {
+        return new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT);
     }
 
     // ----- pieces ---------------------------------------------------------------------------
@@ -452,7 +386,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
      * picker, or the bell while an icon is missing.
      */
     @NonNull
-    private View icon(@NonNull NotificationsWidgetData.Item item, int boxDp, float glyphSp,
+    private View icon(@NonNull NotificationsWidgetData.Item item, int boxDp, float glyphDp,
                       @NonNull BuiltinWidgetUi ui) {
         View view;
         Drawable cached = item.glyph == null ? icons.get(item.packageName) : null;
@@ -464,28 +398,12 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             view = image;
         } else if (item.glyph != null) {
-            view = ui.glyph(item.glyph, glyphSp, item.glyphColor);
+            view = ui.glyph(item.glyph, glyphDp, item.glyphColor);
         } else {
-            view = ui.glyph(BELL, glyphSp, ui.style.onSurfaceVariant);
+            view = ui.glyph(NotificationsLayoutPlanner.GLYPH_BELL, glyphDp,
+                ui.style.onSurfaceVariant);
         }
-        return BuiltinWidgetUi.size(view, ui.dp(boxDp), ui.dp(boxDp));
-    }
-
-    /** A {@code container} disc holding the app icon, with the card-coloured rim when stacked. */
-    @NonNull
-    private FrameLayout disc(@NonNull NotificationsWidgetData.Item item, int discDp, int iconDp,
-                             float glyphSp, boolean rim, @NonNull BuiltinWidgetUi ui) {
-        BuiltinWidgetStyle s = ui.style;
-        FrameLayout disc = new FrameLayout(getContext());
-        GradientDrawable shape = new GradientDrawable();
-        shape.setShape(GradientDrawable.OVAL);
-        shape.setColor(s.container);
-        if (rim) shape.setStroke(ui.dp(2), s.card);
-        disc.setBackground(shape);
-        disc.addView(icon(item, iconDp, glyphSp, ui),
-            new FrameLayout.LayoutParams(ui.dp(iconDp), ui.dp(iconDp), Gravity.CENTER));
-        disc.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(discDp), ui.dp(discDp)));
-        return disc;
+        return view;
     }
 
     /** A row that opens its app; inert in the picker, whose card takes the tap. */
@@ -499,27 +417,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     }
 
     @NonNull
-    private static <V extends View> V wide(@NonNull V view) {
-        view.setLayoutParams(new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return view;
-    }
-
-    @NonNull
-    private String time(@NonNull NotificationsWidgetData.Item item) {
-        return SignalsWidgetFormats.clockOrDay(item.time, System.currentTimeMillis(),
-            ZoneId.systemDefault(), DateFormat.is24HourFormat(getContext()), Locale.getDefault());
-    }
-
-    @NonNull
     private String appsLabel(int apps) {
         return getResources().getQuantityString(R.plurals.bw_signals_notifications_apps, apps, apps);
-    }
-
-    /** Text on the red badge: the page colour, as the design has it, opaque even on glass. */
-    @ColorInt
-    private static int onBadge(@NonNull BuiltinWidgetStyle s) {
-        return ColorUtils.setAlphaComponent(s.card, 255);
     }
 
     @NonNull
@@ -536,27 +435,28 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
 
     // ----- picker sample --------------------------------------------------------------------
 
-    /** The design's sample: seven notifications from four apps, newest from Ahmed on WhatsApp. */
+    /**
+     * The design's sample: five messages, three from Mum on WhatsApp and two from Alex on
+     * Messages, newest first.
+     */
     @NonNull
     private static NotificationsWidgetData.Snapshot sample(@NonNull BuiltinWidgetStyle s) {
         LocalDate today = LocalDate.now();
         ZoneId zone = ZoneId.systemDefault();
         List<NotificationsWidgetData.Item> items = new ArrayList<>();
         Object[][] rows = {
-            {"WhatsApp", "Ahmed", "Sent the PO, check mail when you can", 13, 32, "\uf232", s.done},
-            {"Gmail", "Elsevier", "Your 2027 renewal quote is ready", 12, 10, "\uf0e0", s.error},
-            {"GitHub", "termux-launcher", "PR #412 approved: widget pane rim", 11, 48, "\uf09b", s.onSurface},
-            {"Telegram", "Termux Launcher", "v1.0.1 released", 9, 15, "\uf2c6", s.primary},
-            {"WhatsApp", "Sara", "On my way", 9, 2, "\uf232", s.done},
-            {"Gmail", "Zoho Desk", "Ticket #2291 was updated", 8, 40, "\uf0e0", s.error},
-            {"GitHub", "dependabot", "Bump gradle to 8.13", 8, 5, "\uf09b", s.onSurface},
+            {"WhatsApp", "Mum", "Are you coming for dinner tonight? Let me know", 14, 10, "", s.done},
+            {"Messages", "Alex", "I've sent the updated plans. See you tomorrow.", 13, 40, "", s.primary},
+            {"WhatsApp", "Mum", "Dinner is at eight", 13, 32, "", s.done},
+            {"Messages", "Alex", "Running late", 12, 10, "", s.primary},
+            {"WhatsApp", "Mum", "Call me when you can", 9, 15, "", s.done},
         };
         for (int i = 0; i < rows.length; i++) {
             Object[] row = rows[i];
             long time = today.atTime((Integer) row[3], (Integer) row[4]).atZone(zone).toInstant().toEpochMilli();
             items.add(new NotificationsWidgetData.Item("sample" + i, "sample." + row[0], (String) row[0],
-                (String) row[1], (String) row[2], time, (String) row[5], (Integer) row[6]));
+                (String) row[1], (String) row[2], time, (String) row[5], (Integer) row[6], true));
         }
-        return new NotificationsWidgetData.Snapshot(items, 4);
+        return new NotificationsWidgetData.Snapshot(items, 2);
     }
 }

@@ -412,6 +412,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 LauncherSchemeTheme.invalidate();
                 scheduleTermuxActivityStylingSync(true);
                 break;
+            case "widgets_on_glass":
+                // Each widget page re-dresses its widgets on the styling pass.
+                mPreferences.setWidgetsOnGlassEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case KEY_MOTION_LIGHT:
                 // Read by each pane as a motion starts: nothing to restyle.
                 mPreferences.setFancierGlassMotionLightEnabled(value);
@@ -482,6 +487,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isWallpaperParallaxEnabled();
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
+            case "widgets_on_glass":
+                return mPreferences.isWidgetsOnGlassEnabled();
             case KEY_MOTION_LIGHT:
                 return mPreferences.isFancierGlassMotionLightEnabled();
             case "app_launcher_bw_icons":

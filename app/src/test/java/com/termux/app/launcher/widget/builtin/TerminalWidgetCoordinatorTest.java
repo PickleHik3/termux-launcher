@@ -201,6 +201,35 @@ public class TerminalWidgetCoordinatorTest {
         assertTrue(holds(widget, shell));
     }
 
+    /**
+     * The terminal's view spans the card at every span, the same clearance off the left as off
+     * the right: its rows and columns are read from that width, so nothing of the card is left to
+     * a narrower grid (#103). An empty right quarter on a device is the text the shell printed,
+     * not the room the terminal was given.
+     */
+    @Test public void theTerminalSpansTheCardAtEverySpan() {
+        host.ready = true;
+        TerminalWidgetView widget = place();
+        int[][] spans = {{760, 380}, {760, 760}, {370, 380}, {370, 180}, {1000, 380}};
+        for (int[] size : spans) {
+            cell.setLayoutParams(new FrameLayout.LayoutParams(size[0], size[1]));
+            idle();
+            TerminalView view = terminalIn(widget);
+            assertNotNull("a terminal in the card", view);
+            int[] card = new int[2];
+            int[] text = new int[2];
+            widget.getLocationInWindow(card);
+            view.getLocationInWindow(text);
+            int left = text[0] - card[0];
+            int right = (card[0] + widget.getWidth()) - (text[0] + view.getWidth());
+            String at = size[0] + "x" + size[1];
+            assertEquals("the card is the cell, " + at, size[0], widget.getWidth());
+            assertEquals("as far off the right as off the left, " + at, left, right);
+            assertTrue("only the corner's clearance is kept off each side, " + at + ": " + left,
+                left >= 0 && left <= Math.ceil(widget.cornerRadiusPx()));
+        }
+    }
+
     @Test public void editingHomeGivesTheKeyboardBack() {
         host.ready = true;
         place();
@@ -218,7 +247,7 @@ public class TerminalWidgetCoordinatorTest {
     @NonNull private TerminalWidgetView place() {
         BuiltinWidgetServices services = new BuiltinWidgetServices(activity, new ServicesHost());
         BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(activity,
-            BuiltinWidgetStyle.Direction.values()[0], false, null);
+            BuiltinWidgetStyle.Numerals.values()[0], false, null);
         TerminalWidgetView widget = (TerminalWidgetView) BuiltinWidgetFactory.create(activity,
             BuiltinWidgetKind.TERMINAL, services, style);
         widget.setWidgetId(ID);
@@ -236,6 +265,17 @@ public class TerminalWidgetCoordinatorTest {
         for (int i = 0; i < group.getChildCount(); i++)
             if (holds(group.getChildAt(i), shell)) return true;
         return false;
+    }
+
+    @Nullable private static TerminalView terminalIn(@NonNull View view) {
+        if (view instanceof TerminalView) return (TerminalView) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TerminalView found = terminalIn(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static void idle() {
