@@ -21690,6 +21690,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             pad.setTapListener(() -> {
                 if (mX11Display != null) mX11Display.onDisplayTap();
             });
+            pad.setModeSwitchListener(this::switchDisplayKeyboardMode);
             mDisplayTouchpad = pad;
         }
         // The keyboard's frame is the pad's: the host wraps its content, so a match-parent pad
@@ -21872,8 +21873,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Keyboard2View keys = inGap ? (Keyboard2View) keyboardView : null;
         pad.setInSplitGap(inGap, keys == null ? 0f : keys.getKeyCapRadiusPx(),
             keys == null ? 0 : keys.getKeyCapColor());
+        syncDisplayTouchpadModeSwitch(pad);
         return com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap, seat,
             keyboardView == null ? 0 : keyboardView.getHeight(), density);
+    }
+
+    /**
+     * The pad's keyboard mode button shows this orientation's keyboard mode, and is there only
+     * where the mode decides anything: over a floating keyboard it is not.
+     */
+    private void syncDisplayTouchpadModeSwitch(
+            @NonNull com.termux.app.x11.DisplayTouchpadView pad) {
+        PlaceLayout layout = currentPlaceLayout();
+        pad.setKeyboardModeSwitch(
+            com.termux.app.x11.DisplayTouchpadPlacement.offersModeSwitch(inAppKeyboardForm()),
+            layout.keyboardMode == PlaceLayout.KeyboardMode.OVERLAY);
+    }
+
+    /**
+     * The pad's keyboard mode button: this orientation's keyboard mode flips between Overlay and
+     * Resize, saved where the Layout editor reads it. The pad stands in the keyboard's frame, so
+     * the one geometry pass that follows floats it over the display or gives it the display's
+     * room, as it would the keyboard. The display holds its size over that pass and takes the new
+     * one after it, so the X screen is resized once; an overlaying keyboard also paints opaque
+     * rather than glass, so the stack is re-rendered with it.
+     */
+    private void switchDisplayKeyboardMode() {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return;
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (frame != null) frame.holdHostSizeOverNextLayout();
+        PlaceLayout.KeyboardMode mode = com.termux.app.x11.DisplayTouchpadPlacement
+            .switchKeyboardMode(store, currentPlaceOrientation());
+        Logger.logInfo(LOG_TAG, "Touchpad switched the keyboard mode to " + mode);
+        if (mDisplayTouchpad != null) syncDisplayTouchpadModeSwitch(mDisplayTouchpad);
+        mGeometry.requestNow(GeometryScheduler.Reason.KEYBOARD,
+            GeometryScheduler.ResizePolicy.NOW);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
     }
 
     private void createWidgetPaneController() {

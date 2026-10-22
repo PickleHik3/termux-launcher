@@ -2120,6 +2120,12 @@
     <string name="tool_mouse_toggle">Mouse mode</string>
     <string name="extra_key_readout_mouse_mode_on">Mouse mode on</string>
     <string name="extra_key_readout_mouse_mode_off">Mouse mode off</string>
+    <!-- The display touchpad's two buttons, read by a screen reader. The mode button's state is
+         the keyboard mode (GLOSSARY: Keyboard mode), the same value the Layout editor shows. -->
+    <string name="display_touchpad_exit_description">Leave mouse mode</string>
+    <string name="display_touchpad_keyboard_mode_description">Keyboard mode</string>
+    <string name="display_touchpad_keyboard_mode_overlay">Overlay</string>
+    <string name="display_touchpad_keyboard_mode_resize">Resize</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
