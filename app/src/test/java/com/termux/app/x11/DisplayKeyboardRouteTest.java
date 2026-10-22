@@ -46,6 +46,30 @@ public class DisplayKeyboardRouteTest {
         assertEquals(false, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(true, true, false));
     }
 
+    /** A keyboard the drawer raised, still up and not touched by the user, goes down with it. */
+    @org.junit.Test
+    public void aKeyboardTheDrawerRaisedGoesDownWhenTheDrawerCloses() {
+        assertEquals(true, DisplayKeyboardRoute.drawerCloseLowers(true, false, true));
+    }
+
+    /** A keyboard that was already up when the drawer opened is the user's, and stays. */
+    @org.junit.Test
+    public void aKeyboardThatWasAlreadyUpStaysWhenTheDrawerCloses() {
+        assertEquals(false, DisplayKeyboardRoute.drawerCloseLowers(false, false, true));
+    }
+
+    /** Pinned by hand while the drawer was open, it is the user's now, and stays. */
+    @org.junit.Test
+    public void aKeyboardTheUserPinnedMeanwhileStaysWhenTheDrawerCloses() {
+        assertEquals(false, DisplayKeyboardRoute.drawerCloseLowers(true, true, true));
+    }
+
+    /** Already put away by hand, there is nothing left to lower. */
+    @org.junit.Test
+    public void aKeyboardAlreadyDownIsLeftBe() {
+        assertEquals(false, DisplayKeyboardRoute.drawerCloseLowers(true, false, false));
+    }
+
     /** An empty Display page has nothing to type into, so the keyboard is the launcher's. */
     @Test
     public void withNoDisplayRunningTheRequestFallsBackToTheBuiltInKeyboard() {
