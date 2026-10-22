@@ -105,13 +105,28 @@ goes away until they do.
 
 Work reaches the channel only after all of these:
 
-1. **Used on pong** as a release-type build (debuggable builds go to the emulator; pong stays on
-   release builds), in normal use, with no crash or freeze.
+1. **Used on pong** for a day in normal use, with no crash or freeze: as a staging build while
+   it is developed, then as a release build of the candidate commit
+   (`BUILD_TYPE=release scripts/dev-install.sh`) before the cut. The release build is the drop
+   candidate's check, and the only place pong runs one.
 2. **Suite green** on the branch with `pre` merged in.
 3. **Within budget**: frame-path work holds the pong baselines in
    [`performance.md`](performance.md); an on-device AI load is admitted at its intended context
    with no `oom_guard` stop in `tai logs`.
 4. **The developer says it goes in the next drop.**
+
+Before each drop is cut, two checks run on the emulator, not pong, because a long-lived phone
+cannot show either:
+
+- **Fresh install**, with no network until the bootstrap step: the download-and-verify path and
+  the first-run flow come up.
+- **Upgrade install** over the previous stable's APK, with a store that has customised surfaces (a
+  Home dock height, Corners or Margin set apart, a non-default dock style): migrations run and
+  the user's look survives. The item for this is the migrations one in
+  `project-docs/device-checks.md`.
+
+The shipped drop itself is installed on pong from the GitHub release through Obtainium, never
+from a local build, so the real signing key, ABI splits and bootstrap download are exercised.
 
 It then gets a line under `## Experimental` in `project-docs/prerelease-notes.md` naming its pull
 request or branch, with the status `<!-- stays: P1 -->`.
@@ -157,7 +172,8 @@ The promotion, step by step:
 2. On `dev`, `git cherry-pick -x` each ready feature's commits, oldest first (`-m 1` for a merge
    commit). Keep `dev`'s `versionName`.
 3. Run the full suite on `dev`, build and install it on pong with `BUILD_TYPE=release scripts/dev-install.sh`
-   (it checks the launcher came back up), and use each promoted feature once. This combination never ran
+   (it checks the launcher came back up), and use each promoted feature once; run the two per-drop
+   emulator checks from "From pong to `pre`" too. This combination never ran
    on the channel; without this step the cut is not ready.
 4. Cut the minor as in "Cutting a stable release". The notes' `## New` comes from the promoted
    lines; those lines leave `prerelease-notes.md`.

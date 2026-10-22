@@ -5,7 +5,8 @@
 #
 # Staging (./gradlew :app:assembleStaging) is the release build's R8 shrinking,
 # still debuggable. BUILD_TYPE=debug installs the unshrunk debug APK instead.
-# BUILD_TYPE=release is what pong runs: release builds have no ABI splits and come out
+# Pong's development builds are staging (the default). BUILD_TYPE=release is for a drop
+# candidate on pong, a day before a pre-release cut: release builds have no ABI splits and come out
 # unsigned without the CI's TERMUX_RELEASE_* variables, so this takes the universal APK,
 # keeps only arm64-v8a's native libs, drops the bootstraps and signs it with the same test
 # key every build uses. It builds the release APK itself, versioned
