@@ -28,6 +28,24 @@ public class DisplayKeyboardRouteTest {
         assertEquals(Target.NONE, DisplayKeyboardRoute.decide(true, false, true, false));
     }
 
+    /**
+     * The drawer's search types through the launcher's keyboard, and over a display the focus is
+     * the display's own, so the system keyboard it would ask for is refused as "not served": the
+     * launcher's keyboard has to be raised for it there.
+     */
+    @org.junit.Test
+    public void theDrawerSearchRaisesTheBuiltInKeyboardOverARunningDisplay() {
+        assertEquals(true, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(true, true, true));
+    }
+
+    /** Anywhere else the terminal view is served, and the request keeps its old way. */
+    @org.junit.Test
+    public void theDrawerSearchLeavesEveryOtherPlaceAlone() {
+        assertEquals(false, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(false, true, true));
+        assertEquals(false, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(true, false, true));
+        assertEquals(false, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(true, true, false));
+    }
+
     /** An empty Display page has nothing to type into, so the keyboard is the launcher's. */
     @Test
     public void withNoDisplayRunningTheRequestFallsBackToTheBuiltInKeyboard() {
