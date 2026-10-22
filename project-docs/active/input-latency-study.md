@@ -752,9 +752,21 @@ Findings:
 - From finger-up to the character on screen is about 35 ms. From finger-down it is about 109 ms, of
   which the finger rest is about 74 ms (commit stays on release, spec decision 2).
 
-Owed: a run with Terminal effect on; a 20 s at-rest trace for the idle audit; a test of whether
-stopping the press-fade stream (or limiting it to the key's own bounds) removes the Buffer Stuffing
-and the extra vsync.
+**Run 3, Terminal effect on** (inline echo, 195 keys): commit → echo drawn 17.1 / 20.7 ms (p50 / p90;
+max 361.5 ms was one command's output, not an echo). Echo drawn → presented rose to
+**20.5 / 24.8 / 25.7 ms**, about 5 ms more than with the effect off. App frames: 2852, of which only 19
+were App Deadline Missed, so the effect does not drop frames. It delays presentation by about half a
+vsync, which fits the `RenderEffect`'s GPU pass **(inference)**. `Effect.retro.refresh` ran 28,570
+times, about 10 per frame, at 0.02 ms each: cheap, but redundant.
+
+**Idle, 20 s at rest on a terminal pane** (no input): 6 app frames, in pairs about 6 s apart. No
+`frames.*` counter fired, so the 6 s source is not one of the instrumented loops **(unverified which)**.
+At rest the launcher is effectively idle.
+
+Owed: identify the 6 s idle wake; test whether stopping the press-fade stream, or limiting it to the
+key's own bounds, removes the Buffer Stuffing and the extra vsync. Spec decision 6 (redraw Terminal
+effect as a Paint overlay) was gated on missed frames; it misses none, but it adds about 5 ms to
+presentation, so that is the developer's call.
 
 ## What could not be verified from a primary source
 
