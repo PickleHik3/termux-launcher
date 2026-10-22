@@ -74,9 +74,11 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).
 - **The keyboard floats.** In either orientation the keyboard comes up over the display instead
   of squeezing it, so the picture keeps the size it was given and nothing on it moves as you type,
-  whether the keyboard came up from a text field or by hand. Either orientation can be set to make
-  room for the keyboard instead in the Layout editor opened on a display window, after switching
-  to the orientation you want it for.
+  whether the keyboard came up from a text field or by hand. To make room for the keyboard
+  instead, press the keyboard mode button on the touchpad (shown on the pad while the keyboard is
+  docked); it switches the orientation the phone is in, and each orientation keeps its own. If an
+  older version left the display making room in portrait without you choosing it, the update
+  puts it back to floating once; the same button switches it back.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts or stops the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap

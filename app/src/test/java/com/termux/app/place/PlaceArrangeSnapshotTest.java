@@ -12,6 +12,7 @@ import android.os.Build;
 
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -323,5 +324,43 @@ public class PlaceArrangeSnapshotTest {
         places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         assertEquals(normalEntry,
             PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature());
+    }
+
+    /**
+     * A keyboard mode the layout never stored is put back absent, not pinned at the default it
+     * read: pinning is how portrait kept Resize after Overlay became its default.
+     */
+    @Test
+    public void aRestoreLeavesAnAbsentKeyboardModeAbsent() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+        assertFalse(places.hasStoredKeyboardMode(PORTRAIT));
+
+        entry.restore(places);
+        assertFalse(prefs.contains("layout.portrait.keyboard_mode"));
+        assertFalse(prefs.contains("layout.landscape.keyboard_mode"));
+
+        // And a mode switched mid-session goes away again, rather than being reverted to a key.
+        places.setKeyboardMode(PORTRAIT, KeyboardMode.RESIZE);
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        entry.restore(places);
+        assertFalse(prefs.contains("layout.portrait.keyboard_mode"));
+        assertEquals(KeyboardMode.OVERLAY, places.keyboardMode(PORTRAIT));
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+    }
+
+    /** A keyboard mode the layout did store comes back as stored. */
+    @Test
+    public void aRestorePutsAStoredKeyboardModeBack() {
+        places.setKeyboardMode(PORTRAIT, KeyboardMode.RESIZE);
+        places.setKeyboardMode(LANDSCAPE, KeyboardMode.OVERLAY);
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+
+        places.clearKeyboardMode(PORTRAIT);
+        places.setKeyboardMode(LANDSCAPE, KeyboardMode.RESIZE);
+        entry.restore(places);
+
+        assertEquals("resize", prefs.getString("layout.portrait.keyboard_mode", null));
+        assertEquals("overlay", prefs.getString("layout.landscape.keyboard_mode", null));
     }
 }
