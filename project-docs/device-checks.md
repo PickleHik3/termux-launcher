@@ -18,6 +18,12 @@ under twenty items; past that, the oldest are re-judged first.
   the dock on Home, on a window with the keyboard down and with it up, and mid-swipe → the pinned
   icons are the same size in every shot and the window's dock is Home's plus the extra-keys row;
   in landscape with the keyboard up the terminal still shows several lines · emulator.
+- 2026-10-22 · commit "fix(terminal): text on thin glass leans to pale ink, whatever the theme" ·
+  light theme, wallpaper colours on, a dark wallpaper, terminal opacity below 50 → terminal text is
+  light on dark, in every pane; then a busy wallpaper → still light; then a bright white wallpaper
+  at opacity 10 → dark text comes back (the measured ground overrules the leaning); terminal
+  opacity raised to 50 or more in the Appearance editor → dark text on the light glass, both
+  live and after Done; dark theme unchanged throughout. Before/after screenshots · emulator.
 - 2026-10-22 · PR #99 (244fcf46a, migrations 9–13) · Upgrade: install over a release from before
   this branch with a Home dock height, Corners or Margin set apart from the Workspace's and a
   Prompt line or Taskbar dock style picked → Home keeps its rows (Home's own on only if rows
