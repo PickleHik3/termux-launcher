@@ -59,10 +59,10 @@ public final class GuiAppsSetup {
     public static final String WINDOW_MANAGER_PACKAGE = "openbox";
 
     /**
-     * fcitx5 and its GTK 3 module, which every starter app uses. fcitx5-qt is left to whoever
-     * installs a Qt app: it brings all of Qt 6 with it.
+     * fcitx5 and its toolkit modules: GTK 3, which every starter app uses, and Qt, so a Qt app
+     * installed later reports focus too rather than leaving taps in it to the cursor alone.
      */
-    private static final String[] INPUT_METHOD_PACKAGES = {"fcitx5", "fcitx5-gtk3"};
+    private static final String[] INPUT_METHOD_PACKAGES = {"fcitx5", "fcitx5-gtk3", "fcitx5-qt"};
 
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";

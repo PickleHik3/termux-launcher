@@ -62,7 +62,7 @@ public class GuiAppsSetupTest {
     @Test public void termuxsX11RouteInstallsFcitx5ForTextFieldFocusAndVajsDoesNot() {
         for (Set<StarterApp> starters : java.util.Arrays.asList(ALL, NONE)) {
             String termux = command(Route.X11_REPO, Distro.DEBIAN, starters);
-            assertTrue(termux.contains(" fcitx5 fcitx5-gtk3"));
+            assertTrue(termux.contains(" fcitx5 fcitx5-gtk3 fcitx5-qt"));
             assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
                 TourEdition.VAJ).contains("fcitx5"));
             assertFalse(command(Route.DISTRO, Distro.DEBIAN, starters).contains("fcitx5"));
@@ -70,7 +70,7 @@ public class GuiAppsSetupTest {
     }
 
     @Test public void theX11RouteWithNothingTickedIsJustTheRepository() {
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt",
             command(Route.X11_REPO, Distro.DEBIAN, NONE));
     }
 
@@ -78,7 +78,7 @@ public class GuiAppsSetupTest {
         String command = command(Route.X11_REPO, Distro.DEBIAN,
             EnumSet.of(StarterApp.TEXT_EDITOR));
 
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 mousepad",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt mousepad",
             command);
     }
 
@@ -326,7 +326,7 @@ public class GuiAppsSetupTest {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
         assertEquals("pkg install -y x11-repo && pkg install -y "
-                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 firefox pcmanfm mousepad xfce4-terminal",
+                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt firefox pcmanfm mousepad xfce4-terminal",
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
     }
 
