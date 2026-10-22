@@ -1651,14 +1651,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The system keyboard's bottom inset as last dispatched, 0 while it is down. */
     private int mLastDispatchedImeBottomPx;
     private int mAppliedTerminalFlushPaddingPx;
-    /** The dock's rows and the bottom status band as the last geometry pass laid them out. */
-    private int mAppliedDockContentHeightPx;
     /**
-     * The room the accessory stack last took from the content root, after the keyboard overlay
-     * handed its share back. -1 until the first geometry pass, so that pass always counts as a
-     * change.
+     * The bottom stack the last geometry pass applied, as Stack layout answered it (ADR 0011):
+     * the one record every reader of the stack's numbers reads, instead of a cache apiece. Null
+     * until the first pass, so that pass always counts as a change.
      */
-    private int mAppliedContentReservationPx = -1;
+    @Nullable private com.termux.app.place.StackLayout.Result mAppliedStack;
     /** Set when {@link WallpaperManager#getDrawable()} threw for want of the storage permission. */
     private boolean mWallpaperReadPermissionDenied;
     private boolean mWallpaperReadPermissionPromptShowing;
@@ -15812,15 +15810,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Ceiling for the accessory stack: whatever the window holds minus the status inset, the
-     * window bar, and a minimum usable terminal slice. Returns MAX_VALUE before first layout.
+     * window bar, and a minimum usable terminal slice, before the margin under the stack comes
+     * off it (Stack layout does that). {@code NO_CEILING} before first layout.
      */
-    private int computeMaxAccessoryStackHeightPx(int accessoryBottomMarginPx) {
+    private int accessoryStackCeilingBeforeMarginPx() {
         // The root relative layout already sits below the status-bar inset, so only the window bar
         // and the reserved terminal slice come out of its height.
         View root = findViewById(R.id.activity_termux_root_relative_layout);
         int rootHeightPx = root != null ? rootRelativeLayoutHeightPx(root) : 0;
         if (rootHeightPx <= 0)
-            return Integer.MAX_VALUE;
+            return com.termux.app.place.StackLayout.NO_CEILING;
         // A bar standing in a column takes no height from the stack at all; only a row does — and
         // a row along the bottom is a band of this very stack, counted into what is measured
         // against the ceiling rather than taken off the ceiling itself. Only a top row is content
@@ -15841,8 +15840,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // extra-keys row and a keyboard came to share 600px with four lines of terminal.
         int minTerminalPx = CanvasBudgetPolicy.canvasFloorPx(rootHeightPx,
             currentPlaceOrientation(), getResources().getDisplayMetrics().density);
-        return Math.max(0, rootHeightPx - windowBarPx - azBarTopPx - minTerminalPx
-            - Math.max(0, accessoryBottomMarginPx));
+        return rootHeightPx - windowBarPx - azBarTopPx - minTerminalPx;
     }
 
     public void setTerminalToolbarHeight() {
@@ -15896,8 +15894,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the slide holds the content, whatever the stack lays out floats over it.
         boolean keyboardOverlays = mTravelHoldsContent
             || KeyboardOverlayPolicy.overlays(mLastWallPage, currentPlaceLayout());
-        int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
-            keyboardOverlays, state.keyboardShown, state.keyboardHeight);
         // The keyboard coming and going is also when the place's claim on the system IME changes.
         applyPlaceSystemImeOwner();
         int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
@@ -15907,78 +15903,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminalToolbarViewPager.setLayoutParams(toolbarLayoutParams);
         }
 
-        // Measured without a squeeze first: the projected stack is what the rows would take.
-        mDockSqueezePx = 0;
-        DockLayout dockMetrics = getDockLayout();
-        int accessoryBottomMarginPx = resolveAccessoryStackBottomMarginPx(state);
-        // The stack has no natural ceiling: dock rows + keyboard can otherwise consume the whole
-        // window and crush the terminal and its window bar to zero height. Shed the overflow from
-        // the apps row (its icons rescale to the row-height hint); the keyboard's own screen-share
-        // cap bounds the rest.
-        int maxAccessoryStackPx = computeMaxAccessoryStackHeightPx(accessoryBottomMarginPx);
-        // A status bar standing along the bottom is a band of this stack, wherever in the order it
-        // was put. It is the same height it took off the terminal when it had a stack of its own
-        // above the dock, so the ceiling above and the content below come out where they were.
-        int statusBandPx = bottomStatusBandPx();
-        // Bands under the keyboard stand on a card with air above and under it, and that air is
-        // this stack's height like the rows are: the card's sheet reports no size of its own, so
-        // what is counted here is exactly what the column lays out. Zero with no band there.
-        boolean bandsUnderKeyboard = state.toolbarShown
-            && !EdgeStackPolicy.underKeyboard(currentPlaceLayout()).isEmpty();
-        int stackEdgeGapPx = ChromePolicy.bottomEdgeGapPx(isRoundedDockStyle(),
-            dockMetrics.capsuleBottomGapPx);
-        int underKeyboardAirPx = com.termux.app.dock.UnderKeyboardBand.airPx(dockMetrics,
-            stackEdgeGapPx, bandsUnderKeyboard);
-        int projectedStackPx = computeAccessoryStackHeight(
-            dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) + statusBandPx
-                + underKeyboardAirPx,
-            0, state.keyboardHeight);
-        // The ceiling exists to keep a usable slice of content under the stack. A floating keyboard
-        // takes none of that slice, so only what the stack really costs the content is measured
-        // against it — otherwise the apps row sheds height to protect room nothing is taking.
-        if (projectedStackPx - keyboardOverlapPx > maxAccessoryStackPx) {
-            mDockSqueezePx = projectedStackPx - keyboardOverlapPx - maxAccessoryStackPx;
-            dockMetrics = getDockLayout();
-        }
-        boolean dockMoved = applyDockLayout(dockMetrics);
-        dockMoved |= applyUnderKeyboardBandAir(dockMetrics, stackEdgeGapPx, bandsUnderKeyboard);
-        int dockContentHeightPx = (state.toolbarShown
-            ? dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0)
-            + statusBandPx + underKeyboardAirPx;
-        mAppliedDockContentHeightPx = dockContentHeightPx;
-        int accessoryContentHeightPx = computeAccessoryStackHeight(
-            dockContentHeightPx, 0, state.keyboardHeight);
+        // The whole bottom stack from one snapshot (Stack layout): the squeeze is worked out there
+        // and flows into Dock geometry's snapshot, so this pass applies one dock.
+        com.termux.app.place.StackLayout.Input stackIn = new com.termux.app.place.StackLayout.Input(
+            dockSnapshot(currentPlaceLayout(), stackDressPage()));
+        stackIn.toolbarShown = state.toolbarShown;
+        stackIn.keyboardShown = state.keyboardShown;
+        stackIn.extraKeysRowEnabled = state.extraKeysRowEnabled;
+        stackIn.toolbarHeightPx = toolbarHeightPx;
+        stackIn.keyboardHeightPx = state.keyboardHeight;
+        stackIn.statusBandPx = bottomStatusBandPx();
+        stackIn.roundedDockStyle = isRoundedDockStyle();
+        stackIn.imeLiftPx = mImeLiftPx;
+        stackIn.ceilingBeforeMarginPx = accessoryStackCeilingBeforeMarginPx();
+        stackIn.keyboardOverlays = keyboardOverlays;
+        stackIn.dockOverlays = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        stackIn.systemImeTakePx = systemImeTakePx();
+        stackIn.travelHoldsContent = mTravelHoldsContent;
+        stackIn.heldReservationPx = mTravelHeldReservationPx;
         // The embedded keyboard suspends flush absorption: its height is user-scaled and its
         // surface defines its own boundary, so the split remainder halves would surface as
         // wallpaper bands above the gesture-navigation inset instead of hiding in dock glass.
         // Tiled splits couple mTerminalView's window position to the very accessory geometry this
         // padding feeds back into (its pane reflows every time the stack resizes), so the modulo
-        // calc below never settles — it just chases its own tail and flickers the bottom pane/dock.
-        // Skip it whenever more than one pane is tiled, same as the keyboard-shown/toolbar-hidden
-        // cases. A focused FLOATING pane is the same coupling with one hop more: the float's
-        // fractional bounds re-project on every host resize, so mTerminalView's top moves with the
-        // very stack height the modulo feeds — tap a float and the whole band flickered at layout
-        // speed until focus left it.
-        boolean activePaneFloating = mPaneController != null && mPaneController.isActivePaneFloating();
+        // calc never settles; it just chases its own tail and flickers the bottom pane/dock. Skip
+        // it whenever more than one pane is tiled. A focused FLOATING pane is the same coupling
+        // with one hop more: the float's fractional bounds re-project on every host resize.
         // The system IME stands the absorption down too: the remainder halves only hide when the
-        // band rests on the screen edge — above a keyboard they surface as a wallpaper band
-        // between the extra-keys glass and the IME, read as a stray gap.
+        // band rests on the screen edge, and above a keyboard they read as a stray gap.
         // And it is the terminal's own device: it exists to land the dock on a whole terminal row.
         // On a place with no rows to land on it is only a height that changes as the keyboard comes
-        // and goes — on the home place, a grid re-cut around every widget for nothing.
-        // The rows a slide across the seam brings in from Home are Home's, and do not wear it.
+        // and goes. The rows a slide across the seam brings in from Home are Home's, and do not
+        // wear it.
+        boolean activePaneFloating = mPaneController != null && mPaneController.isActivePaneFloating();
         boolean terminalOnScreen =
             stackDressPage() == com.termux.app.wall.PaneWallPage.TERMINAL;
-        int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown
-            || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() || !terminalOnScreen
-            ? 0
-            : resolveTerminalFlushDockPaddingPx(accessoryContentHeightPx, accessoryBottomMarginPx);
-        mAppliedTerminalFlushPaddingPx = terminalFlushPaddingPx;
-        int combinedHeight = computeAccessoryStackHeight(
-            dockContentHeightPx, terminalFlushPaddingPx, state.keyboardHeight);
+        stackIn.flushAllowed = visiblePaneCount() <= 1 && !activePaneFloating && !isImeVisible()
+            && terminalOnScreen;
+        stackIn.flush = this::resolveTerminalFlushDockPaddingPx;
+        com.termux.app.place.StackLayout.Result stack =
+            com.termux.app.place.StackLayout.layout(stackIn, mDockGeometry);
+        // The last pass's squeeze, an input to every snapshot asked between two passes.
+        mDockSqueezePx = stack.squeezePx;
+        mAppliedTerminalFlushPaddingPx = stack.flushPaddingPx;
+
+        boolean dockMoved = applyDockLayout(stack.dock);
+        dockMoved |= applyUnderKeyboardBandAir(stack.underKeyboardTopMarginPx,
+            stack.underKeyboardBottomMarginPx);
+        int accessoryBottomMarginPx = stack.bottomMarginPx;
+        int combinedHeight = stack.stackHeightPx;
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
-        int flushBottomInsetPx = terminalFlushPaddingPx / 2;
+        int flushBottomInsetPx = stack.flushBottomInsetPx;
         boolean flushInsetChanged = accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx;
         if (flushInsetChanged) {
             accessoryStackContainer.setPadding(
@@ -15996,58 +15972,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
         // Home floats are laid out between the status bar and the dock, and lifted over the
         // keyboard: they hear the stack's rows from this pass.
-        // The system keyboard's take on the root: Home's content reaches past it, and the floats
-        // meet the stack it pushes up as they meet the in-app keyboard.
-        int systemImeTakePx = systemImeTakePx();
-        mHomeFloatDockPx = dockContentHeightPx + terminalFlushPaddingPx;
-        mHomeFloatStackPx = combinedHeight;
+        mHomeFloatDockPx = stack.homeFloatDockPx;
+        mHomeFloatStackPx = stack.homeFloatStackPx;
         mHomeFloatKeyboardShown = state.keyboardShown;
-        mHomeFloatImePushPx = systemImeTakePx
-            + (state.toolbarShown || state.keyboardShown ? Math.max(0, mImeLiftPx) : 0);
+        mHomeFloatImePushPx = stack.homeFloatImePushPx;
         syncHomeFloatObstructions();
-        // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps its
-        // whole height.
         boolean dockOverlays = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
-        int homeImeReachPx = dockOverlays ? systemImeTakePx : 0;
-        keyboardOverlapPx = KeyboardOverlayPolicy.overlapPx(
-            dockOverlays, combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx,
-            homeImeReachPx);
         // A side rail on Home ends above the dock, as it does on the Workspace.
-        if (applySideStackDockInsets(dockOverlays, KeyboardOverlayPolicy.overlapPx(true,
-                combinedHeight, accessoryBottomMarginPx, 0, homeImeReachPx)))
+        if (applySideStackDockInsets(dockOverlays, stack.sideStackOverlapPx))
             mChrome.onArrangementChanged();
-        // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
-        // was committed with: whatever the stack grew by for the slide, the content reaches under
-        // it by the same amount, so nothing the terminal is measured from moves until settle.
-        if (mTravelHoldsContent) {
-            keyboardOverlapPx = com.termux.app.place.PlaceChromeTravel.heldOverlapPx(
-                combinedHeight, accessoryBottomMarginPx, mTravelHeldReservationPx);
-            mTravelHeldOverlapPx = keyboardOverlapPx;
-            homeImeReachPx = 0;
-        }
-        mHomeContentImeReachPx = homeImeReachPx;
-        // With the stack away the content is the surface on the bottom edge, and it keeps the
-        // same gap from it the dock would (ChromePolicy.bottomEdgeGapPx): a gone stack's margin
-        // positions nothing, so the content carries the gap itself. The reservation below counts
-        // the margin either way, so it is the room the layout really gives.
-        boolean stackShown = shouldShowAccessoryStack(state.toolbarShown, state.keyboardShown,
-            statusBandPx > 0);
-        int contentEdgeGapPx = stackShown ? 0 : accessoryBottomMarginPx;
+        if (mTravelHoldsContent) mTravelHeldOverlapPx = stack.contentOverlapPx;
+        mHomeContentImeReachPx = stack.homeImeReachPx;
         // On a Home page the dock floats over the grid, so the grid ends above the dock's rows at
-        // rest and the edge gap under them (#104): its last row is never behind the dock, and a
-        // keyboard still floats over it. On the Workspace the content ends at the stack, and
-        // nothing is reserved. A slide keeps what the content was committed with, as above.
+        // rest and the edge gap under them (#104). A slide keeps what the content was committed
+        // with.
         View widgetPane = mTravelHoldsContent ? null : findViewById(R.id.widget_pane);
         if (widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView) {
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
-                KeyboardOverlayPolicy.homeGridDockReservePx(dockOverlays && stackShown,
-                    dockContentHeightPx, stackEdgeGapPx));
+                stack.homeGridDockReservePx);
         }
-        boolean overlapChanged = applyContentBottomMargin(contentEdgeGapPx, keyboardOverlapPx);
-        int contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
-            combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
-        boolean contentReservationChanged = contentReservationPx != mAppliedContentReservationPx;
-        mAppliedContentReservationPx = contentReservationPx;
+        boolean overlapChanged = applyContentBottomMargin(stack.contentEdgeGapPx,
+            stack.contentOverlapPx);
+        boolean contentReservationChanged =
+            stack.contentReservationPx != appliedContentReservationPx();
+        mAppliedStack = stack;
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
         // While the slide holds the content, the room it gives back is laid out under a grid the
         // travel has paused (preRollTravelContent); the settle sends the PTY its one size.
@@ -16083,15 +16031,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * @return whether the margins moved
      */
-    private boolean applyUnderKeyboardBandAir(@NonNull DockLayout dock, int stackEdgeGapPx,
-                                              boolean bandsUnderKeyboard) {
+    private boolean applyUnderKeyboardBandAir(int top, int bottom) {
         View under = findViewById(R.id.accessory_under_keyboard_stack);
         if (under == null || !(under.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
             return false;
         ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) under.getLayoutParams();
-        int top = bandsUnderKeyboard ? com.termux.app.dock.UnderKeyboardBand.topGapPx(dock) : 0;
-        int bottom = bandsUnderKeyboard
-            ? com.termux.app.dock.UnderKeyboardBand.bottomAirPx(dock, stackEdgeGapPx) : 0;
         if (params.topMargin == top && params.bottomMargin == bottom) return false;
         params.topMargin = top;
         params.bottomMargin = bottom;
@@ -16208,10 +16152,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         marginParams.bottomMargin = marginBottom;
         view.setLayoutParams(marginParams);
         return true;
-    }
-
-    private int resolveAccessoryStackBottomMarginPx(@NonNull ChromeSpec state) {
-        return resolveAccessoryStackBottomMarginPx(state.toolbarShown, state.keyboardShown);
     }
 
     /**
@@ -22001,7 +21941,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Reduced motion snaps the wall, so the chrome snaps with it, at settle. The app drawer
         // and the editors own the stack while they are up and move it their own way.
         if (isReducedMotionEnabled() || isAppDrawerEngaged() || mSurfaceEditor.isActive()
-            || mAppliedContentReservationPx < 0) return;
+            || appliedContentReservationPx() < 0) return;
         // The Workspace's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
         java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(mPaneWallController.pages());
@@ -22153,13 +22093,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int dockRowsAtRestPx(@NonNull com.termux.app.wall.PaneWallPage page,
                                  @NonNull PlaceLayout layout) {
         if (mPreferences == null) return -1;
-        // Its own half's dress, unsqueezed: a rest is what the rows take before the stack sheds
-        // anything. The eases stay the live ones, as the rest was measured before Dock geometry;
-        // Snapshot#restOf would also swap them for the half's own Search field and Wall strip.
-        // Worked out apart from the memo, which keeps the frame's answers.
-        return com.termux.app.dock.DockGeometry.compute(
-                dockSnapshot(layout, page).toBuilder().squeezePx(0).build())
-            .combinedHeight(0, false);
+        // A half's rest is its own (Stack layout): its rows in its dress, its Search field and
+        // Wall strip wholly in or out, nothing squeezed, whichever half is committed.
+        return com.termux.app.place.StackLayout.restDockRowsPx(
+            dockSnapshot(layout, page), dockSideOf(page));
     }
 
     /** {@link #frameStandsDown} as the seam's crossing asks it, bound once rather than per gesture. */
@@ -22353,7 +22290,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void beginTravelHold() {
         if (mTravelHoldsContent) return;
         mTravelHoldsContent = true;
-        mTravelHeldReservationPx = mAppliedContentReservationPx;
+        mTravelHeldReservationPx = appliedContentReservationPx();
     }
 
     /**
@@ -22415,17 +22352,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return travelRestReservationPx(place, toolbarShown, rest.keyboardReveal() > 0f);
     }
 
-    /** The same, for the place with its keyboard up or down as {@code keyboardShown} says. */
+    /**
+     * The same, for the place with its keyboard up or down as {@code keyboardShown} says. Stack
+     * layout answers it from the place's own rest: its own rows, Search field and Wall strip,
+     * whichever half is committed.
+     */
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
                                         boolean toolbarShown, boolean keyboardShown) {
-        int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
-            && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
-        return KeyboardOverlayPolicy.restReservationPx(
-            place == com.termux.app.wall.PaneWallPage.WIDGETS,
-            mAppliedDockContentHeightPx, flushPadding,
-            keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
-            Math.max(0, mKeyboardGeometry.desiredHeightPx()),
-            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown));
+        ChromeSpec spec = buildChromeSpec();
+        com.termux.app.place.StackLayout.RestInput in =
+            new com.termux.app.place.StackLayout.RestInput(
+                dockSnapshot(currentPlaceLayout(), stackDressPage()), dockSideOf(place));
+        in.toolbarShown = toolbarShown;
+        in.extraKeysRowEnabled = spec.extraKeysRowEnabled;
+        in.toolbarHeightPx = appliedToolbarHeightPx();
+        in.statusBandPx = bottomStatusBandPx();
+        in.roundedDockStyle = isRoundedDockStyle();
+        in.imeLiftPx = mImeLiftPx;
+        in.keyboardShown = keyboardShown;
+        in.keyboardHeightPx = Math.max(0, mKeyboardGeometry.desiredHeightPx());
+        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, currentPlaceLayout());
+        in.flushPaddingPx = place == com.termux.app.wall.PaneWallPage.TERMINAL
+            && place == mLastWallPage && !keyboardShown && mAppliedStack != null
+            ? mAppliedStack.flushPaddingPx : 0;
+        return com.termux.app.place.StackLayout.restReservationPx(in);
+    }
+
+    /** The extra-keys row's height as the last pass set it, 0 while the row is off. */
+    private int appliedToolbarHeightPx() {
+        ViewPager pager = getTerminalToolbarViewPager();
+        ViewGroup.LayoutParams params = pager == null ? null : pager.getLayoutParams();
+        return params == null ? 0 : Math.max(0, params.height);
+    }
+
+    /** The room the stack last took from the content root; -1 until the first pass. */
+    private int appliedContentReservationPx() {
+        return mAppliedStack == null ? -1 : mAppliedStack.contentReservationPx;
+    }
+
+    /** The half of the dock's snapshot a wall page's rows belong to. */
+    @NonNull
+    private static com.termux.app.dock.DockGeometry.Side dockSideOf(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        return page == com.termux.app.wall.PaneWallPage.WIDGETS
+            ? com.termux.app.dock.DockGeometry.Side.HOME
+            : com.termux.app.dock.DockGeometry.Side.WORKSPACE;
     }
 
     /**
@@ -23207,7 +23178,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (wall.isMoving() || wall.offsetPx() != 0f || mTravelHoldsContent
             || mTravelKeyboardPreRolled || mChromeTravelMoved) return 0;
         if (isReducedMotionEnabled() || isAppDrawerEngaged() || mSurfaceEditor.isActive()
-            || mAppliedContentReservationPx < 0) return 0;
+            || appliedContentReservationPx() < 0) return 0;
         if (!canPreRollTravelKeyboard() || mInAppKeyboard.isTurnedOff()
             || displayTakesSystemKeyboard() || isDisplayTouchpadFrame()) return 0;
         boolean up = committedKeyboardVisible();
@@ -23277,7 +23248,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || (mPaneController != null && mPaneController.isActivePaneFloating()))
             return 0;
         return Math.max(0, resolveTerminalFlushDockPaddingPx(
-            computeAccessoryStackHeight(mAppliedDockContentHeightPx, 0, 0),
+            computeAccessoryStackHeight(
+                mAppliedStack == null ? 0 : mAppliedStack.dockContentHeightPx, 0, 0),
             resolveAccessoryStackBottomMarginPx(toolbarShown, false)));
     }
 

@@ -462,7 +462,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
                 keyboardContainer.getHeight(), choreographer().reservedHeightPx());
 
             settleLayout();
-            int rowsPx = ReflectionHelpers.getField(mActivity, "mAppliedDockContentHeightPx");
+            int rowsPx = appliedDockContentHeightPx();
             assertEquals(form + ": the stack is the rows plus the keyboard column",
                 rowsPx + keyboardColumn.getHeight(), accessoryContainer.getHeight());
             assertEquals(form + ": the extra keys row keeps its height",
@@ -499,8 +499,15 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         settleLayout();
         assertEquals(keyboardPx, choreographer.reservedHeightPx());
-        int rowsPx = ReflectionHelpers.getField(mActivity, "mAppliedDockContentHeightPx");
+        int rowsPx = appliedDockContentHeightPx();
         assertEquals(rowsPx + keyboardPx, accessoryContainer.getHeight());
+    }
+
+    /** The dock's rows and the bottom status band, as the last geometry pass's stack holds them. */
+    private int appliedDockContentHeightPx() {
+        com.termux.app.place.StackLayout.Result stack =
+            ReflectionHelpers.getField(mActivity, "mAppliedStack");
+        return stack.dockContentHeightPx;
     }
 
     @Test
