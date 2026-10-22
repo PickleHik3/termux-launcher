@@ -106,6 +106,12 @@ off puts things back if nothing was edited meanwhile. With it on, a typed key op
 palette with that key, after the bound keys have had their turn.
 _Avoid_: persistent keyboard, keyboard lock
 
+**Layer**, **open layer**:
+Launcher UI that opens over a page and closes again: the app drawer, the command palette, a sheet,
+help, the widget editor. While a layer is open it takes Back and the keys first, over the
+**display window** as over a terminal window; what it does not take reaches the page below.
+_Avoid_: overlay (a **keyboard mode** value), popup, modal
+
 **Linux app**:
 An app installed in the prefix or in a `proot-distro` container, read from its desktop file and
 listed in the drawer under Linux Apps beside the Android apps. A tap runs it on the **display**,

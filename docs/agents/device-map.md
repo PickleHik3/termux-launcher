@@ -133,3 +133,32 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - Each `ad runas` call is a new shell: keep a pane id in a file (`$HOME/pid`) between calls.
 - The Benchmark graphics toast shows on the launcher after Settings closes: `ad frames 6 <dir> --
   tap "Benchmark graphics"` and read the last frames.
+
+## The display window on the emulator (2026-10-22)
+
+- First run needs `xkeyboard-config`: the display window offers an "Install xkeyboard-config" button
+  (`x11_pane_install`), which opens a terminal window that closes itself after about 90 s.
+- Turn the display on: Settings → Display, the switch at about 969,458. Back to the launcher with
+  `ad shell am start -n com.termux/.app.TermuxActivity`; the red monitor glyph in the dock (about
+  694,1699 with the keyboard up) shows the display window (the wall pages widgets, terminal, display).
+  "No display is running" → `ad tap "Start display"`, about 15 s until `x11_display_view` appears.
+- No X client is installed on the emulator (no xterm, xeyes, xclock); the bare display surface is
+  enough for input checks.
+- The drawer route above needs the dock at y≈1531: on the display window, raise the keyboard first
+  (`launcherctl keyboard show` under runas), then `tap 40 1625` and `swipe 900 1520 900 2000 600`.
+  The drawer is open while `ad find app_drawer_host` shows that node. If Back leaves it open,
+  `ad home` then the `am start` above closes it.
+- `ad install <apk> --fresh` (the flag after the path; before it, ad reads it as the file). First run
+  logs under `Termux.TermuxInstaller`; extraction takes about 8 s on the emulator, with the Welcome
+  sheet over the "Installing bootstrap packages…" dialog ("Skip the tour" / Start at about 895,1476).
+- `launcherctl keyboard show` pins the keyboard: X11TextFocus then logs "ignored: pinned". Run
+  `launcherctl keyboard hide` before testing focus-driven show/hide.
+- Mousepad in the drawer: `ad find Mousepad` (an ImageView, about 100,949). A tap into its text area
+  at about 330,480 focuses it. Drawer apps get the fcitx5 environment from the launcher; one started
+  by hand needs `GTK_IM_MODULE=fcitx XMODIFIERS=@im=fcitx
+  DBUS_SESSION_BUS_ADDRESS=unix:path=$PREFIX/tmp/termux-x11-im-bus-0`.
+- Rotate: `settings put system accelerometer_rotation 0` + `user_rotation 1`; restore 1 / 0. Keyboard
+  off is the palette's "Keyboard on/off" entry, not the dock key (which only hides/shows).
+- Stop the display with `kill <termux-x11 pid>` under runas (it restarts on its own); never
+  `pkill -f termux-x11` inside a runas string, it kills your own shell. `ps -o` fails in the
+  prefix: read `/proc/*/cmdline`.
