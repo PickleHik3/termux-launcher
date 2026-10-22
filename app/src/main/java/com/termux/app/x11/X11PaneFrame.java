@@ -173,6 +173,10 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private boolean mEnabled = true;
     /** The display's size while the frame around it animates; unset when it follows the frame. */
     private int mFrozenWidth = -1, mFrozenHeight = -1;
+    /** Lets go of a {@link #holdHostSizeOverNextLayout} hold; null while there is none. */
+    @Nullable private Runnable mNextLayoutRelease;
+    /** Watches for the frame's new height under that hold; null along with it. */
+    @Nullable private View.OnLayoutChangeListener mNextLayoutFollower;
     /** When the still copy stands in for the surface ({@link SurfaceStandIn}). */
     private final SurfaceStandIn mStill = new SurfaceStandIn();
     /** The copy's view, just above the display and below the corner mask; drawn only while up. */
@@ -893,6 +897,53 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         requestLayout();
     }
 
+    /**
+     * Holds the display's size over a change of the frame's height that lands in a pass or two
+     * rather than over many frames — the keyboard mode switched under the touchpad. Taken now,
+     * and let go a frame after the frame has laid out at a new height, so whatever the passes
+     * after the first still move lands before the X screen is resized, once. A frame whose height
+     * never moves lets go after {@link #NEXT_LAYOUT_BACKSTOP_MS}. A hold that is already taken —
+     * the status bar folding — is left to whoever took it.
+     */
+    public void holdHostSizeOverNextLayout() {
+        if (mFrozenWidth >= 0) return;
+        beginHostResize();
+        if (mFrozenWidth < 0) return;
+        final int heldHeight = getHeight();
+        final Runnable release = new Runnable() {
+            @Override
+            public void run() {
+                if (mNextLayoutRelease != this) return;
+                dropNextLayoutHold();
+                finishHostResize();
+            }
+        };
+        View.OnLayoutChangeListener follower = (v, l, t, r, b, ol, ot, or, ob) -> {
+            if (b - t == heldHeight) return;
+            // One frame on, so a pass that follows this layout lands under the hold too.
+            removeCallbacks(release);
+            post(release);
+        };
+        mNextLayoutRelease = release;
+        mNextLayoutFollower = follower;
+        addOnLayoutChangeListener(follower);
+        postDelayed(release, NEXT_LAYOUT_BACKSTOP_MS);
+    }
+
+    /**
+     * How long a {@link #holdHostSizeOverNextLayout} hold waits for a height that never comes —
+     * the keyboard reveal gate's backstop, for the same reason: a layout that never comes must
+     * not keep the display frozen.
+     */
+    private static final long NEXT_LAYOUT_BACKSTOP_MS = 160L;
+
+    private void dropNextLayoutHold() {
+        if (mNextLayoutRelease != null) removeCallbacks(mNextLayoutRelease);
+        if (mNextLayoutFollower != null) removeOnLayoutChangeListener(mNextLayoutFollower);
+        mNextLayoutRelease = null;
+        mNextLayoutFollower = null;
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -1266,6 +1317,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         cancelHold();
+        // A frame taken off the window lets go of the display rather than leave it frozen.
+        if (mNextLayoutRelease != null) {
+            dropNextLayoutHold();
+            finishHostResize();
+        }
         mRim.cancel();
         // A surface-sized bitmap is not carried out of the window.
         resetStill();
