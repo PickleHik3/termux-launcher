@@ -123,4 +123,14 @@ public class SceneEventsTest {
         assertTrue(SceneFramePolicy.glassLowRes(null));
         assertFalse(SceneFramePolicy.glassLowRes("still"));
     }
+
+    @Test
+    public void glassRateParsesAndClamps() {
+        assertEquals(15, SceneFramePolicy.parseGlassRate(null));
+        assertEquals(15, SceneFramePolicy.parseGlassRate("x"));
+        assertEquals(15, SceneFramePolicy.parseGlassRate("-3"));
+        assertEquals(0, SceneFramePolicy.parseGlassRate("0"));
+        assertEquals(30, SceneFramePolicy.parseGlassRate(" 30 "));
+        assertEquals(90, SceneFramePolicy.parseGlassRate("500"));
+    }
 }

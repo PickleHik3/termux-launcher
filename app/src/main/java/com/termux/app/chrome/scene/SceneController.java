@@ -22,10 +22,13 @@ import java.util.List;
  * Debug properties only (see {@link SceneFramePolicy}); with {@code debug.tl.scene} unset every
  * entry point is a field read, and no view exists.
  *
- * <p>The layer is inserted into the terminal root container directly above the wallpaper backdrop
- * and below everything else the container holds (panes, chrome, widgets), sized and offset by
- * margins to the whole decor so it fills the window the way the backdrop's painted frame does. It
- * is opaque, so the system-wallpaper show-through is replaced while the scene is on.</p>
+ * <p>The layer is a SurfaceView inserted into the terminal root container directly above the
+ * wallpaper backdrop and below everything else the container holds (panes, chrome, widgets), sized
+ * and offset by margins to the whole decor. Its surface sits behind the window; the view punches a
+ * transparent hole in the window where it is, so everything drawn before it in the tree (the
+ * backdrop, the root's background) is cleared there and the scene replaces the system-wallpaper
+ * show-through, while everything drawn after it composites over the scene as it did over the
+ * wallpaper.</p>
  */
 public final class SceneController implements LatencyProbe.CommitListener {
 
@@ -46,6 +49,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
         new DebugChoice(SceneFramePolicy.PROP_RATE, "30", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice GLASS =
         new DebugChoice(SceneFramePolicy.PROP_GLASS, "lowres", DebugSwitch.SYSTEM_PROPERTIES);
+    private static final DebugChoice GLASS_RATE =
+        new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE, "15", DebugSwitch.SYSTEM_PROPERTIES);
 
     @NonNull private final Activity mActivity;
     @NonNull private final FrameLayout mContainer;
@@ -120,6 +125,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (layer == null) return;
         layer.setRateHz(SceneFramePolicy.parseRate(RATE.get(now)));
         layer.setGlassLowRes(SceneFramePolicy.glassLowRes(GLASS.get(now)));
+        layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now)));
     }
 
     private void installLayer() {
