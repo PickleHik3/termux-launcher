@@ -256,6 +256,8 @@ public final class PaneWallLayout extends ViewGroup {
     private float mOffsetPx;
     @Nullable private ValueAnimator mSlide;
     private boolean mSliding;
+    /** Where the slide under way started, from the current page's rest; NaN while none runs. */
+    private float mSlideFromPx = Float.NaN;
     private boolean mDragging;
     /** One page slid in from beside its place on top of wherever the wall puts it. */
     @Nullable private PaneWallPage mNudgePage;
@@ -686,6 +688,15 @@ public final class PaneWallLayout extends ViewGroup {
     /** True while a finger is driving the wall. */
     public boolean isDragging() {
         return mDragging;
+    }
+
+    /**
+     * Where the slide under way started, in px from the current page's rest as {@link #offsetPx}
+     * reads: the offset a tap's slide or a released finger's settle set off from. NaN while no
+     * slide runs: at rest, and under a finger.
+     */
+    public float slideFromPx() {
+        return mSlideFromPx;
     }
 
     /**
@@ -2537,11 +2548,13 @@ public final class PaneWallLayout extends ViewGroup {
         });
         mSlide = slide;
         mSliding = true;
+        mSlideFromPx = mOffsetPx;
         slide.start();
     }
 
     private void stopSlide() {
         mSliding = false;
+        mSlideFromPx = Float.NaN;
         ValueAnimator slide = mSlide;
         mSlide = null;
         if (slide != null) slide.cancel();
