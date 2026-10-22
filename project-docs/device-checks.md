@@ -13,6 +13,15 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · Reproduce "a font scale change lands on the terminal, not the Home page I was on"
+  (chrome-unification triage) before any fix. Start in = Workspace, rest on Home page 2 or later,
+  then separately: (a) Settings › Terminal text › Terminal fonts › Font size, Apply, Back;
+  (b) Android's own font size (`settings put system font_scale 1.3`, then back to 1.0) with the
+  launcher behind another app, then Home; (c) the same with the launcher in front. Record which
+  of the three moves the wall and to where (Workspace, or Home page 1). From the code: (a) never
+  recreates (it only re-sizes the panes on resume); (b) and (c) relaunch the activity, since
+  `fontScale` is not in its `configChanges`, and the wall's saved half and index come back
+  through `landWall` · emulator.
 - 2026-10-22 · PR #99 (244fcf46a, migrations 9–13) · Upgrade: install over a release from before
   this branch with a Home dock height, Corners or Margin set apart from the Workspace's and a
   Prompt line or Taskbar dock style picked → Home keeps its rows (Home's own on only if rows
