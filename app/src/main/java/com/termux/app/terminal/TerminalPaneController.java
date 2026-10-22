@@ -1377,6 +1377,11 @@ public class TerminalPaneController {
             mMaximizedLeaf = null;
         }
         render();
+        // The wall's travel cover belongs to the window in front: one taken while the window that
+        // left was in front (a chip on Home starts the slide before it shows its window) stays on
+        // that window's frames, and the settle's 0 reaches only this one, so the left window
+        // would come back clipped by the dock it travelled from. It moves here.
+        if (switched) moveTravelCoverToActiveWindow();
         // A hidden window's panes drop any resize that settled while they were off screen
         // (setAllPaneSizeUpdatesPaused), and coming back at the same pixel size raises no
         // onSizeChanged. Re-measure them so the PTY matches what is on screen.
@@ -1673,6 +1678,20 @@ public class TerminalPaneController {
         int cover = Math.max(0, coverPx);
         if (cover == mTravelBottomCoverPx) return;
         mTravelBottomCoverPx = cover;
+        applyTravelBottomCover(cover);
+    }
+
+    /**
+     * Takes the travel cover off every pane frame and puts the one standing now on the window in
+     * front ({@link #showWindow}), so no window off screen keeps a cover the settle never clears.
+     */
+    private void moveTravelCoverToActiveWindow() {
+        for (PaneContentFrame frame : mPaneFrames.values()) frame.setTravelBottomInsetPx(0);
+        if (mTravelBottomCoverPx > 0) applyTravelBottomCover(mTravelBottomCoverPx);
+    }
+
+    /** The cover {@code cover} on the tiled panes of the window in front. */
+    private void applyTravelBottomCover(int cover) {
         if (mActiveWindow == null) return;
         int hostHeight = mHostView.getHeight();
         if (mMaximizedLeaf != null) {
