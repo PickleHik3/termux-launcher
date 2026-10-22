@@ -13,6 +13,29 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · #135 stage 1, Dock geometry (commits "feat(dock): Dock geometry…" to "refactor(dock):
+  the row draws only the size it is handed") · A Home layout with Beads, the Search field and the
+  Drawer tile on Home, the Workspace on Tray (then the reverse), Docked and Floating, portrait and
+  landscape: screenshot Home at rest, a window at rest, and mid-swipe both ways → the pinned icons
+  arrive at their settled size (no grow or snap at the settle: the phone had 118 px mid-slide vs
+  143 px at rest), the row's width and icon pitch match the arriving half from the first frame
+  (1032 vs 1080 px before), the widgets do not jump up at the settle, the icons do not shift
+  sideways at the settle, no card is drawn under Home's beads mid-slide · emulator.
+- 2026-10-22 · #135 stage 1 · One layout (Home's own off): Home and a window, Docked and
+  Floating, apps row alone and with the A–Z row: screenshot the dock on both and mid-swipe → icon
+  size, row width and pitch identical throughout; with 10 pinned slots per page the icons still
+  fit their slots on both halves · emulator.
+- 2026-10-22 · #135 stage 1 · A window whose layout puts the apps row away, Home showing it:
+  swipe window→Home slowly, stop halfway, release back → the row slides in at Home's size and a cut
+  swipe leaves the window's dock exactly as it was; keyboard up: the dock resizes once as the
+  keyboard rises (no second size a frame later) · emulator.
+- 2026-10-22 · #135 stage 1 · Pinned apps as a rail (left, then right) and as a row along the
+  top: screenshot → rail icons 38 dp in a column the same width as before, the top row's icons the
+  dock row's size with the same side inset; change Apps per page in Settings and come back → the
+  icons re-fit their slots without a swipe; turn the screen → icons re-fit the new width · emulator.
+- 2026-10-22 · #135 stage 1 · Cold start and return from the app drawer and from Settings: the
+  dock row never shows an empty frame longer than before and never draws icons at a guessed size
+  first (the row's own fallback sizing is deleted; it now waits for the dock's size) · emulator.
 - 2026-10-22 · commit "feat(appearance): a Split gap slider on the Terminal tap" · Appearance ›
   tap the terminal: the row reads Glass, Opacity, Tint, Contrast, Split gap. In a 2-pane and a
   4-pane window set Split gap to 0, 4 and 24 dp: screenshot each; the gutter between panes follows,
@@ -2143,6 +2166,11 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
 
 ## Developer
 
+- 2026-10-22 · #135 stage 1, Dock geometry · pong: the slide to Home with Beads, Search field and
+  Drawer tile on; measure frames (gfxinfo framestats) over ten slides each way against the
+  recorded baseline (median 17 ms, 90th 24 ms, 99th 57 ms, 16.5 % janky; plain-setup baseline
+  15–16 ms median) → no worse, and the settle has no visible step; both Styles · pong, release
+  build.
 - 2026-10-21 · commit "fix(place): a fold across the seam lands on Home's own stack" (#94) ·
   pong: Workspace→Home swipe, slow/fast, keyboard up/down: dock never sinks then snaps; only the
   extra keys fold (the emulator had the dock glass end 26 px low with the keyboard up and 10 px

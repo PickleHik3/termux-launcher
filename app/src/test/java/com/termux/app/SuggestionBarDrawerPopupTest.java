@@ -69,6 +69,8 @@ public class SuggestionBarDrawerPopupTest {
         controller = Robolectric.buildActivity(Activity.class).setup();
         activity = controller.get();
         row = new SuggestionBarView(activity, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        row.setDockIconSizePx(Math.round(24f * row.getResources().getDisplayMetrics().density));
         activity.setContentView(row, new ViewGroup.LayoutParams(720, 160));
         idle();
     }
