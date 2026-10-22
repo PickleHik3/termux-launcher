@@ -38,6 +38,13 @@ public final class X11LinuxAppRunner {
      */
     static final List<String> TOUCH_ENV = java.util.Collections.singletonList("MOZ_USE_XINPUT2=1");
 
+    /**
+     * What tells GTK, Qt and the XIM clients to use fcitx5, for {@link #inputMethodBlock}. The
+     * names are fcitx5's own; Termux packages the GTK modules and the Qt 6 one.
+     */
+    static final List<String> INPUT_METHOD_ENV = java.util.Collections.unmodifiableList(
+        Arrays.asList("GTK_IM_MODULE=fcitx", "QT_IM_MODULE=fcitx", "XMODIFIERS=@im=fcitx"));
+
     /** How long a display gets to come up before the tap is given up on. */
     private static final long START_TIMEOUT_MS = 15_000L;
     /**
@@ -609,7 +616,8 @@ public final class X11LinuxAppRunner {
     }
 
     /**
-     * The shell line that runs the app: the display, the GPU environment, the home directory,
+     * The shell line that runs the app: the display, the GPU environment, fcitx5's when it is
+     * there ({@link #inputMethodBlock}), the home directory,
      * then the app's command — its own, or a {@code proot-distro login} around it when the app is
      * installed in a container. The touch environment goes in first so a GPU profile still has the
      * last word over anything it sets. Pure, so the composition is tested.
@@ -642,11 +650,38 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
+        // apps keep the cursor guess until that follow-up is verified on a phone.
+        if (app.container.isPrefix()) script.append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
         if (awaitWindowManager != null) script.append(awaitWindowManager);
         script.append("exec ").append(noSandbox ? app.commandWith("--no-sandbox") : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * The lines that hand an app fcitx5 (#129): the toolkits' input-method modules, and the
+     * display's session bus, which is where the helper started fcitx5 — a GTK or Qt module talks
+     * to fcitx5 over D-Bus alone, so an app on any other bus never reaches it, and its text
+     * fields never report focus.
+     *
+     * <p>Only when fcitx5 is installed and the helper's bus for this display is actually up: the
+     * socket only exists while the helper runs, and an app given a bus nobody answers on is worse
+     * off than one given none. Without fcitx5 the app is run exactly as it always was. Pure, so
+     * the composition is tested.
+     */
+    @NonNull
+    static String inputMethodBlock(@NonNull String display) {
+        String bus = X11CliInstaller.imBusPath(display);
+        StringBuilder block = new StringBuilder();
+        block.append("if [ -x ").append(ProotDistro.singleQuote(X11CliInstaller.FCITX5_PATH))
+            .append(" ] && [ -S ").append(ProotDistro.singleQuote(bus)).append(" ]; then\n");
+        for (String line : INPUT_METHOD_ENV) block.append("export ").append(line).append('\n');
+        block.append("export DBUS_SESSION_BUS_ADDRESS=")
+            .append(ProotDistro.singleQuote("unix:path=" + bus)).append('\n');
+        block.append("fi\n");
+        return block.toString();
     }
 
     /**
