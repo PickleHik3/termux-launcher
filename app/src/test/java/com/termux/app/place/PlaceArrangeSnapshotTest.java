@@ -64,6 +64,27 @@ public class PlaceArrangeSnapshotTest {
         places.setWidgetColumns(LANDSCAPE, 6);
     }
 
+    @Test
+    public void restoreLeavesNoKeyboardModeWhereNoneWasStored() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        places.setKeyboardMode(PORTRAIT, PlaceLayout.KeyboardMode.RESIZE);
+        entry.restore(places);
+        assertFalse(places.hasStoredKeyboardMode(PORTRAIT));
+        assertFalse(places.hasStoredKeyboardMode(LANDSCAPE));
+        assertEquals(PlaceLayout.KeyboardMode.OVERLAY, places.keyboardMode(PORTRAIT));
+    }
+
+    @Test
+    public void restorePutsBackAKeyboardModeThatWasStored() {
+        places.setKeyboardMode(PORTRAIT, PlaceLayout.KeyboardMode.RESIZE);
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        places.clearKeyboardMode(PORTRAIT);
+        entry.restore(places);
+        assertTrue(places.hasStoredKeyboardMode(PORTRAIT));
+        assertEquals(PlaceLayout.KeyboardMode.RESIZE, places.keyboardMode(PORTRAIT));
+        assertFalse(places.hasStoredKeyboardMode(LANDSCAPE));
+    }
+
     /** A band moved under the keyboard is as unsaved as any move, and Discard takes it back. */
     @Test
     public void aBandUnderTheKeyboardIsSomethingToLose() {

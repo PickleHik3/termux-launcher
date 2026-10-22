@@ -20,6 +20,7 @@ Latest stable: v1.2.0.
 - When another app is your home screen, the launcher can have a wallpaper of its own, and its colours theme the launcher.
 - Battery & performance in Settings gathers the power presets and the motion effects they turn off.
 - The keyboard floats over the Linux display in portrait, follows text fields in every touch mode, and with fcitx5 follows text-field focus exactly.
+- The keyboard floats over the Linux display in portrait again on installs an older Layout editor visit had switched to making room.
 - The touchpad can switch the keyboard between floating and making room.
 - The drawer, palette and sheets over the Linux display take Back and typing.
 - "Use system keyboard" replaces "Search keyboard" in the drawer settings.

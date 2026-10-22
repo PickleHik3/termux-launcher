@@ -613,3 +613,12 @@ under twenty items; past that, the oldest are re-judged first.
   judge whether that reads as the intended ~200 ms. TalkBack reads "name, second line, actions
   hidden" and offers Show/Hide. Typing in the layout editor with the phone's keyboard shrinks the
   XML field above it · pong, by hand.
+
+## Display keyboard Resize reset
+- 2026-10-23 · branch fix/display-keyboard-resize-reset (one-time portrait Resize reset, Layout editor
+  revert no longer saves the keyboard mode) · Emulator: in `shared_prefs`, seed
+  `layout.portrait.keyboard_mode` = `resize` and remove `place_keyboard_overlay_reset_done`, install,
+  open a Linux app in portrait and raise the keyboard: it floats, the key is gone and the flag is
+  set. Set Resize with the touchpad's mode button afterwards and relaunch: it stays Resize. Then open
+  the Layout editor on the display in portrait and Discard: no `keyboard_mode` key appears in the
+  prefs file · emulator.
