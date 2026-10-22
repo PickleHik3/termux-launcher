@@ -54,6 +54,15 @@ import com.termux.app.chrome.WallpaperParallax;
  */
 public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdge {
 
+    /** Frame-source counter for the idle audit: paneGlass.motion. */
+    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_MOTION = com.termux.terminal.FrameProbe.source("paneGlass.motion");
+
+    /** Frame-source counter for the idle audit: paneGlass.tilt. */
+    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_TILT = com.termux.terminal.FrameProbe.source("paneGlass.tilt");
+
+    /** Frame-source counter for the idle audit: paneGlass.crossfade. */
+    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_CROSSFADE = com.termux.terminal.FrameProbe.source("paneGlass.crossfade");
+
     private final Paint mFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint mTintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix mFrameMatrix = new Matrix();
@@ -525,7 +534,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     private void followTilt() {
         mTiltStillDraws = 0;
-        if (mProgram != null && (mTilt[0] != 0f || mTilt[1] != 0f)) postInvalidateOnAnimation();
+        if (mProgram != null && (mTilt[0] != 0f || mTilt[1] != 0f)) {
+            PANEGLASS_TILT.tick();
+            postInvalidateOnAnimation();
+        }
     }
 
     @NonNull
@@ -703,12 +715,18 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 // Where the slab stands now against where it stood last draw: its bend follows on
                 // a spring and asks for the frames it needs to settle. At rest it asks for none
                 // and the program draws the resting look.
-                if (driveMotionLight(width, height)) postInvalidateOnAnimation();
+                if (driveMotionLight(width, height)) {
+                    PANEGLASS_MOTION.tick();
+                    postInvalidateOnAnimation();
+                }
                 program.setMotionLight(mMotionLight);
                 if (mPreviousProgram != null) mPreviousProgram.setMotionLight(mMotionLight);
                 // How far the slab is tipped, so the picture through it is displaced as through a
                 // tipped plate and its rim leans with the tip. Flat, (0, 0): the resting look.
-                if (readTilt()) postInvalidateOnAnimation();
+                if (readTilt()) {
+                    PANEGLASS_TILT.tick();
+                    postInvalidateOnAnimation();
+                }
                 program.setTilt(mTilt[0], mTilt[1]);
                 if (mPreviousProgram != null) mPreviousProgram.setTilt(mTilt[0], mTilt[1]);
             }
@@ -761,6 +779,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 canvas.drawRect(0f, 0f, width, height, mPreviousFramePaint);
                 mFramePaint.setAlpha(Math.round(255f * progress));
                 canvas.drawRect(0f, 0f, width, height, mFramePaint);
+                PANEGLASS_CROSSFADE.tick();
                 postInvalidateOnAnimation();
             } else {
                 mPreviousFrame = null;

@@ -78,6 +78,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     public void key_up(KeyValue value, Pointers.Modifiers modifiers) {
         if (value == null)
             return;
+        com.termux.terminal.LatencyProbe.commit();
         dispatch(value, TerminalModifiers.from(modifiers));
     }
 

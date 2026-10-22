@@ -922,6 +922,7 @@ public final class TerminalRenderer {
         } finally {
             Trace.endSection();
         }
+        com.termux.terminal.LatencyProbe.rendered();
     }
 
     /**

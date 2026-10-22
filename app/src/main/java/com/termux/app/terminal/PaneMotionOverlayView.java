@@ -78,6 +78,9 @@ public final class PaneMotionOverlayView extends View {
     private boolean mCursorTargetValid;
     private boolean mCursorFrameScheduled;
 
+    /** Frame-source counter for the idle audit: cursorTrail. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("cursorTrail");
+
     private final Choreographer.FrameCallback mFrameCallback = this::onFrame;
 
     private CursorTrailStyle mCursorTrailStyle = CursorTrailStyle.DEFAULT;
@@ -179,6 +182,7 @@ public final class PaneMotionOverlayView extends View {
         animator.setDuration(GHOST_DURATION_MS);
         animator.setInterpolator(EXIT);
         animator.addUpdateListener(a -> {
+            FRAMES.tick();
             ghost.progress = (float) a.getAnimatedValue();
             invalidateRect(ghost.bounds);
         });
@@ -275,6 +279,7 @@ public final class PaneMotionOverlayView extends View {
 
     private void onFrame(long frameTimeNanos) {
         mCursorFrameScheduled = false;
+        FRAMES.tick();
         if (!mCursorTrailEnabled) return;
         // The frame's own vsync time, so every step is one even frame interval rather than
         // whenever this callback happened to run. It is System.nanoTime's clock, the same one
@@ -400,7 +405,13 @@ public final class PaneMotionOverlayView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         for (int i = 0; i < mGhosts.size(); i++) drawGhost(canvas, mGhosts.get(i));
-        if (mCursorTrailEnabled) drawCursorTrail(canvas);
+        if (!mCursorTrailEnabled) return;
+        android.os.Trace.beginSection("Effect.cursorTrail.draw");
+        try {
+            drawCursorTrail(canvas);
+        } finally {
+            android.os.Trace.endSection();
+        }
     }
 
     private void drawGhost(@NonNull Canvas canvas, @NonNull Ghost ghost) {

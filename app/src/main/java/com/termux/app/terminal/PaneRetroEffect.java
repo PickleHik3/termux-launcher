@@ -137,6 +137,7 @@ public final class PaneRetroEffect {
         if (style == PaneRetroStyle.NONE || !available() || mFailed
             || uniforms.width <= 0f || uniforms.height <= 0f)
             return null;
+        android.os.Trace.beginSection("Effect.retro.build");
         try {
             if (mProgram == null) mProgram = new Program();
             return mProgram.build(style, uniforms);
@@ -144,6 +145,8 @@ public final class PaneRetroEffect {
             mFailed = true;
             Logger.logError(LOG_TAG, "retro shader failed, effect disabled: " + e);
             return null;
+        } finally {
+            android.os.Trace.endSection();
         }
     }
 

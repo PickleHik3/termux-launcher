@@ -248,9 +248,14 @@ public final class TerminalSession extends TerminalOutput {
     @Override
     public void write(byte[] data, int offset, int count) {
         if (mShellPid > 0) {
-            synchronized (mWriteLock) {
-                mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
-                mTerminalToProcessIOQueue.write(data, offset, count);
+            Trace.beginSection("Terminal.write");
+            try {
+                synchronized (mWriteLock) {
+                    mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
+                    mTerminalToProcessIOQueue.write(data, offset, count);
+                }
+            } finally {
+                Trace.endSection();
             }
         }
     }
@@ -620,6 +625,7 @@ public final class TerminalSession extends TerminalOutput {
             mAppendingProcessOutput = false;
             Trace.endSection();
         }
+        LatencyProbe.outputArrived();
         notifyScreenUpdate();
         return bytesRead == mReceiveBuffer.length;
     }

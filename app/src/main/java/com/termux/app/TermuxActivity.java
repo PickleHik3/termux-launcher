@@ -1896,6 +1896,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
+        com.termux.terminal.LatencyProbe.setDebugBuild(com.termux.BuildConfig.DEBUG);
         mIsOnResumeAfterOnCreate = true;
         mCreatedThisMessage.mark();
         if (savedInstanceState != null) {

@@ -92,6 +92,7 @@ public final class RetroEffectBinder {
         PaneRetroStyle next = style == null || !PaneRetroEffect.available()
             ? PaneRetroStyle.NONE : style;
         mStyle = next;
+        if (next != PaneRetroStyle.NONE) RetroEffectPrewarm.request(next);
         mHook.setOn(next != PaneRetroStyle.NONE);
         refresh();
     }
@@ -107,6 +108,15 @@ public final class RetroEffectBinder {
      * what {@link Shape} answers. Cheap when nothing moved.
      */
     public void refresh() {
+        android.os.Trace.beginSection("Effect.retro.refresh");
+        try {
+            refreshInternal();
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void refreshInternal() {
         if (mStyle == PaneRetroStyle.NONE || !PaneRetroEffect.available()) {
             clear();
             return;

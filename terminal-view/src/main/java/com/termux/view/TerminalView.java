@@ -161,6 +161,12 @@ public final class TerminalView extends View {
     /** Whether this travel is frosted throughout ({@link #holdTravelFrost}), to thaw as it ends. */
     private boolean mTravelFrostHeld;
     /** The frost's change, while one runs (API 31+), and how deep it stands, 0 to 1. */
+    /** Frame-source counter for the idle audit: terminal.scroll. */
+    private static final com.termux.terminal.FrameProbe.Source TERMINAL_SCROLL = com.termux.terminal.FrameProbe.source("terminal.scroll");
+
+    /** Frame-source counter for the idle audit: terminal.reflowFrost. */
+    private static final com.termux.terminal.FrameProbe.Source TERMINAL_REFLOWFROST = com.termux.terminal.FrameProbe.source("terminal.reflowFrost");
+
     @Nullable private ValueAnimator mReflowFrost;
     private float mReflowFrostLevel;
     /** How long the frost over a travel's reflow takes to thaw. */
@@ -2189,6 +2195,7 @@ public final class TerminalView extends View {
             boolean more = mScroller.computeScrollOffset();
             setScrollPixelPosition(mScroller.getCurrY());
             if (more) {
+                TERMINAL_SCROLL.tick();
                 postOnAnimation(this);
                 return;
             }
@@ -3361,6 +3368,7 @@ public final class TerminalView extends View {
         frost.setInterpolator(new DecelerateInterpolator());
         frost.addUpdateListener(animation -> {
             if (mReflowFrost != animation) return;
+            TERMINAL_REFLOWFROST.tick();
             mReflowFrostLevel = (float) animation.getAnimatedValue();
             applyReflowFrost(radius * mReflowFrostLevel);
         });
