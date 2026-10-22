@@ -2260,6 +2260,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onStart() {
         super.onStart();
+        com.termux.app.terminal.TouchDownHint.attach(this);
         // Both arrivals the launcher has: unlocking the phone, and switching back from another
         // app. Each ends in onStart, because the keyguard stops this activity too.
         View arrivalHost = findViewById(android.R.id.content);
@@ -9983,6 +9984,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        com.termux.app.terminal.TouchDownHint.detach(this);
         mHomePress.onStop();
         Logger.logDebug(LOG_TAG, "onStop");
         // The Appearance surface survives a stop (the overlay registry's STOP keeps it, as it kept
