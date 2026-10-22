@@ -33,6 +33,7 @@ Three rules keep this directory from rotting:
 | | |
 |---|---|
 | [`active/fancier-glass/SPEC.md`](active/fancier-glass/SPEC.md) | Fancier Glass: refraction, motions and their bug list. Partly built. |
+| [`active/agsl-effects-and-touch-latency-2026-10-22.md`](active/agsl-effects-and-touch-latency-2026-10-22.md) | Shader effects and touch latency: measure tap-to-echo on pong with cheap fixes first, then built-in event effects (bell flash, focus pulse, find-cursor, typing sparks). Spec; not started. |
 | [`active/glass-plan-2026-10-16.md`](active/glass-plan-2026-10-16.md) | The next glass round: gathered-light edge, a per-spot film under Clear, small glass that picks its own ink. Rounds 0 and 1 built, Round 1 always on (the switch is gone); the rest is spec. |
 | [`active/wall-rework-2026-10-17.md`](active/wall-rework-2026-10-17.md) | The wall rework: Home pages as a conventional launcher, then the Workspace with terminal and display windows in one row; usage mode and the Display place retire (ADR 0008). Spec; not started. |
 - `active/wall-rework-phase2-2026-10-18.md`: phase two of the wall rework, slices in order (the capsule status bar, built and removed; Home pills, built and removed for no status bar on Home).

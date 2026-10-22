@@ -149,6 +149,16 @@ off puts things back if nothing was edited meanwhile. With it on, a typed key op
 palette with that key, after the bound keys have had their turn.
 _Avoid_: persistent keyboard, keyboard lock
 
+**Commit** (a key):
+The moment a key press is sent: on release, never on finger-down, so a swipe legend, a long press or
+tap correction can still decide which key it was.
+_Avoid_: send, key-down
+
+**Echo**:
+What the shell writes back for a committed key, drawn in the terminal; the typed character appearing
+is the echo, not the key press.
+_Avoid_: local echo (the app never draws a character before the shell sends it)
+
 **Linux app**:
 An app installed in the prefix or in a `proot-distro` container, read from its desktop file and
 listed in the drawer under Linux Apps beside the Android apps. A tap runs it on the **display**,
@@ -291,6 +301,12 @@ sessions**)
 
 ### Look and motion
 
+**Ambient effect**:
+A built-in shader effect that animates continuously rather than in answer to something. It is off
+unless chosen, is labelled as a battery cost, and stops drawing under **Lazy mode**, when its page or
+pane is not visible, and after about ten seconds without input, resuming on the next touch.
+_Avoid_: animated background, live wallpaper (removed), animation
+
 **Base**:
 The shared value of a surface property (blur, opacity, grain, tint, corner radius, side gap) that
 every surface follows until it is given its own. A surface that follows Base is **inherited**; one
@@ -298,6 +314,13 @@ with its own value is **detached**, holding an override. The resolution happens 
 `TermuxAppSharedPreferences`, so every getter returns the resolved value. Setters write through the
 link, so a slider or the wallpaper mode leaves a surface inherited.
 _Avoid_: global, default (the shipped value is the default; Base is what the user set)
+
+**Event effect**:
+A built-in shader effect that draws only in answer to something happening (a keystroke, a cursor
+move, the bell, a pane taking focus) and stops when its motion ends, so it costs nothing at rest.
+Every effect is an event effect unless it is an **Ambient effect**. Effects are built in; there are
+no user-supplied shaders.
+_Avoid_: animation, custom shader (users cannot load their own)
 
 **Fancier Glass**:
 The extra glass: refraction at glass edges on every glass surface and the
