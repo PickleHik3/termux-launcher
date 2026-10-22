@@ -189,6 +189,22 @@ display's), and apps inside a proot container keep the pointer's shape for now. 
 what it did to `$PREFIX/tmp/termux-x11-im-bus-0.log`; it says `focus in` and `focus out` as it
 passes them on. This is not yet device-verified.
 
+**Once focus is heard, it decides.** From the first `focus in` or `focus out` that reaches the
+launcher while you are on the display, until you leave it or switch the setting off:
+
+- a field taking focus brings the keyboard up, tap or no tap;
+- a field losing focus puts it away 150 ms later, unless another field takes focus first, so
+  moving from one field to the next leaves the keyboard where it is;
+- a tap over a text cursor only brings the keyboard back if a field has focus, so tapping a
+  terminal or the text of a page no longer opens it;
+- a tap or a scroll anywhere else leaves the keyboard alone; losing focus is what puts it away.
+
+Until the first focus signal of a visit, and always without fcitx5, the pointer's shape decides as
+above. A keyboard you opened yourself, and a keyboard you switched off, win over focus as they do
+over taps. Under `adb logcat -s X11TextFocus` every decision names the signal behind it:
+`focus in -> show`, `focus out -> hide in 150 ms`, `hide cancelled: focus in`,
+`tap over xterm ignored: no focus`.
+
 The helper sends the same two commands you can send from a shell yourself, so anything else that
 knows when a field takes focus can drive the keyboard too:
 
@@ -197,8 +213,8 @@ launcherctl keyboard show --source focus
 launcherctl keyboard hide --source focus
 ```
 
-They are read as a signal, not an order: on the display they go through the same rules as a tap,
-and elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
+They are read as a signal, not an order: on the display they go through the rules above, and
+elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
 asking, which pins the keyboard until you put it down again.
 
 ## GPU acceleration for your apps
