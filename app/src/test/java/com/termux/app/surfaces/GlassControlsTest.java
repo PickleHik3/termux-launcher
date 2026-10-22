@@ -11,12 +11,14 @@ public class GlassControlsTest {
 
     @Test
     public void theCurveRunsFromClearToFrosted() {
-        assertEquals(4, GlassControls.blurForGlass(0));
-        assertEquals(2, GlassControls.grainForGlass(0));
+        assertEquals("Glass 0 is no frost", 0, GlassControls.blurForGlass(0));
+        assertEquals("Glass 0 is no grain", 0, GlassControls.grainForGlass(0));
+        assertEquals(4, GlassControls.blurForGlass(1));
+        assertEquals(2, GlassControls.grainForGlass(1));
         assertEquals(36, GlassControls.blurForGlass(100));
         assertEquals(8, GlassControls.grainForGlass(100));
         assertEquals("clamped", 36, GlassControls.blurForGlass(400));
-        assertEquals("clamped", 2, GlassControls.grainForGlass(-5));
+        assertEquals("clamped", 0, GlassControls.grainForGlass(-5));
         int lastBlur = 0;
         int lastGrain = 0;
         for (int g = GlassControls.GLASS_MIN; g <= GlassControls.GLASS_MAX; g++) {
@@ -45,6 +47,29 @@ public class GlassControlsTest {
         assertTrue(GlassControls.onCurve(7, 3));
         assertTrue(!GlassControls.onCurve(4, 4));
         assertEquals("Solid's no-frost pair reads at the clear end", 0, GlassControls.glassFor(0, 0));
+    }
+
+    @Test
+    public void glassZeroIsNoFrostAndReadsBackAtEveryStop() {
+        assertEquals(0, GlassControls.glassFor(0, 0));
+        assertEquals(0, GlassControls.readBack(0, 0, 0));
+        assertEquals(1, GlassControls.readBack(1, 4, 2));
+        assertEquals("position memory", 0, GlassControls.readBack(0, 0, 0));
+        assertEquals("a stale 0 over a curve pair reads the pair", 1, GlassControls.readBack(0, 4, 2));
+        for (int g : new int[] {0, 1, 20, 40, 75, 100}) {
+            int blur = GlassControls.blurForGlass(g);
+            int grain = GlassControls.grainForGlass(g);
+            assertEquals("stored " + g, g, GlassControls.readBack(g, blur, grain));
+            assertTrue("on curve " + g, GlassControls.onCurve(blur, grain));
+            assertArrayEquals("snapped " + g, new int[] {blur, grain},
+                GlassControls.snapped(blur, grain));
+        }
+        assertEquals(20, GlassControls.glassFor(7, 3));
+        assertEquals(40, GlassControls.glassFor(12, 4));
+        assertEquals(75, GlassControls.glassFor(25, 7));
+        assertEquals("no blur stays no blur", 0, GlassControls.blurWithGrain(0, 0));
+        assertEquals("a wanted blur never lands on 0", 25, GlassControls.blurWithGrain(25, 7));
+        assertTrue(GlassControls.blurWithGrain(20, 0) > 0);
     }
 
     /** Every position's pair reads back as a position that writes the same pair. */
@@ -97,7 +122,7 @@ public class GlassControlsTest {
     public void aReleaseAtFiveStaysAtFive() {
         int blur = GlassControls.blurForGlass(5);
         int grain = GlassControls.grainForGlass(5);
-        assertEquals("0 to 7 write this pair", blur, GlassControls.blurForGlass(0));
+        assertEquals("1 to 7 write this pair", blur, GlassControls.blurForGlass(1));
         assertEquals(5, GlassControls.readBack(5, blur, grain));
         assertEquals("none stored: the nearest", GlassControls.glassFor(blur, grain),
             GlassControls.readBack(-1, blur, grain));
