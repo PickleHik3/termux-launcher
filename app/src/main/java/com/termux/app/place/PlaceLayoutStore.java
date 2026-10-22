@@ -541,14 +541,13 @@ public final class PlaceLayoutStore {
     /**
      * Whether an open keyboard floats over the Linux display or shrinks it. Only the display reads
      * this ({@link KeyboardOverlayPolicy}): it has a fixed screen of its own and nothing to reflow,
-     * so in landscape it floats until the user asks otherwise. The terminal's text always takes the
-     * room, whatever is stored here.
+     * so it floats in both orientations until the user asks otherwise. A stored Resize is kept,
+     * whichever orientation it was set for. The terminal's text always takes the room, whatever
+     * is stored here.
      */
     @NonNull
     public KeyboardMode keyboardMode(@NonNull PlaceOrientation orientation) {
-        KeyboardMode fallback = orientation == PlaceOrientation.LANDSCAPE
-            ? KeyboardMode.OVERLAY : KeyboardMode.RESIZE;
-        return KeyboardMode.parse(readString(orientation, KEY_KEYBOARD_MODE), fallback);
+        return KeyboardMode.parse(readString(orientation, KEY_KEYBOARD_MODE), KeyboardMode.OVERLAY);
     }
 
     public void setKeyboardMode(@NonNull PlaceOrientation orientation, @NonNull KeyboardMode mode) {
