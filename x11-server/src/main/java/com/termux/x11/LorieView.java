@@ -161,6 +161,8 @@ public class LorieView extends SurfaceView implements InputStub {
         }
 
         void sendKey(int k) {
+            // A launcher layer open over the display types first, as over a terminal.
+            if (activity != null && activity.offerKeyToLauncher(k)) return;
             LorieView.this.sendKeyEvent(0, k, true);
             LorieView.this.sendKeyEvent(0, k, false);
         }
@@ -198,6 +200,12 @@ public class LorieView extends SurfaceView implements InputStub {
          * But we can simply send text we want and erase it in the case if user does not need it.
          *
          * @noinspection SameReturnValue*/
+        /** Text for X, less whatever a launcher layer open over the display takes. */
+        void sendText(CharSequence text) {
+            String rest = activity == null ? text.toString() : activity.textLeftForX(text.toString());
+            if (!rest.isEmpty()) sendTextEvent(rest.getBytes(UTF_8));
+        }
+
         boolean replaceText(CharSequence newText, boolean reuse) {
             int oldLen = currentComposingText != null ? currentComposingText.length() : 0;
             int newLen = newText != null ? newText.length() : 0;
@@ -206,12 +214,12 @@ public class LorieView extends SurfaceView implements InputStub {
                 for (int i=0; i < oldLen - newLen; i++)
                     sendKey(KeyEvent.KEYCODE_DEL);
                 for (int i=oldLen; i<newLen; i++)
-                    sendTextEvent(String.valueOf(newText.charAt(i)).getBytes(UTF_8));
+                    sendText(String.valueOf(newText.charAt(i)));
             } else {
                 for (int i = 0; i < oldLen; i++)
                     sendKey(KeyEvent.KEYCODE_DEL);
                 if (newText != null)
-                    sendTextEvent(newText.toString().getBytes(UTF_8));
+                    sendText(newText);
             }
 
             currentComposingText = reuse ? newText : null;
@@ -340,8 +348,16 @@ public class LorieView extends SurfaceView implements InputStub {
     }
 
     public void triggerCallback() {
-        requestFocus();
+        takeFocus();
         updateViewport();
+    }
+
+    /**
+     * The view's own grab for the focus. The launcher can have something typed into open over the
+     * display — a layer, a text field — and the focus is then not ours to take back.
+     */
+    private void takeFocus() {
+        if (activity == null || activity.mayTakeFocus()) requestFocus();
     }
 
     /** Shows or hides the soft keyboard for this view, the same way focusing an editable field would. */
@@ -683,7 +699,7 @@ public class LorieView extends SurfaceView implements InputStub {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
 
-        requestFocus();
+        takeFocus();
 
         // Registration belongs to the page (setClipboardSyncActive), so a window that loses and
         // regains focus — the screen going off, a dialog over the wall — only re-checks what the

@@ -2,6 +2,7 @@ package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
 
+import com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch;
 import com.termux.app.x11.DisplayKeyboardRoute.Target;
 
 import org.junit.Test;
@@ -35,15 +36,35 @@ public class DisplayKeyboardRouteTest {
      */
     @org.junit.Test
     public void theDrawerSearchRaisesTheBuiltInKeyboardOverARunningDisplay() {
-        assertEquals(true, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(true, true, true));
+        assertEquals(DrawerSearch.RAISE_BUILT_IN,
+            DisplayKeyboardRoute.drawerSearch(true, true, true, false, false));
+    }
+
+    /** Keyboard off is the user's standing say, and a tap on search is a request for one. */
+    @org.junit.Test
+    public void aKeyboardTheUserSwitchedOffComesBackForTheSearch() {
+        assertEquals(DrawerSearch.TURN_ON_AND_RAISE,
+            DisplayKeyboardRoute.drawerSearch(true, true, true, true, false));
+    }
+
+    /** A launcher keyboard set to stay away from a physical keyboard stays away: keys do the typing. */
+    @org.junit.Test
+    public void aKeyboardThatYieldsToAPhysicalKeyboardRaisesNothing() {
+        assertEquals(DrawerSearch.NONE,
+            DisplayKeyboardRoute.drawerSearch(true, true, true, false, true));
+        assertEquals(DrawerSearch.NONE,
+            DisplayKeyboardRoute.drawerSearch(true, true, true, true, true));
     }
 
     /** Anywhere else the terminal view is served, and the request keeps its old way. */
     @org.junit.Test
     public void theDrawerSearchLeavesEveryOtherPlaceAlone() {
-        assertEquals(false, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(false, true, true));
-        assertEquals(false, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(true, false, true));
-        assertEquals(false, DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(true, true, false));
+        assertEquals(DrawerSearch.SYSTEM_ASK,
+            DisplayKeyboardRoute.drawerSearch(false, true, true, true, true));
+        assertEquals(DrawerSearch.SYSTEM_ASK,
+            DisplayKeyboardRoute.drawerSearch(true, false, true, true, true));
+        assertEquals(DrawerSearch.SYSTEM_ASK,
+            DisplayKeyboardRoute.drawerSearch(true, true, false, false, false));
     }
 
     /** A keyboard the drawer raised, still up and not touched by the user, goes down with it. */

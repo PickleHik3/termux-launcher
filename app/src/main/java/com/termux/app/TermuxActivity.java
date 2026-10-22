@@ -435,7 +435,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // however it went: the Close button, Back, a place change, or onPause.
                     if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(showing);
                     if (showing) return;
-                    if (holdDisplayKeyboardFocus()) return;
+                    if (holdDisplayKeyboardFocus() || returnFocusToDisplayWindow()) return;
                     View pane = mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
                     if (pane != null) pane.requestFocus();
                 }
@@ -2163,6 +2163,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * listener would re-show the system keyboard 500ms later for a terminal nobody is typing into.
      */
     private void returnFocusToTerminalQuietly() {
+        // Over the display window the focus is the display's: a terminal that is hidden behind
+        // it must not be handed the keys the launcher keyboard types.
+        if (returnFocusToDisplayWindow()) return;
         if (mTerminalView == null || mTerminalView.hasFocus()) return;
         View.OnFocusChangeListener listener = mTerminalView.getOnFocusChangeListener();
         mTerminalView.setOnFocusChangeListener(null);
@@ -2258,6 +2261,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // alpha, scale and translation, so a drawer left open across HOME would strand faded
             // pinned icons.
             mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
+            restoreInAppKeyboardTypingClaim();
             // A home press while the launcher is in front lands on Home page 1, from a window or
             // from another Home page; a return from another app finds the page it left.
             if (mHomePress.goesHome() && mPaneWallController != null) {
@@ -10363,6 +10367,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // refresh pass afterwards; a sheet's glass is built per show(), so the next one already
         // picks up the new configuration.
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION);
+        // The surfaces that closed may have held the keyboard's keys; they go back to whoever
+        // is under them — the display window, when that is where the wall rests.
+        restoreInAppKeyboardTypingClaim();
         if (mCommandPalette != null)
             mCommandPalette.refreshAppearance();
         mChrome.onConfigurationChanged();
@@ -18218,7 +18225,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setPromptFieldUnderPalette(active);
         if (mInAppKeyboard == null)
             return;
-        mInAppKeyboard.setKeyValueInterceptor(active ? getCommandPaletteController() : null);
+        applyInAppKeyboardTypingClaim(active, isTerminalSheetOpen(), isAppDrawerOpen());
     }
 
     /**
@@ -18234,11 +18241,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
         if (mInAppKeyboard == null)
             return;
-        if (active) {
-            mInAppKeyboard.setKeyValueInterceptor(getTerminalSheetController());
-            return;
-        }
-        setAppDrawerInterceptorActive(isAppDrawerOpen());
+        applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), active, isAppDrawerOpen());
     }
 
     /** Seed rect for surfaces growing out of the space bar; false when the keyboard is hidden. */
@@ -18297,24 +18300,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @VisibleForTesting
     public void setAppDrawerInterceptorActive(boolean active) {
-        if (mInAppKeyboard == null)
-            return;
-        // A close/mode reset can be re-entered from terminal dispatch while rename is active. The
-        // rename interceptor is a stronger, independently owned latch and cannot be cleared by the
-        // drawer search lifecycle; its own single finish path restores the previous owner.
-        if (mFolderRenameController.isActive()) {
-            mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
-            return;
-        }
-        // Same latch for a terminal rename chip: beginTerminalRename closes the drawer, and the
-        // closing spring's onClosed lands here hundreds of ms after the chip installed its
-        // interceptor. Clearing the slot then would leave the chip up but dead, typing into the
-        // shell behind it. The chip's own finish path restores the drawer's claim.
-        if (isTerminalRenameActive())
-            return;
-        mInAppKeyboard.setKeyValueInterceptor(
-            active && mAppDrawerController != null
-                ? mAppDrawerController.getSearchController() : null);
+        applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), isTerminalSheetOpen(), active);
     }
 
     /** Installs focusless rename ahead of drawer search while TerminalView retains InputConnection. */
@@ -18339,9 +18325,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mLauncherConfigRepository == null ? null
                             : mLauncherConfigRepository.loadSnapshot().folder(folderId);
                     titleView.bind(new FolderRenameModel(latest == null ? title : latest.title), false);
-                    if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(
-                        isAppDrawerOpen() && mAppDrawerController != null
-                            ? mAppDrawerController.getSearchController() : null);
+                    restoreInAppKeyboardTypingClaim();
                 }
             });
         if (mInAppKeyboard != null)
@@ -18441,7 +18425,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
-        registry.register(this::onHelpBackPressed);
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                return onHelpBackPressed();
+            }
+            @Override public boolean isOpen() {
+                return mHelpController != null && mHelpController.isShowing();
+            }
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             // The dictation card floats over every other surface, so its editor is innermost.
             @Override public boolean onBack() {
@@ -18449,6 +18440,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mVoiceCardEdit == null || !mVoiceCardEdit.isActive()) return false;
                 mVoiceCardEdit.end();
                 return true;
+            }
+            @Override public boolean isOpen() {
+                return mVoiceCardEdit != null && mVoiceCardEdit.isActive();
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
                 return mVoiceCardEdit != null && mVoiceCardEdit.handleKeyDown(keyCode, event);
@@ -18467,6 +18461,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mRenameCoordinator.cancel();
                 return true;
             }
+            @Override public boolean isOpen() {
+                return isTerminalRenameActive();
+            }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
                 return handleTerminalRenameKey(keyCode, event);
             }
@@ -18479,6 +18476,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (!isScrollbackFindActive()) return false;
                 cancelScrollbackFind();
                 return true;
+            }
+            @Override public boolean isOpen() {
+                return isScrollbackFindActive();
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
                 return handleScrollbackFindKey(keyCode, event);
@@ -18499,6 +18499,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mHomeActionsSheet.close();
                 return true;
             }
+            @Override public boolean isOpen() {
+                return mHomeActionsSheet != null && mHomeActionsSheet.isOpen();
+            }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 if (mHomeActionsSheet != null) mHomeActionsSheet.closeImmediately();
             }
@@ -18509,6 +18512,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (!isCommandPaletteOpen()) return false;
                 mCommandPalette.collapse();
                 return true;
+            }
+            @Override public boolean isOpen() {
+                return isCommandPaletteOpen();
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
                 return handleCommandPaletteKey(keyCode, event);
@@ -18531,6 +18537,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxActivity.this)) return true;
                 return mTerminalSheet != null && mTerminalSheet.onBackPressed();
             }
+            @Override public boolean isOpen() {
+                return isTerminalSheetOpen();
+            }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
                 return handleTerminalSheetKey(keyCode, event);
             }
@@ -18552,6 +18561,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mAppDrawerController == null || !mAppDrawerController.isOpen()) return false;
                 if (!mAppDrawerController.onBackPressedInDrawer()) mAppDrawerController.close(true);
                 return true;
+            }
+            @Override public boolean isOpen() {
+                return isAppDrawerOpen();
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
                 return handleAppDrawerKey(keyCode, event);
@@ -18583,6 +18595,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Icons to Overview, an editor to Overview (after its unsaved-changes question),
                 // Overview to the launcher; spent on a hop that is playing.
                 return mAppearance.onBack();
+            }
+            @Override public boolean isOpen() {
+                return mAppearance.isOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 switch (reason) {
@@ -18789,7 +18804,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (interceptor != null) {
                 mInAppKeyboard.setKeyValueInterceptor(interceptor);
             } else {
-                setAppDrawerInterceptorActive(isAppDrawerOpen());
+                restoreInAppKeyboardTypingClaim();
             }
         }
 
@@ -18950,7 +18965,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (interceptor != null) {
                 mInAppKeyboard.setKeyValueInterceptor(interceptor);
             } else {
-                setAppDrawerInterceptorActive(isAppDrawerOpen());
+                restoreInAppKeyboardTypingClaim();
             }
         }
 
@@ -19027,9 +19042,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Over a running display the focus is the display's, so the system keyboard below is
         // refused as "not served" and the search would have no keyboard at all: raise the
         // launcher's, which the drawer types through, in whatever frame the place keeps it.
-        if (com.termux.app.x11.DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(
-                isDisplayWindowShowing(), isEmbeddedDisplayRunning(),
-                mInAppKeyboard != null && mInAppKeyboard.isEnabled())) {
+        com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch route = mInAppKeyboard == null
+            ? com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK
+            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(
+                isDisplayWindowShowing(), isEmbeddedDisplayRunning(), mInAppKeyboard.isEnabled(),
+                mInAppKeyboard.isTurnedOff(), mInAppKeyboard.yieldsToHardwareKeyboard());
+        // A keyboard that stands aside for a physical one raises nothing; the keys type into the
+        // search through the layer's own key route.
+        if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.NONE) return;
+        if (route != com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK) {
+            boolean wasUp = mInAppKeyboard.isVisible();
+            if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.TURN_ON_AND_RAISE) {
+                // Switched off with the keyboard key, and tapping the search asks for it back.
+                // Nobody's pin either: held off from the visibility listener like the raise below.
+                mRaisingDisplayFrameKeyboard = true;
+                try {
+                    mInAppKeyboard.setTurnedOff(false);
+                } finally {
+                    mRaisingDisplayFrameKeyboard = false;
+                }
+            }
             // The drawer's raise is nobody's pin: it goes down again with the drawer
             // (lowerDrawerSearchKeyboard) unless the keyboard was up first or the user claims it.
             if (isDisplayTouchpadFrame()) {
@@ -19037,7 +19069,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 applyDisplayFrameDecision(mFrameContent.onTextFocus(true));
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
-            } else if (!mInAppKeyboard.isVisible()) {
+            } else if (!wasUp) {
                 raiseDisplayFrameKeyboard();
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
@@ -19983,22 +20015,68 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Hands the in-app keyboard's interceptor slot back to whoever owns it now, after a surface
-     * that borrowed it: the palette, a sheet, the display on the Display place, or the drawer's
-     * search (which also keeps a rename's claim, {@link #setAppDrawerInterceptorActive}).
+     * Hands the in-app keyboard's interceptor slot to whoever owns it now. Every surface that
+     * borrows the slot calls this on its way out, and none of them puts {@code null} back: a
+     * layer closing over the display window would leave the keyboard typing into the terminal
+     * hidden behind it.
      */
     private void restoreInAppKeyboardTypingClaim() {
+        applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), isTerminalSheetOpen(),
+            isAppDrawerOpen());
+    }
+
+    /**
+     * The one owner of the in-app keyboard's interceptor slot, in {@link
+     * com.termux.app.terminal.inappkeyboard.TypingClaim}'s order. The three flags are what the
+     * caller knows to be so now: a surface mid-open or mid-close is not yet what its own
+     * {@code isOpen} says.
+     */
+    private void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) {
         if (mInAppKeyboard == null) return;
-        if (isCommandPaletteOpen()) {
-            mInAppKeyboard.setKeyValueInterceptor(getCommandPaletteController());
-        } else if (isTerminalSheetOpen()) {
-            mInAppKeyboard.setKeyValueInterceptor(getTerminalSheetController());
-        } else if (currentWallPage() == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
-            && mPaneWallController != null && mPaneWallController.displayWindow() != null) {
-            mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
-        } else {
-            setAppDrawerInterceptorActive(isAppDrawerOpen());
+        boolean folderRename = mFolderRenameController.isActive();
+        switch (com.termux.app.terminal.inappkeyboard.TypingClaim.owner(palette, sheet,
+            folderRename || isTerminalRenameActive(), drawer, isDisplayWindowTyping())) {
+            case COMMAND_PALETTE:
+                mInAppKeyboard.setKeyValueInterceptor(getCommandPaletteController());
+                break;
+            case TERMINAL_SHEET:
+                mInAppKeyboard.setKeyValueInterceptor(getTerminalSheetController());
+                break;
+            case RENAME:
+                // A folder rename is stronger than the drawer search under it, and a terminal
+                // rename chip installed its own interceptor, which the closing drawer's spring
+                // landing hundreds of ms later must not clear: its finish path restores the claim.
+                if (folderRename) mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
+                break;
+            case APP_DRAWER:
+                mInAppKeyboard.setKeyValueInterceptor(mAppDrawerController == null
+                    ? null : mAppDrawerController.getSearchController());
+                break;
+            case DISPLAY:
+                mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
+                break;
+            default:
+                mInAppKeyboard.setKeyValueInterceptor(null);
+                break;
         }
+    }
+
+    /**
+     * The wall's last settled place, which is the window the keyboard's keys belong to: a swipe
+     * in flight keeps its keys with the window it started from until the wall lands. The display
+     * window in front of the Workspace is the place {@link com.termux.app.wall.PaneWallPage#DISPLAY}.
+     */
+    @Nullable private com.termux.app.wall.PaneWallPage mSettledWallPage;
+
+    @NonNull
+    private com.termux.app.wall.PaneWallPage settledWallPage() {
+        return mSettledWallPage != null ? mSettledWallPage : currentWallPage();
+    }
+
+    /** Whether the settled place is the display window, with a display attached to type into. */
+    private boolean isDisplayWindowTyping() {
+        return settledWallPage() == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+            && mPaneWallController != null && mPaneWallController.displayWindow() != null;
     }
 
     private final VoiceInputSession.Host mVoiceInputHost = new VoiceInputSession.Host() {
@@ -23598,6 +23676,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The tour hears the page first: the keyboard the settle lands is then heard
                     // on the half the wall arrived on, not taken for a swipe on the one it left.
                     if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(wallPage.name());
+                    mSettledWallPage = page;
                     settlePlaceChrome(page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
@@ -24595,11 +24674,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         R.string.settings_terminal_sub_linux_apps_title));
             }
             @Override public boolean consumeLauncherKey(@NonNull KeyEvent event) {
-                // The display's keyboard is a PC keyboard: every key, chords included, is X's.
-                // The wall is left by touch, by the place icons, or by Home. Back is the one
-                // exception, because the phone has nothing else that means "back".
-                if (event.getKeyCode() != KeyEvent.KEYCODE_BACK) return false;
-                return consumeDisplayBack(event);
+                return consumeDisplayWindowKey(event);
             }
         });
         page.applyEnabled(true);
@@ -24765,6 +24840,76 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(getCurrentFocus() instanceof TerminalView)) returnKeysToTerminal();
     }
 
+    /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
+    private boolean isLayerOpen() {
+        return mOverlays.anyOpen();
+    }
+
+    /** The Back press whose release the layer that took it is owed, so X never sees half a Back. */
+    private boolean mLayerClaimedBackDown;
+
+    /**
+     * Every key aimed at the display window. An open layer takes keys first, through the same
+     * registry calls the terminal path makes, and only what it leaves reaches X. With none open
+     * the display's keyboard is a PC keyboard: every key, chords included, is X's. The wall is
+     * left by touch, by the place icons, or by Home. Back is the one exception, because the
+     * phone has nothing else that means "back".
+     */
+    private boolean consumeDisplayWindowKey(@NonNull KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            // Asked even with every layer gone: the press a layer took ended it, and its
+            // release must not become a Back for the app.
+            if (keyCode == KeyEvent.KEYCODE_BACK && mLayerClaimedBackDown) {
+                mLayerClaimedBackDown = false;
+                return true;
+            }
+            if (mOverlays.consumeKeyUp(keyCode)) return true;
+        } else if (event.getAction() == KeyEvent.ACTION_DOWN && isLayerOpen()
+                && mOverlays.consumeKeyDown(keyCode, event)) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) mLayerClaimedBackDown = true;
+            return true;
+        }
+        if (keyCode != KeyEvent.KEYCODE_BACK) return false;
+        return consumeDisplayBack(event);
+    }
+
+    /**
+     * Text the phone's keyboard committed into the display: what an open layer takes is its own,
+     * and what is left is for X.
+     */
+    @NonNull
+    private String textLeftAfterOpenLayer(@NonNull String text) {
+        if (!isLayerOpen()) return text;
+        StringBuilder left = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            i += Character.charCount(codePoint);
+            if (!mOverlays.consumeCodePoint(codePoint, false)) left.appendCodePoint(codePoint);
+        }
+        return left.toString();
+    }
+
+    /**
+     * Whether the display's view may take the focus back for itself, as it does whenever the
+     * window regains focus: not over an open layer, and not from a launcher text field.
+     */
+    private boolean displayViewMayTakeFocus() {
+        return !isLayerOpen() && !(getCurrentFocus() instanceof EditText);
+    }
+
+    /**
+     * Gives the focus back to the display's view when the display window is the one showing;
+     * true when it did, so a caller that would hand it to a terminal pane leaves it be.
+     */
+    private boolean returnFocusToDisplayWindow() {
+        if (settledWallPage() != com.termux.app.wall.PaneWallPage.DISPLAY) return false;
+        com.termux.x11.LorieView display = displayView();
+        if (display == null) return false;
+        display.requestFocus();
+        return true;
+    }
+
     /**
      * Android's Back on the Display place: a keyboard the place raised goes down first, and with
      * nothing of its own to put down the app on the display is told to go back. What it means is
@@ -24772,7 +24917,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean consumeDisplayBack(@NonNull KeyEvent event) {
         com.termux.app.x11.DisplayBackPolicy.Action action =
-            com.termux.app.x11.DisplayBackPolicy.decide(isDisplayWindowShowing(),
+            com.termux.app.x11.DisplayBackPolicy.decide(isDisplayWindowShowing(), isLayerOpen(),
                 isEmbeddedDisplayRunning(),
                 mX11Display == null ? null : mX11Display.textFocusPolicy().state(),
                 mFrameContent.content());
@@ -24868,6 +25013,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the wall already rests on the page (the page's own "Turn on"), which no settle follows.
      */
     private void syncDisplayAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
+        mSettledWallPage = page;
         com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
             ? null : mPaneWallController.displayWindow();
         // Off its window the display's view must neither keep the keys nor take them back.
@@ -24887,8 +25033,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mX11Display.onDisplayPlaceEntered(
                 wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.DISPLAY));
             // The in-app keyboard and the extra-keys row type into X while the page is showing;
-            // the terminal never sees those values.
-            if (mInAppKeyboard != null) mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
+            // the terminal never sees those values, unless a layer open over it holds them.
+            restoreInAppKeyboardTypingClaim();
             syncDisplayKeyboardRoute();
         } else {
             if (mDeferDisplayDetach) mDisplayDetachOwed = true;
@@ -25641,6 +25787,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
                             .TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
                     }
+                }
+                // Hardware keys reach the view before the page sees them when the server's scancode
+                // workaround is off; the same answer either way.
+                @Override public boolean handleKey(@NonNull KeyEvent event) {
+                    return consumeDisplayWindowKey(event);
+                }
+                @NonNull
+                @Override public String textLeftAfterLayer(@NonNull String text) {
+                    return textLeftAfterOpenLayer(text);
+                }
+                @Override public boolean mayTakeFocus() {
+                    return displayViewMayTakeFocus();
                 }
                 @Override public void onDisplayStopped() {
                     com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
