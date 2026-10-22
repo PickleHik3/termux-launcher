@@ -367,7 +367,44 @@ before spending on 3 or 5. 4 and 6 are not worth it.
 - **Qt6 on IBus not forwarding hints** is from a `grep` for `ImHints`/`SetContentType` returning
   nothing in one file.
 - **Qt6 has no XIM**: from the absence of an XIM file in the two listed directories at v6.8.0.
-- **fcitx5 option defaults, Termux packaging of fcitx5/ibus/at-spi2-core, and Termux X11 session
-  D-Bus availability** were not checked. The launcher's own recipe is marked "not device-verified"
-  ([X11_Display.md:200-203](../../../docs/en/X11_Display.md)).
+- **fcitx5, checked from source since (2026-10-22, #129), still not on a device.** Read at tag
+  5.1.23, the version Termux packages:
+  - Auto-show and auto-hide default to on ([instance_p.h:229-231](https://github.com/fcitx/fcitx5/blob/5.1.23/src/lib/fcitx/instance_p.h#L229-L231)),
+    and focus-in and focus-out call the virtual keyboard unless the client asked to control it
+    itself ([instance.cpp:1097-1100, 1152-1155](https://github.com/fcitx/fcitx5/blob/5.1.23/src/lib/fcitx/instance.cpp#L1097-L1100));
+    that flag is false unless a D-Bus client sends it ([inputcontext_p.h:161-162](https://github.com/fcitx/fcitx5/blob/5.1.23/src/lib/fcitx/inputcontext_p.h#L161-L162),
+    [dbusfrontend.cpp:148-153](https://github.com/fcitx/fcitx5/blob/5.1.23/src/frontend/dbusfrontend/dbusfrontend.cpp#L148-L153)).
+  - The calls go only to the UI addon of the current mode: the virtual keyboard
+    (`UIType=OnScreenKeyboard`) is chosen only in on-screen-keyboard mode, and only while
+    somebody owns `org.fcitx.Fcitx5.VirtualKeyboard`, which fcitx5 watches for whenever it comes
+    ([userinterfacemanager.cpp:67-78, 312-345](https://github.com/fcitx/fcitx5/blob/5.1.23/src/lib/fcitx/userinterfacemanager.cpp#L67-L78);
+    [virtualkeyboard.cpp:224-237](https://github.com/fcitx/fcitx5/blob/5.1.23/src/ui/virtualkeyboard/virtualkeyboard.cpp#L224-L237)).
+    No backend registration is needed; the owner only has to answer the method calls. The calls
+    are `ShowVirtualKeyboard` and `HideVirtualKeyboard` on `/org/fcitx/virtualkeyboard/impanel`,
+    interface `org.fcitx.Fcitx5.VirtualKeyboard1` (virtualkeyboard.cpp:302-328).
+  - The mode starts on-screen only where `isAndroid()` is true, i.e. built with `__ANDROID__`
+    ([instance_p.h:163-165](https://github.com/fcitx/fcitx5/blob/5.1.23/src/lib/fcitx/instance_p.h#L163-L165),
+    [misc.h:185-191](https://github.com/fcitx/fcitx5/blob/5.1.23/src/lib/fcitx-utils/misc.h#L185-L191)),
+    which Termux's NDK build is (inferred from the toolchain). Calling fcitx5's own
+    `org.fcitx.Fcitx.VirtualKeyboard1.ShowVirtualKeyboard` on `/virtualkeyboard` sets it
+    anywhere (virtualkeyboard.cpp:330-338).
+  - **The catch:** any key event not marked virtual switches fcitx5 to physical-keyboard mode,
+    and the switch hides the virtual keyboard on its way out (virtualkeyboard.cpp:241-251,
+    283-292). The in-app keyboard types into the display as X keys, so to fcitx5 it is hardware:
+    a helper that passed every hide on would drop the keyboard at the first letter typed, and hear
+    no focus at all after it. The helper tells the two hides apart by asking
+    `org.fcitx.Fcitx.Controller1.CurrentUI` (still `virtualkeyboard` on a focus-out), and puts
+    fcitx5 back in on-screen mode after a switch. Not tried on a phone.
+  - Termux's x11 repository packages fcitx5 5.1.23 with D-Bus on, so the virtual-keyboard addon
+    is built ([ui/CMakeLists.txt](https://github.com/fcitx/fcitx5/blob/5.1.23/src/ui/CMakeLists.txt)),
+    the GTK modules (`fcitx5-gtk2/3/4`) and the Qt 6 module (`fcitx5-qt`, Qt 5 off). The `dbus`
+    package builds `dbus-test-tool` unconditionally (dbus 1.16.2 `tools/meson.build`), which is
+    what owns the name; I did not see the shipped file list.
+- **Session D-Bus in the launcher's X11 display, from source.** There is none to share: the
+  display server is started as a plain task, a drawer app's script sets `DISPLAY`, touch and GPU
+  variables only, and only XFCE is handed a bus, a private one from
+  `dbus-launch --exit-with-session` (`X11LinuxAppRunner.sessionBody`). Termux's dbus is built
+  with X11 autolaunch on, which could give clients on one display a common bus by itself when
+  `dbus-launch` is installed; not relied on, not checked. So the helper starts a bus per display
+  and the runner hands its address to prefix apps.
 - **Everything in Part 2** is read from source; no `X11TextFocus` log was captured for this note.

@@ -165,8 +165,32 @@ GTK and Qt apps pick up the Adwaita theme that ships with them; core X apps such
 use it with `XCURSOR_THEME=Adwaita` in their environment (or a `default` cursor theme that
 inherits it).
 
-**Your input method's own focus.** Exact, and opt in. Two commands feed the same behaviour from a
-shell, so anything that knows when a field takes focus can drive it:
+**Your input method's own focus.** Exact, and on by itself once fcitx5 is installed. fcitx5 knows
+when a text field takes focus and when it loses it, whether you tapped, pressed Tab, or a dialog
+put the cursor in its entry, and the launcher listens to it:
+
+```sh
+pkg install fcitx5 fcitx5-gtk3 fcitx5-qt
+```
+
+(`fcitx5-gtk4` and `fcitx5-gtk2` are there too, for apps on those toolkits.) Then turn the
+display off and on again. From then on, whenever the display starts:
+
+- a small helper, `termux-x11-im`, starts beside it, with a session bus of the display's own and
+  fcitx5 on it. The helper stands in for fcitx5's virtual keyboard, so fcitx5 tells it when a
+  field takes and loses focus, and it passes that on to the launcher;
+- every app you start from the drawer is given `GTK_IM_MODULE=fcitx`, `QT_IM_MODULE=fcitx`,
+  `XMODIFIERS=@im=fcitx` and that bus, so its text fields report to fcitx5.
+
+Without fcitx5 nothing starts and nothing changes. Two limits: an app you start yourself from a
+shell gets none of this unless you export the same variables and
+`DBUS_SESSION_BUS_ADDRESS=unix:path=$PREFIX/tmp/termux-x11-im-bus-0` (the last number is the
+display's), and apps inside a proot container keep the pointer's shape for now. The helper writes
+what it did to `$PREFIX/tmp/termux-x11-im-bus-0.log`; it says `focus in` and `focus out` as it
+passes them on. This is not yet device-verified.
+
+The helper sends the same two commands you can send from a shell yourself, so anything else that
+knows when a field takes focus can drive the keyboard too:
 
 ```sh
 launcherctl keyboard show --source focus
@@ -176,30 +200,6 @@ launcherctl keyboard hide --source focus
 They are read as a signal, not an order: on the display they go through the same rules as a tap,
 and elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
 asking, which pins the keyboard until you put it down again.
-
-With fcitx5, tell your toolkits to use it and run a small watcher beside your session:
-
-```sh
-pkg install fcitx5
-export GTK_IM_MODULE=fcitx
-export QT_IM_MODULE=fcitx
-export XMODIFIERS=@im=fcitx
-```
-
-```sh
-# focus-keyboard.sh: run it in the background: sh focus-keyboard.sh &
-dbus-monitor --session "type='method_call',interface='org.fcitx.Fcitx.InputContext1'" |
-while read -r line; do
-    case "$line" in
-        *FocusIn*)  launcherctl keyboard show --source focus ;;
-        *FocusOut*) launcherctl keyboard hide --source focus ;;
-    esac
-done
-```
-
-This recipe is documented, not device-verified: it needs a session D-Bus running in the same
-session as fcitx5, and the interface name is fcitx5's own. If nothing happens, check that
-`dbus-monitor` prints anything at all while you move between fields.
 
 ## GPU acceleration for your apps
 

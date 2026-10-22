@@ -399,7 +399,8 @@ else
   if ! command -v termux-x11 >/dev/null; then
     say "The display command (termux-x11) is not installed. Turn the Linux display on in the launcher's settings first."; exit 1
   fi
-  termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
+  # A display only for measuring: no fcitx5 beside it, however it is set up for the real one.
+  TERMUX_X11_IM=0 termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 20); do [ -S "$SOCKET" ] && break; sleep 0.5; done
   if [ ! -S "$SOCKET" ]; then
