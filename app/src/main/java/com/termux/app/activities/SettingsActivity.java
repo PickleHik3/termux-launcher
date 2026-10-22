@@ -147,6 +147,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         } else if ((PAGES + "X11DisplayPreferencesFragment").equals(className)) {
             switch (scrollToKey) {
                 case "touchMode": case "x11_android_keyboard": case "x11_keyboard_follows_text":
+                case "x11_keyboard_over_display":
                 case "clipboardEnable":
                     page = "X11DisplayInputPreferencesFragment"; break;
                 case "displayResolutionMode": case "displayScale": case "displayResolutionExact":

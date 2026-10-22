@@ -301,6 +301,14 @@
         <item>2</item>
         <item>3</item>
     </string-array>
+    <string-array name="x11_keyboard_over_display_entries">
+        <item>Overlay</item>
+        <item>Resize display</item>
+    </string-array>
+    <string-array name="x11_keyboard_over_display_values">
+        <item>overlay</item>
+        <item>resize</item>
+    </string-array>
     <string-array name="x11_filtering_entries">
         <item>Smooth</item>
         <item>Sharp</item>
