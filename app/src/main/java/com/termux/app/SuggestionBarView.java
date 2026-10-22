@@ -3590,6 +3590,7 @@ public final class SuggestionBarView extends GridLayout
         setAlpha(1f);
         removeAllViews();
         slotIcons.clear();
+        logDockIconSize("render");
         drawerTileSlot = null;
         drawerTileColumn = -1;
         drawerTileAppSlots = 0;
@@ -4282,12 +4283,22 @@ public final class SuggestionBarView extends GridLayout
         if (vertical)
             return;
         int sizePx = iconSizePx();
+        logDockIconSize("resize");
         if (sizePx <= 0)
             return;
         for (SlotIcon icon : slotIcons) {
             if (icon.slot.getParent() == this)
                 icon.resize(sizePx);
         }
+    }
+
+    /**
+     * TEMPORARY (2026-10-22 slide-to-Home icon size): what the row sizes its slots from, under the
+     * same tag as the dock's own line in TermuxActivity.applyDockLayout. Remove once read.
+     */
+    private void logDockIconSize(@NonNull String why) {
+        if (vertical) return;
+        android.util.Log.w("TermuxDock", "row " + why + " iconSizePx=" + iconSizePx() + " dockIconSizePx=" + dockIconSizePx + " hint=" + dockRowHeightHintPx + " measured=" + measuredRowHeightPx() + " rowW=" + (getWidth() - getPaddingLeft() - getPaddingRight()) + " slots=" + maxButtonCount + " lensBeadFit=" + lensBeadFit + " shown=" + isShown());
     }
 
     /** A folder's mini icons, two to a side of its round shell. */
