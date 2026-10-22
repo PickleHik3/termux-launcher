@@ -17243,8 +17243,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private DockLayout dockLayoutIn(@NonNull PlaceLayout arrangement) {
         DockLayout applied = mAppliedDockLayout;
+        // A preference write (Margin, Corners, a design or toggle) keeps the arrangement but moves
+        // the dock, so the applied one is reused only while the store has not moved either.
         return applied != null && arrangement.equals(mAppliedDockArrangement)
+            && dockStoreRevision() == mAppliedDockRevision
             ? applied : dockLayoutFor(arrangement);
+    }
+
+    /** The layout store's revision, or MIN_VALUE before the preferences are read. */
+    private int dockStoreRevision() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store == null ? Integer.MIN_VALUE : store.revision();
     }
 
     /**
@@ -17272,6 +17281,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private DockLayout mAppliedDockLayout;
     /** The arrangement {@link #mAppliedDockLayout} was measured in; null where not known. */
     @Nullable private PlaceLayout mAppliedDockArrangement;
+    /** The store revision the applied dock was measured at. */
+    private int mAppliedDockRevision = Integer.MIN_VALUE;
     private int mAppliedAzRowChinPaddingPx = Integer.MIN_VALUE;
     private int mAppliedAzRowCrownPaddingPx = Integer.MIN_VALUE;
 
@@ -17349,6 +17360,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mAppliedDockLayout = layout;
         mAppliedDockArrangement = arrangement;
+        mAppliedDockRevision = dockStoreRevision();
         return moved;
     }
 
