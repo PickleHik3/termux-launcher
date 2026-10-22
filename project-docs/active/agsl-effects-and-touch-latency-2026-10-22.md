@@ -85,10 +85,16 @@ check while typing. Record them in `project-docs/device-checks.md` when they are
 
 ## Open questions
 
-- **Wallpaper effects** (raised 2026-10-22, reversing part of the 10-06 removal). Two ideas. The
-  first is animated backgrounds in the spirit of Wallpaper Engine that react to the launcher's
-  surfaces. The second is recipes that work on any user wallpaper: derive colours, pick where each
-  effect goes. Feasibility notes are in the session log; the next grilling round decides.
+- **Wallpaper scenes** (decided 2026-10-22, partly reversing the 10-06 removal). These are
+  first-party procedural AGSL scenes in the spirit of Wallpaper Engine, drawn by the launcher as an
+  in-process layer behind its surfaces. They are not a system live wallpaper, so the lock screen and
+  other apps keep the static wallpaper. Because the layer is in-process, scenes can react to panes,
+  touches, typing, the bell and focus. Glass samples a low-resolution second pass of the scene (about
+  1/8 per axis) instead of blurring the full frame. Animating the user's own photo is parked: the
+  removed pipeline (depth, segmentation, a Gemma director, moments capped at +15%) already covered
+  it, and it was rejected as too subtle. The developer will send Wallpaper Engine examples. A research
+  pass judges each one (can AGSL recreate it, at what cost, what it reacts to) before anything is
+  built. Recreate the look, never the workshop assets.
 - **Frame queueing.** Every frame is presented one vsync late, seeded by the first frame of each
   typing burst missing its deadline (see the latency study, "Buffer Stuffing analysis"). The
   experiment owed is to prime clocks or start a performance-hint session at touch-down, then
