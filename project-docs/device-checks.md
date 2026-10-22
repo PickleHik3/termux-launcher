@@ -13,6 +13,12 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-22 · commit "feat(widgets): Home widgets follow the Text size" · Home with a Clock, a
+  Battery and a Weather widget at 1x1, 2x1 and 2x2; Appearance > Base, Text size at 80%, 100% and
+  150%, once dragging live (the widgets behind the card re-set within a frame of each tick, no
+  flicker) and once after Done: screenshot each. Pass: type grows and shrinks with the slider, no
+  text is cut or overlaps at any size, the 1x1 Battery and Clock still fit their card at 150%. Repeat
+  at system font scale 1.3 (force-stop the app after changing it).
 - 2026-10-22 · commit "feat(appearance): one Text size slider" · Appearance › Custom with
   nothing tapped, Text size at 80%, 100% and 150%, keyboard up: screenshot the terminal, the key
   legends, the status bar figures and window chips, the dock strip titles and Home's app labels →

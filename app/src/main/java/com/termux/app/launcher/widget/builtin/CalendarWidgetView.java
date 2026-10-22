@@ -161,7 +161,7 @@ public class CalendarWidgetView extends BuiltinWidgetView {
         drawnMonthEvents = null;
         Drawing drawing = drawing(day, span);
         frame.removeAllViews();
-        float fontScale = getResources().getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(getResources());
         CalendarLayoutPlanner.Words words = words();
         CalendarCard next = new CalendarCard(getContext(), drawing, (widthDp, heightDp, measure) ->
             CalendarLayoutPlanner.plan(span, widthDp, heightDp, fontScale, drawing.content, words,

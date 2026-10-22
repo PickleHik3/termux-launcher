@@ -234,7 +234,7 @@ public class NotesWidgetView extends BuiltinWidgetView
         String title = data == null ? null : NotesWidgetFormats.title(data.text);
         if (title != null) root.addView(titleView(ui, title));
         root.addView(block(ui, data));
-        TextView age = ui.text("", WidgetTokens.Role.LABEL.sp, style.sansMedium, style.onSurfaceVariant);
+        TextView age = ui.text("", WidgetTokens.textSp(WidgetTokens.Role.LABEL), style.sansMedium, style.onSurfaceVariant);
         trackAge(age, AgeLabel.AGE);
         root.addView(age);
         inset(root, WidgetTokens.INSET_DP, WidgetTokens.INSET_DP, WidgetTokens.INSET_DP,
@@ -249,17 +249,17 @@ public class NotesWidgetView extends BuiltinWidgetView
         View name = nameOrChips;
         if (name == null) {
             TextView label = ui.text(FilesWidgetPaths.fileName(shownPath()),
-                WidgetTokens.Role.LABEL.sp, style.sansMedium, style.onSurfaceVariant);
+                WidgetTokens.textSp(WidgetTokens.Role.LABEL), style.sansMedium, style.onSurfaceVariant);
             label.setSingleLine(true);
             label.setEllipsize(TextUtils.TruncateAt.END);
             name = label;
         }
         LinearLayout row = ui.row(WidgetTokens.GAP_DP,
-            ui.glyph(GLYPH_NOTE, WidgetTokens.Role.BODY.sp, style.primary),
+            ui.glyph(GLYPH_NOTE, WidgetTokens.textSp(WidgetTokens.Role.BODY), style.primary),
             BuiltinWidgetUi.flex(name));
         row.setGravity(Gravity.CENTER_VERTICAL);
         if (withAge) {
-            TextView age = ui.text("", WidgetTokens.Role.LABEL.sp, style.sansMedium,
+            TextView age = ui.text("", WidgetTokens.textSp(WidgetTokens.Role.LABEL), style.sansMedium,
                 style.onSurfaceVariant);
             trackAge(age, AgeLabel.AGE);
             row.addView(age);
@@ -268,7 +268,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     }
 
     @NonNull private TextView titleView(@NonNull BuiltinWidgetUi ui, @NonNull String title) {
-        TextView view = ui.text(title, WidgetTokens.Role.TITLE.sp, ui.style.sansBold,
+        TextView view = ui.text(title, WidgetTokens.textSp(WidgetTokens.Role.TITLE), ui.style.sansBold,
             ui.style.onSurface);
         view.setSingleLine(true);
         view.setEllipsize(TextUtils.TruncateAt.END);
@@ -289,10 +289,10 @@ public class NotesWidgetView extends BuiltinWidgetView
         List<TextView> lines = new ArrayList<>();
         if (!data.exists || NotesWidgetFormats.isBlank(data.text)) {
             lines.add(ui.text(getContext().getString(R.string.bw_files_notes_empty),
-                WidgetTokens.Role.BODY.sp, style.mono, style.onSurfaceVariant));
+                WidgetTokens.textSp(WidgetTokens.Role.BODY), style.mono, style.onSurfaceVariant));
         } else {
             for (String line : NotesWidgetFormats.bodyLines(data.text, max)) {
-                lines.add(ui.text(line, WidgetTokens.Role.BODY.sp, style.mono,
+                lines.add(ui.text(line, WidgetTokens.textSp(WidgetTokens.Role.BODY), style.mono,
                     NotesWidgetFormats.isDoneItem(line) ? style.onSurfaceVariant : style.onSurface));
             }
         }
@@ -309,7 +309,7 @@ public class NotesWidgetView extends BuiltinWidgetView
         String path = shownPath();
         String title = data == null ? null : NotesWidgetFormats.title(data.text);
         TextView line;
-        float bodySp = WidgetTokens.Role.BODY.sp;
+        float bodySp = WidgetTokens.textSp(WidgetTokens.Role.BODY);
         if (data == null) {
             line = ui.text("", bodySp, style.mono, style.onSurface);
         } else if (!data.exists || NotesWidgetFormats.isBlank(data.text)) {
@@ -371,7 +371,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     @NonNull private TextView chip(@NonNull BuiltinWidgetUi ui, @NonNull String path,
                                    @NonNull String name, boolean selected) {
         BuiltinWidgetStyle style = ui.style;
-        TextView chip = ui.text(name, WidgetTokens.Role.LABEL_FORCED.sp, selected ? style.monoMedium : style.mono,
+        TextView chip = ui.text(name, WidgetTokens.textSp(WidgetTokens.Role.LABEL_FORCED), selected ? style.monoMedium : style.mono,
             selected ? style.onPrimaryContainer : style.onSurfaceVariant);
         chip.setGravity(Gravity.CENTER);
         chip.setBackground(ui.rounded(selected ? style.primaryContainer : style.container, ui.dp(12)));
@@ -393,7 +393,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     @NonNull private TextView block(@NonNull BuiltinWidgetUi ui,
                                     @Nullable MarkdownFileSource.Snapshot data) {
         BuiltinWidgetStyle style = ui.style;
-        TextView view = ui.text("", WidgetTokens.Role.BODY.sp, style.mono, style.onSurface);
+        TextView view = ui.text("", WidgetTokens.textSp(WidgetTokens.Role.BODY), style.mono, style.onSurface);
         view.setSingleLine(false);
         view.setHorizontallyScrolling(false);
         view.setLineSpacing(0f, 1.25f);

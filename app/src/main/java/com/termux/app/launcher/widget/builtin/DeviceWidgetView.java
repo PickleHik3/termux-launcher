@@ -116,7 +116,7 @@ public class DeviceWidgetView extends BuiltinWidgetView
         ring = null; bolt = null; chart = null; cpuChart = null; cpuValue = null;
         bars.clear();
         shownSignature = shown.signature();
-        float fontScale = getResources().getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(getResources());
         frame.addView(new WidgetPlanHost(getContext(), style(), (widthDp, heightDp, measure) ->
             DeviceLayoutPlanner.plan(span, widthDp, heightDp, fontScale, shown, measure),
             new WidgetPlanHost.ViewSource() {

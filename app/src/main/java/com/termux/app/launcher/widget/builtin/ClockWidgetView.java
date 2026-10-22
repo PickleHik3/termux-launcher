@@ -142,7 +142,7 @@ public class ClockWidgetView extends BuiltinWidgetView {
         shownDate = date;
         shownAlarm = alarm;
         shownZones = zonesKey(zones);
-        float fontScale = getResources().getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(getResources());
         float density = getResources().getDisplayMetrics().density;
         ClockLayoutPlanner.FaceMeasure faceMeasure = (widthDp, maxHeightDp) ->
             faceView.heightPxFor(widthDp * density, maxHeightDp * density) / density;

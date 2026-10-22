@@ -366,7 +366,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     @NonNull private View buildPlayer(@NonNull BuiltinWidgetSpan span, @NonNull BuiltinWidgetUi ui) {
         MediaLayoutPlanner.Content content = planContent();
-        float fontScale = getResources().getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(getResources());
         return new WidgetPlanHost(getContext(), style(), (widthDp, heightDp, measure) ->
             MediaLayoutPlanner.plan(span, widthDp, heightDp, fontScale, content, measure),
             new WidgetPlanHost.ViewSource() {

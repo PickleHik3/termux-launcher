@@ -50,4 +50,14 @@ public class WidgetTokensTest {
         assertEquals(33f, WidgetTokens.heroMinDp(BuiltinWidgetSpan.ONE_BY_ONE, 3f), 0.001f);
         assertEquals(57f, WidgetTokens.heroMaxDp(), 0f);
     }
+
+    @Test public void theTypeScaleIsTheSystemScaleTimesTheSharedTextSize() {
+        assertEquals(1.95f, WidgetTokens.typeScale(1.3f, 1.5f), 0.001f);
+        com.termux.app.theme.TextScale.set(1.5f);
+        try {
+            assertEquals(21f, WidgetTokens.textSp(WidgetTokens.Role.BODY), 0.001f);
+        } finally {
+            com.termux.app.theme.TextScale.set(1f);
+        }
+    }
 }

@@ -184,7 +184,7 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
         int open = TaskListParser.openCount(all);
         boolean loaded = loaded();
         String shownPath = configString(KEY_PATH, DEFAULT_PATH);
-        float fontScale = getResources().getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(getResources());
         TasksLayoutPlanner.Words words = words();
         describe(loaded, all, open);
         frame.addView(new WidgetPlanHost(getContext(), style(), (widthDp, heightDp, measure) ->
