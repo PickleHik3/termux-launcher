@@ -719,6 +719,43 @@ sanction the record-off-thread/draw-on-thread split that would be needed.
 backlog's GL item, for the recorded reason: the chrome composites over the terminal, the wall
 translates it, and the draw cost that motivated it is a cache problem.
 
+## Baseline on pong (2026-10-22)
+
+Measured on pong (Nothing Phone 2, 90 Hz) with staging `1.1.0-pre.6+dev.84f71ccab`, which carries the
+round-1 telemetry of [`agsl-effects-and-touch-latency-2026-10-22.md`](agsl-effects-and-touch-latency-2026-10-22.md).
+The developer typed a paragraph and a few commands in a bare terminal pane. Each run is a 40 s
+Perfetto trace (atrace `view gfx input sched freq` for `com.termux`, frametimeline). Run 1 used the
+gated inline echo redraw (`debug.tl.echo_inline` unset). Run 2 used the old post path
+(`debug.tl.echo_inline 0`). Terminal effect was off in both.
+
+| Stage | Run 1 inline (191 keys), p50 / p90 / max ms | Run 2 post (205 keys), p50 / p90 / max ms |
+|---|---|---|
+| Finger rest (`Keyboard.down` → `Keyboard.commit`) | 74.2 / 95.4 / 141.8 | 75.7 / 99.1 / 124.6 |
+| Commit → PTY write (`Terminal.write`) | 0.4 / 0.4 / 6.7 | 0.4 / 0.5 / 1.2 |
+| Write → output parsed on main (shell echo round trip) | 7.5 / 10.2 / 16.6 | 7.6 / 10.6 / 14.4 |
+| Commit → echo drawn (`KeyToEcho`) | 19.2 / 23.1 / 46.5 | 17.4 / 21.9 / 31.0 |
+| Echo drawn → frame presented (frametimeline) | 15.5 / 18.0 / 19.9 | 15.9 / 18.7 / 21.1 |
+| App frames / flagged janky | 2919 / 2900 (2879 Buffer Stuffing) | 3009 / 2977 |
+
+Findings:
+
+- **The gated inline redraw gains nothing.** The two runs are within noise. While typing, the app
+  already draws every vsync, so the echo waits for the next traversal whichever path invalidates
+  it. Rank 2 of the research is disproved on this device.
+- **Typing keeps the window drawing at 90 fps.** Frames continue about 250 ms after each touch
+  (`Keyboard2View` press ramp 60 ms + release fade 150 ms, plus the finger rest). At about 5 keys a
+  second this joins into one stream: about 3.7 ms of main-thread traversal per frame, about 29% of the
+  run. In the one 2 s window without keys, the app drew 5 frames, so this is not an idle leak.
+- **Drawn → presented takes about 16 ms, more than one 11.1 ms vsync.** Nearly every frame is
+  flagged Buffer Stuffing: the continuous stream keeps a frame queued ahead, so the echo frame
+  presents about one vsync later than it could **(inference: likely cause, not yet proven)**.
+- From finger-up to the character on screen is about 35 ms. From finger-down it is about 109 ms, of
+  which the finger rest is about 74 ms (commit stays on release, spec decision 2).
+
+Owed: a run with Terminal effect on; a 20 s at-rest trace for the idle audit; a test of whether
+stopping the press-fade stream (or limiting it to the key's own bounds) removes the Buffer Stuffing
+and the extra vsync.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
