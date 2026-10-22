@@ -32,8 +32,10 @@ Terms: **Commit**, **Echo**, **Event effect** and **Ambient effect** are in
 4. **Effects are built in only.** They are original AGSL picked in settings, with no user shader
    files and no kitty.conf `custom_shaders` (option A of the kitty note).
 5. **Event effects by default; ambient effects allowed as an opt-in.** An ambient effect is labelled
-   as a battery cost and stops under Lazy mode, when its page or pane is hidden, and after about
-   10 s without input. It resumes on the next touch.
+   as a battery cost. Keystroke-spawned animation decays on its own (about 10 s at most). Ambient
+   effects belong to a future **Idle animations** setting: while it is on, they run whenever
+   visible and stop under Lazy mode, when hidden or with the screen off, with no idle timeout
+   (revised 2026-10-22).
 6. **If Terminal effect makes echo frames miss vsync, redraw it as a Paint overlay.** The scanlines
    and tint become a bounded Paint-shader layer instead of a `RenderEffect` over the live pane.
    Warp and curvature looks would be dropped or remade. Do this only if round 1 shows missed frames.
@@ -41,6 +43,19 @@ Terms: **Commit**, **Echo**, **Event effect** and **Ambient effect** are in
    never a `RenderEffect`. If they cost echo frames, the sparks get cheaper, not the echo.
 8. **Baseline first, target later.** Round 1 records numbers with no pass bar, and a budget is set
    from them.
+
+9. **Terminal effect gets more realistic in place** (2026-10-22). The CRT styles move to a heavier
+   AGSL render effect: phosphor glow, character and screen flicker, slight beam wobble, curvature.
+   There is no separate "realistic" toggle. A switch on the Battery & performance page (it exists on
+   `pre` as `performance_preferences.xml`; v2-redesign has no such page yet) turns the AGSL path off
+   and draws a flat paint overlay instead: scanlines, tint, TFT grid and flicker, with no curve or
+   glow.
+10. **Flicker is gentle and respects accessibility.** It uses smooth low-amplitude noise, with no
+    hard flashes. Whole-screen brightness moves by a few percent at most, with never more than 3
+    flash-like events a second. It is off entirely when Android's "Remove animations" is on.
+    Flicker is tied to keystrokes and redraws, and runs on its own only under Idle animations.
+11. **Surfaces:** terminal panes, cursor, chrome and keyboard all take shader effects. Wallpaper
+    effects are being reconsidered (see Open questions).
 
 ## Round 1: measure and the cheap fixes
 
@@ -67,3 +82,14 @@ frames. Ambient effects are allowed by decision 5, but none is planned yet.
 
 Round 1's pong baseline is the first. Each effect in round 2 owes a look on pong and a missed-frame
 check while typing. Record them in `project-docs/device-checks.md` when they are built.
+
+## Open questions
+
+- **Wallpaper effects** (raised 2026-10-22, reversing part of the 10-06 removal). Two ideas. The
+  first is animated backgrounds in the spirit of Wallpaper Engine that react to the launcher's
+  surfaces. The second is recipes that work on any user wallpaper: derive colours, pick where each
+  effect goes. Feasibility notes are in the session log; the next grilling round decides.
+- **Frame queueing.** Every frame is presented one vsync late, seeded by the first frame of each
+  typing burst missing its deadline (see the latency study, "Buffer Stuffing analysis"). The
+  experiment owed is to prime clocks or start a performance-hint session at touch-down, then
+  re-measure.
