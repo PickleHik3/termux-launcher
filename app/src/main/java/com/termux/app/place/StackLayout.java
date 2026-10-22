@@ -75,48 +75,148 @@ public final class StackLayout {
         }
     }
 
-    /** The whole bottom stack for one pass. */
+    /** The whole bottom stack for one pass. Worked out once, at construction, then read. */
     public static final class Result {
         /** The dock the pass applies, squeezed as the stack needed. */
-        @NonNull public DockLayout dock;
+        @NonNull public final DockLayout dock;
         /** How much the stack sheds from the apps row to fit under its ceiling; 0 when it fits. */
-        public int squeezePx;
+        public final int squeezePx;
         /** The margin under the stack: the shared edge gap plus the IME's lift. */
-        public int bottomMarginPx;
+        public final int bottomMarginPx;
         /** The edge gap alone, the part of the margin the stack keeps whatever it holds. */
-        public int stackEdgeGapPx;
-        public boolean bandsUnderKeyboard;
-        public int underKeyboardAirPx;
-        public int underKeyboardTopMarginPx;
-        public int underKeyboardBottomMarginPx;
-        public int statusBandPx;
+        public final int stackEdgeGapPx;
+        public final boolean bandsUnderKeyboard;
+        public final int underKeyboardAirPx;
+        public final int underKeyboardTopMarginPx;
+        public final int underKeyboardBottomMarginPx;
+        public final int statusBandPx;
         /** The dock's rows with the status band and the air under the keyboard. */
-        public int dockContentHeightPx;
+        public final int dockContentHeightPx;
         /** The terminal's dock padding, and the half of it under the rows. */
-        public int flushPaddingPx;
-        public int flushBottomInsetPx;
-        /** The stack's height as the container is laid out. */
-        public int stackHeightPx;
-        public boolean stackShown;
+        public final int flushPaddingPx;
+        public final int flushBottomInsetPx;
+        /** The stack's height as the container is laid out; Home's floats are told this too. */
+        public final int stackHeightPx;
+        public final boolean stackShown;
         /** How far the content reaches past the stack's top, after Home and a slide's hold. */
-        public int contentOverlapPx;
+        public final int contentOverlapPx;
         /** The same for a side rail on Home: the stack and its margin. */
-        public int sideStackOverlapPx;
+        public final int sideStackOverlapPx;
         /** How much of the system keyboard's take the content reaches past (Home only). */
-        public int homeImeReachPx;
+        public final int homeImeReachPx;
         /** The gap the content keeps from the edge while the stack is away. */
-        public int contentEdgeGapPx;
+        public final int contentEdgeGapPx;
         /** The band of the widget pane the dock takes at rest. */
-        public int homeGridDockReservePx;
+        public final int homeGridDockReservePx;
         /** The room the chrome takes from the content. */
-        public int contentReservationPx;
-        /** What Home's floats are told: the dock's rows with the padding, the stack, the IME push. */
-        public int homeFloatDockPx;
-        public int homeFloatStackPx;
-        public int homeFloatImePushPx;
+        public final int contentReservationPx;
+        /** What Home's floats are told: the dock's rows with the padding, and the IME's push. */
+        public final int homeFloatDockPx;
+        public final int homeFloatImePushPx;
 
-        private Result(@NonNull DockLayout dock) {
-            this.dock = dock;
+        private Result(@NonNull Input in, @NonNull DockGeometry geometry) {
+            DockGeometry.Snapshot unsqueezed = in.dock.toBuilder().squeezePx(0).build();
+            DockLayout probe = geometry.layout(unsqueezed);
+            Base base = new Base(probe, in.roundedDockStyle, in.dock.arrangement, in.toolbarShown,
+                in.keyboardShown, in.imeLiftPx);
+            int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
+                : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
+            int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
+                in.keyboardOverlays, in.keyboardShown, in.keyboardHeightPx);
+            int projectedPx = stackHeightPx(
+                probe.combinedHeight(in.toolbarHeightPx, in.extraKeysRowEnabled)
+                    + in.statusBandPx + base.airPx, 0, in.keyboardHeightPx);
+            // The ceiling exists to keep a usable slice of content under the stack. A floating
+            // keyboard takes none of that slice, so only what the stack really costs the content
+            // is measured against it.
+            int squeeze = 0;
+            DockLayout squeezed = probe;
+            if (projectedPx - keyboardOverlapPx > ceilingPx) {
+                squeeze = projectedPx - keyboardOverlapPx - ceilingPx;
+                // Two layouts for an overflowing pass: the policy clamps a negative extra row
+                // height to zero, so today the two are equal, but the squeeze stays an input.
+                squeezed = geometry.layout(in.dock.toBuilder().squeezePx(squeeze).build());
+            }
+
+            dock = squeezed;
+            squeezePx = squeeze;
+            bottomMarginPx = base.marginPx;
+            stackEdgeGapPx = base.edgeGapPx;
+            bandsUnderKeyboard = base.bandsUnderKeyboard;
+            underKeyboardAirPx = base.airPx;
+            underKeyboardTopMarginPx = bandsUnderKeyboard ? UnderKeyboardBand.topGapPx(dock) : 0;
+            underKeyboardBottomMarginPx = bandsUnderKeyboard
+                ? UnderKeyboardBand.bottomAirPx(dock, base.edgeGapPx) : 0;
+            statusBandPx = in.statusBandPx;
+            dockContentHeightPx = base.dockContentPx(dock, in.toolbarShown, in.toolbarHeightPx,
+                in.extraKeysRowEnabled, in.statusBandPx);
+            int accessoryContentPx = stackHeightPx(dockContentHeightPx, 0, in.keyboardHeightPx);
+            flushPaddingPx = in.keyboardShown || !in.toolbarShown || !in.flushAllowed ? 0
+                : in.flush.paddingPx(accessoryContentPx, base.marginPx);
+            flushBottomInsetPx = flushPaddingPx / 2;
+            stackHeightPx = stackHeightPx(dockContentHeightPx, flushPaddingPx,
+                in.keyboardHeightPx);
+            homeFloatDockPx = dockContentHeightPx + flushPaddingPx;
+            homeFloatImePushPx = in.systemImeTakePx + (base.lifted ? Math.max(0, in.imeLiftPx) : 0);
+
+            // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps
+            // its whole height.
+            int imeReachPx = in.dockOverlays ? in.systemImeTakePx : 0;
+            int overlapPx = KeyboardOverlayPolicy.overlapPx(in.dockOverlays, stackHeightPx,
+                base.marginPx, keyboardOverlapPx, imeReachPx);
+            sideStackOverlapPx = KeyboardOverlayPolicy.overlapPx(true, stackHeightPx,
+                base.marginPx, 0, imeReachPx);
+            // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
+            // was committed with: whatever the stack grew by for the slide, the content reaches
+            // under it by the same amount.
+            if (in.travelHoldsContent) {
+                overlapPx = PlaceChromeTravel.heldOverlapPx(stackHeightPx, base.marginPx,
+                    in.heldReservationPx);
+                imeReachPx = 0;
+            }
+            contentOverlapPx = overlapPx;
+            homeImeReachPx = imeReachPx;
+            stackShown = DockRows.stackShown(in.toolbarShown, in.keyboardShown,
+                in.statusBandPx > 0);
+            // With the stack away the content is the surface on the bottom edge and keeps the gap
+            // the dock would.
+            contentEdgeGapPx = stackShown ? 0 : base.marginPx;
+            homeGridDockReservePx = KeyboardOverlayPolicy.homeGridDockReservePx(
+                in.dockOverlays && stackShown, dockContentHeightPx, base.edgeGapPx);
+            contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
+                stackHeightPx, base.marginPx, overlapPx);
+        }
+    }
+
+    /**
+     * What a pass and a half's rest build the same way, from the dock they measure: the shared
+     * edge gap and the IME's lift under the stack, whether bands stand under the keyboard and the
+     * air they keep there, and the dock's content (its rows, the status band and that air).
+     */
+    private static final class Base {
+        final int edgeGapPx;
+        /** Whether the IME's lift stands under the stack: only while it holds rows or a keyboard. */
+        final boolean lifted;
+        final int marginPx;
+        final boolean bandsUnderKeyboard;
+        final int airPx;
+
+        Base(@NonNull DockLayout dock, boolean roundedDockStyle,
+             @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
+             int imeLiftPx) {
+            edgeGapPx = ChromePolicy.bottomEdgeGapPx(roundedDockStyle, dock.capsuleBottomGapPx);
+            lifted = toolbarShown || keyboardShown;
+            marginPx = (lifted ? imeLiftPx : 0) + edgeGapPx;
+            bandsUnderKeyboard = toolbarShown
+                && !EdgeStackPolicy.underKeyboard(arrangement).isEmpty();
+            airPx = UnderKeyboardBand.airPx(dock, edgeGapPx, bandsUnderKeyboard);
+        }
+
+        /** The dock's rows (none while it is away), the status band and the air under the keyboard. */
+        int dockContentPx(@NonNull DockLayout dock, boolean toolbarShown, int toolbarHeightPx,
+                          boolean extraKeysRowEnabled, int statusBandPx) {
+            return (toolbarShown ? dock.combinedHeight(toolbarHeightPx, extraKeysRowEnabled) : 0)
+                + statusBandPx + airPx;
         }
     }
 
@@ -131,82 +231,7 @@ public final class StackLayout {
     /** One pass of the bottom stack. {@code geometry} memoises the dock's layouts. */
     @NonNull
     public static Result layout(@NonNull Input in, @NonNull DockGeometry geometry) {
-        DockGeometry.Snapshot unsqueezed = in.dock.toBuilder().squeezePx(0).build();
-        DockLayout probe = geometry.layout(unsqueezed);
-        int lift = in.toolbarShown || in.keyboardShown ? in.imeLiftPx : 0;
-        int edgeGapPx = ChromePolicy.bottomEdgeGapPx(in.roundedDockStyle, probe.capsuleBottomGapPx);
-        int marginPx = lift + edgeGapPx;
-        int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
-            : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, marginPx));
-        boolean bandsUnderKeyboard = in.toolbarShown
-            && !EdgeStackPolicy.underKeyboard(in.dock.arrangement).isEmpty();
-        int airPx = UnderKeyboardBand.airPx(probe, edgeGapPx, bandsUnderKeyboard);
-        int overlapPx = KeyboardOverlayPolicy.contentOverlapPx(
-            in.keyboardOverlays, in.keyboardShown, in.keyboardHeightPx);
-        int projectedPx = stackHeightPx(
-            probe.combinedHeight(in.toolbarHeightPx, in.extraKeysRowEnabled)
-                + in.statusBandPx + airPx, 0, in.keyboardHeightPx);
-        // The ceiling exists to keep a usable slice of content under the stack. A floating
-        // keyboard takes none of that slice, so only what the stack really costs the content is
-        // measured against it.
-        int squeezePx = 0;
-        DockLayout dock = probe;
-        if (projectedPx - overlapPx > ceilingPx) {
-            squeezePx = projectedPx - overlapPx - ceilingPx;
-            dock = geometry.layout(in.dock.toBuilder().squeezePx(squeezePx).build());
-        }
-
-        Result r = new Result(dock);
-        r.squeezePx = squeezePx;
-        r.bottomMarginPx = marginPx;
-        r.stackEdgeGapPx = edgeGapPx;
-        r.bandsUnderKeyboard = bandsUnderKeyboard;
-        r.underKeyboardAirPx = airPx;
-        r.underKeyboardTopMarginPx = bandsUnderKeyboard ? UnderKeyboardBand.topGapPx(dock) : 0;
-        r.underKeyboardBottomMarginPx = bandsUnderKeyboard
-            ? UnderKeyboardBand.bottomAirPx(dock, edgeGapPx) : 0;
-        r.statusBandPx = in.statusBandPx;
-        r.dockContentHeightPx = (in.toolbarShown
-            ? dock.combinedHeight(in.toolbarHeightPx, in.extraKeysRowEnabled) : 0)
-            + in.statusBandPx + airPx;
-        int accessoryContentPx = stackHeightPx(r.dockContentHeightPx, 0, in.keyboardHeightPx);
-        r.flushPaddingPx = in.keyboardShown || !in.toolbarShown || !in.flushAllowed ? 0
-            : in.flush.paddingPx(accessoryContentPx, marginPx);
-        r.flushBottomInsetPx = r.flushPaddingPx / 2;
-        r.stackHeightPx = stackHeightPx(r.dockContentHeightPx, r.flushPaddingPx,
-            in.keyboardHeightPx);
-        r.homeFloatDockPx = r.dockContentHeightPx + r.flushPaddingPx;
-        r.homeFloatStackPx = r.stackHeightPx;
-        r.homeFloatImePushPx = in.systemImeTakePx
-            + (in.toolbarShown || in.keyboardShown ? Math.max(0, in.imeLiftPx) : 0);
-
-        // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps its
-        // whole height.
-        int imeReachPx = in.dockOverlays ? in.systemImeTakePx : 0;
-        overlapPx = KeyboardOverlayPolicy.overlapPx(in.dockOverlays, r.stackHeightPx, marginPx,
-            overlapPx, imeReachPx);
-        r.sideStackOverlapPx = KeyboardOverlayPolicy.overlapPx(true, r.stackHeightPx, marginPx, 0,
-            imeReachPx);
-        // While the wall travels with chrome pre-rolled, the content keeps exactly the room it was
-        // committed with: whatever the stack grew by for the slide, the content reaches under it
-        // by the same amount.
-        if (in.travelHoldsContent) {
-            overlapPx = PlaceChromeTravel.heldOverlapPx(r.stackHeightPx, marginPx,
-                in.heldReservationPx);
-            imeReachPx = 0;
-        }
-        r.contentOverlapPx = overlapPx;
-        r.homeImeReachPx = imeReachPx;
-        r.stackShown = DockRows.stackShown(in.toolbarShown, in.keyboardShown,
-            in.statusBandPx > 0);
-        // With the stack away the content is the surface on the bottom edge and keeps the gap the
-        // dock would.
-        r.contentEdgeGapPx = r.stackShown ? 0 : marginPx;
-        r.homeGridDockReservePx = KeyboardOverlayPolicy.homeGridDockReservePx(
-            in.dockOverlays && r.stackShown, r.dockContentHeightPx, edgeGapPx);
-        r.contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
-            r.stackHeightPx, marginPx, overlapPx);
-        return r;
+        return new Result(in, geometry);
     }
 
     // ---- A half at rest, for a slide ----
@@ -250,16 +275,12 @@ public final class StackLayout {
      */
     public static int restReservationPx(@NonNull RestInput in) {
         DockLayout rest = DockGeometry.compute(in.dock.restOf(in.side));
-        int edgeGapPx = ChromePolicy.bottomEdgeGapPx(in.roundedDockStyle,
-            rest.capsuleBottomGapPx);
-        boolean bands = in.toolbarShown
-            && !EdgeStackPolicy.underKeyboard(in.dock.half(in.side).layout).isEmpty();
-        int dockContentPx = (in.toolbarShown
-            ? rest.combinedHeight(in.toolbarHeightPx, in.extraKeysRowEnabled) : 0)
-            + in.statusBandPx + UnderKeyboardBand.airPx(rest, edgeGapPx, bands);
-        int lift = in.toolbarShown || in.keyboardShown ? in.imeLiftPx : 0;
+        Base base = new Base(rest, in.roundedDockStyle, in.dock.half(in.side).layout,
+            in.toolbarShown, in.keyboardShown, in.imeLiftPx);
+        int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
+            in.extraKeysRowEnabled, in.statusBandPx);
         return KeyboardOverlayPolicy.restReservationPx(in.side == Side.HOME, dockContentPx,
             in.flushPaddingPx, in.keyboardShown, in.keyboardOverlays,
-            Math.max(0, in.keyboardHeightPx), lift + edgeGapPx);
+            Math.max(0, in.keyboardHeightPx), base.marginPx);
     }
 }

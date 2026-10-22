@@ -15973,7 +15973,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Home floats are laid out between the status bar and the dock, and lifted over the
         // keyboard: they hear the stack's rows from this pass.
         mHomeFloatDockPx = stack.homeFloatDockPx;
-        mHomeFloatStackPx = stack.homeFloatStackPx;
+        mHomeFloatStackPx = stack.stackHeightPx;
         mHomeFloatKeyboardShown = state.keyboardShown;
         mHomeFloatImePushPx = stack.homeFloatImePushPx;
         syncHomeFloatObstructions();

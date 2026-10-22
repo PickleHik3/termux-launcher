@@ -244,7 +244,6 @@ public class StackLayoutTest {
         assertEquals("the grid ends above the rows and the gap under them",
             r.dockContentHeightPx + r.stackEdgeGapPx, r.homeGridDockReservePx);
         assertEquals(r.dockContentHeightPx + r.flushPaddingPx, r.homeFloatDockPx);
-        assertEquals(r.stackHeightPx, r.homeFloatStackPx);
         assertEquals(25 + LIFT, r.homeFloatImePushPx);
     }
 
