@@ -2472,3 +2472,18 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   judge whether that reads as the intended ~200 ms. TalkBack reads "name, second line, actions
   hidden" and offers Show/Hide. Typing in the layout editor with the phone's keyboard shrinks the
   XML field above it · pong, by hand.
+- 2026-10-22 · branch `fix/round-2026-10-22` (merge into v2-redesign on the developer's cue) ·
+  Four changes, three owed on pong: (1) commit "fix(dock): no icon reflection while the dock row
+  is off screen" — a terminal window in front with the docked keyboard up shows no faint app
+  icons in the extra-keys row or the keys' top rows; Home still reflects the dock's icons under
+  the tray; a Home float with the keyboard up looks unchanged (the emulator's default layout keeps
+  the apps row above the keyboard, so the hidden-row case never came up there). (2) commit
+  "feat(glass): Glass 0 writes blur 0 and grain 0; a bare stack draws only its rim" — Look editor,
+  Custom row: Glass 0 with Opacity 0 on the status bar, window bar, dock and keyboard shows only
+  the rim; Glass 0 with Opacity above 0 shows the tint without blur or grain; Glass 1 and the
+  Clear/Tint/Mist/Solid stops look as before; the slider reads back where it was left after a
+  restart. (3) commit "debug(statusbar): log who moves the window bar's selection" — when the
+  chip highlight jumps on its own, `adb logcat -s TermuxWindowBar` names the caller; send the
+  trace, then the log lines come out again. (4) commit "fix(terminal-view): a key typed on the
+  in-app keyboard ends a selection and unpins the screen" was verified on the emulator (long
+  press on a streaming pane, then a typed key brings the picture back) · pong, by hand.
