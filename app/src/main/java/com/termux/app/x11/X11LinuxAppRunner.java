@@ -45,6 +45,24 @@ public final class X11LinuxAppRunner {
     static final List<String> INPUT_METHOD_ENV = java.util.Collections.unmodifiableList(
         Arrays.asList("GTK_IM_MODULE=fcitx", "QT_IM_MODULE=fcitx", "XMODIFIERS=@im=fcitx"));
 
+    /**
+     * Where the launcher's own PulseAudio listens for the prefix's apps: a fixed absolute path, so
+     * that it does not depend on the {@code TMPDIR} or {@code XDG_RUNTIME_DIR} a shell or a
+     * desktop happens to set (libpulse's own lookup follows both). The prefix's tmp is the
+     * launcher's, not the user's.
+     */
+    static final String PULSE_SOCKET = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH
+        + "/termux-launcher-pulse";
+    /**
+     * The same server on loopback, for the containers: {@code proot-distro login} binds nothing
+     * of the prefix's tmp but the X11 socket directory ({@code --shared-x11}), so the unix socket
+     * is out of reach there while the network is the host's. PulseAudio's own default port; only
+     * 127.0.0.1 may connect, and without a cookie, since a container has none.
+     */
+    static final int PULSE_TCP_PORT = 4713;
+    /** What a container's app is given as {@code PULSE_SERVER}; see {@link #PULSE_TCP_PORT}. */
+    static final String PULSE_SERVER_TCP = "tcp:127.0.0.1:" + PULSE_TCP_PORT;
+
     /** How long a display gets to come up before the tap is given up on. */
     private static final long START_TIMEOUT_MS = 15_000L;
     /**
@@ -654,10 +672,51 @@ public final class X11LinuxAppRunner {
         // apps keep the cursor guess until that follow-up is verified on a phone.
         if (app.container.isPrefix()) script.append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
+        script.append(audioBlock());
         if (awaitWindowManager != null) script.append(awaitWindowManager);
         script.append("exec ").append(noSandbox ? app.commandWith("--no-sandbox") : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * The lines that give an app sound: a PulseAudio server for it to find, and where. Chromium
+     * and the rest play through libpulse, and Termux starts no server and lets none autospawn
+     * for long, so without this the app is silent.
+     *
+     * <p>Only when {@code pulseaudio} is installed (Set up Linux apps does). If nothing answers on
+     * {@link #PULSE_SOCKET}, one is started, detached and with {@code --exit-idle-time=-1}: the
+     * stock {@code default.pa} suspends the sink when idle, so it costs next to nothing to keep.
+     * {@code PULSE_CLIENTCONFIG=/dev/null} around the start and the check, because a
+     * {@code client.conf} naming a {@code default-server} makes {@code pulseaudio --start} refuse.
+     * The server also listens on loopback for the containers ({@link #PULSE_TCP_PORT}); they are
+     * handed {@code PULSE_SERVER} by {@link ProotDistro#FORWARDED_ENV}, since no host variable
+     * crosses a login. For the prefix the variable is exported here, where it wins over the
+     * lookup that {@code TMPDIR} or a desktop's {@code XDG_RUNTIME_DIR} would otherwise steer.
+     * If the server still does not answer (another one already runs elsewhere, which
+     * {@code --start} then takes for its own), the variable is dropped again so libpulse's own
+     * lookup gets its chance. Pure, so the composition is tested.
+     */
+    @NonNull
+    static String audioBlock() {
+        String bin = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
+        String pulse = ProotDistro.singleQuote(bin + "/pulseaudio");
+        String pactl = ProotDistro.singleQuote(bin + "/pactl");
+        String socket = ProotDistro.singleQuote("unix:" + PULSE_SOCKET);
+        String check = "PULSE_CLIENTCONFIG=/dev/null PULSE_SERVER=" + socket + " " + pactl
+            + " info > /dev/null 2>&1";
+        return "if [ -x " + pulse + " ]; then\n"
+            + "if ! " + check + "; then\n"
+            + "PULSE_CLIENTCONFIG=/dev/null " + pulse + " --start --exit-idle-time=-1"
+            + " -L " + ProotDistro.singleQuote(
+                "module-native-protocol-unix auth-anonymous=1 socket=" + PULSE_SOCKET)
+            + " -L " + ProotDistro.singleQuote("module-native-protocol-tcp listen=127.0.0.1"
+                + " auth-ip-acl=127.0.0.1 auth-anonymous=1 port=" + PULSE_TCP_PORT)
+            + " > /dev/null 2>&1\n"
+            + "fi\n"
+            + "export PULSE_SERVER=" + socket + "\n"
+            + "if ! " + check + "; then unset PULSE_SERVER; fi\n"
+            + "fi\n";
     }
 
     /**
@@ -715,6 +774,7 @@ public final class X11LinuxAppRunner {
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
         script.append("cd \"$HOME\"\n");
+        script.append(audioBlock());
         if (stopWindowManager != null) script.append(stopWindowManager).append('\n');
         script.append("mkdir -p ")
             .append(ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH))

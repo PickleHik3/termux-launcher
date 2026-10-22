@@ -2523,3 +2523,25 @@ place. Agent items first, then the developer's.
   dark and TalkBack "Keyboard mode, Overlay", a Qt app's focus, a dialog entry's focus, and drawer
   search from Keyboard off; known gap from pre to look at: after a GTK focus-out, a text tap in
   xterm or a proot app shows nothing · pong, release build.
+
+## X11 audio for Linux apps
+
+Sound for Linux apps with no shell step (the launcher starts PulseAudio and sets `PULSE_SERVER`).
+Agent items first, then the developer's.
+
+- 2026-10-23 · commit "feat(x11): start PulseAudio for Linux apps and point them at it" · Fresh
+  install, Set up Linux apps with Chromium ticked (the command now lists `pulseaudio`); open
+  Chromium from the drawer in the prefix and play a video: sound comes out, `pulseaudio` is
+  running afterwards (it stays up) and Chromium was never started from a shell · emulator (no mic
+  needed, check the sink is not muted; if the emulator has no audio, check `pactl info` instead).
+- 2026-10-23 · same · The same in a Debian container (Chromium or any app that plays sound from
+  the drawer): sound comes out over `tcp:127.0.0.1:4713`; kill the server, tap the app again and
+  it comes back · emulator.
+- 2026-10-23 · same · A shell with a custom TMPDIR (`export TMPDIR=$HOME/.tmp` in the shell
+  config, restart Termux): a drawer-launched Chromium still has sound, and with a desktop (XFCE)
+  open, an app inside it plays sound too (the desktop's own XDG_RUNTIME_DIR does not hide the
+  server) · emulator.
+- 2026-10-23 · same (Developer) · On pong: remove `~/.config/pulse/client.conf` and
+  `~/.config/pulse/daemon.conf` (the stopgaps), stop the hand-started server, restart Termux, run
+  Set up Linux apps (or `pkg install pulseaudio`), open Chromium from the drawer and play a video:
+  sound works · pong, release build.

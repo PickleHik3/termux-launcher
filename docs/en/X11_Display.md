@@ -222,6 +222,20 @@ They are read as a signal, not an order: on the display they go through the rule
 elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
 asking, which pins the keyboard until you put it down again.
 
+## Sound for Linux apps
+
+Linux apps opened from the app drawer play sound with no setup beyond "Set up Linux apps", which
+installs `pulseaudio`. Whenever you open an app or a desktop and no sound server answers, the
+launcher starts one (detached, kept running; it suspends its audio output when idle, so it costs
+next to nothing) and points the app at it with `PULSE_SERVER`. Apps in the Termux prefix use a
+socket at a fixed path under `$PREFIX/tmp`, so it does not matter what your shell sets `TMPDIR`
+to. Apps in a proot container reach the same server over `tcp:127.0.0.1:4713`, open to this phone
+only, because a container cannot see the prefix's tmp.
+
+To opt out, `pkg uninstall pulseaudio`: the launcher then adds nothing and an app runs as before.
+A `client.conf` naming a `default-server` is ignored while the launcher starts its own server,
+but an app you start from your own shell uses whatever your shell is set up to use.
+
 ## GPU acceleration for your apps
 
 The display server itself always draws in software: X apps render into their own buffers and hand

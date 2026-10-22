@@ -43,7 +43,8 @@ public class X11LinuxAppRunnerTest {
         assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
             + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.inputMethodBlock(":1")
-            + "cd \"$HOME\"\nexec firefox --new-window\n", script);
+            + "cd \"$HOME\"\n" + X11LinuxAppRunner.audioBlock()
+            + "exec firefox --new-window\n", script);
     }
 
     @Test public void anAppInThePrefixMeetsFcitx5OnTheDisplaysBusWhenBothAreThere() {
@@ -81,6 +82,62 @@ public class X11LinuxAppRunnerTest {
             .contains("IM_MODULE"));
         assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
             Collections.emptyList(), null).contains("IM_MODULE"));
+    }
+
+    @Test public void anAppIsGivenAPulseServerOnAFixedSocketWhenPulseaudioIsInstalled() {
+        String bin = com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
+        String socket = "'unix:" + X11LinuxAppRunner.PULSE_SOCKET + "'";
+        String check = "PULSE_CLIENTCONFIG=/dev/null PULSE_SERVER=" + socket + " '" + bin
+            + "/pactl' info > /dev/null 2>&1";
+        String block = X11LinuxAppRunner.audioBlock();
+
+        // Guarded on the binary, so a prefix without pulseaudio runs exactly as before.
+        assertTrue(block.startsWith("if [ -x '" + bin + "/pulseaudio' ]; then\n"));
+        assertTrue(block.endsWith("fi\n"));
+        // Started only when nothing answers, detached, kept up, past a client.conf's default-server.
+        assertTrue(block.contains("if ! " + check + "; then\nPULSE_CLIENTCONFIG=/dev/null '" + bin
+            + "/pulseaudio' --start --exit-idle-time=-1 "));
+        assertTrue(block.contains("module-native-protocol-unix auth-anonymous=1 socket="
+            + X11LinuxAppRunner.PULSE_SOCKET + "'"));
+        assertTrue(block.contains("module-native-protocol-tcp listen=127.0.0.1"
+            + " auth-ip-acl=127.0.0.1 auth-anonymous=1 port=4713'"));
+        // The address is fixed and under the prefix's tmp, whatever the shell's TMPDIR says.
+        assertTrue(X11LinuxAppRunner.PULSE_SOCKET.startsWith(
+            com.termux.shared.termux.TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/"));
+        assertFalse(block.contains("TMPDIR"));
+        assertTrue(block.contains("export PULSE_SERVER=" + socket + "\n"));
+        assertTrue(block.contains("if ! " + check + "; then unset PULSE_SERVER; fi\n"));
+
+        String script = X11LinuxAppRunner.script(app("chromium"), ":1", Collections.emptyList());
+        assertTrue(script.contains(block));
+        assertTrue("before the app runs", script.indexOf(block) < script.indexOf("exec "));
+    }
+
+    @Test public void aDesktopGetsTheServerBeforeItsRuntimeDirChangesWhereLibpulseLooks() {
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null);
+        String block = X11LinuxAppRunner.audioBlock();
+
+        // PULSE_SERVER is exported ahead of sessionBody's XDG_RUNTIME_DIR, and wins over it.
+        assertTrue(script.contains(block));
+        assertTrue(script.indexOf(block) < script.indexOf("export XDG_RUNTIME_DIR="));
+        assertFalse(X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE"))
+            .contains("PULSE_SERVER"));
+    }
+
+    @Test public void aContainerAppReachesTheServerOverLoopbackBecauseTheSocketIsNotBoundIn() {
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        LinuxAppCatalog.LinuxApp inDebian = new LinuxAppCatalog.LinuxApp(debian, "chromium",
+            "chromium", "chromium", "", "", "", false);
+        String script = X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList());
+
+        // The host starts the server; the container is handed the TCP address with -e.
+        assertTrue(script.contains(X11LinuxAppRunner.audioBlock()));
+        assertEquals("tcp:127.0.0.1:4713", X11LinuxAppRunner.PULSE_SERVER_TCP);
+        assertTrue(ProotDistro.loginCommand(debian, "chromium")
+            .contains(" -e PULSE_SERVER=tcp:127.0.0.1:4713 "));
+        assertTrue(ProotDistro.FORWARDED_ENV.contains("PULSE_SERVER=tcp:127.0.0.1:4713"));
     }
 
     @Test public void theNoSandboxOverloadAppendsTheFlagToTheAppsOwnCommand() {
