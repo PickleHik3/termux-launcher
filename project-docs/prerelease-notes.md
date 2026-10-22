@@ -17,6 +17,8 @@ Latest stable: v1.2.0.
 - Benchmark graphics in Set up Linux apps finds this phone's fastest graphics option.
 - Full screen uses the whole screen.
 - Dragging a launcher widget across pages no longer crashes.
+- When another app is your home screen, the launcher can have a wallpaper of its own, and its colours theme the launcher.
+- Battery & performance in Settings gathers the power presets and the motion effects they turn off.
 - The keyboard floats over the Linux display in portrait, follows text fields in every touch mode, and with fcitx5 follows text-field focus exactly.
 - The touchpad can switch the keyboard between floating and making room.
 - The drawer, palette and sheets over the Linux display take Back and typing.
@@ -33,6 +35,8 @@ These may change or be dropped before they reach a stable release.
 - Benchmark graphics, under Settings → Display → Linux apps → Set up Linux apps → Graphics, tries every graphics option this phone has and keeps the fastest. (merge d55271a54 on `pre`) <!-- stays: P1, P2 -->
 - Full screen now uses the whole screen: the empty band left where the status bar was is gone. (280ced3f7 on `pre`) <!-- stays: P1, P2 -->
 - Dragging one of the launcher's own widgets to the edge of the Widgets page to move it to another page no longer crashes the launcher. (77e72e455 on `pre`) <!-- stays: P1, P2 -->
+- With another app as your home screen, Appearance lets you pick a picture for Termux Launcher alone: it sits behind the terminal and under the glass, and the phone's own wallpaper stays as it was. Tick "Also set as phone wallpaper" to set both. The launcher's Material colours follow that picture. (merges 19b0f4c29 and 0f256d039 on `pre`) <!-- stays: P1, P2 -->
+- Settings › App › Battery & performance gathers Reduce idle activity, the Low-memory preset and the motion they trim (Glass refraction, Living glass, Wallpaper parallax, Cursor trail, Terminal effect), and shows which ones a preset has turned off. Wallpaper parallax moved there from Appearance. (merge 8f1301960 on `pre`) <!-- stays: P1, P2 -->
 - The keyboard floats over the Linux display in portrait as it does in landscape, so apps no longer resize and flicker each time it opens. (branch `feat/display-keyboard`, spec #125) <!-- stays: P1, P2 -->
 - "Keyboard follows text fields" works in every touch mode: Touchscreen, Trackpad and Direct touch. (branch `feat/display-keyboard`, #126) <!-- stays: P1, P2 -->
 - The touchpad has a button that switches between the keyboard floating over the display and the display making room for it, so you can reach its bottom corners. (branch `feat/display-keyboard`, #128) <!-- stays: P1, P2 -->
