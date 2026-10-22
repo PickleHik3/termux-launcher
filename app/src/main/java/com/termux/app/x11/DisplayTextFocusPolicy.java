@@ -26,19 +26,15 @@ import androidx.annotation.Nullable;
  * asked for is theirs, and a tap on the desktop must not take it away. Asking for it pins it:
  * from then on focus is ignored until it is asked down again, or until the wall leaves the place.
  *
- * <p>Inert unless the Display place is on screen, the setting is on, and either the touch mode is
- * Touchscreen or mouse mode's touchpad holds the keyboard frame: in Trackpad and Direct touch a
- * tap on the display is not a tap on a widget, and the two modes are meant to behave exactly as
- * they always have. A tap on the touchpad is a click wherever the pointer is standing, in every
- * touch mode, so while the pad is up it counts as a tap on a widget like a Touchscreen tap.
+ * <p>Inert unless the Display place is on screen and the setting is on, whatever the touch mode.
+ * A tap is a click where it lands: under the finger in Touchscreen and Direct touch, at the
+ * pointer in Trackpad and on mouse mode's touchpad, so in every case the cursor name read after it
+ * is the name of the widget that was clicked.
  */
 public final class DisplayTextFocusPolicy {
 
     /** How long after a tap a cursor name still counts as that tap's answer. */
     public static final long TAP_WINDOW_MS = 150L;
-
-    /** {@code touchMode} 2 — Touchscreen. The policy sleeps through Trackpad and Direct touch. */
-    public static final int TOUCH_MODE_TOUCHSCREEN = 2;
 
     /** The cursor names an X client draws over text. Anything else, or nothing, is not text. */
     private static final String[] TEXT_CURSORS = {"xterm", "text", "ibeam", "vertical-text"};
@@ -85,10 +81,7 @@ public final class DisplayTextFocusPolicy {
 
     @NonNull private State state = State.CLOSED;
     private boolean enabled = true;
-    private int touchMode = TOUCH_MODE_TOUCHSCREEN;
     private boolean onPlace;
-    /** True while mouse mode's touchpad holds the keyboard frame; its taps are clicks. */
-    private boolean padUp;
     /** The name the pointer's cursor last reported, whether or not a finger was involved. */
     @NonNull private String cursorName = "";
     /** A name that arrived inside the open tap window, or null while none has. */
@@ -113,7 +106,7 @@ public final class DisplayTextFocusPolicy {
 
     /** True while the signals mean anything at all. */
     public boolean isActive() {
-        return enabled && onPlace && (padUp || touchMode == TOUCH_MODE_TOUCHSCREEN);
+        return enabled && onPlace;
     }
 
     /** True while the wall rests on the Display place. */
@@ -133,29 +126,6 @@ public final class DisplayTextFocusPolicy {
         if (enabled == value) return;
         enabled = value;
         if (!isActive()) standDown("setting " + (value ? "on" : "off"));
-    }
-
-    /** The display's {@code touchMode}: only Touchscreen is read as taps on widgets. */
-    public void setTouchMode(int mode) {
-        if (touchMode == mode) return;
-        touchMode = mode;
-        if (!isActive()) standDown("touch mode " + mode);
-    }
-
-    /**
-     * Whether mouse mode's touchpad holds the keyboard frame. A tap on the pad is a click where
-     * the pointer stands, so it answers a cursor name exactly as a Touchscreen tap does — and
-     * the touch mode under it, whatever it is, decides nothing while the pad is there.
-     */
-    public void setPadUp(boolean value) {
-        if (padUp == value) return;
-        padUp = value;
-        if (!isActive()) standDown("the touchpad went down");
-    }
-
-    /** True while mouse mode's touchpad holds the keyboard frame. */
-    public boolean isPadUp() {
-        return padUp;
     }
 
     // ---- The wall ----------------------------------------------------------------------------
