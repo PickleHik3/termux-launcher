@@ -24,7 +24,9 @@ import java.util.List;
  * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
  * a restore writes the value the layout was resolving to whether or not it had a key of its own.
  * That materialises a key the global value was answering for, at the value it was answering with:
- * the same arrangement, spelled out.
+ * the same arrangement, spelled out. The keyboard mode is the exception: it is put back as stored
+ * or as absent, so a default that later changes is not kept as a choice. The signature still
+ * compares the mode it resolves to, like every other field.
  *
  * <p>A snapshot remembers its variant and restores onto it, whatever the store is on by then, so a
  * Discard puts back the layout that was being edited and never the other one.
@@ -49,6 +51,12 @@ public final class PlaceArrangeSnapshot {
          */
         final Slot[] slots;
         final PlaceLayout.KeyboardMode keyboardMode;
+        /**
+         * Whether the keyboard mode had a key of its own. The one field a restore leaves absent
+         * where it was absent: the mode's default has moved (portrait was Resize, now Overlay),
+         * and a revert that spelled it out kept the old default as though it were a choice.
+         */
+        final boolean keyboardModeStored;
         final PlaceLayout.KeyboardForm keyboardForm;
         final int widgetColumns;
         final int widgetRows;
@@ -64,6 +72,7 @@ public final class PlaceArrangeSnapshot {
             for (Element element : Element.values())
                 slots[element.ordinal()] = places.slot(orientation, element);
             keyboardMode = places.keyboardMode(orientation);
+            keyboardModeStored = places.hasStoredKeyboardMode(orientation);
             keyboardForm = places.keyboardForm(orientation);
             widgetColumns = places.widgetColumns(orientation);
             widgetRows = places.widgetRows(orientation);
@@ -78,6 +87,7 @@ public final class PlaceArrangeSnapshot {
             orientation = base.orientation;
             slots = base.slots.clone();
             keyboardMode = base.keyboardMode;
+            keyboardModeStored = base.keyboardModeStored;
             keyboardForm = base.keyboardForm;
             widgetColumns = base.widgetColumns;
             widgetRows = base.widgetRows;
@@ -90,7 +100,8 @@ public final class PlaceArrangeSnapshot {
         void restore(@NonNull PlaceLayoutStore places) {
             for (Element element : Element.values())
                 places.setSlot(orientation, element, slots[element.ordinal()]);
-            places.setKeyboardMode(orientation, keyboardMode);
+            if (keyboardModeStored) places.setKeyboardMode(orientation, keyboardMode);
+            else places.clearKeyboardMode(orientation);
             places.setKeyboardForm(orientation, keyboardForm);
             places.setWidgetColumns(orientation, widgetColumns);
             places.setWidgetRows(orientation, widgetRows);

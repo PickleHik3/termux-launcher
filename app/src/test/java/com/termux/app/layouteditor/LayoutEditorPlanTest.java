@@ -481,4 +481,22 @@ public class LayoutEditorPlanTest {
         places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         assertFalse("the minimal layout is not this session's to lose", plan.isDirty());
     }
+
+    /**
+     * Opening the editor and discarding writes no keyboard mode: the revert puts back what the
+     * layout stored, and portrait stored none, so the display keeps reading the default.
+     */
+    @Test
+    public void aDiscardedVisitWritesNoKeyboardMode() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        plan.drop(Bar.STATUS_BAR, null);
+        assertTrue(plan.isDirty());
+
+        plan.revert();
+
+        assertFalse(prefs.contains("layout.portrait.keyboard_mode"));
+        assertFalse(prefs.contains("layout.landscape.keyboard_mode"));
+        assertEquals(KeyboardMode.OVERLAY, places.keyboardMode(PORTRAIT));
+        assertFalse(plan.isDirty());
+    }
 }

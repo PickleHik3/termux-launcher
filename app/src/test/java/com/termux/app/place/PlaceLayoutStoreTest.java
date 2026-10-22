@@ -120,6 +120,47 @@ public class PlaceLayoutStoreTest {
         assertEquals(KeyboardMode.RESIZE, store().resolve(PlaceOrientation.LANDSCAPE).keyboardMode);
     }
 
+    // ------------------------------------------------------------------ the Overlay reset
+
+    /**
+     * An older Layout editor's revert stored the portrait Resize it fell back to; the reset takes
+     * that away once, in every layout, and leaves a stored Overlay and landscape as they are.
+     */
+    @Test
+    public void aStoredPortraitResizeIsResetToOverlayOnce() {
+        prefs.edit()
+            .putInt(PlaceLayoutStore.KEY_MIGRATED, MIGRATED)
+            .putString("layout.portrait.keyboard_mode", "resize")
+            .putString("layout.minimal.portrait.keyboard_mode", "resize")
+            .putString("layout.home.portrait.keyboard_mode", "overlay")
+            .putString("layout.landscape.keyboard_mode", "resize")
+            .commit();
+
+        PlaceLayoutStore store = store();
+
+        assertFalse(prefs.contains("layout.portrait.keyboard_mode"));
+        assertFalse(prefs.contains("layout.minimal.portrait.keyboard_mode"));
+        assertEquals(KeyboardMode.OVERLAY, store.keyboardMode(PlaceOrientation.PORTRAIT));
+        assertEquals("a stored Overlay is kept",
+            "overlay", prefs.getString("layout.home.portrait.keyboard_mode", null));
+        assertEquals("landscape always defaulted to Overlay, so its Resize was chosen",
+            KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.LANDSCAPE));
+        assertTrue(prefs.getBoolean(PlaceLayoutStore.KEY_KEYBOARD_OVERLAY_RESET_DONE, false));
+
+        // A Resize picked after the reset is the user's, and a later start keeps it.
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.RESIZE);
+        assertEquals(KeyboardMode.RESIZE, store().keyboardMode(PlaceOrientation.PORTRAIT));
+    }
+
+    /** A fresh install takes the flag on its first start, so the reset never runs on it later. */
+    @Test
+    public void aFreshInstallIsMarkedAsReset() {
+        store();
+        assertTrue(prefs.getBoolean(PlaceLayoutStore.KEY_KEYBOARD_OVERLAY_RESET_DONE, false));
+        assertEquals("the flag is a flag of its own, not a migration step",
+            MIGRATED, prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
+    }
+
     // ------------------------------------------------------------------ the global fallback
 
     @Test

@@ -87,6 +87,16 @@ public final class PlaceLayoutStore {
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
+    /**
+     * Set once {@link #resetPortraitKeyboardResizeOnce} has run, on every install, fresh ones
+     * included. A flag of its own and not a {@link #MIGRATION_VERSION} step: the pre-release line
+     * ships the same reset under this same key at a lower version number, and a version bump there
+     * would make a later move to this line skip its own steps. One key for both, so it runs once
+     * across them.
+     */
+    @VisibleForTesting static final String KEY_KEYBOARD_OVERLAY_RESET_DONE =
+        "place_keyboard_overlay_reset_done";
+
     private static final String PREFIX = "place.";
     private static final String LAYOUT_PREFIX = "layout.";
 
@@ -383,6 +393,7 @@ public final class PlaceLayoutStore {
         mSeeded = new boolean[LayoutVariant.values().length][PlaceOrientation.values().length];
         mVariantViews = new PlaceLayoutStore[LayoutVariant.values().length];
         migrateIfNeeded();
+        resetPortraitKeyboardResizeOnce();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
     }
 
@@ -1084,6 +1095,24 @@ public final class PlaceLayoutStore {
     }
 
     /**
+     * Whether this orientation's keyboard mode has a key of its own, rather than reading the
+     * Overlay every layout falls back to. The Layout editor's snapshot asks, so its revert puts an
+     * absent mode back as absent instead of pinning the default it answered with: a pinned
+     * default outlives a change of default, which is how portrait kept Resize after Overlay
+     * became the default.
+     */
+    public boolean hasStoredKeyboardMode(@NonNull PlaceOrientation orientation) {
+        return mStore != null && mStore.contains(variantKey(orientation, KEY_KEYBOARD_MODE));
+    }
+
+    /** Drops this orientation's keyboard mode, so it reads the default again. */
+    public void clearKeyboardMode(@NonNull PlaceOrientation orientation) {
+        if (mStore == null) return;
+        mStore.edit().remove(variantKey(orientation, KEY_KEYBOARD_MODE)).apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
      * The shape the keyboard takes. Docked until the user asks for something else: floating and
      * split are choices, never a default, so nothing has to be written for the launcher to keep
      * the keyboard it has always had.
@@ -1502,6 +1531,29 @@ public final class PlaceLayoutStore {
         if (fromVersion < 12) migrateTaskbarToTheDrawerTile();
         if (fromVersion < 13) migrateToLinkedKeys();
         mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Once per install, after the migration: a portrait keyboard mode stored as Resize goes, so the
+     * display reads the Overlay default. Before Overlay was the portrait default, the Layout
+     * editor's revert wrote back the Resize it was falling back to, so a stored portrait Resize
+     * is far more often that visit than a choice; the touchpad's mode button switches it back.
+     * Every layout's portrait key, since the minimal and Home layouts seed from the normal one and
+     * the display wears the normal or the minimal one. A stored Overlay and landscape are left
+     * alone: landscape always defaulted to Overlay, so what it holds was chosen. The flag is set
+     * whether or not anything was removed, so a fresh install never runs it and a Resize picked
+     * after it is kept.
+     */
+    private void resetPortraitKeyboardResizeOnce() {
+        if (mStore == null || mStore.getBoolean(KEY_KEYBOARD_OVERLAY_RESET_DONE, false)) return;
+        String resize = KeyboardMode.RESIZE.storageValue();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String key = layoutKey(variant, PlaceOrientation.PORTRAIT, KEY_KEYBOARD_MODE);
+            if (resize.equals(mStore.getString(key, null))) editor.remove(key);
+        }
+        editor.putBoolean(KEY_KEYBOARD_OVERLAY_RESET_DONE, true).apply();
         mRevision.incrementAndGet();
     }
 
