@@ -160,13 +160,10 @@ public final class TerminalView extends View {
     private boolean mFrostOnTravelReflow;
     /** Whether this travel is frosted throughout ({@link #holdTravelFrost}), to thaw as it ends. */
     private boolean mTravelFrostHeld;
-    /** The frost's change, while one runs (API 31+), and how deep it stands, 0 to 1. */
-    /** Frame-source counter for the idle audit: terminal.scroll. */
+    /** Frame-source counters for the idle audit. */
     private static final com.termux.terminal.FrameProbe.Source TERMINAL_SCROLL = com.termux.terminal.FrameProbe.source("terminal.scroll");
-
-    /** Frame-source counter for the idle audit: terminal.reflowFrost. */
     private static final com.termux.terminal.FrameProbe.Source TERMINAL_REFLOWFROST = com.termux.terminal.FrameProbe.source("terminal.reflowFrost");
-
+    /** The frost's change, while one runs (API 31+), and how deep it stands, 0 to 1. */
     @Nullable private ValueAnimator mReflowFrost;
     private float mReflowFrostLevel;
     /** How long the frost over a travel's reflow takes to thaw. */
