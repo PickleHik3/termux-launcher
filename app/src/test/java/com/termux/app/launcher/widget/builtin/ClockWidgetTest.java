@@ -25,6 +25,7 @@ import com.termux.app.terminal.ClockFaceRenderer;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
+import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
@@ -66,6 +67,10 @@ public class ClockWidgetTest {
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
         fontScale(1f);
+    }
+
+    @After public void resetTextScale() {
+        com.termux.app.theme.TextScale.set(1f);
     }
 
     // ----- kind loading ---------------------------------------------------------------------

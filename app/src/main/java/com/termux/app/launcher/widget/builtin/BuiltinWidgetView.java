@@ -44,7 +44,8 @@ import java.util.List;
  * measure asks for is built at layout, once the size is the one the card is drawn at, and the
  * sources run from attach to detach across measures.</p>
  */
-public abstract class BuiltinWidgetView extends FrameLayout {
+public abstract class BuiltinWidgetView extends FrameLayout
+        implements com.termux.app.theme.TextScale.Follower {
     /** One editable setting of a widget, offered by the settings sheet. */
     public static final class ConfigField {
         /**
@@ -958,7 +959,25 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         return new BuiltinWidgetUi(getContext(), style, corner);
     }
 
+    /** The shared Text size the content was last built at. */
+    private float builtTextScale = com.termux.app.theme.TextScale.get();
+    /** Builds again at the new Text size, once a frame however many ticks the slider sends. */
+    private final Runnable followTextScale = () -> {
+        if (built && builtTextScale != com.termux.app.theme.TextScale.get()) rebuild();
+    };
+
+    /**
+     * The shared Text size moved: the type is planned at it, so the content is built again, at the
+     * next frame and only if the factor differs from the one it was built at.
+     */
+    @Override public void onTextScaleChanged() {
+        if (!built || builtTextScale == com.termux.app.theme.TextScale.get()) return;
+        removeCallbacks(followTextScale);
+        postOnAnimation(followTextScale);
+    }
+
     protected final void rebuild() {
+        builtTextScale = com.termux.app.theme.TextScale.get();
         boolean wasStarted = started;
         if (wasStarted) stopInternal();
         content.removeAllViews();

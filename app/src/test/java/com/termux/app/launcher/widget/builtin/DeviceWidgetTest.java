@@ -23,6 +23,7 @@ import com.termux.app.launcher.widget.WidgetCellRect;
 import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Part;
 import com.termux.app.theme.SchemeTone;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -58,6 +59,10 @@ public class DeviceWidgetTest {
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
         fontScale(1f);
+    }
+
+    @After public void resetTextScale() {
+        com.termux.app.theme.TextScale.set(1f);
     }
 
     // ----- kind loading ---------------------------------------------------------------------
@@ -139,6 +144,31 @@ public class DeviceWidgetTest {
                 }
                 if (span != BuiltinWidgetSpan.ONE_BY_ONE) {
                     assertTrue(where + ": the level shows", plan.has("hero"));
+                }
+            }
+        }
+    }
+
+    /** The shared Text size at 80% and 150%, alone and on a 1.3 system scale: every span fits. */
+    @Test public void everySpanFitsItsCardAtTheSharedTextSizeEnds() {
+        for (float text : new float[] {0.8f, 1.5f}) {
+            com.termux.app.theme.TextScale.set(text);
+            for (float font : new float[] {1f, 1.3f}) {
+                fontScale(font);
+                for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
+                    String where = span + " at text " + text + " font " + font;
+                    WidgetLayoutPlan plan = plan(laidOut(span, true), where);
+                    for (Part part : plan.parts) {
+                        assertTrue(where + ": " + part + " inside " + plan.inset,
+                            plan.inset.contains(part.box));
+                    }
+                    for (int i = 0; i < plan.parts.size(); i++) {
+                        for (int j = i + 1; j < plan.parts.size(); j++) {
+                            Part a = plan.parts.get(i), b = plan.parts.get(j);
+                            assertFalse(where + ": " + a + " overlaps " + b,
+                                a.box.overlaps(b.box));
+                        }
+                    }
                 }
             }
         }

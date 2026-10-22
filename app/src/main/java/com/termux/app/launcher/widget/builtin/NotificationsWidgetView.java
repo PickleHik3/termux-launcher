@@ -239,7 +239,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         }
         shownGroups = groups;
         BuiltinWidgetSpan span = span();
-        float fontScale = res.getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(res);
         boolean canClear = isPreview() || LauncherCtlNotificationListener.isListenerConnected();
         NotificationsLayoutPlanner.Words words = words();
         List<NotificationsWidgetData.Group> shown = groups;

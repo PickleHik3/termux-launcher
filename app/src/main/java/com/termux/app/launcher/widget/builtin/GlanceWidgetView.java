@@ -133,7 +133,7 @@ public class GlanceWidgetView extends BuiltinWidgetView implements BatterySource
         shownSignature = signature(shown);
         shownItem = shown.item;
         setContentDescription(describe(shown));
-        float fontScale = getResources().getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(getResources());
         frame.addView(new WidgetPlanView(getContext(), style(), (widthDp, heightDp, measure) ->
             GlanceLayoutPlanner.plan(span, widthDp, heightDp, fontScale, shown, measure)),
             new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,

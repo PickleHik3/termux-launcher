@@ -163,7 +163,7 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         }
         WeatherWidgetModel shown = model;
         String message = empty;
-        float fontScale = getResources().getConfiguration().fontScale;
+        float fontScale = WidgetTokens.typeScale(getResources());
         WeatherLayoutPlanner.Words words = words();
         boolean offerPlace = model == null && !isPreview() && "no-location".equals(error);
         frame.addView(new WidgetPlanView(getContext(), style(), (widthDp, heightDp, measure) ->

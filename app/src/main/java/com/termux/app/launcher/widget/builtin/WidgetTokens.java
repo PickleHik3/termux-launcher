@@ -1,6 +1,10 @@
 package com.termux.app.launcher.widget.builtin;
 
+import android.content.res.Resources;
+
 import androidx.annotation.NonNull;
+
+import com.termux.app.theme.TextScale;
 
 /**
  * The shared tokens of every built-in widget (spec #101, "Widget tokens"; research note §4.1–4.2):
@@ -83,6 +87,24 @@ final class WidgetTokens {
     /** The radius of chips, art and tracks inside a card cut at {@code outer}: concentric with it. */
     static float innerRadius(float outer, float inset) {
         return Math.max(0f, outer - inset);
+    }
+
+    /**
+     * The scale every widget's type is planned at: the system font scale times the shared Text
+     * size (Appearance › Base), so a widget's type follows the same knob as the terminal and the
+     * chrome. The planners take it as their {@code fontScale}.
+     */
+    static float typeScale(@NonNull Resources resources) {
+        return typeScale(resources.getConfiguration().fontScale, TextScale.get());
+    }
+
+    static float typeScale(float fontScale, float textScale) {
+        return fontScale * textScale;
+    }
+
+    /** A role's size in sp at the shared Text size, for text the system scales itself. */
+    static float textSp(@NonNull Role role) {
+        return role.sp * TextScale.get();
     }
 
     /** A fixed role's text size in dp at {@code fontScale}. Not for the hero, which is fit. */
