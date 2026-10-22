@@ -92,7 +92,7 @@ public class PlaceLayoutStoreTest {
         assertEquals(RowPlacement.BOTTOM, rowOf(portrait, Element.APPS));
         assertFalse(portrait.slot(Element.AZ).hidden);
         assertEquals(RowPlacement.BOTTOM, rowOf(portrait, Element.EXTRA_KEYS));
-        assertEquals(KeyboardMode.RESIZE, portrait.keyboardMode);
+        assertEquals(KeyboardMode.OVERLAY, portrait.keyboardMode);
         assertEquals(4, portrait.widgetColumns);
         assertEquals(5, portrait.widgetRows);
 
@@ -103,12 +103,21 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void theKeyboardFloatsOverTheDisplayInLandscapeUntilAskedOtherwise() {
-        // Only the display reads the mode (KeyboardOverlayPolicy), and it floated there in
-        // landscape before the layout was shared, so that is still the default.
+    public void theKeyboardFloatsOverTheDisplayInBothOrientationsUntilAskedOtherwise() {
+        // Only the display reads the mode (KeyboardOverlayPolicy); it floats there in both
+        // orientations, so the X screen keeps its size however the keyboard came up.
         PlaceLayoutStore store = store();
         assertEquals(KeyboardMode.OVERLAY, store.resolve(PlaceOrientation.LANDSCAPE).keyboardMode);
-        assertEquals(KeyboardMode.RESIZE, store.resolve(PlaceOrientation.PORTRAIT).keyboardMode);
+        assertEquals(KeyboardMode.OVERLAY, store.resolve(PlaceOrientation.PORTRAIT).keyboardMode);
+    }
+
+    @Test
+    public void aStoredResizeIsStillReadInEitherOrientation() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.RESIZE);
+        store.setKeyboardMode(PlaceOrientation.LANDSCAPE, KeyboardMode.RESIZE);
+        assertEquals(KeyboardMode.RESIZE, store().resolve(PlaceOrientation.PORTRAIT).keyboardMode);
+        assertEquals(KeyboardMode.RESIZE, store().resolve(PlaceOrientation.LANDSCAPE).keyboardMode);
     }
 
     // ------------------------------------------------------------------ the global fallback
