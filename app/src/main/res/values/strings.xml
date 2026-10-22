@@ -406,6 +406,7 @@
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead.</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
+    <string name="termux_x11_app_command_missing">%1$s could not start: its command %2$s is not installed.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
     <!-- The launcher's own drawer entries, listed with the Linux apps (ADR 0008). -->
     <string name="launcher_entry_terminal">Terminal</string>
