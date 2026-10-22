@@ -982,7 +982,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // opaque, the measured glass ground while it is translucent.
                 int ground = mHost.terminalTextGround();
                 props = MaterialTerminalColorScheme.create(mContext, level, ground,
-                    mTerminalInkPolarity);
+                    inkLeaning(ground));
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
                 MaterialTerminalColorScheme.rememberGround(mContext, ground, mTerminalInkPolarity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
@@ -1192,11 +1192,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
             return;
         }
+        int ground = mHost.terminalTextGround();
         int signature = MaterialTerminalColorScheme.signature(mContext,
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
-            mHost.terminalTextGround(), mTerminalInkPolarity);
+            ground, inkLeaning(ground));
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
+    }
+
+    /**
+     * The ink the palette is built leaning to on {@code ground}: the glass's, not the theme's
+     * ({@link TerminalSurfacePolicy#inkLeaning}). The build and the signature both ask here, so an
+     * opacity that crosses the line rebuilds the palette, and one that does not leaves it alone.
+     */
+    @Nullable
+    private com.termux.app.chrome.ChromeInk.Polarity inkLeaning(int ground) {
+        int opacity = mHost.preferences() != null
+            ? mHost.preferences().getTerminalBackgroundOpacity() : 100;
+        return TerminalSurfacePolicy.inkLeaning(android.graphics.Color.alpha(ground) != 0,
+            opacity, mTerminalInkPolarity);
     }
 
     private void onTerminalTextGroundSettled() {
