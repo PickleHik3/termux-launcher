@@ -79,6 +79,8 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   docked); it switches the orientation the phone is in, and each orientation keeps its own. If an
   older version left the display making room in portrait without you choosing it, the update
   puts it back to floating once; the same button switches it back.
+  Settings → Terminal → Linux apps → Input → Keyboard over display switches both orientations
+  at once.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts or stops the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
