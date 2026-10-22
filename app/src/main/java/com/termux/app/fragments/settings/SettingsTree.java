@@ -197,6 +197,9 @@ public final class SettingsTree {
         section(Section.GENERAL, general, R.string.settings_section_general, R.xml.general_preferences);
         // Page transition turns every page, not only Home's: it sits under Motion.
         editor(general, PAGES + "HomePageTransitionFragment", R.string.settings_home_page_transition_title);
+        // The presets and the motion they trim: General's Battery row opens it.
+        page(general, PAGES + "PerformancePreferencesFragment", R.string.settings_destination_performance,
+            R.xml.performance_preferences);
         page(general, PAGES + "BackupRestorePreferencesFragment", R.string.settings_destination_backup_restore,
             R.xml.backup_restore_preferences);
         String permissions = PAGES + "ServicesPermissionsPreferencesFragment";
@@ -301,6 +304,10 @@ public final class SettingsTree {
                     return "KeyboardTypingPreferencesFragment";
                 if (key.equals("in_app_keyboard_haptics_enabled")) return "GeneralPreferencesFragment";
                 return null;
+            case "GeneralPreferencesFragment":
+            case "AppBehaviorPreferencesFragment":
+                return key.equals("lazy_mode") || key.equals("low_memory_preset")
+                    ? "PerformancePreferencesFragment" : null;
             case "LauncherPreferencesFragment":
             case "LauncherDockPreferencesFragment":
                 if (key.equals("app_launcher_input_char") || key.equals("app_launcher_reset_usage_ranking"))
@@ -325,6 +332,7 @@ public final class SettingsTree {
                     || key.equals("in_app_keyboard_color_scheme_editor"))
                     return "KeyboardPreferencesFragment";
                 if (key.equals("wallpaper_parallax")) return "HomePreferencesFragment";
+                if (key.equals("fancier_glass_motion_light")) return "PerformancePreferencesFragment";
                 return null;
             case "TerminalPreferencesFragment":
             case "TerminalStatusPreferencesFragment":
@@ -342,8 +350,10 @@ public final class SettingsTree {
                     case "status_widget_media": case "status_widget_weather":
                     case "status_widget_weather_fahrenheit": case "status_widget_weather_location":
                         return "StatusBarPreferencesFragment";
-                    case "show_in_recents_when_not_default": case "lazy_mode":
+                    case "show_in_recents_when_not_default":
                         return "GeneralPreferencesFragment";
+                    case "lazy_mode":
+                        return "PerformancePreferencesFragment";
                     default:
                         return null;
                 }

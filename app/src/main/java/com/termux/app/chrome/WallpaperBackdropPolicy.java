@@ -42,8 +42,37 @@ public final class WallpaperBackdropPolicy {
     @NonNull
     public static Mode mode(boolean wallpaperFeatureEnabled, @NonNull WallpaperPicture picture,
                             boolean wallpaperReadable) {
-        return wallpaperFeatureEnabled && picture.allowsSelfDrawnBackdrop() && wallpaperReadable
+        return mode(wallpaperFeatureEnabled, picture, wallpaperReadable, false);
+    }
+
+    /**
+     * {@link #mode(boolean, WallpaperPicture, boolean)} with the launcher's app-only picture.
+     *
+     * @param appOnlyPicture the launcher wears a picture of its own that Android never got (see
+     *                       {@link WallpaperSourceFacts#appOnlyOnScreen}). Only the launcher can
+     *                       show it, so it is always self-drawn while wallpaper mode is on; it is
+     *                       the app's own file, so a refused read of Android's wallpaper does not
+     *                       stand in its way.
+     */
+    @NonNull
+    public static Mode mode(boolean wallpaperFeatureEnabled, @NonNull WallpaperPicture picture,
+                            boolean wallpaperReadable, boolean appOnlyPicture) {
+        if (!wallpaperFeatureEnabled) return Mode.PASSTHROUGH;
+        if (appOnlyPicture) return Mode.SELF_DRAWN;
+        return picture.allowsSelfDrawnBackdrop() && wallpaperReadable
             ? Mode.SELF_DRAWN : Mode.PASSTHROUGH;
+    }
+
+    /**
+     * Whether the window still asks Android to composite the phone's wallpaper behind it.
+     *
+     * <p>Only an app-only picture turns it off: every other self-drawn frame is the phone's own
+     * picture, so the system's showing for the frame or two before the capture lands (a cold
+     * start, a rotation) is the same picture. Under an app-only picture it is a different one,
+     * and would flash. With wallpaper mode off the theme has no wallpaper to begin with.</p>
+     */
+    public static boolean showsSystemWallpaper(@NonNull Mode mode, boolean appOnlyPicture) {
+        return !(mode == Mode.SELF_DRAWN && appOnlyPicture);
     }
 
     /**

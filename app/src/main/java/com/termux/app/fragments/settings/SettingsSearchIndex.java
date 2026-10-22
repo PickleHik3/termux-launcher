@@ -151,7 +151,7 @@ public final class SettingsSearchIndex {
         for (int i = 0; i < group.getPreferenceCount(); i++) {
             Preference row = group.getPreference(i);
             if (row instanceof PreferenceGroup) {
-                // A section hidden in the XML (Living glass's) is not offered, so neither are its rows.
+                // A section hidden in the XML is not offered, so neither are its rows.
                 if (!row.isVisible()) continue;
                 // A section header is not a destination; its rows are.
                 collect((PreferenceGroup) row, breadcrumb, screen, out);
@@ -164,7 +164,12 @@ public final class SettingsSearchIndex {
             if (title == null || title.length() == 0 || !row.isVisible()) continue;
             if (hiddenOnThisPhone(row.getKey())) continue;
             CharSequence summary = row.getSummary();
-            out.add(new Entry(title.toString(), summary == null ? null : summary.toString(), breadcrumb,
+            // An <extra android:name="search_terms"> in the XML: words a row is found by without
+            // showing them, such as a feature's old name. Matched as summary words.
+            String terms = row.peekExtras() == null ? null : row.peekExtras().getString("search_terms");
+            String searchable = summary == null ? terms
+                : terms == null ? summary.toString() : summary + " " + terms;
+            out.add(new Entry(title.toString(), searchable, breadcrumb,
                 screen.className, row.getKey(), screen.section));
         }
     }

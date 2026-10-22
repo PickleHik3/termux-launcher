@@ -86,8 +86,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
         configureWallpaperAlignment(context);
-        // Living glass is always on and its switch hidden (look_glass in the XML): at rest the glass
-        // looks the same either way, so the switch offered no visible choice.
     }
 
     @Override
@@ -328,7 +326,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private static final long STYLE_SYNC_DEBOUNCE_MS = 140L;
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
-    /** Look › Glass › Living glass. */
+    /** Battery &amp; performance › Living glass, which writes through this store. */
     static final String KEY_MOTION_LIGHT =
         com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
             .KEY_FANCIER_GLASS_MOTION_LIGHT;
@@ -374,7 +372,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
-    /** Lazy mode and Fancier Glass sit on this page but are stored by the terminal I/O store. */
+    /** Lazy mode and Fancier Glass are stored by the terminal I/O store, whoever asks this one. */
     private static boolean isTerminalIoToggle(String key) {
         return "lazy_mode".equals(key) || "fancier_glass".equals(key);
     }

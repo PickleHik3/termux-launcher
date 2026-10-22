@@ -192,6 +192,15 @@ public class SettingsActivity extends AppCompatActivity implements
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // The launcher's app-only picture can be set, replaced or ended while this page sits
+        // behind it (Appearance opened from here), and Android sends no configuration change for
+        // a picture it never got: re-theme here when the colours it gave no longer apply.
+        TermuxThemeManager.recreateIfWallpaperColorsMoved(this);
+    }
+
+    @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         // The FragmentManager saves the fragments and its own back stack by itself; this saves

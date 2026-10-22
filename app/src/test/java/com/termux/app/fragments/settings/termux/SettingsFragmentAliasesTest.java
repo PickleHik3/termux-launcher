@@ -117,7 +117,7 @@ public class SettingsFragmentAliasesTest {
     public void generalHoldsBehaviorTheAppsPagesAndTheHomeApp() {
         PreferenceScreen general = screen(launch(GeneralPreferencesFragment.class));
         for (String key : new String[] {"app_haptics_enabled", "app_launcher_row_haptics",
-            "in_app_keyboard_haptics_enabled", "lazy_mode", "low_memory_preset", "backup_restore",
+            "in_app_keyboard_haptics_enabled", "performance_link", "backup_restore",
             "services_permissions", "advanced_diagnostics", "about_support", "app_launcher_help",
             "app_launcher_set_home", "show_in_recents_when_not_default"}) {
             assertNotNull(key, general.findPreference(key));

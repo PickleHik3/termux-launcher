@@ -60,7 +60,8 @@ public class SettingsSearchIndexTest {
     @Test
     public void rowsAreFoundOnThePagesTheyMovedTo() {
         SettingsSearchIndex index = index();
-        assertFirst(index, "lazy mode", PAGES + "GeneralPreferencesFragment", "lazy_mode");
+        assertFirst(index, "lazy mode", PAGES + "PerformancePreferencesFragment", "lazy_mode");
+        assertFirst(index, "low-memory preset", PAGES + "PerformancePreferencesFragment", "low_memory_preset");
         assertFirst(index, "12-hour", PAGES + "StatusBarPreferencesFragment", "top_pane_clock_am_pm");
         assertFirst(index, "wallpaper scrolls", PAGES + "HomePreferencesFragment", "wallpaper_parallax");
         assertFirst(index, "start in", PAGES + "HomePreferencesFragment", "app_launcher_start_in");

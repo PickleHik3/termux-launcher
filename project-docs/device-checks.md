@@ -2523,3 +2523,53 @@ place. Agent items first, then the developer's.
   dark and TalkBack "Keyboard mode, Overlay", a Qt app's focus, a dialog entry's focus, and drawer
   search from Keyboard off; known gap from pre to look at: after a GTK focus-out, a text tap in
   xterm or a proot app shows nothing · pong, release build.
+
+## Ported from 1.3.0-pre.2: app-only wallpaper, Battery & performance
+Agent items for the port of these changes onto v2-redesign (2026-10-23). The pre versions were
+checked against pre's Settings; these name v2's pages.
+- 2026-10-23 · commit "fix(chrome): fullscreen claims the status bar's band over the cutout"
+  (port of 280ced3f7) · With fullscreen on, the window bar sits at the top edge with no empty band,
+  on Home and in the Workspace; with it off, nothing moved. Look at where the camera hole lands on
+  the window bar's chips and say whether anything is covered · pong (punch-hole), release build.
+- 2026-10-23 · commit "feat(settings): a Battery & performance page for the presets and the
+  motion they trim" (port of 4f08b6ba5, c6c97e4cd, 97d31bd40) · Settings › General › Battery ›
+  Battery & performance opens with Presets (Reduce idle activity, Low-memory preset) and Smoother
+  motion (Glass refraction, Living glass, Wallpaper parallax, Cursor trail, Terminal effect);
+  General no longer shows the two preset switches, only the link row, and its other rows are as
+  before. Home still has its own Wallpaper parallax row and Terminal › Text & display its Terminal
+  effect row; each pair stays in step. Cursor trail off here stops the trail in the terminal on
+  return, in every pane of a split. Live greying: Low-memory preset on greys parallax, Cursor trail
+  and Terminal effect ("Set by Low-memory preset", parallax and trail off, effect "Set by
+  Low-memory preset · None") and the glass rows ("Off while Reduce idle activity is on", shown
+  off); off again brings back the look, the glass switches as they were, and the stored
+  fancier_glass is never written by the greying. Reduce idle activity alone greys only the glass.
+  Glass refraction off gives Living glass "Needs Glass refraction"; with a wallpaper not picked in
+  the launcher both say "Needs a wallpaper picked in Appearance"; wallpaper mode off gives parallax
+  "Needs a wallpaper". Searching "Reduce idle activity", "lazy mode" and "Low-memory preset" lands
+  on the page. Screenshot General and the page beside v2's General before the port: no restyle ·
+  emulator (API 33+), debug build.
+- 2026-10-23 · commit "fix(glass): honour the Living glass switch now that Settings shows it"
+  (port of 0e62fb23a) · Living glass off on Battery & performance stops the glass flexing on a
+  page swipe and under a press; on again brings it back; Animation speed still stretches it ·
+  emulator (API 33+), debug build.
+- 2026-10-23 · commits "feat(wallpaper): a picture for the launcher alone while it is not the home
+  app" and "feat(chrome): the glass treats an app-only wallpaper as the launcher's own" (ports of
+  a2faacf62, defd8b1db) · With another launcher as the home app: Appearance shows one card titled
+  "Termux Launcher" with an unticked round "Also set as phone wallpaper" and its line under it;
+  pick a photo, Done: the phone's home and lock wallpapers are unchanged (`ad -s emu` home and lock
+  screenshots before and after), the launcher draws the picture behind the wall with no flash of
+  the phone's wallpaper on a cold start or a rotation, every glass (dock, window bar, panes,
+  widgets on glass) blurs it and Fancier Glass can be turned on and refracts it. Tick the box and
+  Done again: the phone's wallpaper changes, and the tick is still there on reopening. Then make
+  Termux Launcher the home app: the Home and Lock pair is back, Home showing the launcher's
+  picture, Lock the phone's own · emulator, debug build.
+- 2026-10-23 · commit "feat(theme): an app-only wallpaper's colours stand in for Android's" (port
+  of 2e2db445b) · With another launcher as the home app, a blue phone wallpaper and Wallpaper
+  colours on: set a red photo for the launcher alone (Also set as phone wallpaper unticked): the
+  launcher recreates once and its theme (dock, drawer, window bar accents), Settings and the
+  terminal's colours turn red-based; `~/.termux/material-colors.properties` turns red-based too.
+  A second app-only photo (green) re-themes again, once. Tick "Also set as phone wallpaper" and
+  apply: the colours follow the phone's (new) wallpaper. Deleting the exact copy (`run-as` the
+  files dir) then returning to the launcher puts Android's colours back. With the launcher as the
+  home app nothing changes from before. Logcat shows "App-only wallpaper seed" once per pick and no
+  repeated "Wallpaper colours moved" lines (no recreate loop) · emulator (API 31+), debug build.

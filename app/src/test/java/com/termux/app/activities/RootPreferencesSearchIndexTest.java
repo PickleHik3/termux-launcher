@@ -94,7 +94,8 @@ public class RootPreferencesSearchIndexTest {
         PreferenceGroup results = root.findPreference("settings_search_results");
         assertTrue(results != null && results.isVisible() && results.getPreferenceCount() > 0);
         assertEquals("Reduce idle activity", String.valueOf(results.getPreference(0).getTitle()));
-        assertEquals("General", String.valueOf(results.getPreference(0).getSummary()));
+        assertEquals("found by its old name, on Battery & performance",
+            "General › Battery & performance", String.valueOf(results.getPreference(0).getSummary()));
 
         search.getOnQueryChangedListener().onQueryChanged("");
         assertTrue(isVisible(root, "root_your_launcher"));

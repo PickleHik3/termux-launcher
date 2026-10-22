@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- General: the switches that cut across the launcher (vibration, battery, Recents), the app's own
-     pages (backup, permissions, diagnostics, about) and setting it as the home app. Every key is the
-     one it always was; App behavior, the old root rows and Apps' Set as default launcher folded in. -->
+<!-- General: the switches that cut across the launcher (vibration, Recents), the way to Battery &
+     performance, the app's own pages (backup, permissions, diagnostics, about) and setting it as the
+     home app. Every key is the one it always was; App behavior, the old root rows and Apps' Set as
+     default launcher folded in. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -42,17 +43,14 @@
             app:summary="@string/settings_behavior_keyboard_vibration_summary" />
     </PreferenceCategory>
 
+    <!-- Idle activity and the Low-memory preset live on Battery & performance. -->
     <PreferenceCategory app:key="general_battery" app:title="@string/settings_behavior_battery_header">
-        <SwitchPreferenceCompat
-            app:key="lazy_mode"
-            app:title="@string/settings_behavior_idle_title"
-            app:summary="@string/settings_behavior_idle_summary"
-            app:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="low_memory_preset"
-            app:title="@string/settings_behavior_low_memory_title"
-            app:summary="@string/settings_behavior_low_memory_summary"
-            app:defaultValue="false" />
+        <Preference
+            app:key="performance_link"
+            app:persistent="false"
+            app:title="@string/settings_destination_performance"
+            app:summary="@string/settings_destination_performance_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.PerformancePreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="general_more" app:title="@string/settings_general_more_header">

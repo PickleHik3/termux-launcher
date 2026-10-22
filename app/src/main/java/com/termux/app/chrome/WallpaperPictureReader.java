@@ -55,6 +55,22 @@ public final class WallpaperPictureReader {
     public static WallpaperPicture read(@NonNull Context context,
                                         @Nullable TermuxAppSharedPreferences preferences,
                                         int currentSystemWallpaperId) {
+        return read(context, preferences, currentSystemWallpaperId,
+            appOnlyPictureOnDisk(context, preferences));
+    }
+
+    /**
+     * {@link #read(Context, TermuxAppSharedPreferences, int)} for a caller that already knows
+     * whether the launcher wears its app-only picture ({@code WallpaperSourceFacts.appOnlyOnScreen}).
+     * That picture is the one on screen whatever Android runs, so Android is not asked at all.
+     */
+    @NonNull
+    public static WallpaperPicture read(@NonNull Context context,
+                                        @Nullable TermuxAppSharedPreferences preferences,
+                                        int currentSystemWallpaperId, boolean appOnlyPictureOnDisk) {
+        if (appOnlyPictureOnDisk) {
+            return WallpaperPicturePolicy.resolve(false, false, false, true);
+        }
         WallpaperManager manager;
         try {
             manager = WallpaperManager.getInstance(context);
@@ -86,14 +102,27 @@ public final class WallpaperPictureReader {
     }
 
     /**
-     * Whether the wallpaper on screen is one set from inside the launcher: the system's wallpaper
-     * id is the one the picker stored when it set the picture, and the picture's exact copy is
-     * still on disk. The same rule the activity's blur source uses, so the settings page and the
+     * Whether the launcher wears a picture of its own that Android never got: the picker marked
+     * the exact copy app-only, and the copy is still on disk. A mark whose copy is gone counts
+     * for nothing, and the phone's wallpaper shows again.
+     */
+    public static boolean appOnlyPictureOnDisk(@NonNull Context context,
+                                               @Nullable TermuxAppSharedPreferences preferences) {
+        return preferences != null && preferences.isWallpaperAppOnly()
+            && managedWallpaperExactFile(context).isFile();
+    }
+
+    /**
+     * Whether the wallpaper on screen is one set from inside the launcher: the launcher's app-only
+     * picture, or the system's wallpaper id is the one the picker stored when it set the picture —
+     * with the picture's exact copy still on disk either way. The same rule the activity's blur
+     * source uses ({@code WallpaperSourceFacts.managedOnScreen}), so the settings page and the
      * chrome agree on which wallpapers Fancier Glass can work over.
      */
     public static boolean managedPictureOnScreen(@NonNull Context context,
                                                  @Nullable TermuxAppSharedPreferences preferences) {
         if (preferences == null) return false;
+        if (appOnlyPictureOnDisk(context, preferences)) return true;
         int storedId = preferences.getManagedWallpaperSystemId();
         if (storedId <= 0) return false;
         WallpaperManager manager;

@@ -4354,7 +4354,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private WallpaperBackdropPolicy.Mode wallpaperBackdropMode() {
         return WallpaperBackdropPolicy.mode(shouldUseWallpaperPassthroughMode(),
-            wallpaperPicture(), !mWallpaperReadPermissionDenied);
+            wallpaperPicture(), !mWallpaperReadPermissionDenied, appOnlyWallpaperOnScreen());
+    }
+
+    /**
+     * Keeps the window from asking Android to composite the phone's wallpaper behind it while the
+     * launcher draws an app-only picture of its own: that is a different picture, and it would
+     * show through for the frames before the capture lands (a cold start, a rotation). Any other
+     * wallpaper keeps the flag the wallpaper theme gave the window. Only in wallpaper mode, whose
+     * theme is the one that carries the flag; a flag compare otherwise.
+     */
+    private void syncSystemWallpaperBehindWindow(@NonNull WallpaperBackdropPolicy.Mode mode) {
+        if (!shouldUseWallpaperPassthroughMode() || getWindow() == null) return;
+        boolean show = WallpaperBackdropPolicy.showsSystemWallpaper(mode, appOnlyWallpaperOnScreen());
+        boolean showing = (getWindow().getAttributes().flags
+            & WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER) != 0;
+        if (show == showing) return;
+        if (show) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER);
     }
 
     /**
@@ -4369,8 +4386,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         WallpaperBackdropView backdrop = mWallpaperBackdropView;
         if (backdrop == null) return;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (wallpaperFrame == null
-            || wallpaperBackdropMode() != WallpaperBackdropPolicy.Mode.SELF_DRAWN) {
+        WallpaperBackdropPolicy.Mode mode = wallpaperBackdropMode();
+        syncSystemWallpaperBehindWindow(mode);
+        if (wallpaperFrame == null || mode != WallpaperBackdropPolicy.Mode.SELF_DRAWN) {
             backdrop.hide();
             return;
         }
@@ -6904,7 +6922,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** {@link #refreshWallpaperPicture()} with source facts the caller has just read. */
     private boolean refreshWallpaperPicture(@NonNull com.termux.app.chrome.WallpaperSourceFacts facts) {
         WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences,
-            facts.systemWallpaperId);
+            facts.systemWallpaperId, facts.appOnlyOnScreen());
         if (picture == mWallpaperPicture) return false;
         mWallpaperPicture = picture;
         return true;
@@ -8342,9 +8360,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.chrome.WallpaperSourceFacts wallpaperSourceFacts() {
         com.termux.app.chrome.WallpaperSourceFacts facts = mWallpaperSourceFacts;
-        // The stored id is a preference held in memory, so it is checked on every ask: the picker
-        // (or a command) writes it once the picture is on disk, and a moved id reads again.
-        if (facts == null || facts.isStaleFor(storedManagedWallpaperSystemId())) {
+        // The stored id and the app-only mark are preferences held in memory, so they are checked
+        // on every ask: the picker (or a command) writes them once the picture is on disk, and a
+        // moved one reads again.
+        if (facts == null || facts.isStaleFor(storedManagedWallpaperSystemId(), storedWallpaperAppOnly())) {
             facts = refreshWallpaperSourceFacts();
         }
         return facts;
@@ -8352,6 +8371,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int storedManagedWallpaperSystemId() {
         return mPreferences == null ? 0 : mPreferences.getManagedWallpaperSystemId();
+    }
+
+    private boolean storedWallpaperAppOnly() {
+        return mPreferences != null && mPreferences.isWallpaperAppOnly();
+    }
+
+    /**
+     * Whether the launcher wears its app-only picture (one Android's home and lock screens never
+     * got), with the copy on disk; see {@link com.termux.app.chrome.WallpaperSourceFacts#appOnlyOnScreen}.
+     */
+    private boolean appOnlyWallpaperOnScreen() {
+        return mPreferences != null && wallpaperSourceFacts().appOnlyOnScreen();
     }
 
     /**
@@ -8371,10 +8402,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.chrome.WallpaperSourceFacts facts = com.termux.app.chrome.WallpaperSourceFacts.of(
             storedManagedWallpaperSystemId(), getCurrentSystemWallpaperId(), present,
-            exact.lastModified(), exact.length(), width, height);
+            exact.lastModified(), exact.length(), width, height, storedWallpaperAppOnly());
         mWallpaperSourceFacts = facts;
+        // An app-only picture set, replaced, ended or gone moves the theme's colours too (ADR
+        // 0011), and Android sends no configuration change for a picture it never got: the theme
+        // is checked wherever these are read again, after the pass that asked.
+        mAccessoryRenderHandler.removeCallbacks(mWallpaperColorsCheck);
+        mAccessoryRenderHandler.post(mWallpaperColorsCheck);
         return facts;
     }
+
+    /** Re-themes the activity when the app-only colours it wears no longer apply. */
+    private final Runnable mWallpaperColorsCheck =
+        () -> TermuxThemeManager.recreateIfWallpaperColorsMoved(this);
 
     private int computeAccessoryBackdropHorizontalOverscanPx(int blurRadiusDp) {
         float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, blurRadiusDp));
@@ -21632,6 +21672,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyHomeWallpaperInPlace(boolean photo) {
         if (isFinishing() || isDestroyed()) return;
         refreshWallpaperPicture();
+        if (appOnlyWallpaperOnScreen()) {
+            // A picture Android never got brings no colours callback: the glass and the
+            // self-drawn backdrop are moved to it here.
+            mChrome.onWallpaperChanged();
+            updateTerminalGlassFrost();
+        }
         setWallpaperModeEnabled(TermuxActivity.this, true);
         updateWindowBackgroundForCurrentSession();
         if (photo) {
@@ -32045,6 +32091,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAppLauncherBarHeight();
         applyPaddingFillPolicyToVisiblePanes();
         applyTrailStyleAndRetroEffect();
+        // Settings can switch the trail off for every pane, not only the focused one onResume re-reads.
+        applyCursorTrailEnabledToPanes();
         if (mWidgetPaneController != null) mWidgetPaneController.onLookChanged();
         applySuggestionBarPreferences();
         if (mSuggestionBarView != null) {
