@@ -165,3 +165,39 @@ Merged into v2-redesign as PR #99 (244fcf46a); #84 and #85–#98 are closed. Wha
 - **Later design**: #3 Strip as the start of a dock that carries the status bar's work (see
   Notes for later).
 
+### Pong feedback on 1.1.0-pre.6+dev.0bd6f3ff5 (2026-10-22)
+
+A video review of opening and closing a window from Home on pong (v2-redesign after PR #124),
+mapped to the code:
+
+- **The terminal turns sideways while the keyboard and dock move vertically.** Pong has
+  `app_launcher_home_page_transition` = carousel, so the window crosses with the turn pose
+  (`turnTerminalDeparture`, `WallPageTransition`: translation, scale, alpha, rotationY) while the
+  keyboard reveal (`applyPlaceKeyboard`, keys animate alpha + translationY on their own clock) and
+  the dock fold run as separate animators. The default Slide only translates. Design question: the
+  crossing should read as one motion — either the keyboard and dock ride the same clock and
+  interpolator as the page, or the turn effects are retired now that the chrome is shared.
+- **Closing leaves a narrow, tilted panel after the keyboard is gone.** Same cause: the turn's tail
+  outlives the keyboard hide. The reviewer could not tell whether the keyboard was hidden, Home
+  was shown, or the window was dismissed. Fix together with the item above.
+- **The dock changes position and density between halves.** By design in part (ADR 0009: the dock
+  lifts above the keyboard, the extra-keys row folds in and out), but the icon size follows the
+  extra-keys progress curve (`DockLayoutPolicy` lines 59–98) so app icons shrink as the row
+  appears. Taste check owed on pong: whether icons should keep their size and only the row should
+  fold.
+- **Transparency hurts readability** (terminal text and secondary key legends faint behind a busy
+  wallpaper, app icons louder than the active task). Same family as the open item below on the
+  light theme; glass opacity is per surface in the Appearance editor, but the shipped defaults
+  were tuned on a dark wallpaper.
+- **Text scales disagree.** Terminal font (`font_size`) small in a large empty window, keyboard
+  legends large, bar controls small. No shared scale exists; a one-knob "text size" that moves the
+  terminal, the keyboard legends and the labels together is a design candidate.
+
+Open outside the widget work, not yet tracked as issues:
+
+- Terminal text is hard to read on a dark wallpaper with the light theme.
+- Changing the font scale sends the app back to the terminal instead of the widgets page. The
+  wall half and index are saved in `PaneWallController.onSaveInstanceState` and restored in
+  `landWall`, so either the save is skipped on that path or the restore lands on the wrong index.
+  Needs a reproduction (system font scale vs the app's own setting) before a fix.
+
