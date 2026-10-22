@@ -40,6 +40,7 @@ import com.termux.app.ReducedMotion;
 import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.theme.SchemeTone;
+import com.termux.app.theme.TextScale;
 import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TextStyle;
@@ -70,7 +71,7 @@ import java.util.List;
  * geometry ({@link #setGeometry}), and routes taps. Its background is clear: the slab is the
  * dock's. Nothing but the clock repaints at rest, and the clock only while it is shown.</p>
  */
-public final class WallStripRowView extends ViewGroup {
+public final class WallStripRowView extends ViewGroup implements TextScale.Follower {
 
     /** Taps on the row. */
     public interface Listener {
@@ -1009,10 +1010,21 @@ public final class WallStripRowView extends ViewGroup {
             || wellAlpha != mWellAlpha || titleInk != mTitleInk || amber != mAmber;
     }
 
-    private void applyTextSizes() {
-        mTitlePaint.setTextSize(sp(TITLE_SP));
-        if (mGlyphPaint != null) mGlyphPaint.setTextSize(sp(TITLE_SP));
+    /** The titles at the shared Text size; true when that moved them. */
+    private boolean applyTextSizes() {
+        float title = sp(TextScale.sp(TITLE_SP));
+        boolean changed = mTitlePaint.getTextSize() != title;
+        mTitlePaint.setTextSize(title);
+        if (mGlyphPaint != null) mGlyphPaint.setTextSize(title);
         mPlusPaint.setTextSize(sp(PLUS_SP));
+        return changed;
+    }
+
+    @Override public void onTextScaleChanged() {
+        if (applyTextSizes()) {
+            requestLayout();
+            invalidate();
+        }
     }
 
     private float sp(float value) {

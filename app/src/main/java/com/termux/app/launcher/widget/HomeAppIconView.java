@@ -20,7 +20,7 @@ import androidx.annotation.Nullable;
  * The cell around it keeps the gutter, the clip and the long press, so a tap here is a launch and
  * a hold is the page's edit mode, as for any widget.
  */
-final class HomeAppIconView extends ViewGroup {
+final class HomeAppIconView extends ViewGroup implements com.termux.app.theme.TextScale.Follower {
     /** The label's size: the drawer's 11 sp, a step above the dock's tighter 10 sp. */
     static final float LABEL_SP = 11f;
     /** How faint an app that is gone is drawn. */
@@ -77,6 +77,10 @@ final class HomeAppIconView extends ViewGroup {
         HomeIconLabels.dress(label, value, density);
         HomeIconLabels.fitLines(this, label, getWidth(), getHeight(), value, density, false);
         requestLayout();
+    }
+
+    @Override public void onTextScaleChanged() {
+        HomeIconLabels.followTextScale(this, label, style, density);
     }
 
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {

@@ -3410,6 +3410,37 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY), false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TEXT_SIZE_PERCENT}. Clamped. */
+    public int getTextSizePercent() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_TEXT_SIZE_PERCENT, TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT),
+            TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT);
+    }
+
+    public void setTextSizePercent(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TEXT_SIZE_PERCENT,
+            DataUtils.clamp(value, TERMUX_APP.MIN_TEXT_SIZE_PERCENT,
+                TERMUX_APP.MAX_TEXT_SIZE_PERCENT), false);
+    }
+
+    /** The shared Text size as a factor: 1 at the default. */
+    public float getTextSizeScale() {
+        return getTextSizePercent() / 100f;
+    }
+
+    /**
+     * The size a terminal view is drawn at, in px, for a terminal size of its own ({@link
+     * #getFontSize()}, the scratchpad's, or a pane's zoom): that size times the shared Text size,
+     * held inside this display's font size limits. The own size is what is stored and stepped, so
+     * zoom keeps working in its own units and the shared size moves every pane together.
+     */
+    public int textScaledFontSize(int ownSize) {
+        int percent = getTextSizePercent();
+        if (percent == TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT)
+            return ownSize;
+        return DataUtils.clamp(Math.round(ownSize * percent / 100f), MIN_FONTSIZE, MAX_FONTSIZE);
+    }
+
     /** A stored enum-like string if it is one of {@code known}, else the default. */
     @NonNull
     private String knownOrDefault(String key, String fallback, String... known) {

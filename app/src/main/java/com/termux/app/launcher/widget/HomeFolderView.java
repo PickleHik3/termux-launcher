@@ -23,7 +23,7 @@ import java.util.List;
  * ({@link HomeAppIconMetrics}) so a folder and an icon side by side line up. The miniature is the
  * drawer folder's ({@code AppDrawerFolderCellView}): two 42% minis and a 6% gap, centred.
  */
-final class HomeFolderView extends ViewGroup {
+final class HomeFolderView extends ViewGroup implements com.termux.app.theme.TextScale.Follower {
     /** The drawer folder's mini size, as a fraction of the icon. */
     static final float MINI_FRACTION = 0.42f;
     /** The gap between minis, as a fraction of the icon. */
@@ -107,6 +107,10 @@ final class HomeFolderView extends ViewGroup {
         HomeIconLabels.dress(label, value, density);
         HomeIconLabels.fitLines(this, label, getWidth(), getHeight(), value, density, false);
         requestLayout();
+    }
+
+    @Override public void onTextScaleChanged() {
+        HomeIconLabels.followTextScale(this, label, style, density);
     }
 
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {

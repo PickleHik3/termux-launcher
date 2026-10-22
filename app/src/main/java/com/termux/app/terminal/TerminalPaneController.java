@@ -5380,8 +5380,8 @@ public class TerminalPaneController {
     public boolean setActivePaneFontSize(int size) {
         if (mActiveWindow == null || mActiveWindow.active == null || size <= 0) return false;
         mActiveWindow.active.fontSize = size;
-        TerminalView view = mPaneViews.get(mActiveWindow.active.session);
-        if (view != null) view.setTextSize(size);
+        // Through the host, which draws the pane's own size at the shared Text size.
+        refreshAttachedPaneView(mActiveWindow.active.session);
         return true;
     }
 

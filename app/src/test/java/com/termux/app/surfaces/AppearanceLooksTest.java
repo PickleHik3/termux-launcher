@@ -84,7 +84,7 @@ public class AppearanceLooksTest {
     @Test
     public void eachSelectionHasItsSliderSet() {
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.VIBRANCY), AppearanceLooks.controls(null));
+            Control.VIBRANCY, Control.TEXT_SIZE), AppearanceLooks.controls(null));
         // The keyboard's two opacities stand side by side, under their link.
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.KEY_OPACITY,
             Control.TINT, Control.KEY_RADIUS, Control.KEY_SPACING),
@@ -105,17 +105,18 @@ public class AppearanceLooksTest {
     }
 
     /**
-     * Edge (in the column Shade left, after Tint) and Depth (last) are the global set's while the
-     * glass edge is drawn, and absent otherwise; the one-argument form is the set without them.
-     * Six columns, the most any set has.
+     * Edge (in the column Shade left, after Tint) and Depth (last of the glass) are the global
+     * set's while the glass edge is drawn, and absent otherwise; the one-argument form is the set
+     * without them. Text size ends the set either way. Seven columns, the most any set has.
      */
     @Test
     public void depthEndsTheGlobalSetOnlyWithTheGlassEdge() {
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT, Control.EDGE,
-            Control.VIBRANCY, Control.DEPTH), AppearanceLooks.controls(null, true));
+            Control.VIBRANCY, Control.DEPTH, Control.TEXT_SIZE),
+            AppearanceLooks.controls(null, true));
         assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null, true).size());
         assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.VIBRANCY), AppearanceLooks.controls(null, false));
+            Control.VIBRANCY, Control.TEXT_SIZE), AppearanceLooks.controls(null, false));
         assertEquals(AppearanceLooks.controls(null, false), AppearanceLooks.controls(null));
     }
 
@@ -167,6 +168,10 @@ public class AppearanceLooksTest {
         assertEquals(3, Control.APP_ICONS.min);
         assertEquals(10, Control.APP_ICONS.max);
         assertEquals("three stops", 2, Control.CONTRAST.max);
+        assertEquals("Text size: 80%", 80, Control.TEXT_SIZE.min);
+        assertEquals("Text size: 150%", 150, Control.TEXT_SIZE.max);
+        assertEquals("Text size: today's sizes are a step",
+            0, (100 - Control.TEXT_SIZE.min) % Control.TEXT_SIZE.step);
         for (Control control : Control.values()) {
             assertEquals(control.name(), control.min, control.clamp(control.min - 50));
             assertEquals(control.name(), control.max, control.clamp(control.max + 50));

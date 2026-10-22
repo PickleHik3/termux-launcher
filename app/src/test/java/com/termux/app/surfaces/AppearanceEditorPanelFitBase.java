@@ -257,14 +257,16 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     /**
-     * The global set has six columns, and a seventh, Depth, last, while the glass edge is drawn;
-     * no buttons either way.
+     * The global set has five columns, and seven, with Edge after Tint and Depth after Vibrancy,
+     * while the glass edge is drawn; Text size is the last either way; no buttons either way.
      */
     @Test
     public void theGlobalSetEndsInDepthOnlyWithTheGlassEdge() {
         showControls(null, false);
         layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
-        assertEquals(4, mPanel.shownControls().size());
+        assertEquals(5, mPanel.shownControls().size());
+        assertEquals("Text size is the last column", AppearanceLooks.Control.TEXT_SIZE,
+            mPanel.shownControls().get(4));
         assertTrue("no Edge or Depth without the glass edge",
             !mPanel.shownControls().contains(AppearanceLooks.Control.DEPTH)
                 && !mPanel.shownControls().contains(AppearanceLooks.Control.EDGE));
@@ -277,9 +279,11 @@ public abstract class AppearanceEditorPanelFitBase {
         showControls(null, true);
         layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
         List<AppearanceLooks.Control> shown = mPanel.shownControls();
-        assertEquals(6, shown.size());
+        assertEquals(7, shown.size());
         assertEquals("Edge follows Tint", AppearanceLooks.Control.EDGE, shown.get(3));
-        assertEquals("Depth is the last column", AppearanceLooks.Control.DEPTH,
+        assertEquals("Depth ends the glass", AppearanceLooks.Control.DEPTH,
+            shown.get(shown.size() - 2));
+        assertEquals("Text size is the last column", AppearanceLooks.Control.TEXT_SIZE,
             shown.get(shown.size() - 1));
         assertEquals(java.util.Collections.singletonList(AppearanceLooks.Door.TINT_HUE),
             mPanel.shownDoors());

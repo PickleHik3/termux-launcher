@@ -45,6 +45,8 @@ final class AppearanceSnapshot {
     private final String mMotion;
     private final String mTintHue;
     private final int mVibrancy;
+    /** The shared Text size, in percent. */
+    private final int mTextSize;
     /** Where Base's Glass slider and each surface's were left; -1 for none stored. */
     private final int[] mGlassPositions;
     private final int mBend;
@@ -99,6 +101,7 @@ final class AppearanceSnapshot {
         mMotion = prefs.getSurfaceGlassMotion();
         mTintHue = prefs.getSurfaceGlassTintHue();
         mVibrancy = prefs.getSurfaceGlassVibrancy();
+        mTextSize = prefs.getTextSizePercent();
         SurfaceSlot[] slots = SurfaceSlot.values();
         mGlassPositions = new int[slots.length + 1];
         mGlassPositions[0] = prefs.getSurfaceGlassPosition(null);
@@ -157,6 +160,7 @@ final class AppearanceSnapshot {
         prefs.setSurfaceGlassMotion(mMotion);
         prefs.setSurfaceGlassTintHue(mTintHue);
         prefs.setSurfaceGlassVibrancy(mVibrancy);
+        prefs.setTextSizePercent(mTextSize);
         prefs.setSurfaceGlassPosition(null, mGlassPositions[0]);
         for (SurfaceSlot slot : SurfaceSlot.values())
             prefs.setSurfaceGlassPosition(slot, mGlassPositions[slot.ordinal() + 1]);
@@ -195,6 +199,7 @@ final class AppearanceSnapshot {
             .append('|').append(mWallpaperTerminalOpacity)
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
             .append('|').append(mTintHue).append('|').append(mVibrancy)
+            .append('|').append(mTextSize)
             .append('|').append(java.util.Arrays.toString(mGlassPositions))
             .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
             .append('|').append(mSpecular).append('|').append(mDispersion)

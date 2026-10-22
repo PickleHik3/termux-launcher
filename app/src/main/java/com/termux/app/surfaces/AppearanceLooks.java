@@ -131,7 +131,8 @@ public final class AppearanceLooks {
      * ({@link GlassControls}); Vibrancy the frame's saturation in percent, 70 to 150. Edge and
      * Depth are the glass edge's: Edge the stored dispersion itself, 0 (no fringe) to 100 (a bold
      * coloured edge), Glint at 40; Depth 0 to 100 over the bend and the edge width
-     * ({@link GlassEdgeControls}).
+     * ({@link GlassEdgeControls}). Text size is the shared size of the type the launcher draws, in
+     * percent of each surface's own, 80 to 150 in steps of 5.
      */
     public enum Control {
         GLASS(GlassControls.GLASS_MIN, GlassControls.GLASS_MAX, 1),
@@ -147,7 +148,8 @@ public final class AppearanceLooks {
             DockLayoutPolicy.maxRowBandPx(1f), 1),
         APP_ICONS(APP_ICONS_MIN, APP_ICONS_MAX, 1),
         CONTRAST(0, 2, 1),
-        DEPTH(GlassEdgeControls.MIN, GlassEdgeControls.MAX, 1);
+        DEPTH(GlassEdgeControls.MIN, GlassEdgeControls.MAX, 1),
+        TEXT_SIZE(TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT, 5);
 
         public final int min;
         public final int max;
@@ -198,17 +200,17 @@ public final class AppearanceLooks {
      * the keyboard puts Key opacity between Opacity and Tint, so its two opacities stand side by
      * side under their link ({@link OpacityLink}). The global set
      * adds Vibrancy and, while the glass edge is drawn ({@code glassEdge}), Edge after Tint and
-     * Depth at the end: the edge is not drawn otherwise, so neither is offered. An element never
-     * has those.
+     * Depth after Vibrancy: the edge is not drawn otherwise, so neither is offered. Text size ends
+     * the global set, after the glass. An element never has those.
      */
     @NonNull
     public static List<Control> controls(@Nullable Target target, boolean glassEdge) {
         if (target == null)
             return glassEdge
                 ? Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT, Control.EDGE,
-                    Control.VIBRANCY, Control.DEPTH)
+                    Control.VIBRANCY, Control.DEPTH, Control.TEXT_SIZE)
                 : Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-                    Control.VIBRANCY);
+                    Control.VIBRANCY, Control.TEXT_SIZE);
         switch (target) {
             case KEYBOARD:
                 // Key opacity stands beside Opacity (its BG opacity), under their link.
@@ -248,11 +250,10 @@ public final class AppearanceLooks {
     }
 
     /**
-     * The most sliders any selection has (the global set with the glass edge, and the
-     * keyboard's): the sheet's columns. Seven would still fit a 360 dp phone at the 36 dp floor;
-     * eight would not.
+     * The most sliders any selection has (the global set with the glass edge): the sheet's
+     * columns. Seven still fit a 360 dp phone at the 36 dp floor; eight would not.
      */
-    public static final int MAX_CONTROLS = 6;
+    public static final int MAX_CONTROLS = 7;
 
     /** The name in a legend such as "Blur · 12 dp": the part before the separator. */
     @NonNull

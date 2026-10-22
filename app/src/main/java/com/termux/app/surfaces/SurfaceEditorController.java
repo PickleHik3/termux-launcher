@@ -167,6 +167,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         /** The coalesced glass re-render. */
         void applyGlassPreview();
         /**
+         * The shared Text size moved: the chrome labels and the key legends take it, and with
+         * {@code terminal} the panes too (a terminal resize, so a drag gives it one, on release).
+         */
+        default void applyTextSizePreview(boolean terminal) {}
+        /**
          * Holds the Tint amount's frame tint for a drag's release while {@code held}: the blurred
          * frames keep the tint they were baked with, so a Tint or Opacity drag re-bakes them
          * once, on release, not on every tick.
@@ -2026,6 +2031,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
             case DEPTH:
                 return glassEdgeOf(prefs).depth(mDepthSet);
+            case TEXT_SIZE:
+                // On a step, which the slider insists on: only it writes the value, but a
+                // restored backup could hold any number in range.
+                return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
+                    / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
             case CONTRAST:
             default:
                 return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
@@ -2062,6 +2072,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case APP_ICONS: return getString(R.string.appearance_editor_app_icons, value);
             case EDGE: return getString(R.string.appearance_editor_edge, value);
             case DEPTH: return getString(R.string.appearance_editor_depth, value);
+            case TEXT_SIZE: return getString(R.string.appearance_editor_text_size, value);
             case CONTRAST:
             default:
                 if (!enabled)
@@ -2307,8 +2318,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case DEPTH:
                 writeGlassDepth(value);
                 break;
+            case TEXT_SIZE:
+                writeTextSize(value);
+                break;
             default: break;
         }
+    }
+
+    /**
+     * The shared Text size, global: the chrome labels and the key legends follow each tick, the
+     * terminal on the release (each of its sizes is a resize the shell is told about).
+     */
+    private void writeTextSize(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int written = Control.TEXT_SIZE.clamp(value);
+        if (prefs.getTextSizePercent() == written)
+            return;
+        prefs.setTextSizePercent(written);
+        requestPreview(SurfaceEditorProperties.PREVIEW_TEXT
+            | SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL);
     }
 
     /**
@@ -3971,6 +4001,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private boolean mSliderDragActive;
     private boolean mDragTouchedBlur;
     private boolean mDragTouchedKeyboard;
+    /** A Text size drag moved the terminal's size; its panes take it on the release. */
+    private boolean mDragTouchedTerminalText;
     /** A Corners or Margin drag moved the shape; the release resizes the terminal once. */
     private boolean mDragTouchedGeometry;
     /** An Icon size drag wrote through the layout session; the release re-lays the place once. */
@@ -4024,6 +4056,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mDragTouchedKeyboard = false;
             requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
         }
+        if (mDragTouchedTerminalText) {
+            mDragTouchedTerminalText = false;
+            requestPreview(SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL);
+        }
         if (mDirtyDeferred) {
             mDirtyDeferred = false;
             syncDirty();
@@ -4039,6 +4075,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // A re-blur is the frame a drag can least afford; the release settles it once.
             mDragTouchedBlur = true;
             scopes &= ~SurfaceEditorProperties.PREVIEW_BLUR;
+        }
+        if (defersHeavyPasses()
+                && (scopes & SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL) != 0) {
+            // The panes' resize waits for the release, like the geometry's.
+            mDragTouchedTerminalText = true;
+            scopes &= ~SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL;
         }
         mPendingPreviewScopes |= scopes | SurfaceEditorProperties.PREVIEW_GLASS;
         if (mPreviewScheduled)
@@ -4077,6 +4119,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (defersHeavyPasses()) mDragTouchedKeyboard = true;
             else keyboard().onPreferencesReloaded();
         }
+        if ((scopes & (SurfaceEditorProperties.PREVIEW_TEXT
+                | SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL)) != 0)
+            mHost.applyTextSizePreview(
+                (scopes & SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL) != 0);
         mHost.applyGlassPreview();
         if (mOpen && !mSliderDragActive)
             positionOutline();
@@ -4109,6 +4155,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         SoftWallpaper.apply(mHost.findView(R.id.wallpaper_backdrop), prefs);
         if (keyboard() != null)
             keyboard().onPreferencesReloaded();
+        mHost.applyTextSizePreview(true);
         applyStructuralPreview();
         syncPanel();
         // An Undo can move Style or Corners under a showing canvas.

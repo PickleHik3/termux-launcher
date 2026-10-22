@@ -1,10 +1,11 @@
 package com.termux.app.launcher.widget;
 
-import android.util.TypedValue;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+
+import com.termux.app.theme.TextScale;
 
 /**
  * The label under an app icon or a folder on Home, for both views: dressed by the
@@ -21,11 +22,12 @@ final class HomeIconLabels {
 
     private HomeIconLabels() {}
 
-    /** Dresses {@code label} for {@code style}: its size, its shadow, one line or room for two. */
+    /**
+     * Dresses {@code label} for {@code style}: its size (Home's label size at the shared Text
+     * size), its shadow, one line or room for two.
+     */
     static void dress(@NonNull TextView label, @NonNull HomeIconStyle style, float density) {
-        float px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, style.labelSize.sp,
-            label.getResources().getDisplayMetrics());
-        if (label.getTextSize() != px) label.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.labelSize.sp);
+        TextScale.apply(label, style.labelSize.sp);
         if (style.shadow) {
             label.setShadowLayer(SHADOW_RADIUS_DP * density, 0f, SHADOW_DY_DP * density, SHADOW_COLOR);
         } else {
@@ -35,6 +37,19 @@ final class HomeIconLabels {
         // below takes the second back where the cell has no room for it.
         label.setSingleLine(!style.twoLines);
         if (style.twoLines) label.setMaxLines(2);
+    }
+
+    /**
+     * The shared Text size moved: the label takes its new size and, if that changed it, its line
+     * count for the cell, and the owner measures again. Never called from a measure.
+     */
+    static void followTextScale(@NonNull View owner, @NonNull TextView label,
+                                @NonNull HomeIconStyle style, float density) {
+        float before = label.getTextSize();
+        TextScale.apply(label, style.labelSize.sp);
+        if (label.getTextSize() == before) return;
+        fitLines(owner, label, owner.getWidth(), owner.getHeight(), style, density, false);
+        owner.requestLayout();
     }
 
     /**
