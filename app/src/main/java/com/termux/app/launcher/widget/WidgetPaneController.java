@@ -255,6 +255,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         dismissPaneMenu();
         if (currentPage != 0) { currentPage = 0; render(); }
     }
+    /** Whether the pane's menu or its editor is up over the widgets. */
+    public boolean isLayerOpen() {
+        return (paneMenu != null && paneMenu.isShowing()) || pane.widgetEditActive();
+    }
     public boolean onBackPressed() {
         if (paneMenu != null && paneMenu.isShowing()) { dismissPaneMenu(); return true; }
         if (pane.widgetEditActive()) { exitEditMode(); return true; }

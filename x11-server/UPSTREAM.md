@@ -245,3 +245,20 @@ Firefox as a second touch (a one-finger drag pinch-zoomed). Now DOWN ends every 
 its Begin, MOVE ends every held id the event lacks, and UP and CANCEL end every pointer in the
 event and every held id. POINTER_UP still ends only the lifting pointer. The wire calls are
 unchanged; the native side ignores an End for an inactive id.
+
+## A launcher layer open over the display takes the keys and the focus (2026-10-22)
+
+Java only, no native change, and `LorieHost.Callbacks` carries it: the view asks the host before it
+acts, and the launcher answers.
+
+- **`LorieView.sendKey` and `replaceText`** (the phone keyboard's connection) offer a deletion and
+  committed text to the host first — `LorieHost.offerKeyToLauncher`, `textLeftForX` — and send to
+  X only what comes back. Both default to "nothing taken", so with no layer open the path is
+  upstream's.
+- **`LorieView.onWindowFocusChanged` and `triggerCallback`** grab the focus through `takeFocus()`,
+  which asks `Callbacks.mayTakeFocus()` (default true).
+- `Callbacks.handleKey` is now implemented by the launcher: with the server's scancode workaround
+  on (its default) a hardware key reaches the page's `dispatchKeyEvent` first; with it off,
+  `dispatchKeyEventPreIme` reaches `handleKey` first and, for Back, `TouchInputHandler`'s
+  `backButtonAction` would consume it before the page — so both routes now go through the same
+  launcher method.
