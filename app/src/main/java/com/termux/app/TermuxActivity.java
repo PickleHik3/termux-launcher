@@ -17402,12 +17402,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAppliedDockRowHeightHintPx = layout.appsRowBandHintPx;
             mSuggestionBarView.setDockRowHeightHintPx(layout.appsRowBandHintPx);
             moved |= layout.appsRowIconPx != mAppliedDockIconSizePx;
-            int rowDockIconWasPx = mAppliedDockIconSizePx;
             mAppliedDockIconSizePx = layout.appsRowIconPx;
             mSuggestionBarView.setDockIconSizePx(layout.appsRowIconPx);
-            // TEMPORARY (2026-10-22 slide-to-Home icon size): one recording on the phone decides
-            // whether the dock or the row draws the slide's icons small. Remove once read.
-            android.util.Log.w("TermuxDock", "applyDockLayout place=" + mLastWallPage + " travel=" + (mSeamCrossing.layout() != null) + " appsRowAlone=" + isAppsRowAlone(currentPlaceLayout()) + " appsRowIconPx=" + layout.appsRowIconPx + " rowDockIconSizePx=" + rowDockIconWasPx + "->" + layout.appsRowIconPx + " rowIconSizePx=" + mSuggestionBarView.iconSizePx() + " rowW=" + mSuggestionBarView.getWidth() + " beads=" + layout.surface.beads + " scale=" + layout.iconScale);
         }
         return moved;
     }
