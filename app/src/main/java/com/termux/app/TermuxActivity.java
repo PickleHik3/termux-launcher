@@ -16313,7 +16313,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? com.termux.app.dock.DockGeometry.Side.HOME
                 : com.termux.app.dock.DockGeometry.Side.WORKSPACE)
             .arrangement(arrangement)
-            .keyboardShown(committedKeyboardVisible())
             .density(metrics.density)
             .widthPx(dockRowsWidthPx(metrics))
             .cutouts(mLastDisplayCutoutInsetLeft, mLastDisplayCutoutInsetRight)
@@ -16331,8 +16330,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * {@code page}'s half as its dress and its stored layout hold it: Style, Corners and Margin,
-     * the dock size and Wall strip height of the layout it wears, its Dock design, Search field
-     * and Drawer tile. Before the preferences are read, a default half standing in
+     * the dock size and Wall strip height of the layout it wears, its Dock design and Search
+     * field. Before the preferences are read, a default half standing in
      * {@code fallbackLayout}.
      */
     @NonNull
@@ -16355,7 +16354,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .cornersDp(shape.cornersDp)
             .design(mDresses.dockDesignOf(page))
             .searchField(mDresses.searchFieldOf(page))
-            .drawerTile(mDresses.drawerTileOf(page))
             .wallStripHeightDp(sizes.wallStripHeightDp(orientation))
             .build();
     }

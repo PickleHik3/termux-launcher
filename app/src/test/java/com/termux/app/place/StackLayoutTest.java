@@ -54,7 +54,7 @@ public class StackLayoutTest {
     /** The Workspace at rest, a window with its extra keys row. */
     private static StackLayout.Input window(boolean keyboardShown) {
         Snapshot s = device(half(HOME, false), half(WINDOW, false))
-            .rows(Side.WORKSPACE).arrangement(WINDOW).keyboardShown(keyboardShown).build();
+            .rows(Side.WORKSPACE).arrangement(WINDOW).build();
         StackLayout.Input in = new StackLayout.Input(s);
         in.toolbarShown = true;
         in.extraKeysRowEnabled = true;
