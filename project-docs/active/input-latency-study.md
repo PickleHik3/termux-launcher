@@ -807,6 +807,28 @@ re-recorded while a press animates), and `nofade` (the highlight clears at commi
   `hasClientComposition` 0), and the wallpaper-backed window is not the cause.
 - Scripts: `~/.cache/tl-latency/queueing/`.
 
+### Touch-down hint experiment (2026-10-22, `faadb42e3`)
+
+Synthetic typing over adb (a device-side `input tap` loop: about 5 keys a second, zero finger
+rest, 14 words typed and deleted with 1 s pauses), run once with `debug.tl.touch_hint` 0 and once
+with 1. The press highlight was on the overlay default.
+
+| Hint | Commit → drawn p50 / p90 / max | Drawn → buffer ready p50 / p90 | Stuffed frames | Bursts with a late first frame |
+|---|---|---|---|---|
+| 0 | 18.0 / 24.8 / 39.8 | 11.1 / 12.3 | 1018 / 2472 (41%) | 16 / 51 |
+| 1 | 17.3 / 20.7 / 27.5 | 10.8 / 12.4 | 717 / 2491 (29%) | 14 / 61 |
+
+**The hint never reached the system.** Logcat: `perf_hint: createSessionUsingConfig: PerformanceHint
+cannot create session. PowerHintSessions are not supported!`. Pong's power HAL has no ADPF hint
+sessions, so mode 1 only added the `TouchHint.loadUp` trace section. The difference between the rows
+is run-to-run variation, with 51 against 61 bursts. The seed theory is still neither confirmed nor
+refuted on this device.
+
+Synthetic typing stuffs far fewer frames (29-41%) than the developer's typing did (about 99%). Its 1 s
+pauses split the input into many short bursts, which drain the queue, and that fits the analysis
+above: the stuffing persists while frames run back to back. The remaining lever on pong is fix 2
+there: less GPU time per frame, so a burst's first frame meets its deadline.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
