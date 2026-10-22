@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Battery & performance: what makes the launcher lighter on a weak phone. Every key is the one it
+     always was. The Terminal page keeps its own Terminal effect row; both write the same
+     preference. Summaries here are the rows' normal ones: the fragment says why a row is greyed. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:key="performance_presets"
+        app:title="@string/settings_performance_presets_header">
+        <SwitchPreferenceCompat
+            app:key="lazy_mode"
+            app:title="@string/settings_behavior_idle_title"
+            app:summary="@string/settings_behavior_idle_summary"
+            app:defaultValue="false">
+            <!-- Its old name, so a search for it still lands here. -->
+            <extra android:name="search_terms" android:value="lazy mode" />
+        </SwitchPreferenceCompat>
+        <SwitchPreferenceCompat
+            app:key="low_memory_preset"
+            app:title="@string/settings_behavior_low_memory_title"
+            app:summary="@string/settings_behavior_low_memory_summary"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="performance_motion"
+        app:title="@string/settings_performance_motion_header">
+        <SwitchPreferenceCompat
+            app:key="fancier_glass"
+            app:title="@string/settings_performance_glass_refraction_title"
+            app:summary="@string/settings_performance_glass_refraction_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="fancier_glass_motion_light"
+            app:title="@string/settings_motion_light_title"
+            app:summary="@string/settings_performance_living_glass_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="wallpaper_parallax"
+            app:title="@string/settings_wallpaper_parallax_title"
+            app:summary="@string/settings_performance_parallax_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_cursor_trail"
+            app:title="@string/settings_performance_cursor_trail_title"
+            app:summary="@string/settings_performance_cursor_trail_summary"
+            android:defaultValue="true" />
+        <ListPreference
+            app:key="terminal_retro_effect"
+            app:title="@string/settings_terminal_retro_effect_title"
+            app:summary="@string/settings_performance_terminal_effect_summary"
+            app:entries="@array/settings_terminal_retro_effect_entries"
+            app:entryValues="@array/settings_terminal_retro_effect_values"
+            app:defaultValue="none" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

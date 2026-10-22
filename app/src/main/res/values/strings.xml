@@ -185,7 +185,6 @@
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_parallax_title">Wallpaper parallax</string>
-    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the places slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off.</string>
     <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
     <string name="settings_wallpaper_alignment_summary">Line up the wallpaper behind the launcher surfaces with the one on your screen.</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
@@ -340,6 +339,10 @@
     <string name="settings_gui_apps_gpu_copy_summary">Paste it into the terminal to let your apps draw with this phone\'s graphics.</string>
     <string name="settings_gui_apps_gpu_clipboard_label">Graphics setup</string>
     <string name="settings_gui_apps_gpu_copied">Graphics command copied. Paste it into the terminal and press Enter.</string>
+    <string name="settings_gui_apps_gpu_benchmark_title">Benchmark graphics</string>
+    <string name="settings_gui_apps_gpu_benchmark_summary">Tries every option and keeps the fastest. Takes a few minutes.</string>
+    <string name="settings_gui_apps_gpu_benchmark_clipboard_label">Graphics benchmark</string>
+    <string name="settings_gui_apps_gpu_benchmark_copied">Benchmark command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
@@ -349,7 +352,6 @@
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
     <string name="settings_x11_keyboard_follows_text_title">OSK auto-show</string>
     <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
-    <string name="settings_x11_keyboard_follows_text_unavailable">Available in Touchscreen touch mode.</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
     <string name="settings_x11_filtering_title">Scaling</string>
@@ -377,6 +379,7 @@
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead.</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
+    <string name="termux_x11_app_command_missing">%1$s could not start: its command %2$s is not installed.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
@@ -536,8 +539,8 @@
     <string name="settings_app_drawer_view_type_categories">Categories</string>
     <string name="settings_app_drawer_search_on_open_title">Open keyboard automatically</string>
     <string name="settings_app_drawer_search_on_open_summary">When the app drawer opens.</string>
-    <string name="settings_app_drawer_search_android_keyboard_title">Search keyboard</string>
-    <string name="settings_app_drawer_search_android_keyboard_summary">Use the Android keyboard, with its suggestions and swipe typing.</string>
+    <string name="settings_app_drawer_search_android_keyboard_title">Use system keyboard</string>
+    <string name="settings_app_drawer_search_android_keyboard_summary">Search with the phone\'s own keyboard instead of the launcher\'s, with its suggestions and swipe typing.</string>
     <string name="settings_app_drawer_category_sort_title">Category sorting</string>
     <string name="settings_app_drawer_category_sort_summary">Choose how apps are grouped.</string>
     <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>
@@ -683,11 +686,9 @@
     <string name="settings_lazy_mode_header">Battery</string>
     <string name="settings_lazy_mode_title">Lazy mode</string>
     <string name="settings_lazy_mode_summary">Stops idle animations and slows status sampling so nothing repaints while you look.</string>
-    <string name="settings_fancier_glass_header">Fancier Glass</string>
     <string name="settings_fancier_glass_title">Fancier Glass</string>
     <string name="settings_fancier_glass_summary">Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker.</string>
     <string name="settings_motion_light_title">Living glass</string>
-    <string name="settings_motion_light_summary">Glass flexes as panes move and gives a little under your finger.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
@@ -2119,6 +2120,12 @@
     <string name="tool_mouse_toggle">Mouse mode</string>
     <string name="extra_key_readout_mouse_mode_on">Mouse mode on</string>
     <string name="extra_key_readout_mouse_mode_off">Mouse mode off</string>
+    <!-- The display touchpad's two buttons, read by a screen reader. The mode button's state is
+         the keyboard mode (GLOSSARY: Keyboard mode), the same value the Layout editor shows. -->
+    <string name="display_touchpad_exit_description">Leave mouse mode</string>
+    <string name="display_touchpad_keyboard_mode_description">Keyboard mode</string>
+    <string name="display_touchpad_keyboard_mode_overlay">Overlay</string>
+    <string name="display_touchpad_keyboard_mode_resize">Resize</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>

@@ -38,6 +38,13 @@ public final class X11LinuxAppRunner {
      */
     static final List<String> TOUCH_ENV = java.util.Collections.singletonList("MOZ_USE_XINPUT2=1");
 
+    /**
+     * What tells GTK, Qt and the XIM clients to use fcitx5, for {@link #inputMethodBlock}. The
+     * names are fcitx5's own; Termux packages the GTK modules and the Qt 6 one.
+     */
+    static final List<String> INPUT_METHOD_ENV = java.util.Collections.unmodifiableList(
+        Arrays.asList("GTK_IM_MODULE=fcitx", "QT_IM_MODULE=fcitx", "XMODIFIERS=@im=fcitx"));
+
     /** How long a display gets to come up before the tap is given up on. */
     private static final long START_TIMEOUT_MS = 15_000L;
     /**
@@ -511,6 +518,11 @@ public final class X11LinuxAppRunner {
                 // A desktop's exit is news whenever it comes, not only inside the window: it is
                 // what says the display is free again and the window manager can come back.
                 if (app.session) onSessionExited(app, exitCode, windowManagerRestart);
+                // 127 is the shell's "command not found": a flag cannot fix that, so no retry.
+                if (!app.session && exitCode == COMMAND_NOT_FOUND) {
+                    commandMissing();
+                    return;
+                }
                 resolve(isQuickFailure(exitCode));
             });
             if (started) {
@@ -524,6 +536,15 @@ public final class X11LinuxAppRunner {
             decided = true;
             Logger.logWarn(LOG_TAG, "No shell to run " + app.id + " in; nothing was started");
             notice(failureNotice(app));
+        }
+
+        /** The command is not installed: settle without retrying or touching the sandbox store. */
+        private void commandMissing() {
+            if (decided) return;
+            decided = true;
+            handler.removeCallbacks(timeout);
+            notice(context.getString(com.termux.R.string.termux_x11_app_command_missing,
+                app.name, LinuxAppCatalog.execBinary(app.exec)));
         }
 
         /**
@@ -567,6 +588,9 @@ public final class X11LinuxAppRunner {
         }
     }
 
+    /** What a POSIX shell exits with when the command it was asked to run is not there. */
+    private static final int COMMAND_NOT_FOUND = 127;
+
     /** A process that has already exited with a non-zero code within the quick-fail window. */
     static boolean isQuickFailure(int exitCode) {
         return exitCode != 0;
@@ -589,7 +613,8 @@ public final class X11LinuxAppRunner {
     }
 
     /**
-     * The shell line that runs the app: the display, the GPU environment, the home directory,
+     * The shell line that runs the app: the display, the GPU environment, fcitx5's when it is
+     * there ({@link #inputMethodBlock}), the home directory,
      * then the app's command — its own, or a {@code proot-distro login} around it when the app is
      * installed in a container. The touch environment goes in first so a GPU profile still has the
      * last word over anything it sets. Pure, so the composition is tested.
@@ -622,11 +647,42 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
+        // apps keep the cursor guess until that follow-up is verified on a phone.
+        if (app.container.isPrefix()) script.append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
         if (awaitWindowManager != null) script.append(awaitWindowManager);
         script.append("exec ").append(noSandbox ? app.commandWith("--no-sandbox") : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * The lines that hand an app fcitx5 (#129): the toolkits' input-method modules, and the
+     * display's session bus, which is where the helper started fcitx5 — a GTK or Qt module talks
+     * to fcitx5 over D-Bus alone, so an app on any other bus never reaches it, and its text
+     * fields never report focus.
+     *
+     * <p>Only when fcitx5 is installed and the helper's bus for this display is actually up: its
+     * socket is there and the helper that made it is still alive, by the pid it keeps beside it.
+     * A helper killed outright leaves the socket behind, and an app given a bus nobody answers on
+     * is worse off than one given none. The test is shell builtins only, no process started.
+     * Without fcitx5 the app is run exactly as it always was. Pure, so the composition is tested.
+     */
+    @NonNull
+    static String inputMethodBlock(@NonNull String display) {
+        String bus = X11CliInstaller.imBusPath(display);
+        String pid = X11CliInstaller.imHelperPidPath(display);
+        StringBuilder block = new StringBuilder();
+        block.append("if [ -x ").append(ProotDistro.singleQuote(X11CliInstaller.FCITX5_PATH))
+            .append(" ] && [ -S ").append(ProotDistro.singleQuote(bus)).append(" ]")
+            .append(" && { read -r termux_x11_im_pid < ").append(ProotDistro.singleQuote(pid))
+            .append("; } 2>/dev/null && kill -0 \"$termux_x11_im_pid\" 2>/dev/null; then\n");
+        for (String line : INPUT_METHOD_ENV) block.append("export ").append(line).append('\n');
+        block.append("export DBUS_SESSION_BUS_ADDRESS=")
+            .append(ProotDistro.singleQuote("unix:path=" + bus)).append('\n');
+        block.append("fi\n");
+        return block.toString();
     }
 
     /**

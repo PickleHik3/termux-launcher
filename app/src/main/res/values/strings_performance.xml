@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copy for Settings › Battery & performance: what a row gains first, then what it costs. -->
+<resources>
+    <string name="settings_destination_performance">Battery &amp; performance</string>
+    <string name="settings_destination_performance_summary">Idle activity, low-memory preset and motion</string>
+
+    <string name="settings_performance_presets_header">Presets</string>
+    <string name="settings_performance_motion_header">Smoother motion</string>
+
+    <string name="settings_performance_glass_refraction_title">Glass refraction</string>
+    <string name="settings_performance_glass_refraction_summary">Turn off for smoother swipes. Glass edges stop bending the wallpaper.</string>
+    <string name="settings_performance_living_glass_summary">Turn off for smoother swipes. Glass stops flexing and catching light as you move.</string>
+    <string name="settings_performance_parallax_summary">Turn off for smoother page swipes. The wallpaper stops sliding with the pages.</string>
+    <string name="settings_performance_cursor_trail_title">Cursor trail</string>
+    <string name="settings_performance_cursor_trail_summary">Turn off for less drawing while you type. The cursor moves without a trail.</string>
+    <string name="settings_performance_terminal_effect_summary">None draws least. Other choices add a screen effect over the terminal.</string>
+
+    <!-- Why a row is greyed -->
+    <string name="settings_performance_set_by_preset">Set by Low-memory preset</string>
+    <!-- A list row shows its value only here: the choice the preset wrote, by name. -->
+    <string name="settings_performance_set_by_preset_value">Set by Low-memory preset · %1$s</string>
+    <string name="settings_performance_off_while_idle">Off while Reduce idle activity is on</string>
+    <string name="settings_performance_needs_android_13">Needs Android 13</string>
+    <string name="settings_performance_needs_picked_wallpaper">Needs a wallpaper picked in Appearance</string>
+    <string name="settings_performance_needs_refraction">Needs Glass refraction</string>
+    <string name="settings_performance_needs_wallpaper">Needs a wallpaper</string>
+</resources>

@@ -127,6 +127,14 @@ screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-
   no rebuild of `libXlorie.so`. A nightly merge must keep the two annotations off. The remaining
   `@FastNative` entries only take `stateLock` briefly or `write()` a socket; `sendTextEvent` sleeps
   2.5 ms per character and is the one to watch if a long paste ever stalls the GC.
+- **`LorieView.sendWindowChange` sends only a change unlike the last one** (`WindowChangeGate`,
+  new). Upstream announces its size on every `onMeasure` and every `surfaceChanged`, and the
+  server applies and logs each one (`tx11-request: window changed`) even when nothing moved, so
+  one real resize reached it two or three times — the keyboard mode switch under the touchpad
+  showed three "window changed" per switch. `connect(int)` forgets the last one sent, so a new
+  connection always hears the size (`triggerCallback` follows every connect). The cost: a size
+  an X client sets for itself (`xrandr`) is no longer put back by the next unrelated measure,
+  only by a real change of the view's size.
 - **`stub/`** is upstream's `shell-loader/stub` — compile-only declarations of the hidden
   framework classes `CmdEntryPoint` reaches for while it runs outside an app process.
 - Only `res/values/arrays.xml` and `res/xml/preferences.xml` are vendored from upstream's
@@ -245,3 +253,20 @@ Firefox as a second touch (a one-finger drag pinch-zoomed). Now DOWN ends every 
 its Begin, MOVE ends every held id the event lacks, and UP and CANCEL end every pointer in the
 event and every held id. POINTER_UP still ends only the lifting pointer. The wire calls are
 unchanged; the native side ignores an End for an inactive id.
+
+## A launcher layer open over the display takes the keys and the focus (2026-10-22)
+
+Java only, no native change, and `LorieHost.Callbacks` carries it: the view asks the host before it
+acts, and the launcher answers.
+
+- **`LorieView.sendKey` and `replaceText`** (the phone keyboard's connection) offer a deletion and
+  committed text to the host first — `LorieHost.offerKeyToLauncher`, `textLeftForX` — and send to
+  X only what comes back. Both default to "nothing taken", so with no layer open the path is
+  upstream's.
+- **`LorieView.onWindowFocusChanged` and `triggerCallback`** grab the focus through `takeFocus()`,
+  which asks `Callbacks.mayTakeFocus()` (default true).
+- `Callbacks.handleKey` is now implemented by the launcher: with the server's scancode workaround
+  on (its default) a hardware key reaches the page's `dispatchKeyEvent` first; with it off,
+  `dispatchKeyEventPreIme` reaches `handleKey` first and, for Back, `TouchInputHandler`'s
+  `backButtonAction` would consume it before the page — so both routes now go through the same
+  launcher method.
