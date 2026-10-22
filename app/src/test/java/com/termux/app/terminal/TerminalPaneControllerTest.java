@@ -135,6 +135,44 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void travelCoverTakenBeforeAWindowSwitchIsNotLeftOnTheWindowThatLeft() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalSession firstSession = terminal();
+        TerminalSession secondSession = terminal();
+        TerminalPaneController.Window first = controller.newWindow(firstSession);
+        TerminalPaneController.Window second = controller.newWindow(secondSession);
+        controller.showWindow(first);
+        layoutHost(host, 600, 1000);
+        Map<TerminalSession, PaneContentFrame> frames =
+            ReflectionHelpers.getField(controller, "mPaneFrames");
+
+        // A chip on Home: the slide's first frame covers the window in front, then the chip's
+        // window is shown and the rest of the slide covers that one.
+        controller.setTravelBottomCoverPx(213);
+        assertEquals(213, travelInset(frames.get(firstSession)));
+        controller.showWindow(second);
+        layoutHost(host, 600, 1000);
+        assertEquals("the window that left keeps no cover", 0,
+            travelInset(frames.get(firstSession)));
+        controller.setTravelBottomCoverPx(120);
+        assertEquals("the slide's next frame covers the window in front", 120,
+            travelInset(frames.get(secondSession)));
+        assertEquals(0, travelInset(frames.get(firstSession)));
+        controller.setTravelBottomCoverPx(0);
+        assertEquals(0, travelInset(frames.get(secondSession)));
+
+        // Its chip after the settle brings it back at its laid-out bottom.
+        controller.showWindow(first);
+        assertEquals(0, travelInset(frames.get(firstSession)));
+    }
+
+    private static int travelInset(PaneContentFrame frame) {
+        assertNotNull("a frame for the shell", frame);
+        return ReflectionHelpers.getField(frame, "mTravelBottomInsetPx");
+    }
+
+    @Test
     public void compatibilityModeCollapsesTheRowAndLeavesHomeFloatsAsTheyAre() {
         TerminalPaneController controller = newController();
         HomeFloatLayer layer = new HomeFloatLayer(RuntimeEnvironment.getApplication());
