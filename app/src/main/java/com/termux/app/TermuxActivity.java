@@ -16490,7 +16490,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                         @NonNull PlaceLayout layout) {
         boolean preferencesAvailable = mPreferences != null;
         List<Element> bottomStack = EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM);
-        return DockLayoutPolicy.DockInputs.builder()
+        DockLayoutPolicy.DockInputs.Builder inputs = DockLayoutPolicy.DockInputs.builder();
+        // A row this layout puts away is measured where it shows, so it comes back at its size.
+        if (preferencesAvailable && !PlaceChromePolicy.appsShown(layout))
+            measureHiddenAppsRow(inputs);
+        return inputs
             .preferencesAvailable(preferencesAvailable)
             .capsule(isRoundedDockStyle())
             .appsRowOnEdge(PlaceChromePolicy.appsShown(layout)
@@ -16536,6 +16540,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .displayCutoutInsetLeftPx(mLastDisplayCutoutInsetLeft)
             .displayCutoutInsetRightPx(mLastDisplayCutoutInsetRight)
             .build();
+    }
+
+    /** The halves asked, in order, for the pinned-apps row a layout puts away: Home first. */
+    private static final com.termux.app.wall.PaneWallPage[] APPS_ROW_OWNERS = {
+        com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL};
+
+    /**
+     * The pinned-apps row a layout puts away (a window without it), measured as the half that
+     * shows it does: that half's Style and dock size (its stack dress) and whether the row stands
+     * alone in its layout ({@link DockLayoutPolicy.DockInputs#hiddenRowAsShown}). The row keeps
+     * those icons while it is put away, so a slide to Home brings it in at the size it settles at
+     * rather than a fill ratio of its own host that grew at the settle. No half shows it: no icon.
+     */
+    private void measureHiddenAppsRow(@NonNull DockLayoutPolicy.DockInputs.Builder inputs) {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return;
+        PlaceOrientation orientation = currentPlaceOrientation();
+        for (com.termux.app.wall.PaneWallPage page : APPS_ROW_OWNERS) {
+            PlaceLayout owner = store.resolve(orientation, page);
+            if (!PlaceChromePolicy.appsShown(owner)) continue;
+            com.termux.app.place.SeamDress.StackDress dress =
+                stackDressOf(dressOf(page), orientation);
+            inputs.hiddenRowAsShown(dress.shape.isFloating(), dress.dockHeightScale,
+                isAppsRowAlone(owner));
+            return;
+        }
     }
 
     /**
