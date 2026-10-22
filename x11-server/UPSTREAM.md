@@ -127,6 +127,14 @@ screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-
   no rebuild of `libXlorie.so`. A nightly merge must keep the two annotations off. The remaining
   `@FastNative` entries only take `stateLock` briefly or `write()` a socket; `sendTextEvent` sleeps
   2.5 ms per character and is the one to watch if a long paste ever stalls the GC.
+- **`LorieView.sendWindowChange` sends only a change unlike the last one** (`WindowChangeGate`,
+  new). Upstream announces its size on every `onMeasure` and every `surfaceChanged`, and the
+  server applies and logs each one (`tx11-request: window changed`) even when nothing moved, so
+  one real resize reached it two or three times — the keyboard mode switch under the touchpad
+  showed three "window changed" per switch. `connect(int)` forgets the last one sent, so a new
+  connection always hears the size (`triggerCallback` follows every connect). The cost: a size
+  an X client sets for itself (`xrandr`) is no longer put back by the next unrelated measure,
+  only by a real change of the view's size.
 - **`stub/`** is upstream's `shell-loader/stub` — compile-only declarations of the hidden
   framework classes `CmdEntryPoint` reaches for while it runs outside an app process.
 - Only `res/values/arrays.xml` and `res/xml/preferences.xml` are vendored from upstream's

@@ -84,6 +84,8 @@ public class LorieView extends SurfaceView implements InputStub {
     private float inputSourceLeft = 0.f, inputSourceTop = 0.f;
     private float inputSourceWidth = 0.f, inputSourceHeight = 0.f;
     private boolean dimensionsFrozen = false;
+    /** Only a window change unlike the last one sent reaches the server; see UPSTREAM.md. */
+    private final WindowChangeGate windowChangeGate = new WindowChangeGate();
     boolean commitedText = false;
     private final InputConnection mConnection = new BaseInputConnection(this, false) {
         private CharSequence currentComposingText = null;
@@ -449,6 +451,8 @@ public class LorieView extends SurfaceView implements InputStub {
         else
             name = "external";
 
+        if (!windowChangeGate.shouldSend(p.x, p.y, framerate, name))
+            return;
         sendWindowChange(mNativeContext, p.x, p.y, framerate, name);
     }
 
@@ -797,7 +801,11 @@ public class LorieView extends SurfaceView implements InputStub {
     @FastNative private native void sendSync(long ptr, int serial);
 
     // Public API stays free of the native pointer; it's threaded through to an overload below.
-    public void connect(int fd) { connect(mNativeContext, fd); }
+    public void connect(int fd) {
+        // A new connection (or none) has heard no size yet.
+        windowChangeGate.forget();
+        connect(mNativeContext, fd);
+    }
     @FastNative private static native void connect(long ptr, int fd);
 
     // The zero check is the launcher's: a page of the pane wall is asked whether it is connected

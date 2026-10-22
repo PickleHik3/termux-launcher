@@ -9,7 +9,10 @@ import android.app.Activity;
 import android.app.Application;
 import android.os.Build;
 import android.os.Looper;
+import android.view.View;
 import android.widget.FrameLayout;
+
+import com.termux.R;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -19,6 +22,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Who lets go of the display's held size. The keyboard mode switch holds it over the next
@@ -119,5 +124,52 @@ public class X11PaneFrameHostSizeHoldTest {
         assertTrue(page.isHostSizeHeld());
         page.finishHostResize();
         assertFalse(page.isHostSizeHeld());
+    }
+
+    /**
+     * The display announces every height it is measured at to the X server, so a hold that lets
+     * the frame measure it at the frame's new height first, and only then at the held one, sends
+     * the new size and the old one back. Under the hold it is only ever measured at the held size.
+     */
+    @Test
+    public void theHeldDisplayIsNeverMeasuredAtTheFramesNewHeight() {
+        HeightRecorder display = new HeightRecorder(page.getContext());
+        display.setId(R.id.x11_display_view);
+        page.addView(display, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        idle(0);
+        assertEquals(800, display.getHeight());
+
+        page.holdHostSizeOverNextLayout(600, 800);
+        display.heights.clear();
+        page.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(560, View.MeasureSpec.EXACTLY));
+        page.layout(0, 0, 600, 560);
+        assertTrue(page.isHostSizeHeld());
+        assertFalse("measured at " + display.heights + " under the hold",
+            display.heights.contains(560));
+        assertEquals(800, display.getHeight());
+
+        idle(200);
+        assertFalse(page.isHostSizeHeld());
+        page.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(560, View.MeasureSpec.EXACTLY));
+        page.layout(0, 0, 600, 560);
+        assertEquals(560, display.getHeight());
+    }
+
+    /** Stands in for the display view, which cannot exist on the JVM: notes each measured height. */
+    private static final class HeightRecorder extends View {
+        final List<Integer> heights = new ArrayList<>();
+
+        HeightRecorder(android.content.Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            heights.add(getMeasuredHeight());
+        }
     }
 }
