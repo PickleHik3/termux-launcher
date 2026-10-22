@@ -37,7 +37,8 @@ under twenty items; past that, the oldest are re-judged first.
   of the three moves the wall and to where (Workspace, or Home page 1). From the code: (a) never
   recreates (it only re-sizes the panes on resume); (b) and (c) relaunch the activity, since
   `fontScale` is not in its `configChanges`, and the wall's saved half and index come back
-  through `landWall` · emulator.
+  through `landWall`. Pong 2026-10-22 (0bd6f3ff5): (a) from Home page 1 stays on Home page 1,
+  same activity record, no recreate; the Home page 2 case and (b)/(c) still owed · emulator.
 - 2026-10-22 · PR #99 (244fcf46a, migrations 9–13) · Upgrade: install over a release from before
   this branch with a Home dock height, Corners or Margin set apart from the Workspace's and a
   Prompt line or Taskbar dock style picked → Home keeps its rows (Home's own on only if rows
