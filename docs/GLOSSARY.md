@@ -85,7 +85,7 @@ _Avoid_: dock sizing, dock policy (the internal arithmetic only), per-caller mea
 
 **Dock rows**:
 The one adapter that writes the dock's accessory views (the pinned-apps row, the A–Z index, the extra keys and the bands under the keyboard) from the applied DockLayout, and announces which Elements are on screen. Not the rows themselves.
-_Avoid_: dock controller, row visibility code, accessory views
+_Avoid_: dock controller, row visibility code
 
 **Dock design**:
 Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
