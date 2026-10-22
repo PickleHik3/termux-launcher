@@ -70,7 +70,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   left) to step through the apps the status bar lists, in the same order as its chips. The same
   actions on the extra-keys row, a key chord or `launcherctl` do the same while the Display place
   is up.
-- **The keyboard follows text fields.** In Touchscreen touch mode, tapping a text field on the
+- **The keyboard follows text fields.** Tapping a text field on the
   display brings the keyboard up and tapping elsewhere puts it down; see
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).
 - **The keyboard floats.** In landscape the keyboard comes up over the display instead of
@@ -140,9 +140,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## The keyboard follows text fields
 
 Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
-again. It is on by default (**Settings → Display → Input → OSK auto-show**) and it only applies
-in **Touchscreen** touch mode, where a tap lands where you put it. Trackpad and
-Direct touch are unchanged.
+again. It is on by default (**Settings → Display → Input → OSK auto-show**) and it works in every
+touch mode. A tap counts where its click lands: under your finger in Touchscreen and Direct touch,
+at the pointer in Trackpad.
 
 A keyboard you opened yourself is yours: it stays until you close it, and taps on the desktop
 never take it away. Only a keyboard that came up for a text field is put away for one.
@@ -150,8 +150,7 @@ never take it away. Only a keyboard that came up for a text field is put away fo
 With mouse mode on, the keyboard and the touchpad share one frame, so the field brings the keyboard
 to the front of it and the touchpad waits behind rather than going away. Tap somewhere that is not
 text, or press the mouse key, and the touchpad is back where it was. A tap on the touchpad counts as
-a tap on whatever the pointer is standing on, so this works in every touch mode while the touchpad
-is up.
+a tap on whatever the pointer is standing on.
 
 Two signals tell the launcher that a text field is under your finger.
 
