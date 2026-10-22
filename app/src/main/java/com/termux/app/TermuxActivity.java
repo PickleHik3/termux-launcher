@@ -23835,6 +23835,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The plus opens a terminal window right after the window in front, whichever it is;
             // without split panes there are no windows to open, on either half.
             bar.setCreateButtonShown(workspace && isSplitPanesEnabled());
+            // Seen from Home the selected chip is a window to go to, not one to close.
+            bar.setSelectedChipOffersClose(workspace);
         }
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
