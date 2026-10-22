@@ -96,6 +96,22 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - `-s emulator-5554` does not resolve until the emulator is up: `ad -s emu emu start` first.
 - The Appearance editor reopens on its last page; the Icon pack page's switch is `icon_pack_pinned_only` (about 935,2030).
 - The only AVD is tl16 (API 36); there is none for API 29/30.
+- Renderer: `-gpu auto` crashes qemu in host libEGL within about 90 s of the launcher drawing
+  (`coredumpctl list` shows it; the app's install is lost on the systemd restart). The drop-in
+  `~/.config/systemd/user/android-emulator.service.d/gpu.conf` starts it with
+  `-gpu swangle -feature -Vulkan`, which holds. `angle_indirect` is not offered by this emulator.
+- A cold boot needs the quickboot snapshot moved aside first
+  (`~/.android/avd/tl16.avd/snapshots`); `emu stop` + `emu start` reloads a broken GPU state.
+- Swapping one debug build for another: uninstall first. `--no-incremental` over a different build
+  fails the bootstrap ("reinstall completely"). A fresh install opens the tour: Skip the tour,
+  Don't allow, Start.
+- Crossing the wall: swipe left goes Home → window, right goes window → Home. A held mid-slide
+  frame is `input motionevent DOWN`, MOVE steps, then UP; a start at x ≤ 100 or ≥ 1000 does not
+  take.
+- Settings pages are Home / Dock & drawer / Terminal / Look / Keyboard. The Layout editor is Look →
+  "Wallpaper, look and layout"; its home icon (about 645,1728) edits Home's layout, "Home's own"
+  (654,1875); a tap on the preview dock (540,1485) opens Tray / Beads / Strip / Search / Drawer;
+  Done (993,220), then `ad launch com.termux` (the Settings task stays in front).
 
 ## The wall rework (feat/wall-rework, 2026-10-18)
 
