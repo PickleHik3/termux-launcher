@@ -33,7 +33,24 @@ public final class LatencyProbe {
     private static final DebugSwitch sLogSwitch =
         new DebugSwitch("debug.tl.latency_log", false, DebugSwitch.SYSTEM_PROPERTIES);
 
+    /** A one-slot hook told of every commit; see {@link #setCommitListener}. */
+    public interface CommitListener {
+        void onCommit();
+    }
+
+    private static volatile CommitListener sCommitListener;
+
     private LatencyProbe() {}
+
+    /** Lets a consumer that reacts to typing (the wallpaper scene) ride the commit path. */
+    public static void setCommitListener(CommitListener listener) {
+        sCommitListener = listener;
+    }
+
+    /** Clears the slot only if it still holds {@code listener}. */
+    public static void clearCommitListener(CommitListener listener) {
+        if (sCommitListener == listener) sCommitListener = null;
+    }
 
     /** Called once by the app: the logcat summary exists in debug builds only. */
     public static void setDebugBuild(boolean debug) {
@@ -42,6 +59,8 @@ public final class LatencyProbe {
 
     /** A key was committed (released and resolved). */
     public static void commit() {
+        CommitListener listener = sCommitListener;
+        if (listener != null) listener.onCommit();
         long now = System.nanoTime();
         while (sCount > 0 && (sCount == PENDING || now - sStartNanos[0] > STALE_MS * 1_000_000L)) {
             dropOldest();

@@ -1562,6 +1562,20 @@ public final class TerminalView extends View {
             requestLayout();
     }
 
+    /**
+     * The cursor cell's centre in this view's own pixels, written to {@code out[0..1]}. False
+     * before an emulator and a renderer exist. Allocation-free; a reaction that starts at the cursor
+     * (the wallpaper scene's spark) reads it.
+     */
+    public boolean getCursorCenter(float[] out) {
+        if (mEmulator == null || mRenderer == null) return false;
+        int row = mEmulator.getCursorRow() - mTopRow;
+        out[0] = getHorizontalContentOffset() + (mEmulator.getCursorCol() + 0.5f) * mRenderer.mFontWidth;
+        out[1] = getVerticalContentOffset() - mScrollOffsetPixels + mRenderer.mFontLineSpacingAndAscent
+            + (row + 0.5f) * mRenderer.mFontLineSpacing;
+        return true;
+    }
+
     private int getColumnForX(float x) {
         return (int) (textAreaOffsetX(x) / mRenderer.mFontWidth);
     }
