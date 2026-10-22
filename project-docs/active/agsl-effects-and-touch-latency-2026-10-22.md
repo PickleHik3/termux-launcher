@@ -95,6 +95,10 @@ check while typing. Record them in `project-docs/device-checks.md` when they are
   it, and it was rejected as too subtle. The developer will send Wallpaper Engine examples. A research
   pass judges each one (can AGSL recreate it, at what cost, what it reacts to) before anything is
   built. Recreate the look, never the workshop assets.
+  Judged in [`reference/launcher/wallpaper-scenes-research-2026-10-22.md`](../reference/launcher/wallpaper-scenes-research-2026-10-22.md).
+  **The first two scenes are Contour, then Filament** (decided 2026-10-22). Slats is the fallback if
+  Filament's haze is too heavy. Contour is prototyped first behind a debug switch and measured on
+  pong (GPU time with glass and Terminal effect on) before anything else is built.
 - **Frame queueing.** Every frame is presented one vsync late, seeded by the first frame of each
   typing burst missing its deadline (see the latency study, "Buffer Stuffing analysis"). The
   experiment owed is to prime clocks or start a performance-hint session at touch-down, then
