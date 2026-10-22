@@ -14,6 +14,7 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.app.x11.DisplayTouchpadPlacement;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -65,13 +66,12 @@ public class KeyboardOverlayPolicyTest {
     // ------------------------------------------------------------------ when it applies
 
     @Test
-    public void outOfTheBoxTheHomePlaceAndTheDisplayInLandscapeFloatTheKeyboard() {
+    public void outOfTheBoxEveryPlaceThatReadsTheModeFloatsTheKeyboardInBothOrientations() {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 boolean expected = place == PaneWallPage.WIDGETS
-                    || (place == PaneWallPage.DISPLAY
-                        && orientation == PlaceOrientation.LANDSCAPE);
+                    || place == PaneWallPage.DISPLAY;
                 assertEquals(place + " " + orientation, expected,
                     overlays(store, place, orientation));
             }
@@ -89,6 +89,14 @@ public class KeyboardOverlayPolicyTest {
         }
         assertTrue(KeyboardOverlayPolicy.overlays(PaneWallPage.WIDGETS,
             layout(KeyboardMode.RESIZE)));
+    }
+
+    @Test
+    public void aStoredResizeKeepsTheDisplayResizingInPortraitToo() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.RESIZE);
+        assertFalse(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
@@ -155,6 +163,40 @@ public class KeyboardOverlayPolicyTest {
             layout(KeyboardMode.OVERLAY)));
         assertFalse(KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY,
             layout(KeyboardMode.RESIZE)));
+    }
+
+    /**
+     * The touchpad stands in the keyboard's frame, so with the pad up the frame is a shown keyboard
+     * of the pad's height: under Overlay the display keeps the size it has with nothing up, and
+     * once the pad's switch has saved Resize the display gives up exactly the pad's height. The
+     * switch decides it for the orientation it was pressed in and nowhere else.
+     */
+    @Test
+    public void theTouchpadFollowsTheKeyboardModeItsSwitchSaves() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.OVERLAY);
+        store.setKeyboardMode(PlaceOrientation.LANDSCAPE, KeyboardMode.OVERLAY);
+        int available = 2000;
+        int dockPx = 180;
+        int marginPx = 24;
+        int padPx = 640;
+        int closed = contentHeight(false, false, 0, available, dockPx, marginPx);
+
+        boolean overlays = overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT);
+        assertTrue(overlays);
+        assertEquals("Overlay: the X screen keeps its size", closed,
+            contentHeight(overlays, true, padPx, available, dockPx, marginPx));
+
+        DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT);
+        overlays = overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT);
+        assertFalse(overlays);
+        assertEquals("Resize: the display shrinks above the pad", closed - padPx,
+            contentHeight(overlays, true, padPx, available, dockPx, marginPx));
+        assertTrue("landscape keeps its own mode",
+            overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+
+        DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT);
+        assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
     }
 
     // ------------------------------------------------------------------ what it leaves the content

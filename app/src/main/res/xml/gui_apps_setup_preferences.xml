@@ -70,6 +70,11 @@
             app:title="@string/settings_gui_apps_gpu_copy_title"
             app:summary="@string/settings_gui_apps_gpu_copy_summary"
             app:persistent="false" />
+        <Preference
+            app:key="gui_apps_gpu_benchmark"
+            app:title="@string/settings_gui_apps_gpu_benchmark_title"
+            app:summary="@string/settings_gui_apps_gpu_benchmark_summary"
+            app:persistent="false" />
     </PreferenceCategory>
 
     <Preference

@@ -167,7 +167,7 @@ display. See [The Linux display](X11_Display.md#apps-on-the-display).
 
 - The layout: **Vertical**, **Horizontal pages** or **Categories**.
 - **Open keyboard automatically**: the keyboard comes up when the drawer opens.
-- **Search keyboard**: "Use the Android keyboard, with its suggestions and swipe typing."
+- **Use system keyboard**: "Search with the phone's own keyboard instead of the launcher's, with its suggestions and swipe typing."
 
 ### Categories
 
