@@ -233,10 +233,11 @@ public class DisplayTextFocusPolicyTest {
         assertEquals(State.PINNED, policy.state());
         assertEquals(List.of(), keyboard.calls);
 
-        // Put down by hand, the keyboard is the policy's business again.
+        // Put down by hand, the keyboard is the policy's business again. Focus was heard, so it
+        // is focus that raises it, not a tap.
         policy.onUserKeyboardIntent(false);
         assertEquals(State.CLOSED, policy.state());
-        tapOver("xterm");
+        policy.onTextFocusSignal(true);
         assertEquals(State.AUTO_OPEN, policy.state());
         assertEquals(List.of("show"), keyboard.calls);
     }
@@ -261,12 +262,193 @@ public class DisplayTextFocusPolicyTest {
         assertEquals(List.of("show"), keyboard.calls);
 
         assertTrue(policy.onTextFocusSignal(false));
+        scheduler.expire();
         assertEquals(State.CLOSED, policy.state());
         assertEquals(List.of("show", "hide"), keyboard.calls);
 
         // And focus out with nothing of ours up closes nothing.
         assertTrue(policy.onTextFocusSignal(false));
+        scheduler.expire();
         assertEquals(List.of("show", "hide"), keyboard.calls);
+    }
+
+    // ---- Focus decides: once a focus signal has been heard on the place ----------------------
+
+    @Test
+    public void focusOut_hidesOnlyAfterTheGrace() {
+        policy.onTextFocusSignal(true);
+        policy.onTextFocusSignal(false);
+        assertEquals("not yet", List.of("show"), keyboard.calls);
+        assertEquals(State.AUTO_OPEN, policy.state());
+        assertEquals(DisplayTextFocusPolicy.HIDE_GRACE_MS, scheduler.delayMs);
+        assertEquals(150L, DisplayTextFocusPolicy.HIDE_GRACE_MS);
+        assertTrue(trace.contains("focus out -> hide in 150 ms"));
+
+        scheduler.expire();
+        assertEquals(State.CLOSED, policy.state());
+        assertEquals(List.of("show", "hide"), keyboard.calls);
+    }
+
+    @Test
+    public void fieldToField_withinTheGrace_keepsTheKeyboardUp() {
+        policy.onTextFocusSignal(true);
+        // Focus leaves the first field and lands on the next one.
+        policy.onTextFocusSignal(false);
+        policy.onTextFocusSignal(true);
+        assertNull("the hide was cancelled", scheduler.pending);
+        scheduler.expire();
+        assertEquals(List.of("show"), keyboard.calls);
+        assertEquals(State.AUTO_OPEN, policy.state());
+        assertTrue(trace.contains("hide cancelled: focus in"));
+    }
+
+    @Test
+    public void aTapOverReadOnlyText_withFocusPresent_showsNothing() {
+        // A field had focus and lost it: the terminal the user then taps draws a text cursor too.
+        policy.onTextFocusSignal(true);
+        policy.onTextFocusSignal(false);
+        scheduler.expire();
+        keyboard.calls.clear();
+
+        tapOver("xterm");
+        assertEquals(List.of(), keyboard.calls);
+        assertEquals(State.CLOSED, policy.state());
+        assertTrue(trace.contains("tap over xterm ignored: no focus"));
+    }
+
+    @Test
+    public void aFocusOutAlone_isEnoughToKnowFocusIsThere() {
+        policy.onTextFocusSignal(false);
+        tapOver("xterm");
+        assertEquals(List.of(), keyboard.calls);
+        assertEquals(State.CLOSED, policy.state());
+    }
+
+    @Test
+    public void aConfirmingTap_raisesAKeyboardPutDownWhileTheFieldKeptFocus() {
+        policy.onTextFocusSignal(true);
+        // The keyboard's own hide key: down, focus still in the field, nothing telling the policy.
+        keyboard.up = false;
+        keyboard.calls.clear();
+        tapOver("xterm");
+        assertEquals(List.of("show"), keyboard.calls);
+        assertEquals(State.AUTO_OPEN, policy.state());
+
+        // And after the user put it down by hand.
+        policy.onUserKeyboardIntent(false);
+        keyboard.up = false;
+        keyboard.calls.clear();
+        tapOver("xterm");
+        assertEquals(List.of("show"), keyboard.calls);
+    }
+
+    @Test
+    public void withFocusPresent_aTapOrADragElsewhere_leavesHidingToFocus() {
+        policy.onTextFocusSignal(true);
+        tapOver("left_ptr");
+        policy.onCursorName("left_ptr");
+        policy.onDisplayDrag();
+        assertEquals(List.of("show"), keyboard.calls);
+        assertEquals(State.AUTO_OPEN, policy.state());
+    }
+
+    @Test
+    public void aTapThenFocusIn_insideTheTapWindow_showsOnce() {
+        policy.onTextFocusSignal(false);
+        policy.onDisplayTap();
+        policy.onCursorName("xterm");
+        policy.onTextFocusSignal(true);
+        scheduler.expire();
+        assertEquals(List.of("show"), keyboard.calls);
+        assertEquals(State.AUTO_OPEN, policy.state());
+    }
+
+    @Test
+    public void focusInThenATap_showsOnce() {
+        policy.onTextFocusSignal(true);
+        tapOver("xterm");
+        assertEquals(List.of("show"), keyboard.calls);
+        assertEquals(State.AUTO_OPEN, policy.state());
+    }
+
+    @Test
+    public void aTapThenFocusOut_hidesAfterTheGrace() {
+        policy.onTextFocusSignal(true);
+        // Tapping the terminal: the field's focus-out lands inside the tap's window.
+        policy.onDisplayTap();
+        policy.onCursorName("xterm");
+        policy.onTextFocusSignal(false);
+        assertEquals(DisplayTextFocusPolicy.HIDE_GRACE_MS, scheduler.delayMs);
+        scheduler.expire();
+        assertEquals(List.of("show", "hide"), keyboard.calls);
+        assertEquals(State.CLOSED, policy.state());
+    }
+
+    @Test
+    public void aTapOrADragDuringTheGrace_doesNotCancelTheHide() {
+        policy.onTextFocusSignal(true);
+        policy.onTextFocusSignal(false);
+        policy.onDisplayTap();
+        policy.onCursorName("xterm");
+        policy.onDisplayDrag();
+        scheduler.expire();
+        assertEquals(List.of("show", "hide"), keyboard.calls);
+        assertEquals(State.CLOSED, policy.state());
+    }
+
+    @Test
+    public void aPinnedKeyboard_ignoresFocus_andNoGraceRuns() {
+        keyboard.up = true;
+        policy.onUserKeyboardIntent(true);
+        policy.onTextFocusSignal(false);
+        assertNull(scheduler.pending);
+        policy.onTextFocusSignal(true);
+        assertEquals(List.of(), keyboard.calls);
+        assertEquals(State.PINNED, policy.state());
+    }
+
+    @Test
+    public void pinningDuringTheGrace_cancelsTheHide() {
+        policy.onTextFocusSignal(true);
+        policy.onTextFocusSignal(false);
+        policy.onUserKeyboardIntent(true);
+        scheduler.expire();
+        assertEquals(List.of("show"), keyboard.calls);
+        assertEquals(State.PINNED, policy.state());
+    }
+
+    @Test
+    public void leavingThePlaceOrTheSettingOff_duringTheGrace_hidesNothing() {
+        policy.onTextFocusSignal(true);
+        policy.onTextFocusSignal(false);
+        policy.onPlaceLeft();
+        scheduler.expire();
+        assertEquals(List.of("show"), keyboard.calls);
+
+        policy.onPlaceEntered(false);
+        keyboard.calls.clear();
+        policy.onTextFocusSignal(true);
+        policy.onTextFocusSignal(false);
+        policy.setEnabled(false);
+        scheduler.expire();
+        assertEquals(List.of("show"), keyboard.calls);
+    }
+
+    @Test
+    public void withNoFocusSignalSinceEntering_tapRulesAreUnchanged() {
+        // Focus heard on an earlier visit does not count on this one.
+        policy.onTextFocusSignal(false);
+        policy.onPlaceLeft();
+        policy.onPlaceEntered(false);
+
+        tapOver("xterm");
+        assertEquals(List.of("show"), keyboard.calls);
+        tapOver("left_ptr");
+        assertEquals(List.of("show", "hide"), keyboard.calls);
+        tapOver("xterm");
+        policy.onCursorName("left_ptr");
+        policy.onDisplayDrag();
+        assertEquals(List.of("show", "hide", "show", "hide"), keyboard.calls);
     }
 
     @Test
