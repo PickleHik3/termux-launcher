@@ -67,7 +67,6 @@ public class DisplayTextFocusPolicyTest {
         trace = new ArrayList<>();
         policy = new DisplayTextFocusPolicy(keyboard, scheduler, trace::add);
         policy.setEnabled(true);
-        policy.setTouchMode(DisplayTextFocusPolicy.TOUCH_MODE_TOUCHSCREEN);
         policy.onPlaceEntered(false);
     }
 
@@ -304,22 +303,31 @@ public class DisplayTextFocusPolicyTest {
         assertTrue(policy.isActive());
     }
 
+    // The policy is given no touch mode: a tap is a click where it lands, so the same tap reads
+    // the same in Touchscreen (under the finger), Direct touch (under the finger) and Trackpad
+    // (at the pointer, or on the touchpad). These two stand for all three.
+
     @Test
-    public void trackpadAndDirectTouch_areInert() {
-        policy.setTouchMode(1);
-        assertFalse(policy.isActive());
+    public void aTapOverText_showsTheKeyboard_andANonTextTapPutsItDown() {
+        assertTrue(policy.isActive());
         tapOver("xterm");
-        assertEquals(List.of(), keyboard.calls);
-        assertEquals(State.CLOSED, policy.state());
-
-        policy.setTouchMode(3);
-        tapOver("xterm");
-        assertEquals(List.of(), keyboard.calls);
-
-        // Back in Touchscreen the same tap is read again.
-        policy.setTouchMode(DisplayTextFocusPolicy.TOUCH_MODE_TOUCHSCREEN);
-        tapOver("xterm");
+        assertEquals(State.AUTO_OPEN, policy.state());
         assertEquals(List.of("show"), keyboard.calls);
+
+        tapOver("left_ptr");
+        assertEquals(State.CLOSED, policy.state());
+        assertEquals(List.of("show", "hide"), keyboard.calls);
+    }
+
+    @Test
+    public void aPinnedKeyboard_keepsItsPriority() {
+        policy.onPlaceLeft();
+        policy.onPlaceEntered(true);
+        keyboard.up = true;
+        tapOver("xterm");
+        tapOver("left_ptr");
+        assertEquals(State.PINNED, policy.state());
+        assertEquals(List.of(), keyboard.calls);
     }
 
     @Test
@@ -332,16 +340,6 @@ public class DisplayTextFocusPolicyTest {
         assertEquals(List.of(), keyboard.calls);
 
         tapOver("left_ptr");
-        assertEquals(List.of(), keyboard.calls);
-    }
-
-    @Test
-    public void aModeChangeMidWindow_dropsTheWindow() {
-        policy.onDisplayTap();
-        policy.onCursorName("xterm");
-        policy.setTouchMode(1);
-        assertFalse(policy.isTapWindowOpen());
-        scheduler.expire();
         assertEquals(List.of(), keyboard.calls);
     }
 
@@ -374,89 +372,6 @@ public class DisplayTextFocusPolicyTest {
         tapOver("xterm");
         assertEquals(State.AUTO_OPEN, policy.state());
         assertEquals(List.of("show"), keyboard.calls);
-    }
-
-    // ---- Mouse mode's touchpad holding the keyboard frame ------------------------------------
-
-    @Test
-    public void thePadsTaps_areReadInEveryTouchMode() {
-        // Trackpad: a tap on the display decides nothing, as it always has...
-        policy.setTouchMode(1);
-        assertFalse(policy.isActive());
-        tapOver("xterm");
-        assertEquals(List.of(), keyboard.calls);
-
-        // ...but the pad's tap is a click where the pointer stands, so it is read.
-        policy.setPadUp(true);
-        assertTrue(policy.isActive());
-        assertTrue(policy.isPadUp());
-        tapOver("xterm");
-        assertEquals(State.AUTO_OPEN, policy.state());
-        assertEquals(List.of("show"), keyboard.calls);
-
-        // And a tap on anything else puts the keyboard back behind the pad.
-        tapOver("left_ptr");
-        assertEquals(State.CLOSED, policy.state());
-        assertEquals(List.of("show", "hide"), keyboard.calls);
-    }
-
-    @Test
-    public void thePadGoingDown_inTrackpad_standsThePolicyDown() {
-        policy.setTouchMode(1);
-        policy.setPadUp(true);
-        tapOver("xterm");
-        assertEquals(State.AUTO_OPEN, policy.state());
-        keyboard.calls.clear();
-
-        // Mouse mode off: the touch mode under the pad is the answer again, so this is inert.
-        policy.setPadUp(false);
-        assertFalse(policy.isActive());
-        assertEquals(State.CLOSED, policy.state());
-        assertEquals("the keyboard is left exactly as it is", List.of(), keyboard.calls);
-        tapOver("xterm");
-        assertEquals(List.of(), keyboard.calls);
-    }
-
-    @Test
-    public void thePadGoingDown_inTouchscreen_changesNothing() {
-        policy.setPadUp(true);
-        tapOver("xterm");
-        assertEquals(State.AUTO_OPEN, policy.state());
-        keyboard.calls.clear();
-
-        policy.setPadUp(false);
-        assertTrue(policy.isActive());
-        assertEquals("Touchscreen was the gate all along", State.AUTO_OPEN, policy.state());
-        tapOver("left_ptr");
-        assertEquals(List.of("hide"), keyboard.calls);
-    }
-
-    @Test
-    public void thePad_doesNotSurviveTheSettingOff_orLeavingThePlace() {
-        policy.setTouchMode(3);
-        policy.setPadUp(true);
-        assertTrue(policy.isActive());
-
-        policy.setEnabled(false);
-        assertFalse(policy.isActive());
-        policy.setEnabled(true);
-        assertTrue(policy.isActive());
-
-        policy.onPlaceLeft();
-        assertFalse(policy.isActive());
-        tapOver("xterm");
-        assertEquals(List.of(), keyboard.calls);
-    }
-
-    @Test
-    public void aFocusSignal_isTakenWhileThePadHoldsTheFrame() {
-        policy.setTouchMode(1);
-        policy.setPadUp(true);
-        assertTrue(policy.onTextFocusSignal(true));
-        assertEquals(State.AUTO_OPEN, policy.state());
-        assertEquals(List.of("show"), keyboard.calls);
-        assertTrue(policy.onTextFocusSignal(false));
-        assertEquals(List.of("show", "hide"), keyboard.calls);
     }
 
     @Test

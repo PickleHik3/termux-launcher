@@ -13091,7 +13091,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Nothing is arranged before there is a store to arrange it from. */
     private static final PlaceLayout NO_PREFERENCES_PLACE_LAYOUT = new PlaceLayout(
         PlaceLayout.Edge.TOP, PlaceLayout.RowPlacement.HIDDEN, false, PlaceLayout.Edge.BOTTOM,
-        PlaceLayout.RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.OVERLAY,
         PlaceLayout.KeyboardForm.DOCKED,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
         TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
@@ -21618,9 +21618,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The frame stops being mouse mode's when the wall leaves the place or the display goes:
         // mouse mode itself stays on, and comes back to the pad rather than to a parked keyboard.
         if (!ours) mFrameContent.onFrameLost();
-        // A tap on the pad is a click where the pointer stands, so while the pad holds the frame
-        // the text-focus policy reads its taps whatever the touch mode is under it.
-        if (mX11Display != null) mX11Display.setPadUp(ours);
         boolean wanted = ours
             && mFrameContent.content() == com.termux.app.x11.DisplayFrameContentPolicy.Content.PAD;
         float density = getResources().getDisplayMetrics().density;
