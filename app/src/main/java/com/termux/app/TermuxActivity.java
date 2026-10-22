@@ -28859,6 +28859,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean activateSessionInPanes(TerminalSession session) {
         if (session == null || mPaneController == null) return false;
         TerminalSession previousFocused = getCurrentSession();
+        if (previousFocused != session) {
+            // Diagnostic for the chip highlight jumping on its own (2026-10-22): every switch of
+            // the focused shell with its caller. Remove once the cause is known.
+            android.util.Log.w("TermuxWindowBar", "activate pid " + session.getPid() + " from pid "
+                + (previousFocused == null ? -1 : previousFocused.getPid()),
+                new Throwable("activateSessionInPanes"));
+        }
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.windowOf(session);
         if (w != null && w.isHostedFloat()) {
             // A Terminal widget's shell takes focus by a tap on its widget and no other way: a

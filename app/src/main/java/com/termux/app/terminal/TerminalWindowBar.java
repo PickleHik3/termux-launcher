@@ -689,6 +689,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
             && sameActivity(mItems, items)) return;
         int previousSelected = mSelectedIndex;
+        if (previousSelected >= 0 && selectedIndex != previousSelected) {
+            // Diagnostic for the chip highlight jumping on its own (2026-10-22): who refreshed
+            // the bar with a different current window. Remove once the cause is known.
+            android.util.Log.w("TermuxWindowBar", "selection " + previousSelected + " -> "
+                + selectedIndex + " items=" + items.size(), new Throwable("window bar selection"));
+        }
         // A × belongs to one window of one list. A different list, or the same list with the
         // selection somewhere else, is no longer the row it was revealed on.
         if (!sameItems(mItems, items)) mReveal.onItemsChanged();
