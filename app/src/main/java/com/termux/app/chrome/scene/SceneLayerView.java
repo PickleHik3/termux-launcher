@@ -84,6 +84,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     /** The reaction uniforms need re-setting before the next draw. */
     private boolean mEventsStale = true;
     private boolean mWasActive;
+    private long mDrawCount;
 
     private final Choreographer.FrameCallback mFrame = this::onFrame;
 
@@ -121,6 +122,11 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         mGlassLowRes = lowRes;
         if (!lowRes) closeLowRes();
         kick();
+    }
+
+    /** Scene frames drawn so far, for the invalidation diagnostic. */
+    public long drawCount() {
+        return mDrawCount;
     }
 
     // ---- Reactions ---------------------------------------------------------------------------
@@ -212,11 +218,20 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 renderLowRes(nowMs);
             }
             FRAMES.tick();
+            mDrawCount++;
             drawScene(frameTimeNanos);
         }
         if (active || period != Long.MAX_VALUE) {
             mPosted = true;
-            Choreographer.getInstance().postFrameCallback(mFrame);
+            // At rest the main thread sleeps until the next ambient frame is due instead of
+            // waking on every vsync just to skip it.
+            long delayMs = SceneFramePolicy.nextCallbackDelayMs(active, period, mLastDrawNs,
+                frameTimeNanos);
+            if (delayMs > 0L) {
+                Choreographer.getInstance().postFrameCallbackDelayed(mFrame, delayMs);
+            } else {
+                Choreographer.getInstance().postFrameCallback(mFrame);
+            }
         }
     }
 

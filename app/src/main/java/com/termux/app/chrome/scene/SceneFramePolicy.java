@@ -69,4 +69,16 @@ public final class SceneFramePolicy {
         if (ambientPeriodNs == 0L) return true;
         return nowNs - lastDrawNs >= ambientPeriodNs - SLACK_NS;
     }
+
+    /**
+     * How long the next frame callback may sleep: 0 while a reaction animates or the ambient rate
+     * is every vsync, otherwise the time until the next ambient frame is due (less the vsync
+     * slack), rounded up to whole milliseconds. Never negative.
+     */
+    public static long nextCallbackDelayMs(boolean eventsActive, long ambientPeriodNs,
+                                           long lastDrawNs, long nowNs) {
+        if (eventsActive || ambientPeriodNs <= 0L || ambientPeriodNs == Long.MAX_VALUE) return 0L;
+        long waitNs = lastDrawNs + ambientPeriodNs - SLACK_NS - nowNs;
+        return waitNs <= 0L ? 0L : (waitNs + 999_999L) / 1_000_000L;
+    }
 }
