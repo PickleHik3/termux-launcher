@@ -275,7 +275,8 @@ _Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
 **Style**:
 How the chrome is shaped as a whole: **Docked** or **Floating**. In Floating each piece is a rounded
 card with air around it. In Docked the bars join flush into one frame of glass, and the pane is a
-rounded insert over it. Corners and Margin mean the same in both: the radius, and the air or the
+rounded insert over it; under a **Beads** dock the frame ends above the beads, which float on the
+background as they do in Floating, with no glass under the gesture pill. Corners and Margin mean the same in both: the radius, and the air or the
 gutter of glass around the pane. One Style holds for both orientations and the minimal layout. It
 never changes a floating or split keyboard's own shape.
 Full behaviour in `project-docs/reference/launcher/gestures-and-style.md`.
