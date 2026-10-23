@@ -107,6 +107,11 @@ check while typing. Record them in `project-docs/device-checks.md` when they are
   next to the keyboard's press highlight, the echo and the cursor trail. Scenes react to touches
   outside the keyboard, the bell, and a pane opening, closing or taking focus. Typing stays calm.
   Filament's tubes follow this too: they do not light per key.
+  **Scenes hold still while typing** (decided and measured 2026-10-23): a key commit freezes ambient
+  motion and the glass pass until 1.5 s after the last key. With that, a scene behind glass costs the
+  same as no scene while typing. Glass samples a software copy of the low-res frame (a hardware
+  bitmap on the window's glass stalled the UI thread every frame). Every scene shares HWUI's one
+  RenderThread with the window, so keep scene and low-res cost small at rest too.
 - **Frame queueing.** Every frame is presented one vsync late, seeded by the first frame of each
   typing burst missing its deadline (see the latency study, "Buffer Stuffing analysis"). The
   experiment owed is to prime clocks or start a performance-hint session at touch-down, then

@@ -924,7 +924,17 @@ typing.
 - The queueing stays. The scene, its low-res pass and the window all render on HWUI's single
   RenderThread (4,125 against 2,466 `DrawFrame`s), and AGSL has no other renderer.
 - Decision (developer, 2026-10-23): the scene and its glass pass **hold still while typing**, and
-  resume 1.5 s after the last key (`749d21d2a`). Re-measure owed.
+  resume 1.5 s after the last key (`749d21d2a`).
+
+**Re-measured with the hold** (same synthetic typing; its 1 s word pauses stay inside the hold):
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | `postAndWait` avg | Scene draws |
+|---|---|---|---|---|---|
+| Scene off | 17.8 / 21.3 | 10.0 / 11.5 | 29% | 0.59 ms | 0 |
+| Contour + glass live, held | 16.5 / 21.5 | 10.1 / 11.4 | 25% | 0.63 ms | 17 |
+
+While typing, a scene with glass reading it now costs the same as no scene. Measured again here:
+the scene and glass cost while the scene moves at rest, with nobody typing.
 
 ## What could not be verified from a primary source
 
