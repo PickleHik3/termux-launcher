@@ -11,6 +11,9 @@ package com.termux.app.chrome.scene;
  *   <li>spark: a committed key lights the nearest contour from the cursor, travelling outward
  *   for {@link #SPARK_MS};</li>
  *   <li>pulse: the bell sends a ring outward from a pane's rect for {@link #PULSE_MS};</li>
+ *   <li>focus: another window took focus (read by the Filament scene only): one slot, a cathode
+ *   cycle of {@link FilamentLayout#CYCLE_MS}, not restarted by a change within
+ *   {@link FilamentLayout#CYCLE_MIN_GAP_MS} of the last;</li>
  *   <li>basin: an open pane presses a shallow basin under its rect (steady, set by the layer).</li>
  * </ul>
  */
@@ -43,6 +46,7 @@ public final class SceneEvents {
     private final long[] mPulseStart = new long[MAX_PULSES];
     /** Per pulse: centre x, centre y, half width, half height, px. */
     private final float[] mPulseRect = new float[MAX_PULSES * 4];
+    private long mFocusStart = NONE;
     private int mBasinCount;
     private final float[] mBasins = new float[MAX_BASINS * 4];
 
@@ -54,7 +58,24 @@ public final class SceneEvents {
         for (int i = 0; i < MAX_HILLS; i++) mHillStart[i] = NONE;
         for (int i = 0; i < MAX_SPARKS; i++) mSparkStart[i] = NONE;
         for (int i = 0; i < MAX_PULSES; i++) mPulseStart[i] = NONE;
+        mFocusStart = NONE;
         mBasinCount = 0;
+    }
+
+    /** Another window took focus at {@code nowMs}. */
+    public void addFocus(long nowMs) {
+        if (live(mFocusStart, nowMs, FilamentLayout.CYCLE_MIN_GAP_MS)) return;
+        mFocusStart = nowMs;
+    }
+
+    /** Ms since the focus change while its cycle runs, else -1. */
+    public long focusAgeMs(long nowMs) {
+        return live(mFocusStart, nowMs, FilamentLayout.CYCLE_MS) ? nowMs - mFocusStart : -1L;
+    }
+
+    /** Drops the focus cycle: with motion off a change shows its result at once. */
+    public void clearFocus() {
+        mFocusStart = NONE;
     }
 
     public void addHill(float x, float y, long nowMs) {
@@ -100,8 +121,9 @@ public final class SceneEvents {
         return mBasinCount;
     }
 
-    /** True while any hill, spark or pulse is still animating. */
+    /** True while any hill, spark, pulse or focus cycle is still animating. */
     public boolean active(long nowMs) {
+        if (live(mFocusStart, nowMs, FilamentLayout.CYCLE_MS)) return true;
         for (int i = 0; i < MAX_HILLS; i++) if (live(mHillStart[i], nowMs, HILL_MS)) return true;
         for (int i = 0; i < MAX_SPARKS; i++) if (live(mSparkStart[i], nowMs, SPARK_MS)) return true;
         for (int i = 0; i < MAX_PULSES; i++) if (live(mPulseStart[i], nowMs, PULSE_MS)) return true;

@@ -20,6 +20,7 @@ final class SceneEventRing {
     static final int HILL = 1;
     static final int SPARK = 2;
     static final int PULSE = 3;
+    static final int FOCUS = 4;
 
     private final int[] mKind = new int[CAPACITY];
     private final float[] mA = new float[CAPACITY];
@@ -63,6 +64,7 @@ final class SceneEventRing {
                 case HILL: events.addHill(mA[i], mB[i], mAtMs[i]); break;
                 case SPARK: events.addSpark(mA[i], mB[i], mAtMs[i]); break;
                 case PULSE: events.addPulse(mA[i], mB[i], mC[i], mD[i], mAtMs[i]); break;
+                case FOCUS: events.addFocus(mAtMs[i]); break;
                 default: break;
             }
             tail++;

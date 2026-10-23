@@ -86,6 +86,11 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     @Nullable private final PaneSource mPanes;
     @NonNull private final int[] mScreenLoc = new int[2];
     private final float mDensity;
+    @NonNull private final String mKind;
+    /** What the Filament scene spells and draws with; unused by Contour. */
+    @NonNull private final FilamentSource mFilament = new FilamentSource();
+    @NonNull private final ScenePrograms.Factory mPrograms;
+    private boolean mFilamentKind() { return ScenePrograms.FILAMENT.equals(mKind); }
     @Nullable private Loop mLoop;
     private boolean mAnimatorsOn = true;
     private boolean mLazy;
@@ -116,9 +121,12 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
 
     @NonNull private final Runnable mPoll = this::poll;
 
-    public SceneLayerView(@NonNull Context context, @Nullable PaneSource panes,
-                          @NonNull BooleanSupplier lazyMode) {
+    /** {@code kind}: {@link ScenePrograms#CONTOUR} or {@link ScenePrograms#FILAMENT}. */
+    public SceneLayerView(@NonNull Context context, @NonNull String kind,
+                          @Nullable PaneSource panes, @NonNull BooleanSupplier lazyMode) {
         super(context);
+        mKind = kind;
+        mPrograms = ScenePrograms.factory(kind, mFilament);
         mPanes = panes;
         mLazyMode = lazyMode;
         mDensity = context.getResources().getDisplayMetrics().density;
@@ -199,6 +207,27 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     public void bell(float cx, float cy, float hw, float hh) {
         if (!motionAllowed()) return;
         mRing.push(SceneEventRing.PULSE, cx, cy, hw, hh, SystemClock.uptimeMillis());
+        wake();
+    }
+
+    /** Which scene this layer runs. */
+    @NonNull
+    public String kind() {
+        return mKind;
+    }
+
+    /**
+     * Filament only: the focused window's name changed (the window chip's text). The name is
+     * published at once; a record asks the scene thread to redraw and to play the cathode cycle,
+     * which with animations off is skipped (the new name shows at once).
+     */
+    public void setWindowName(@Nullable String name, @Nullable android.graphics.Typeface typeface) {
+        if (!mFilamentKind()) return;
+        mFilament.setTypeface(typeface);
+        String old = mFilament.name();
+        if (name == null ? old == null : name.equals(old)) return;
+        mFilament.setName(name);
+        mRing.push(SceneEventRing.FOCUS, 0f, 0f, 0f, 0f, SystemClock.uptimeMillis());
         wake();
     }
 
@@ -294,7 +323,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         @NonNull private final RenderNode mNode = new RenderNode("SceneContour");
         @NonNull private final float[] mBasinTake = new float[SceneEvents.MAX_BASINS * 4];
         @Nullable private HardwareRenderer mRenderer;
-        @Nullable private ContourProgram mProgram;
+        @Nullable private SceneProgram mProgram;
         @Nullable private SceneLowRes mLowRes;
         private int mSurfaceW, mSurfaceH;
         private boolean mSurfaceReady;
@@ -357,6 +386,11 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 Trace.endSection();
             }
             boolean motion = mMotion;
+            if (!motion && mEvents.focusAgeMs(nowMs) >= 0L) {
+                // Animations are off: the new name shows at once, drawn once even though ambient is frozen.
+                mEvents.clearFocus();
+                mSurfaceBlank = true;
+            }
             boolean active = motion && mEvents.active(nowMs);
             long holdUntil = mHoldUntilMs;
             boolean held = nowMs < holdUntil;
@@ -421,7 +455,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             if (w <= 0 || h <= 0) return;
             SceneLowRes low = mLowRes;
             if (low == null) {
-                low = new SceneLowRes(w, h, handler);
+                low = new SceneLowRes(w, h, handler, mPrograms);
                 mLowRes = low;
             }
             low.render(mEvents, nowMs, mTimeMs, mDensity, mEventsStale);
@@ -440,11 +474,11 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             if (renderer == null || !mSurfaceReady || w <= 0 || h <= 0) return;
             Trace.beginSection("Scene.contour.draw");
             try {
-                ContourProgram program = mProgram;
+                SceneProgram program = mProgram;
                 if (program == null) {
-                    program = new ContourProgram(1f);
+                    program = mPrograms.create(1f);
                     mProgram = program;
-                    mPaint.setShader(program.shader);
+                    mPaint.setShader(program.shader());
                     mEventsStale = true;
                 }
                 program.setSize(w, h, mDensity);
