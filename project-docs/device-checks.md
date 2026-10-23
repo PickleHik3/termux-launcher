@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #147 (commits "refactor(chrome): no app-icon reflection in any glass" and its
+  activity half) · every Style x Dock design, keyboard up and down: the A-Z row, the extra keys and
+  the keyboard glass show no ghost of the pinned icons (crops against the audit's e3 and e3b), and
+  the glass otherwise looks the same · emulator.
 - 2026-10-23 · commit "refactor(place): resolve the arrangement once per page and orientation"
   (#141) · the 2026-10-23 consistency audit's cells re-shot: Docked and Floating × Tray, Beads and
   Strip × Home and a window × keyboard up and down, portrait and landscape → the same chrome as

@@ -4775,11 +4775,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // preference.
             program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
                 .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
-            // The Dock design's own glass (the Tray's soft rim, shelf and icon reflection);
+            // The Dock design's own glass (the Tray's soft rim and shelf);
             // the strip under the pill wears none of it.
             if (navStrip) {
                 program.setDockSurface(0f, 0f);
-                program.clearReflection();
             } else {
                 applyDockSurfaceGlass(program);
             }
@@ -4805,14 +4804,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** The dock icon row's picture for its glass to reflect; built with the first effect that asks. */
-    @Nullable private com.termux.app.chrome.DockIconReflection mDockIconReflection;
-
     /**
      * The dock's style's own glass on its program ({@link com.termux.app.dock.DockSurfaceSpec}):
      * the soft rim band, the lower shelf where the slab floats (Docked, its lower edge is a seam
-     * at the screen's edge and has no shelf), and the icon row's reflection once its picture has
-     * been captured. The plain dock writes all of it off, which is the program as it always was.
+     * at the screen's edge and has no shelf). The plain dock writes all of it off, which is the
+     * program as it always was.
      */
     @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     private void applyDockSurfaceGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program) {
@@ -4846,48 +4842,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             program.setDockSurface(softRim, arrangement().floating() ? spec.shelf : 0f);
             program.clearBeads();
         }
-        com.termux.app.chrome.DockIconReflection reflection = dockIconReflection();
-        View host = findViewById(R.id.accessory_surface_host);
-        View container = findViewById(R.id.accessory_stack_container);
-        if (reflection == null || host == null || container == null) {
-            program.clearReflection();
-            return;
-        }
-        reflection.setEnabled(spec.iconReflections);
-        // While a swipe fades the reflection out, it is aimed where the swipe draws the icons,
-        // so it leaves with them rather than staying behind.
-        float rowOffset = mSuggestionBarView != null ? mSuggestionBarView.drawnPageOffsetPx() : 0f;
-        // Under the Search field the lower bevel shows the icons as the tray's would, aimed that
-        // much lower, and nowhere over the field or the icons themselves, with any design. Beads
-        // keep their own reflection, the field's capsule none (GlassRefraction's capsule).
-        int belowPx = beads != null ? 0 : mAppliedPromptFieldBandPx;
-        // The Wall strip holds its reflection under the tray's (spec.reflectionScale), and its
-        // tiles stand over the icons: its reflection is the lower bevel's alone.
-        reflection.bind(program, host, container, mGlassOriginLeft + rowOffset, mGlassOriginTop,
-            belowPx, belowPx > 0
-                ? Math.min(PROMPT_LINE_REFLECTION_SCALE, spec.reflectionScale)
-                : spec.reflectionScale,
-            spec.reflectsLowerBevelOnly());
-    }
-
-    /**
-     * The reflection of the dock's icon row, following the row this activity holds: a capture
-     * rebuilds the dock's effect once ({@link #rebuildBackdropGlassEffectForLens}).
-     */
-    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
-    @Nullable
-    private com.termux.app.chrome.DockIconReflection dockIconReflection() {
-        SuggestionBarView bar = mSuggestionBarView;
-        if (bar == null) return null;
-        if (mDockIconReflection == null || !mDockIconReflection.follows(bar)) {
-            if (mDockIconReflection != null) mDockIconReflection.setEnabled(false);
-            com.termux.app.chrome.DockIconReflection reflection =
-                new com.termux.app.chrome.DockIconReflection(bar, this::rebuildBackdropGlassEffectForLens);
-            bar.setContentInvalidatedListener(reflection::requestCapture);
-            reflection.setRowOnScreen(mDockRows.isRowOnScreen(Element.APPS));
-            mDockIconReflection = reflection;
-        }
-        return mDockIconReflection;
     }
 
     /**
@@ -11838,12 +11792,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override
             public void onOverflowPagePositionChanged(float pagePosition) {
                 updateAzOverflowAffordance();
-                // The icons' reflection is put away while a swipe carries them, and comes back
-                // with the page they settle on.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                    && mDockIconReflection != null) {
-                    mDockIconReflection.onPagePosition(pagePosition);
-                }
             }
         });
         if (mLauncherTransitionController != null) {
@@ -16620,8 +16568,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** How long a style switch takes to grow or shrink the slab by the field. */
     private static final long PROMPT_FIELD_EASE_MS = 240L;
-    /** How strongly the lower bevel shows the icons under the field, of the tray's. */
-    private static final float PROMPT_LINE_REFLECTION_SCALE = 0.8f;
     /** The field, made the first time the slab carries it; null before. */
     @Nullable private com.termux.app.dock.PromptLineFieldView mPromptLineField;
     /**
@@ -17360,9 +17306,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Back on the dock, the row's ticks say again whether anything shows in their band.
         if (shown.pageBand == com.termux.app.dock.DockRows.PageBand.TICKS && bar != null)
             bar.publishPageIndicator();
-        // The icon reflection is aimed only at a row on screen.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && mDockIconReflection != null)
-            mDockIconReflection.setRowOnScreen(shown.apps);
     }
 
     /** True when this layout moved the dock. Package-visible for the arrangement tests. */
