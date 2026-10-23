@@ -933,8 +933,8 @@ typing.
 | Scene off | 17.8 / 21.3 | 10.0 / 11.5 | 29% | 0.59 ms | 0 |
 | Contour + glass live, held | 16.5 / 21.5 | 10.1 / 11.4 | 25% | 0.63 ms | 17 |
 
-While typing, a scene with glass reading it now costs the same as no scene. Measured again here:
-the scene and glass cost while the scene moves at rest, with nobody typing.
+While typing, a scene with glass reading it now costs the same as no scene. Not measured here: the
+scene and glass cost while the scene moves at rest, with nobody typing (battery, not latency).
 
 ## What could not be verified from a primary source
 
