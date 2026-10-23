@@ -936,6 +936,22 @@ typing.
 While typing, a scene with glass reading it now costs the same as no scene. Not measured here: the
 scene and glass cost while the scene moves at rest, with nobody typing (battery, not latency).
 
+### Filament, first version (2026-10-23, `ded288161`)
+
+Static nixie bench, glass live (soft copy), typing hold on, synthetic typing:
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | Deadline missed |
+|---|---|---|---|---|
+| Scene off | 17.6 / 20.8 | 9.7 / 10.9 | 17% | 89 |
+| Filament + glass, typing | 17.8 / 21.0 | 10.2 / 11.1 | 24% | 105 |
+
+At rest, 15 s untouched: `Scene.contour.draw` 339 times at 3.17 ms average (about 22/s),
+`Scene.contour.lowres` 170 times at 2.37 ms, `Scene.glass.publish` on the scene thread 4.69 ms
+average (the GPU readback of the software copy), and 170 window traversals (the glass repaint at
+the glass rate). That is roughly 12% of one core while a scene drifts with nobody touching. It is a
+battery cost, not latency. The readback is the first thing to make cheaper: copy less often, or
+reuse bitmaps.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
