@@ -21,10 +21,6 @@ under twenty items; past that, the oldest are re-judged first.
   Drawer tile fading with its half rather than leaving at the end, no blurred flash at the pane's
   top as the last band settles, Strip's clock not leaving in the last frames, the pane not
   shortening after the landing, the keyboard travelling with the half that has it open · emulator.
-- 2026-10-23 · #152 (commit "feat(pages): one commit and fling rule for the wall, widgets and
-  drawer") · a slow drag to 0.39 of a page then lift springs back, to 0.41 commits: on the wall
-  (status bar border, window → window and window → Home), on a Home page with two pages, and on
-  the drawer's pull (0.4 of its travel) and its close · emulator.
 - 2026-10-23 · same commit · drag past half a page, then move back slowly but steadily (about
   250 dp/s or more) and lift past a third: the page you started on comes back, on the wall and on
   Home pages; the same reversal flicked hard short of a third goes on to the page the other way ·
@@ -36,24 +32,13 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-23 · same commit · the drawer's fling threshold is the same in dp at 2.6 and 3.5
   density (`wm density`, force-stop after each): a short quick pull off the dock opens it at the
   same thumb speed on both · emulator.
-- 2026-10-23 · #151 (commit "feat(launcher): the App menu as grouped rows with an arrow") · the
-  App menu on a dock icon, a drawer cell and a dock-folder member, in the light, dark and black
-  themes and with the scheme chrome on, for an icon near each screen edge (left and right of the
-  dock, a top-row drawer cell) → groups and shades as mockup A (notifications pill when badged,
-  the shortcuts group, the action group, 4 dp gaps, each group a step lighter going down), rows in
-  order (Widgets only for an app that has widgets, App info, Add to Home, Pin or Unpin, Change
-  icon, Reset icon only after a custom icon, Uninstall), the arrow on the edge facing the icon and
-  pointing at its centre, the card flipping below a top-row cell, no category row, the open
-  scaling out of the arrow and the close shrinking back into it; Widgets opens the picker on the
-  Widgets page; an app with seven or more shortcuts shows five and a More shortcuts row whose side
-  menu lists the rest; a slide from the icon still highlights and commits a row · emulator.
+- 2026-10-23 · #151 (merge d9b5c4fb3) · the App menu on a drawer cell and a dock-folder member,
+  in the black theme and with the scheme chrome, near each screen edge (arrow on the icon,
+  card flipping below), with 7+ shortcuts (collapse), and the open/close motion in a frame
+  recording (dock icon in light/dark seen 2026-10-23) · emulator.
 - 2026-10-23 · same commit · font scale 1.3 and a small density: labels on one line, ellipsized,
   rows still 52 dp; an app with many shortcuts on a short landscape screen scrolls inside the card
   rather than running off it · emulator.
-- 2026-10-23 · same commit · Workspace → Home with Beads: no horizontal line above the dock in the
-  landing frames; Home's widgets the same size in the first frame of the slide that shows them,
-  the first frame after landing and a second later (the grid is given Home's band as the slide
-  begins) · emulator, frames recorded.
 - 2026-10-23 · same commit · a window chip tapped on Home mid-slide, and a reversal past halfway:
   the icons run back the way they came with no jump, the pane's bottom never stays clipped by the
   dock on the window that comes back, and the keyboard pre-rolled for the slide goes away when the
@@ -63,19 +48,11 @@ under twenty items; past that, the oldest are re-judged first.
   the arm64 staging build against the #133 baseline (median 17 ms, 90th 24 ms, 99th 57 ms): no
   worse, and no slide frame re-renders the row (a perfetto trace shows no `Wall.*` layout of the
   apps row between the first frame and the settle) · pong, with the go-ahead.
-- 2026-10-23 · #146 (commits "fix(dock): the landscape rail holds every pin and scrolls…") ·
-  landscape, 7 pins, Docked and Floating × Tray, Beads and Strip, a window and Home, keyboard up
-  and down → the rail shows whole icons only, a vertical drag on it scrolls to the last pin, no
-  icon stands behind the A–Z card (re-shoot the audit's e4 cells), a long press on a rail icon
-  still opens its menu and a sideways drag still pulls the drawer; with the most-used page on,
-  scrolling to the end of the landscape rail shows the most-used apps after the pins, with the
-  same separation the row shows (the ticks beside the rail: two, the second in the most-used
-  page's warm tint, lit as the scroll reaches the end), and a tap on one launches it; with it off
-  the column ends at the last pin; portrait unchanged · emulator.
-- 2026-10-23 · #147 (commits "refactor(chrome): no app-icon reflection in any glass" and its
-  activity half) · every Style x Dock design, keyboard up and down: the A-Z row, the extra keys and
-  the keyboard glass show no ghost of the pinned icons (crops against the audit's e3 and e3b), and
-  the glass otherwise looks the same · emulator.
+- 2026-10-23 · #146 (merges 56fcaf1cb, b1b829854) · landscape rail, seen 2026-10-23 on the
+  emulator except: the two ticks beside the rail follow the scroll (second warm at the end), a
+  tap on a most-used app at the column's end launches it, and in Floating the rail never
+  stands under the A–Z card; a long press still opens the menu and a sideways drag still
+  pulls the drawer · emulator.
 - 2026-10-23 · commit "refactor(place): resolve the arrangement once per page and orientation"
   (#141) · the 2026-10-23 consistency audit's cells re-shot: Docked and Floating × Tray, Beads and
   Strip × Home and a window × keyboard up and down, portrait and landscape → the same chrome as
@@ -84,10 +61,9 @@ under twenty items; past that, the oldest are re-judged first.
   Tray and with Beads → no Element appears or disappears mid-slide or at the landing that the
   audit's clips did not show; a Style or Dock design change in the Layout editor shows on the
   next pass on both halves · emulator, frames recorded.
-- 2026-10-23 · #143 (merge f19d7e1ff, status bar row geometry) · the status bar in both Styles,
-  capsule and docked, top and bottom edge, folded and open: the row height, the foot below it and
-  the widget slot measure the same as before (screenshot pairs against v2-redesign 52831bcac),
-  and the row does not jump when a fold animation ends · emulator.
+- 2026-10-23 · #143 (merge f19d7e1ff) · the status bar at rest in Floating and with the capsule,
+  folded and open: row height, foot and slot the same as 52831bcac (Docked Tray seen
+  2026-10-23), and the row does not jump when a fold animation ends · emulator.
 - 2026-10-23 · commit "fix(place): the terminal takes its room back when the display window
   goes" · Display open with the keyboard up in Overlay mode, then close the display window (its
   ×) or switch to a terminal window from the chips: the terminal shrinks above the keyboard, no
@@ -2302,6 +2278,12 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-23 · finding (emulator, #151) · the App menu showed only after the injected finger
+  lifted, not at the long-press threshold (icon lifted at 2 s): confirm it is the injection, or a
+  real wait for release · pong, a hand on the icon.
+- 2026-10-23 · finding (emulator, #146/#142) · after changing the Dock design to Beads in the
+  Layout editor on Home, the dock rested on the most-used page instead of the 7 pins: leftover
+  emulator state, or the resting page lost on a design change · emulator, fresh install.
 - 2026-10-23 · #142 phase 2 (commit "feat(place): the crossing morphs the dock's row and holds
   every reader") · a slow drag Home → window and back, and a fling reversed mid-way, in both
   Styles with Beads on Home and the Tray on the window: the icons grow or shrink with the finger

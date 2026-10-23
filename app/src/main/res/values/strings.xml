@@ -17,7 +17,7 @@
     <string name="home_actions_add_widget">Add a widget</string>
     <string name="home_actions_add_app">Add an app</string>
     <!-- An app icon on a Home page: the drawer's long-press row, and the toast after either way in. -->
-    <string name="home_add_to_home">Add to Home</string>
+    <string name="home_add_to_home">Add to home</string>
     <string name="home_app_added">Added to Home page %1$d</string>
     <!-- A folder on a Home page: the name it takes when its first app has no label, and the row a
          long press on one of its apps offers. -->

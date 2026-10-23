@@ -259,3 +259,14 @@ a Linux app.
   changes (17 on v2 since this port). After installing a build that changed one, check
   `$PREFIX/bin/termux-x11-gpu-setup` and `$PREFIX/bin/termux-x11-im` are the new ones before
   testing them.
+
+## App menu and the wall, over adb (2026-10-23)
+
+- The App menu from a dock icon opens on release: `ad adb shell input swipe X Y X Y 4000`, then a
+  screenshot about 3 s later. A `motionevent DOWN` hold alone launches the app. Dismiss it with
+  Back, never a tap: the tap lands on whatever is behind the card.
+- A wall drag takes only from the gap just under the pane (about y=1232 in a window at
+  1080x2400); mid-screen drags on the terminal do nothing.
+- The Layout editor opens with `--ez com.termux.app.extra.LAYOUT_EDITOR true --es
+  com.termux.app.extra.PLACE widgets`; the Dock design chips sit at about (139,2022) Tray and
+  (332,2022) Beads.
