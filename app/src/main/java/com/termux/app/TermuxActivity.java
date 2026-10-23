@@ -6238,6 +6238,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // with, or the terminal content beside it.
             int outerMargin = statusBarColumnOuterMarginPx();
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
+            com.termux.app.statusbar.StatusBarEdgeGeometry.RowGeometry rows =
+                com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mStatusBarEdge,
+                    capsule, collapsed, collapsed, getResources().getDisplayMetrics().density);
             boolean vertical = isStatusBarVertical();
             // A column keeps only its own air from the band beside it. The camera hole it used to
             // start past is the padded content root's now, so the bar is a plain band and the two
@@ -6271,9 +6274,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             View topWidgets = findViewById(R.id.terminal_top_widget_area);
             if (topWidgets != null && topWidgets.getLayoutParams() != null) {
-                int targetWidgetHeight = Math.round(dpToPx(capsule
-                    ? com.termux.app.statusbar.StatusBarEdgeGeometry.SLOT_CAPSULE_DP
-                    : com.termux.app.statusbar.StatusBarEdgeGeometry.SLOT_DOCKED_DP));
+                int targetWidgetHeight = rows.slot;
                 ViewGroup.LayoutParams widgetParams = topWidgets.getLayoutParams();
                 if (widgetParams.height != targetWidgetHeight) {
                     widgetParams.height = targetWidgetHeight;
@@ -6329,11 +6330,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // Keep only enough inset for the capsule clip and move the side content inward
                 // below where the curve becomes tight.
-                int targetEdgeMargin = Math.round(dpToPx(collapsed ? 0 : capsule
-                    ? com.termux.app.statusbar.StatusBarEdgeGeometry.ROW_FOOT_CAPSULE_DP
-                    : com.termux.app.statusbar.StatusBarEdgeGeometry.ROW_FOOT_DOCKED_DP));
-                int targetRowHeight = Math.round(dpToPx(collapsed && capsule ? 22
-                    : com.termux.app.statusbar.StatusBarEdgeGeometry.STATUS_ROW_DP));
+                int targetEdgeMargin = rows.foot;
+                int targetRowHeight = rows.rowHeight;
                 // The row keeps the screen edge its bar stands on: a bottom bar's row stays at
                 // the foot of the panel and the clock's band grows upward above it, which is the
                 // reading order a top bar has always had. Mirroring it is what used to lift a
@@ -27111,13 +27109,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.statusbar.StatusBarResizeGeometry.Row
             applyInteractiveStatusRowGeometry(int surfaceHeight, boolean capsule,
                                               int collapsedHeight, int expandedHeight) {
-        int collapsedRowHeight = Math.round(dpToPx(capsule ? 22
-            : com.termux.app.statusbar.StatusBarEdgeGeometry.STATUS_ROW_DP));
-        int expandedRowHeight = Math.round(
-            dpToPx(com.termux.app.statusbar.StatusBarEdgeGeometry.STATUS_ROW_DP));
-        int expandedBottomMargin = Math.round(dpToPx(capsule
-            ? com.termux.app.statusbar.StatusBarEdgeGeometry.ROW_FOOT_CAPSULE_DP
-            : com.termux.app.statusbar.StatusBarEdgeGeometry.ROW_FOOT_DOCKED_DP));
+        float density = getResources().getDisplayMetrics().density;
+        com.termux.app.statusbar.StatusBarEdgeGeometry.RowGeometry folded =
+            com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mStatusBarEdge, capsule,
+                true, true, density);
+        com.termux.app.statusbar.StatusBarEdgeGeometry.RowGeometry open =
+            com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mStatusBarEdge, capsule,
+                false, false, density);
+        int collapsedRowHeight = folded.rowHeight;
+        int expandedRowHeight = open.rowHeight;
+        int expandedBottomMargin = open.foot;
         com.termux.app.statusbar.StatusBarResizeGeometry.Row geometry =
             com.termux.app.statusbar.StatusBarResizeGeometry.calculate(surfaceHeight,
                 collapsedHeight, expandedHeight, collapsedRowHeight, expandedRowHeight,
