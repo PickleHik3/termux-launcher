@@ -252,11 +252,11 @@ a Linux app.
   `pane wait` caps at 300000 ms. Each `ad runas` call is a new shell: keep a pane id in a file.
 - Clipboard: `ad shell cmd clipboard` has no get-primary-clip; read it with
   `launcherctl clipboard paste` under runas.
-- Benchmark graphics is the last row of Settings → Terminal → Linux apps → Set up Linux apps;
-  swipe up. Its toast shows on the launcher after Settings closes: `ad frames 6 <dir> -- tap
-  "Benchmark graphics"` and read the last frames.
+- Graphics acceleration is the last row of Settings → Terminal → Linux apps → Set up Linux apps;
+  swipe up. Its page's Run benchmark opens a terminal session and closes Settings; the toast
+  shows on the launcher after: `ad frames 6 <dir> -- tap "Run benchmark"` and read the last frames.
 - The launcher rewrites `termux-x11*` scripts in the prefix only when `X11CliInstaller.VERSION`
-  changes (17 on v2 since this port). After installing a build that changed one, check
+  changes (18 on v2 since the graphics page). After installing a build that changed one, check
   `$PREFIX/bin/termux-x11-gpu-setup` and `$PREFIX/bin/termux-x11-im` are the new ones before
   testing them.
 

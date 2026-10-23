@@ -2827,3 +2827,29 @@ writes a keyboard mode the layout never stored. Agent items.
   Commit "fix(dock): a put-away apps row keeps the icon Home draws" — slide from a window (no apps
   row, keyboard up) to Home: the pinned icons arrive at their final size, Docked and Floating; Home
   to window and back; Lens beads on Home during the slide and at the settle · pong, by hand.
+
+## Graphics acceleration page (#162)
+
+Agent:
+- 2026-10-24 · commit "feat(settings): a Graphics acceleration page where the user benchmarks
+  and picks" · Settings → Terminal → Linux apps → Set up Linux apps: one Graphics acceleration
+  row (no copy or benchmark rows), its summary "Automatic (…) · Not measured yet"; tap it: the
+  phone's chip card, Automatic plus one card per profile with a radio, the software note, Draw in
+  software with one switch per Linux app, Run benchmark floating at the foot; nothing clipped or
+  overlapping in light, dark and at font scale 1.3 (force-stop after the font change) · emulator.
+- 2026-10-24 · same · Pick Software, Back, force-stop, reopen the page: Software is still
+  picked; `launcherctl x11 gpu` shows `"pick":"software"` and `in_use_env` with
+  LIBGL_ALWAYS_SOFTWARE=1; open a Linux app from the drawer and logcat `X11LinuxAppRunner` says
+  "with graphics software". Pick a profile that is not installed: the app opens with the notice
+  "Your graphics choice isn't installed…". Switch one app on under Draw in software with
+  Automatic picked: only that app's launch logs software · emulator.
+- 2026-10-24 · same · Run benchmark: a terminal session runs termux-x11-gpu-setup, Settings
+  closes and the notice shows; after it finishes, the page shows a score or outcome on every
+  tested profile and "Last benchmark …" on the chip card (on the emulator only software is
+  tried) · emulator.
+
+Developer:
+- 2026-10-24 · same · Run benchmark on pong (Adreno): every fitting profile gets a score, the
+  fastest wins, the Automatic row and the Set up Linux apps summary name it; pick another
+  installed profile and open a GPU app: it draws, and glmark2-es2 names that renderer · pong, by
+  hand.

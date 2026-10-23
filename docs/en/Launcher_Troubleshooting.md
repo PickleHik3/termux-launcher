@@ -300,11 +300,21 @@ The display window hides its
   (the server's `-legacy-drawing`).
 - **Apps cannot open the display from a proot.** Log in with `--shared-x11`, and check
   `echo $DISPLAY` inside.
+- **The whole phone freezes when a Linux app opens.** On some GPUs (reported on a Mali-G52, the
+  Moto G15) an app opening OpenGL through the virgl server hangs the phone; only a forced restart
+  (hold the power button) brings it back. The launcher ranks software rendering first on those
+  phones and says so in **Graphics acceleration**, and the benchmark tries only software there;
+  the other profiles stay under **Advanced**, with the warning. To keep acceleration for everything else and run one app in software, turn that
+  app on under **Draw in software** on the same page (from a terminal:
+  `env -u GALLIUM_DRIVER code-oss`). Electron apps (Code-OSS among them) started from the app
+  drawer under a virgl profile get `--disable-gpu` on their own.
 - **Nothing is accelerated.** `glmark2-es2` names the renderer in its first lines; `llvmpipe`
-  means a profile variable is missing or the profile does not fit this GPU. Tap
-  **Benchmark graphics** under Settings → Terminal → Linux apps → Set up Linux apps → Graphics, or run
-  `termux-x11-gpu-setup` in the terminal: it tries every graphics profile that fits the phone
-  and keeps the best. `launcherctl x11 gpu` says which profile fits.
+  means a profile variable is missing or the profile does not fit this GPU. Open
+  **Settings → Terminal → Linux apps → Set up Linux apps → Graphics acceleration** and tap
+  **Run benchmark**: it tries every graphics profile that fits the phone in the terminal and keeps
+  the best, and the page then shows each profile's result and lets you pick one (Automatic follows
+  the launcher's ranking). `launcherctl x11 gpu` says which profile fits, which one you picked
+  and what apps are started with.
 - **`termux-x11-gpu-setup` says even software rendering did not finish.** The test could not talk
   to a display at all; the first two causes above are the usual ones, and the full log it names
   shows the test program's own message.

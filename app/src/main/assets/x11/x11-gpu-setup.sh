@@ -12,10 +12,11 @@
 #   3. Brings the installed packages up to date, then installs the small test program and the
 #      driver packages for each way (remembering which were already there).
 #   4. Starts a private display for the tests, so nothing you have open is disturbed.
-#   5. Tries each way with a short 3D test, hardest scenes first. A way passes only if it
+#   5. Tries every way with a short 3D test, hardest scenes first. A way passes only if it
 #      really uses the graphics chip, finishes without crashing, and is clearly faster than
 #      the no-acceleration baseline.
-#   6. Keeps the best one and saves it.
+#   6. Keeps the fastest that passed and saves it, with every way's result for the launcher's
+#      Graphics acceleration page (~/.config/termux-launcher/x11-gpu-results.tsv).
 #   7. If a Debian container (proot-distro) is installed, repeats the test inside it.
 #   8. Removes the test program and the drivers that lost, unless you asked to keep them.
 #      Only what this run installed goes, with the dependencies nothing else needs any more;
@@ -27,20 +28,24 @@
 #   --skip-proot  do not test inside the Debian container
 #   --yes         do not pause for confirmation before installing anything
 #   --display=N   use display :N for the tests (default :7)
+#   --profiles=FILE  read the ways to try from FILE (the launcher's page writes one) instead of
+#                 asking the launcher with launcherctl
 #
-# Nothing here changes the launcher's settings. The launcher runs a Linux app with the
-# profile whose driver packages are installed, so after this script only the winner's
-# packages remain and the drawer uses it on its own.
+# Which ways fit the phone, and what each needs, is the launcher's list (launcherctl x11 gpu
+# --table), not this script's. Nothing here changes the launcher's settings: with the choice on
+# Automatic the launcher runs a Linux app with the best profile whose packages are installed,
+# so after this script only the winner's packages remain and the drawer uses it on its own.
 
 set -uo pipefail
 
-KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_NO=7
+KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_NO=7; PROFILES=""
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
     --skip-proot) SKIP_PROOT=1 ;;
     --yes) YES=1 ;;
     --display=*) DISPLAY_NO=${arg#--display=} ;;
+    --profiles=*) PROFILES=${arg#--profiles=} ;;
     -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)"; exit 2 ;;
   esac
@@ -53,6 +58,8 @@ export TMPDIR=$PREFIX/tmp
 ICD_DIR=$PREFIX/share/vulkan/icd.d
 OUT_DIR=$HOME/.config/termux-launcher
 OUT_FILE=$OUT_DIR/x11-gpu.env
+# One line per way tried, tab-separated: name, outcome, score, renderer. The launcher reads it.
+RESULTS_FILE=$OUT_DIR/x11-gpu-results.tsv
 LOG=$TMPDIR/x11-gpu-setup.log
 # proot-distro 5.x keeps a container's root under containers/<name>/rootfs; older versions
 # used installed-rootfs/<name>. Take whichever is there.
@@ -271,71 +278,40 @@ trap 'exec </dev/null >>"$LOG" 2>&1; exit 129' HUP
 
 # ---------------------------------------------------------------------------------------------
 step 1 "Looking at the phone's graphics chip"
-EGL=$(getprop ro.hardware.egl 2>/dev/null)
-VULKAN=$(getprop ro.hardware.vulkan 2>/dev/null)
-KGSL_MODEL=$(cat /sys/class/kgsl/kgsl-3d0/gpu_model 2>/dev/null)
-HAS_KGSL=0; [ -e /dev/kgsl-3d0 ] && HAS_KGSL=1
-VENDORS=$(printf '%s %s %s' "$EGL" "$VULKAN" "$KGSL_MODEL" | tr '[:upper:]' '[:lower:]')
-
-GPU_KIND=unknown
-if [ $HAS_KGSL = 1 ] || [[ $VENDORS == *adreno* || $VENDORS == *qcom* || $VENDORS == *qualcomm* ]]; then GPU_KIND=adreno
-elif [[ $VENDORS == *mali* ]]; then GPU_KIND=mali
-elif [[ $VENDORS == *xclipse* || $VENDORS == *powervr* || $VENDORS == *img* || $VENDORS == *samsung* ]]; then GPU_KIND=other-gles
-elif [[ $VENDORS == *emulation* || $VENDORS == *swiftshader* || $VENDORS == *angle* ]]; then GPU_KIND=emulated
+# The launcher's list of the ways that fit this chip, best first: CANDIDATES, and per way its
+# packages (PKGS), the settings that select it (ENV), a helper to keep running or "-" (HELPER),
+# why (WHY), and, for a way known to freeze phones with this chip, why it is not tried (SKIP).
+# The launcher owns that list (X11GpuProbe); this script only measures.
+declare -A PKGS ENV HELPER WHY SKIP
+CANDIDATES=(); GPU_NAME=unknown
+if [ -n "$PROFILES" ]; then
+  TABLE=$(cat "$PROFILES" 2>/dev/null) || TABLE=""
+else
+  TABLE=$(launcherctl x11 gpu --table 2>/dev/null) || TABLE=""
 fi
-GPU_NAME=${KGSL_MODEL:-${EGL:-unknown}}
-detail "Graphics chip: $GPU_NAME  (family: $GPU_KIND$( [ -n "$VULKAN" ] && echo ", has a Vulkan driver"))"
+case $TABLE in
+  *"PKGS['software']="*) eval "$TABLE" ;;
+  *) say "Could not get the list of graphics settings from the launcher. Open Settings > Terminal >"
+     say "Linux apps > Set up Linux apps > Graphics acceleration and tap Run benchmark there."
+     exit 1 ;;
+esac
+detail "Graphics chip: $GPU_NAME"
 detail "Package manager: $PM"
 
 # ---------------------------------------------------------------------------------------------
 step 2 "Deciding what to try"
-# Each candidate: a name, the packages it needs, the settings that select it, and a helper to
-# keep running (or "-"). Same table as the launcher's own recommendation (launcherctl x11 gpu).
-declare -A PKGS ENV HELPER WHY
-PKGS[software]="mesa"
-ENV[software]="LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe MESA_LOADER_DRIVER_OVERRIDE=llvmpipe"
-HELPER[software]="-"
-WHY[software]="no acceleration; drawn by the CPU. Works everywhere and is the baseline."
-
-TU_DEBUG=noconform
-[[ $(echo "$KGSL_MODEL" | tr '[:upper:]' '[:lower:]') =~ adreno\ ?8[0-9][0-9] ]] && TU_DEBUG="noconform,flushall,syncdraw"
-PKGS[turnip-zink]="mesa mesa-vulkan-icd-freedreno"
-ENV[turnip-zink]="MESA_LOADER_DRIVER_OVERRIDE=zink TU_DEBUG=$TU_DEBUG"
-HELPER[turnip-zink]="-"
-WHY[turnip-zink]="the open Adreno driver (Turnip) with OpenGL on top (Zink). Usually the fastest on Qualcomm phones."
-
-PKGS[virgl]="mesa virglrenderer-android"
-ENV[virgl]="GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2 MESA_NO_ERROR=1 LIBGL_DRI3_DISABLE=1"
-HELPER[virgl]="virgl_test_server_android"
-WHY[virgl]="forwards OpenGL to the phone's own driver through a helper program."
-
-PKGS[virgl-angle]="mesa virglrenderer-android angle-android"
-ENV[virgl-angle]=${ENV[virgl]}
-HELPER[virgl-angle]="virgl_test_server_android --angle-gl"
-WHY[virgl-angle]="like virgl, but through Google's ANGLE, for chips whose own OpenGL driver misbehaves."
-
-PKGS[vulkan-wrapper]="mesa vulkan-wrapper-android"
-ENV[vulkan-wrapper]="VK_ICD_FILENAMES=$ICD_DIR/wrapper_icd.aarch64.json MESA_LOADER_DRIVER_OVERRIDE=zink"
-[ $GPU_KIND = mali ] && ENV[vulkan-wrapper]="${ENV[vulkan-wrapper]} MESA_VK_WSI_PRESENT_MODE=mailbox MESA_VK_WSI_DEBUG=blit"
-HELPER[vulkan-wrapper]="-"
-WHY[vulkan-wrapper]="the phone's own Vulkan driver, wrapped so Zink can use it."
-
-case $GPU_KIND in
-  adreno)     CANDIDATES=(turnip-zink virgl); [ -n "$VULKAN" ] && CANDIDATES+=(vulkan-wrapper) ;;
-  mali)       CANDIDATES=(virgl-angle); [ -n "$VULKAN" ] && CANDIDATES+=(vulkan-wrapper); CANDIDATES+=(virgl) ;;
-  other-gles) CANDIDATES=(virgl-angle); [ -n "$VULKAN" ] && CANDIDATES+=(vulkan-wrapper); CANDIDATES+=(virgl) ;;
-  emulated)   CANDIDATES=() ;;
-  *)          CANDIDATES=(virgl); [ -n "$VULKAN" ] && CANDIDATES+=(vulkan-wrapper) ;;
-esac
-
 detail "Will try, in this order:"
 n=1
-for c in "${CANDIDATES[@]}"; do detail "  $n. $c — ${WHY[$c]}"; n=$((n+1)); done
-detail "  $n. software — ${WHY[software]}"
-[ ${#CANDIDATES[@]} -eq 0 ] && detail "(This looks like an emulator, so only software rendering will be checked.)"
+detail "  $n. software — ${WHY[software]} (the baseline)"
+for c in "${CANDIDATES[@]}"; do
+  n=$((n+1))
+  if [ -n "${SKIP[$c]:-}" ]; then detail "  $n. $c — not tried: ${SKIP[$c]}."
+  else detail "  $n. $c — ${WHY[$c]}"; fi
+done
+[ ${#CANDIDATES[@]} -eq 0 ] && detail "(Nothing on this graphics chip can be accelerated, so only software rendering will be checked.)"
 
 ALL_PKGS="$REPO_PKG xkeyboard-config glmark2 ${PKGS[software]}"
-for c in "${CANDIDATES[@]}"; do ALL_PKGS="$ALL_PKGS ${PKGS[$c]}"; done
+for c in "${CANDIDATES[@]}"; do [ -n "${SKIP[$c]:-}" ] || ALL_PKGS="$ALL_PKGS ${PKGS[$c]}"; done
 # shellcheck disable=SC2086
 ALL_PKGS=$(printf '%s\n' $ALL_PKGS | awk '!seen[$0]++' | tr '\n' ' ')
 detail "Packages needed for the tests: $ALL_PKGS"
@@ -372,13 +348,20 @@ fi
 # shellcheck disable=SC2086
 install_pkgs xkeyboard-config glmark2 ${PKGS[software]} || { say "The display's own packages could not be installed, so the tests cannot run."; exit 1; }
 AVAILABLE=()
+declare -A SCORES STATUSES RENDERERS
 for c in "${CANDIDATES[@]}"; do
+  if [ -n "${SKIP[$c]:-}" ]; then STATUSES[$c]=skipped; continue; fi
   # shellcheck disable=SC2086
-  if install_pkgs ${PKGS[$c]}; then AVAILABLE+=("$c"); else detail "Skipping $c: its packages are not available here."; fi
+  if install_pkgs ${PKGS[$c]}; then AVAILABLE+=("$c")
+  else STATUSES[$c]=unavailable; detail "Skipping $c: its packages are not available here."; fi
 done
-# With more than one Vulkan driver installed, Turnip has to be named explicitly.
-if [ "$(ls "$ICD_DIR" 2>/dev/null | wc -l)" -gt 1 ]; then
-  ENV[turnip-zink]="${ENV[turnip-zink]} VK_ICD_FILENAMES=$ICD_DIR/freedreno_icd.aarch64.json"
+# With more than one Vulkan driver installed, Turnip has to be named explicitly. The launcher
+# adds the same setting when it starts an app, once it sees the second driver.
+if [ -n "${ENV[turnip-zink]:-}" ] && [ "$(ls "$ICD_DIR" 2>/dev/null | wc -l)" -gt 1 ]; then
+  case " ${ENV[turnip-zink]} " in
+    *" VK_ICD_FILENAMES="*) ;;
+    *) ENV[turnip-zink]="${ENV[turnip-zink]} VK_ICD_FILENAMES=$ICD_DIR/freedreno_icd.aarch64.json" ;;
+  esac
 fi
 ALREADY=""
 for p in $ALL_PKGS; do case " ${WE_INSTALLED[*]} ${NOT_AVAILABLE[*]} " in *" $p "*) ;; *) ALREADY="$ALREADY $p" ;; esac; done
@@ -432,17 +415,35 @@ run_test() {
   else STATUS="ok"; fi
 }
 
+# write_results -> RESULTS_FILE: software first, then every way in the launcher's order, each
+# "name<TAB>outcome<TAB>score<TAB>renderer", the outcome one word (ok, crashed, timed-out,
+# not-accelerated, skipped, unavailable).
+write_results() {
+  mkdir -p "$OUT_DIR"
+  {
+    echo "# Written by x11-gpu-setup.sh on $(date '+%Y-%m-%d %H:%M'). Graphics chip: $GPU_NAME."
+    for c in software "${CANDIDATES[@]}"; do
+      [ -n "${STATUSES[$c]:-}" ] || continue
+      printf '%s\t%s\t%s\t%s\n' "$c" "$(echo "${STATUSES[$c]}" | tr ' ' '-')" "${SCORES[$c]:-0}" \
+        "$(echo "${RENDERERS[$c]:-}" | tr '\t\r' '  ')"
+    done
+  } > "$RESULTS_FILE"
+}
+
 detail "Baseline first: software rendering."
 run_test software "${ENV[software]}" -
+SCORES[software]=$SCORE; STATUSES[software]=$STATUS; RENDERERS[software]=$RENDERER
 if [ "$STATUS" != ok ]; then
+  write_results
   say "Even software rendering did not finish ($STATUS). The display itself is not working, so no acceleration can be chosen. See $LOG."
   exit 1
 fi
 BASE=$SCORE
 result "software: score $BASE, drawn by \"$RENDERER\""
 
+# Every way is tried, so the launcher's page can show each one's result; the fastest that is
+# clearly faster than software wins.
 WINNER=software; WINNER_SCORE=$BASE
-declare -A SCORES STATUSES RENDERERS
 for c in "${AVAILABLE[@]}"; do
   detail "Trying $c ..."
   run_test "$c" "${ENV[$c]}" "${HELPER[$c]}"
@@ -451,7 +452,7 @@ for c in "${AVAILABLE[@]}"; do
     ok)
       if [ "$SCORE" -ge $((BASE * 2)) ]; then
         result "$c: score $SCORE, drawn by \"$RENDERER\" — works, and clearly faster than software."
-        WINNER=$c; WINNER_SCORE=$SCORE; break
+        if [ "$SCORE" -gt "$WINNER_SCORE" ] || [ "$WINNER" = software ]; then WINNER=$c; WINNER_SCORE=$SCORE; fi
       else
         result "$c: score $SCORE — works, but not faster enough than software ($BASE) to be worth it."
       fi ;;
@@ -459,6 +460,7 @@ for c in "${AVAILABLE[@]}"; do
     *) result "$c: $STATUS." ;;
   esac
 done
+write_results
 
 # ---------------------------------------------------------------------------------------------
 step 6 "The result"
@@ -520,7 +522,9 @@ else
     else
       PROOT_BASE=$SCORE; PROOT_WINNER=software
       result "Debian, software: score $PROOT_BASE"
-      if command -v virgl_test_server_android >/dev/null; then
+      if [ -z "${ENV[virgl]:-}" ] || [ -n "${SKIP[virgl]:-}" ]; then
+        detail "virgl is not tried on this graphics chip, so software is the only option inside Debian."
+      elif command -v virgl_test_server_android >/dev/null; then
         detail "Trying virgl inside Debian ..."
         virgl_test_server_android >>"$LOG" 2>&1 & VIRGL_PID=$!; sleep 1
         pd_test "${ENV[virgl]} VTEST_SOCKET_NAME=/tmp/.virgl_test"
@@ -562,4 +566,5 @@ detail "Graphics chip: $GPU_NAME"
 detail "Linux apps in Termux: $WINNER"
 [ -n "$PROOT_WINNER" ] && detail "Linux apps in the Debian container: $PROOT_WINNER"
 detail "Details: $OUT_FILE   Full log: $LOG"
+detail "Every way's result is on the launcher's Graphics acceleration page, where you can pick another one."
 detail "If an app shows a black window or wrong colours, the launcher's Display options have two compatibility switches for that."

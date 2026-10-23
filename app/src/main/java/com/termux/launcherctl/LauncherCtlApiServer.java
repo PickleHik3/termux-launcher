@@ -633,11 +633,16 @@ public class LauncherCtlApiServer {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
                 com.termux.app.x11.X11GpuProbe.Result gpu = com.termux.app.x11.X11GpuProbe.probe(context);
-                if ("env".equals(queryParameters(request.query).get("format"))) {
+                String format = queryParameters(request.query).get("format");
+                if ("env".equals(format) || "table".equals(format)) {
+                    // table: the profile list termux-x11-gpu-setup benchmarks (X11GpuProbe.Result#toTable).
+                    String text = "table".equals(format) ? gpu.toTable() : gpu.toEnv();
                     return new HttpResponse(200, "text/plain; charset=utf-8",
-                        gpu.toEnv().getBytes(StandardCharsets.UTF_8), null);
+                        text.getBytes(StandardCharsets.UTF_8), null);
                 }
-                return jsonResponse(gpu.toJson());
+                JSONObject json = gpu.toJson();
+                new com.termux.app.x11.X11GpuProfileStore(context).putChoice(json, gpu);
+                return jsonResponse(json);
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));
             } else if ("GET".equals(request.method) && "/v1/ai/status".equals(request.path)) {
@@ -2994,7 +2999,7 @@ public class LauncherCtlApiServer {
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
             "  launcherctl wallpaper get\n" +
-            "  launcherctl x11 gpu [--env]\n" +
+            "  launcherctl x11 gpu [--env|--table]\n" +
             "\n" +
             "Each group explains its commands and flags: launcherctl <group> --help, for launch, pane,\n" +
             "window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch,\n" +
@@ -3246,10 +3251,11 @@ public class LauncherCtlApiServer {
             "launcherctl x11 - Linux apps on the display\n" +
             "\n" +
             "Usage:\n" +
-            "  launcherctl x11 gpu [--env]\n" +
+            "  launcherctl x11 gpu [--env|--table]\n" +
             "\n" +
             "gpu says which graphics profile fits this phone and whether its packages are\n" +
-            "installed; --env prints the exports instead, ready to eval.\n" +
+            "installed, and which one you picked; --env prints the exports instead, ready to\n" +
+            "eval; --table prints the profile list the graphics benchmark tries.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    *) return 1 ;;\n" +
@@ -3831,9 +3837,14 @@ public class LauncherCtlApiServer {
             "      gpu)\n" +
             "        # What this phone's GPU can do for Linux apps on the display, and the exact\n" +
             "        # environment that asks for it: JSON, or with --env lines to eval in a shell.\n" +
-            "        if [ \"${2:-}\" = \"--env\" ]; then api GET \"/v1/x11/gpu?format=env\"; else api GET /v1/x11/gpu; fi\n" +
+            "        # --table is the profile list termux-x11-gpu-setup benchmarks.\n" +
+            "        case \"${2:-}\" in\n" +
+            "          --env) api GET \"/v1/x11/gpu?format=env\" ;;\n" +
+            "          --table) api GET \"/v1/x11/gpu?format=table\" ;;\n" +
+            "          *) api GET /v1/x11/gpu ;;\n" +
+            "        esac\n" +
             "        ;;\n" +
-            "      *) echo \"usage: launcherctl x11 gpu [--env]\" >&2; exit 2 ;;\n" +
+            "      *) echo \"usage: launcherctl x11 gpu [--env|--table]\" >&2; exit 2 ;;\n" +
             "    esac\n" +
             "    ;;\n" +
             "  *)\n" +

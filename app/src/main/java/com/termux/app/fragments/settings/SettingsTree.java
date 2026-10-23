@@ -136,6 +136,8 @@ public final class SettingsTree {
         page(terminal, linuxApps, R.string.settings_terminal_sub_linux_apps_title, R.xml.x11_display_preferences);
         page(linuxApps, PAGES + "GuiAppsSetupPreferencesFragment", R.string.settings_gui_apps_title,
             R.xml.gui_apps_setup_preferences);
+        page(PAGES + "GuiAppsSetupPreferencesFragment", PAGES + "GraphicsAccelerationFragment",
+            R.string.settings_x11_gpu_title, 0);
         page(linuxApps, PAGES + "HiddenAppsPreferencesFragment", R.string.settings_x11_hidden_apps_title, 0);
         page(linuxApps, PAGES + "X11DisplayInputPreferencesFragment", R.string.settings_x11_sub_input_title,
             R.xml.x11_display_input_preferences);

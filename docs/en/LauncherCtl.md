@@ -303,11 +303,13 @@ launcherctl wallpaper set ~/pics/a.jpg --lock
 ## x11 gpu
 
 ```text
-launcherctl x11 gpu [--env]
+launcherctl x11 gpu [--env|--table]
 ```
 
 Says which graphics profile fits this phone for Linux apps on the display, and whether its packages
-are installed. `--env` prints the exports instead, ready to `eval`. See
+are installed; `pick` is the profile chosen on the Graphics acceleration page (`auto` follows the
+ranking) and `in_use` / `in_use_env` what an app is started with now. `--env` prints the exports
+instead, ready to `eval`; `--table` prints the list of profiles the graphics benchmark tries. See
 [GPU acceleration for your apps](X11_Display.md#gpu-acceleration-for-your-apps).
 
 ```sh

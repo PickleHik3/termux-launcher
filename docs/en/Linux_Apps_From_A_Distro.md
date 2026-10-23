@@ -34,9 +34,9 @@ to, which is what lets a tap on a Linux app open as you. The same command adds t
 distro does not ship, adds its graphics support, and installs the apps you ticked. It finishes with
 a line telling you it is done.
 
-The same screen has a **Graphics** section: **Graphics acceleration** says what this phone's GPU
-can do for Linux apps, and **Copy the graphics command** copies the install line and exports for
-it. See [GPU acceleration for your apps](X11_Display.md#gpu-acceleration-for-your-apps).
+The same screen has a **Graphics** section: **Graphics acceleration** opens a page where you run
+the graphics benchmark, see how each way of drawing did on this phone, and pick the one Linux apps
+use. See [GPU acceleration for your apps](X11_Display.md#gpu-acceleration-for-your-apps).
 
 The Display place offers this screen by itself when it finds a distro that is not ready. Copy a
 command from it and it stops asking about that distro. The offer is for distros that install with

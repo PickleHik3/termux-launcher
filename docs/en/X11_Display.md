@@ -261,14 +261,18 @@ the proot's login shell). The launcher never sets these for you.
 
 The launcher can pick for you: `launcherctl x11 gpu` says which row fits this phone and what is
 installed, and `launcherctl x11 gpu --env` prints the exports to paste or `eval` (see
-[launcherctl](LauncherCtl.md#x11-gpu)). The same answer is under **Settings → Terminal → Linux apps
-→ Set up Linux apps → Graphics**: **Graphics acceleration** shows what the phone can do, and **Copy
-the graphics command** puts the install line and the exports for this phone on the clipboard.
+[launcherctl](LauncherCtl.md#x11-gpu)). You choose on **Settings → Terminal → Linux apps → Set up
+Linux apps → Graphics acceleration**: the page lists every row that fits this phone with whether it
+is installed and its last benchmark score, and you pick one (**Automatic** follows the ranking
+above) or switch single apps to **Draw in software**. Where a chip is known to freeze with virgl
+(a Mali-G52 so far), the page says so and software is ranked first.
 
-Or let the phone decide by trying: **Benchmark graphics** on the same screen copies
-`termux-x11-gpu-setup`, which you paste into the terminal and run. It installs the drivers for
-every row that fits this phone, runs a short 3D test with each on a private display, keeps the one
-that really uses the GPU and is clearly faster than software, and removes the rest again. It explains each
+To let the phone decide by trying, tap **Run benchmark** on that page: it opens the terminal and
+runs `termux-x11-gpu-setup` (you can also run it yourself). It installs the drivers for every row
+that fits this phone, runs a short 3D test with each on a private display, keeps the fastest that
+really uses the GPU and is clearly faster than software, removes the rest again, and leaves every
+row's result for the page. The list of rows comes from the launcher (`launcherctl x11 gpu
+--table`), so the script and the page always agree. It explains each
 step as it goes, asks before installing anything, and writes what it decided to
 `~/.config/termux-launcher/x11-gpu.env`. With a Debian proot installed it repeats the test inside
 the container. `--keep` leaves every package in place, `--skip-proot` skips the container,
@@ -308,8 +312,11 @@ Two things make this work:
   you would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table
-above for the profile whose packages are installed (other than `software`), so a GPU app is
-accelerated without any setup. After `termux-x11-gpu-setup`, only the winner's packages remain. The first time the display is used, the text size and touch mode are set to values
+above for the profile you picked, or on **Automatic** for the best profile whose packages are
+installed (other than `software`, except on a chip known to freeze), so a GPU app is accelerated
+without any setup. A profile that needs a helper (virgl's `virgl_test_server_android`) gets it
+started before the app, once, unless one is already running. A picked profile that is not
+installed draws in software, and you are told. After `termux-x11-gpu-setup`, only the winner's packages remain. The first time the display is used, the text size and touch mode are set to values
 that suit a phone; both can be changed afterwards.
 
 ## A desktop in a proot

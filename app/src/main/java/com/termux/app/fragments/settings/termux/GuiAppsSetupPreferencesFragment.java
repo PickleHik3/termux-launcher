@@ -25,12 +25,11 @@ import com.termux.app.notice.AppNotice;
 import com.termux.app.tour.TourEdition;
 import com.termux.app.x11.DistroSetupStore;
 import com.termux.app.x11.GuiAppsSetup;
-import com.termux.app.x11.X11CliInstaller;
 import com.termux.app.x11.X11GpuProbe;
+import com.termux.app.x11.X11GpuProfileStore;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.TermuxConstants;
 
-import java.io.File;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -60,8 +59,6 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     static final String KEY_NIX_DOCS = "gui_apps_nix_docs";
     static final String KEY_GRAPHICS_CATEGORY = "gui_apps_graphics_category";
     static final String KEY_GPU = "x11_gpu";
-    static final String KEY_GPU_COPY = "gui_apps_gpu_copy";
-    static final String KEY_GPU_BENCHMARK = "gui_apps_gpu_benchmark";
 
     /** How long the launcher is given to come forward before the notice is raised on it. */
     private static final long NOTICE_DELAY_MS = 350L;
@@ -73,8 +70,6 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         return thread;
     });
     private final Handler probeHandler = new Handler(Looper.getMainLooper());
-    /** The last probe's answer, kept so the copy row has something to build a command from. */
-    @Nullable private X11GpuProbe.Result gpuResult;
 
     /** Where nix's "Read the docs" row sends the user; nix has no command for this screen to build. */
     private static final String NIX_DOCS_URL =
@@ -159,17 +154,6 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
             copyCommand(preference.getContext());
             return true;
         });
-        Preference gpuCopy = findPreference(KEY_GPU_COPY);
-        if (gpuCopy != null) gpuCopy.setOnPreferenceClickListener(preference -> {
-            copyGraphicsCommand(preference.getContext());
-            return true;
-        });
-        Preference gpuBenchmark = findPreference(KEY_GPU_BENCHMARK);
-        if (gpuBenchmark != null) gpuBenchmark.setOnPreferenceClickListener(preference -> {
-            copyBenchmarkCommand(preference.getContext());
-            return true;
-        });
-        probeGpu(context);
     }
 
     @Override
@@ -193,6 +177,10 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     public void onResume() {
         super.onResume();
         if (getActivity() != null) getActivity().setTitle(R.string.settings_gui_apps_title);
+        // Every return, so a pick made on the Graphics acceleration page shows here at once.
+        Context context = getContext();
+        Preference graphics = findPreference(KEY_GRAPHICS_CATEGORY);
+        if (context != null && graphics != null && graphics.isVisible()) probeGpu(context);
     }
 
     /** Everything on the screen that the chosen source decides, in one place. */
@@ -219,57 +207,26 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         }
     }
 
-    /** What this phone's GPU can do for Linux apps, worked out off the main thread. */
+    /**
+     * The Graphics acceleration row's summary: the user's pick and its last result, worked out
+     * off the main thread (the probe builds a GL context the first time).
+     */
     private void probeGpu(@NonNull Context context) {
         Context app = context.getApplicationContext();
+        if (probeExecutor.isShutdown()) return;
         probeExecutor.execute(() -> {
             X11GpuProbe.Result result = X11GpuProbe.probe(app);
+            X11GpuProfileStore store = new X11GpuProfileStore(app);
+            // A benchmark finished in the terminal since the page was last open is news here too.
+            store.importResults(new java.io.File(X11GpuProfileStore.RESULTS_FILE_PATH));
+            String summary = GraphicsAccelerationFragment.rowSummary(app, result, store.pick(), store.results());
             probeHandler.post(() -> {
                 if (!isAdded()) return;
-                gpuResult = result;
                 Preference gpu = findPreference(KEY_GPU);
-                if (gpu == null) return;
-                gpu.setSummary(result.recommended() == null
-                    ? getString(R.string.settings_x11_gpu_none)
-                    : getString(R.string.settings_x11_gpu_summary, result.headline()));
+                if (gpu == null || summary.contentEquals(gpu.getSummary() == null ? "" : gpu.getSummary())) return;
+                gpu.setSummary(summary);
             });
         });
-    }
-
-    /**
-     * The graphics command onto the clipboard, the same way the setup command goes: Settings
-     * closes so the terminal is in front, and the notice follows it there.
-     *
-     * <p>Nothing happens while the probe is still running - the row has no command to give yet,
-     * and a wrong one would install the wrong driver.
-     */
-    private void copyGraphicsCommand(@NonNull Context context) {
-        X11GpuProbe.Result result = gpuResult;
-        if (result == null) return;
-        Context appContext = context.getApplicationContext();
-        ShareUtils.copyTextToClipboard(appContext,
-            getString(R.string.settings_gui_apps_gpu_clipboard_label), result.toCommand(), null);
-        Activity activity = getActivity();
-        if (activity != null) activity.finish();
-        new Handler(Looper.getMainLooper()).postDelayed(
-            () -> AppNotice.show(appContext, R.string.settings_gui_apps_gpu_copied),
-            NOTICE_DELAY_MS);
-    }
-
-    /**
-     * The installed benchmark script, by name: it is on PATH, so the bare command is what the user
-     * pastes, with no newline, and their Enter runs it.
-     */
-    private void copyBenchmarkCommand(@NonNull Context context) {
-        Context appContext = context.getApplicationContext();
-        ShareUtils.copyTextToClipboard(appContext,
-            getString(R.string.settings_gui_apps_gpu_benchmark_clipboard_label),
-            new File(X11CliInstaller.GPU_SETUP_SCRIPT_PATH).getName(), null);
-        Activity activity = getActivity();
-        if (activity != null) activity.finish();
-        new Handler(Looper.getMainLooper()).postDelayed(
-            () -> AppNotice.show(appContext, R.string.settings_gui_apps_gpu_benchmark_copied),
-            NOTICE_DELAY_MS);
     }
 
     /** Which Linux to put inside is only a question for the route that puts one inside. */
