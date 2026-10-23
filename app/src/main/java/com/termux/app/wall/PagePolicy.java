@@ -37,12 +37,15 @@ public final class PagePolicy {
      */
     public static final float MIN_FLING_DP_PER_SEC = 250f;
 
-    /** The angle off the page's axis, in degrees, past which the touch slop is damped. */
+    /** The angle off the page's axis, in degrees, past which the touch slop starts to grow. */
     public static final float SLOP_DAMPING_ANGLE_DEG = 30f;
-    /** How many slops a swipe more than {@link #SLOP_DAMPING_ANGLE_DEG} off the axis must go. */
+    /** The angle off the axis past which a swipe is never the page's (Launcher3's MAX_SWIPE_ANGLE). */
+    public static final float MAX_SWIPE_ANGLE_DEG = 60f;
+    /**
+     * How many extra slops the swipe asks for at {@link #MAX_SWIPE_ANGLE_DEG}; between the two
+     * angles the extra grows as the square root of the way there (Launcher3's damping).
+     */
     public static final float SLOP_DAMPING = 4f;
-    private static final float SLOP_DAMPING_TAN =
-        (float) Math.tan(Math.toRadians(SLOP_DAMPING_ANGLE_DEG));
 
     private PagePolicy() {}
 
@@ -104,12 +107,17 @@ public final class PagePolicy {
     /**
      * The touch slop a finger that has gone {@code along} the page's axis and {@code across} it
      * must pass along the axis before the swipe is the page's: the plain slop up to
-     * {@link #SLOP_DAMPING_ANGLE_DEG} off the axis, {@link #SLOP_DAMPING} of it past that, so a
-     * diagonal thumb scrolls what is under it rather than turning the page.
+     * {@link #SLOP_DAMPING_ANGLE_DEG} off the axis, growing to {@code 1 + SLOP_DAMPING} slops at
+     * {@link #MAX_SWIPE_ANGLE_DEG} along a square root, and never past that, so a diagonal thumb
+     * scrolls what is under it rather than turning the page.
      */
     public static float slopPx(float along, float across, float slopPx) {
         float slop = Math.max(0f, slopPx);
-        return Math.abs(across) > Math.abs(along) * SLOP_DAMPING_TAN ? slop * SLOP_DAMPING : slop;
+        float theta = (float) Math.toDegrees(Math.atan2(Math.abs(across), Math.abs(along)));
+        if (theta > MAX_SWIPE_ANGLE_DEG) return Float.POSITIVE_INFINITY;
+        if (theta <= SLOP_DAMPING_ANGLE_DEG) return slop;
+        float way = (theta - SLOP_DAMPING_ANGLE_DEG) / (MAX_SWIPE_ANGLE_DEG - SLOP_DAMPING_ANGLE_DEG);
+        return slop * (1f + SLOP_DAMPING * (float) Math.sqrt(way));
     }
 
     /** Whether a finger at ({@code along}, {@code across}) is past {@link #slopPx} on the axis. */

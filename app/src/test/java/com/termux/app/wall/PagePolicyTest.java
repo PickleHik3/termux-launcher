@@ -94,18 +94,30 @@ public class PagePolicyTest {
     }
 
     @Test
-    public void theSlopIsDampedFourFoldPastThirtyDegrees() {
+    public void theSlopGrowsPastThirtyDegreesAndEndsAtSixty() {
         float slop = 24f;
         float along = 50f;
         float at29 = along * (float) Math.tan(Math.toRadians(29));
         float at31 = along * (float) Math.tan(Math.toRadians(31));
+        float at45 = along * (float) Math.tan(Math.toRadians(45));
+        float at60 = along * (float) Math.tan(Math.toRadians(59.99));
+        float at61 = along * (float) Math.tan(Math.toRadians(61));
         assertEquals(slop, PagePolicy.slopPx(along, at29, slop), 0f);
-        assertEquals(4f * slop, PagePolicy.slopPx(along, at31, slop), 0f);
-        // At 29 degrees the plain slop lets it go; at 31 it waits for four of them.
+        // Launcher3's ramp: 1 + 4 * sqrt((theta - 30) / 30) slops.
+        assertEquals(slop * (1f + 4f * (float) Math.sqrt(1f / 30f)),
+            PagePolicy.slopPx(along, at31, slop), 0.5f);
+        assertEquals(slop * (1f + 4f * (float) Math.sqrt(0.5f)),
+            PagePolicy.slopPx(along, at45, slop), 0.5f);
+        assertEquals(5f * slop, PagePolicy.slopPx(along, at60, slop), 0.5f);
+        // Past 60 degrees the swipe is never the page's.
+        assertEquals(Float.POSITIVE_INFINITY, PagePolicy.slopPx(along, at61, slop), 0f);
         assertTrue(PagePolicy.pastSlop(along, at29, slop));
-        assertFalse(PagePolicy.pastSlop(along, at31, slop));
-        assertTrue(PagePolicy.pastSlop(4f * slop + 1f,
-            (4f * slop + 1f) * (float) Math.tan(Math.toRadians(31)), slop));
+        // At 31 degrees the ramp asks about 1.7 slops: 40 px is short of it, 50 px past it.
+        assertFalse(PagePolicy.pastSlop(40f, 40f * (float) Math.tan(Math.toRadians(31)), slop));
+        assertTrue(PagePolicy.pastSlop(along, at31, slop));
+        float farAt45 = 5f * slop;
+        assertTrue(PagePolicy.pastSlop(farAt45, farAt45, slop));
+        assertFalse(PagePolicy.pastSlop(1000f, 1000f * (float) Math.tan(Math.toRadians(61)), slop));
         assertFalse(PagePolicy.pastSlop(slop, 0f, slop));
         assertFalse(PagePolicy.pastSlop(Float.NaN, 0f, slop));
     }
