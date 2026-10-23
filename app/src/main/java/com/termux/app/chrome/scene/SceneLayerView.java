@@ -100,7 +100,17 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         // Default Z order on purpose (no setZOrderOnTop / media overlay): the surface sits below
         // the window, which the display composites over it.
         getHolder().addCallback(this);
+        addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> publishRect());
         mPaint.setAntiAlias(false);
+    }
+
+    private final int[] mScreenLoc = new int[2];
+
+    /** Tells the glass where on screen the live frame lies: this layer's rect. */
+    private void publishRect() {
+        getLocationOnScreen(mScreenLoc);
+        LiveSceneFrame.setRect(mScreenLoc[0], mScreenLoc[1], mScreenLoc[0] + getWidth(),
+            mScreenLoc[1] + getHeight());
     }
 
     // ---- Configuration, from the controller's property polls ----------------------------------
@@ -246,7 +256,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         if (w <= 0 || h <= 0) return;
         SceneLowRes low = mLowRes;
         if (low == null) {
-            low = new SceneLowRes(w, h);
+            low = new SceneLowRes(w, h, new android.os.Handler(android.os.Looper.getMainLooper()));
             mLowRes = low;
         }
         low.render(mEvents, nowMs, mTimeMs, mDensity, mEventsStale);
