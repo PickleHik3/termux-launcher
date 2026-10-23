@@ -908,6 +908,24 @@ Glass sampled the scene's low-res pass, published at 15 fps. This build still ha
 - Crash found on the same build: a software canvas (a RealtimeBlurView capture) drew the hardware
   bitmap. Fixed in `fa2cce7c7`.
 
+### Software copy for glass (2026-10-23, `ecf749c04`)
+
+`debug.tl.scene_glass_copy soft` copies each low-res frame into a 135x301 software bitmap before glass
+samples it. `hw` hands glass the hardware buffer. Contour at ambient 30, glass at 15 fps, synthetic
+typing.
+
+| Run | `postAndWait` avg | Main traversal avg | Drawn → buffer ready p50 / p90 | Stuffed | Deadline missed |
+|---|---|---|---|---|---|
+| Scene off | 0.65 ms | 1.96 ms | 10.1 / 11.3 | 31% | 98 |
+| Glass live, soft | 2.43 ms | 3.66 ms | 12.9 / 17.7 | 84% | 242 |
+| Glass live, hw | 7.39 ms | 8.66 ms | 12.2 / 14.8 | 81% | 242 |
+
+- The software copy removes most of the hardware-bitmap stall on the UI thread (7.4 to 2.4 ms).
+- The queueing stays. The scene, its low-res pass and the window all render on HWUI's single
+  RenderThread (4,125 against 2,466 `DrawFrame`s), and AGSL has no other renderer.
+- Decision (developer, 2026-10-23): the scene and its glass pass **hold still while typing**, and
+  resume 1.5 s after the last key (`749d21d2a`). Re-measure owed.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
