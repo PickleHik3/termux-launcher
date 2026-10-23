@@ -9,7 +9,7 @@ package com.termux.app.chrome.scene;
  * {@code debug.tl.scene_rate}: ambient frames per second when nothing is happening, {@code 30}
  * (default), {@code 90}, or {@code 0} for no ambient motion. {@code debug.tl.scene_glass}:
  * {@code lowres} (default) or {@code still}. {@code debug.tl.scene_glass_rate}: the low-res
- * pass's frames per second, 15 by default, 0 for none.</p>
+ * pass's frames per second, 8 by default, 0 for none.</p>
  */
 public final class SceneFramePolicy {
 
@@ -19,7 +19,7 @@ public final class SceneFramePolicy {
     public static final String PROP_GLASS_RATE = "debug.tl.scene_glass_rate";
 
     public static final int DEFAULT_RATE_HZ = 30;
-    public static final int DEFAULT_GLASS_RATE_HZ = 15;
+    public static final int DEFAULT_GLASS_RATE_HZ = 8;
     /** A callback may land this much before the period is up and still draw: vsync jitter. */
     static final long SLACK_NS = 4_000_000L;
 

@@ -17,10 +17,16 @@ import android.os.Handler;
 import android.os.SystemClock;
 import android.os.Trace;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import com.termux.terminal.FrameProbe;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * The scene rendered a second time at {@link #DIVISOR} of the screen per axis into an offscreen
@@ -55,6 +61,10 @@ final class SceneLowRes {
     static final int MIN_NEWER = 2;
     static final long MIN_AGE_MS = 100L;
 
+    /** Pooled software bitmaps the soft path rotates through. */
+    static final int POOL = 3;
+    private static final String TAG = "SceneLowRes";
+
     private static final FrameProbe.Source GLASS = FrameProbe.source("sceneGlass");
 
     @NonNull private final SceneProgram mProgram;
@@ -65,6 +75,12 @@ final class SceneLowRes {
     @NonNull private final SceneImageLedger<Image> mLedger =
         new SceneImageLedger<>(HELD, MIN_NEWER, MIN_AGE_MS, Image::close);
     private final int mWidth, mHeight;
+    /** Soft path: the reader's images are CPU readable, so no GPU readback is needed. */
+    private boolean mCpuReadable;
+    @NonNull private final SceneSoftPool mPool = new SceneSoftPool(POOL);
+    @NonNull private final Bitmap[] mPoolBitmaps = new Bitmap[POOL];
+    @NonNull private final BitmapShader[] mPoolShaders = new BitmapShader[POOL];
+    @Nullable private ByteBuffer mStaging;
     private long mFrames;
     private int mBlurDp = -1;
     private boolean mClosed;
@@ -75,8 +91,24 @@ final class SceneLowRes {
         mProgram = programs.create(1f / DIVISOR);
         mWidth = Math.max(1, screenWidth / DIVISOR);
         mHeight = Math.max(1, screenHeight / DIVISOR);
-        mReader = ImageReader.newInstance(mWidth, mHeight, PixelFormat.RGBA_8888, MAX_IMAGES,
-            HardwareBuffer.USAGE_GPU_COLOR_OUTPUT | HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE);
+        ImageReader reader = null;
+        if ("soft".equals(COPY.get(SystemClock.uptimeMillis()))) {
+            try {
+                // The listener fires once the producer's fence has signalled, so a delivered
+                // image is rendered and can be read on the CPU without waiting for the GPU.
+                reader = ImageReader.newInstance(mWidth, mHeight, PixelFormat.RGBA_8888,
+                    MAX_IMAGES, HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
+                        | HardwareBuffer.USAGE_CPU_READ_OFTEN);
+                mCpuReadable = true;
+            } catch (RuntimeException e) {
+                Log.w(TAG, "CPU-readable scene reader refused, glass falls back to Bitmap.copy", e);
+            }
+        }
+        if (reader == null) {
+            reader = ImageReader.newInstance(mWidth, mHeight, PixelFormat.RGBA_8888, MAX_IMAGES,
+                HardwareBuffer.USAGE_GPU_COLOR_OUTPUT | HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE);
+        }
+        mReader = reader;
         mReader.setOnImageAvailableListener(this::onImage, sceneHandler);
         mPaint.setShader(mProgram.shader());
         mNode.setPosition(0, 0, mWidth, mHeight);
@@ -122,8 +154,11 @@ final class SceneLowRes {
     }
 
     /**
-     * {@code debug.tl.scene_glass_copy}: {@code soft} (default) copies each frame into a small
-     * software bitmap before glass sees it; {@code hw} hands glass the hardware buffer itself.
+     * {@code debug.tl.scene_glass_copy}: {@code soft} (default) reads each rendered frame on the
+     * CPU (the reader's buffers are CPU readable, so no GPU wait) into one of {@link #POOL}
+     * reused software bitmaps; {@code copy} wraps the hardware buffer and {@code Bitmap.copy}s it
+     * (a blocking GPU readback, a new bitmap per frame); {@code hw} hands glass the hardware
+     * buffer itself. The reader's usage is chosen from the value when the pass is created.
      * A hardware bitmap on the window's glass kept the UI thread waiting for the whole render on
      * every frame (latency study, "Glass reading the scene"); the still frame, a software bitmap,
      * does not.
@@ -141,6 +176,12 @@ final class SceneLowRes {
         }
         Trace.beginSection("Scene.glass.publish");
         try {
+            if (mCpuReadable && "soft".equals(COPY.get(SystemClock.uptimeMillis()))) {
+                if (publishPooled(image)) return;
+                // Unreadable plane: this device cannot do it; copy as before from now on.
+                mCpuReadable = false;
+                return;
+            }
             HardwareBuffer buffer = image.getHardwareBuffer();
             Bitmap bitmap = buffer == null ? null : Bitmap.wrapHardwareBuffer(buffer, null);
             // The bitmap holds its own reference to the buffer; this handle is done with.
@@ -170,6 +211,61 @@ final class SceneLowRes {
         } finally {
             Trace.endSection();
         }
+    }
+
+    /**
+     * Soft path: the rendered image's pixels into the next pooled bitmap, the image closed at once.
+     * False only when the plane cannot be read (the frame is dropped, the caller switches to the
+     * copy path for the next ones); a frame with no safe slot is dropped and returns true. The
+     * image is closed on every path.
+     */
+    private boolean publishPooled(@NonNull Image image) {
+        int slot = mPool.acquire();
+        if (slot < 0) {
+            image.close();
+            return true;
+        }
+        try {
+            Trace.beginSection("Scene.glass.copy");
+            try {
+                Image.Plane plane = image.getPlanes()[0];
+                ByteBuffer src = plane.getBuffer();
+                int rowStride = plane.getRowStride();
+                int pixelStride = plane.getPixelStride();
+                Bitmap bitmap = mPoolBitmaps[slot];
+                if (bitmap == null) {
+                    // Once per slot: the bitmap and the shader over it live as long as the pass.
+                    bitmap = Bitmap.createBitmap(mWidth, mHeight, Bitmap.Config.ARGB_8888);
+                    BitmapShader shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP,
+                        Shader.TileMode.CLAMP);
+                    shader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+                    mPoolBitmaps[slot] = bitmap;
+                    mPoolShaders[slot] = shader;
+                }
+                if (pixelStride == 4 && rowStride == mWidth * 4) {
+                    src.rewind();
+                    bitmap.copyPixelsFromBuffer(src);
+                } else {
+                    if (mStaging == null) {
+                        mStaging = ByteBuffer.allocateDirect(mWidth * mHeight * 4)
+                            .order(ByteOrder.nativeOrder());
+                    }
+                    SceneSoftPool.copyPacked(src, rowStride, pixelStride, mWidth, mHeight, mStaging);
+                    bitmap.copyPixelsFromBuffer(mStaging);
+                }
+            } finally {
+                Trace.endSection();
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "reading the scene image on the CPU failed, falling back to Bitmap.copy", e);
+            image.close();
+            return false;
+        }
+        image.close();
+        mPool.published(slot);
+        LiveSceneFrame.publish(mPoolBitmaps[slot], mPoolShaders[slot]);
+        GLASS.tick();
+        return true;
     }
 
     long framesRendered() {
