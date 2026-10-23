@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-23
 amends: 0003's amendment (the dock and keyboard travel as transforms of the wall's live offset), by naming who owns that travel; 0011's "a slide is an input", by making the slide's dress a morph
 ---
