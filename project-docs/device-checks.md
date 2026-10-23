@@ -13,6 +13,21 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #152 (commit "feat(pages): one commit and fling rule for the wall, widgets and
+  drawer") · a slow drag to 0.39 of a page then lift springs back, to 0.41 commits: on the wall
+  (status bar border, window → window and window → Home), on a Home page with two pages, and on
+  the drawer's pull (0.4 of its travel) and its close · emulator.
+- 2026-10-23 · same commit · drag past half a page, then move back slowly but steadily (about
+  250 dp/s or more) and lift past a third: the page you started on comes back, on the wall and on
+  Home pages; the same reversal flicked hard short of a third goes on to the page the other way ·
+  emulator.
+- 2026-10-23 · same commit · a diagonal thumb at 35° off the horizontal, under four slops of
+  travel (about 32 dp), does not turn a Home page or slide the wall from the bottom gap or the
+  status bar border; it pages once it carries on that way well past that; at 25° it pages at the
+  usual slop; a widget that scrolls vertically scrolls more readily under a diagonal · emulator.
+- 2026-10-23 · same commit · the drawer's fling threshold is the same in dp at 2.6 and 3.5
+  density (`wm density`, force-stop after each): a short quick pull off the dock opens it at the
+  same thumb speed on both · emulator.
 - 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
   landing") · the audit's slide clips re-shot, frames recorded: Home → window and window → Home,
   Docked and Floating, each of Tray, Beads and Strip → no blurred flash at the pane's top as the

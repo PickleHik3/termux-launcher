@@ -135,9 +135,6 @@ public final class WidgetPaneView extends FrameLayout {
         boolean paletteUp();
     }
 
-    /** Fraction of the pane width a released drag must cross to commit a page switch. */
-    private static final float PAGE_COMMIT_FRACTION = 1f / 3f;
-    private static final float PAGE_COMMIT_VELOCITY_DP_PER_SEC = 900f;
     private static final float PAGE_EDGE_RESISTANCE = 0.35f;
     /** How long a page takes to slide in or back once the finger has let go, at Normal speed. */
     static final long PAGE_SETTLE_MS = 160L;
@@ -952,15 +949,9 @@ public final class WidgetPaneView extends FrameLayout {
             pagingVelocity.computeCurrentVelocity(1000);
             velocityX = pagingVelocity.getXVelocity();
         }
-        float commitVelocity = PAGE_COMMIT_VELOCITY_DP_PER_SEC
-            * getResources().getDisplayMetrics().density;
-        int width = Math.max(1, getWidth());
-        int direction = 0;
-        if (dx < 0 && (-dx > width * PAGE_COMMIT_FRACTION || velocityX < -commitVelocity)) {
-            direction = 1;
-        } else if (dx > 0 && (dx > width * PAGE_COMMIT_FRACTION || velocityX > commitVelocity)) {
-            direction = -1;
-        }
+        // The one page rule; a drag to the left (negative) brings the next page in.
+        int direction = -com.termux.app.wall.PagePolicy.turn(dx, velocityX,
+            Math.max(1, getWidth()), getResources().getDisplayMetrics().density);
         int target = Math.max(0, Math.min(pageCount - 1, currentPage + direction));
         if (target != currentPage && listener != null) {
             pageCommitPending = true;

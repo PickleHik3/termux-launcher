@@ -583,9 +583,13 @@ public class BorderDragTest {
             BorderDrag.Claim.PAGING, drag.move(claimX, BOTTOM - 400f));
         assertEquals(BorderDrag.KeyboardSwipe.NONE,
             drag.keyboardRelease(BOTTOM - 400f, 0f, COMMIT, FLING));
-        // A diagonal exactly as much across as up is not a clear vertical swipe: it slides.
+        // A diagonal exactly as much across as up is not a clear vertical swipe: it slides, once
+        // it has gone the page's damped slop, four of them that far off the axis (#152).
         BorderDrag diagonal = armed(MID_X, BOTTOM + 10f);
-        assertEquals(BorderDrag.Claim.PAGING, diagonal.move(MID_X + 30f, BOTTOM + 10f - 30f));
+        assertEquals(BorderDrag.Claim.PENDING, diagonal.move(MID_X + 30f, BOTTOM + 10f - 30f));
+        assertFalse("a finger that set off is not holding", diagonal.holdElapsed());
+        float far = PagePolicy.SLOP_DAMPING * SLOP + 1f;
+        assertEquals(BorderDrag.Claim.PAGING, diagonal.move(MID_X + far, BOTTOM + 10f - far));
         assertEquals(BorderDrag.KeyboardSwipe.NONE,
             diagonal.keyboardRelease(BOTTOM + 10f - COMMIT, 0f, COMMIT, FLING));
     }

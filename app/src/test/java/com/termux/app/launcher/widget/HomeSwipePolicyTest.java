@@ -25,7 +25,9 @@ public class HomeSwipePolicyTest {
 
     @Test public void mostlySideways_pages() {
         assertEquals(HORIZONTAL, HomeSwipePolicy.axis(20f, 5f, SLOP));
-        assertEquals(HORIZONTAL, HomeSwipePolicy.axis(-30f, -29f, SLOP));
+        // Past 30 degrees off the axis a page asks for four slops (#152): 44 degrees waits.
+        assertEquals(UNDECIDED, HomeSwipePolicy.axis(-30f, -29f, SLOP));
+        assertEquals(HORIZONTAL, HomeSwipePolicy.axis(-65f, -62f, SLOP));
     }
 
     @Test public void aTiePastTheSlop_goesVertical() {

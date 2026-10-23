@@ -225,7 +225,11 @@ public class SeamSwipeTest {
     public void theAirKeepsItsRuleAndCountsTheClaimsLead() {
         float y = BOTTOM + AIR / 2f;
         BorderDrag drag = pressed(MID_X, y, false);
-        float[] steep = swipe(SLOP + 6f, 40);
+        // Forty degrees off the axis waits for the page's damped slop (#152), then pages.
+        float[] early = swipe(SLOP + 6f, 40);
+        assertEquals(BorderDrag.Claim.PENDING, drag.move(MID_X - early[0], y - early[1]));
+        float[] steep = swipe((PagePolicy.SLOP_DAMPING * SLOP + 6f)
+            / (float) Math.cos(Math.toRadians(40)), 40);
         assertEquals(BorderDrag.Claim.PAGING, drag.move(MID_X - steep[0], y - steep[1]));
         assertEquals(-steep[0], drag.claimLead(), 0.001f);
 
