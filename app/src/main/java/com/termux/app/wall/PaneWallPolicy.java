@@ -11,24 +11,23 @@ import java.util.List;
  * Which stretches the row has, and where a horizontal drag lands. Pure and tested; the layout is
  * dumb enough to just apply the answer.
  *
- * <p>The commit thresholds are the ones the status bar's pull-down already uses, so a page swipe
- * and a status pull feel like the same gesture at the same speeds.
+ * <p>Where a released drag lands is the one page rule ({@link PagePolicy}), which the Home pages
+ * and the app drawer read too.
  */
 public final class PaneWallPolicy {
 
-    /** Fraction of a page's width past which a released drag commits to the next page. */
-    public static final float DRAG_COMMIT_FRACTION = 0.35f;
+    /** Fraction of a page's width past which a released drag commits: {@link PagePolicy}'s. */
+    public static final float DRAG_COMMIT_FRACTION = PagePolicy.COMMIT_FRACTION;
     /**
-     * Release speed, in dp per second, that commits regardless of distance: the pager's usual
-     * (ViewPager's minimum fling velocity). It used to be two page widths a second — over
-     * 700 dp/s on a phone — which a quick flick of 250 ms rarely reaches, so short flicks on the
-     * bar sprang back and only long drags past {@link #DRAG_COMMIT_FRACTION} paged (pong,
-     * 2026-09-28). In dp rather than widths, so a tablet is not asked for a faster flick.
+     * Release speed, in dp per second, that commits regardless of distance: {@link PagePolicy}'s
+     * fling. In dp rather than widths, so a tablet is not asked for a faster flick; at two widths
+     * a second (over 700 dp/s on a phone) a quick 250 ms flick rarely paged (pong, 2026-09-28).
      */
-    public static final float DRAG_COMMIT_VELOCITY_DP_PER_SEC = 400f;
+    public static final float DRAG_COMMIT_VELOCITY_DP_PER_SEC = PagePolicy.FLING_DP_PER_SEC;
     /**
      * How far a flick must have moved the wall, in dp, for its speed to count: a twitch of a
-     * held finger is not a page change, however fast it reads.
+     * held finger is not a page change, however fast it reads. The wall's own input to
+     * {@link PagePolicy#turn}.
      */
     public static final float DRAG_COMMIT_FLING_MIN_DISTANCE_DP = 25f;
     /** How much of a drag past the outer page survives as movement. */
@@ -235,16 +234,12 @@ public final class PaneWallPolicy {
     public static int settle(float offsetPx, float velocityPxPerSec, int widthPx, float density,
                              boolean previousExists, boolean nextExists, float leadPx) {
         if (widthPx <= 0) return 0;
-        float flingPx = DRAG_COMMIT_VELOCITY_DP_PER_SEC * Math.max(0f, density);
-        boolean flung = Math.abs(offsetPx + leadPx) >= DRAG_COMMIT_FLING_MIN_DISTANCE_DP
-            * Math.max(0f, density);
-        // A flick decides on its own, whichever way the finger had already dragged: reversing
-        // direction at the end of a drag must not commit the page the drag was heading for.
-        if (flung && velocityPxPerSec >= flingPx) return previousExists ? -1 : 0;
-        if (flung && velocityPxPerSec <= -flingPx) return nextExists ? 1 : 0;
-        float commitPx = widthPx * DRAG_COMMIT_FRACTION;
-        if (offsetPx >= commitPx) return previousExists ? -1 : 0;
-        if (offsetPx <= -commitPx) return nextExists ? 1 : 0;
+        float d = Math.max(0f, density);
+        // Positive offset shows the page on the left.
+        int way = PagePolicy.turn(offsetPx, offsetPx + leadPx, velocityPxPerSec, widthPx, d,
+            DRAG_COMMIT_FLING_MIN_DISTANCE_DP * d);
+        if (way > 0) return previousExists ? -1 : 0;
+        if (way < 0) return nextExists ? 1 : 0;
         return 0;
     }
 

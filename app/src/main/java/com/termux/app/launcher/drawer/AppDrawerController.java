@@ -461,7 +461,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (!mDragging) return;
         mDragging = false;
         AppDrawerCommitPolicy.Decision decision = AppDrawerCommitPolicy.decide(mProgress.value,
-            velocityPxPerSec, mDirection);
+            velocityPxPerSec, mDirection, mDensity);
         boolean open;
         switch (decision) {
             case COMMIT_OPEN: open = true; break;

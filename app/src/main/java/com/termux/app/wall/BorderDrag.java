@@ -437,6 +437,11 @@ public final class BorderDrag {
     private float mDownX;
     private float mDownY;
     private float mSlop;
+    /**
+     * Whether the finger has gone past the plain slop: it is not holding, though a diagonal
+     * start may still be short of the damped slop a page asks for ({@link PagePolicy#pastSlop}).
+     */
+    private boolean mSetOff;
     /** Whether the hold may page: the wall has another place to go. */
     private boolean mHoldPages;
     /**
@@ -635,6 +640,7 @@ public final class BorderDrag {
         mSeamSlides = mSeamStart == SeamSwipe.Start.PANE && seamSwipe && canPage && !mSlidePages
             && !(y < statusTopLimit);
         mClaimLeadX = 0f;
+        mSetOff = false;
         boolean armed = mHoldPages || mKeyboardEligible || mStatusEligible || mBodySlides
             || mSeamSlides;
         mBorder = !armed ? Border.NONE : mHoldPages ? mBorder
@@ -671,7 +677,9 @@ public final class BorderDrag {
      * One move of the finger. Before the hold, travel past the slop decides: a finger that sets
      * off is not holding. Up or down from the bottom zone it is the keyboard's, and from the top
      * zone the status bar's; sideways from where a slide pages ({@link #slidePages}) it is the
-     * wall's at once, its drag measured from here so the wall does not jump by the slop. Any other
+     * wall's at once, its drag measured from here so the wall does not jump by the slop. A
+     * sideways start more than 30 degrees off the axis waits for the page's damped slop
+     * ({@link PagePolicy#pastSlop}), so a diagonal thumb is not a turn by accident. Any other
      * start is given up. After a claim the move is the claimant's, and the claim never changes.
      */
     @NonNull
@@ -680,6 +688,7 @@ public final class BorderDrag {
         float dx = x - mDownX;
         float dy = y - mDownY;
         if (dx * dx + dy * dy <= mSlop * mSlop) return mClaim;
+        mSetOff = true;
         boolean vertical = Math.abs(dy) > Math.abs(dx);
         if (vertical) {
             mClaim = mKeyboardEligible ? Claim.KEYBOARD
@@ -687,6 +696,7 @@ public final class BorderDrag {
         } else if (mSlidePages || (mBodySlides && TerminalBodySwipe.isSideways(dx, dy))
             || (mSeamSlides && SeamSwipe.decide(mSeamStart, dx, dy, mSlop, true, false)
                 == SeamSwipe.Decision.BORDER_DRAG)) {
+            if (!PagePolicy.pastSlop(dx, dy, mSlop)) return mClaim;
             mClaim = Claim.PAGING;
             mDragOriginX = x;
             mClaimLeadX = dx;
@@ -698,15 +708,16 @@ public final class BorderDrag {
 
     /**
      * The hold time passed. A finger that travelled or was joined has already given the gesture
-     * up through {@link #move} or {@link #secondPointer}, so a still pending press is a still one.
-     * Where the hold may not page — a wall of one place, or a press in a pill's box — a still
-     * finger is given up, and inside the page it is the content's long press. A later vertical
-     * move can then no longer turn into the keyboard's or the status bar's swipe.
+     * up through {@link #move} or {@link #secondPointer}, or is a diagonal start still short of
+     * the page's damped slop, which its travel goes on deciding; any other pending press is a
+     * still one. Where the hold may not page — a wall of one place, or a press in a pill's box — a
+     * still finger is given up, and inside the page it is the content's long press. A later
+     * vertical move can then no longer turn into the keyboard's or the status bar's swipe.
      *
      * @return true when the wall just claimed the finger, and the content is owed a cancel
      */
     public boolean holdElapsed() {
-        if (mClaim != Claim.PENDING) return false;
+        if (mClaim != Claim.PENDING || mSetOff) return false;
         if (!mHoldPages) {
             mClaim = Claim.ABANDONED;
             return false;
@@ -752,6 +763,7 @@ public final class BorderDrag {
         mSeamSlides = false;
         mSeamStart = SeamSwipe.Start.NONE;
         mClaimLeadX = 0f;
+        mSetOff = false;
     }
 
     @NonNull
