@@ -42,7 +42,10 @@ public final class StackLayout {
 
     /** Everything one pass of the stack is a function of. Filled once, then read. */
     public static final class Input {
-        /** The dock's snapshot; its squeeze is ignored, the module works that out. */
+        /**
+         * The dock's snapshot, both halves' resolved arrangements in it; its squeeze is ignored,
+         * the module works that out. The stack's Style is its rows half's.
+         */
         @NonNull public final DockGeometry.Snapshot dock;
         public boolean toolbarShown;
         public boolean keyboardShown;
@@ -53,7 +56,6 @@ public final class StackLayout {
         public int keyboardHeightPx;
         /** A status bar standing along the bottom, with its margin; 0 elsewhere. */
         public int statusBandPx;
-        public boolean roundedDockStyle;
         /** The system keyboard's lift while it stands under the dock. */
         public int imeLiftPx;
         /** What the window holds for the stack before the margin comes off, {@link #NO_CEILING}. */
@@ -119,8 +121,9 @@ public final class StackLayout {
             DockGeometry.Snapshot unsqueezed = in.dock.squeezePx == 0 ? in.dock
                 : in.dock.toBuilder().squeezePx(0).build();
             DockLayout probe = geometry.layout(unsqueezed);
-            Base base = new Base(probe, in.roundedDockStyle, in.dock.arrangement, in.toolbarShown,
-                in.keyboardShown, in.imeLiftPx);
+            // The stack wears the Style of the half whose rows it stands, from its arrangement.
+            Base base = new Base(probe, in.dock.rowsHalf().floating, in.dock.arrangement,
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx);
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
