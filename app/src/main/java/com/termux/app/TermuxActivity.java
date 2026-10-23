@@ -29559,6 +29559,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Off the display window: its frame goes off as the new window comes in.
                 mPaneController.showWindow(w);
                 setDisplayInFront(false, 1, 0f, fromRow);
+                returnKeysToTerminal();
                 return;
             }
             // niri's language: a new window on a full screen scrolls the strip sideways to make
@@ -29567,6 +29568,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             captureTerminalDeparture();
             mPaneController.showWindow(w);
             animateTerminalWindowLifecycleArrival(1);
+            // Showing a window names its pane active but hands it no keys (a tap does that for a
+            // pane): a window opened from the keyboard would otherwise type into nothing until
+            // tapped. The keys go to the new pane, retried after layout if it is not in yet.
+            returnKeysToTerminal();
         });
         rebuildDrawerSessions();
     }

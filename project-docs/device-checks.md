@@ -2243,6 +2243,10 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-23 · #150 (commit "fix(windows): a new window takes the keys…") · a Bluetooth keyboard
+  on the Surface, splits on: Ctrl+Alt+C, then type at once → the keystrokes land in the new
+  window's shell with no tap; the same from the + chip, and from a display window in front ·
+  Surface, hand on the keyboard.
 - 2026-10-23 · #148 (commit "fix(keys): Ctrl+Shift+V pastes…") · a Bluetooth keyboard on the
   Surface: copy text in another app, Ctrl+Shift+V in a terminal window pastes it (confirmation
   notice if the tool asks for one, then the text in the shell); Ctrl+Alt+V still pastes with
