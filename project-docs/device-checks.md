@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · commit "fix(place): the terminal takes its room back when the display window
+  goes" · Display open with the keyboard up in Overlay mode, then close the display window (its
+  ×) or switch to a terminal window from the chips: the terminal shrinks above the keyboard, no
+  rows under it; switching back to the display floats the keyboard over it again · emulator or
+  pong, Workspace with one terminal window and the display.
 - 2026-10-22 · #133 review fixes (commits "fix(dock): the Drawer tile follows…" and
   "refactor(dock): every writer reads the one applied DockLayout…") · Home with the Drawer tile
   on, the window without: swipe window → Home past halfway and back quickly (and with reduced

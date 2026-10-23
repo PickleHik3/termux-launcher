@@ -80,6 +80,19 @@ public class KeyboardOverlayPolicyTest {
 
     /** The widget grid is laid against fixed cells; a keyboard that took room would re-cut it. */
     @Test
+    public void leavingTheDisplayForATerminalWindowChangesTheContentsRoom() {
+        PlaceLayout layout = layout(KeyboardMode.OVERLAY);
+        // The display window going off the Workspace without a slide: the terminal must get
+        // its room back from the floating keyboard, and the way back must float it again.
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PaneWallPage.DISPLAY,
+            PaneWallPage.TERMINAL, layout));
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PaneWallPage.TERMINAL,
+            PaneWallPage.DISPLAY, layout));
+        assertFalse(KeyboardOverlayPolicy.changesBetween(PaneWallPage.DISPLAY,
+            PaneWallPage.WIDGETS, layout));
+    }
+
+    @Test
     public void theHomePlaceFloatsTheKeyboardWhateverIsStored() {
         PlaceLayoutStore store = store();
         for (PlaceOrientation orientation : PlaceOrientation.values()) {

@@ -58,6 +58,17 @@ public final class KeyboardOverlayPolicy {
     }
 
     /**
+     * Whether a move from {@code from} to {@code to} changes whether the keyboard floats, and so
+     * the room the content keeps: the pass that settles the move has to lay the content out again
+     * even when no slide held it, as when the display window goes off the Workspace and a
+     * terminal window takes its place.
+     */
+    public static boolean changesBetween(@NonNull PaneWallPage from, @NonNull PaneWallPage to,
+                                         @NonNull PlaceLayout layout) {
+        return overlays(from, layout) != overlays(to, layout);
+    }
+
+    /**
      * How far the content root reaches past the top of the accessory stack: the keyboard's own
      * height while it floats, and nothing at all otherwise.
      *

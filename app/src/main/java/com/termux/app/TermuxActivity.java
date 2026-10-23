@@ -22126,8 +22126,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
             return;
         }
-        PlaceLayout layout = currentPlaceLayout();
-        boolean overlaid = KeyboardOverlayPolicy.overlays(from, layout);
+        boolean overlayChanged = KeyboardOverlayPolicy.changesBetween(from, page,
+            currentPlaceLayout());
         syncWallKeyboard(page, leavingKeyboardUp, !first);
         syncDisplayTouchpad();
         applyPlaceSystemImeOwner();
@@ -22137,9 +22137,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // float an open keyboard over their content where the terminal gives it room. An
         // overlaying keyboard also paints an opaque fill rather than glass
         // (KeyboardMaterialPolicy), so a keyboard that stayed up across that change is repainted.
+        // The content's room changes with it: a slide's settle lays the content out again anyway,
+        // but a window switch to or from the display window has no slide behind it, and without
+        // this pass the terminal would keep the display's floating keyboard over its rows.
         int scopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
-        if (overlaid != KeyboardOverlayPolicy.overlays(page, layout))
+        if (overlayChanged) {
             scopes |= ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP;
+            mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
+                GeometryScheduler.ResizePolicy.NOW);
+        }
         mChrome.requestSync(scopes);
     }
 
