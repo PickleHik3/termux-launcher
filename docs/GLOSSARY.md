@@ -89,8 +89,10 @@ _Avoid_: dock controller, row visibility code
 
 **Dock design**:
 Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
-**Home layout**): #1 Tray (the default), #2 Beads or #3 Strip (a big clock and a tile per terminal over the
-apps; the clock slides out at 3+ terminals). Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
+**Home layout**): #1 Tray (the default), #2 Beads (each pinned app its own round glass bead floating
+on the background with air between, no shared card, in both Styles) or #3 Strip (a big clock and a
+tile per terminal over the apps; the clock slides out at 3+ terminals). The extra keys are not part
+of any design: the Workspace shows them under every design and Style. Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
 the **Drawer tile**, which any design can carry.
 _Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
 Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
