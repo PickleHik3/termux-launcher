@@ -952,6 +952,20 @@ the glass rate). That is roughly 12% of one core while a scene drifts with nobod
 battery cost, not latency. The readback is the first thing to make cheaper: copy less often, or
 reuse bitmaps.
 
+### Filament, flying tubes (2026-10-23, `8786a8d64`)
+
+12 nixie and neon tubes drifting at three depths, glass live (soft copy), typing hold on.
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | Deadline missed |
+|---|---|---|---|---|
+| Flying Filament + glass, typing | 16.8 / 20.6 | 10.3 / 11.3 | 29% | 124 |
+
+Typing matches the scene-off runs. At rest, 15 s untouched: `Scene.contour.draw` 3.80 ms (about
+22/s), `Scene.contour.lowres` 2.92 ms (about 11/s), and `Scene.glass.publish` on the scene thread
+**9.79 ms** (about 11/s), which is the blocking GPU readback (`Bitmap.copy` from the hardware frame)
+for the glass's software copy. Together that is roughly a fifth of a core, mostly waiting, plus GPU
+time. It is a battery cost on Home. Next: a lower default glass rate and a reused bitmap pool.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
