@@ -2282,6 +2282,11 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-23 · #153 (commit "feat(widgets): widget pages settle on the wall's spring") · on
+  Home with two or more pages, a quick flick and a slow drag past the commit point, and a short
+  drag let go to spring back, in Slide and in a turning page transition: the page settles like
+  the wall does (a flick lands quickly, a slow drag eases in), no step at the release, no
+  overshoot, the wallpaper pans with it; Animation speed Slow and Off still apply · pong.
 - 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
   landing") · a slow drag Home → window and back, and a fling reversed mid-way, in both Styles:
   the dock and keyboard feel exactly as before the change, nothing lands late · pong.

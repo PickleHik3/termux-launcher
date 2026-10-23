@@ -25,9 +25,11 @@ import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 
 import com.termux.R;
+import com.termux.app.AnimationSpeed;
 import com.termux.app.launcher.home.HomeGestures;
 import com.termux.app.launcher.home.HomePageIndicator;
 import com.termux.app.launcher.home.HomePageTransition;
+import com.termux.app.wall.SettleSpring;
 
 import java.util.List;
 
@@ -136,8 +138,6 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private static final float PAGE_EDGE_RESISTANCE = 0.35f;
-    /** How long a page takes to slide in or back once the finger has let go, at Normal speed. */
-    static final long PAGE_SETTLE_MS = 160L;
     /** The camera's distance for Carousel's turn, in dp: the one every turned page shares. */
     private static final float CAMERA_DISTANCE_DP = HomePageTransition.CAMERA_DISTANCE_DP;
 
@@ -155,7 +155,10 @@ public final class WidgetPaneView extends FrameLayout {
     @NonNull private HomePageIndicator indicator = HomePageIndicator.DEFAULT;
     /** How the page moves while a swipe turns it (Settings › Home › Page transition). */
     @NonNull private HomePageTransition transition = HomePageTransition.DEFAULT;
-    /** General › Animation speed's multiplier on the settle; 0 is Off, the instant cut. */
+    /**
+     * General › Animation speed's multiplier; 0 is Off, the instant cut. Any other speed stretches
+     * the settle's spring as it does the wall's ({@code AnimationSpeed.springTime}).
+     */
     private float motionScale = 1f;
     /**
      * Where the page's content stands off its rest, in px, positive to the right: the finger's
@@ -183,6 +186,8 @@ public final class WidgetPaneView extends FrameLayout {
     private boolean pageCommitPending;
     private int pageCommitDirection;
     private float pageCommitDragX;
+    /** The released finger's speed, px per second, which the committed page's settle carries on. */
+    private float pageCommitVelocity;
     @Nullable private VelocityTracker pagingVelocity;
     /**
      * The palette gesture: whether the press landed on the free area (no widget, no Home float,
@@ -548,7 +553,7 @@ public final class WidgetPaneView extends FrameLayout {
      * same movement the finger already knows.
      */
     public void slideInFrom(int direction) {
-        enterFromSide(direction, 0f);
+        enterFromSide(direction, 0f, 0f);
     }
 
     /** The commit and discard buttons on the page's own border tab, relayed to the coordinator. */
@@ -612,7 +617,7 @@ public final class WidgetPaneView extends FrameLayout {
             ((PagePinnedLayer) pinnedLayer).onHomePageShown(currentPage);
         if (pageCommitPending && currentPage != previousPage) {
             pageCommitPending = false;
-            enterFromSide(pageCommitDirection, pageCommitDragX);
+            enterFromSide(pageCommitDirection, pageCommitDragX, pageCommitVelocity);
         } else if (!pagingDragging) {
             setContentTranslationX(0f);
         }
@@ -953,30 +958,39 @@ public final class WidgetPaneView extends FrameLayout {
         int direction = -com.termux.app.wall.PagePolicy.turn(dx, velocityX,
             Math.max(1, getWidth()), getResources().getDisplayMetrics().density);
         int target = Math.max(0, Math.min(pageCount - 1, currentPage + direction));
+        // The content moved with the finger, at its speed, except into an end, where it only
+        // ever took the resistance's share of the travel and so of the speed too.
+        float contentVelocity = resistedDrag(dx) != dx ? velocityX * PAGE_EDGE_RESISTANCE
+            : velocityX;
         if (target != currentPage && listener != null) {
             pageCommitPending = true;
             pageCommitDirection = direction;
             pageCommitDragX = resistedDrag(dx);
+            pageCommitVelocity = velocityX;
             listener.onPageChangeRequested(target);
             if (pageCommitPending) { // the coordinator did not re-render; recover in place
                 pageCommitPending = false;
-                settleContentBack();
+                settleContentBack(contentVelocity);
             }
         } else {
-            settleContentBack();
+            settleContentBack(contentVelocity);
         }
     }
 
-    private void enterFromSide(int direction, float dragX) {
+    private void enterFromSide(int direction, float dragX, float velocityPxPerSec) {
         if (instantMotion()) { setContentTranslationX(0f); return; }
         float start = direction > 0 ? getWidth() + dragX : dragX - getWidth();
         setContentTranslationX(start);
-        animateContentTranslationX();
+        animateContentTranslationX(velocityPxPerSec);
     }
 
     private void settleContentBack() {
+        settleContentBack(0f);
+    }
+
+    private void settleContentBack(float velocityPxPerSec) {
         if (instantMotion() || contentShiftPx == 0f) { setContentTranslationX(0f); return; }
-        animateContentTranslationX();
+        animateContentTranslationX(velocityPxPerSec);
     }
 
     /** Reduce motion, or Animation speed at Off: the page lands at once. */
@@ -1049,13 +1063,30 @@ public final class WidgetPaneView extends FrameLayout {
         return width <= 0 ? 0f : contentShiftPx / width;
     }
 
-    private void animateContentTranslationX() {
+    /**
+     * The settle a page rides once the finger lets go: the wall's own spring, so a flick settles
+     * fast and a slow drag slow on Home as on the wall (#153).
+     */
+    @NonNull
+    static SettleSpring settleSpring(float shiftPx, float velocityPxPerSec, float springTime) {
+        return SettleSpring.page(shiftPx, velocityPxPerSec, springTime);
+    }
+
+    /** Settles the content from where it stands to rest, starting at {@code velocityPxPerSec}. */
+    private void animateContentTranslationX(float velocityPxPerSec) {
         if (contentSettle != null) contentSettle.cancel();
-        ValueAnimator settle = ValueAnimator.ofFloat(contentShiftPx, 0f);
-        settle.setDuration(Math.round(PAGE_SETTLE_MS * (double) motionScale));
-        settle.setInterpolator(HomePageTransition.settleInterpolator());
+        final SettleSpring spring = settleSpring(contentShiftPx, velocityPxPerSec,
+            AnimationSpeed.springTime(getContext()));
+        final long duration = spring.durationMs(SettleSpring.PAGE_REST_PX);
+        // The animator is the clock only; the spring says where the page stands.
+        ValueAnimator settle = ValueAnimator.ofFloat(0f, 1f);
+        settle.setDuration(duration);
+        settle.setInterpolator(null);
         // The page reports each frame, so the wallpaper pans on the page's own curve.
-        settle.addUpdateListener(animation -> moveContent((float) animation.getAnimatedValue()));
+        settle.addUpdateListener(animation -> {
+            float fraction = animation.getAnimatedFraction();
+            moveContent(fraction >= 1f ? 0f : spring.displacementAt(fraction * duration / 1000f));
+        });
         settle.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
                 if (contentSettle == animation) contentSettle = null;
