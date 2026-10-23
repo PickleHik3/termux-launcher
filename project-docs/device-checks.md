@@ -21,10 +21,6 @@ under twenty items; past that, the oldest are re-judged first.
   Drawer tile fading with its half rather than leaving at the end, no blurred flash at the pane's
   top as the last band settles, Strip's clock not leaving in the last frames, the pane not
   shortening after the landing, the keyboard travelling with the half that has it open · emulator.
-- 2026-10-23 · same commit · drag past half a page, then move back slowly but steadily (about
-  250 dp/s or more) and lift past a third: the page you started on comes back, on the wall and on
-  Home pages; the same reversal flicked hard short of a third goes on to the page the other way ·
-  emulator.
 - 2026-10-23 · same commit · a diagonal thumb at 35° off the horizontal, under four slops of
   travel (about 32 dp), does not turn a Home page or slide the wall from the bottom gap or the
   status bar border; it pages once it carries on that way well past that; at 25° it pages at the
@@ -32,10 +28,10 @@ under twenty items; past that, the oldest are re-judged first.
 - 2026-10-23 · same commit · the drawer's fling threshold is the same in dp at 2.6 and 3.5
   density (`wm density`, force-stop after each): a short quick pull off the dock opens it at the
   same thumb speed on both · emulator.
-- 2026-10-23 · #151 (merge d9b5c4fb3) · the App menu on a drawer cell and a dock-folder member,
-  in the black theme and with the scheme chrome, near each screen edge (arrow on the icon,
-  card flipping below), with 7+ shortcuts (collapse), and the open/close motion in a frame
-  recording (dock icon in light/dark seen 2026-10-23) · emulator.
+- 2026-10-23 · #151 (merge d9b5c4fb3) · the App menu on a dock-folder member, in the black theme
+  and with the scheme chrome, near the left edge, with 7+ shortcuts (collapse), and the
+  open/close motion in a frame recording (dock icon light/dark and a drawer cell at the top
+  right seen) · emulator.
 - 2026-10-23 · same commit · font scale 1.3 and a small density: labels on one line, ellipsized,
   rows still 52 dp; an app with many shortcuts on a short landscape screen scrolls inside the card
   rather than running off it · emulator.
@@ -61,9 +57,9 @@ under twenty items; past that, the oldest are re-judged first.
   Tray and with Beads → no Element appears or disappears mid-slide or at the landing that the
   audit's clips did not show; a Style or Dock design change in the Layout editor shows on the
   next pass on both halves · emulator, frames recorded.
-- 2026-10-23 · #143 (merge f19d7e1ff) · the status bar at rest in Floating and with the capsule,
-  folded and open: row height, foot and slot the same as 52831bcac (Docked Tray seen
-  2026-10-23), and the row does not jump when a fold animation ends · emulator.
+- 2026-10-23 · #143 (merge f19d7e1ff) · the status bar at rest with the capsule, folded and open:
+  row height, foot and slot the same as 52831bcac (Docked Tray and Floating seen) and the row
+  does not jump when a fold animation ends · emulator.
 - 2026-10-23 · commit "fix(place): the terminal takes its room back when the display window
   goes" · Display open with the keyboard up in Overlay mode, then close the display window (its
   ×) or switch to a terminal window from the chips: the terminal shrinks above the keyboard, no
@@ -2278,6 +2274,13 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-24 · finding (emulator, #152) · a 35° drag from the bottom gap, 500 px across, did not
+  turn the page under injection though the ramp asks ~2.6 slops: a thumb at about 35° on pong turns
+  the page, and one past 60° never does · pong.
+- 2026-10-24 · finding (emulator) · landscape window with the keyboard up: the terminal was a ~230 px
+  strip with blurred, unreadable text and the rail showed only the Terminal icon (evidence2/50-
+  landscape-window.png): confirm it is the emulator, or a real landscape-with-keyboard regression ·
+  pong, rotate with the keyboard up.
 - 2026-10-23 · finding (emulator, #151) · the App menu showed only after the injected finger
   lifted, not at the long-press threshold (icon lifted at 2 s): confirm it is the injection, or a
   real wait for release · pong, a hand on the icon.
