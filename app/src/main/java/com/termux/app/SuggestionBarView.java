@@ -128,6 +128,7 @@ import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.drawer.AppDrawerPullGeometry;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry;
+import com.termux.app.launcher.drawer.DockRailScrollView;
 import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -161,7 +162,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public final class SuggestionBarView extends GridLayout
-    implements AppDrawerController.AppDrawerDockChoreographyTarget {
+    implements AppDrawerController.AppDrawerDockChoreographyTarget,
+    DockRailScrollView.ScrollFollower {
 
     public interface LaunchRippleListener {
         void onLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
@@ -8400,6 +8402,13 @@ public final class SuggestionBarView extends GridLayout
         indicator.setVerticalForm(vertical);
         indicator.setGlassInk(glassBackdrop, glassInk);
         indicator.setAccentColor(resolvePageIndicatorAccentColor());
+        if (!azPages && railCarriesMostUsed()) {
+            // The rail's two pages are the pins and the most-used apps after them in one column:
+            // the same two ticks a row shows, the second warm, lit by the scroll, not a page turn.
+            indicator.setPages(2, railScrollPagePosition(), 1);
+            indicator.setVisibility(VISIBLE);
+            return;
+        }
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
         float position = azPages ? getAzVisualPagePosition()
@@ -8408,6 +8417,36 @@ public final class SuggestionBarView extends GridLayout
         // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
         // gained a page would otherwise grow by it and shove the terminal.
         indicator.setVisibility(overflow ? VISIBLE : INVISIBLE);
+    }
+
+    /** A rail's scroll moved its column, so the ticks move with it. */
+    @Override
+    public void onRailScrolled() {
+        if (vertical) publishPageIndicator();
+    }
+
+    /** Whether the rail at rest is showing its pins with the most-used apps after them. */
+    private boolean railCarriesMostUsed() {
+        return vertical
+            && activeAzLetter == null
+            && TextUtils.isEmpty(lastInput.trim())
+            && pinnedItems != null
+            && !pinnedItems.isEmpty()
+            && !railMostUsedEntries().isEmpty();
+    }
+
+    /**
+     * Where the rail's scroll stands between its two pages: 0 at the top of the pins, 1 with the
+     * column scrolled to its end, where the most-used apps are; 0 while the column fits.
+     */
+    private float railScrollPagePosition() {
+        ViewParent parent = getParent();
+        if (!(parent instanceof View)) return 0f;
+        View host = (View) parent;
+        int inside = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+        int range = getHeight() - inside;
+        if (range <= 0) return 0f;
+        return Math.max(0f, Math.min(1f, host.getScrollY() / (float) range));
     }
 
     /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */

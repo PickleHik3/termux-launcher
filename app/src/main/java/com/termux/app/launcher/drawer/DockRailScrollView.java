@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
+import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewParent;
 import android.widget.ScrollView;
@@ -69,6 +70,14 @@ public final class DockRailScrollView extends ScrollView {
         boolean isBadgedIconAt(float rawX, float rawY);
     }
 
+    /**
+     * The column this scroll carries, told when the scroll has moved it: a rail's page ticks follow
+     * its scroll rather than a page turn.
+     */
+    public interface ScrollFollower {
+        void onRailScrolled();
+    }
+
     @Nullable private DrawerPullListener mListener;
     @Nullable private QuickReplyProbe mQuickReplyProbe;
     private boolean mQuickReplyHoldsPull;
@@ -129,6 +138,14 @@ public final class DockRailScrollView extends ScrollView {
             getChildAt(0).getMeasuredHeight(), mRailSlotLengthPx);
         int height = fit.viewportLengthPx + padding;
         if (height != getMeasuredHeight()) setMeasuredDimension(getMeasuredWidthAndState(), height);
+    }
+
+    @Override
+    protected void onScrollChanged(int l, int t, int oldl, int oldt) {
+        super.onScrollChanged(l, t, oldl, oldt);
+        if (t == oldt || getChildCount() == 0) return;
+        View column = getChildAt(0);
+        if (column instanceof ScrollFollower) ((ScrollFollower) column).onRailScrolled();
     }
 
     /**

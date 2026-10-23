@@ -12,6 +12,7 @@ import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.launcher.paging.PageTickStripView;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -317,6 +318,35 @@ public class SuggestionBarRailFormTest {
             scrollRangePx(scroll));
         assertEquals("so its end shows the last most-used app",
             scrollRangePx(scroll) + scroll.getHeight(), rail.getChildAt(9).getBottom());
+    }
+
+    @Test
+    public void theRailsTicksAreThePinsAndTheMostUsedAppsLitByTheScroll() {
+        DockRailScrollView scroll = railInScroll(7, 3, true);
+        SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
+        PageTickStripView ticks = new PageTickStripView(context);
+        rail.setPageIndicator(ticks);
+
+        assertEquals("the row's two ticks", 2, ticks.getPageCount());
+        assertEquals("the second the most-used page's", 1, ticks.getDynamicPageIndex());
+        assertEquals(View.VISIBLE, ticks.getVisibility());
+        assertEquals("the pins on show", 0f, ticks.getPagePosition(), 0.001f);
+
+        scroll.scrollTo(0, scrollRangePx(scroll));
+        assertEquals("scrolled to the end, the most-used apps are lit", 1f,
+            ticks.getPagePosition(), 0.001f);
+        scroll.scrollTo(0, scrollRangePx(scroll) / 2);
+        assertEquals("and halfway between on the way", 0.5f, ticks.getPagePosition(), 0.01f);
+    }
+
+    @Test
+    public void withTheMostUsedPageOffTheRailShowsNoTicks() {
+        DockRailScrollView scroll = railInScroll(7, 3, false);
+        SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
+        PageTickStripView ticks = new PageTickStripView(context);
+        rail.setPageIndicator(ticks);
+        assertEquals(1, ticks.getPageCount());
+        assertEquals(View.INVISIBLE, ticks.getVisibility());
     }
 
     @Test
