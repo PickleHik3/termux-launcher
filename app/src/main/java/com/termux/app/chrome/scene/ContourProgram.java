@@ -20,7 +20,7 @@ import androidx.annotation.RequiresApi;
  * base angular speed, so the wrap is seamless and the shader never sees a large number.</p>
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-final class ContourProgram {
+final class ContourProgram implements SceneProgram {
 
     /** The wrap of the time uniform, seconds. Drift octaves run at 1x, 2x and 3x the base speed. */
     static final long PERIOD_MS = 120_000L;
@@ -134,6 +134,11 @@ final class ContourProgram {
         + "}\n";
 
     @NonNull final RuntimeShader shader = new RuntimeShader(AGSL);
+
+    @NonNull @Override
+    public RuntimeShader shader() {
+        return shader;
+    }
     private final float scale;
     private final float[] mHills = new float[SceneEvents.MAX_HILLS * 4];
     private final float[] mSparks = new float[SceneEvents.MAX_SPARKS * 4];
@@ -153,7 +158,8 @@ final class ContourProgram {
     }
 
     /** The static uniforms, only when the size or density changed. {@code width}/{@code height} at this scale. */
-    void setSize(int width, int height, float density) {
+    @Override
+    public void setSize(int width, int height, float density) {
         if (width == mWidth && height == mHeight && density == mDensity) return;
         mWidth = width;
         mHeight = height;
@@ -167,12 +173,14 @@ final class ContourProgram {
     }
 
     /** Time wrapped to {@link #PERIOD_MS} so the shader only ever sees a small number. */
-    void setTime(long uptimeMs) {
+    @Override
+    public void setTime(long uptimeMs) {
         shader.setFloatUniform("uTime", (uptimeMs % PERIOD_MS) / 1000f);
     }
 
     /** The reaction arrays for {@code nowMs}, scaled to this program's resolution. */
-    void setEvents(@NonNull SceneEvents events, long nowMs, float density) {
+    @Override
+    public void setEvents(@NonNull SceneEvents events, long nowMs, float density) {
         events.fill(nowMs, density, mHills, mSparks, mPulseRect, mPulseT, mBasins);
         if (scale != 1f) {
             scaleRange(mHills, 4, 0, 2);

@@ -62,6 +62,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @NonNull private final float[] mCursor = new float[2];
     @NonNull private final int[] mLoc = new int[2];
     @Nullable private SceneLayerView mLayer;
+    @Nullable private String mWindowName;
     private boolean mAttached;
     @Nullable private SceneInvalTrace mInvalTrace;
 
@@ -142,10 +143,12 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private void poll() {
         if (!mAttached) return;
         long now = SystemClock.uptimeMillis();
+        String value = SCENE.get(now);
         boolean on = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-            && SceneFramePolicy.sceneOn(SCENE.get(now));
-        if (on && mLayer == null) installLayer();
-        else if (!on && mLayer != null) removeLayer();
+            && SceneFramePolicy.sceneOn(value);
+        // A different scene is a different layer: the property switches it on the next poll.
+        if (mLayer != null && (!on || !mLayer.kind().equals(value))) removeLayer();
+        if (on && mLayer == null) installLayer(value);
         SceneLayerView layer = mLayer;
         if (layer == null) return;
         layer.setRateHz(SceneFramePolicy.parseRate(RATE.get(now)));
@@ -153,8 +156,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
         layer.setGlassRateHz(SceneFramePolicy.parseGlassRate(GLASS_RATE.get(now)));
     }
 
-    private void installLayer() {
-        SceneLayerView layer = new SceneLayerView(mActivity, this::paneRects, mHost::lazyMode);
+    private void installLayer(@NonNull String kind) {
+        SceneLayerView layer = new SceneLayerView(mActivity, kind, this::paneRects, mHost::lazyMode);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(0, 0);
         int index = mBackdrop == null ? 0 : mContainer.indexOfChild(mBackdrop) + 1;
         mLayer = layer;
@@ -162,6 +165,26 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mContainer.addOnLayoutChangeListener(mPlace);
         place();
         installInvalTrace(layer);
+        pushWindowName(layer);
+    }
+
+    /**
+     * The focused window's chip text changed (Filament spells it). Cheap and idempotent: the
+     * activity calls it on every window-chip refresh, and only a different name goes further.
+     */
+    public void onFocusedWindow(@Nullable String label) {
+        String name = FilamentLayout.clean(label);
+        if (name.equals(mWindowName)) return;
+        mWindowName = name;
+        SceneLayerView layer = mLayer;
+        if (layer != null) pushWindowName(layer);
+    }
+
+    private void pushWindowName(@NonNull SceneLayerView layer) {
+        TerminalView pane = mHost.focusedPane();
+        android.graphics.Typeface face =
+            pane == null || pane.mRenderer == null ? null : pane.mRenderer.getTypeface();
+        layer.setWindowName(mWindowName, face);
     }
 
     @Nullable private java.util.List<android.view.ViewGroup.LayoutParams> mInvalTraceParams;

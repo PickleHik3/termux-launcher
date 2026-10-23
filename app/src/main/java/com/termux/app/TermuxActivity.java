@@ -27625,6 +27625,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // not the Home floats' after them. The same on both halves.
         bar.setMovableChipCount(chips.rowCount());
         bar.setWindows(items, selected);
+        if (mScene != null && selected >= 0 && selected < items.size())
+            mScene.onFocusedWindow(items.get(selected).label);
         // The row is rebuilt whenever anything about a window changes, so the count is the edge
         // the tour reads: one more chip is the +, one fewer is a chip's ×. Only the terminal
         // windows, though — the display window coming or going is no terminal window opening or

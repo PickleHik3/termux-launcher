@@ -25,7 +25,7 @@ import com.termux.terminal.FrameProbe;
 /**
  * The scene rendered a second time at {@link #DIVISOR} of the screen per axis into an offscreen
  * target, blurred, and published as {@link LiveSceneFrame} for the glass surfaces to sample. The
- * target is an {@link ImageReader} surface drawn by a {@link HardwareRenderer}: the same Contour
+ * target is an {@link ImageReader} surface drawn by a {@link HardwareRenderer}: the scene's
  * program on a RenderNode. Scene thread only (its handler is the scene thread's).
  *
  * <p>Blur: a {@link RenderEffect} blur on the node, so it runs on the GPU at 1/8 size, keyed to the
@@ -57,7 +57,7 @@ final class SceneLowRes {
 
     private static final FrameProbe.Source GLASS = FrameProbe.source("sceneGlass");
 
-    @NonNull private final ContourProgram mProgram = new ContourProgram(1f / DIVISOR);
+    @NonNull private final SceneProgram mProgram;
     @NonNull private final Paint mPaint = new Paint();
     @NonNull private final RenderNode mNode = new RenderNode("SceneLowRes");
     @NonNull private final HardwareRenderer mRenderer = new HardwareRenderer();
@@ -70,13 +70,15 @@ final class SceneLowRes {
     private boolean mClosed;
     private boolean mEventsSet;
 
-    SceneLowRes(int screenWidth, int screenHeight, @NonNull Handler sceneHandler) {
+    SceneLowRes(int screenWidth, int screenHeight, @NonNull Handler sceneHandler,
+                @NonNull ScenePrograms.Factory programs) {
+        mProgram = programs.create(1f / DIVISOR);
         mWidth = Math.max(1, screenWidth / DIVISOR);
         mHeight = Math.max(1, screenHeight / DIVISOR);
         mReader = ImageReader.newInstance(mWidth, mHeight, PixelFormat.RGBA_8888, MAX_IMAGES,
             HardwareBuffer.USAGE_GPU_COLOR_OUTPUT | HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE);
         mReader.setOnImageAvailableListener(this::onImage, sceneHandler);
-        mPaint.setShader(mProgram.shader);
+        mPaint.setShader(mProgram.shader());
         mNode.setPosition(0, 0, mWidth, mHeight);
         mRenderer.setName("SceneLowRes");
         mRenderer.setOpaque(true);
