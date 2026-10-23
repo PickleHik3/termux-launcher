@@ -132,6 +132,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     /** Tells the glass where on screen the live frame lies: this layer's rect. */
     private void publishRect() {
         getLocationOnScreen(mScreenLoc);
+        LiveSceneFrame.setRoot(getRootView());
         LiveSceneFrame.setRect(mScreenLoc[0], mScreenLoc[1], mScreenLoc[0] + getWidth(),
             mScreenLoc[1] + getHeight());
     }

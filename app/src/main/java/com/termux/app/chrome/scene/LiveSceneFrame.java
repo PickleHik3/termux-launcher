@@ -71,6 +71,13 @@ public final class LiveSceneFrame {
     @Nullable private static Handler sMain;
     @NonNull private static final AtomicBoolean sInvalPending = new AtomicBoolean();
     @NonNull private static final Runnable INVALIDATE = LiveSceneFrame::invalidateDrawn;
+    /** The window the glass lives in, swept once when the live frame comes or goes. */
+    @Nullable private static java.lang.ref.WeakReference<android.view.View> sRoot;
+    /**
+     * The next invalidation redraws the whole tree once: glass that has not drawn since the frame
+     * changed source is in no list yet, and lists itself only from a draw.
+     */
+    private static volatile boolean sSweep;
 
     private LiveSceneFrame() {}
 
@@ -124,6 +131,7 @@ public final class LiveSceneFrame {
 
     /** Any thread: a new frame is ready; the visible glass is invalidated once, on the main thread. */
     static void publish(@NonNull Bitmap bitmap, @NonNull BitmapShader shader) {
+        if (sFrame == null) sSweep = true;
         sFrame = new Frame(bitmap, shader, sGeneration.incrementAndGet());
         postInvalidate();
     }
@@ -132,12 +140,14 @@ public final class LiveSceneFrame {
     static void retire() {
         if (sFrame == null) return;
         sFrame = null;
+        sSweep = true;
         postInvalidate();
     }
 
     /** Main thread: the scene is gone; glass is back on the still frame and told so now. */
     public static void clear() {
         sFrame = null;
+        sSweep = true;
         invalidateDrawn();
     }
 
@@ -151,6 +161,20 @@ public final class LiveSceneFrame {
             if (sDrawn[i] == surface) return;
         }
         if (sDrawnCount < MAX_SURFACES) sDrawn[sDrawnCount++] = surface;
+    }
+
+    /** Main thread: the root of the window whose glass reads the live frame. */
+    public static void setRoot(@NonNull android.view.View root) {
+        java.lang.ref.WeakReference<android.view.View> ref = sRoot;
+        if (ref == null || ref.get() != root) sRoot = new java.lang.ref.WeakReference<>(root);
+    }
+
+    private static void sweep(@NonNull android.view.View view) {
+        view.invalidate();
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) sweep(group.getChildAt(i));
+        }
     }
 
     private static void postInvalidate() {
@@ -169,6 +193,11 @@ public final class LiveSceneFrame {
         try {
             // An invalidation only schedules the draw, so the list is safe to walk and empty after:
             // the surfaces list themselves again from the draws it causes.
+            if (sSweep) {
+                sSweep = false;
+                android.view.View root = sRoot == null ? null : sRoot.get();
+                if (root != null) sweep(root);
+            }
             int n = sDrawnCount;
             for (int i = 0; i < n; i++) {
                 Surface s = sDrawn[i];

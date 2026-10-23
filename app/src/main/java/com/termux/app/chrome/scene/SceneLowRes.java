@@ -131,6 +131,8 @@ final class SceneLowRes {
         try {
             HardwareBuffer buffer = image.getHardwareBuffer();
             Bitmap bitmap = buffer == null ? null : Bitmap.wrapHardwareBuffer(buffer, null);
+            // The bitmap holds its own reference to the buffer; this handle is done with.
+            if (buffer != null) buffer.close();
             if (bitmap == null) {
                 image.close();
                 return;
