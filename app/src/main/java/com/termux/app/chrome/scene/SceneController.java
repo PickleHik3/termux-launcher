@@ -79,7 +79,6 @@ public final class SceneController implements LatencyProbe.CommitListener {
     /** From onStart. */
     public void attach() {
         mAttached = true;
-        LatencyProbe.setCommitListener(this);
         poll();
     }
 
@@ -95,7 +94,28 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return;
         poll();
         SceneLayerView layer = mLayer;
-        if (layer != null) layer.touchDown(ev.getRawX(), ev.getRawY());
+        if (layer == null) return;
+        // Taps on the keyboard and the extra keys are typing, and scenes do not react to typing.
+        if (overKeys(mActivity.getWindow().getDecorView(), ev.getRawX(), ev.getRawY())) return;
+        layer.touchDown(ev.getRawX(), ev.getRawY());
+    }
+
+    /** Whether a shown keyboard or extra-keys view lies under the screen point. */
+    private boolean overKeys(@NonNull View view, float x, float y) {
+        if (!view.isShown()) return false;
+        if (view instanceof juloo.keyboard2.Keyboard2View
+                || view.getClass().getSimpleName().contains("ExtraKeys")) {
+            view.getLocationOnScreen(mLoc);
+            return x >= mLoc[0] && x < mLoc[0] + view.getWidth()
+                && y >= mLoc[1] && y < mLoc[1] + view.getHeight();
+        }
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (overKeys(group.getChildAt(i), x, y)) return true;
+            }
+        }
+        return false;
     }
 
     /** A terminal bell from {@code pane}. */
@@ -107,7 +127,11 @@ public final class SceneController implements LatencyProbe.CommitListener {
         layer.bell(mLoc[0] + hw, mLoc[1] + hh, hw, hh);
     }
 
-    /** A key was committed: the spark starts at the focused pane's cursor. */
+    /**
+     * A key was committed. Scenes do not react to typing (the keyboard, the echo and the trail
+     * already move with every key), so this listener is no longer registered; kept for the spark
+     * slots a later scene may use for a run command.
+     */
     @Override
     public void onCommit() {
         SceneLayerView layer = mLayer;
