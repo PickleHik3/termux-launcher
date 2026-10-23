@@ -42,7 +42,8 @@ public final class DockSurfaceSpec {
      * that they are on.
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
-        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, false, false);
+        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, false,
+            false);
 
     /**
      * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
@@ -51,7 +52,8 @@ public final class DockSurfaceSpec {
      * contact shadow under each bead, whatever the dock's Style, since a bead always floats).
      */
     @NonNull public static final DockSurfaceSpec LENS_BEADS =
-        new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, false);
+        new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true,
+            false);
 
     /**
      * Home's Wall strip, the expanded dock: the tray's glass (dashes above, equal air, soft rim,
