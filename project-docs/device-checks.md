@@ -49,6 +49,14 @@ under twenty items; past that, the oldest are re-judged first.
   tap on a most-used app at the column's end launches it, and in Floating the rail never
   stands under the A–Z card; a long press still opens the menu and a sideways drag still
   pulls the drawer · emulator.
+- 2026-10-24 · #146 round 2 FAIL on 2b047c607 (last most-used icon cut 60 px short of the
+  scroll's end, no ticks at either end), not reproduced by `TermuxActivityRailScrollEndTest`
+  (the real layout and rail sync: column 10 slots, range content − viewport, ticks drawn) ·
+  Home, landscape, 7 pins + most-used: fling to the end of the rail, then `dumpsys activity top`
+  for the bounds of `place_apps_bar_scroll`, its SuggestionBarView child and
+  `place_apps_bar_indicator` (visibility flag), plus the same screenshots → the child's height
+  less the scroll's inside is the travel; a child 60 px shorter than its slots, a scroll not at
+  that travel, or an indicator that is not V or has no width names the cause · emulator.
 - 2026-10-23 · commit "refactor(place): resolve the arrangement once per page and orientation"
   (#141) · the 2026-10-23 consistency audit's cells re-shot: Docked and Floating × Tray, Beads and
   Strip × Home and a window × keyboard up and down, portrait and landscape → the same chrome as
