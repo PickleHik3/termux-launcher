@@ -79,6 +79,14 @@ only the Workspace's carries the extra keys. Its shape follows the **Style**. It
 the keyboard instead of over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
 _Avoid_: taskbar, nav bar, hotseat
 
+**Dock geometry**:
+The pure module that answers every measurement of the dock: one snapshot of both halves in, one DockLayout out, down to the final per-slot icon. A slide is an input to it, never a path of its own (ADR 0011).
+_Avoid_: dock sizing, dock policy (the internal arithmetic only), per-caller measuring, travel icon size
+
+**Dock rows**:
+The one adapter that writes the dock's accessory views (the pinned-apps row, the A–Z index, the extra keys and the bands under the keyboard) from the applied DockLayout, and announces which Elements are on screen. Not the rows themselves.
+_Avoid_: dock controller, row visibility code
+
 **Dock design**:
 Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
 **Home layout**): #1 Tray (the default), #2 Beads or #3 Strip (a big clock and a tile per terminal over the
@@ -86,6 +94,10 @@ apps; the clock slides out at 3+ terminals). Separate from the **Style**, which 
 the **Drawer tile**, which any design can carry.
 _Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
 Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
+
+**Stack layout**:
+The pure module that answers the whole bottom stack from one snapshot: heights, margins, overlap, reservation and the DockLayout from **Dock geometry**. Travel asks it for a half's rest.
+_Avoid_: bottom-stack assembly, stack caches, inset math
 
 **Dress**:
 Everything a page wears: the layout it follows and the elements it leaves out, the **Dock design**,

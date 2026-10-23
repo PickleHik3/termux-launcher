@@ -101,6 +101,8 @@ public class SuggestionBarPageCommitTest {
         context = RuntimeEnvironment.getApplication().getApplicationContext();
         context.getResources().getConfiguration().orientation = Configuration.ORIENTATION_PORTRAIT;
         row = new SuggestionBarView(context, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        row.setDockIconSizePx(Math.round(24f * row.getResources().getDisplayMetrics().density));
         row.addView(new View(context), new ViewGroup.LayoutParams(ROW_WIDTH / 2, ROW_HEIGHT));
         // In a window, not free-floating: a detached view queues everything it posts until it is
         // attached, so every deferred render and every timeout the row relies on would sit unrun,
@@ -264,6 +266,8 @@ public class SuggestionBarPageCommitTest {
         ReflectionHelpers.setField(screen, "mPreferences", preferences);
 
         SuggestionBarView bar = new SuggestionBarView(screen, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         ViewGroup plank = screen.findViewById(R.id.apps_bar_plank_layer);
         plank.addView(bar, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));

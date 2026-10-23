@@ -252,8 +252,27 @@ public final class DockLayoutPolicy {
         public final boolean hiddenRowCapsule;
         public final float hiddenRowBarHeightScale;
         public final boolean hiddenRowAlone;
+        /**
+         * The slot icon and usable width of that put-away row as the half that shows it lays it
+         * out at rest ({@link DockLayout#slotIconPx}, {@link DockLayout#appsRowUsableWidthPx}):
+         * its design's side inset and bead fit, its host's width. Negative while not measured.
+         */
+        public final int hiddenRowSlotIconPx;
+        public final int hiddenRowUsableWidthPx;
+        /**
+         * The width the pinned-apps row's host spans, px, before the row's side inset: the
+         * content's width between the display cutouts. Zero while not known, and the row's icon
+         * is then not held to a slot.
+         */
+        public final int rowWidthPx;
+        /** How many slots a page of the row lying down shares its width between. */
+        public final int slotCount;
 
         private DockInputs(Builder b) {
+            this.hiddenRowSlotIconPx = b.hiddenRowSlotIconPx;
+            this.hiddenRowUsableWidthPx = b.hiddenRowUsableWidthPx;
+            this.rowWidthPx = b.rowWidthPx;
+            this.slotCount = b.slotCount;
             this.hiddenRowCapsule = b.hiddenRowCapsule;
             this.hiddenRowBarHeightScale = b.hiddenRowBarHeightScale;
             this.hiddenRowAlone = b.hiddenRowAlone;
@@ -322,6 +341,23 @@ public final class DockLayoutPolicy {
             private boolean hiddenRowCapsule;
             private float hiddenRowBarHeightScale = Float.NaN;
             private boolean hiddenRowAlone;
+            private int hiddenRowSlotIconPx = -1;
+            private int hiddenRowUsableWidthPx = -1;
+            private int rowWidthPx;
+            private int slotCount = 1;
+
+            /**
+             * {@link DockInputs#hiddenRowSlotIconPx} and its width, from the half that shows the
+             * row, laid out at rest.
+             */
+            public Builder hiddenRowSlot(int slotIconPx, int usableWidthPx) {
+                this.hiddenRowSlotIconPx = slotIconPx;
+                this.hiddenRowUsableWidthPx = usableWidthPx;
+                return this;
+            }
+
+            public Builder rowWidthPx(int v) { this.rowWidthPx = v; return this; }
+            public Builder slotCount(int v) { this.slotCount = v; return this; }
 
             /** {@link DockInputs#hiddenRowCapsule} and its pair, from the half that shows the row. */
             public Builder hiddenRowAsShown(boolean capsule, float barHeightScale, boolean alone) {
@@ -564,6 +600,28 @@ public final class DockLayoutPolicy {
         out.railIconSizePx = railIconSizePx(density);
         out.railIconSpacingPx = railIconSpacingPx(density);
         out.railSlotLengthPx = railSlotLengthPx(density);
+        // The rail is a lone row standing up: its own air on all four sides.
+        out.railAirPx = loneAirPx;
+
+        // The width the row shares between its slots, and the icon one slot draws. On the dock the
+        // row stands in by its design's side inset (Lens beads narrow it); along the top by the
+        // plain one. A rail's slot is the rail's own icon. A row this layout puts away has the
+        // slot of the half that shows it, so it comes back at the size it settles at.
+        int contentInsetPx = capsule ? out.capsuleContentInsetPx : out.horizontalInsetPx;
+        out.appsRowEdgeInsetPx = appsRowSideInsetPx(contentInsetPx,
+            in.surface.beads && !in.appsRowOnEdge, density);
+        if (railActive) {
+            out.slotIconPx = out.railIconSizePx;
+        } else if (in.preferencesAvailable && !in.appsRowEnabledPref
+            && in.hiddenRowSlotIconPx >= 0) {
+            out.appsRowUsableWidthPx = Math.max(0, in.hiddenRowUsableWidthPx);
+            out.slotIconPx = in.hiddenRowSlotIconPx;
+        } else {
+            out.appsRowUsableWidthPx = in.rowWidthPx > 0
+                ? Math.max(0, in.rowWidthPx - 2 * out.appsRowEdgeInsetPx) : 0;
+            out.slotIconPx = slotIconPx(out.appsRowIconPx, out.appsRowUsableWidthPx,
+                in.slotCount, in.surface.beads, density);
+        }
 
         // The bar's own geometry owns this number in one place, for every edge and both styles;
         // the dock only asks what a compact row costs, because the lift it gives a bottom bar is
@@ -788,6 +846,20 @@ public final class DockLayoutPolicy {
             return iconPx;
         int slotPx = rowWidthPx / Math.max(1, slotCount);
         return Math.max(1, Math.min(iconPx, slotPx - loneRowAirPx(density)));
+    }
+
+    /**
+     * The icon one slot of a row lying down draws: {@code iconPx} held to its slot
+     * ({@link #slotFitIconPx}) and, under Lens beads, to what a bead covers in it
+     * ({@link LensBeadGeometry#fitIconPx}). A row with no width yet is not held at all.
+     */
+    public static int slotIconPx(int iconPx, int usableWidthPx, int slotCount, boolean beads,
+                                 float density) {
+        int slots = Math.max(1, slotCount);
+        int fit = slotFitIconPx(iconPx, usableWidthPx, slots, density);
+        if (beads && usableWidthPx > 0)
+            fit = LensBeadGeometry.fitIconPx(fit, usableWidthPx / (float) slots, density);
+        return fit;
     }
 
     /**

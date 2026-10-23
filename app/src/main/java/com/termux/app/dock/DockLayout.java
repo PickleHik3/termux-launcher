@@ -108,6 +108,31 @@ public final class DockLayout {
     public final int appsRowTickSideAirPx;
 
     /**
+     * The width the pinned-apps row lying down shares between its slots: the host's width less
+     * the row's side inset on each side (the design's, {@link #appsRowSideInsetPx()} on the dock;
+     * the plain one along the top). Zero for a rail, and while the host's width is not known.
+     * A row this layout puts away has the width of the half that shows it.
+     */
+    public final int appsRowUsableWidthPx;
+
+    /**
+     * The icon one of the row's slots draws, final: {@link #appsRowIconPx} held to its slot
+     * ({@link DockLayoutPolicy#slotFitIconPx}) and, under Lens beads, to what a bead covers
+     * ({@link LensBeadGeometry#fitIconPx}); the rail's own icon for a rail. The row renders
+     * exactly this and works nothing out of its own. Zero while no half shows the row.
+     */
+    public final int slotIconPx;
+
+    /**
+     * The side inset of the row lying down on each side, as {@link #appsRowUsableWidthPx} was
+     * measured with it: {@link #appsRowSideInsetPx()} on the dock, the plain one along the top.
+     */
+    public final int appsRowEdgeInsetPx;
+
+    /** The air a rail keeps around its icons on every side: a lone row's, standing up. */
+    public final int railAirPx;
+
+    /**
      * What the dock's style asked of its slab ({@link DockSurfaceSpec}), so the glass and the
      * shelf read the same answer the geometry was laid out for.
      */
@@ -240,6 +265,10 @@ public final class DockLayout {
         this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
         this.appsRowStripBandPx = Math.max(0, b.appsRowStripBandPx);
         this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
+        this.appsRowUsableWidthPx = Math.max(0, b.appsRowUsableWidthPx);
+        this.slotIconPx = Math.max(0, b.slotIconPx);
+        this.appsRowEdgeInsetPx = Math.max(0, b.appsRowEdgeInsetPx);
+        this.railAirPx = Math.max(0, b.railAirPx);
         this.surface = b.surface != null ? b.surface : DockSurfaceSpec.PLAIN;
         this.slabTopInsetPx = Math.max(0, b.slabTopInsetPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
@@ -360,6 +389,10 @@ public final class DockLayout {
         int appsRowIconPx;
         int appsRowStripBandPx;
         int appsRowTickSideAirPx;
+        int appsRowUsableWidthPx;
+        int slotIconPx;
+        int appsRowEdgeInsetPx;
+        int railAirPx;
         DockSurfaceSpec surface = DockSurfaceSpec.PLAIN;
         int slabTopInsetPx;
         int compactStatusBarHeightPx;

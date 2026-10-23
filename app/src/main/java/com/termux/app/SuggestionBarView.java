@@ -317,8 +317,14 @@ public final class SuggestionBarView extends GridLayout
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
     private int dockRowHeightHintPx = 0;
-    /** The icon size the dock resolved for the lying-down form; 0 until it has said. */
+    /**
+     * The icon one slot draws lying down, as the dock resolved it: final, its slot fit and bead
+     * fit already applied (DockLayout#slotIconPx); 0 until it has said.
+     */
     private int dockIconSizePx = 0;
+    /** The rail's icon and the length of one of its slots, as the dock resolved them; 0 until then. */
+    private int dockRailIconPx = 0;
+    private int dockRailSlotLengthPx = 0;
     private List<String> defaultButtonStrings = new ArrayList<>();
     private final Map<String, WeakReference<View>> launchTargetViews = new HashMap<>();
     private final Map<String, WeakReference<View>> launchTargetViewsByPackage = new HashMap<>();
@@ -1539,8 +1545,10 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * One pinned icon's size in the form that lies down, as the dock resolved it. Zero hands the
-     * question back to the row's own host, which is what a bar with no dock behind it has.
+     * The icon one slot draws lying down, final ({@code DockLayout#slotIconPx}); the row draws
+     * exactly this. Zero is no size, and the row then draws no icons. The activity hands it over
+     * with the rest of the dock's answer ({@link #setDockLayout}); a row with no dock behind it,
+     * as the tests build one, is handed it here.
      */
     public void setDockIconSizePx(int dockIconSizePx) {
         int clamped = Math.max(0, dockIconSizePx);
@@ -1556,6 +1564,48 @@ public final class SuggestionBarView extends GridLayout
         requestLayout();
         invalidate();
         scheduleStableDrawReleaseIfPossible();
+        // The slots already built keep the size they were built at until something resizes
+        // them; nothing else re-renders the row when only the dock's size moved.
+        scheduleSlotIconResize();
+    }
+
+    /**
+     * The dock's answer for this pass, and the one place the row is told its sizes: the band it
+     * lies in (its hint), the icon one of its slots draws lying down, and the rail's icon and slot
+     * standing up. The row draws exactly these and works none of them out of its own.
+     */
+    public void setDockLayout(@NonNull com.termux.app.dock.DockLayout layout) {
+        int hint = Math.max(0, layout.appsRowBandHintPx);
+        int icon = Math.max(0, layout.slotIconPx);
+        int railIcon = Math.max(0, layout.railIconSizePx);
+        int railSlot = Math.max(0, layout.railSlotLengthPx);
+        boolean scaleChanged = Math.abs(iconScale - layout.iconScale) >= 0.0001f;
+        boolean hintChanged = hint != dockRowHeightHintPx;
+        boolean iconChanged = icon != dockIconSizePx;
+        boolean railChanged = railIcon != dockRailIconPx || railSlot != dockRailSlotLengthPx;
+        if (!scaleChanged && !hintChanged && !iconChanged && !railChanged) return;
+        iconScale = layout.iconScale;
+        dockRowHeightHintPx = hint;
+        dockIconSizePx = icon;
+        dockRailIconPx = railIcon;
+        dockRailSlotLengthPx = railSlot;
+        if (vertical && !railChanged) return;
+        // A new hint is a new question, so it is asked afresh even if the last one was overruled.
+        if (hintChanged) {
+            rowHeightHintWaived = false;
+            renderDeferredSinceUptimeMs = 0L;
+        }
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
+        invalidate();
+        scheduleStableDrawReleaseIfPossible();
+        if (vertical) {
+            // A rail pages by its slot's length, so its pages are counted again.
+            railPagedAtLengthPx = 0;
+            post(this::reload);
+            return;
+        }
         // The slots already built keep the size they were built at until something resizes
         // them; nothing else re-renders the row when only the dock's size moved.
         scheduleSlotIconResize();
@@ -4321,14 +4371,38 @@ public final class SuggestionBarView extends GridLayout
         return param;
     }
 
-    /** How much of the rail's axis one icon takes: the icon, and its air above and below. */
+    /**
+     * How much of the rail's axis one icon takes, as the dock handed it: the icon, and its air
+     * above and below. Zero while it has handed none.
+     */
     private int railSlotLengthPx() {
-        return com.termux.app.dock.DockLayoutPolicy.railSlotLengthPx(screenDensity());
+        return dockRailSlotLengthPx;
     }
 
-    /** One rail icon, across the rail. */
+    /**
+     * One rail icon, across the rail, as the dock handed it. Zero while it has handed none, and a
+     * rail with no size draws no icons, as a row does ({@link #hasStableRenderBounds}).
+     */
     private int railIconSizePx() {
-        return com.termux.app.dock.DockLayoutPolicy.railIconSizePx(screenDensity());
+        return dockRailIconPx;
+    }
+
+    /**
+     * The rail's icon and slot length, standing up. The activity hands them over with the rest of
+     * the dock's answer ({@link #setDockLayout}); a rail with no dock behind it, as the tests build
+     * one, is handed them here.
+     */
+    void setDockRailSizePx(int iconPx, int slotLengthPx) {
+        int icon = Math.max(0, iconPx);
+        int slot = Math.max(0, slotLengthPx);
+        if (icon == dockRailIconPx && slot == dockRailSlotLengthPx) return;
+        dockRailIconPx = icon;
+        dockRailSlotLengthPx = slot;
+        if (!vertical) return;
+        invalidateRenderedIconCaches();
+        childLayoutPending = true;
+        requestLayout();
+        invalidate();
     }
 
     /** The dock row's height hint, which only the form that lies down is sized by. */
@@ -8806,6 +8880,10 @@ public final class SuggestionBarView extends GridLayout
         if (!isLaidOut()) {
             return false;
         }
+        // No size handed over: nothing is drawn rather than icons at a guessed size.
+        if (iconSizePx() <= 0) {
+            return false;
+        }
         if (vertical) {
             // A tolerance below one icon, not an exact fit: the host's band is a rounded 58dp
             // less two rounded 10dp paddings, which can land a pixel or two under the icon.
@@ -9211,85 +9289,13 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * One icon's size in the form the bar is standing in. Package-visible so the clamp below can
-     * be tested against a host far taller than a row.
+     * One icon's size in the form the bar is standing in: exactly what the dock handed over
+     * ({@link #setDockLayout}), the slot's icon lying down and the rail's standing up. Zero while
+     * it has handed none, and a row with no size draws no icons rather than guess one
+     * ({@link #hasStableRenderBounds}). Package-visible for the tests.
      */
     int iconSizePx() {
-        // A rail icon is a fixed size on every side: its column has no row height to be a share of.
-        if (vertical)
-            return railIconSizePx();
-        // Lying down the slots share the row's width, so the icon is held to one slot's share of
-        // it, less a little air: a large size with many apps would otherwise cover its neighbours.
-        int rowWidth = getWidth() - getPaddingLeft() - getPaddingRight();
-        int slots = Math.max(1, maxButtonCount);
-        int fit = com.termux.app.dock.DockLayoutPolicy.slotFitIconPx(rowIconSizePx(), rowWidth,
-            slots, screenDensity());
-        // Under Lens beads each icon stands on a bead a little larger than it, so the icon is
-        // held to what leaves its bead a gap to the next one.
-        if (lensBeadFit && rowWidth > 0)
-            fit = com.termux.app.dock.LensBeadGeometry.fitIconPx(fit, rowWidth / (float) slots,
-                screenDensity());
-        return fit;
-    }
-
-    /** Whether the row's icons are held to the Lens beads' fit ({@link #setLensBeadFit}). */
-    private boolean lensBeadFit;
-
-    /**
-     * Holds the icons lying down to the size a Lens bead covers in its slot
-     * ({@link com.termux.app.dock.LensBeadGeometry#fitIconPx}), or lets go: on while Home's dock
-     * wears Lens beads, off for every other dock.
-     */
-    public void setLensBeadFit(boolean fit) {
-        if (lensBeadFit == fit) return;
-        lensBeadFit = fit;
-        if (vertical) return;
-        invalidateRenderedIconCaches();
-        childLayoutPending = true;
-        requestLayout();
-        invalidate();
-        scheduleStableDrawReleaseIfPossible();
-        scheduleSlotIconResize();
-    }
-
-    /** The row's icon before it is held to its slot: the height the row gives it. */
-    private int rowIconSizePx() {
-        // The dock's own answer, whenever it has given one. The row's band is this icon and its
-        // air, so the icon is handed over rather than read back out of the band: derived from the
-        // band it would be the band less the air less the air again.
-        if (dockIconSizePx > 0)
-            return dockIconSizePx;
-        // The box the dock hands over is the band less its air, which is the icon itself, alone
-        // or sharing its container; a fill ratio of it would draw a lone row's icons small.
-        int hintPx = rowHeightHintPx();
-        if (hintPx > 0)
-            return hintPx;
-        // Only when it has not does the measured host decide, and then it is capped: a plank
-        // measured before it was sized, or a stack that swallowed the whole content column, is a
-        // host several screens tall and must not scale one pinned icon across it.
-        int availableHeight = measuredRowHeightPx();
-        if (availableHeight <= 0) {
-            return Math.max(dp(20), Math.round(24f * iconScale * getResources().getDisplayMetrics().density));
-        }
-        return com.termux.app.dock.DockLayoutPolicy.dockIconSizePx(
-            availableHeight, iconScale, screenDensity());
-    }
-
-    /**
-     * The height this row was actually laid out at, for the passes that run before the dock has
-     * told it its band — bounded by the deepest a row is ever drawn
-     * ({@link com.termux.app.dock.DockLayoutPolicy#maxRowBandPx}), so an oversized host gives an
-     * oversized icon no longer.
-     */
-    private int measuredRowHeightPx() {
-        int height = getHeight();
-        if (height <= 0) {
-            ViewParent parent = getParent();
-            if (parent instanceof View) height = ((View) parent).getHeight();
-        }
-        if (height <= 0) return 0;
-        return Math.min(height,
-            com.termux.app.dock.DockLayoutPolicy.maxRowBandPx(screenDensity()));
+        return vertical ? railIconSizePx() : dockIconSizePx;
     }
 
     @NonNull
