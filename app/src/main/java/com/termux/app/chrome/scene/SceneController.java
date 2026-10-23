@@ -197,6 +197,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         removeInvalTrace();
         layer.destroy();
         mContainer.removeView(layer);
+        LiveSceneFrame.clear();
     }
 
     /** Sizes the layer to the whole decor: margins pull it out to the window's origin. */

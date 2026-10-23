@@ -16,6 +16,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.chrome.scene.LiveSceneFrame;
+
 import java.util.Objects;
 
 /**
@@ -47,7 +49,9 @@ import java.util.Objects;
  * a background, both of which size the drawable to the view, and neither host pads, so drawable
  * coordinates are the view's own — which is what the anchor's origin describes.</p>
  */
-public final class SharedFrameDrawable extends Drawable {
+public final class SharedFrameDrawable extends Drawable implements LiveSceneFrame.Surface {
+
+    private static final int NOT_LIVE = -1;
 
     @NonNull private final Paint mPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     @NonNull private final Paint mPreviousPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
@@ -66,6 +70,8 @@ public final class SharedFrameDrawable extends Drawable {
     @Nullable private Bitmap mPreviousFrame;
     @Nullable private BitmapShader mPreviousShader;
     private int mAlpha = 255;
+    /** The live scene frame the paints were last pointed at, or {@link #NOT_LIVE}: the still frame is bound. */
+    private int mLiveGen = NOT_LIVE;
     /** A clearer frame of the same rect for the bent edge to show, or null; see {@link #setClearFrame}. */
     @Nullable private Bitmap mClearFrame;
     @Nullable private BitmapShader mClearShader;
@@ -178,6 +184,7 @@ public final class SharedFrameDrawable extends Drawable {
         mClearFrame = clearFrame;
         mClearShader = clearFrame == null ? null
             : new BitmapShader(clearFrame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        mLiveGen = NOT_LIVE;
         syncClarity();
         invalidateSelf();
     }
@@ -266,6 +273,7 @@ public final class SharedFrameDrawable extends Drawable {
      * captures its input when it is set.
      */
     private void syncRefraction() {
+        mLiveGen = NOT_LIVE;
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mShader;
         if (look == null || shader == null || !GlassRefraction.available()) {
@@ -371,6 +379,13 @@ public final class SharedFrameDrawable extends Drawable {
         Bitmap frame = mFrame;
         BitmapShader shader = mShader;
         if (bounds.isEmpty() || frame == null || frame.isRecycled() || shader == null) return;
+        LiveSceneFrame.Frame live = LiveSceneFrame.current();
+        if (live != null) {
+            drawLive(canvas, bounds, live);
+            return;
+        }
+        // The scene went off: the still frame goes back on the paints.
+        if (mLiveGen != NOT_LIVE) syncRefraction();
         mAnchor.originOnScreen(mOrigin);
         float offsetPx = mParallax == null ? 0f : mParallax.offsetPx();
         GlassRefraction.Program program = mProgram;
@@ -418,6 +433,43 @@ public final class SharedFrameDrawable extends Drawable {
             mPaint.setAlpha(mAlpha);
             canvas.drawRect(bounds, mPaint);
         }
+    }
+
+    /**
+     * The same surface through the wallpaper scene's live frame: one shared shader, re-aimed by
+     * this surface's anchor exactly as the still frame is, with no crossfade and no parallax (the
+     * scene does not pan). The program's clearer picture is the live frame itself ({@code setInput}
+     * binds it as both), so the bent edge keeps the frost.
+     */
+    private void drawLive(@NonNull Canvas canvas, @NonNull Rect bounds,
+                          @NonNull LiveSceneFrame.Frame live) {
+        GlassRefraction.Program program = mProgram;
+        // See draw(): a software canvas refuses the program.
+        if (program != null && !canvas.isHardwareAccelerated()) return;
+        if (mLiveGen != live.generation) {
+            mLiveGen = live.generation;
+            if (program != null) program.setInput(live.shader);
+            else mPaint.setShader(live.shader);
+        }
+        mAnchor.originOnScreen(mOrigin);
+        aim(mAim, LiveSceneFrame.rect(), live.bitmap.getWidth(), live.bitmap.getHeight(),
+            mOrigin[0], mOrigin[1], 0f);
+        if (program != null) {
+            program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+            program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
+        } else {
+            matrixOf(mMatrix, mAim);
+            live.shader.setLocalMatrix(mMatrix);
+        }
+        LiveSceneFrame.noteDrawn(this);
+        mPaint.setAlpha(mAlpha);
+        canvas.drawRect(bounds, mPaint);
+    }
+
+    /** A new live frame is out: draw it. */
+    @Override
+    public void invalidateLive() {
+        invalidateSelf();
     }
 
     /**

@@ -446,6 +446,8 @@ public final class WallpaperBlurCache {
      */
     @Nullable
     public Bitmap obtain(int blurRadiusDp, @NonNull View wallpaperFrame) {
+        // The wallpaper scene's live frame is blurred at the radius glass is asking for.
+        com.termux.app.chrome.scene.LiveSceneFrame.noteBlurRadius(blurRadiusDp);
         Rect frameRect = mSource.wallpaperFrameRect();
         boolean managedSource = mSource.useManagedWallpaperSource();
         int systemWallpaperId = mSource.systemWallpaperId();
