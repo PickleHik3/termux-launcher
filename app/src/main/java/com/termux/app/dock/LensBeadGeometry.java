@@ -416,6 +416,23 @@ public final class LensBeadGeometry {
     }
 
     /**
+     * The beads under a row drawn at other boxes than the ones {@code rest} stood on (a
+     * crossing's morph, which draws each icon moved and scaled): worked out from the drawn boxes
+     * by {@link #compute}'s own rule, on the same surface, so each bead stands at its icon's drawn
+     * centre and its size follows the drawn icon as the rest's follows the laid-out one. The
+     * Search field's capsule is the field's and stays {@code rest}'s. Where the drawn row cannot
+     * be beads, {@code rest} itself, rather than the slab for a frame.
+     */
+    @NonNull
+    public static Beads drawnAt(@NonNull Beads rest, @NonNull float[] boxes, int count,
+                                float left, float top, float right, float bottom, float density) {
+        Beads drawn = compute(boxes, count, left, top, right, bottom, density);
+        if (drawn == null) return rest;
+        return new Beads(drawn.mCentersX, drawn.centerY, drawn.radiusPx, drawn.iconHalfPx,
+            rest.capsuleLeft, rest.capsuleTop, rest.capsuleRight, rest.capsuleBottom);
+    }
+
+    /**
      * The beads for a row whose icons' boxes are {@code boxes} (left, top, right, bottom per
      * icon, {@code count} of them, in the surface's coordinates), on a surface spanning
      * {@code left..right} by {@code top..bottom} there, or null when the row cannot be drawn as

@@ -10,6 +10,7 @@ import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.dock.DockMorph;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.LensBeadGeometry;
 import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -35,6 +36,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -227,6 +229,107 @@ public class SuggestionBarDockMorphTest {
                 assertEquals("slot " + i + " where the last frame drew it", last[i],
                     drawnCentre(bar, i, arriving), 1.5f);
             }
+        }
+    }
+
+    /** Both halves on Lens beads, Home Floating and the Workspace Docked: their insets differ. */
+    private DockLayout[] beadedRests() {
+        float density = context.getResources().getDisplayMetrics().density;
+        DockGeometry.Half homeHalf = DockGeometry.Half.builder(HOME).floating(true)
+            .design(DockStyle.LENS_BEADS).build();
+        DockGeometry.Half workspaceHalf = DockGeometry.Half.builder(WINDOW)
+            .design(DockStyle.LENS_BEADS).build();
+        DockGeometry.Snapshot snapshot = DockGeometry.Snapshot.builder(homeHalf, workspaceHalf)
+            .density(density)
+            .widthPx(Math.round(411 * density))
+            .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
+            .pinnedSlotCount(SLOTS)
+            .build();
+        return new DockLayout[] {DockGeometry.compute(snapshot.restOf(DockGeometry.Side.HOME)),
+            DockGeometry.compute(snapshot.restOf(DockGeometry.Side.WORKSPACE))};
+    }
+
+    /** The beads the dock stands on the row's drawn boxes, on a surface clear of every edge. */
+    private LensBeadGeometry.Beads beadsOf(SuggestionBarView bar, LensBeadGeometry.Beads rest) {
+        float[] boxes = new float[(LensBeadGeometry.MAX_BEADS + 1) * 4];
+        int count = bar.drawnIconBoxes(boxes);
+        float density = context.getResources().getDisplayMetrics().density;
+        return rest == null
+            ? LensBeadGeometry.compute(boxes, count, -10000f, -10000f, 10000f, 10000f, density)
+            : LensBeadGeometry.drawnAt(rest, boxes, count, -10000f, -10000f, 10000f, 10000f,
+                density);
+    }
+
+    @Test
+    public void eachBeadStandsAtItsIconsDrawnCentreAndSizeThroughTheMorph() {
+        DockLayout[] rests = beadedRests();
+        DockLayout leaving = rests[0];
+        DockLayout arriving = rests[1];
+        assertNotEquals("the insets differ", leaving.appsRowEdgeInsetPx,
+            arriving.appsRowEdgeInsetPx);
+        SuggestionBarView bar = rowAt(leaving);
+        LensBeadGeometry.Beads rest = beadsOf(bar, null);
+        assertNotNull(rest);
+        bar.beginDockMorph(leaving, arriving);
+        runResize(bar);
+        layOut(bar, leaving);
+        DockMorph morph = new DockMorph();
+        morph.between(leaving, false, arriving, false);
+        for (float t : new float[] {0f, 0.5f, 1f}) {
+            morph.at(t);
+            frame(bar, morph);
+            LensBeadGeometry.Beads beads = beadsOf(bar, rest);
+            assertEquals(SLOTS, beads.count());
+            for (int i = 0; i < SLOTS; i++) {
+                float[] icon = bar.drawnSlotIcon(i);
+                assertEquals("bead " + i + " under its icon at " + t, icon[0], beads.centerX(i),
+                    0.01f);
+                assertEquals("bead " + i + " the icon's size at " + t, icon[1],
+                    2f * beads.iconHalfPx, 0.01f);
+            }
+        }
+    }
+
+    @Test
+    public void noFrameBetweenTheLastMorphFrameAndTheLandedLayoutDrawsAnotherIcon() {
+        for (boolean fromHome : new boolean[] {true, false}) {
+            DockLayout leaving = fromHome ? home : workspace;
+            DockLayout arriving = fromHome ? workspace : home;
+            SuggestionBarView bar = rowAt(leaving);
+            bar.beginDockMorph(leaving, arriving);
+            runResize(bar);
+            layOut(bar, leaving);
+            DockMorph morph = new DockMorph();
+            morph.between(leaving, false, arriving, false);
+            morph.at(1f);
+            frame(bar, morph);
+            // The last frame, with the row still laid out in the leaving rest's inset and width.
+            float[][] last = new float[SLOTS][];
+            for (int i = 0; i < SLOTS; i++)
+                last[i] = new float[] {drawnCentre(bar, i, leaving), drawnSize(bar, i)};
+            String at = fromHome ? "from Home" : "to Home";
+            // The landing, then the resize it asks for, then the dock's answer and its layout:
+            // every frame between draws what the last frame drew.
+            bar.endDockMorph(arriving);
+            assertSlotsAt(at + ", landed", bar, leaving, last, 0.01f);
+            runResize(bar);
+            layOut(bar, leaving);
+            assertSlotsAt(at + ", resized", bar, leaving, last, 0.5f);
+            assertTrue(bar.isDockMorphSettling());
+            bar.setDockLayout(arriving);
+            layOut(bar, arriving);
+            assertFalse(at + ": laid out, the row draws as laid out", bar.isDockMorphSettling());
+            assertSlotsAt(at + ", laid out", bar, arriving, last, 1.5f);
+        }
+    }
+
+    private static void assertSlotsAt(String message, SuggestionBarView bar, DockLayout laidOutAt,
+                                      float[][] expected, float delta) {
+        for (int i = 0; i < SLOTS; i++) {
+            assertEquals(message + ": slot " + i + " centre", expected[i][0],
+                drawnCentre(bar, i, laidOutAt), delta);
+            assertEquals(message + ": slot " + i + " icon", expected[i][1], drawnSize(bar, i),
+                0.5f);
         }
     }
 

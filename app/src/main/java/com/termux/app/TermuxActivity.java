@@ -4852,6 +4852,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mDockBeadsMoving;
     /** Where the row stands in the host sideways, and the span it draws its icons in there. */
     private float mDockBeadsRowDx;
+    /** Where it stands down the host, and the bottom the beads are held above; NaN unread. */
+    private float mDockBeadsRowDy = Float.NaN;
+    private float mDockBeadsBottomPx = Float.NaN;
     private float mDockBeadsSpanLeft = Float.NaN, mDockBeadsSpanRight = Float.NaN;
     /** Scratch for the neighbouring page's icons a swipe stages. */
     private final float[] mDockBeadNeighbours =
@@ -5077,6 +5080,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * One frame of a crossing's morph under Lens beads: each bead worked out from its icon's
+     * drawn box (SuggestionBarView#drawnIconBoxes) by the rule the beads at rest follow theirs
+     * (LensBeadGeometry.drawnAt), on the surface the last full read found, so bead and icon
+     * never part. The host, the shelf and the dock's effect once, as a swipe's frame does; at
+     * rest and off beads nothing runs past the first check.
+     */
+    private void syncDockBeadsWithMorph() {
+        com.termux.app.dock.LensBeadGeometry.Beads rest = mDockBeads;
+        SuggestionBarView row = mSuggestionBarView;
+        if (rest == null || row == null || Float.isNaN(mDockBeadsRowDy)
+            || Float.isNaN(mDockBeadsBottomPx)) return;
+        View host = hotView(R.id.accessory_surface_host);
+        if (!(host instanceof DockSurfaceHostLayout) || host.getWidth() <= 0) return;
+        int count = row.drawnIconBoxes(mDockBeadBoxes);
+        if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return;
+        for (int i = 0; i < count; i++) {
+            mDockBeadBoxes[i * 4] += mDockBeadsRowDx;
+            mDockBeadBoxes[i * 4 + 1] += mDockBeadsRowDy;
+            mDockBeadBoxes[i * 4 + 2] += mDockBeadsRowDx;
+            mDockBeadBoxes[i * 4 + 3] += mDockBeadsRowDy;
+        }
+        com.termux.app.dock.LensBeadGeometry.Beads drawn =
+            com.termux.app.dock.LensBeadGeometry.drawnAt(rest, mDockBeadBoxes, count, 0f, 0f,
+                host.getWidth(), mDockBeadsBottomPx, getResources().getDisplayMetrics().density);
+        if (drawn.equals(rest)) return;
+        mDockBeads = drawn;
+        ((DockSurfaceHostLayout) host).setBeads(dockBeadsDrawn());
+        DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
+        if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
+        rebuildBackdropGlassEffectForLens();
+    }
+
+    /**
      * Works the beads out again from the row and the host as laid out and hands them to the
      * host; true when they changed. A change between beads and the slab re-cuts the host's
      * shape at once (the slab's rim and clip go, or come back).
@@ -5128,7 +5164,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeads(layout, stackStandsDownOnFrame(),
             isInAppKeyboardShown()
                 && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()))) return null;
-        int count = row.layoutIconBoxes(mDockBeadBoxes);
+        // Where the row draws its icons: as laid out at rest, where a crossing's morph draws
+        // them mid-slide and through its landing (SuggestionBarView#drawnIconBoxes).
+        int count = row.drawnIconBoxes(mDockBeadBoxes);
         if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
         float[] rowAt = layoutOffsetIn(row, container);
         float[] hostAt = layoutOffsetIn(host, container);
@@ -5163,6 +5201,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int topPad = ((ViewGroup.MarginLayoutParams) field.getLayoutParams()).topMargin;
             bottom = Math.min(bottom, fieldAt[1] - topPad);
         }
+        mDockBeadsRowDy = dy;
+        mDockBeadsBottomPx = bottom;
         com.termux.app.dock.LensBeadGeometry.Beads beads =
             com.termux.app.dock.LensBeadGeometry.compute(boxes, count, 0f, 0f, host.getWidth(),
                 bottom, density);
@@ -22780,11 +22820,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mSuggestionBarView == null || !morph.rowMorphs()) return;
             mSuggestionBarView.dockMorphFrame(morph.slotIconPx(), morph.appsRowUsableWidthPx(),
                 morph.appsRowEdgeInsetPx(), morph.drawerTileAlpha());
+            // The beads under the icons where this frame draws them.
+            syncDockBeadsWithMorph();
         }
 
         @Override
         public void endMorph(@NonNull DockLayout landed) {
-            if (mSuggestionBarView != null) mSuggestionBarView.endDockMorph(landed);
+            if (mSuggestionBarView == null) return;
+            mSuggestionBarView.endDockMorph(landed);
+            // The row draws the landed rest from here, exactly as its last frame did: so do the
+            // beads, until the row is laid out in it.
+            syncDockBeadsWithMorph();
         }
 
         void listenForFold() {

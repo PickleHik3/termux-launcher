@@ -806,6 +806,8 @@ public final class SuggestionBarView extends GridLayout
         com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
         if (dockMorphing && laidOut != null) endDockMorph(laidOut);
         dockMorphing = false;
+        dockMorphSettling = false;
+        removeCallbacks(dockMorphSettleBackstop);
     }
 
     @Override
@@ -1229,9 +1231,23 @@ public final class SuggestionBarView extends GridLayout
      * bottom per icon into {@code out}, at most {@code out.length / 4} of them, and how many
      * there are (one more than {@code out} holds when there are more). An app's button or a folder's shell counts; a filler slot, the empty row's hint
      * and a slot faded out do not. Read off layout values only, so an icon in flight (a drag, a
-     * page swipe) answers where it was laid out. The dock's Lens beads stand on these.
+     * page swipe) answers where it was laid out.
      */
     public int layoutIconBoxes(@NonNull float[] out) {
+        return iconBoxes(out, false);
+    }
+
+    /**
+     * The same boxes where a crossing's morph draws them ({@link #slotMorph}): each moved to its
+     * share of the frame's row and scaled to the frame's icon about its centre, and as laid out
+     * whenever no morph draws the row. A swipe's offset is still not in them. The dock's Lens
+     * beads stand on these, so a bead and its icon never part, at rest or mid-slide.
+     */
+    public int drawnIconBoxes(@NonNull float[] out) {
+        return iconBoxes(out, true);
+    }
+
+    private int iconBoxes(@NonNull float[] out, boolean drawn) {
         if (vertical) return 0;
         int max = out.length / 4;
         int count = 0;
@@ -1258,10 +1274,20 @@ public final class SuggestionBarView extends GridLayout
                 }
                 v = p;
             }
-            out[count * 4] = left;
-            out[count * 4 + 1] = top;
-            out[count * 4 + 2] = left + box.getWidth();
-            out[count * 4 + 3] = top + box.getHeight();
+            float halfW = box.getWidth() * 0.5f;
+            float halfH = box.getHeight() * 0.5f;
+            float cx = left + halfW;
+            float cy = top + halfH;
+            if (drawn && slotMorph(slot)) {
+                // The same shift and scale the slot is drawn at, about the same centre.
+                cx += slotMorphOut[0];
+                halfW *= slotMorphOut[1];
+                halfH *= slotMorphOut[1];
+            }
+            out[count * 4] = cx - halfW;
+            out[count * 4 + 1] = cy - halfH;
+            out[count * 4 + 2] = cx + halfW;
+            out[count * 4 + 3] = cy + halfH;
             count++;
         }
         return count;
@@ -1546,6 +1572,13 @@ public final class SuggestionBarView extends GridLayout
     public void setDockLayout(@NonNull com.termux.app.dock.DockLayout layout) {
         dockLaidOutLayout = layout;
         if (dockMorphing) return;
+        if (dockMorphSettling) {
+            // The dock's answer after a landing: the row is laid out in it by the pass that
+            // draws next, its icons at its own size once their resize has run.
+            dockMorphLandedBase = true;
+            // With no new icon size in it, nothing is left to resize; otherwise the resize ends it.
+            if (Math.max(0, layout.slotIconPx) == dockIconSizePx) settleDockMorphIfLaidOut();
+        }
         int hint = Math.max(0, layout.appsRowBandHintPx);
         int icon = Math.max(0, layout.slotIconPx);
         int railIcon = Math.max(0, layout.railIconSizePx);
@@ -1617,6 +1650,8 @@ public final class SuggestionBarView extends GridLayout
         if (vertical || leaving.railActive || arriving.railActive) return;
         dockMorphing = true;
         dockMorphSettling = false;
+        dockMorphLandedBase = false;
+        removeCallbacks(dockMorphSettleBackstop);
         morphIconPx = Math.max(0, leaving.slotIconPx);
         morphInsetPx = leaving.appsRowEdgeInsetPx;
         morphWidthPx = leaving.appsRowUsableWidthPx;
@@ -1660,15 +1695,56 @@ public final class SuggestionBarView extends GridLayout
         dockMorphing = false;
         View tile = drawerTileSlot;
         if (tile != null && tile.getAlpha() != 1f) tile.setAlpha(1f);
-        dockMorphSettling = true;
+        // The landed rest is the last frame's dress: from here until the boxes are that size and
+        // the row is laid out in the dock's answer after the landing, every frame draws exactly
+        // it, by the same mapping the last morph frame drew, so no frame between shows another.
+        morphIconPx = Math.max(0, landed.slotIconPx);
+        morphInsetPx = landed.appsRowEdgeInsetPx;
+        morphWidthPx = landed.appsRowUsableWidthPx;
+        // Its sizes, once; the row's slots still stand in the layout the activity last laid out.
+        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
         setDockLayout(landed);
-        if (!slotIconResizePosted) dockMorphSettling = false;
+        dockLaidOutLayout = laidOut;
+        dockMorphSettling = true;
+        dockMorphLandedBase = false;
+        removeCallbacks(dockMorphSettleBackstop);
+        postDelayed(dockMorphSettleBackstop, DOCK_MORPH_SETTLE_BACKSTOP_MS);
+        invalidate();
+    }
+
+    /**
+     * Whether the dock has handed its answer since the landing: the row is laid out in it, so a
+     * slot drawn as laid out is drawn at the landed rest.
+     */
+    private boolean dockMorphLandedBase;
+    /** A settle that never hears the dock again still ends: the row then draws as laid out. */
+    private static final long DOCK_MORPH_SETTLE_BACKSTOP_MS = 500L;
+    private final Runnable dockMorphSettleBackstop = () -> {
+        if (!dockMorphSettling || dockMorphing) return;
+        dockMorphSettling = false;
+        invalidate();
+    };
+
+    /**
+     * The landing's draw lets go once nothing is left between it and the row as laid out: the
+     * boxes resized to the landed icon and the row laid out in the dock's answer after landing.
+     */
+    private void settleDockMorphIfLaidOut() {
+        if (!dockMorphSettling || dockMorphing || slotIconResizePosted || !dockMorphLandedBase)
+            return;
+        dockMorphSettling = false;
+        removeCallbacks(dockMorphSettleBackstop);
         invalidate();
     }
 
     /** Whether a crossing's morph draws the row. Package-visible for the tests. */
     boolean isDockMorphing() {
         return dockMorphing;
+    }
+
+    /** Whether the row still draws a landed morph's rest over its layout. For the tests. */
+    boolean isDockMorphSettling() {
+        return dockMorphSettling;
     }
 
     /**
@@ -1701,11 +1777,11 @@ public final class SuggestionBarView extends GridLayout
         }
         cx += child.getLeft();
         cy += child.getTop();
-        float scale = com.termux.app.dock.DockMorph.iconScale(
-            dockMorphing ? morphIconPx : iconSizePx(), boxPx);
+        // A morph's frame, or after its landing the landed rest by the same mapping.
+        float scale = com.termux.app.dock.DockMorph.iconScale(morphIconPx, boxPx);
         float shift = 0f;
         com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
-        if (dockMorphing && laidOut != null) {
+        if (laidOut != null) {
             shift = com.termux.app.dock.DockMorph.slotCentreX(cx, laidOut.appsRowEdgeInsetPx,
                 laidOut.appsRowUsableWidthPx, morphInsetPx, morphWidthPx) - cx;
         }
@@ -4442,10 +4518,7 @@ public final class SuggestionBarView extends GridLayout
         slotIconResizePosted = false;
         resizeSlotIcons();
         // A morph's landing drew the boxes at the landed icon until now; they are that size.
-        if (dockMorphSettling && !dockMorphing) {
-            dockMorphSettling = false;
-            invalidate();
-        }
+        settleDockMorphIfLaidOut();
     };
 
     /**
