@@ -1505,61 +1505,8 @@ public class GlassRefractionTest {
     }
 
     @Test
-    public void theReflectionIsFaintOnTheFaceAndClearerAtTheLowerBevel() {
-        // A 58 dp icon row in a slab with 14 dp of air above and below it.
-        float top = 0f;
-        float rowTop = 14f * DENSITY;
-        float rowBottom = rowTop + 58f * DENSITY;
-        float bottom = rowBottom + 14f * DENSITY;
-        float[] out = new float[2];
-        GlassRefraction.reflectionAt(rowTop + 20f * DENSITY, top, bottom, rowTop, rowBottom,
-            DENSITY, out);
-        assertEquals("nothing over the icons themselves", 0f, out[1], 0f);
-        GlassRefraction.reflectionAt(rowBottom + 1f, top, bottom, rowTop, rowBottom, DENSITY, out);
-        assertEquals(GlassRefraction.REFLECT_FACE, out[1], 1e-3f);
-        assertTrue(out[1] >= 0.04f && out[1] <= 0.05f);
-        assertEquals("a mirror about the icons' lower edge", rowBottom - 1f, out[0], 1e-3f);
-        GlassRefraction.reflectionAt(bottom, top, bottom, rowTop, rowBottom, DENSITY, out);
-        assertEquals(GlassRefraction.REFLECT_BEVEL, out[1], 1e-4f);
-        assertTrue(out[1] >= 0.25f && out[1] <= 0.40f);
-        // A low slab takes less of it.
-        float lowBottom = rowBottom + 4f * DENSITY;
-        GlassRefraction.reflectionAt(lowBottom, top, lowBottom, rowTop, rowBottom, DENSITY, out);
-        assertTrue(out[1] < GlassRefraction.REFLECT_BEVEL * 0.5f);
-    }
-
-    @Test
-    public void theTopBevelSqueezesTheWholeIconAndJoinsTheFaceMirror() {
-        float top = 0f;
-        float rowTop = 14f * DENSITY;
-        float rowBottom = rowTop + 58f * DENSITY;
-        float bottom = rowBottom + 14f * DENSITY;
-        float w = GlassRefraction.REFLECT_TOP_BEVEL_DP * DENSITY;
-        float[] out = new float[2];
-        GlassRefraction.reflectionAt(top, top, bottom, rowTop, rowBottom, DENSITY, out);
-        assertEquals("the whole icon at the rim", rowBottom, out[0], 1e-3f);
-        assertEquals(GlassRefraction.REFLECT_TOP, out[1], 1e-6f);
-        float[] inner = new float[2];
-        float[] face = new float[2];
-        GlassRefraction.reflectionAt(top + w - 1e-3f, top, bottom, rowTop, rowBottom, DENSITY, inner);
-        GlassRefraction.reflectionAt(top + w + 1e-3f, top, bottom, rowTop, rowBottom, DENSITY, face);
-        assertEquals("continuous at the bevel's inner edge", face[0], inner[0], 0.05f);
-        assertEquals(face[1], inner[1], 1e-3f);
-        float previous = Float.MAX_VALUE;
-        for (float y = top; y < rowTop; y += 0.5f) {
-            GlassRefraction.reflectionAt(y, top, bottom, rowTop, rowBottom, DENSITY, out);
-            assertTrue("one row of the picture per row of the bevel, no fold", out[0] <= previous);
-            previous = out[0];
-        }
-    }
-
-    @Test
-    public void aTiltShiftsTheReflectionByTwiceIt() {
-        float sine = (float) Math.sin(Math.toRadians(3));
-        assertEquals(2f * sine * GlassRefraction.REFLECT_DEPTH_DP * DENSITY,
-            GlassRefraction.reflectionShiftPx(sine, DENSITY), 1e-4f);
-        assertEquals(0f, GlassRefraction.reflectionShiftPx(0f, DENSITY), 0f);
-        assertTrue(GlassRefraction.AGSL.contains(
-            "float2 q = fragCoord + uTilt * (2.0 * kReflDepthDp * uDensity);"));
+    public void theProgramHoldsNoIconReflection() {
+        assertFalse(GlassRefraction.AGSL.contains("reflection"));
+        assertFalse(GlassRefraction.AGSL.contains("uReflect"));
     }
 }

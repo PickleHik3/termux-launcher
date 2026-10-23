@@ -8,8 +8,7 @@ import com.termux.app.chrome.GlassRefraction;
 /**
  * What a dock style asks of the dock's slab: where its page dashes stand, and which of the glass's
  * dock-surface features it wears. One value, so a style is a choice of spec and the geometry
- * ({@link DockLayoutPolicy}), the glass program ({@link GlassRefraction.Program#setDockSurface},
- * {@link GlassRefraction.Program#setReflection}) and the shelf under the slab each read the part
+ * ({@link DockLayoutPolicy}), the glass program ({@link GlassRefraction.Program#setDockSurface}) and the shelf under the slab each read the part
  * that is theirs.
  *
  * <p>{@link #PLAIN} is the dock exactly as it was, which a layout pass that names no surface
@@ -31,47 +30,34 @@ import com.termux.app.chrome.GlassRefraction;
 public final class DockSurfaceSpec {
 
     /**
-     * The dock as it always was: dashes in the row's own air, the narrow rim, no shelf, no
-     * reflection. What a layout pass that names no surface gets; no Dock design draws it.
+     * The dock as it always was: dashes in the row's own air, the narrow rim, no shelf. What a layout pass that names no surface gets; no Dock design draws it.
      */
     @NonNull public static final DockSurfaceSpec PLAIN =
-        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, 1f, false);
+        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false);
 
     /**
      * Home's Glass tray. Its glass numbers are the program's own constants, so the spec says only
      * that they are on.
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
-        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            1f, false);
+        new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, false, false);
 
     /**
      * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
      * on its own round glass bead with a tight, stronger rim band
      * ({@link GlassRefraction#BEAD_SOFT_RIM_DP}), the shelf in miniature (its lip and a small
-     * contact shadow under each bead, whatever the dock's Style, since a bead always floats) and
-     * its own icon's reflection.
+     * contact shadow under each bead, whatever the dock's Style, since a bead always floats).
      */
     @NonNull public static final DockSurfaceSpec LENS_BEADS =
-        new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, true,
-            1f, false);
-
-    /**
-     * How strongly the Wall strip's lower bevel shows the icons, of the tray's: the Search
-     * field's share, since there too only the lower bevel carries them.
-     */
-    public static final float WALL_STRIP_REFLECTION_SCALE = 0.8f;
+        new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true, false);
 
     /**
      * Home's Wall strip, the expanded dock: the tray's glass (dashes above, equal air, soft rim,
      * shelf, shadow) on one tall slab, a first row for the Workspace ({@link WallStripRowView}: a
-     * clock and the terminals as tiles, {@link DockLayout#wallStripBandPx}) over the apps row. The
-     * icons are reflected only in the lower bevel under them ({@link #reflectsLowerBevelOnly}),
-     * never over the tiles, at {@link #WALL_STRIP_REFLECTION_SCALE} of the tray's strength.
+     * clock and the terminals as tiles, {@link DockLayout#wallStripBandPx}) over the apps row.
      */
     @NonNull public static final DockSurfaceSpec WALL_STRIP =
-        new DockSurfaceSpec("wall_strip", true, GlassRefraction.SOFT_RIM_DP, 1f, true, true, false,
-            WALL_STRIP_REFLECTION_SCALE, true);
+        new DockSurfaceSpec("wall_strip", true, GlassRefraction.SOFT_RIM_DP, 1f, true, false, true);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -85,8 +71,6 @@ public final class DockSurfaceSpec {
     public final float softRimDp;
     /** How much of the lower shelf the slab wears, 0..1: the thicker lower edge and its lip. */
     public final float shelf;
-    /** The icons are reflected in the glass. */
-    public final boolean iconReflections;
     /** A soft contact shadow and a faint glow of light on the wallpaper under a floating slab. */
     public final boolean contactShadow;
     /**
@@ -95,8 +79,6 @@ public final class DockSurfaceSpec {
      * beads, another band on the dock's glass) the dock falls back to the slab.
      */
     public final boolean beads;
-    /** How strongly the icons are reflected in the glass, of the tray's own strength, 0..1. */
-    public final float reflectionScale;
     /**
      * The slab carries the Wall strip's first row over the apps row, on the same glass; how much
      * of it is laid out is {@link DockLayoutPolicy.DockInputs#wallStripReveal}.
@@ -104,16 +86,14 @@ public final class DockSurfaceSpec {
     public final boolean wallStrip;
 
     private DockSurfaceSpec(@NonNull String name, boolean dashesAboveSlab, float softRimDp,
-                            float shelf, boolean iconReflections, boolean contactShadow,
-                            boolean beads, float reflectionScale, boolean wallStrip) {
+                            float shelf, boolean contactShadow, boolean beads,
+                            boolean wallStrip) {
         this.name = name;
         this.dashesAboveSlab = dashesAboveSlab;
         this.softRimDp = softRimDp;
         this.shelf = shelf;
-        this.iconReflections = iconReflections;
         this.contactShadow = contactShadow;
         this.beads = beads;
-        this.reflectionScale = reflectionScale;
         this.wallStrip = wallStrip;
     }
 
@@ -134,18 +114,9 @@ public final class DockSurfaceSpec {
         }
     }
 
-    /**
-     * Whether the icons' reflection shows only in the lower bevel, under them: a slab with another
-     * row over the icons (the Wall strip's tiles) would show the face's mirror and the top
-     * bevel's copy of the icons over that row.
-     */
-    public boolean reflectsLowerBevelOnly() {
-        return wallStrip;
-    }
-
     /** Whether the glass program has anything of this spec's to draw. */
     public boolean wearsGlassFeatures() {
-        return softRimDp > 0f || shelf > 0f || iconReflections;
+        return softRimDp > 0f || shelf > 0f;
     }
 
     @NonNull

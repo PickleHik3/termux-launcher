@@ -959,12 +959,6 @@ public final class SuggestionBarView extends GridLayout
             reload();
             publishPageIndicator();
         }
-        // The dock's reflection is a picture of the row: it is taken again with the tile in its
-        // new slot (DockIconReflection settles the request itself).
-        post(() -> {
-            Runnable invalidated = contentInvalidatedListener;
-            if (invalidated != null) invalidated.run();
-        });
     }
 
     /** Whether the row lays the Drawer tile out: one stands, and the row is lying down. */
@@ -1283,18 +1277,6 @@ public final class SuggestionBarView extends GridLayout
         return count;
     }
 
-    /** Told when one of the row's icons redrew: the dock's reflection of the row re-captures. */
-    @Nullable private Runnable contentInvalidatedListener;
-
-    /**
-     * Who hears that an icon on the row redrew (an icon arrived, a badge changed, a press
-     * faded), or null for nobody. The dock's glass reflects the row and captures it again a
-     * short settle later ({@link com.termux.app.chrome.DockIconReflection}).
-     */
-    public void setContentInvalidatedListener(@Nullable Runnable listener) {
-        contentInvalidatedListener = listener;
-    }
-
     /**
      * Told on every frame a page swipe or a page switch moves where the row draws its icons, and
      * once more when they are back where they were laid out. Run from the touch or the
@@ -1390,13 +1372,6 @@ public final class SuggestionBarView extends GridLayout
         int center = clamp(Math.round(computeAzAnchorPosition(activeAzLetter, slotCount)), 0,
             slotCount - 1);
         return buildAzPriorityColumnsAround(center, slotCount);
-    }
-
-    @Override
-    public void onDescendantInvalidated(@NonNull View child, @NonNull View target) {
-        super.onDescendantInvalidated(child, target);
-        Runnable listener = contentInvalidatedListener;
-        if (listener != null) listener.run();
     }
 
     public void setTextSize(float textSize) {

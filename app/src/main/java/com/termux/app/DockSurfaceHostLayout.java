@@ -19,7 +19,7 @@ import com.termux.app.dock.LensBeadGeometry;
  * to the beads, one round lens under each icon (and the Search field's capsule under them, where
  * the dock carries the field), so the frost, the tint, a launch's wave and a
  * press's light are each bead's on every Android version: below Android 13 the beads are plain
- * frost, from 13 the glass program draws each bead's rim, shelf and reflection as well. The
+ * frost, from 13 the glass program draws each bead's rim and shelf as well. The
  * slab's own furniture ({@link #setSlabOnlyChildren}: its top seam, its rim glow) is not drawn
  * while beads are. With no beads it is a plain {@link FrameLayout} and draws exactly as before.
  *
