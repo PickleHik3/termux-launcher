@@ -801,6 +801,11 @@ public final class SuggestionBarView extends GridLayout
         if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
         // Nothing is rendered, or kept queued, for a window that has gone.
         iconBinder.cancelAll();
+        // A morph never outlives the window: a row that comes back lays out the dock's last
+        // answer rather than waiting for a landing that went with the window.
+        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
+        if (dockMorphing && laidOut != null) endDockMorph(laidOut);
+        dockMorphing = false;
     }
 
     @Override
@@ -1106,6 +1111,15 @@ public final class SuggestionBarView extends GridLayout
     protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
         if (child == drawerTileSlot && !drawingDrawerTileUnshifted && swipeOffsetDrawn()
             && drawerTileShown()) return false;
+        // A crossing's morph draws the slot at the frame's icon and its share of the frame's row.
+        if (slotMorph(child)) {
+            int save = canvas.save();
+            canvas.translate(slotMorphOut[0], 0f);
+            canvas.scale(slotMorphOut[1], slotMorphOut[1], slotMorphOut[2], slotMorphOut[3]);
+            boolean more = super.drawChild(canvas, child, drawingTime);
+            canvas.restoreToCount(save);
+            return more;
+        }
         return super.drawChild(canvas, child, drawingTime);
     }
 
@@ -1524,8 +1538,14 @@ public final class SuggestionBarView extends GridLayout
      * The dock's answer for this pass, and the one place the row is told its sizes: the band it
      * lies in (its hint), the icon one of its slots draws lying down, and the rail's icon and slot
      * standing up. The row draws exactly these and works none of them out of its own.
+     *
+     * <p>While a crossing's morph draws the row ({@link #beginDockMorph}) a pass's answer is only
+     * noted, as the layout the row's slots stand in, and the row's own sizes wait for the landing
+     * ({@link #endDockMorph}): no frame of a slide re-renders the row or lays it out.
      */
     public void setDockLayout(@NonNull com.termux.app.dock.DockLayout layout) {
+        dockLaidOutLayout = layout;
+        if (dockMorphing) return;
         int hint = Math.max(0, layout.appsRowBandHintPx);
         int icon = Math.max(0, layout.slotIconPx);
         int railIcon = Math.max(0, layout.railIconSizePx);
@@ -1559,6 +1579,159 @@ public final class SuggestionBarView extends GridLayout
         // The slots already built keep the size they were built at until something resizes
         // them; nothing else re-renders the row when only the dock's size moved.
         scheduleSlotIconResize();
+    }
+
+    // ------------------------------------------------------------------ the dock's morph
+    //
+    // A crossing between Home and the Workspace (ADR 0012) morphs the dock's dress with the wall:
+    // the slot's icon and the row's width and inset go from the leaving half's rest to the
+    // arriving one's. The row cannot be laid out per frame, so it is drawn instead: rendered once
+    // at the larger of the two icons, and each frame every slot is scaled down to the frame's icon
+    // and moved to its share of the frame's row, about the centre its icon is laid out at.
+
+    /** Whether a crossing's morph draws the row, from its begin to its landing. */
+    private boolean dockMorphing;
+    /**
+     * Whether the boxes are still drawn at the row's icon rather than the size they were built at:
+     * from a morph's landing until the slots are resized to the landed size, so the frame between
+     * the two draws the landed icon rather than the one rendered for the slide.
+     */
+    private boolean dockMorphSettling;
+    /** The dock's last answer, whose insets and width the row's slots are laid out in. */
+    @Nullable private com.termux.app.dock.DockLayout dockLaidOutLayout;
+    /** The frame's icon, and the inset and width of the row it is drawn at. */
+    private int morphIconPx;
+    private int morphInsetPx;
+    private int morphWidthPx;
+    /** One slot's draw as {@link #slotMorph} answers it: its shift, scale and pivot. */
+    private final float[] slotMorphOut = new float[4];
+
+    /**
+     * A crossing begins between {@code leaving}'s rest and {@code arriving}'s: the slots are
+     * rendered once at the larger icon of the two, and drawn at {@code leaving}'s until the first
+     * frame ({@link #dockMorphFrame}). A rail on either side, or a row standing up, has no row
+     * lying down to morph and draws as it is laid out.
+     */
+    public void beginDockMorph(@NonNull com.termux.app.dock.DockLayout leaving,
+                               @NonNull com.termux.app.dock.DockLayout arriving) {
+        if (vertical || leaving.railActive || arriving.railActive) return;
+        dockMorphing = true;
+        dockMorphSettling = false;
+        morphIconPx = Math.max(0, leaving.slotIconPx);
+        morphInsetPx = leaving.appsRowEdgeInsetPx;
+        morphWidthPx = leaving.appsRowUsableWidthPx;
+        int larger = Math.max(Math.max(0, leaving.slotIconPx), Math.max(0, arriving.slotIconPx));
+        if (larger > 0 && larger != dockIconSizePx) {
+            // Rendered at the larger icon so the slide only ever scales it down; the boxes take it
+            // on the next frame, and are drawn at the frame's icon from their own size meanwhile.
+            dockIconSizePx = larger;
+            invalidateRenderedIconCaches();
+            scheduleSlotIconResize();
+        }
+        invalidate();
+    }
+
+    /**
+     * One frame of the morph: the slot's icon {@code iconPx} across, the row's slots sharing
+     * {@code usableWidthPx} from {@code edgeInsetPx} in, and the Drawer tile at
+     * {@code drawerTileAlpha}. Fields and one invalidate: no layout, no allocation.
+     */
+    public void dockMorphFrame(int iconPx, int usableWidthPx, int edgeInsetPx,
+                               float drawerTileAlpha) {
+        if (!dockMorphing) return;
+        View tile = drawerTileSlot;
+        float alpha = drawerTileAlpha < 0f ? 0f : drawerTileAlpha > 1f ? 1f : drawerTileAlpha;
+        if (tile != null && tile.getParent() == this && tile.getAlpha() != alpha)
+            tile.setAlpha(alpha);
+        if (iconPx == morphIconPx && usableWidthPx == morphWidthPx && edgeInsetPx == morphInsetPx)
+            return;
+        morphIconPx = iconPx;
+        morphWidthPx = usableWidthPx;
+        morphInsetPx = edgeInsetPx;
+        invalidate();
+    }
+
+    /**
+     * The crossing landed on {@code landed}'s rest, which the last frame already drew: the row
+     * takes it as its layout, once, and draws its slots at that icon until they are resized to it.
+     */
+    public void endDockMorph(@NonNull com.termux.app.dock.DockLayout landed) {
+        if (!dockMorphing) return;
+        dockMorphing = false;
+        View tile = drawerTileSlot;
+        if (tile != null && tile.getAlpha() != 1f) tile.setAlpha(1f);
+        dockMorphSettling = true;
+        setDockLayout(landed);
+        if (!slotIconResizePosted) dockMorphSettling = false;
+        invalidate();
+    }
+
+    /** Whether a crossing's morph draws the row. Package-visible for the tests. */
+    boolean isDockMorphing() {
+        return dockMorphing;
+    }
+
+    /**
+     * How {@code child} is drawn for the morph, into {@link #slotMorphOut}: its shift along the
+     * row, its scale, and the pivot (its icon's centre as laid out). False where it is drawn as
+     * laid out: no morph, not one of the row's slots, or nothing to change.
+     */
+    private boolean slotMorph(@NonNull View child) {
+        if (vertical || (!dockMorphing && !dockMorphSettling)) return false;
+        SlotIcon icon = null;
+        for (int i = 0; i < slotIcons.size(); i++) {
+            if (slotIcons.get(i).slot == child) {
+                icon = slotIcons.get(i);
+                break;
+            }
+        }
+        if (icon == null) return false;
+        View box = icon.box;
+        int boxPx = box.getWidth();
+        if (boxPx <= 0) return false;
+        float cx = box.getWidth() * 0.5f;
+        float cy = box.getHeight() * 0.5f;
+        View at = box;
+        while (at != child) {
+            cx += at.getLeft();
+            cy += at.getTop();
+            ViewParent parent = at.getParent();
+            if (!(parent instanceof View)) return false;
+            at = (View) parent;
+        }
+        cx += child.getLeft();
+        cy += child.getTop();
+        float scale = com.termux.app.dock.DockMorph.iconScale(
+            dockMorphing ? morphIconPx : iconSizePx(), boxPx);
+        float shift = 0f;
+        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
+        if (dockMorphing && laidOut != null) {
+            shift = com.termux.app.dock.DockMorph.slotCentreX(cx, laidOut.appsRowEdgeInsetPx,
+                laidOut.appsRowUsableWidthPx, morphInsetPx, morphWidthPx) - cx;
+        }
+        if (scale == 1f && shift == 0f) return false;
+        slotMorphOut[0] = shift;
+        slotMorphOut[1] = scale;
+        slotMorphOut[2] = cx;
+        slotMorphOut[3] = cy;
+        return true;
+    }
+
+    /**
+     * Where slot {@code index}'s icon is drawn on this frame, in the row's coordinates: its
+     * centre's x and its size across. Package-visible for the tests.
+     */
+    @NonNull
+    float[] drawnSlotIcon(int index) {
+        View child = getChildAt(index);
+        View box = null;
+        for (SlotIcon icon : slotIcons) if (icon.slot == child) box = icon.box;
+        if (child == null || box == null) return new float[] {Float.NaN, Float.NaN};
+        if (slotMorph(child))
+            return new float[] {slotMorphOut[2] + slotMorphOut[0], box.getWidth() * slotMorphOut[1]};
+        float cx = box.getWidth() * 0.5f;
+        for (View at = box; at != child; at = (View) at.getParent()) cx += at.getLeft();
+        return new float[] {cx + child.getLeft(), box.getWidth()};
     }
 
     public void setAppBarOpacity(int appBarOpacity) {
@@ -4268,6 +4441,11 @@ public final class SuggestionBarView extends GridLayout
     private final Runnable slotIconResizeRunnable = () -> {
         slotIconResizePosted = false;
         resizeSlotIcons();
+        // A morph's landing drew the boxes at the landed icon until now; they are that size.
+        if (dockMorphSettling && !dockMorphing) {
+            dockMorphSettling = false;
+            invalidate();
+        }
     };
 
     /**
