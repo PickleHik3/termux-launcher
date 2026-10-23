@@ -128,6 +128,13 @@ public final class X11GpuProbe {
             return null;
         }
 
+        /** The software row, wherever it stands: first on a known-freeze GPU, last elsewhere. */
+        @NonNull
+        private Recommendation softwareRow() {
+            for (Recommendation r : ranked) if (r.profile == Profile.SOFTWARE) return r;
+            return ranked.get(ranked.size() - 1);
+        }
+
         /** One sentence for the settings row. */
         @NonNull
         public String headline() {
@@ -157,7 +164,7 @@ public final class X11GpuProbe {
          */
         @NonNull
         public String toCommand() {
-            Recommendation best = recommended() != null ? recommended() : ranked.get(ranked.size() - 1);
+            Recommendation best = recommended() != null ? recommended() : softwareRow();
             StringBuilder out = new StringBuilder();
             out.append("# ").append(gpu).append(": ").append(best.profile.id).append('\n');
             out.append("pkg install -y ").append(String.join(" ", best.packages)).append('\n');
@@ -174,7 +181,7 @@ public final class X11GpuProbe {
         /** Shell-sourceable: the top profile's exports, then its helper as a comment. */
         @NonNull
         public String toEnv() {
-            Recommendation best = recommended() != null ? recommended() : ranked.get(ranked.size() - 1);
+            Recommendation best = recommended() != null ? recommended() : softwareRow();
             StringBuilder out = new StringBuilder();
             out.append("# ").append(gpu).append(": ").append(best.profile.id).append(" — ")
                 .append(best.reason).append('\n');
