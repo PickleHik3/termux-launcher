@@ -119,6 +119,16 @@ final class SceneLowRes {
             : RenderEffect.createBlurEffect(sigma, sigma, Shader.TileMode.CLAMP));
     }
 
+    /**
+     * {@code debug.tl.scene_glass_copy}: {@code soft} (default) copies each frame into a small
+     * software bitmap before glass sees it; {@code hw} hands glass the hardware buffer itself.
+     * A hardware bitmap on the window's glass kept the UI thread waiting for the whole render on
+     * every frame (latency study, "Glass reading the scene"); the still frame, a software bitmap,
+     * does not.
+     */
+    private static final com.termux.terminal.DebugChoice COPY = new com.termux.terminal.DebugChoice(
+        "debug.tl.scene_glass_copy", "soft", com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
+
     /** Scene thread: a frame landed. Wrap its buffer, keep the image open, publish. */
     private void onImage(@NonNull ImageReader reader) {
         Image image = reader.acquireLatestImage();
@@ -135,6 +145,18 @@ final class SceneLowRes {
             if (buffer != null) buffer.close();
             if (bitmap == null) {
                 image.close();
+                return;
+            }
+            if (!"hw".equals(COPY.get(SystemClock.uptimeMillis()))) {
+                // A software copy: the image goes back to the reader at once, nothing to track.
+                Bitmap soft = bitmap.copy(Bitmap.Config.ARGB_8888, false);
+                image.close();
+                if (soft == null) return;
+                BitmapShader softShader = new BitmapShader(soft, Shader.TileMode.CLAMP,
+                    Shader.TileMode.CLAMP);
+                softShader.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+                LiveSceneFrame.publish(soft, softShader);
+                GLASS.tick();
                 return;
             }
             BitmapShader shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP,
