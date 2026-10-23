@@ -890,9 +890,19 @@ Glass sampled the scene's low-res pass, published at 15 fps. This build still ha
 | Contour 30 + glass live | 15.7 / 24.5 | 14.9 | 67% | 210 | 9.48 ms |
 | Contour 90 + glass live | 15.8 / 23.8 | 14.9 | 63% | 210 | 9.58 ms |
 
-- **Over budget.** Each glass publish makes the main thread re-record the glass surfaces, at about
-  9.5 ms per traversal on average against 1.7 ms. That brings back deadline misses and stuffing. The
-  scene's own surface stays cheap.
+- **Over budget.** The main thread's traversal averages about 9.5 ms against 1.7 ms. That brings back
+  deadline misses and stuffing. The scene's own surface stays cheap.
+- **Where the 9.5 ms goes (traces `s4-off`, `s4-g30`, analysed 2026-10-23).** Not re-recording and
+  not the publish. `Record View#draw()` is 0.71 ms against 0.70 ms, and the whole `Scene.glass.publish`
+  main runnable is 0.18 ms average (540 in 40 s). The difference is `postAndWait`, the UI thread's
+  wait on the RenderThread: 8.38 ms against 0.61 ms, on all 2377 frames, and 8.2 ms on frames with no
+  publish in the 20 ms before (8.7 ms with one). With the scene off, or on with the low-res pass
+  published but not read (`s3-c30low`: 0.93 ms), the UI thread is released after the sync while the
+  RenderThread draws (window `DrawFrames` about 6 ms, unchanged). While glass reads the live frame,
+  every window frame holds the UI thread to the end of its `DrawFrames` (2376 of 2376). The RenderThread
+  work is not longer (window `DrawFrames` 5.97 ms against 6.28 ms); only the early unblock is lost. The
+  trace does not name the native reason, so the cause is open: the discriminator is a live
+  hardware-buffer-backed bitmap shader in the glass draw against the still frame's software bitmap.
 - On `SceneThread`, `Scene.contour.draw` rose to about 2.1 ms average and `Scene.contour.lowres` to
   about 2 ms, against about 1 ms before, probably because the sparks were live.
 - Crash found on the same build: a software canvas (a RealtimeBlurView capture) drew the hardware
