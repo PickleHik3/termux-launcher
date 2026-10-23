@@ -14707,6 +14707,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 int airPx = dockLayout.railAirPx;
                 scroll.setPadding(airPx, airPx, airPx, airPx);
                 setBandSize(scroll, dockLayout.railBandPx, ViewGroup.LayoutParams.MATCH_PARENT);
+                // Every pin in one column: the scroll stands the whole slots its band holds and
+                // scrolls the rest, and draws nothing past itself (DockLayoutPolicy.railFit).
+                scroll.setRailSlotLengthPx(dockLayout.railSlotLengthPx);
                 setBandSize(indicator, indicatorBandPx, ViewGroup.LayoutParams.MATCH_PARENT);
                 setBandSize(host, ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.MATCH_PARENT);
@@ -14714,6 +14717,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Lying along the top: the dock's own row height and its own side inset, so a row
                 // moved to the top edge reads exactly as it did at the bottom.
                 int contentInset = dockLayout.appsRowEdgeInsetPx;
+                scroll.setRailSlotLengthPx(0);
                 // The ticks' band is the air on whichever side the rule puts them, so the row
                 // itself keeps only what is left of the air on that side. Between them the pair
                 // is the band.
@@ -14740,8 +14744,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             orderAppsBarBands(host, scroll, indicator,
                 !PageTickStrip.ticksLeadRow(edge, nextToCanvas));
             scroll.setClipToPadding(false);
-            // Every form fills its host now: a rail pages by the column's length rather than
-            // running past the end of it, so there is nothing left for the scroll to reach.
+            // A row fills its host; a rail fills it too while every pin fits, and otherwise
+            // stands its whole slots and scrolls.
             scroll.setFillViewport(true);
             // The row's band, its slot's icon and the rail's are handed over by the dock's pass
             // (applyDockLayout), from the same layout.
