@@ -13,6 +13,21 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
+  landing") · the audit's slide clips re-shot, frames recorded: Home → window and window → Home,
+  Docked and Floating, each of Tray, Beads and Strip → no blurred flash at the pane's top as the
+  last band settles, Strip's clock and tile not leaving in the last frames, the pane not
+  shortening after the landing, the keyboard travelling with the half that has it open; the same
+  as the audit's clips or better, never worse (the change moves state, not behaviour) · emulator.
+- 2026-10-23 · same commit · Workspace → Home with Beads: no horizontal line above the dock in the
+  landing frames; Home's widgets the same size in the first frame after landing as a second later
+  (the shrink is not fixed by this change: the widget pane's dock reserve is still held under the
+  slide and set at settle) · emulator, frames recorded.
+- 2026-10-23 · same commit · a window chip tapped on Home mid-slide, and a reversal past halfway:
+  the pane's bottom never stays clipped by the dock on the window that comes back, and the
+  keyboard pre-rolled for the slide goes away when the wall returns · emulator.
+- 2026-10-23 · same commit · a frame measurement of ten slides each way (gfxinfo framestats) on
+  the arm64 staging build against the #133 baseline: no worse · pong, with the go-ahead.
 - 2026-10-23 · #147 (commits "refactor(chrome): no app-icon reflection in any glass" and its
   activity half) · every Style x Dock design, keyboard up and down: the A-Z row, the extra keys and
   the keyboard glass show no ghost of the pinned icons (crops against the audit's e3 and e3b), and
@@ -2243,6 +2258,9 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
+  landing") · a slow drag Home → window and back, and a fling reversed mid-way, in both Styles:
+  the dock and keyboard feel exactly as before the change, nothing lands late · pong.
 - 2026-10-23 · #148 (commit "fix(keys): Ctrl+Shift+V pastes…") · a Bluetooth keyboard on the
   Surface: copy text in another app, Ctrl+Shift+V in a terminal window pastes it (confirmation
   notice if the tool asks for one, then the text in the shell); Ctrl+Alt+V still pastes with
