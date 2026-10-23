@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #143 (merge f19d7e1ff, status bar row geometry) · the status bar in both Styles,
+  capsule and docked, top and bottom edge, folded and open: the row height, the foot below it and
+  the widget slot measure the same as before (screenshot pairs against v2-redesign 52831bcac),
+  and the row does not jump when a fold animation ends · emulator.
 - 2026-10-23 · commit "fix(place): the terminal takes its room back when the display window
   goes" · Display open with the keyboard up in Overlay mode, then close the display window (its
   ×) or switch to a terminal window from the chips: the terminal shrinks above the keyboard, no
