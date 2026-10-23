@@ -527,6 +527,12 @@ public final class SuggestionBarView extends GridLayout
     /** The page ticks this row carries off the dock; null while it is the dock's own row. */
     @Nullable private PageTickStripView pageIndicator;
     /**
+     * How many most-used apps the column on screen holds after its last pin: what the last
+     * committed render put there, so the rail's ticks follow the column as drawn rather than a
+     * fresh resolve of the list, which a catalogue in flight can answer empty for.
+     */
+    private int railMostUsedSlots;
+    /**
      * The latched owner of the current stream, mirrored from {@link #gestureArbiter} at the two
      * points it is consulted. Replaces the {@code horizontalIntent} boolean the move handler used to
      * recompute from scratch on every event — recomputation is what let one drag hand ownership
@@ -1153,6 +1159,8 @@ public final class SuggestionBarView extends GridLayout
         invalidateRenderedIconCaches();
         // A page lying down holds one app fewer beside the Drawer tile, which a rail does not lay.
         invalidateMostUsedCache();
+        // The slots on screen were laid along the old axis; the next render says what stands now.
+        railMostUsedSlots = 0;
         lastSurfaceRenderSignature = 0;
         childLayoutPending = true;
         requestLayout();
@@ -3778,6 +3786,7 @@ public final class SuggestionBarView extends GridLayout
             pinnedItems = configRepository.loadPinnedItems();
         }
         boolean pinnedSurface = !azPreview && TextUtils.isEmpty(lastInput.trim()) && pinnedItems != null && !pinnedItems.isEmpty();
+        int mostUsedSlots = 0;
         if (pinnedSurface) {
             pinnedItemsPerPage = computePinnedItemsPerPage();
             int totalPages = getPinnedPagesCount();
@@ -3804,6 +3813,7 @@ public final class SuggestionBarView extends GridLayout
                     entries = new ArrayList<>(entries);
                     entries.addAll(mostUsed);
                     buttonCount += mostUsed.size();
+                    mostUsedSlots = mostUsed.size();
                 }
             }
         }
@@ -3828,10 +3838,14 @@ public final class SuggestionBarView extends GridLayout
             } else {
                 invalidate();
             }
+            // No layout pass follows a render that changed nothing, and the ticks may have been
+            // told something else since the column was last laid out: they hear what stands.
+            publishPageIndicator();
             // The page asked for is the page already on screen, so as far as any caller keeping
             // track of what it rendered is concerned, this rendered it.
             return true;
         }
+        railMostUsedSlots = mostUsedSlots;
 
         boolean keepCurrentFrameVisible = hasStableDisplayLayout() && surfaceRenderSignature != 0 && surfaceRenderSignature != lastSurfaceRenderSignature;
         if (!keepCurrentFrameVisible) {
@@ -8587,14 +8601,13 @@ public final class SuggestionBarView extends GridLayout
         if (vertical) publishPageIndicator();
     }
 
-    /** Whether the rail at rest is showing its pins with the most-used apps after them. */
+    /**
+     * Whether the rail's column holds its pins with the most-used apps after them, as last
+     * rendered. Read off the column rather than resolved afresh: the ticks describe what is drawn,
+     * and a resolve while the catalogue reloads answers no apps for a column still showing five.
+     */
     private boolean railCarriesMostUsed() {
-        return vertical
-            && activeAzLetter == null
-            && TextUtils.isEmpty(lastInput.trim())
-            && pinnedItems != null
-            && !pinnedItems.isEmpty()
-            && !railMostUsedEntries().isEmpty();
+        return vertical && railMostUsedSlots > 0;
     }
 
     /**
