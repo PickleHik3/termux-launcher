@@ -2231,6 +2231,10 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-23 · #148 (commit "fix(keys): Ctrl+Shift+V pastes…") · a Bluetooth keyboard on the
+  Surface: copy text in another app, Ctrl+Shift+V in a terminal window pastes it (confirmation
+  notice if the tool asks for one, then the text in the shell); Ctrl+Alt+V still pastes with
+  splits off and splits with them on · Surface, hand on the keyboard.
 
 - 2026-10-22 · #135 stage 1, Dock geometry · pong: the slide to Home with Beads, Search field and
   Drawer tile on; measure frames (gfxinfo framestats) over ten slides each way against the
