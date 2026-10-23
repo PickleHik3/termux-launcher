@@ -586,6 +586,11 @@ public final class TerminalRenderer {
 
     private final DashPathEffect mDashedEffect;
 
+    /** The regular face this renderer draws with (the wallpaper scenes borrow it for their glyphs). */
+    public Typeface getTypeface() {
+        return mTypeface;
+    }
+
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
         this(textSize, typeface, null,
             italicTypeface != null && !italicTypeface.equals(typeface) ? italicTypeface : null,
