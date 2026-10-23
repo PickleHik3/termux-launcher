@@ -11,7 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * What the Filament scene shows and draws its tubes with, shared by the full-resolution program
+ * What the Filament scene shows and draws its tubes with, and where they drift, shared by the full-resolution program
  * and the glass pass: the focused window's name (written on the main thread) and the glyph atlas
  * (built once, on the scene thread, from the terminal's own font).
  *
@@ -32,6 +32,13 @@ final class FilamentSource {
     @Nullable private volatile String mName;
     @Nullable private volatile Typeface mTypeface;
     @Nullable private Bitmap mAtlas;
+    /** The drifting objects, one field for the full-resolution program and the glass pass. */
+    @NonNull private final FilamentField mField = new FilamentField();
+
+    @NonNull
+    FilamentField field() {
+        return mField;
+    }
 
     /** The window name the tubes spell; main thread writes, scene thread reads. */
     void setName(@Nullable String name) {

@@ -99,21 +99,22 @@ public class FilamentLayoutTest {
     }
 
     @Test
-    public void benchIsCentredInTheUpperThirdAndFitsTheScreen() {
-        float[] g = new float[7];
-        float dp = 2.75f;
-        float w = 1080f, h = 2400f;
-        for (int n = FilamentLayout.MIN_TUBES; n <= FilamentLayout.MAX_TUBES; n++) {
-            FilamentLayout.geometry(n, w, h, dp, g);
-            float total = n * g[3] + (n - 1) * FilamentLayout.GAP * g[3];
-            assertEquals("centred", g[0], w - g[0] - total, 0.01f);
-            assertTrue(total <= w * FilamentLayout.WIDTH_USE + 0.01f);
-            assertTrue(g[3] <= FilamentLayout.TUBE_MAX_DP * dp + 0.01f);
-            float centre = g[1] + (g[4] + g[5]) / 2f;
-            assertEquals(h / 6f, centre, 0.01f);
-            assertTrue("bench surface below the tubes", g[6] > g[1] + g[4] + g[5]);
-            assertTrue("in the upper third", g[6] < h / 3f);
-        }
+    public void lettersAreDealtAcrossTheNixiesInOrderThenRepeat() {
+        int n = FilamentLayout.layout("claude", glyphs);
+        int[] out = new int[7];
+        FilamentLayout.spread(glyphs, n, 7, out);
+        assertEquals(FilamentLayout.GLYPHS.indexOf('C'), out[0]);
+        assertEquals(FilamentLayout.GLYPHS.indexOf('E'), out[5]);
+        assertEquals(FilamentLayout.GLYPHS.indexOf('C'), out[6]);
+        // A short name pads with unlit tubes in the layout; the dealing skips them.
+        n = FilamentLayout.layout("ab", glyphs);
+        FilamentLayout.spread(glyphs, n, 7, out);
+        assertEquals(FilamentLayout.GLYPHS.indexOf('A'), out[0]);
+        assertEquals(FilamentLayout.GLYPHS.indexOf('B'), out[1]);
+        assertEquals(FilamentLayout.GLYPHS.indexOf('A'), out[2]);
+        n = FilamentLayout.layout(null, glyphs);
+        FilamentLayout.spread(glyphs, n, 7, out);
+        for (int i = 0; i < 7; i++) assertEquals(FilamentLayout.UNLIT, out[i]);
     }
 
     @Test
