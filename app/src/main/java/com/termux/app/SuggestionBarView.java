@@ -522,8 +522,6 @@ public final class SuggestionBarView extends GridLayout
     private boolean quickReplyHandedOff;
     /** The page ticks this row carries off the dock; null while it is the dock's own row. */
     @Nullable private PageTickStripView pageIndicator;
-    /** The column length the rail's page count was last worked out from. */
-    private int railPagedAtLengthPx;
     /**
      * The latched owner of the current stream, mirrored from {@link #gestureArbiter} at the two
      * points it is consulted. Replaces the {@code horizontalIntent} boolean the move handler used to
@@ -850,7 +848,6 @@ public final class SuggestionBarView extends GridLayout
         }
         scheduleStableDrawReleaseIfPossible();
         if (renderLostWhileUnstable) post(this::reissueLostRender);
-        if (changed) resyncRailPagingForLength();
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
         publishPageIndicator();
     }
@@ -872,28 +869,6 @@ public final class SuggestionBarView extends GridLayout
     /** Whether a render is still owed to the row because it was dropped while unstable. */
     boolean isRenderLostWhileUnstable() {
         return renderLostWhileUnstable;
-    }
-
-    /**
-     * A rail pages by the length of the column it was given, so a column that changed length is a
-     * different number of pages — the keyboard coming up, the canvas band resizing, a turn of the
-     * screen. Re-rendered only when the fit actually moved, never on every layout pass.
-     */
-    private void resyncRailPagingForLength() {
-        if (!vertical) {
-            railPagedAtLengthPx = 0;
-            return;
-        }
-        int length = railUsableLengthPx();
-        if (length <= 0 || length == railPagedAtLengthPx) return;
-        int wasPerPage = railPagedAtLengthPx <= 0 ? -1
-            : DockPagingModel.railItemsPerPage(railPagedAtLengthPx, railSlotLengthPx());
-        railPagedAtLengthPx = length;
-        if (wasPerPage == DockPagingModel.railItemsPerPage(length, railSlotLengthPx())) {
-            publishPageIndicator();
-            return;
-        }
-        post(this::reload);
     }
 
     /**
@@ -1164,9 +1139,6 @@ public final class SuggestionBarView extends GridLayout
         invalidateRenderedIconCaches();
         lastSurfaceRenderSignature = 0;
         childLayoutPending = true;
-        // The turn changes what a page is, so the length the last fit was worked out from is not
-        // the length this form pages by.
-        railPagedAtLengthPx = 0;
         requestLayout();
         return true;
     }
@@ -1601,8 +1573,7 @@ public final class SuggestionBarView extends GridLayout
         invalidate();
         scheduleStableDrawReleaseIfPossible();
         if (vertical) {
-            // A rail pages by its slot's length, so its pages are counted again.
-            railPagedAtLengthPx = 0;
+            // A rail's slots are its pitch long, so they are built again at the new one.
             post(this::reload);
             return;
         }
@@ -3016,8 +2987,10 @@ public final class SuggestionBarView extends GridLayout
             if (swipeVelocityTracker != null) swipeVelocityTracker.recycle();
             swipeVelocityTracker = VelocityTracker.obtain();
             swipeVelocityTracker.addMovement(event);
+            // A rail's host scrolls it along the axis a row pages on, so the rail leaves its host
+            // free to take an up-and-down drag; a long press takes the stream back once it fires.
             ViewParent parent = getParent();
-            if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+            if (parent != null && !vertical) parent.requestDisallowInterceptTouchEvent(true);
             swipeDownX = event.getX();
             swipeDownY = event.getY();
             swipeDownRawX = event.getRawX();
@@ -5811,6 +5784,10 @@ public final class SuggestionBarView extends GridLayout
             if (drawerPickup != null && drawerPickupEntry != null
                 && !drawerPickup.claimContext(pressTarget, drawerPickupEntry)) return true;
             showContextPopup.run();
+            // The finger now slides onto the menu or picks the icon up; a rail's scrolling host
+            // must not take that slide for a scroll.
+            ViewParent host = getParent();
+            if (host != null) host.requestDisallowInterceptTouchEvent(true);
             LongPressPickupState state = activeLongPressPickupState;
             if (state == null || state.sourceView != pressTarget) {
                 state = new LongPressPickupState(pressTarget, pinnedIndex, 0f, 0f);
@@ -9145,36 +9122,18 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * Slots one page holds. Lying down that is the user's own icons-per-page; standing up the
-     * slots are a fixed pitch, so it is however many of them the column's length holds.
+     * Slots one page holds. Lying down that is the user's own icons-per-page; standing up it is
+     * every pin, in one column its scrolling host shows as much of as its band holds
+     * ({@code DockLayoutPolicy.railFit}).
      *
-     * <p>A rail used to answer "every pinned item", which made it one page as tall as its content
-     * however short the column was: the run past the bottom of the canvas was clipped away and the
-     * last icons were simply unreachable. It pages now, the way the row it is has always paged.
+     * <p>A rail paged by its own length for a while, which a column inside a scroll cannot read
+     * right: its box is never shorter than what it holds, so a band that shrank under it (the
+     * keyboard coming up, Floating's taller dock) kept the old count and ran its last slot on
+     * under the dock. One column scrolled by its host has no length to go stale.
      */
     int computePinnedItemsPerPage() {
-        if (vertical)
-            return DockPagingModel.railItemsPerPage(railUsableLengthPx(), railSlotLengthPx());
+        if (vertical) return Math.max(1, pinnedItemCount());
         return DockPagingModel.pinnedItemsPerPage(pinnedRowAppSlots());
-    }
-
-    /**
-     * The length the rail's slots are laid along: the bar's own box, which is its host's minus the
-     * padding the host keeps. Falls back to the host while the bar is between a re-parent and its
-     * first layout, so the first render of a moved rail pages by the column it is about to fill
-     * rather than by nothing.
-     */
-    private int railUsableLengthPx() {
-        int length = getHeight();
-        if (length <= 0) length = getMeasuredHeight();
-        if (length <= 0) {
-            ViewParent parent = getParent();
-            if (parent instanceof View) {
-                View host = (View) parent;
-                length = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
-            }
-        }
-        return Math.max(0, length);
     }
 
     /** Pages occupied by the user's persisted pinned items (excludes the dynamic most-used page). */
@@ -9201,8 +9160,9 @@ public final class SuggestionBarView extends GridLayout
      * most-used candidate to fill it. Must NOT call {@link #getPinnedPagesCount()} (recursion).
      */
     private boolean hasMostUsedDynamicPage() {
-        // A rail pages by the column since P6, exactly like a row: the trailing page is as
-        // reachable there as anywhere else.
+        // A rail scrolls along the axis a page would turn on, so it carries no trailing page:
+        // one the scroll took every drag from would show a tick nothing could reach.
+        if (vertical) return false;
         return mostUsedPageEnabled && !resolveMostUsedPageEntries().isEmpty();
     }
 

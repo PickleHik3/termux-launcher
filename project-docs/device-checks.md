@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #146 (commits "fix(dock): the landscape rail holds every pin and scrolls…") ·
+  landscape, 7 pins, Docked and Floating × Tray, Beads and Strip, a window and Home, keyboard up
+  and down → the rail shows whole icons only, a vertical drag on it scrolls to the last pin, no
+  icon stands behind the A–Z card (re-shoot the audit's e4 cells), a long press on a rail icon
+  still opens its menu and a sideways drag still pulls the drawer; portrait unchanged · emulator.
 - 2026-10-23 · commit "refactor(place): resolve the arrangement once per page and orientation"
   (#141) · the 2026-10-23 consistency audit's cells re-shot: Docked and Floating × Tray, Beads and
   Strip × Home and a window × keyboard up and down, portrait and landscape → the same chrome as
