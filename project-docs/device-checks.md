@@ -13,6 +13,21 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
+  landing") · the audit's slide clips re-shot, frames recorded: Home → window and window → Home,
+  Docked and Floating, each of Tray, Beads and Strip → no blurred flash at the pane's top as the
+  last band settles, Strip's clock and tile not leaving in the last frames, the pane not
+  shortening after the landing, the keyboard travelling with the half that has it open; the same
+  as the audit's clips or better, never worse (the change moves state, not behaviour) · emulator.
+- 2026-10-23 · same commit · Workspace → Home with Beads: no horizontal line above the dock in the
+  landing frames; Home's widgets the same size in the first frame after landing as a second later
+  (the shrink is not fixed by this change: the widget pane's dock reserve is still held under the
+  slide and set at settle) · emulator, frames recorded.
+- 2026-10-23 · same commit · a window chip tapped on Home mid-slide, and a reversal past halfway:
+  the pane's bottom never stays clipped by the dock on the window that comes back, and the
+  keyboard pre-rolled for the slide goes away when the wall returns · emulator.
+- 2026-10-23 · same commit · a frame measurement of ten slides each way (gfxinfo framestats) on
+  the arm64 staging build against the #133 baseline: no worse · pong, with the go-ahead.
 - 2026-10-23 · #146 (commits "fix(dock): the landscape rail holds every pin and scrolls…") ·
   landscape, 7 pins, Docked and Floating × Tray, Beads and Strip, a window and Home, keyboard up
   and down → the rail shows whole icons only, a vertical drag on it scrolls to the last pin, no
@@ -2252,6 +2267,9 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
+  landing") · a slow drag Home → window and back, and a fling reversed mid-way, in both Styles:
+  the dock and keyboard feel exactly as before the change, nothing lands late · pong.
 - 2026-10-23 · #150 (commit "fix(windows): a new window takes the keys…") · a Bluetooth keyboard
   on the Surface, splits on: Ctrl+Alt+C, then type at once → the keystrokes land in the new
   window's shell with no tap; the same from the + chip, and from a display window in front ·
