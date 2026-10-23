@@ -13,6 +13,20 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #151 (commit "feat(launcher): the App menu as grouped rows with an arrow") · the
+  App menu on a dock icon, a drawer cell and a dock-folder member, in the light, dark and black
+  themes and with the scheme chrome on, for an icon near each screen edge (left and right of the
+  dock, a top-row drawer cell) → groups and shades as mockup A (notifications pill when badged,
+  the shortcuts group, the action group, 4 dp gaps, each group a step lighter going down), rows in
+  order (Widgets only for an app that has widgets, App info, Add to Home, Pin or Unpin, Change
+  icon, Reset icon only after a custom icon, Uninstall), the arrow on the edge facing the icon and
+  pointing at its centre, the card flipping below a top-row cell, no category row, the open
+  scaling out of the arrow and the close shrinking back into it; Widgets opens the picker on the
+  Widgets page; an app with seven or more shortcuts shows five and a More shortcuts row whose side
+  menu lists the rest; a slide from the icon still highlights and commits a row · emulator.
+- 2026-10-23 · same commit · font scale 1.3 and a small density: labels on one line, ellipsized,
+  rows still 52 dp; an app with many shortcuts on a short landscape screen scrolls inside the card
+  rather than running off it · emulator.
 - 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
   landing") · the audit's slide clips re-shot, frames recorded: Home → window and window → Home,
   Docked and Floating, each of Tray, Beads and Strip → no blurred flash at the pane's top as the
@@ -2267,6 +2281,10 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-23 · #151 (commit "feat(launcher): the App menu as grouped rows with an arrow") · the
+  App menu's open and close on pong: the open's slight overshoot out of the arrow, the 83 ms row
+  fade, the 233 ms close, one long-press buzz on open (none twice, none with Haptic feedback off)
+  → feels like Launcher3's, never laggy · pong.
 - 2026-10-23 · #142 (commit "refactor(activity): the crossing owns the travel state and its
   landing") · a slow drag Home → window and back, and a fling reversed mid-way, in both Styles:
   the dock and keyboard feel exactly as before the change, nothing lands late · pong.

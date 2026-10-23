@@ -677,7 +677,22 @@
     <string name="app_drawer_category_linux_apps">Linux Apps</string>
     <string name="app_drawer_category_other">Other</string>
     <string name="app_drawer_category_automatic">Automatic (suggested)</string>
-    <string name="app_drawer_category_menu_entry">Category</string>
+
+    <!-- The App menu: the card a long press on an app icon opens. -->
+    <plurals name="app_menu_notifications">
+        <item quantity="one">%d notification</item>
+        <item quantity="other">%d notifications</item>
+    </plurals>
+    <string name="app_menu_more_shortcuts">More shortcuts</string>
+    <string name="app_menu_widgets">Widgets</string>
+    <string name="app_menu_app_info">App info</string>
+    <string name="app_menu_pin">Pin</string>
+    <string name="app_menu_unpin">Unpin</string>
+    <string name="app_menu_move_to_dock">Move to dock</string>
+    <string name="app_menu_remove_from_folder">Remove from folder</string>
+    <string name="app_menu_change_icon">Change icon</string>
+    <string name="app_menu_reset_icon">Reset icon</string>
+    <string name="app_menu_uninstall">Uninstall</string>
     <string name="app_drawer_category_open">Open %1$s</string>
     <string name="app_drawer_category_collapse">Collapse %1$s</string>
     <string name="app_drawer_category_empty_title">Nothing here yet</string>
