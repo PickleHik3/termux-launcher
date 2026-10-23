@@ -1,3 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App menu glyph, drawn after project-docs/reference/launcher/app-menu-mockups/app-menu-A-chosen.svg. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -6,8 +8,8 @@
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FF000000"
-        android:strokeWidth="1.8"
+        android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M4,4h6.5v6.5h-6.5z M13.5,4h6.5v6.5h-6.5z M4,13.5h6.5v6.5h-6.5z M13.5,13.5h6.5v6.5h-6.5z" />
+        android:pathData="M6,12h0.01 M12,12h0.01 M18,12h0.01" />
 </vector>

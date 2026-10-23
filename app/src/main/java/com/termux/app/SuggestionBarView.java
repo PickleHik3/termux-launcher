@@ -101,6 +101,8 @@ import com.termux.app.launcher.folder.FolderRenameTitleView;
 import com.termux.app.launcher.folder.LauncherFolderPopupController;
 import com.termux.app.launcher.popup.AnchoredMenu;
 import com.termux.app.launcher.popup.AnchoredMenuTheme;
+import com.termux.app.launcher.popup.AppMenuCard;
+import com.termux.app.launcher.popup.AppMenuPlan;
 import com.termux.app.launcher.popup.MenuHighlightTracker;
 import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
@@ -4902,11 +4904,15 @@ public final class SuggestionBarView extends GridLayout
         pinEditorListener = listener;
     }
 
-    /** Puts an app on a Home page: the app menu's Add to Home. */
+    /** Puts an app on a Home page: the App menu's Add to home, and its Widgets. */
     public interface AddToHomeListener {
         /** Whether there are Home pages to take an icon right now; no row while there are not. */
         boolean canAddToHome();
         void onAddToHome(@NonNull LauncherAppEntry entry);
+        /** Whether the widget picker can open; the Widgets row shows only while it can. */
+        default boolean canOpenWidgets() { return false; }
+        /** Opens the widget picker for the App menu's Widgets row. */
+        default void onOpenWidgets(@NonNull LauncherAppEntry entry) { }
     }
 
     @Nullable private AddToHomeListener addToHomeListener;
@@ -4914,21 +4920,6 @@ public final class SuggestionBarView extends GridLayout
     /** Who puts an app on Home; null takes the Add to Home row out of the app menu. */
     public void setAddToHomeListener(@Nullable AddToHomeListener listener) {
         addToHomeListener = listener;
-    }
-
-    /** The app menu's Add to Home row, beside Pin/Unpin; nothing while no Home takes icons. */
-    private void addAddToHomeRow(@NonNull LinearLayout shell, @NonNull LauncherAppEntry entry,
-                                 int tintBase) {
-        if (addToHomeListener == null || !addToHomeListener.canAddToHome()) return;
-        Runnable add = () -> {
-            dismissAppContextPopup();
-            AddToHomeListener listener = addToHomeListener;
-            if (listener != null) listener.onAddToHome(entry);
-        };
-        TextView row = menuRows.addActionRow(shell,
-            getResources().getString(R.string.home_add_to_home), R.drawable.ic_symbol_add, false,
-            tintBase, add);
-        pendingMenuRows.add(new MenuRow(row, add, false));
     }
 
     /**
@@ -5699,10 +5690,8 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * Same as the two-arg overload, but with a {@code categoryAction}: when non-null, the popup
-     * this opens drops its Pin/Unpin row and gains a "Category" row that runs it instead — the
-     * app-drawer categories grid's reassignment entry point, reusing this Material popup rather
-     * than jumping straight to a category picker.
+     * Same as the two-arg overload. {@code categoryAction} is no longer shown: the App menu has no
+     * category row (decided 2026-10-23, #151), so the categories grid's callers pass it for nothing.
      */
     public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
                                               @NonNull LauncherAppEntry entry,
@@ -5713,11 +5702,14 @@ public final class SuggestionBarView extends GridLayout
             null, null, pickupDelegate, entry, null);
     }
 
-    /** Shows the Material app-context popup anchored to a drawer view, outside the long-press gesture. */
+    /**
+     * Shows the App menu anchored to a drawer view, outside the long-press gesture.
+     * {@code categoryAction} is ignored, as above.
+     */
     public void showDrawerAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
                                           @Nullable Runnable categoryAction) {
         dismissShortcutsPopup();
-        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null, categoryAction));
+        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null));
     }
 
     private void bindFolderContextLongPress(
@@ -5764,6 +5756,9 @@ public final class SuggestionBarView extends GridLayout
         } else {
             notificationSwipeTargets.remove(pressTarget);
         }
+        // The menu's LONG_PRESS goes through the app's haptics switch when it opens, not the
+        // view's own long-click buzz, so the open is felt exactly once and a refused press not at all.
+        pressTarget.setHapticFeedbackEnabled(false);
         pressTarget.setOnLongClickListener(v -> {
             if (suppressContextLongPressForSwipe) {
                 return true;
@@ -5771,6 +5766,7 @@ public final class SuggestionBarView extends GridLayout
             if (drawerPickup != null && drawerPickupEntry != null
                 && !drawerPickup.claimContext(pressTarget, drawerPickupEntry)) return true;
             showContextPopup.run();
+            Haptics.tick(SuggestionBarView.this, android.view.HapticFeedbackConstants.LONG_PRESS);
             // The finger now slides onto the menu or picks the icon up; a rail's scrolling host
             // must not take that slide for a scroll.
             ViewParent host = getParent();
@@ -5968,257 +5964,229 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
+    /**
+     * Opens the App menu for {@code context}: the same card on the dock, in a dock folder and in
+     * the drawer, its rows decided by {@link AppMenuPlan} and only their actions by where the icon
+     * lives.
+     */
     private void showAppContextPopup(@NonNull AppMenuContext context) {
         dismissAppContextPopup();
+        LauncherAppEntry entry = context.entry;
         // A Linux app and the launcher's own entries have no Android package behind them.
-        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(context.entry.appRef)
-            || com.termux.app.launcher.LauncherEntries.isEntry(context.entry.appRef);
+        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)
+            || com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef);
         List<ShortcutInfo> shortcuts = linuxApp ? java.util.Collections.<ShortcutInfo>emptyList()
-            : queryEntryShortcuts(context.entry);
-        boolean hasShortcuts = !shortcuts.isEmpty();
+            : queryEntryShortcuts(entry);
         PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
         boolean folderSource = sourceFolder != null && context.folderEntryRef != null;
-        int topPinnedIndex = context.pinnedIndex >= 0 ? context.pinnedIndex : findPinnedAppIndex(context.entry.appRef);
+        int topPinnedIndex = context.pinnedIndex >= 0 ? context.pinnedIndex : findPinnedAppIndex(entry.appRef);
         boolean topPinned = topPinnedIndex >= 0;
-        // A category-context popup swaps its Pin/Unpin row for a Category row instead — see below.
-        boolean suppressPinRow = context.categoryAction != null;
+        String packageName = entry.appRef.packageName;
 
-        LinearLayout shell = menuRows.newShell();
         pendingMenuRows.clear();
         menuHighlight.clear();
         shortcutsMainRowView = null;
         activeAppMenuContext = context;
-        activeAppMenuShortcuts = shortcuts;
-
-        TextView header = new TextView(getContext());
-        header.setText(context.entry.label);
-        header.setTextColor(resolveLauncherTextColor());
-        header.setTextSize(12f);
-        header.setTypeface(Typeface.DEFAULT_BOLD);
-        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(8), dp(6), dp(8), dp(7));
-        Drawable headerIcon = resolveMenuHeaderIcon(context.entry);
-        if (headerIcon != null) {
-            headerIcon.setBounds(0, 0, dp(22), dp(22));
-            header.setCompoundDrawablesRelative(headerIcon, null, null, null);
-            header.setCompoundDrawablePadding(dp(10));
-        }
-        shell.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        activeAppMenuShortcuts = null;
 
         int tintBase = sourceFolder != null && sourceFolder.tintOverrideEnabled
             ? (sourceFolder.tintColor & 0x00FFFFFF)
             : (inheritedTintColor & 0x00FFFFFF);
         menuHighlight.setTintBase(tintBase);
 
-        // The Terminal entry's long press: a Home float on the page in view, then a new window,
-        // first, the way an app's shortcuts lead.
-        if (com.termux.app.launcher.LauncherEntries.hasHomeFloat(context.entry.appRef)) {
-            Runnable newFloat = () -> {
-                dismissAppContextPopup();
-                LauncherAppLauncher.launchEntryHomeFloat(context.entry);
-            };
-            TextView newFloatRow = menuRows.addActionRow(shell,
+        // The app's shortcuts: the Terminal entry's own two first (a Home float on the page in
+        // view, a new window), then what the app publishes.
+        List<AppMenuCard.Item> shortcutItems = new ArrayList<>();
+        if (com.termux.app.launcher.LauncherEntries.hasHomeFloat(entry.appRef)) {
+            shortcutItems.add(new AppMenuCard.Item(
                 getResources().getString(R.string.launcher_entry_new_float),
-                R.drawable.ic_symbol_add, false, tintBase, newFloat);
-            pendingMenuRows.add(new MenuRow(newFloatRow, newFloat, false));
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    dismissAppContextPopup();
+                    LauncherAppLauncher.launchEntryHomeFloat(entry);
+                }));
         }
-        if (com.termux.app.launcher.LauncherEntries.hasAlternate(context.entry.appRef)) {
-            Runnable newWindow = () -> {
-                dismissAppContextPopup();
-                LauncherAppLauncher.launchEntryAlternate(context.entry);
-            };
-            TextView newWindowRow = menuRows.addActionRow(shell,
+        if (com.termux.app.launcher.LauncherEntries.hasAlternate(entry.appRef)) {
+            shortcutItems.add(new AppMenuCard.Item(
                 getResources().getString(R.string.launcher_entry_new_window),
-                R.drawable.ic_symbol_add, false, tintBase, newWindow);
-            pendingMenuRows.add(new MenuRow(newWindowRow, newWindow, false));
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    dismissAppContextPopup();
+                    LauncherAppLauncher.launchEntryAlternate(entry);
+                }));
         }
-
-        // Uninstall and App info ask Android about a package; a Linux app has none.
-        if (!linuxApp) {
-            TextView uninstallRow = menuRows.addActionRow(shell, "Uninstall", R.drawable.ic_dock_menu_uninstall, false, tintBase, () -> {
+        int entryShortcuts = shortcutItems.size();
+        int shortcutCount = entryShortcuts + shortcuts.size();
+        int visibleShortcuts = AppMenuPlan.visibleShortcutCount(shortcutCount);
+        // A launched shortcut animates out of its own row, which exists only once the card is built.
+        List<View[]> shortcutSources = new ArrayList<>();
+        for (int i = 0; i < shortcuts.size() && entryShortcuts + i < visibleShortcuts; i++) {
+            ShortcutInfo info = shortcuts.get(i);
+            View[] source = new View[1];
+            shortcutSources.add(source);
+            String label = info.getShortLabel() != null ? info.getShortLabel().toString() : info.getId();
+            shortcutItems.add(new AppMenuCard.Item(label, R.drawable.ic_app_menu_shortcut, () -> {
+                launchShortcut(info, source[0]);
                 dismissAppContextPopup();
-                requestUninstall(context.entry);
-            });
-            pendingMenuRows.add(new MenuRow(uninstallRow, () -> {
-                dismissAppContextPopup();
-                requestUninstall(context.entry);
-            }, false));
-
-            TextView appInfoRow = menuRows.addActionRow(shell, "App info", R.drawable.ic_dock_menu_info, false, tintBase, () -> {
-                dismissAppContextPopup();
-                openAppInfo(context.entry);
-            });
-            pendingMenuRows.add(new MenuRow(appInfoRow, () -> {
-                dismissAppContextPopup();
-                openAppInfo(context.entry);
-            }, false));
-
+            }));
         }
+        List<ShortcutInfo> overflow = shortcutCount > visibleShortcuts
+            ? new ArrayList<>(shortcuts.subList(Math.max(0, visibleShortcuts - entryShortcuts),
+                shortcuts.size()))
+            : java.util.Collections.<ShortcutInfo>emptyList();
+        activeAppMenuShortcuts = overflow.isEmpty() ? null : overflow;
+
+        PinnedAppItem topPinnedApp = topPinned ? pinnedAppAt(topPinnedIndex) : null;
+        PinnedAppItem folderApp = folderSource ? findFolderApp(sourceFolder, context.folderEntryRef) : null;
+        AppMenuPlan.Inputs inputs = new AppMenuPlan.Inputs();
+        inputs.source = folderSource ? AppMenuPlan.Source.FOLDER_MEMBER
+            : topPinned ? AppMenuPlan.Source.PINNED : AppMenuPlan.Source.UNPINNED;
+        inputs.badged = !linuxApp && LauncherNotificationBadgeStore.hasBadge(packageName);
+        inputs.shortcutCount = shortcutCount;
+        inputs.androidPackage = !linuxApp;
+        inputs.hasWidgets = !linuxApp && addToHomeListener != null
+            && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
+        inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
         if (folderSource) {
-            PinnedAppItem folderApp = findFolderApp(sourceFolder, context.folderEntryRef);
-            boolean folderHasCustomIcon = folderApp != null
+            inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
-            TextView changeIconRow = menuRows.addActionRow(shell, "Change icon in folder", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-                dismissAppContextPopup();
-                changeFolderAppIcon(context);
-            });
-            pendingMenuRows.add(new MenuRow(changeIconRow, () -> {
-                dismissAppContextPopup();
-                changeFolderAppIcon(context);
-            }, false));
-
-            if (folderHasCustomIcon) {
-                TextView resetIconRow = menuRows.addActionRow(shell, "Reset icon in folder", R.drawable.ic_dock_menu_reset, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    resetFolderAppIcon(context);
-                });
-                pendingMenuRows.add(new MenuRow(resetIconRow, () -> {
-                    dismissAppContextPopup();
-                    resetFolderAppIcon(context);
-                }, false));
-            }
-
-            addAppWideIconRows(shell, context.entry, tintBase);
-
-            TextView moveToDockRow = menuRows.addActionRow(shell, "Move to dock", R.drawable.ic_dock_menu_move, false, tintBase, () -> {
-                dismissAppContextPopup();
-                moveContextEntryToDock(context);
-            });
-            pendingMenuRows.add(new MenuRow(moveToDockRow, () -> {
-                dismissAppContextPopup();
-                moveContextEntryToDock(context);
-            }, false));
-
-            TextView deleteRow = menuRows.addActionRow(shell, "Delete", R.drawable.ic_dock_menu_uninstall, false, tintBase, () -> {
-                dismissAppContextPopup();
-                removeFromContextSource(context);
-            });
-            pendingMenuRows.add(new MenuRow(deleteRow, () -> {
-                dismissAppContextPopup();
-                removeFromContextSource(context);
-            }, false));
         } else if (topPinned) {
-            final int targetPinnedIndex = topPinnedIndex;
-            PinnedAppItem topPinnedApp = pinnedAppAt(targetPinnedIndex);
-            boolean pinnedHasCustomIcon = topPinnedApp != null
+            inputs.customIcon = topPinnedApp != null
                 && getIconResolver().loadOverride(topPinnedApp.iconOverride) != null;
-            if (LauncherNotificationBadgeStore.hasBadge(context.entry.appRef.packageName)) {
-                TextView notificationsRow = menuRows.addActionRow(shell, "Notifications", R.drawable.ic_dock_menu_info, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    showNotificationPopup(context.entry, context.anchor);
-                });
-                pendingMenuRows.add(new MenuRow(notificationsRow, () -> {
-                    dismissAppContextPopup();
-                    showNotificationPopup(context.entry, context.anchor);
-                }, false));
-            }
-            TextView changeIconRow = menuRows.addActionRow(shell, "Change dock icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-                dismissAppContextPopup();
-                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                if (pinnedApp != null) {
-                    showPinnedIconPackPicker(targetPinnedIndex, pinnedApp);
-                }
-            });
-            pendingMenuRows.add(new MenuRow(changeIconRow, () -> {
-                dismissAppContextPopup();
-                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                if (pinnedApp != null) {
-                    showPinnedIconPackPicker(targetPinnedIndex, pinnedApp);
-                }
-            }, false));
-
-            if (pinnedHasCustomIcon) {
-                TextView resetIconRow = menuRows.addActionRow(shell, "Reset dock icon", R.drawable.ic_dock_menu_reset, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                    if (pinnedApp != null) {
-                        resetPinnedIcon(targetPinnedIndex, pinnedApp);
-                    }
-                });
-                pendingMenuRows.add(new MenuRow(resetIconRow, () -> {
-                    dismissAppContextPopup();
-                    PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                    if (pinnedApp != null) {
-                        resetPinnedIcon(targetPinnedIndex, pinnedApp);
-                    }
-                }, false));
-            }
-
-            addAppWideIconRows(shell, context.entry, tintBase);
-
-            if (!suppressPinRow) {
-                TextView unpinRow = menuRows.addActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    removePinnedAt(targetPinnedIndex);
-                });
-                pendingMenuRows.add(new MenuRow(unpinRow, () -> {
-                    dismissAppContextPopup();
-                    removePinnedAt(targetPinnedIndex);
-                }, false));
-            }
-            addAddToHomeRow(shell, context.entry, tintBase);
         } else {
-            if (!suppressPinRow) {
-                TextView pinRow = menuRows.addActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    pinEntryToTopLevel(context.entry);
-                });
-                pendingMenuRows.add(new MenuRow(pinRow, () -> {
-                    dismissAppContextPopup();
-                    pinEntryToTopLevel(context.entry);
-                }, false));
-            }
-            addAddToHomeRow(shell, context.entry, tintBase);
-
-            TextView changeIconRow = menuRows.addActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-                dismissAppContextPopup();
-                changeAppIconForEntry(context.entry);
-            });
-            pendingMenuRows.add(new MenuRow(changeIconRow, () -> {
-                dismissAppContextPopup();
-                changeAppIconForEntry(context.entry);
-            }, false));
-            addResetAppIconRowIfNeeded(shell, context.entry, tintBase);
+            inputs.customIcon = configRepository != null
+                && configRepository.loadAppIconOverride(resolveForSelectionRef(entry.appRef)) != null;
         }
 
-        if (context.categoryAction != null) {
-            Runnable categoryAction = context.categoryAction;
-            TextView categoryRow = menuRows.addActionRow(shell,
-                getResources().getString(R.string.app_drawer_category_menu_entry),
-                R.drawable.ic_dock_menu_category, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    categoryAction.run();
-                });
-            pendingMenuRows.add(new MenuRow(categoryRow, () -> {
-                dismissAppContextPopup();
-                categoryAction.run();
-            }, false));
-        }
-
-        if (hasShortcuts) {
-            menuRows.addDivider(shell);
-            TextView shortcutsRow = menuRows.addActionRow(shell, "Shortcuts", R.drawable.ic_dock_menu_shortcuts, true, tintBase, () -> {
-                if (shortcutsMenu.isShowing()) {
-                    dismissShortcutsPopup();
-                    menuHighlight.clear();
+        List<List<AppMenuCard.Item>> groups = new ArrayList<>();
+        int moreRowIndex = -1;
+        int flatIndex = 0;
+        int nextShortcut = 0;
+        int nextSource = 0;
+        int[] shortcutRowIndex = new int[shortcutSources.size()];
+        for (List<AppMenuPlan.Row> planGroup : AppMenuPlan.groups(inputs)) {
+            List<AppMenuCard.Item> items = new ArrayList<>(planGroup.size());
+            for (AppMenuPlan.Row row : planGroup) {
+                if (row == AppMenuPlan.Row.SHORTCUT) {
+                    if (nextShortcut >= entryShortcuts) shortcutRowIndex[nextSource++] = flatIndex;
+                    items.add(shortcutItems.get(nextShortcut++));
+                } else if (row == AppMenuPlan.Row.MORE_SHORTCUTS) {
+                    moreRowIndex = flatIndex;
+                    items.add(new AppMenuCard.Item(
+                        getResources().getString(R.string.app_menu_more_shortcuts),
+                        R.drawable.ic_app_menu_more, () -> {
+                            if (!shortcutsMenu.isShowing()) openShortcutsForFocusedRow();
+                        }, true));
                 } else {
-                    showShortcutsPopup(context, shortcuts, shortcutsMainRowView);
+                    items.add(appMenuAction(row, context, topPinnedIndex));
                 }
-            });
-            shortcutsMainRowView = shortcutsRow;
-            pendingMenuRows.add(new MenuRow(shortcutsRow, () -> {
-                if (!shortcutsMenu.isShowing()) {
-                    showShortcutsPopup(context, shortcuts, shortcutsMainRowView);
-                }
-            }, true));
+                flatIndex++;
+            }
+            groups.add(items);
         }
 
-        int rowWidth = MenuRowWidths.normalize(pendingMenuRows);
-        int contentWidth = MenuRowWidths.constrainHeader(header, rowWidth);
-        MenuRowWidths.constrainRows(pendingMenuRows, contentWidth);
+        AppMenuCard card = AppMenuCard.build(getContext(), menuRows, groups);
+        for (int i = 0; i < shortcutSources.size(); i++) {
+            shortcutSources.get(i)[0] = card.rows.get(shortcutRowIndex[i]).rowView;
+        }
+        if (moreRowIndex >= 0) shortcutsMainRowView = card.rows.get(moreRowIndex).rowView;
+        pendingMenuRows.addAll(card.rows);
+        appContextMenu.showAppMenu(card, context.anchor, null);
+    }
 
-        appContextMenu.show(MenuSpec.of(shell, tintBase).rows(pendingMenuRows).build(),
-            context.anchor);
+    /** One App menu action row: its label, glyph and what it runs for the icon in {@code context}. */
+    @NonNull
+    private AppMenuCard.Item appMenuAction(@NonNull AppMenuPlan.Row row,
+                                          @NonNull AppMenuContext context, int pinnedIndex) {
+        LauncherAppEntry entry = context.entry;
+        boolean folderSource = context.folderEntryRef != null
+            && resolveLatestFolder(context.sourceFolderId) != null;
+        boolean pinned = pinnedIndex >= 0;
+        switch (row) {
+            case NOTIFICATIONS: {
+                int count = Math.max(1, LauncherNotificationBadgeStore
+                    .getNotificationsForPackage(entry.appRef.packageName).size());
+                return new AppMenuCard.Item(getResources().getQuantityString(
+                    R.plurals.app_menu_notifications, count, count),
+                    R.drawable.ic_app_menu_notifications, () -> {
+                        dismissAppContextPopup();
+                        showNotificationPopup(entry, context.anchor);
+                    });
+            }
+            case WIDGETS:
+                return appMenuItem(R.string.app_menu_widgets, R.drawable.ic_app_menu_widgets, () -> {
+                    AddToHomeListener listener = addToHomeListener;
+                    if (listener != null) listener.onOpenWidgets(entry);
+                });
+            case APP_INFO:
+                return appMenuItem(R.string.app_menu_app_info, R.drawable.ic_app_menu_info,
+                    () -> openAppInfo(entry));
+            case ADD_TO_HOME:
+                return appMenuItem(R.string.home_add_to_home, R.drawable.ic_app_menu_home, () -> {
+                    AddToHomeListener listener = addToHomeListener;
+                    if (listener != null) listener.onAddToHome(entry);
+                });
+            case PIN:
+                return appMenuItem(R.string.app_menu_pin, R.drawable.ic_app_menu_pin,
+                    () -> pinEntryToTopLevel(entry));
+            case UNPIN:
+                return appMenuItem(R.string.app_menu_unpin, R.drawable.ic_app_menu_pin,
+                    () -> removePinnedAt(pinnedIndex));
+            case MOVE_TO_DOCK:
+                return appMenuItem(R.string.app_menu_move_to_dock, R.drawable.ic_app_menu_move_to_dock,
+                    () -> moveContextEntryToDock(context));
+            case REMOVE_FROM_FOLDER:
+                return appMenuItem(R.string.app_menu_remove_from_folder,
+                    R.drawable.ic_app_menu_remove_from_folder, () -> removeFromContextSource(context));
+            case CHANGE_ICON:
+                return appMenuItem(R.string.app_menu_change_icon, R.drawable.ic_app_menu_change_icon, () -> {
+                    if (folderSource) {
+                        changeFolderAppIcon(context);
+                    } else if (pinned) {
+                        PinnedAppItem pinnedApp = pinnedAppAt(pinnedIndex);
+                        if (pinnedApp != null) showPinnedIconPackPicker(pinnedIndex, pinnedApp);
+                    } else {
+                        changeAppIconForEntry(entry);
+                    }
+                });
+            case RESET_ICON:
+                return appMenuItem(R.string.app_menu_reset_icon, R.drawable.ic_app_menu_reset_icon, () -> {
+                    if (folderSource) {
+                        resetFolderAppIcon(context);
+                    } else if (pinned) {
+                        PinnedAppItem pinnedApp = pinnedAppAt(pinnedIndex);
+                        if (pinnedApp != null) resetPinnedIcon(pinnedIndex, pinnedApp);
+                    } else {
+                        resetAppIcon(entry);
+                    }
+                });
+            case UNINSTALL:
+            default:
+                return appMenuItem(R.string.app_menu_uninstall, R.drawable.ic_app_menu_uninstall,
+                    () -> requestUninstall(entry));
+        }
+    }
+
+    /** An App menu row that closes the card and then runs {@code action}. */
+    @NonNull
+    private AppMenuCard.Item appMenuItem(int labelRes, int glyphRes, @NonNull Runnable action) {
+        return new AppMenuCard.Item(getResources().getString(labelRes), glyphRes, () -> {
+            dismissAppContextPopup();
+            action.run();
+        });
+    }
+
+    /** Whether {@code packageName} offers any app widget, which is when the Widgets row shows. */
+    private boolean hasWidgetProviders(@Nullable String packageName) {
+        if (TextUtils.isEmpty(packageName)) return false;
+        try {
+            android.appwidget.AppWidgetManager manager =
+                android.appwidget.AppWidgetManager.getInstance(getContext());
+            if (manager == null) return false;
+            List<android.appwidget.AppWidgetProviderInfo> providers =
+                manager.getInstalledProvidersForPackage(packageName, null);
+            return providers != null && !providers.isEmpty();
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     @Nullable
@@ -6574,39 +6542,6 @@ public final class SuggestionBarView extends GridLayout
         reloadAllApps();
     }
 
-    private void addAppWideIconRows(
-        @NonNull LinearLayout shell,
-        @NonNull LauncherAppEntry entry,
-        int tintBase
-    ) {
-        TextView change = menuRows.addActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-            dismissAppContextPopup();
-            changeAppIconForEntry(entry);
-        });
-        pendingMenuRows.add(new MenuRow(change, () -> {
-            dismissAppContextPopup();
-            changeAppIconForEntry(entry);
-        }, false));
-        addResetAppIconRowIfNeeded(shell, entry, tintBase);
-    }
-
-    private void addResetAppIconRowIfNeeded(
-        @NonNull LinearLayout shell,
-        @NonNull LauncherAppEntry entry,
-        int tintBase
-    ) {
-        if (configRepository == null
-            || configRepository.loadAppIconOverride(resolveForSelectionRef(entry.appRef)) == null) return;
-        TextView reset = menuRows.addActionRow(shell, "Reset app icon", R.drawable.ic_dock_menu_reset, false, tintBase, () -> {
-            dismissAppContextPopup();
-            resetAppIcon(entry);
-        });
-        pendingMenuRows.add(new MenuRow(reset, () -> {
-            dismissAppContextPopup();
-            resetAppIcon(entry);
-        }, false));
-    }
-
     /**
      * The untreated artwork for an entry, from the entry itself when it carries bespoke artwork and
      * otherwise from the bounded store. Null when the app has none — the sites that test for that
@@ -6617,17 +6552,6 @@ public final class SuggestionBarView extends GridLayout
         if (entry == null) return null;
         if (entry.icon != null) return entry.icon;
         return LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry);
-    }
-
-    /** A fresh copy of the app icon for the menu header so we don't disturb the row icon's bounds. */
-    @Nullable
-    private Drawable resolveMenuHeaderIcon(@NonNull LauncherAppEntry entry) {
-        Drawable base = artworkOrNull(entry);
-        if (base == null) {
-            return null;
-        }
-        Drawable.ConstantState state = base.getConstantState();
-        return state != null ? state.newDrawable().mutate() : base;
     }
 
     /**
@@ -7009,7 +6933,6 @@ public final class SuggestionBarView extends GridLayout
         final int pinnedIndex;
         @Nullable final String sourceFolderId;
         @Nullable final AppRef folderEntryRef;
-        @Nullable final Runnable categoryAction;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -7018,23 +6941,11 @@ public final class SuggestionBarView extends GridLayout
             @Nullable String sourceFolderId,
             @Nullable AppRef folderEntryRef
         ) {
-            this(entry, anchor, pinnedIndex, sourceFolderId, folderEntryRef, null);
-        }
-
-        AppMenuContext(
-            @NonNull LauncherAppEntry entry,
-            @NonNull View anchor,
-            int pinnedIndex,
-            @Nullable String sourceFolderId,
-            @Nullable AppRef folderEntryRef,
-            @Nullable Runnable categoryAction
-        ) {
             this.entry = entry;
             this.anchor = anchor;
             this.pinnedIndex = pinnedIndex;
             this.sourceFolderId = sourceFolderId;
             this.folderEntryRef = folderEntryRef;
-            this.categoryAction = categoryAction;
         }
     }
 
