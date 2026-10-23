@@ -706,6 +706,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // A software canvas refuses a RuntimeShader (a RealtimeBlurView capturing the window is
         // one), so the refracted frame sits that pass out; it only feeds another view's blur.
         LiveSceneFrame.Frame liveFrame = LiveSceneFrame.current();
+        // The live frame is a hardware bitmap, which a software canvas refuses outright.
+        if (liveFrame != null && !canvas.isHardwareAccelerated()) return;
         // The scene went off: the still frame goes back on the paint.
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null

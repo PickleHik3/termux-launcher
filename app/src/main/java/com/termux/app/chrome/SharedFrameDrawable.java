@@ -381,7 +381,9 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         if (bounds.isEmpty() || frame == null || frame.isRecycled() || shader == null) return;
         LiveSceneFrame.Frame live = LiveSceneFrame.current();
         if (live != null) {
-            drawLive(canvas, bounds, live);
+            // The live frame is a hardware bitmap: a software pass (a RealtimeBlurView capturing
+            // the window) sits it out rather than throwing.
+            if (canvas.isHardwareAccelerated()) drawLive(canvas, bounds, live);
             return;
         }
         // The scene went off: the still frame goes back on the paints.
