@@ -181,6 +181,20 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         wake();
     }
 
+    /** How long the scene holds still after a key, so typing never shares the render thread. */
+    static final long TYPING_HOLD_MS = 1500L;
+    /** Uptime until which ambient motion and the glass pass hold still; written on main. */
+    private volatile long mHoldUntilMs;
+
+    /**
+     * A key was committed: ambient motion and the glass pass stop until the typing pauses for
+     * {@link #TYPING_HOLD_MS}. Touch and bell reactions still play. No wake: a running loop sees
+     * the hold on its next frame, and an idle one has nothing to stop.
+     */
+    public void holdForTyping() {
+        mHoldUntilMs = SystemClock.uptimeMillis() + TYPING_HOLD_MS;
+    }
+
     /** The bell of the pane whose screen rect is centred at (cx, cy) with half extents (hw, hh). */
     public void bell(float cx, float cy, float hw, float hh) {
         if (!motionAllowed()) return;
@@ -293,6 +307,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         private long mTimeMs;
         private long mFrozenTimeMs = SystemClock.uptimeMillis();
         private boolean mFrozen;
+        /** Time spent frozen so far: the scene clock resumes where it stopped instead of jumping. */
+        private long mFrozenTotalMs;
         /** The reaction uniforms need re-setting before the next draw. */
         private boolean mEventsStale = true;
         private boolean mWasActive;
@@ -342,11 +358,14 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             }
             boolean motion = mMotion;
             boolean active = motion && mEvents.active(nowMs);
-            long period = motion ? mPeriodNs : Long.MAX_VALUE;
+            long holdUntil = mHoldUntilMs;
+            boolean held = nowMs < holdUntil;
+            long period = motion && !held ? mPeriodNs : Long.MAX_VALUE;
             if (period == Long.MAX_VALUE) {
                 if (!mFrozen) mFrozenTimeMs = nowMs;
                 mFrozen = true;
             } else {
+                if (mFrozen) mFrozenTotalMs += nowMs - mFrozenTimeMs;
                 mFrozen = false;
             }
             boolean basinsMoved = false;
@@ -363,12 +382,12 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 || basinsMoved || mSurfaceBlank) {
                 mSurfaceBlank = false;
                 mLastDrawNs = frameTimeNanos;
-                mTimeMs = period == Long.MAX_VALUE ? mFrozenTimeMs : nowMs;
+                mTimeMs = (period == Long.MAX_VALUE ? mFrozenTimeMs : nowMs) - mFrozenTotalMs;
                 // Re-set the reaction uniforms while they animate, once more when the last one has
                 // decayed (so it ends at zero), and when the panes moved; never on a plain ambient frame.
                 mEventsStale |= active || mWasActive || basinsMoved;
                 mWasActive = active;
-                if (mGlassLowRes
+                if (mGlassLowRes && !held
                     && SceneFramePolicy.shouldDraw(false, mGlassPeriodNs, mLastLowNs, frameTimeNanos)) {
                     mLastLowNs = frameTimeNanos;
                     renderLowRes(nowMs);
@@ -385,6 +404,10 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                     frameTimeNanos);
                 if (delayMs > 0L) choreographer().postFrameCallbackDelayed(mFrame, delayMs);
                 else choreographer().postFrameCallback(mFrame);
+            } else if (held && motion) {
+                // Typing: sleep until the hold ends, then pick the ambient motion back up.
+                mPosted = true;
+                choreographer().postFrameCallbackDelayed(mFrame, Math.max(1L, holdUntil - nowMs));
             } else {
                 // Going idle. Clear the flag, then look again: a record or a rect pushed just
                 // before the clear saw the flag set and posted nothing.

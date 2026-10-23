@@ -79,6 +79,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
     /** From onStart. */
     public void attach() {
         mAttached = true;
+        LatencyProbe.setCommitListener(this);
         poll();
     }
 
@@ -129,17 +130,13 @@ public final class SceneController implements LatencyProbe.CommitListener {
 
     /**
      * A key was committed. Scenes do not react to typing (the keyboard, the echo and the trail
-     * already move with every key), so this listener is no longer registered; kept for the spark
-     * slots a later scene may use for a run command.
+     * already move with every key); instead the scene holds still while typing goes on, so it
+     * costs nothing on the render thread exactly when latency matters.
      */
     @Override
     public void onCommit() {
         SceneLayerView layer = mLayer;
-        if (layer == null) return;
-        TerminalView pane = mHost.focusedPane();
-        if (pane == null || !pane.getCursorCenter(mCursor)) return;
-        pane.getLocationOnScreen(mLoc);
-        layer.spark(mLoc[0] + mCursor[0], mLoc[1] + mCursor[1]);
+        if (layer != null) layer.holdForTyping();
     }
 
     private void poll() {
