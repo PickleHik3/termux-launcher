@@ -122,6 +122,8 @@ public final class X11GpuProbe {
         /** The best profile for this GPU, installed or not; null only when nothing applies. */
         @Nullable
         public Recommendation recommended() {
+            // Software ranked first is the recommendation (a known-freeze GPU): nothing on the GPU.
+            if (!ranked.isEmpty() && ranked.get(0).profile == Profile.SOFTWARE) return null;
             for (Recommendation r : ranked) if (r.profile != Profile.SOFTWARE) return r;
             return null;
         }
@@ -130,7 +132,12 @@ public final class X11GpuProbe {
         @NonNull
         public String headline() {
             Recommendation best = recommended();
-            if (best == null) return gpu + " draws Linux apps in software";
+            if (best == null) {
+                return !ranked.isEmpty() && ranked.get(0).profile == Profile.SOFTWARE
+                    && ranked.size() > 1
+                    ? gpu + " draws Linux apps in software: " + ranked.get(0).reason
+                    : gpu + " draws Linux apps in software";
+            }
             String line = gpu + " can run Linux apps on the GPU with the " + best.profile.id + " profile";
             if (!best.installed) line += " once " + String.join(", ", best.packages) + " are installed";
             return line;
@@ -210,6 +217,27 @@ public final class X11GpuProbe {
 
     private X11GpuProbe() {}
 
+    /**
+     * GPUs on which a Linux app opening a GL context through the virgl server has hung the whole
+     * phone, needing a forced restart (#162: Mali-G52 on a Moto G15 / MT6768, 2026-10-24, with
+     * Code-OSS and fcitx). Matched against the GL renderer string, lower-cased. Software rendering
+     * worked on the same phone, so it is ranked first there and the virgl profiles carry the
+     * warning.
+     */
+    static final String[] KNOWN_FREEZE_RENDERERS = {"mali-g52"};
+
+    /** Whether {@code in} names a GPU on which the virgl profiles are known to freeze the phone. */
+    static boolean knownFreeze(@NonNull Inputs in) {
+        String renderer = in.glRenderer.toLowerCase(Locale.ROOT);
+        for (String bad : KNOWN_FREEZE_RENDERERS) if (renderer.contains(bad)) return true;
+        return false;
+    }
+
+    /** The warning a virgl profile carries on a {@link #knownFreeze} GPU. */
+    static final String FREEZE_WARNING =
+        "; on this GPU it has frozen the whole phone when an app opened OpenGL (a forced restart"
+        + " was the only way out), so software rendering is the safe pick";
+
     /** The pure decision. */
     @NonNull
     public static Result evaluate(@NonNull Inputs in) {
@@ -240,6 +268,24 @@ public final class X11GpuProbe {
         } else if (!emulated) {
             ranked.add(virgl(in, false));
             if (vulkanDriver) ranked.add(vulkanWrapper(in, false));
+        }
+        if (knownFreeze(in)) {
+            // Software first, and the virgl profiles after it with their warning: the user can
+            // still choose them, told what happened on this GPU.
+            List<Recommendation> warned = new ArrayList<>();
+            for (Recommendation r : ranked) {
+                warned.add(r.profile == Profile.VIRGL || r.profile == Profile.VIRGL_ANGLE
+                    ? new Recommendation(r.profile, r.reason + FREEZE_WARNING, r.installed,
+                        r.packages, r.env, r.serverCommand)
+                    : r);
+            }
+            ranked = new ArrayList<>();
+            ranked.add(new Recommendation(Profile.SOFTWARE,
+                "the virgl profiles have frozen this GPU's phones (Mali-G52): software rendering is the safe path",
+                true, Collections.<String>emptyList(),
+                Arrays.asList("LIBGL_ALWAYS_SOFTWARE=1", "GALLIUM_DRIVER=llvmpipe"), null));
+            ranked.addAll(warned);
+            return new Result(in.gpuName(), ranked);
         }
         ranked.add(new Recommendation(Profile.SOFTWARE,
             emulated ? "an emulated GPU: software rendering is the dependable path"

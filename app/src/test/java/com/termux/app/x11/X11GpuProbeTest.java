@@ -167,4 +167,29 @@ public class X11GpuProbeTest {
         assertEquals(4, json.getJSONArray("profiles").length());
         assertTrue(json.getString("env_text").startsWith("# "));
     }
+
+    @Test public void aKnownFreezeGpuRanksSoftwareFirstAndWarnsOnVirgl() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "mali";
+        in.glRenderer = "Mali-G52 MC2";
+        in.virglServer = true;
+        in.angle = true;
+        in.mesaDri = true;
+
+        X11GpuProbe.Result result = X11GpuProbe.evaluate(in);
+        assertEquals("software", result.ranked.get(0).profile.id);
+        assertTrue(result.ranked.get(0).installed);
+        assertNull("software is what the row recommends", result.recommended());
+        boolean warned = false;
+        for (X11GpuProbe.Recommendation r : result.ranked) {
+            if (r.profile == X11GpuProbe.Profile.VIRGL_ANGLE || r.profile == X11GpuProbe.Profile.VIRGL) {
+                assertTrue(r.reason, r.reason.contains("frozen the whole phone"));
+                warned = true;
+            }
+        }
+        assertTrue(warned);
+        assertTrue(X11GpuProbe.knownFreeze(in));
+        in.glRenderer = "Mali-G78";
+        assertFalse(X11GpuProbe.knownFreeze(in));
+    }
 }

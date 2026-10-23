@@ -595,6 +595,11 @@ public final class X11LinuxAppRunner {
      * last word over anything it sets. Pure, so the composition is tested.
      */
     @NonNull
+    /** Whether {@code env} routes OpenGL through the virgl server ({@code GALLIUM_DRIVER=virpipe}). */
+    static boolean usesVirgl(@NonNull List<String> env) {
+        return env.contains("GALLIUM_DRIVER=virpipe");
+    }
+
     static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
                          @NonNull List<String> env) {
         return script(app, display, env, false);
@@ -624,7 +629,11 @@ public final class X11LinuxAppRunner {
         for (String line : env) script.append("export ").append(line).append('\n');
         script.append("cd \"$HOME\"\n");
         if (awaitWindowManager != null) script.append(awaitWindowManager);
-        script.append("exec ").append(noSandbox ? app.commandWith("--no-sandbox") : app.command())
+        // An Electron app under a virgl profile also draws in software (#162): its own GPU path
+        // through the virgl server has frozen whole phones, and Chromium's software path is fine.
+        String extraArgs = noSandbox
+            ? (usesVirgl(env) ? "--no-sandbox --disable-gpu" : "--no-sandbox") : "";
+        script.append("exec ").append(noSandbox ? app.commandWith(extraArgs) : app.command())
             .append('\n');
         return script.toString();
     }
