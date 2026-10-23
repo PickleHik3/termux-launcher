@@ -1,8 +1,8 @@
 package com.termux.app.chrome.scene;
 
 /**
- * The pure rules of the Filament scene's bench of tubes: how a window name maps to tubes and atlas
- * glyphs, where the bench sits on the screen, and the timing of the cathode "slot machine" cycle
+ * The pure rules of the Filament scene's nixie tubes: how a window name maps to atlas glyphs and
+ * is dealt across the drifting tubes, and the timing of the cathode "slot machine" cycle
  * that plays when focus moves to another window. No Android types, so it runs on the JVM.
  */
 final class FilamentLayout {
@@ -24,15 +24,6 @@ final class FilamentLayout {
     static final long CYCLE_MS = SETTLE_LAST_MS + 50L;
     /** A focus change this soon after the last one does not restart the cycle. */
     static final long CYCLE_MIN_GAP_MS = 333L;
-
-    /** Widest a tube may be, dp; fewer tubes than fit the width are not stretched past this. */
-    static final float TUBE_MAX_DP = 40f;
-    /** Gap between tubes as a fraction of the tube width. */
-    static final float GAP = 0.25f;
-    static final float HEIGHT_RATIO = 1.9f;
-    static final float BASE_RATIO = 0.28f;
-    /** Fraction of the screen width the bench may use. */
-    static final float WIDTH_USE = 0.92f;
 
     private FilamentLayout() {}
 
@@ -121,24 +112,26 @@ final class FilamentLayout {
     }
 
     /**
-     * The bench for {@code n} tubes on a {@code width} x {@code height} px screen at {@code dp} px
-     * per dp, written to {@code out}: [0] x of the first tube's left edge, [1] y of the glass top,
-     * [2] pitch, [3] tube width, [4] glass height, [5] base height, [6] y of the bench surface.
-     * The whole tube (glass and base) is centred in the upper third of the screen.
+     * Deals the lit glyphs of {@code target[0..n)} (a {@link #layout} result) to {@code slots}
+     * nixies, written to {@code out}: in order, each letter once while there are enough nixies,
+     * then repeating from the first; all {@link #UNLIT} when the name has no letters.
      */
-    static void geometry(int n, float width, float height, float dp, float[] out) {
-        float fit = WIDTH_USE * width / (n + GAP * (n - 1));
-        float tw = Math.min(TUBE_MAX_DP * dp, fit);
-        float th = HEIGHT_RATIO * tw;
-        float base = BASE_RATIO * tw;
-        float pitch = tw * (1f + GAP);
-        float total = n * tw + (n - 1) * GAP * tw;
-        out[0] = (width - total) / 2f;
-        out[1] = height / 6f - (th + base) / 2f;
-        out[2] = pitch;
-        out[3] = tw;
-        out[4] = th;
-        out[5] = base;
-        out[6] = out[1] + th + base + 3f * dp;
+    static void spread(int[] target, int n, int slots, int[] out) {
+        int lit = 0;
+        for (int i = 0; i < n; i++) if (target[i] != UNLIT) lit++;
+        for (int s = 0; s < slots; s++) {
+            if (lit == 0) {
+                out[s] = UNLIT;
+                continue;
+            }
+            int want = s % lit;
+            for (int i = 0, seen = 0; i < n; i++) {
+                if (target[i] == UNLIT) continue;
+                if (seen++ == want) {
+                    out[s] = target[i];
+                    break;
+                }
+            }
+        }
     }
 }
