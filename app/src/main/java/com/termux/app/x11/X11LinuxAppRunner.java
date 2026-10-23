@@ -584,7 +584,8 @@ public final class X11LinuxAppRunner {
     static List<String> installedEnv(@NonNull X11GpuProbe.Result gpu) {
         // Software ranked first is the answer (a GPU the virgl profiles have frozen, #162): the
         // app draws in software whatever else is installed.
-        if (!gpu.ranked.isEmpty() && gpu.ranked.get(0).profile == X11GpuProbe.Profile.SOFTWARE) {
+        // An emulator ranks software alone: nothing extra there, as before.
+        if (gpu.ranked.size() > 1 && gpu.ranked.get(0).profile == X11GpuProbe.Profile.SOFTWARE) {
             return gpu.ranked.get(0).env;
         }
         for (X11GpuProbe.Recommendation r : gpu.ranked) {
