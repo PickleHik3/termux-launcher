@@ -50,7 +50,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private static final DebugChoice GLASS =
         new DebugChoice(SceneFramePolicy.PROP_GLASS, "lowres", DebugSwitch.SYSTEM_PROPERTIES);
     private static final DebugChoice GLASS_RATE =
-        new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE, "15", DebugSwitch.SYSTEM_PROPERTIES);
+        new DebugChoice(SceneFramePolicy.PROP_GLASS_RATE,
+            Integer.toString(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ), DebugSwitch.SYSTEM_PROPERTIES);
 
     private static final DebugChoice TRACE_INVAL =
         new DebugChoice("debug.tl.scene_trace_inval", "0", DebugSwitch.SYSTEM_PROPERTIES);

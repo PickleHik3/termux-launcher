@@ -966,6 +966,22 @@ Typing matches the scene-off runs. At rest, 15 s untouched: `Scene.contour.draw`
 for the glass's software copy. Together that is roughly a fifth of a core, mostly waiting, plus GPU
 time. It is a battery cost on Home. Next: a lower default glass rate and a reused bitmap pool.
 
+### Non-blocking glass copy (2026-10-23, `8f303c274`)
+
+The low-res pass now renders into a CPU-readable ImageReader (`GPU_COLOR_OUTPUT | CPU_READ_OFTEN`).
+Each image reaches the listener already rendered, and is copied into one of 3 reused software
+bitmaps. The default glass rate is 8 fps. Flying Filament, 15 s, passive trace (4 touch events
+happened during it, so the scene ran its reactions part of the time):
+
+| Scene thread, per call | Before (`908476aa6`) | Now |
+|---|---|---|
+| `Scene.glass.publish` | 9.79 ms, about 11/s | 1.92 ms, about 7.4/s (`Scene.glass.copy` 1.55 ms of it) |
+| `Scene.contour.lowres` | 2.92 ms | 1.13 ms |
+| `Scene.contour.draw` | 3.80 ms | 1.12 ms |
+
+No fallback warning in logcat. The scene thread's total time at rest falls from about a fifth of a
+core to about 7%.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
