@@ -10741,6 +10741,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
                 addAppToHome(entry);
             }
+            // The App menu's Widgets: the picker has no per-app filter, so it opens whole, on the
+            // Widgets page, the way Home's own Add widget opens it.
+            @Override public boolean canOpenWidgets() {
+                return mWidgetPaneController != null && mPaneWallController != null;
+            }
+            @Override public void onOpenWidgets(
+                    @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+                if (mWidgetPaneController == null || mPaneWallController == null) return;
+                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+                mWidgetPaneController.openPicker();
+            }
         });
         mSuggestionBarView.setFolderRenameHost(new SuggestionBarView.FolderRenameHost() {
             @Override public void beginFolderRename(long revision, @NonNull String folderId,
