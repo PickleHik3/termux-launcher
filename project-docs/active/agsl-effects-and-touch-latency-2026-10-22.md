@@ -103,6 +103,10 @@ check while typing. Record them in `project-docs/device-checks.md` when they are
   to buffer-ready, no Buffer Stuffing; latency study, "Contour on its own surface"). Every scene
   draws on its own surface; an in-window scene cost a vsync per frame. Next: wire glass to the low-res
   pass, move scene driving off the main thread, then the Filament prototype.
+  **Scenes do not react to key presses** (decided 2026-10-23). Per-key sparks were visually jarring
+  next to the keyboard's press highlight, the echo and the cursor trail. Scenes react to touches
+  outside the keyboard, the bell, and a pane opening, closing or taking focus. Typing stays calm.
+  Filament's tubes follow this too: they do not light per key.
 - **Frame queueing.** Every frame is presented one vsync late, seeded by the first frame of each
   typing burst missing its deadline (see the latency study, "Buffer Stuffing analysis"). The
   experiment owed is to prime clocks or start a performance-hint session at touch-down, then
