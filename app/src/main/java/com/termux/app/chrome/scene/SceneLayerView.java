@@ -229,10 +229,13 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
 
     /** Pane rects change rarely and only the main thread can read them: poll here, hand over changes. */
     private void poll() {
-        mPolling = false;
+        // mPolling stays set while this runs, so updateRun() does not post a second poll loop.
         refreshGates(SystemClock.uptimeMillis());
         updateRun();
-        if (!mRun) return;
+        if (!mRun) {
+            mPolling = false;
+            return;
+        }
         if (mPanes != null) {
             int n = mPanes.paneRects(mBasinScratch);
             if (mBasinProbe.setBasins(mBasinScratch, n)) {
