@@ -746,10 +746,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * it), the dock's morph between their rests, the hold on the content (its room, the keyboard
      * and content pre-rolled for the slide, the grid's paused resize) and the travel cover, and
      * composes the seam's answerer (SeamCrossing). {@link #mCrossingViews} is what it moves.
+     * While it runs, every chrome reader of an arrangement reads the ones it holds
+     * ({@link #arrangementOf(boolean)}).
      */
     private final CrossingViews mCrossingViews = new CrossingViews();
     private final com.termux.app.place.Crossing mCrossing = new com.termux.app.place.Crossing(
-        mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews);
+        mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews);
+    /** {@link #frameStandsDown} as a crossing's begin asks it, bound once rather than per begin. */
+    private final com.termux.app.place.SeamCrossing.FrameGlass mFrameStandsDown =
+        this::frameStandsDown;
     /** The chrome's clock through a slide with no finger on it, under a turning transition. */
     private final com.termux.app.place.ChromeSettle mChromeSettle =
         new com.termux.app.place.ChromeSettle();
@@ -4847,6 +4852,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.dock.LensBeadGeometry.Beads mDockBeadsMoving;
     /** Where the row stands in the host sideways, and the span it draws its icons in there. */
     private float mDockBeadsRowDx;
+    /** Where it stands down the host, and the bottom the beads are held above; NaN unread. */
+    private float mDockBeadsRowDy = Float.NaN;
+    private float mDockBeadsBottomPx = Float.NaN;
     private float mDockBeadsSpanLeft = Float.NaN, mDockBeadsSpanRight = Float.NaN;
     /** Scratch for the neighbouring page's icons a swipe stages. */
     private final float[] mDockBeadNeighbours =
@@ -5072,6 +5080,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * One frame of a crossing's morph under Lens beads: each bead worked out from its icon's
+     * drawn box (SuggestionBarView#drawnIconBoxes) by the rule the beads at rest follow theirs
+     * (LensBeadGeometry.drawnAt), on the surface the last full read found, so bead and icon
+     * never part. The host, the shelf and the dock's effect once, as a swipe's frame does; at
+     * rest and off beads nothing runs past the first check.
+     */
+    private void syncDockBeadsWithMorph() {
+        com.termux.app.dock.LensBeadGeometry.Beads rest = mDockBeads;
+        SuggestionBarView row = mSuggestionBarView;
+        if (rest == null || row == null || Float.isNaN(mDockBeadsRowDy)
+            || Float.isNaN(mDockBeadsBottomPx)) return;
+        View host = hotView(R.id.accessory_surface_host);
+        if (!(host instanceof DockSurfaceHostLayout) || host.getWidth() <= 0) return;
+        int count = row.drawnIconBoxes(mDockBeadBoxes);
+        if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return;
+        for (int i = 0; i < count; i++) {
+            mDockBeadBoxes[i * 4] += mDockBeadsRowDx;
+            mDockBeadBoxes[i * 4 + 1] += mDockBeadsRowDy;
+            mDockBeadBoxes[i * 4 + 2] += mDockBeadsRowDx;
+            mDockBeadBoxes[i * 4 + 3] += mDockBeadsRowDy;
+        }
+        com.termux.app.dock.LensBeadGeometry.Beads drawn =
+            com.termux.app.dock.LensBeadGeometry.drawnAt(rest, mDockBeadBoxes, count, 0f, 0f,
+                host.getWidth(), mDockBeadsBottomPx, getResources().getDisplayMetrics().density);
+        if (drawn.equals(rest)) return;
+        mDockBeads = drawn;
+        ((DockSurfaceHostLayout) host).setBeads(dockBeadsDrawn());
+        DockShelfView shelf = hotView(R.id.accessory_shelf_fx);
+        if (shelf != null && mDockRows.shelfShown()) shelf.setBeads(dockBeadsShadowed());
+        rebuildBackdropGlassEffectForLens();
+    }
+
+    /**
      * Works the beads out again from the row and the host as laid out and hands them to the
      * host; true when they changed. A change between beads and the slab re-cuts the host's
      * shape at once (the slab's rim and clip go, or come back).
@@ -5123,7 +5164,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeads(layout, stackStandsDownOnFrame(),
             isInAppKeyboardShown()
                 && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()))) return null;
-        int count = row.layoutIconBoxes(mDockBeadBoxes);
+        // Where the row draws its icons: as laid out at rest, where a crossing's morph draws
+        // them mid-slide and through its landing (SuggestionBarView#drawnIconBoxes).
+        int count = row.drawnIconBoxes(mDockBeadBoxes);
         if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
         float[] rowAt = layoutOffsetIn(row, container);
         float[] hostAt = layoutOffsetIn(host, container);
@@ -5158,6 +5201,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int topPad = ((ViewGroup.MarginLayoutParams) field.getLayoutParams()).topMargin;
             bottom = Math.min(bottom, fieldAt[1] - topPad);
         }
+        mDockBeadsRowDy = dy;
+        mDockBeadsBottomPx = bottom;
         com.termux.app.dock.LensBeadGeometry.Beads beads =
             com.termux.app.dock.LensBeadGeometry.compute(boxes, count, 0f, 0f, host.getWidth(),
                 bottom, density);
@@ -14365,13 +14410,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * {@code home}'s half's resolved arrangement, for every chrome reader: while a crossing runs,
+     * the one it took as it began (Crossing#heldArrangement), so no reader sees a layout change
+     * mid-slide and a store that moves under the slide is applied at the landing; otherwise the
+     * store's ({@link #storeArrangementOf}).
+     */
+    @NonNull
+    private ResolvedArrangement arrangementOf(boolean home) {
+        ResolvedArrangement held = mCrossing.heldArrangement(home);
+        return held != null ? held : storeArrangementOf(home);
+    }
+
+    /** The store revision the arrangements are resolved at; 0 before there is a store. */
+    private int arrangementRevision() {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store == null ? 0 : store.revision();
+    }
+
+    /**
      * {@code home}'s half's resolved arrangement in the orientation on screen, resolved from the
      * store ({@link ResolvedArrangement#resolve}) only when the store's revision or the
      * orientation moved: the Style, the Dock design and the layout are all stored preferences, so
      * a change to any of them moves the revision. Before there is a store, nothing is arranged.
+     * Read by a crossing's begin, and by {@link #arrangementOf} while none runs.
      */
     @NonNull
-    private ResolvedArrangement arrangementOf(boolean home) {
+    private ResolvedArrangement storeArrangementOf(boolean home) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_ARRANGEMENT;
         PlaceOrientation orientation = currentPlaceOrientation();
@@ -15984,8 +16048,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeContentImeReachPx = stack.homeImeReachPx;
         // On a Home page the dock floats over the grid, so the grid ends above the dock's rows at
         // rest and the edge gap under them (#104). A slide keeps what the content was committed
-        // with.
-        View widgetPane = mCrossing.holdsContent() ? null : findViewById(R.id.widget_pane);
+        // with, and a crossing toward Home gave the grid Home's own band as it began
+        // (applyArrivingHomeGridReserve): no pass of the slide hands it another.
+        View widgetPane = mCrossing.holdsContent() || mCrossing.crossing() ? null
+            : findViewById(R.id.widget_pane);
         if (widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView) {
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
                 stack.homeGridDockReservePx);
@@ -22153,34 +22219,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float dockReveal = syncSeamTravel(seam);
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
-        // Between halves that dress the stack differently, the keyboard dips with the rows, so
-        // it is below the screen where the stack changes its dress (SeamDress.wholeStack).
-        float keyboardReveal = seam.keyboardReveal();
-        // With a keyboard in the stack the rows cannot leave by the stack's own translation, which
-        // carries the keyboard too: they sink into the keyboard's top edge instead, and the stack
-        // moves only for the keyboard. A whole-stack dip moves both by the translation.
-        boolean fold = seam.folds();
-        boolean rowsSink = seam.rowsSink(keyboardPx);
-        if (fold) {
-            // Only the extra keys fold: that row shuts into its own bottom edge, the rows on the
-            // canvas's side of it sink by its hidden part, and the rows between it and the
-            // screen's edge stand still, wherever it stands in the stack (#94).
-            mCrossing.foldShare(seam.extraKeysShare());
-            // A fold in lays the extra keys out on this frame: the sink is re-read once the stack
-            // has laid them out, before the frame is drawn.
-            mCrossingViews.listenForFold();
-            mCrossingViews.applyFoldSink();
-        } else {
-            mCrossing.foldShare(Float.NaN);
-            mCrossingViews.sink(rowsSink
-                ? travelDockRowsPx(keyboardPx) * (1f - Math.max(0f, Math.min(1f, dockReveal)))
-                : 0f);
-        }
-        float translation = com.termux.app.place.PlaceChromeTravel.stackTranslationPx(
-            keyboardReveal, rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
-        if (translation != 0f || mDockTravelTranslationPx != 0f) mChromeTravelMoved = true;
-        mCrossingViews.translate(translation, keyboardPx
-            * (1f - Math.max(0f, Math.min(1f, keyboardReveal))));
+        // The stack as the crossing answers it (Crossing#stack): with a keyboard in the stack the
+        // rows sink into its top edge, since the stack's own translation carries the keyboard
+        // too; or only the extra keys fold, the rows on the canvas's side of them sinking by its
+        // hidden part (#94); and between halves that dress the stack differently the keyboard
+        // dips with the rows (SeamDress.wholeStack), both moved by the translation.
+        boolean wasMoved = mDockTravelTranslationPx != 0f;
+        float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
+            travelDockRowsPx(keyboardPx));
+        if (translation != 0f || wasMoved) mChromeTravelMoved = true;
         // A keyboard up on both places crosses from one material to the other with the wall.
         syncKeyboardMaterialTravel(frame);
         // The terminal's rows are drawn where the settle's resize is going to put them, and the
@@ -22197,7 +22244,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The status strip's content and the side and top bars fade as the places' rests say;
         // the minimal layout's bars fade like the normal one's.
         if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
-        mCrossingViews.alpha(statusAlpha, frame.dockReveal);
+        mCrossing.fade(statusAlpha, frame.dockReveal);
     }
 
     /**
@@ -22220,54 +22267,87 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             arrangementOf(other == com.termux.app.wall.PaneWallPage.WIDGETS).layout();
         com.termux.app.chrome.Dress committedDress = dressOf(mLastWallPage);
         com.termux.app.chrome.Dress otherDress = dressOf(other);
+        boolean begins = !mCrossing.crossing();
+        // Both halves' docks at rest, worked out once as the crossing begins and held for its
+        // life (ADR 0012): a half's rest is its own (Stack layout), its rows in its dress, its
+        // Search field and Wall strip wholly in or out, nothing squeezed, whichever half is
+        // committed, so one snapshot answers both. A frame that reaches another page of the same
+        // half reads the halves' dresses again and the rests the crossing holds.
+        com.termux.app.dock.DockLayout homeRest;
+        com.termux.app.dock.DockLayout workspaceRest;
+        com.termux.app.dock.DockGeometry.Snapshot rests = null;
+        if (begins) {
+            rests = dockSnapshot(committed, mLastWallPage);
+            homeRest = com.termux.app.dock.DockGeometry.compute(
+                rests.restOf(com.termux.app.dock.DockGeometry.Side.HOME));
+            workspaceRest = com.termux.app.dock.DockGeometry.compute(
+                rests.restOf(com.termux.app.dock.DockGeometry.Side.WORKSPACE));
+        } else {
+            homeRest = mCrossing.heldRest(true);
+            workspaceRest = mCrossing.heldRest(false);
+            if (homeRest == null || workspaceRest == null) return;
+        }
+        boolean otherHome = other == com.termux.app.wall.PaneWallPage.WIDGETS;
         // A keyboard in the stack, not one floating in a frame of its own: the committed half's
         // as it is up now, the other's as it wants one on arrival.
         // And each half's dock rows at rest, less the extra keys, so a fold travels from one
-        // half's rest to the other's (SeamCrossing.foldRestGrowthPx).
+        // half's rest to the other's (SeamCrossing.foldRestGrowthPx); unknown before the
+        // preferences are read.
+        int committedRowsPx = mPreferences == null ? -1
+            : com.termux.app.dock.DockMorph.rowsPx(otherHome ? workspaceRest : homeRest);
+        int otherRowsPx = mPreferences == null ? -1
+            : com.termux.app.dock.DockMorph.rowsPx(otherHome ? homeRest : workspaceRest);
         com.termux.app.place.SeamCrossing.Half here = com.termux.app.place.SeamCrossing.Half.of(
             mLastWallPage, committedDress, committed, stackDressOf(committedDress, orientation),
-            committedKeyboardVisible() && !isKeyboardFloating(), dockRowsAtRestPx(mLastWallPage, committed));
+            committedKeyboardVisible() && !isKeyboardFloating(), committedRowsPx);
         com.termux.app.place.SeamCrossing.Half there = com.termux.app.place.SeamCrossing.Half.of(
             other, otherDress, otherLayout, stackDressOf(otherDress, orientation),
             mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
-            dockRowsAtRestPx(other, otherLayout));
-        boolean begins = mCrossing.seam().other() == null;
-        // Both halves' arrangements and their docks at rest, held for the crossing's life: the
-        // dock's dress morphs from one rest to the other (ADR 0012). Read once per begin; a frame
-        // that reaches another page of the same half only retargets the crossing.
+            otherRowsPx);
+        // Both halves' arrangements, held for the crossing's life with the revision they were
+        // resolved at: from here every chrome reader reads them (arrangementOf).
         ResolvedArrangement home = arrangementOf(true);
         ResolvedArrangement workspace = arrangementOf(false);
-        com.termux.app.dock.DockGeometry.Snapshot rests = dockSnapshot(committed, mLastWallPage);
         mCrossing.begin(here, there,
-            com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, this::frameStandsDown,
+            com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
                 isSplitPanesEnabled()),
-            home, workspace,
-            com.termux.app.dock.DockGeometry.compute(
-                rests.restOf(com.termux.app.dock.DockGeometry.Side.HOME)), home.drawerTile(),
-            com.termux.app.dock.DockGeometry.compute(
-                rests.restOf(com.termux.app.dock.DockGeometry.Side.WORKSPACE)),
-            workspace.drawerTile());
+            home, workspace, homeRest, home.drawerTile(), workspaceRest, workspace.drawerTile(),
+            arrangementRevision());
+        if (!begins) return;
+        // Toward Home, the grid is given the room Home's dock leaves it at rest now, so it is laid
+        // out at its final size for the slide rather than re-measured at the landing.
+        if (otherHome && rests != null) applyArrivingHomeGridReserve(rests, homeRest, home);
         // From Home, the bar takes off Home's dress for the Workspace's while it is still hidden,
         // before any pass lays it out over Home.
-        if (begins && mCrossing.seam().barTakesWorkspaceDressFirst()) {
+        if (mCrossing.seam().barTakesWorkspaceDressFirst()) {
             refreshTerminalWindowBar();
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         }
     }
 
     /**
-     * The dock rows {@code layout} lays out at rest, less the extra keys row itself: each row as
-     * its neighbours there give it its air (the A-Z row's chin on the dock's rim, its crown, the
-     * apps row's air alone or shared), from the same policy the geometry pass sizes them by.
-     * Once per crossing, at its begin; -1 before the preferences are read.
+     * The widget pane given the band Home's dock takes from it at rest, as a crossing toward Home
+     * begins: Home's own rows in its own dress, its status band and whether its keyboard comes up
+     * (Stack layout's rest), the figure Home's settle lays out. From here to the landing no pass
+     * hands it another (syncAccessoryStack).
      */
-    private int dockRowsAtRestPx(@NonNull com.termux.app.wall.PaneWallPage page,
-                                 @NonNull PlaceLayout layout) {
-        if (mPreferences == null) return -1;
-        // A half's rest is its own (Stack layout): its rows in its dress, its Search field and
-        // Wall strip wholly in or out, nothing squeezed, whichever half is committed.
-        return com.termux.app.place.StackLayout.restDockRowsPx(
-            dockSnapshot(layout, page), com.termux.app.dock.DockGeometry.Side.of(page));
+    private void applyArrivingHomeGridReserve(
+            @NonNull com.termux.app.dock.DockGeometry.Snapshot rests,
+            @NonNull com.termux.app.dock.DockLayout homeRest, @NonNull ResolvedArrangement home) {
+        View widgetPane = findViewById(R.id.widget_pane);
+        if (!(widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
+        com.termux.app.place.StackLayout.RestInput in =
+            new com.termux.app.place.StackLayout.RestInput(rests,
+                com.termux.app.dock.DockGeometry.Side.HOME);
+        in.toolbarShown = home.dockShown();
+        in.extraKeysRowEnabled = home.extraKeysRowShown();
+        in.toolbarHeightPx = appliedToolbarHeightPx();
+        in.statusBand = this::bottomStatusBandAtRestPx;
+        in.imeLiftPx = mImeLiftPx;
+        in.keyboardShown = mInAppKeyboard != null && mInAppKeyboard.isEnabled()
+            && wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS);
+        ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
+            com.termux.app.place.StackLayout.restGridDockReservePx(in, homeRest));
     }
 
     /** What the stack wears in {@code dress}: its Style, Corners, Margin and its layout's sizes. */
@@ -22354,12 +22434,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame,
                                      @NonNull com.termux.app.place.SeamCrossing.Answers seam) {
         View host = hotView(R.id.terminal_window_bar_host);
-        boolean rides = mCrossing.seam().rideBar(frame, host != null
+        // The crossing rides the bar (Crossing#rideBar), through its Bar adapter.
+        boolean rides = mCrossing.rideBar(frame, host != null
             && host.getVisibility() == View.VISIBLE
-            && mStatusBarEdge == PlaceLayout.Edge.TOP && mPaneWallController != null);
-        float x = rides ? com.termux.app.place.SeamTravel.workspaceScreenXPx(frame,
-            mPaneWallController.wall().getWidth()) : 0f;
-        applyStatusTravelX(x);
+            && mStatusBarEdge == PlaceLayout.Edge.TOP && mPaneWallController != null,
+            mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth());
         if (rides) {
             mChromeTravelMoved = true;
             // The bar carries its place content with it: the strip does not also pan inside it.
@@ -22675,7 +22754,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final class CrossingViews implements com.termux.app.place.Crossing.Stack,
             com.termux.app.place.Crossing.Bar, com.termux.app.place.Crossing.Cover,
-            com.termux.app.place.Crossing.Keyboard {
+            com.termux.app.place.Crossing.Keyboard, com.termux.app.place.Crossing.Dock {
 
         /** How far the dock rows' layers last sank into the keyboard's top edge. */
         private float mRowSinkPx;
@@ -22728,6 +22807,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             } finally {
                 mQuietKeyboardChange = false;
             }
+        }
+
+        /**
+         * The extra keys folded by the crossing's share. A fold in lays the extra keys out on this
+         * frame: the sink is re-read once the stack has laid them out, before the frame is drawn.
+         */
+        @Override
+        public void fold() {
+            listenForFold();
+            applyFoldSink();
+        }
+
+        // ---- The dock's pinned row, which draws the morph (SuggestionBarView) ----
+
+        @Override
+        public void beginMorph(@NonNull DockLayout leaving, @NonNull DockLayout arriving) {
+            if (mSuggestionBarView != null) mSuggestionBarView.beginDockMorph(leaving, arriving);
+        }
+
+        @Override
+        public void dress(@NonNull com.termux.app.dock.DockMorph morph) {
+            if (mSuggestionBarView == null || !morph.rowMorphs()) return;
+            mSuggestionBarView.dockMorphFrame(morph.slotIconPx(), morph.appsRowUsableWidthPx(),
+                morph.appsRowEdgeInsetPx(), morph.drawerTileAlpha());
+            // The beads under the icons where this frame draws them.
+            syncDockBeadsWithMorph();
+        }
+
+        @Override
+        public void endMorph(@NonNull DockLayout landed) {
+            if (mSuggestionBarView == null) return;
+            mSuggestionBarView.endDockMorph(landed);
+            // The row draws the landed rest from here, exactly as its last frame did: so do the
+            // beads, until the row is laid out in it.
+            syncDockBeadsWithMorph();
         }
 
         void listenForFold() {
@@ -22900,6 +23014,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean held = false;
         boolean contentPreRolled = false;
         boolean moved = false;
+        boolean storeMoved = false;
         GeometryScheduler.Transition gridHold = null;
         mGeometry.beginBatch();
         try {
@@ -22918,8 +23033,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // geometry pass below lays the panes out at the size the cover stood in for, in the
             // same traversal), the keyboard's and the content's pre-rolls, the stack's
             // translation, sink and alphas, the bar's ride, a fold's and a melt's shares, and the
-            // dock's morph.
-            com.termux.app.place.Crossing.Landing crossingLanding = mCrossing.land(page);
+            // dock's morph, the row laying out the landed rest its last frame already drew. From
+            // here the chrome reads the store's arrangements again.
+            com.termux.app.place.Crossing.Landing crossingLanding =
+                mCrossing.land(page, arrangementRevision());
+            storeMoved = crossingLanding.storeMoved();
             boolean keyboardPreRolled = crossingLanding.keyboardPreRolled();
             contentPreRolled = crossingLanding.contentPreRolled();
             held = crossingLanding.held();
@@ -22975,7 +23093,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // the band with it, so nothing on screen moves (PageTopInsets).
             syncCanvasTopReach();
             // A pass that finds the arrangement already applied changes nothing.
-            if (seamLanding.laidOut()) syncPlaceLayout();
+            if (seamLanding.laidOut() || storeMoved) syncPlaceLayout();
+            // A store that moved under the slide (its readers read the held arrangements till
+            // now) is applied here, whole: the chrome dressed and the geometry laid out again.
+            if (storeMoved) {
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+                mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
+                    GeometryScheduler.ResizePolicy.NOW);
+            }
             if (seamLanding.barTravelled()) syncPlaceBar();
             // The pre-roll came and went quietly; the tour still hears where the keyboard ended
             // up, or it keeps the visibility from before the slide and misses the next change.
@@ -23436,19 +23562,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float shown = Math.max(0f, Math.min(1f, reveal));
         float translation = travelKeyboardLaidOutPx() * (1f - shown);
         mChromeTravelMoved = true;
-        mDockTravelTranslationPx = translation;
-        mKeyboardTravelSharePx = translation;
-        applyAccessoryStackTranslation();
-        if (!mCrossing.holdsContent()) return;
-        com.termux.view.TerminalView view = mPaneController == null ? null
-            : mPaneController.soleTiledPaneView();
-        if (view != null) {
-            // Toward the height the terminal settles at: the room given back less the dock
-            // padding the settle lays, so the rows land where the resize puts them.
-            view.setTravelDisplacement(mKeyboardSwipeRoomChangePx - mKeyboardSwipeLandingPaddingPx,
-                mKeyboardSwipeFromOpen ? 1f - shown : shown);
+        if (mCrossing.holdsContent()) {
+            com.termux.view.TerminalView view = mPaneController == null ? null
+                : mPaneController.soleTiledPaneView();
+            if (view != null) {
+                // Toward the height the terminal settles at: the room given back less the dock
+                // padding the settle lays, so the rows land where the resize puts them.
+                view.setTravelDisplacement(
+                    mKeyboardSwipeRoomChangePx - mKeyboardSwipeLandingPaddingPx,
+                    mKeyboardSwipeFromOpen ? 1f - shown : shown);
+            }
         }
-        mCrossing.coverAt(translation);
+        // The stack's translation, all of it the keyboard's, and the cover under the hold, through
+        // the crossing's adapter (Crossing#keyboardSwipe).
+        mCrossing.keyboardSwipe(translation);
     }
 
     /**
