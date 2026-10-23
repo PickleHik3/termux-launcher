@@ -60,6 +60,15 @@ status bar are one each across both halves and stay put while the wall moves (de
 replacing the 2026-10-19 Home without a launcher status bar).
 _Avoid_: UI (too wide), decoration
 
+**Crossing**:
+One slide of the wall between Home and the Workspace, from the first frame the wall moves to the
+frame it lands. During a crossing the dock morphs from the leaving half's **Dress** to the arriving
+one in step with the wall's offset (icon size, row width, bands, Search field and Drawer tile), so
+nothing changes at the landing. The keyboard travels with the half that has it open, and a reversal
+or a chip tapped mid-slide retargets from where the wall is. A crossing is over only when the wall
+lands.
+_Avoid_: travel (the code's older word for the same motion), transition, page swipe
+
 **Display**, **display window**:
 One X display, shown whole by the embedded X server (`x11-server/`) as a **window** in the
 **Workspace**: a Linux desktop or the X11 apps on it, managed inside by the display's own window
