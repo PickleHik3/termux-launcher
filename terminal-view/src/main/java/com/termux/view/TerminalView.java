@@ -60,6 +60,7 @@ import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TextStyle;
 import com.termux.view.textselection.TextSelectionCursorController;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -3879,6 +3880,8 @@ public final class TerminalView extends View {
             mEdgeTopColors[c] = edgeBackColor(screen, topExternalRow, c, palette, boldWithBright, reverseVideo, defaultBack);
             mEdgeBottomColors[c] = edgeBackColor(screen, bottomExternalRow, c, palette, boldWithBright, reverseVideo, defaultBack);
         }
+        keepOnlyWholeRow(mEdgeTopColors, columns);
+        keepOnlyWholeRow(mEdgeBottomColors, columns);
         for (int r = 0; r < rows; r++) {
             final int externalRow = mTopRow + r;
             mEdgeLeftColors[r] = edgeBackColor(screen, externalRow, 0, palette, boldWithBright, reverseVideo, defaultBack);
@@ -3905,6 +3908,23 @@ public final class TerminalView extends View {
             System.arraycopy(mEdgeLeftColors, 0, mPrevEdgeLeftColors, 0, rows);
             System.arraycopy(mEdgeRightColors, 0, mPrevEdgeRightColors, 0, rows);
             if (mPaddingFillListener != null) mPaddingFillListener.onPaddingFillColorsChanged();
+        }
+    }
+
+    /**
+     * Clear a top or bottom edge row unless every one of its cells has a background of its own.
+     * A row that is all colour — a status line, a title bar — reads as one band running on into
+     * the padding. A row that mixes coloured cells with default ones is drawn shapes, such as the
+     * pill tabs a TUI's dock draws with Powerline caps, and extending only its coloured cells puts
+     * a square block above each rounded pill. Ghostty's {@code window-padding-color = extend}
+     * makes the same call. The side bands keep their per-row colours.
+     */
+    static void keepOnlyWholeRow(int[] colors, int count) {
+        for (int i = 0; i < count; i++) {
+            if (colors[i] == 0) {
+                Arrays.fill(colors, 0, count, 0);
+                return;
+            }
         }
     }
 
