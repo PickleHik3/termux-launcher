@@ -117,10 +117,26 @@ comes from the layout the dress names; the dress itself does not carry the numbe
 Whether the keyboard is open is not dress; each half remembers that.
 _Avoid_: outfit, chrome plan, place chrome
 
+**Dock item**:
+A launcher action standing in the dock's apps row beside the pinned apps, added, removed and
+reordered like a pin (decided 2026-10-23): the **Drawer tile**, New terminal (a new window),
+New float terminal (a **Home float** on the page you are on) and Command palette. One list per
+layout, so a **Home layout** may hold its own. Each has its own glyph; the drawer's is the universal one.
+_Avoid_: launcher shortcut, system tile, anchored tile
+
 **Drawer tile**:
-A dock tile that opens the app drawer, there when the layout turns it on, with any **Dock design**,
-standing at the start, middle or end of the apps row. Once the Taskbar design's (until 2026-10-21).
+The **Dock item** that opens the app drawer, with any **Dock design**. Until 2026-10-23 the
+layout turned it on and anchored it at the start, middle or end of the apps row; now it stands
+where the dock items put it. Once the Taskbar design's (until 2026-10-21).
 _Avoid_: Home tile (it does not go Home), Taskbar
+
+**App menu**:
+The card a long press on an app icon opens, on the dock, on Home or in the drawer: grouped rows
+with a small arrow to the icon, in the system palette's shades (decided 2026-10-23). Rows, in
+order: notifications when badged, the app's shortcuts, Widgets, App info, Add to home, Pin or
+Unpin, Change icon (with Reset icon once one is set), Uninstall. Home's own long press is
+a sheet, not a menu: it has more to show.
+_Avoid_: context popup, anchored menu (the class), popup, context menu
 
 **Grabber**:
 The small pill on a page's bottom or top border that marks the **keyboard swipe** or the **status
