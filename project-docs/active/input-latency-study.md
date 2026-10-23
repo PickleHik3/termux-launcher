@@ -880,6 +880,24 @@ At rest with the scene on (20 s): 7 window traversals, 449 scene draws, 453 `doF
   and a spike can delay an echo. Driving the scene from its own thread is the next refinement.
 - The low-res pass at 15 fps adds about 1.1 ms per pass and is not visible in buffer-ready.
 
+### Glass reading the scene (2026-10-23, `d83078bcf`)
+
+Glass sampled the scene's low-res pass, published at 15 fps. This build still had per-key sparks.
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 | Stuffed | Deadline missed | Main traversal avg |
+|---|---|---|---|---|---|
+| Scene off | 16.4 / 20.7 | 10.2 | 16% | 46 | 1.71 ms |
+| Contour 30 + glass live | 15.7 / 24.5 | 14.9 | 67% | 210 | 9.48 ms |
+| Contour 90 + glass live | 15.8 / 23.8 | 14.9 | 63% | 210 | 9.58 ms |
+
+- **Over budget.** Each glass publish makes the main thread re-record the glass surfaces, at about
+  9.5 ms per traversal on average against 1.7 ms. That brings back deadline misses and stuffing. The
+  scene's own surface stays cheap.
+- On `SceneThread`, `Scene.contour.draw` rose to about 2.1 ms average and `Scene.contour.lowres` to
+  about 2 ms, against about 1 ms before, probably because the sparks were live.
+- Crash found on the same build: a software canvas (a RealtimeBlurView capture) drew the hardware
+  bitmap. Fixed in `fa2cce7c7`.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
