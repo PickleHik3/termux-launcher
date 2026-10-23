@@ -191,5 +191,10 @@ public class X11GpuProbeTest {
         assertTrue(X11GpuProbe.knownFreeze(in));
         in.glRenderer = "Mali-G78";
         assertFalse(X11GpuProbe.knownFreeze(in));
+        // The GL probe may say nothing (a failed throwaway context): the chip name still matches.
+        in.glRenderer = "";
+        in.board = "mt6768";
+        assertTrue(X11GpuProbe.knownFreeze(in));
+        assertEquals("software", X11GpuProbe.evaluate(in).ranked.get(0).profile.id);
     }
 }

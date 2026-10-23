@@ -47,6 +47,8 @@ public final class X11GpuProbe {
     public static final class Inputs {
         /** {@code ro.hardware.egl}, e.g. adreno, mali, emulation. */
         @NonNull public String eglVendor = "";
+        /** {@code ro.board.platform} or {@code ro.hardware}, e.g. mt6768, kalama; the chip. */
+        @NonNull public String board = "";
         /** {@code ro.hardware.vulkan}, e.g. adreno, mali; empty when there is no driver. */
         @NonNull public String vulkanVendor = "";
         /** {@code /dev/kgsl-3d0} exists — a Qualcomm GPU the freedreno kernel path can drive. */
@@ -232,11 +234,15 @@ public final class X11GpuProbe {
      * warning.
      */
     static final String[] KNOWN_FREEZE_RENDERERS = {"mali-g52"};
+    /** The chips those GPUs sit on, matched against the board name when the GL probe says nothing. */
+    static final String[] KNOWN_FREEZE_BOARDS = {"mt6768"};
 
     /** Whether {@code in} names a GPU on which the virgl profiles are known to freeze the phone. */
     static boolean knownFreeze(@NonNull Inputs in) {
         String renderer = in.glRenderer.toLowerCase(Locale.ROOT);
         for (String bad : KNOWN_FREEZE_RENDERERS) if (renderer.contains(bad)) return true;
+        String board = in.board.toLowerCase(Locale.ROOT);
+        for (String bad : KNOWN_FREEZE_BOARDS) if (board.contains(bad)) return true;
         return false;
     }
 
@@ -359,6 +365,8 @@ public final class X11GpuProbe {
     public static Result probe(@NonNull Context context) {
         Inputs in = new Inputs();
         in.eglVendor = systemProperty("ro.hardware.egl");
+        String board = systemProperty("ro.board.platform");
+        in.board = board.isEmpty() ? systemProperty("ro.hardware") : board;
         in.vulkanVendor = systemProperty("ro.hardware.vulkan");
         in.kgsl = new File("/dev/kgsl-3d0").exists();
         in.kgslModel = readFirstLine(new File("/sys/class/kgsl/kgsl-3d0/gpu_model"));
