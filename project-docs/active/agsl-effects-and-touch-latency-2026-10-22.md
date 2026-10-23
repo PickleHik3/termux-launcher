@@ -99,6 +99,10 @@ check while typing. Record them in `project-docs/device-checks.md` when they are
   **The first two scenes are Contour, then Filament** (decided 2026-10-22). Slats is the fallback if
   Filament's haze is too heavy. Contour is prototyped first behind a debug switch and measured on
   pong (GPU time with glass and Terminal effect on) before anything else is built.
+  **Measured 2026-10-23: Contour fits** when drawn on its own surface behind the window (about +1.5 ms
+  to buffer-ready, no Buffer Stuffing; latency study, "Contour on its own surface"). Every scene
+  draws on its own surface; an in-window scene cost a vsync per frame. Next: wire glass to the low-res
+  pass, move scene driving off the main thread, then the Filament prototype.
 - **Frame queueing.** Every frame is presented one vsync late, seeded by the first frame of each
   typing burst missing its deadline (see the latency study, "Buffer Stuffing analysis"). The
   experiment owed is to prime clocks or start a performance-hint session at touch-down, then

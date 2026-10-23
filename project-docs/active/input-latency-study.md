@@ -855,6 +855,31 @@ the wallpaper backdrop. Glass was not wired to it: the low-res pass was rendered
   UI changes or when glass's low-res texture updates, at the glass rate. Re-measure Contour that way
   before building Filament.
 
+### Contour on its own surface (2026-10-23, `c4c1ee67b`)
+
+The scene now draws into a `SurfaceView` below the window through its own `HardwareRenderer`. At rest
+its frame loop sleeps until the next ambient frame (`postFrameCallbackDelayed`) instead of waking
+every vsync. The first surface build (`d0a9a07cd`) still showed a window traversal per scene frame,
+600 in 20 s at rest. After the frame-loop change, the `TLSceneInval` recorder showed 60 scene draws
+against 2 window draws per 2 s (the clock widget), so the repaint is gone. Its exact cause in the
+earlier build is **unverified**. Same synthetic typing as before:
+
+| Run | Commit → drawn p50 / p90 | Drawn → buffer ready p50 / p90 | Stuffed | Window frames/s |
+|---|---|---|---|---|
+| Scene off | 17.0 / 20.5 | 9.7 / 10.6 | 18% | 62 |
+| Contour, ambient 30 | 17.6 / 21.9 | 11.2 / 16.2 | 16% | 61 |
+| Contour, ambient 90 | 17.0 / 20.2 | 11.2 / 13.6 | 7% | 62 |
+| Contour 30 + low-res pass at 15 | 17.4 / 20.8 | 11.5 / 13.9 | 12% | 62 |
+
+At rest with the scene on (20 s): 7 window traversals, 449 scene draws, 453 `doFrame`.
+
+- **Contour fits.** About +1.5 ms p50 to buffer-ready (p90 +3 to +5 ms) and no Buffer Stuffing,
+  against +10 to 15 ms and 97% stuffing in the window. The window draws only for its own reasons.
+- `Scene.contour.draw` now costs about 1 ms of main thread per scene frame on average (max about 11
+  ms), because `syncAndDraw` blocks for the sync. At 90 Hz that is up to about 9% of the main thread,
+  and a spike can delay an echo. Driving the scene from its own thread is the next refinement.
+- The low-res pass at 15 fps adds about 1.1 ms per pass and is not visible in buffer-ready.
+
 ## What could not be verified from a primary source
 
 Listed rather than guessed, because a study whose numbers cannot be traced is worse than none.
