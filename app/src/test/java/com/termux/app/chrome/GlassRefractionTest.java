@@ -133,7 +133,7 @@ public class GlassRefractionTest {
             "uRadius", "uBand", "uStrength", "uDisp", "uDensity",
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens", "uEdgeGain",
-            "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf", "uReflect", "uReflRow",
+            "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf",
             "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap",
         };
         for (String name : written) {
@@ -142,7 +142,6 @@ public class GlassRefractionTest {
         }
         assertTrue(GlassRefraction.AGSL.contains("uniform shader content;"));
         assertTrue("the clearer picture is a second input", GlassRefraction.AGSL.contains("uniform shader sharp;"));
-        assertTrue("the icon row's picture is a third", GlassRefraction.AGSL.contains("uniform shader reflection;"));
         // The knobs the hairline no longer takes, and the slab lens and thickness shading neither
         // reference draws, are gone from the program.
         // The white hairline the gathered light replaced, and the switch that chose between them,
@@ -165,11 +164,6 @@ public class GlassRefractionTest {
         // A pixel clear of every bead reads nothing; a bead's outline is anti-aliased.
         assertTrue(agsl.contains("if (beads && inside < -1.0) {"));
         assertTrue(agsl.contains("col = col * half(clamp(inside + 0.5, 0.0, 1.0));"));
-        // The reflection mirrors about the bead's own icon and bevels at the bead's own rim.
-        assertTrue(agsl.contains("float rBot = beads ? uBead.x + uBead.z : uReflRow.y;"));
-        assertTrue(agsl.contains("max(rMax.y - q.y, 0.0)"));
-        assertFalse("the slab's rect is not read under a bead's reflection",
-            agsl.contains("uRectMax.y - q.y"));
         // No loop and no array: one compare a slot.
         assertFalse(agsl.contains("for ("));
         assertFalse(Pattern.compile("uniform \\w+ \\w+\\[").matcher(agsl).find());
@@ -189,17 +183,13 @@ public class GlassRefractionTest {
             "if (sdRoundRect(fragCoord - capC, capB, capR) < sdRoundRect(fragCoord - center, b, cr)) {"));
         // Its rim band is held by its own corner, as a bead's is by its radius.
         assertTrue(agsl.contains("kBeadBandShare * cr)"));
-        // It holds the field, not the icons: no reflection on it.
-        assertTrue(agsl.contains("if (uReflect > 0.0 && inside > 0.0 && !onCap) {"));
     }
 
     @Test
-    public void theProgramReadsTwelveBeadsAndScalesItsReflection() {
+    public void theProgramReadsTwelveBeads() {
         String agsl = GlassRefraction.AGSL;
         // Twelve slots: a swipe carries the neighbouring page's beads in beside a full row.
         assertTrue(agsl.contains("if (d < bd) { bd = d; bx = uBeadXC.w; }"));
-        // The reflection's strength scales it, so it can fade rather than pop.
-        assertTrue(agsl.contains("ra = ra * clamp(uReflect, 0.0, 1.0);"));
         // Every slot beyond the beads given is parked, never nearer than a real bead.
         float[] twelve = new float[12];
         for (int i = 0; i < twelve.length; i++) twelve[i] = 50f + i * 100f;
@@ -1427,13 +1417,11 @@ public class GlassRefractionTest {
         String agsl = GlassRefraction.AGSL;
         assertTrue(agsl.contains("    if (uSoftRim > 0.0) {\n"));
         assertTrue(agsl.contains("        if (uShelf > 0.0 && n.y > 0.0) {\n"));
-        assertTrue(agsl.contains("    if (uReflect > 0.0 && inside > 0.0 && !onCap) {\n"));
         // The resting narrow ring is still the first word on the pull; the soft band overrides it
         // only behind its gate.
         int ring = agsl.indexOf("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;");
         int soft = agsl.indexOf("if (uSoftRim > 0.0) {");
         assertTrue(ring > 0 && soft > ring);
-        assertEquals("one read of the row's picture", 1, count(agsl, "reflection.eval("));
         assertEquals(GlassRefraction.SOFT_RIM_MAX_PULL_SHARE + "",
             agsl.split("const float kSoftPull = ")[1].split(";")[0]);
     }

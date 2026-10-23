@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #147 (commits "refactor(chrome): no app-icon reflection in any glass" and its
+  activity half) · every Style x Dock design, keyboard up and down: the A-Z row, the extra keys and
+  the keyboard glass show no ghost of the pinned icons (crops against the audit's e3 and e3b), and
+  the glass otherwise looks the same · emulator.
 - 2026-10-23 · #143 (merge f19d7e1ff, status bar row geometry) · the status bar in both Styles,
   capsule and docked, top and bottom edge, folded and open: the row height, the foot below it and
   the widget slot measure the same as before (screenshot pairs against v2-redesign 52831bcac),
