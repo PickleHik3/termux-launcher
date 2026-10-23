@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · #146 (commits "fix(dock): the landscape rail holds every pin and scrolls…") ·
+  landscape, 7 pins, Docked and Floating × Tray, Beads and Strip, a window and Home, keyboard up
+  and down → the rail shows whole icons only, a vertical drag on it scrolls to the last pin, no
+  icon stands behind the A–Z card (re-shoot the audit's e4 cells), a long press on a rail icon
+  still opens its menu and a sideways drag still pulls the drawer; portrait unchanged · emulator.
 - 2026-10-23 · #147 (commits "refactor(chrome): no app-icon reflection in any glass" and its
   activity half) · every Style x Dock design, keyboard up and down: the A-Z row, the extra keys and
   the keyboard glass show no ghost of the pinned icons (crops against the audit's e3 and e3b), and

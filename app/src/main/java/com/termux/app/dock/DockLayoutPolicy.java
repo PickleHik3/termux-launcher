@@ -1,5 +1,7 @@
 package com.termux.app.dock;
 
+import androidx.annotation.NonNull;
+
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.paging.PageTickStrip;
 import com.termux.app.place.Element;
@@ -907,6 +909,64 @@ public final class DockLayoutPolicy {
      */
     public static int maxRowBandPx(float density) {
         return 2 * railSlotLengthPx(density);
+    }
+
+    /** The length of a rail holding {@code pinCount} pins: one slot each, end to end. */
+    public static int railContentLengthPx(int pinCount, int slotLengthPx) {
+        return Math.max(0, pinCount) * Math.max(0, slotLengthPx);
+    }
+
+    /**
+     * How a rail stands in the band its side stack leaves it (the stack's length less its own
+     * padding, which is where the side stack already ends above a bottom stack it overlays, and
+     * less the rail's own air). Every pin stands in one column; the band shows as many whole
+     * slots as it holds and the rest are reached by scrolling the column.
+     *
+     * <p>A rail that scrolls stands only those whole slots long, so at rest no icon is cut at the
+     * end of it; the band's leftover, under one slot, stays empty past its end. A rail that fits
+     * keeps the whole band. Either way nothing it draws reaches past the band, which is what put
+     * an icon under the A&#8211;Z card when the column was paged by a length it had outgrown.
+     *
+     * @param bandLengthPx    the band along the side, the rail's own air already taken off
+     * @param contentLengthPx the column's whole length, {@link #railContentLengthPx}
+     * @param slotLengthPx    one slot's pitch, {@link #railSlotLengthPx}
+     */
+    @NonNull
+    public static RailFit railFit(int bandLengthPx, int contentLengthPx, int slotLengthPx) {
+        int band = Math.max(0, bandLengthPx);
+        int content = Math.max(0, contentLengthPx);
+        int slot = Math.max(0, slotLengthPx);
+        boolean scrolls = content > band;
+        int bandSlots = slot == 0 ? 0 : band / slot;
+        int contentSlots = slot == 0 ? 0 : (content + slot - 1) / slot;
+        int visible = Math.min(bandSlots, contentSlots);
+        // A band shorter than one slot still shows what it can of the first, and scrolls.
+        int viewport = scrolls && bandSlots > 0 ? bandSlots * slot : band;
+        return new RailFit(content, visible, viewport, scrolls);
+    }
+
+    /** {@link #railFit}'s answer. */
+    public static final class RailFit {
+        /** The column's whole length: one slot per pin. */
+        public final int contentLengthPx;
+        /** The whole slots on show at rest; never more than the column holds. */
+        public final int visibleSlots;
+        /** How long the rail's scroll stands: whole slots while it scrolls, else the band. */
+        public final int viewportLengthPx;
+        /** Whether the column is longer than the band, so the rest is reached by scrolling. */
+        public final boolean scrolls;
+
+        RailFit(int contentLengthPx, int visibleSlots, int viewportLengthPx, boolean scrolls) {
+            this.contentLengthPx = contentLengthPx;
+            this.visibleSlots = visibleSlots;
+            this.viewportLengthPx = viewportLengthPx;
+            this.scrolls = scrolls;
+        }
+
+        /** How far the column travels under the scroll; 0 when it fits. */
+        public int scrollRangePx() {
+            return Math.max(0, contentLengthPx - viewportLengthPx);
+        }
     }
 
     /**

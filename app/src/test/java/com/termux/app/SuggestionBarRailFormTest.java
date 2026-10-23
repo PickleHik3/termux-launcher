@@ -227,9 +227,9 @@ public class SuggestionBarRailFormTest {
     }
 
     @Test
-    public void theRailPagesByTheColumnItWasGiven() {
-        // Was "the rail is one page": one page holding every pinned item ran past the bottom of
-        // the canvas and the icons down there were clipped away with nothing able to reach them.
+    public void theRailIsOneColumnOfEveryPinWhateverItsLength() {
+        // #146: paged by its own length, a rail inside its scroll never learnt that its band had
+        // shrunk, and ran its last slot on under the dock. Its host scrolls the one column now.
         SuggestionBarView rail = sized();
         rail.setVerticalForm(true);
         rail.setMaxButtonCount(4);
@@ -237,11 +237,11 @@ public class SuggestionBarRailFormTest {
         int column = 5 * DockLayoutPolicy.railSlotLengthPx(density());
         measureAndLayout(rail, railBarWidthPx(), column);
 
-        assertEquals("as many slots as the column holds", 5,
+        assertEquals("every pin in the one column", 11,
             (int) ReflectionHelpers.callInstanceMethod(rail, "computePinnedItemsPerPage"));
-        assertEquals("and the rest are pages behind it", 3,
+        assertEquals("one page", 1,
             (int) ReflectionHelpers.callInstanceMethod(rail, "getPinnedPagesCount"));
-        assertTrue(rail.hasPinnedOverflowPages());
+        assertFalse(rail.hasPinnedOverflowPages());
     }
 
     @Test
