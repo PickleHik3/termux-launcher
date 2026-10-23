@@ -407,6 +407,12 @@ under twenty items; past that, the oldest are re-judged first.
   read that as the bug.)
 
 ## Developer
+### Hardware keyboard shortcuts (10-25)
+- 2026-10-23 · #148 (commit "fix(keys): Ctrl+Shift+V pastes…") · a Bluetooth keyboard on the
+  Surface: copy text in another app, Ctrl+Shift+V in a terminal window pastes it (confirmation
+  notice if the tool asks for one, then the text in the shell); Ctrl+Alt+V still pastes with
+  splits off and splits with them on · Surface, hand on the keyboard.
+
 ### Graphics setup leaves your display alone (10-24)
 - 2026-10-24 · fix(display) graphics setup uses a private headless display · On pong, run
   `termux-x11-gpu-setup --yes`: (1) with the Linux display on and an app open, it stays connected
