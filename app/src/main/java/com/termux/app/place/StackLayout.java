@@ -304,6 +304,26 @@ public final class StackLayout {
             Math.max(0, in.keyboardHeightPx), base.marginPx);
     }
 
+    /**
+     * The band of the widget pane {@code side}'s dock takes at rest, built the way {@link #layout}
+     * builds {@link Result#homeGridDockReservePx}: its own dock rows in its own Style
+     * ({@code rest}, {@code side}'s rest from {@code in}'s snapshot), its own status band and the
+     * air under the keyboard, and the edge gap under them, while the stack shows. Only Home's dock
+     * floats over a grid; every other side takes none.
+     */
+    public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
+        DockGeometry.Half half = in.dock.half(in.side);
+        Base base = new Base(rest, half.floating, half.layout, in.toolbarShown, in.keyboardShown,
+            in.imeLiftPx);
+        int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
+        int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
+            in.extraKeysRowEnabled, statusBandPx);
+        boolean stackShown = DockRows.stackShown(in.toolbarShown, in.keyboardShown,
+            statusBandPx > 0);
+        return KeyboardOverlayPolicy.homeGridDockReservePx(in.side == Side.HOME && stackShown,
+            dockContentPx, base.edgeGapPx);
+    }
+
     /** Whether {@code layout} stands the status bar along the bottom, a band of the stack. */
     private static boolean statusAlongTheBottom(@NonNull PlaceLayout layout) {
         return EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM).contains(Element.STATUS);
