@@ -13,6 +13,14 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-23 · commit "refactor(place): resolve the arrangement once per page and orientation"
+  (#141) · the 2026-10-23 consistency audit's cells re-shot: Docked and Floating × Tray, Beads and
+  Strip × Home and a window × keyboard up and down, portrait and landscape → the same chrome as
+  the audit's shots at rest (no Element gained or lost, same Style, same dock) · emulator.
+- 2026-10-23 · same commit · a slow drag Home → window and back in Docked and in Floating, with
+  Tray and with Beads → no Element appears or disappears mid-slide or at the landing that the
+  audit's clips did not show; a Style or Dock design change in the Layout editor shows on the
+  next pass on both halves · emulator, frames recorded.
 - 2026-10-23 · #143 (merge f19d7e1ff, status bar row geometry) · the status bar in both Styles,
   capsule and docked, top and bottom edge, folded and open: the row height, the foot below it and
   the widget slot measure the same as before (screenshot pairs against v2-redesign 52831bcac),

@@ -278,7 +278,7 @@ public class TermuxActivityEdgeStackLayoutTest {
         int glassHeightPx = activity.offDockPlankGlassHeightPx();
         assertTrue("both bands are on the sheet", glassHeightPx > 0);
         float density = activity.getResources().getDisplayMetrics().density;
-        if (activity.isRoundedDockStyle()) {
+        if (activity.arrangement().floating()) {
             assertEquals("Floating: the plank is a card at Corners, clamped to the whole plank",
                 activity.resolveDockCapsuleCornerRadiusPx(glassHeightPx), outline.radiusPx(), 0.01f);
             assertTrue("rounder than a half-capsule of one bar",
