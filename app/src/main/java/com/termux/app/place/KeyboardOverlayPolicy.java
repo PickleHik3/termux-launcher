@@ -36,6 +36,28 @@ public final class KeyboardOverlayPolicy {
     }
 
     /**
+     * The place a keyboard question is asked of, derived from what is in front now: the display's
+     * place is the Workspace with a display window in front of it, so a committed
+     * {@link PaneWallPage#DISPLAY} stands only while that window is the one in front. Whatever
+     * left it unrecorded (a window closed, another window brought forward, the display gone), the
+     * answer is the terminal's again, and the stored Overlay/Resize choice, which is the display's
+     * alone, is not read. Only a stale display is demoted: arriving at one is the settle's to
+     * commit, never a pass mid-slide.
+     */
+    @NonNull
+    public static PaneWallPage keyboardPlace(@NonNull PaneWallPage committed,
+                                             boolean displayWindowInFront) {
+        return committed == PaneWallPage.DISPLAY && !displayWindowInFront
+            ? PaneWallPage.TERMINAL : committed;
+    }
+
+    /** {@link #overlays(PaneWallPage, PlaceLayout)} for the place {@link #keyboardPlace} derives. */
+    public static boolean overlays(@NonNull PaneWallPage committed, boolean displayWindowInFront,
+                                   @NonNull PlaceLayout layout) {
+        return overlays(keyboardPlace(committed, displayWindowInFront), layout);
+    }
+
+    /**
      * How far the content root reaches past the top of the accessory stack: the keyboard's own
      * height while it floats, and nothing at all otherwise.
      *

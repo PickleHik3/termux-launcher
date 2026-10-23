@@ -7102,7 +7102,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * so it rises in the material it will keep.
      */
     private boolean inAppKeyboardOverlays() {
-        return KeyboardOverlayPolicy.overlays(inAppKeyboardPlace(), currentPlaceLayout());
+        return KeyboardOverlayPolicy.overlays(inAppKeyboardPlace(), isDisplayWindowInFront(),
+            currentPlaceLayout());
     }
 
     /** Whether that same place is Home, whose overlaying keyboard still wears the glass. */
@@ -15949,7 +15950,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // applied once, at settle (ADR 0003), and a pass mid-slide must not apply it early. While
         // the slide holds the content, whatever the stack lays out floats over it.
         boolean keyboardOverlays = mTravelHoldsContent
-            || KeyboardOverlayPolicy.overlays(mLastWallPage, currentPlaceLayout());
+            || KeyboardOverlayPolicy.overlays(mLastWallPage, isDisplayWindowInFront(),
+                currentPlaceLayout());
         // The keyboard coming and going is also when the place's claim on the system IME changes.
         applyPlaceSystemImeOwner();
         int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
