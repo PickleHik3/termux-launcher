@@ -13,6 +13,9 @@ plain `adb -s <serial>` works the same. Add what you had to find out; fix what t
   data). Pong takes release builds only; see AGENTS.md.
 - After installing on the emulator the launcher becomes home. Before handing the emulator over:
   `ad shell cmd package set-home-activity com.google.android.apps.nexuslauncher/.NexusLauncherActivity`.
+- Leases: `ad lease status` shows only the time left on a lease. Its true age is the `since=`
+  epoch in `~/.local/state/ad/leases/<slot>`; read that before applying the 30-minute rule, and
+  never take a lease over: a long holder is usually another session's sweep. Ask that session.
 - Owed checks: `project-docs/device-checks.md` (Agent items can run here; Developer items need
   the developer's hand).
 
