@@ -128,6 +128,7 @@ import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.drawer.AppDrawerPullGeometry;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry;
+import com.termux.app.launcher.drawer.DockRailScrollView;
 import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -161,7 +162,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public final class SuggestionBarView extends GridLayout
-    implements AppDrawerController.AppDrawerDockChoreographyTarget {
+    implements AppDrawerController.AppDrawerDockChoreographyTarget,
+    DockRailScrollView.ScrollFollower {
 
     public interface LaunchRippleListener {
         void onLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
@@ -1131,6 +1133,8 @@ public final class SuggestionBarView extends GridLayout
         if (this.vertical == vertical) return false;
         this.vertical = vertical;
         invalidateRenderedIconCaches();
+        // A page lying down holds one app fewer beside the Drawer tile, which a rail does not lay.
+        invalidateMostUsedCache();
         lastSurfaceRenderSignature = 0;
         childLayoutPending = true;
         requestLayout();
@@ -3542,6 +3546,14 @@ public final class SuggestionBarView extends GridLayout
                     if (item != null) pinnedForSlots.add(item);
                 }
                 entries = entriesForPinnedItems(pinnedForSlots, drawnSlotPositions);
+                // A rail is one page, so the most-used page stands after its last pin, bound the
+                // way that page is lying down: launch-only, past the pins' drawn slots.
+                List<LauncherAppEntry> mostUsed = railMostUsedEntries();
+                if (!mostUsed.isEmpty()) {
+                    entries = new ArrayList<>(entries);
+                    entries.addAll(mostUsed);
+                    buttonCount += mostUsed.size();
+                }
             }
         }
         if (!azPreview) {
@@ -8390,6 +8402,13 @@ public final class SuggestionBarView extends GridLayout
         indicator.setVerticalForm(vertical);
         indicator.setGlassInk(glassBackdrop, glassInk);
         indicator.setAccentColor(resolvePageIndicatorAccentColor());
+        if (!azPages && railCarriesMostUsed()) {
+            // The rail's two pages are the pins and the most-used apps after them in one column:
+            // the same two ticks a row shows, the second warm, lit by the scroll, not a page turn.
+            indicator.setPages(2, railScrollPagePosition(), 1);
+            indicator.setVisibility(VISIBLE);
+            return;
+        }
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
         float position = azPages ? getAzVisualPagePosition()
@@ -8398,6 +8417,36 @@ public final class SuggestionBarView extends GridLayout
         // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
         // gained a page would otherwise grow by it and shove the terminal.
         indicator.setVisibility(overflow ? VISIBLE : INVISIBLE);
+    }
+
+    /** A rail's scroll moved its column, so the ticks move with it. */
+    @Override
+    public void onRailScrolled() {
+        if (vertical) publishPageIndicator();
+    }
+
+    /** Whether the rail at rest is showing its pins with the most-used apps after them. */
+    private boolean railCarriesMostUsed() {
+        return vertical
+            && activeAzLetter == null
+            && TextUtils.isEmpty(lastInput.trim())
+            && pinnedItems != null
+            && !pinnedItems.isEmpty()
+            && !railMostUsedEntries().isEmpty();
+    }
+
+    /**
+     * Where the rail's scroll stands between its two pages: 0 at the top of the pins, 1 with the
+     * column scrolled to its end, where the most-used apps are; 0 while the column fits.
+     */
+    private float railScrollPagePosition() {
+        ViewParent parent = getParent();
+        if (!(parent instanceof View)) return 0f;
+        View host = (View) parent;
+        int inside = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+        int range = getHeight() - inside;
+        if (range <= 0) return 0f;
+        return Math.max(0f, Math.min(1f, host.getScrollY() / (float) range));
     }
 
     /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */
@@ -9127,33 +9176,51 @@ public final class SuggestionBarView extends GridLayout
 
     private int getPinnedPagesCount() {
         return DockPagingModel.pinnedPageCount(pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedTrailingPage());
     }
 
     /**
      * The optional dynamic page is shown only when the toggle is on AND there is at least one
      * most-used candidate to fill it. Must NOT call {@link #getPinnedPagesCount()} (recursion).
+     * The same answer standing up: a rail carries the page too, at the end of its column
+     * ({@link #railMostUsedEntries}).
      */
     private boolean hasMostUsedDynamicPage() {
-        // A rail scrolls along the axis a page would turn on, so it carries no trailing page:
-        // one the scroll took every drag from would show a tick nothing could reach.
-        if (vertical) return false;
         return mostUsedPageEnabled && !resolveMostUsedPageEntries().isEmpty();
+    }
+
+    /**
+     * Whether the most-used apps are a page of their own after the pins, as they are lying down.
+     * A rail scrolls along the axis a page would turn on, so it stays one page and stands them
+     * after its last pin instead.
+     */
+    private boolean hasMostUsedTrailingPage() {
+        return !vertical && hasMostUsedDynamicPage();
+    }
+
+    /** The most-used apps a rail stands after its last pin; none lying down or with the page off. */
+    @NonNull
+    private List<LauncherAppEntry> railMostUsedEntries() {
+        return vertical ? resolveMostUsedPageEntries() : Collections.emptyList();
     }
 
     /** The dynamic page is always the trailing page, right after the real pinned pages. */
     private boolean isMostUsedDynamicPage(int pageIndex) {
         return DockPagingModel.isMostUsedDynamicPage(pageIndex, pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedTrailingPage());
     }
 
     /** Page index of the dynamic most-used page, or -1 when it isn't shown. */
     public int getPinnedDynamicPageIndex() {
         return DockPagingModel.dynamicPageIndex(pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedTrailingPage());
     }
 
-    /** Top most-used apps (excluding currently pinned), filling one dock page. Cached until dirty. */
+    /**
+     * Top most-used apps (excluding currently pinned), filling one page of the row lying down.
+     * Standing up that is still the row's page, not the rail's every-pin column, so the rail
+     * carries the same few apps the row's trailing page would. Cached until dirty.
+     */
     @NonNull
     private List<LauncherAppEntry> resolveMostUsedPageEntries() {
         if (!mostUsedPageEnabled) return java.util.Collections.emptyList();
@@ -9177,7 +9244,7 @@ public final class SuggestionBarView extends GridLayout
                 if (!pinnedIds.contains(entry.appRef.stableId())) candidates.add(entry);
             }
             List<LauncherAppEntry> ranked = getUsageStatsStore().rankForAz(candidates);
-            int limit = computePinnedItemsPerPage();
+            int limit = DockPagingModel.pinnedItemsPerPage(pinnedRowAppSlots());
             for (int i = 0; i < ranked.size() && result.size() < limit; i++) {
                 result.add(ranked.get(i));
             }

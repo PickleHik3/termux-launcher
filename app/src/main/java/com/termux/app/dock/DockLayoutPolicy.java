@@ -911,16 +911,19 @@ public final class DockLayoutPolicy {
         return 2 * railSlotLengthPx(density);
     }
 
-    /** The length of a rail holding {@code pinCount} pins: one slot each, end to end. */
-    public static int railContentLengthPx(int pinCount, int slotLengthPx) {
-        return Math.max(0, pinCount) * Math.max(0, slotLengthPx);
+    /**
+     * The length of a rail holding {@code pinCount} pins and, after them, the
+     * {@code mostUsedCount} apps of the most-used page: one slot each, end to end.
+     */
+    public static int railContentLengthPx(int pinCount, int mostUsedCount, int slotLengthPx) {
+        return (Math.max(0, pinCount) + Math.max(0, mostUsedCount)) * Math.max(0, slotLengthPx);
     }
 
     /**
      * How a rail stands in the band its side stack leaves it (the stack's length less its own
      * padding, which is where the side stack already ends above a bottom stack it overlays, and
-     * less the rail's own air). Every pin stands in one column; the band shows as many whole
-     * slots as it holds and the rest are reached by scrolling the column.
+     * less the rail's own air). Every pin stands in one column, the most-used apps after them;
+     * the band shows as many whole slots as it holds and the rest are reached by scrolling.
      *
      * <p>A rail that scrolls stands only those whole slots long, so at rest no icon is cut at the
      * end of it; the band's leftover, under one slot, stays empty past its end. A rail that fits
@@ -947,7 +950,7 @@ public final class DockLayoutPolicy {
 
     /** {@link #railFit}'s answer. */
     public static final class RailFit {
-        /** The column's whole length: one slot per pin. */
+        /** The column's whole length: one slot per pin and per most-used app. */
         public final int contentLengthPx;
         /** The whole slots on show at rest; never more than the column holds. */
         public final int visibleSlots;

@@ -17,7 +17,11 @@ under twenty items; past that, the oldest are re-judged first.
   landscape, 7 pins, Docked and Floating × Tray, Beads and Strip, a window and Home, keyboard up
   and down → the rail shows whole icons only, a vertical drag on it scrolls to the last pin, no
   icon stands behind the A–Z card (re-shoot the audit's e4 cells), a long press on a rail icon
-  still opens its menu and a sideways drag still pulls the drawer; portrait unchanged · emulator.
+  still opens its menu and a sideways drag still pulls the drawer; with the most-used page on,
+  scrolling to the end of the landscape rail shows the most-used apps after the pins, with the
+  same separation the row shows (the ticks beside the rail: two, the second in the most-used
+  page's warm tint, lit as the scroll reaches the end), and a tap on one launches it; with it off
+  the column ends at the last pin; portrait unchanged · emulator.
 - 2026-10-23 · #147 (commits "refactor(chrome): no app-icon reflection in any glass" and its
   activity half) · every Style x Dock design, keyboard up and down: the A-Z row, the extra keys and
   the keyboard glass show no ghost of the pinned icons (crops against the audit's e3 and e3b), and

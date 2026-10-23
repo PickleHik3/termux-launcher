@@ -214,7 +214,7 @@ public class TermuxActivityRailPagingTest {
         scroll.setFillViewport(true);
         scroll.setRailSlotLengthPx(slotPx);
         View column = new View(activity);
-        column.setMinimumHeight(DockLayoutPolicy.railContentLengthPx(14, slotPx));
+        column.setMinimumHeight(DockLayoutPolicy.railContentLengthPx(14, 0, slotPx));
         scroll.addView(column, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         scroll.measure(View.MeasureSpec.makeMeasureSpec(140, View.MeasureSpec.EXACTLY),
