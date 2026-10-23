@@ -12,6 +12,7 @@ import android.widget.LinearLayout;
 import com.termux.R;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.dock.DrawerTilePolicy;
 import com.termux.app.launcher.drawer.DockRailScrollView;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -47,6 +48,8 @@ import static org.junit.Assert.assertTrue;
  * activity's own rail sync: a landscape rail of 7 pins with 3 most-used apps after them, in a band
  * that holds four and a bit slots. At the end of its scroll the last most-used app has to end
  * inside the viewport, and the two ticks beside the rail have to be there, and lit by the scroll.
+ * The emulator's own scene (420 dpi, 7 pins and 5 most-used apps, a column of 12) runs the same
+ * checks, and the ticks are held through a catalogue reload.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class, qualifiers = "xxhdpi")
@@ -90,25 +93,36 @@ public class TermuxActivityRailScrollEndTest {
      * the activity's own sync, in a band of four slots and six tenths of one.
      */
     private Scene railInItsHost() {
+        return railInItsHost(PINS, MOST_USED, MOST_USED, null);
+    }
+
+    /**
+     * As {@link #railInItsHost()}, with {@code pins} pins and {@code others} unpinned apps in the
+     * catalogue, a row lying down of {@code slots} slots (the most-used page's length) and the
+     * Drawer tile at {@code drawerTile}, or none.
+     */
+    private Scene railInItsHost(int pins, int others, int slots,
+                                DrawerTilePolicy.Position drawerTile) {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         activity.setContentView(R.layout.activity_termux);
         SuggestionBarView bar = new SuggestionBarView(activity, null);
         bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         List<LauncherAppEntry> apps = new ArrayList<>();
-        for (int i = 0; i < PINS + MOST_USED; i++) {
+        for (int i = 0; i < pins + others; i++) {
             apps.add(new LauncherAppEntry(new AppRef("com.example.app" + i, "Main"),
                 "App " + i, null));
         }
         Map<String, LauncherAppEntry> cache = ReflectionHelpers.getField(bar, "resolvedRefCache");
-        List<PinnedItem> pins = new ArrayList<>();
+        List<PinnedItem> pinned = new ArrayList<>();
         for (int i = 0; i < apps.size(); i++) {
             cache.put(apps.get(i).appRef.stableId(), apps.get(i));
-            if (i < PINS) pins.add(new PinnedAppItem(apps.get(i).appRef));
+            if (i < pins) pinned.add(new PinnedAppItem(apps.get(i).appRef));
         }
-        ReflectionHelpers.setField(bar, "pinnedItems", pins);
+        ReflectionHelpers.setField(bar, "pinnedItems", pinned);
         ReflectionHelpers.setField(bar, "allApps", new ArrayList<>(apps));
-        bar.setMaxButtonCount(MOST_USED);
+        bar.setMaxButtonCount(slots);
         bar.setMostUsedPageEnabled(true);
+        bar.setDrawerTile(drawerTile, null);
         ViewGroup plank = activity.findViewById(R.id.apps_bar_plank_layer);
         plank.addView(bar, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -197,6 +211,74 @@ public class TermuxActivityRailScrollEndTest {
         assertEquals("at the end the most-used apps are lit", 1f, ticks.getPagePosition(),
             0.001f);
         assertTrue("and still paints them there", paintedPixels(ticks) > 0);
+    }
+
+    /**
+     * The emulator's own scene (2b047c607's view dump): 420 dpi, 7 pins and a row of 5 slots, so 5
+     * most-used apps after the pins, with the Drawer tile on, which a rail does not lay. The column
+     * is 12 slots of 152 px, the viewport the band's 4 whole ones, and the scroll's end puts the
+     * last most-used app's bottom on the viewport's.
+     */
+    @Test
+    @Config(qualifiers = "land-420dpi")
+    public void theEmulatorsTwelveSlotColumnEndsOnItsLastSlot() {
+        Scene scene = railInItsHost(PINS, 8, 5, DrawerTilePolicy.Position.END);
+        DockRailScrollView scroll = scene.scroll;
+        SuggestionBarView column = scene.column;
+        int slot = scene.slot;
+
+        assertEquals("a slot at 420 dpi, as the device lays it", 152, slot);
+        assertEquals("7 pins, then the row's page of 5 most-used apps; no Drawer tile",
+            PINS + 5, column.getChildCount());
+        assertEquals(DockLayoutPolicy.railContentLengthPx(PINS, 5, slot), column.getHeight());
+        assertEquals("the column as measured is the column as laid out", column.getHeight(),
+            column.getMeasuredHeight());
+        assertEquals(4 * slot, viewportPx(scroll));
+
+        scroll.scrollTo(0, Integer.MAX_VALUE / 2);
+        assertEquals("the travel is the eight slots not shown", 8 * slot, scroll.getScrollY());
+        View last = column.getChildAt(column.getChildCount() - 1);
+        assertEquals("the last most-used app ends at the viewport's end",
+            scroll.getHeight() - scroll.getPaddingBottom(),
+            scroll.getPaddingTop() + last.getBottom() - scroll.getScrollY());
+        assertEquals("the ticks stand beside it", View.VISIBLE, scene.ticks.getVisibility());
+        assertEquals(1f, scene.ticks.getPagePosition(), 0.001f);
+    }
+
+    /**
+     * The ticks describe the column as drawn. A catalogue reload empties the app list for a
+     * moment, and a scroll then (or any other publish) resolved the most-used page afresh, found
+     * none, and hid the ticks; the catalogue's return renders the same 12 slots, a render skipped
+     * as unchanged with no layout pass after it, so nothing told the ticks again. The dump's
+     * {@code INVISIBLE} strip beside a column of 12.
+     */
+    @Test
+    @Config(qualifiers = "land-420dpi")
+    public void theTicksFollowTheColumnThroughACatalogueReload() {
+        Scene scene = railInItsHost(PINS, 8, 5, DrawerTilePolicy.Position.END);
+        SuggestionBarView column = scene.column;
+        PageTickStripView ticks = scene.ticks;
+        assertEquals(View.VISIBLE, ticks.getVisibility());
+        List<LauncherAppEntry> apps = ReflectionHelpers.getField(column, "allApps");
+
+        // The catalogue in flight: no apps, the most-used page resolved again.
+        ReflectionHelpers.setField(column, "allApps", new ArrayList<LauncherAppEntry>());
+        ReflectionHelpers.callInstanceMethod(column, "invalidateMostUsedCache");
+        scene.scroll.scrollTo(0, scene.slot);
+        assertEquals("the column still holds its 12 slots", PINS + 5, column.getChildCount());
+        assertEquals("so the ticks still stand beside them", View.VISIBLE, ticks.getVisibility());
+
+        // The catalogue back, and the reload it asks for: the same 12 slots, nothing re-laid.
+        ReflectionHelpers.setField(column, "allApps", apps);
+        ReflectionHelpers.callInstanceMethod(column, "invalidateMostUsedCache");
+        column.reloadWithInput("", null);
+        assertEquals(PINS + 5, column.getChildCount());
+        assertEquals(View.VISIBLE, ticks.getVisibility());
+        assertEquals("the pins and the most-used apps", 2, ticks.getPageCount());
+
+        scene.scroll.scrollTo(0, Integer.MAX_VALUE / 2);
+        assertEquals(View.VISIBLE, ticks.getVisibility());
+        assertEquals(1f, ticks.getPagePosition(), 0.001f);
     }
 
     private static int paintedPixels(View view) {
