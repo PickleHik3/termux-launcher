@@ -104,9 +104,89 @@ public class DockMorphTest {
                     assertArrayEquals(at + " at 1", numbers(arriving), numbers(morph));
                     assertEquals(at + ": the arriving tile, on Home only", fromHome ? 0f : 1f,
                         morph.drawerTileAlpha(), 0f);
-                    assertEquals(at + ": beads on Home only", fromHome ? 0f : 1f,
-                        morph.beadShare(), 0f);
+                    // Every band's presence is the arriving rest's, and was the leaving one's.
+                    org.junit.Assert.assertArrayEquals(at + " presence at 1", presence(arriving),
+                        presence(morph), 0f);
+                    morph.at(0f);
+                    org.junit.Assert.assertArrayEquals(at + " presence at 0", presence(leaving),
+                        presence(morph), 0f);
                 }
+    }
+
+    /** Whether each band shows, as 1 or 0, in the order {@link #presence(DockMorph)} reads. */
+    private static float[] presence(DockLayout l) {
+        boolean apps = l.appsBarHeightPx > 0;
+        return new float[] {apps ? 1f : 0f, l.azRowHeightPx > 0 ? 1f : 0f,
+            apps && l.indicatorBandHeightPx > 0 ? 1f : 0f, l.promptFieldBandPx > 0 ? 1f : 0f,
+            l.wallStripBandPx > 0 ? 1f : 0f, l.railActive ? 1f : 0f};
+    }
+
+    private static float[] presence(DockMorph m) {
+        return new float[] {m.appsAlpha(), m.azAlpha(), m.indicatorAlpha(), m.searchFieldAlpha(),
+            m.wallStripAlpha(), m.railAlpha()};
+    }
+
+    @Test
+    public void theRowsHeightIsAlwaysTheSumOfItsBands() {
+        for (float density : DENSITIES)
+            for (boolean floating : STYLES) {
+                Snapshot s = device(density, floating);
+                DockMorph morph = new DockMorph();
+                morph.between(rest(s, Side.HOME), true, rest(s, Side.WORKSPACE), false);
+                for (float t = 0f; t <= 1f + 1e-6f; t += STEP) {
+                    morph.at(t);
+                    int bands = morph.appsBarHeightPx() + morph.promptFieldBandPx()
+                        + morph.wallStripBandPx() + morph.indicatorBandHeightPx()
+                        + morph.azRowHeightPx();
+                    assertEquals(at(density, floating) + " at " + t, bands, morph.rowsPx());
+                }
+            }
+    }
+
+    @Test
+    public void againstARailOnlyTheBandsMorphAndTheRowDrawsAsLaidOut() {
+        float density = 2.625f;
+        Half home = Half.builder(HOME).design(DockStyle.GLASS_TRAY).build();
+        PlaceLayout railWindow = WINDOW.withSlot(com.termux.app.place.Element.APPS,
+            com.termux.app.place.Slot.on(Edge.LEFT, com.termux.app.place.Element.APPS));
+        Half workspace = Half.builder(railWindow).design(DockStyle.GLASS_TRAY).build();
+        Snapshot s = Snapshot.builder(home, workspace)
+            .density(density)
+            .widthPx(Math.round(WIDTH_DP * density))
+            .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
+            .pinnedSlotCount(7)
+            .build();
+        DockLayout row = rest(s, Side.HOME);
+        DockLayout rail = rest(s, Side.WORKSPACE);
+        assertFalse(row.railActive);
+        assertTrue(rail.railActive);
+        DockMorph morph = new DockMorph();
+        morph.between(row, false, rail, false);
+        for (float t = 0f; t <= 1f + 1e-6f; t += STEP) {
+            morph.at(t);
+            assertFalse(morph.rowMorphs());
+            assertEquals("the row's icon stays its own at " + t, row.slotIconPx,
+                morph.slotIconPx());
+            assertEquals(row.appsRowUsableWidthPx, morph.appsRowUsableWidthPx());
+            assertEquals(row.appsRowEdgeInsetPx, morph.appsRowEdgeInsetPx());
+            assertEquals("the rail fades in", t, morph.railAlpha(), 1e-6f);
+        }
+        assertEquals("the bands still land on the rail's rest", DockMorph.rowsPx(rail),
+            morph.rowsPx());
+    }
+
+    @Test
+    public void aSlotKeepsItsShareOfTheRowAndItsIconScalesToTheFrame() {
+        // A row laid out 40 px in and 800 px wide, drawn 60 px in and 600 px wide.
+        assertEquals(20f, DockMorph.slotCentreX(0f, 40, 800, 60, 600), 1e-4f);
+        assertEquals(20f + 300f, DockMorph.slotCentreX(400f, 40, 800, 60, 600), 1e-4f);
+        assertEquals(20f + 600f, DockMorph.slotCentreX(800f, 40, 800, 60, 600), 1e-4f);
+        // The same rest draws every slot where it is laid out.
+        assertEquals(123f, DockMorph.slotCentreX(123f, 40, 800, 40, 800), 0f);
+        assertEquals(123f, DockMorph.slotCentreX(123f, 40, 0, 60, 600), 0f);
+        assertEquals(118f / 143f, DockMorph.iconScale(118, 143), 1e-6f);
+        assertEquals(1f, DockMorph.iconScale(143, 143), 0f);
+        assertEquals(1f, DockMorph.iconScale(0, 143), 0f);
     }
 
     @Test
