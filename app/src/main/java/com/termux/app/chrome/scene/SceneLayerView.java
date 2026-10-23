@@ -7,6 +7,10 @@ import android.graphics.HardwareRenderer;
 import android.graphics.Paint;
 import android.graphics.RenderNode;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Process;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.view.Choreographer;
@@ -19,6 +23,9 @@ import androidx.annotation.Nullable;
 
 import com.termux.terminal.FrameProbe;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -28,6 +35,21 @@ import java.util.function.BooleanSupplier;
  * dedicated {@link HardwareRenderer} whose content root is a single {@link RenderNode}: a frame
  * updates the uniforms, re-records that node and asks for {@code syncAndDraw}; the GPU work runs
  * on the renderer's own thread. No view of the launcher window is invalidated for a scene frame.
+ *
+ * <p>Threads. Everything that draws lives on one dedicated {@link HandlerThread} (the
+ * <i>scene thread</i>): its own {@link Choreographer}, the renderer, the node, the program, the
+ * low-resolution pass and its images, and a private {@link SceneEvents}. The main thread only
+ * (a) keeps the gates (visible, screen on, Lazy mode, animations), (b) hands over reactions
+ * through a lock-free {@link SceneEventRing}, (c) polls the pane rects a few times a second (they
+ * can only be read on the main thread) and copies a changed set under a tiny lock, and (d)
+ * marshals surface lifecycle. Config is volatile fields. A reaction wakes the scene thread only
+ * when it has gone idle ({@link #mAwake}); while it runs, the next frame finds the record.</p>
+ *
+ * <p>Surface lifecycle: {@code surfaceCreated}/{@code surfaceChanged} post to the scene thread;
+ * {@code surfaceDestroyed} and {@link #destroy} post and <b>wait</b> (bounded) for the scene thread
+ * to let go of the surface, because the surface must not be touched once they return. A frame
+ * callback re-checks the surface flag the scene thread itself owns, so nothing draws to a surface
+ * after that runnable has run.</p>
  *
  * <p>Frame policy: a {@link Choreographer} frame callback runs while the layer could be seen. A
  * reaction (see {@link SceneEvents}) animates at the full vsync rate until it has decayed; with
@@ -43,6 +65,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     /** The pane rects the basins are pressed under, and a changing set may be re-read at this pace. */
     private static final long BASIN_REFRESH_MS = 250L;
     private static final long GATE_REFRESH_MS = 1000L;
+    /** The longest the main thread waits for the scene thread to let go of a surface. */
+    private static final long HANDOFF_WAIT_MS = 1000L;
 
     /** Where the layer finds the open panes: screen rects as (cx, cy, hw, hh), up to the array's room. */
     public interface PaneSource {
@@ -51,42 +75,46 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
 
     private static final FrameProbe.Source FRAMES = FrameProbe.source("scene");
 
-    @NonNull private final SceneEvents mEvents = new SceneEvents();
-    @NonNull private final Paint mPaint = new Paint();
-    @NonNull private final RenderNode mNode = new RenderNode("SceneContour");
-    @Nullable private HardwareRenderer mRenderer;
-    private int mSurfaceW, mSurfaceH;
-    private boolean mSurfaceReady;
-    /** The surface has no frame of ours yet (new or resized): draw once even when ambient is off. */
-    private boolean mSurfaceBlank;
+    // ---- Main thread ---------------------------------------------------------------------------
+
+    @NonNull private final SceneEventRing mRing = new SceneEventRing();
+    @NonNull private final Handler mMain = new Handler(Looper.getMainLooper());
+    /** Only compares pane rect sets, so a changed set is the only one handed over. */
+    @NonNull private final SceneEvents mBasinProbe = new SceneEvents();
     @NonNull private final float[] mBasinScratch = new float[SceneEvents.MAX_BASINS * 4];
     @NonNull private final BooleanSupplier mLazyMode;
     @Nullable private final PaneSource mPanes;
-    @Nullable private ContourProgram mProgram;
-    @Nullable private SceneLowRes mLowRes;
+    @NonNull private final int[] mScreenLoc = new int[2];
     private final float mDensity;
-
-    private long mPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_RATE_HZ);
-    private long mGlassPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ);
-    private long mLastLowNs = Long.MIN_VALUE / 2;
-    private boolean mGlassLowRes = true;
-    private boolean mPosted;
+    @Nullable private Loop mLoop;
     private boolean mAnimatorsOn = true;
     private boolean mLazy;
     private boolean mScreenOn = true;
     private boolean mDestroyed;
+    private boolean mMainSurfaceReady;
+    private boolean mPolling;
     private long mGateAtMs = Long.MIN_VALUE;
-    private long mBasinAtMs = Long.MIN_VALUE;
-    private long mLastDrawNs = Long.MIN_VALUE / 2;
-    /** The uptime the next draw shows; frozen while no ambient motion runs. */
-    private long mTimeMs;
-    private long mFrozenTimeMs;
-    /** The reaction uniforms need re-setting before the next draw. */
-    private boolean mEventsStale = true;
-    private boolean mWasActive;
-    private long mDrawCount;
 
-    private final Choreographer.FrameCallback mFrame = this::onFrame;
+    // ---- Shared between the threads ------------------------------------------------------------
+
+    /** The layer could be seen and may draw; written by the main thread, read by the scene thread. */
+    private volatile boolean mRun;
+    /** Ambient motion may run (animations are on). */
+    private volatile boolean mMotion = true;
+    private volatile long mPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_RATE_HZ);
+    private volatile long mGlassPeriodNs = SceneFramePolicy.ambientPeriodNs(SceneFramePolicy.DEFAULT_GLASS_RATE_HZ);
+    private volatile boolean mGlassLowRes = true;
+    /** The scene thread has a frame callback pending or is mid-frame: it will see new work by itself. */
+    private volatile boolean mAwake;
+    private final AtomicBoolean mKickPending = new AtomicBoolean();
+    private volatile long mDrawCount;
+    /** Changed pane rects, copied by the main thread, taken by the scene thread, under {@link #mBasinLock}. */
+    @NonNull private final Object mBasinLock = new Object();
+    @NonNull private final float[] mBasinBox = new float[SceneEvents.MAX_BASINS * 4];
+    private int mBasinBoxCount;
+    private volatile boolean mBasinDirty;
+
+    @NonNull private final Runnable mPoll = this::poll;
 
     public SceneLayerView(@NonNull Context context, @Nullable PaneSource panes,
                           @NonNull BooleanSupplier lazyMode) {
@@ -94,17 +122,12 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         mPanes = panes;
         mLazyMode = lazyMode;
         mDensity = context.getResources().getDisplayMetrics().density;
-        mFrozenTimeMs = SystemClock.uptimeMillis();
-        mTimeMs = mFrozenTimeMs;
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         // Default Z order on purpose (no setZOrderOnTop / media overlay): the surface sits below
         // the window, which the display composites over it.
         getHolder().addCallback(this);
         addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> publishRect());
-        mPaint.setAntiAlias(false);
     }
-
-    private final int[] mScreenLoc = new int[2];
 
     /** Tells the glass where on screen the live frame lies: this layer's rect. */
     private void publishRect() {
@@ -118,7 +141,6 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     public void setRateHz(int hz) {
         long period = SceneFramePolicy.ambientPeriodNs(hz);
         if (period == mPeriodNs) return;
-        if (period == Long.MAX_VALUE) mFrozenTimeMs = SystemClock.uptimeMillis();
         mPeriodNs = period;
         kick();
     }
@@ -130,7 +152,10 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     public void setGlassLowRes(boolean lowRes) {
         if (lowRes == mGlassLowRes) return;
         mGlassLowRes = lowRes;
-        if (!lowRes) closeLowRes();
+        if (!lowRes) {
+            Loop loop = mLoop;
+            if (loop != null) loop.handler.post(loop::closeLowRes);
+        }
         kick();
     }
 
@@ -139,36 +164,27 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         return mDrawCount;
     }
 
-    // ---- Reactions ---------------------------------------------------------------------------
+    // ---- Reactions: main thread, no lock, no allocation ---------------------------------------
 
     /** Touch-down at screen px: a hill that relaxes over about a second. */
     public void touchDown(float x, float y) {
         if (!motionAllowed()) return;
-        Trace.beginSection("Scene.event");
-        mEvents.addHill(x, y, SystemClock.uptimeMillis());
-        mEventsStale = true;
-        Trace.endSection();
-        kick();
+        mRing.push(SceneEventRing.HILL, x, y, 0f, 0f, SystemClock.uptimeMillis());
+        wake();
     }
 
     /** A committed key with the cursor at screen px: a spark along the nearest contour. */
     public void spark(float x, float y) {
         if (!motionAllowed()) return;
-        Trace.beginSection("Scene.event");
-        mEvents.addSpark(x, y, SystemClock.uptimeMillis());
-        mEventsStale = true;
-        Trace.endSection();
-        kick();
+        mRing.push(SceneEventRing.SPARK, x, y, 0f, 0f, SystemClock.uptimeMillis());
+        wake();
     }
 
     /** The bell of the pane whose screen rect is centred at (cx, cy) with half extents (hw, hh). */
     public void bell(float cx, float cy, float hw, float hh) {
         if (!motionAllowed()) return;
-        Trace.beginSection("Scene.event");
-        mEvents.addPulse(cx, cy, hw, hh, SystemClock.uptimeMillis());
-        mEventsStale = true;
-        Trace.endSection();
-        kick();
+        mRing.push(SceneEventRing.PULSE, cx, cy, hw, hh, SystemClock.uptimeMillis());
+        wake();
     }
 
     private boolean motionAllowed() {
@@ -176,19 +192,12 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         return mAnimatorsOn && !mLazy;
     }
 
-    // ---- Frame loop --------------------------------------------------------------------------
+    // ---- Gates and waking the scene thread -----------------------------------------------------
 
-    private boolean shouldRun() {
-        return !mDestroyed && mScreenOn && isShown() && getWindowVisibility() == VISIBLE
-            && mSurfaceReady && !mLazy;
-    }
-
-    /** Starts the callback if nothing is waiting and there is a reason to run. */
+    /** Re-reads the gates and wakes the scene thread when there is a reason to run. */
     public void kick() {
         refreshGates(SystemClock.uptimeMillis());
-        if (mPosted || !shouldRun() || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
-        mPosted = true;
-        Choreographer.getInstance().postFrameCallback(mFrame);
+        updateRun();
     }
 
     private void refreshGates(long nowMs) {
@@ -196,165 +205,354 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             return;
         }
         mGateAtMs = nowMs;
-        mAnimatorsOn = ValueAnimator.areAnimatorsEnabled();
-        mLazy = mLazyMode.getAsBoolean();
+        boolean animators = ValueAnimator.areAnimatorsEnabled();
+        boolean lazy = mLazyMode.getAsBoolean();
+        boolean changed = animators != mAnimatorsOn || lazy != mLazy;
+        mAnimatorsOn = animators;
+        mLazy = lazy;
+        mMotion = animators;
+        if (changed) updateRun();
     }
 
-    private void onFrame(long frameTimeNanos) {
-        mPosted = false;
-        long nowMs = SystemClock.uptimeMillis();
-        refreshGates(nowMs);
-        if (!shouldRun()) return;
-        boolean motion = mAnimatorsOn;
-        boolean active = motion && mEvents.active(nowMs);
-        long period = motion ? mPeriodNs : Long.MAX_VALUE;
-        boolean basinsMoved = false;
-        if (mPanes != null && nowMs - mBasinAtMs >= BASIN_REFRESH_MS) {
-            mBasinAtMs = nowMs;
-            basinsMoved = refreshBasins();
+    /** Recomputes whether the layer could be seen; starts the pane poll and wakes the scene thread when it can. */
+    private void updateRun() {
+        boolean run = !mDestroyed && mScreenOn && isShown() && getWindowVisibility() == VISIBLE
+            && mMainSurfaceReady && !mLazy && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
+        mRun = run;
+        if (!run) return;
+        if (!mPolling) {
+            mPolling = true;
+            mMain.post(mPoll);
         }
-        if (SceneFramePolicy.shouldDraw(active, period, mLastDrawNs, frameTimeNanos)
-            || basinsMoved || mSurfaceBlank) {
-            mSurfaceBlank = false;
-            mLastDrawNs = frameTimeNanos;
-            mTimeMs = period == Long.MAX_VALUE ? mFrozenTimeMs : nowMs;
-            // Re-set the reaction uniforms while they animate, once more when the last one has
-            // decayed (so it ends at zero), and when the panes moved; never on a plain ambient frame.
-            mEventsStale |= active || mWasActive || basinsMoved;
-            mWasActive = active;
-            if (mGlassLowRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && SceneFramePolicy.shouldDraw(false, mGlassPeriodNs, mLastLowNs, frameTimeNanos)) {
-                mLastLowNs = frameTimeNanos;
-                renderLowRes(nowMs);
+        wake();
+    }
+
+    /** Pane rects change rarely and only the main thread can read them: poll here, hand over changes. */
+    private void poll() {
+        mPolling = false;
+        refreshGates(SystemClock.uptimeMillis());
+        updateRun();
+        if (!mRun) return;
+        if (mPanes != null) {
+            int n = mPanes.paneRects(mBasinScratch);
+            if (mBasinProbe.setBasins(mBasinScratch, n)) {
+                synchronized (mBasinLock) {
+                    mBasinBoxCount = Math.min(n, SceneEvents.MAX_BASINS);
+                    System.arraycopy(mBasinScratch, 0, mBasinBox, 0, mBasinBoxCount * 4);
+                    mBasinDirty = true;
+                }
+                wake();
             }
-            FRAMES.tick();
-            mDrawCount++;
-            drawScene(frameTimeNanos);
         }
-        if (active || period != Long.MAX_VALUE) {
+        mPolling = true;
+        mMain.postDelayed(mPoll, BASIN_REFRESH_MS);
+    }
+
+    /**
+     * Tells an idle scene thread there is work. A running one (callback pending) needs nothing: the
+     * record is already published. The check is safe against the scene thread going idle at the same
+     * time because it clears {@link #mAwake} first and re-reads the ring and the run flag after.
+     */
+    private void wake() {
+        Loop loop = mLoop;
+        if (loop == null || !mRun || mAwake) return;
+        if (mKickPending.compareAndSet(false, true)) loop.handler.post(loop.kick);
+    }
+
+    // ---- The scene thread --------------------------------------------------------------------
+
+    /** Everything that draws. Fields below are touched only on the scene thread unless noted. */
+    private final class Loop {
+        final HandlerThread thread;
+        final Handler handler;
+        @Nullable private Choreographer mChoreographer;
+        final Runnable kick = () -> {
+            mKickPending.set(false);
+            start();
+        };
+        private final Choreographer.FrameCallback mFrame = this::onFrame;
+        @NonNull private final SceneEvents mEvents = new SceneEvents();
+        @NonNull private final Paint mPaint = new Paint();
+        @NonNull private final RenderNode mNode = new RenderNode("SceneContour");
+        @NonNull private final float[] mBasinTake = new float[SceneEvents.MAX_BASINS * 4];
+        @Nullable private HardwareRenderer mRenderer;
+        @Nullable private ContourProgram mProgram;
+        @Nullable private SceneLowRes mLowRes;
+        private int mSurfaceW, mSurfaceH;
+        private boolean mSurfaceReady;
+        /** The surface has no frame of ours yet (new or resized): draw once even when ambient is off. */
+        private boolean mSurfaceBlank;
+        private boolean mPosted;
+        private long mLastDrawNs = Long.MIN_VALUE / 2;
+        private long mLastLowNs = Long.MIN_VALUE / 2;
+        /** The uptime the next draw shows; frozen while no ambient motion runs. */
+        private long mTimeMs;
+        private long mFrozenTimeMs = SystemClock.uptimeMillis();
+        private boolean mFrozen;
+        /** The reaction uniforms need re-setting before the next draw. */
+        private boolean mEventsStale = true;
+        private boolean mWasActive;
+
+        Loop() {
+            thread = new HandlerThread("SceneThread", Process.THREAD_PRIORITY_DISPLAY);
+            thread.start();
+            handler = new Handler(thread.getLooper());
+            mTimeMs = mFrozenTimeMs;
+            mPaint.setAntiAlias(false);
+        }
+
+        @NonNull
+        private Choreographer choreographer() {
+            Choreographer c = mChoreographer;
+            if (c == null) {
+                c = Choreographer.getInstance();   // this thread's, as it has its own Looper
+                mChoreographer = c;
+            }
+            return c;
+        }
+
+        /** Posts the frame callback if nothing is waiting and there is a reason to run. */
+        void start() {
+            if (mPosted) return;
+            if (!mRun || !mSurfaceReady || mSurfaceW <= 0) {
+                mAwake = false;
+                return;
+            }
+            mAwake = true;
             mPosted = true;
-            // At rest the main thread sleeps until the next ambient frame is due instead of
-            // waking on every vsync just to skip it.
-            long delayMs = SceneFramePolicy.nextCallbackDelayMs(active, period, mLastDrawNs,
-                frameTimeNanos);
-            if (delayMs > 0L) {
-                Choreographer.getInstance().postFrameCallbackDelayed(mFrame, delayMs);
-            } else {
-                Choreographer.getInstance().postFrameCallback(mFrame);
+            choreographer().postFrameCallback(mFrame);
+        }
+
+        private void onFrame(long frameTimeNanos) {
+            mPosted = false;
+            if (!mRun || !mSurfaceReady) {
+                mAwake = false;
+                return;
             }
-        }
-    }
-
-    /** Re-reads the pane rects into the basin slots; true when they differ from the last read. */
-    private boolean refreshBasins() {
-        int n = mPanes.paneRects(mBasinScratch);
-        return mEvents.setBasins(mBasinScratch, n);
-    }
-
-    private void renderLowRes(long nowMs) {
-        int w = mSurfaceW, h = mSurfaceH;
-        if (w <= 0 || h <= 0) return;
-        SceneLowRes low = mLowRes;
-        if (low == null) {
-            low = new SceneLowRes(w, h, new android.os.Handler(android.os.Looper.getMainLooper()));
-            mLowRes = low;
-        }
-        low.render(mEvents, nowMs, mTimeMs, mDensity, mEventsStale);
-    }
-
-    private void closeLowRes() {
-        SceneLowRes low = mLowRes;
-        mLowRes = null;
-        if (low != null) low.close();
-    }
-
-    // ---- Drawing -----------------------------------------------------------------------------
-
-    /** One scene frame: uniforms, one node re-recorded, one render request. Main thread. */
-    private void drawScene(long frameTimeNanos) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
-        HardwareRenderer renderer = mRenderer;
-        int w = mSurfaceW, h = mSurfaceH;
-        if (renderer == null || !mSurfaceReady || w <= 0 || h <= 0) return;
-        Trace.beginSection("Scene.contour.draw");
-        try {
-            ContourProgram program = mProgram;
-            if (program == null) {
-                program = new ContourProgram(1f);
-                mProgram = program;
-                mPaint.setShader(program.shader);
+            long nowMs = SystemClock.uptimeMillis();
+            if (!mRing.isEmpty()) {
+                Trace.beginSection("Scene.event");
+                mRing.drainInto(mEvents);
                 mEventsStale = true;
+                Trace.endSection();
             }
-            program.setSize(w, h, mDensity);
-            program.setTime(mTimeMs);
-            if (mEventsStale) {
-                program.setEvents(mEvents, SystemClock.uptimeMillis(), mDensity);
-                mEventsStale = false;
+            boolean motion = mMotion;
+            boolean active = motion && mEvents.active(nowMs);
+            long period = motion ? mPeriodNs : Long.MAX_VALUE;
+            if (period == Long.MAX_VALUE) {
+                if (!mFrozen) mFrozenTimeMs = nowMs;
+                mFrozen = true;
+            } else {
+                mFrozen = false;
             }
-            Canvas c = mNode.beginRecording(w, h);
-            c.drawRect(0f, 0f, w, h, mPaint);
-            mNode.endRecording();
-            renderer.createRenderRequest().setVsyncTime(frameTimeNanos).syncAndDraw();
-        } finally {
-            Trace.endSection();
+            boolean basinsMoved = false;
+            if (mBasinDirty) {
+                int n;
+                synchronized (mBasinLock) {
+                    n = mBasinBoxCount;
+                    System.arraycopy(mBasinBox, 0, mBasinTake, 0, n * 4);
+                    mBasinDirty = false;
+                }
+                basinsMoved = mEvents.setBasins(mBasinTake, n);
+            }
+            if (SceneFramePolicy.shouldDraw(active, period, mLastDrawNs, frameTimeNanos)
+                || basinsMoved || mSurfaceBlank) {
+                mSurfaceBlank = false;
+                mLastDrawNs = frameTimeNanos;
+                mTimeMs = period == Long.MAX_VALUE ? mFrozenTimeMs : nowMs;
+                // Re-set the reaction uniforms while they animate, once more when the last one has
+                // decayed (so it ends at zero), and when the panes moved; never on a plain ambient frame.
+                mEventsStale |= active || mWasActive || basinsMoved;
+                mWasActive = active;
+                if (mGlassLowRes
+                    && SceneFramePolicy.shouldDraw(false, mGlassPeriodNs, mLastLowNs, frameTimeNanos)) {
+                    mLastLowNs = frameTimeNanos;
+                    renderLowRes(nowMs);
+                }
+                FRAMES.tick();
+                mDrawCount++;
+                drawScene(frameTimeNanos);
+            }
+            if (active || period != Long.MAX_VALUE) {
+                mPosted = true;
+                // At rest the thread sleeps until the next ambient frame is due instead of
+                // waking on every vsync just to skip it.
+                long delayMs = SceneFramePolicy.nextCallbackDelayMs(active, period, mLastDrawNs,
+                    frameTimeNanos);
+                if (delayMs > 0L) choreographer().postFrameCallbackDelayed(mFrame, delayMs);
+                else choreographer().postFrameCallback(mFrame);
+            } else {
+                // Going idle. Clear the flag, then look again: a record or a rect pushed just
+                // before the clear saw the flag set and posted nothing.
+                mAwake = false;
+                if (!mRing.isEmpty() || mBasinDirty) start();
+            }
+        }
+
+        private void renderLowRes(long nowMs) {
+            int w = mSurfaceW, h = mSurfaceH;
+            if (w <= 0 || h <= 0) return;
+            SceneLowRes low = mLowRes;
+            if (low == null) {
+                low = new SceneLowRes(w, h, handler);
+                mLowRes = low;
+            }
+            low.render(mEvents, nowMs, mTimeMs, mDensity, mEventsStale);
+        }
+
+        void closeLowRes() {
+            SceneLowRes low = mLowRes;
+            mLowRes = null;
+            if (low != null) low.close();
+        }
+
+        /** One scene frame: uniforms, one node re-recorded, one render request. */
+        private void drawScene(long frameTimeNanos) {
+            HardwareRenderer renderer = mRenderer;
+            int w = mSurfaceW, h = mSurfaceH;
+            if (renderer == null || !mSurfaceReady || w <= 0 || h <= 0) return;
+            Trace.beginSection("Scene.contour.draw");
+            try {
+                ContourProgram program = mProgram;
+                if (program == null) {
+                    program = new ContourProgram(1f);
+                    mProgram = program;
+                    mPaint.setShader(program.shader);
+                    mEventsStale = true;
+                }
+                program.setSize(w, h, mDensity);
+                program.setTime(mTimeMs);
+                if (mEventsStale) {
+                    program.setEvents(mEvents, SystemClock.uptimeMillis(), mDensity);
+                    mEventsStale = false;
+                }
+                Canvas c = mNode.beginRecording(w, h);
+                c.drawRect(0f, 0f, w, h, mPaint);
+                mNode.endRecording();
+                renderer.createRenderRequest().setVsyncTime(frameTimeNanos).syncAndDraw();
+            } finally {
+                Trace.endSection();
+            }
+        }
+
+        // ---- Surface lifecycle, run here from the main thread's posts ---------------------------
+
+        void attachSurface(@NonNull android.view.Surface surface) {
+            Trace.beginSection("Scene.surface");
+            try {
+                HardwareRenderer renderer = mRenderer;
+                if (renderer == null) {
+                    renderer = new HardwareRenderer();
+                    renderer.setName("SceneContour");
+                    renderer.setOpaque(true);
+                    mNode.setPosition(0, 0, 1, 1);
+                    renderer.setContentRoot(mNode);
+                    mRenderer = renderer;
+                }
+                renderer.setSurface(surface);
+                mSurfaceReady = true;
+                mSurfaceBlank = true;
+                mEventsStale = true;
+            } finally {
+                Trace.endSection();
+            }
+            start();
+        }
+
+        void resize(int width, int height) {
+            Trace.beginSection("Scene.surface");
+            try {
+                mSurfaceW = width;
+                mSurfaceH = height;
+                mNode.setPosition(0, 0, width, height);
+                mSurfaceBlank = true;
+                closeLowRes();
+            } finally {
+                Trace.endSection();
+            }
+            start();
+        }
+
+        /** After this runs the surface is not touched again until the next {@link #attachSurface}. */
+        void detachSurface() {
+            Trace.beginSection("Scene.surface");
+            try {
+                mSurfaceReady = false;
+                if (mChoreographer != null) mChoreographer.removeFrameCallback(mFrame);
+                mPosted = false;
+                mAwake = false;
+                HardwareRenderer renderer = mRenderer;
+                if (renderer != null) renderer.setSurface(null);
+                closeLowRes();
+            } finally {
+                Trace.endSection();
+            }
+        }
+
+        /** Frees the renderer and the offscreen target; the thread is quit by the caller. */
+        void teardown() {
+            detachSurface();
+            HardwareRenderer renderer = mRenderer;
+            mRenderer = null;
+            if (renderer != null) {
+                Trace.beginSection("Scene.surface");
+                renderer.destroy();
+                Trace.endSection();
+            }
+            mNode.discardDisplayList();
         }
     }
 
-    // ---- Surface lifecycle ---------------------------------------------------------------------
+    /** Runs {@code r} on the scene thread and waits (bounded) for it: the surface must be let go before a callback returns. */
+    private void runAndWait(@NonNull Loop loop, @NonNull Runnable r) {
+        CountDownLatch done = new CountDownLatch(1);
+        boolean posted = loop.handler.post(() -> {
+            try {
+                r.run();
+            } finally {
+                done.countDown();
+            }
+        });
+        if (!posted) return;
+        try {
+            done.await(HANDOFF_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    // ---- Surface lifecycle (main thread) -------------------------------------------------------
 
     @Override
     public void surfaceCreated(@NonNull SurfaceHolder holder) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
-        Trace.beginSection("Scene.surface");
-        try {
-            HardwareRenderer renderer = mRenderer;
-            if (renderer == null) {
-                renderer = new HardwareRenderer();
-                renderer.setName("SceneContour");
-                renderer.setOpaque(true);
-                mNode.setPosition(0, 0, 1, 1);
-                renderer.setContentRoot(mNode);
-                mRenderer = renderer;
-            }
-            renderer.setSurface(holder.getSurface());
-            mSurfaceReady = true;
-            mSurfaceBlank = true;
-            mEventsStale = true;
-        } finally {
-            Trace.endSection();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || mDestroyed) return;
+        Loop loop = mLoop;
+        if (loop == null) {
+            loop = new Loop();
+            mLoop = loop;
         }
-        kick();
+        mMainSurfaceReady = true;
+        final Loop l = loop;
+        final android.view.Surface surface = holder.getSurface();
+        loop.handler.post(() -> l.attachSurface(surface));
+        updateRun();
     }
 
     @Override
     public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
-        Trace.beginSection("Scene.surface");
-        try {
-            mSurfaceW = width;
-            mSurfaceH = height;
-            mNode.setPosition(0, 0, width, height);
-            mSurfaceBlank = true;
-            closeLowRes();
-        } finally {
-            Trace.endSection();
-        }
-        kick();
+        Loop loop = mLoop;
+        if (loop == null) return;
+        publishRect();
+        loop.handler.post(() -> loop.resize(width, height));
+        updateRun();
     }
 
     @Override
     public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
-        Trace.beginSection("Scene.surface");
-        try {
-            mSurfaceReady = false;
-            Choreographer.getInstance().removeFrameCallback(mFrame);
-            mPosted = false;
-            HardwareRenderer renderer = mRenderer;
-            if (renderer != null) renderer.setSurface(null);
-            closeLowRes();
-        } finally {
-            Trace.endSection();
-        }
+        mMainSurfaceReady = false;
+        mRun = false;
+        Loop loop = mLoop;
+        if (loop != null) runAndWait(loop, loop::detachSurface);
     }
 
     @Override
@@ -367,44 +565,44 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        Choreographer.getInstance().removeFrameCallback(mFrame);
-        mPosted = false;
-        closeLowRes();
+        mRun = false;
+        mMain.removeCallbacks(mPoll);
+        mPolling = false;
+        Loop loop = mLoop;
+        if (loop != null) loop.handler.post(loop::closeLowRes);
     }
 
     @Override
     protected void onVisibilityChanged(@NonNull View changed, int visibility) {
         super.onVisibilityChanged(changed, visibility);
-        kick();
+        updateRun();
     }
 
     @Override
     protected void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);
-        kick();
+        updateRun();
     }
 
     @Override
     public void onScreenStateChanged(int screenState) {
         super.onScreenStateChanged(screenState);
         mScreenOn = screenState == SCREEN_STATE_ON;
-        if (mScreenOn) kick();
+        updateRun();
     }
 
     /** Called when the controller removes the layer: stops frames, frees the renderer and the offscreen target. */
     public void destroy() {
         mDestroyed = true;
-        mSurfaceReady = false;
-        Choreographer.getInstance().removeFrameCallback(mFrame);
-        mPosted = false;
-        closeLowRes();
-        HardwareRenderer renderer = mRenderer;
-        mRenderer = null;
-        if (renderer != null) {
-            Trace.beginSection("Scene.surface");
-            renderer.destroy();
-            Trace.endSection();
+        mRun = false;
+        mMainSurfaceReady = false;
+        mMain.removeCallbacks(mPoll);
+        mPolling = false;
+        Loop loop = mLoop;
+        mLoop = null;
+        if (loop != null) {
+            runAndWait(loop, loop::teardown);
+            loop.thread.quitSafely();
         }
-        mNode.discardDisplayList();
     }
 }
