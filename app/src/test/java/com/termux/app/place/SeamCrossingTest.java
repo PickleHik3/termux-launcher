@@ -943,4 +943,69 @@ public class SeamCrossingTest {
         assertNull(crossing.layout());
         assertNull(crossing.other());
     }
+
+    // ---- The rows the seam stands wear their own half's design ----
+
+    /** The Workspace with the extra keys alone along the bottom and the bar on top. */
+    private static PlaceLayout keysOnlyWindow() {
+        return window()
+            .withSlot(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS).withHidden(true))
+            .withSlot(Element.AZ, Slot.on(Edge.BOTTOM, Element.AZ).withHidden(true));
+    }
+
+    @Test
+    public void theRowsTheSeamStandsAreLaidOutInTheirOwnHalfsDesign() {
+        // The developer's phone: Home's own layout on Tray with the pinned apps and the index, the
+        // Workspace on Lens beads with the extra keys alone. A row slid in from Home was held to
+        // the Workspace's bead fit for the whole slide (118 px) and grew at the settle (143 px).
+        for (PaneWallPage from : BOTH) {
+            Stored stored = homeLayoutOn();
+            stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
+            stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+            boolean fromHome = from == PaneWallPage.WIDGETS;
+            Drive drive = fromHome
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    keysOnlyWindow(), true, false)
+                : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true,
+                    PaneWallPage.WIDGETS, home(), false, false);
+            DockStyle committed = fromHome ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS;
+            DockStyle other = fromHome ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY;
+            assertNull("no crossing, no design", drive.crossing.rowsDesign());
+            int othersFrames = 0;
+            int n = Math.round(1f / SLOW);
+            for (int i = 0; i <= n; i++) {
+                Step step = drive.step(i / (float) n);
+                if (!step.active) continue;
+                String at = from + " at " + step.fraction;
+                if (step.layout == null) {
+                    assertEquals(at, committed, drive.crossing.rowsDesign());
+                } else {
+                    // The seam stands the other half's rows: they wear that half's design.
+                    assertEquals(at, EdgeStackPolicy.stack(drive.there.layout, Edge.BOTTOM),
+                        EdgeStackPolicy.stack(step.layout, Edge.BOTTOM));
+                    assertEquals(at, other, drive.crossing.rowsDesign());
+                    othersFrames++;
+                }
+                // The slab and the beads keep the committed half's design and its melt.
+                assertEquals(at, committed, drive.crossing.committedDesign());
+            }
+            assertTrue(from + ": the other half's rows stood before the settle", othersFrames > 5);
+            drive.crossing.land();
+            assertNull(drive.crossing.rowsDesign());
+            drive.crossing.end();
+        }
+    }
+
+    @Test
+    public void oneLayoutsRowsKeepTheOneDesign() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = oneLayout(from);
+            int n = Math.round(1f / SLOW);
+            for (int i = 0; i <= n; i++) {
+                Step step = drive.step(i / (float) n);
+                if (step.active)
+                    assertEquals(DockStyle.GLASS_TRAY, drive.crossing.rowsDesign());
+            }
+        }
+    }
 }

@@ -221,7 +221,20 @@ public final class GlassStack {
         boolean programEdge = false;
         // The frame the band's face is: its own blur when it draws one, the sharp wallpaper when
         // it has none, so its rows are measured where its content really stands.
+        // Glass 0 with Opacity 0 (blur, tint and grain all 0) is no material at all: no backdrop,
+        // tint or grain, only the rim the spec asks for. Without this the unblurred wallpaper copy
+        // under the frost filter still reads as a faint wash.
+        boolean bare = spec.blurRadiusDp <= 0 && spec.tintAlpha <= 0f && spec.grainPercent <= 0
+            && spec.tintColor == null;
+        if (bare) backdrop = null;
         glass.noteBandBlur(spec.band, backdrop != null ? spec.blurRadiusDp : 0);
+        if (bare) {
+            Drawable rimOnly = spec.rim ? glass.rimDrawable(spec.cornerRadiusPx)
+                : new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
+            if (spec.stackAlphaPercent < 100)
+                applyStackAlpha(rimOnly, Math.round(255f * spec.stackAlphaPercent / 100f));
+            return rimOnly;
+        }
         if (backdrop != null) {
             // The content-aware light scatter every glass surface's frame wears.
             backdrop.setColorFilter(GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));

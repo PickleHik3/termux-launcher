@@ -2624,3 +2624,26 @@ writes a keyboard mode the layout never stored. Agent items.
 - 2026-10-23 · commit "feat(settings): Keyboard over display row on the Linux apps Input page" · Settings → Terminal → Linux apps → Input: under Keyboard, "Keyboard over display" shows "Overlay"; pick "Resize display", open a Linux display window and raise the keyboard: the display shrinks above it; pick "Overlay": it floats again. The page looks as before otherwise (rows, spacing, dividers unchanged) · emulator.
 - 2026-10-23 · same · With the display open and its touchpad's mode button, switch the keyboard mode in one orientation only, go back to Settings → Input: the row's summary reads "Portrait: Overlay · Landscape: Resize display" (or the reverse) and shows no checked choice; pick one: both orientations take it and the summary shows the single choice · emulator.
 - 2026-10-23 · same · Search Settings for "keyboard over display": the hit opens the Input page at the row · emulator.
+
+- 2026-10-22 · branch `fix/round-2026-10-22` (merge into v2-redesign on the developer's cue) ·
+  Four changes, three owed on pong: (1) commit "fix(dock): no icon reflection while the dock row
+  is off screen" — a terminal window in front with the docked keyboard up shows no faint app
+  icons in the extra-keys row or the keys' top rows; Home still reflects the dock's icons under
+  the tray; a Home float with the keyboard up looks unchanged (the emulator's default layout keeps
+  the apps row above the keyboard, so the hidden-row case never came up there). (2) commit
+  "feat(glass): Glass 0 writes blur 0 and grain 0; a bare stack draws only its rim" — Look editor,
+  Custom row: Glass 0 with Opacity 0 on the status bar, window bar, dock and keyboard shows only
+  the rim; Glass 0 with Opacity above 0 shows the tint without blur or grain; Glass 1 and the
+  Clear/Tint/Mist/Solid stops look as before; the slider reads back where it was left after a
+  restart. (3) commit "debug(statusbar): log who moves the window bar's selection" — when the
+  chip highlight jumps on its own, `adb logcat -s TermuxWindowBar` names the caller; send the
+  trace, then the log lines come out again. (4) commit "fix(terminal-view): a key typed on the
+  in-app keyboard ends a selection and unpins the screen" was verified on the emulator (long
+  press on a streaming pane, then a typed key brings the picture back) · pong, by hand.
+- 2026-10-22 · branch `fix/round-2026-10-22`, second drop · commit "fix(panes): a window switch
+  takes the wall's travel cover off the window that left" — on Home's own layout: Home, window 2's
+  chip, then window 1's chip: window 1's pane ends 11 px above the extra-keys row, no wallpaper
+  gap; the same with a split window; window switches by chip inside the Workspace unchanged.
+  Commit "fix(dock): a put-away apps row keeps the icon Home draws" — slide from a window (no apps
+  row, keyboard up) to Home: the pinned icons arrive at their final size, Docked and Floating; Home
+  to window and back; Lens beads on Home during the slide and at the settle · pong, by hand.

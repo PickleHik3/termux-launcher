@@ -16538,7 +16538,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                         @NonNull PlaceLayout layout) {
         boolean preferencesAvailable = mPreferences != null;
         List<Element> bottomStack = EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM);
-        return DockLayoutPolicy.DockInputs.builder()
+        DockLayoutPolicy.DockInputs.Builder inputs = DockLayoutPolicy.DockInputs.builder();
+        // A row this layout puts away is measured where it shows, so it comes back at its size.
+        if (preferencesAvailable && !PlaceChromePolicy.appsShown(layout))
+            measureHiddenAppsRow(inputs);
+        return inputs
             .preferencesAvailable(preferencesAvailable)
             .capsule(isRoundedDockStyle())
             .appsRowOnEdge(PlaceChromePolicy.appsShown(layout)
@@ -16553,8 +16557,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A row that lies down carries the ticks in its own air; a rail's stand in a column
             // beside it, so its cross-axis keeps the plain air of a lone row.
             .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
-            // The committed page's Dock design, on either half (#93).
-            .surface(dockSurfaceSpec())
+            // The Dock design of the half whose rows this layout stands (#93): the committed
+            // page's, or mid-slide the other half's once the seam stands its rows.
+            .surface(dockRowsSurfaceSpec(layout))
             // The Search field under the apps row: all of it while the page's layout turns it on,
             // between while the toggle, the palette or a slide across the seam eases the slab.
             .promptFieldReveal(promptFieldReveal())
@@ -16586,6 +16591,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .build();
     }
 
+    /** The halves asked, in order, for the pinned-apps row a layout puts away: Home first. */
+    private static final com.termux.app.wall.PaneWallPage[] APPS_ROW_OWNERS = {
+        com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL};
+
+    /**
+     * The pinned-apps row a layout puts away (a window without it), measured as the half that
+     * shows it does: that half's Style and dock size (its stack dress) and whether the row stands
+     * alone in its layout ({@link DockLayoutPolicy.DockInputs#hiddenRowAsShown}). The row keeps
+     * those icons while it is put away, so a slide to Home brings it in at the size it settles at
+     * rather than a fill ratio of its own host that grew at the settle. No half shows it: no icon.
+     */
+    private void measureHiddenAppsRow(@NonNull DockLayoutPolicy.DockInputs.Builder inputs) {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return;
+        PlaceOrientation orientation = currentPlaceOrientation();
+        for (com.termux.app.wall.PaneWallPage page : APPS_ROW_OWNERS) {
+            PlaceLayout owner = store.resolve(orientation, page);
+            if (!PlaceChromePolicy.appsShown(owner)) continue;
+            com.termux.app.place.SeamDress.StackDress dress =
+                stackDressOf(dressOf(page), orientation);
+            inputs.hiddenRowAsShown(dress.shape.isFloating(), dress.dockHeightScale,
+                isAppsRowAlone(owner));
+            return;
+        }
+    }
+
     /**
      * What the dock's design asks of its slab, on the committed page: the Dock design its layout
      * holds, on either half (#93). Read off the committed page rather than the stack's dress, so
@@ -16596,6 +16627,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec() {
         return com.termux.app.dock.DockSurfaceSpec.forStyle(committedDockDesign());
+    }
+
+    /**
+     * The design the dock lays {@code layout}'s rows out in: the half's whose rows they are. While
+     * the seam stands the other half's rows ({@link com.termux.app.place.SeamCrossing#layout})
+     * that is the other half's design, so a row slid in from Home on Tray is not held to the
+     * Workspace's Lens bead fit and narrower slots until the settle (the icons grew 118 to 143 px
+     * there). Everywhere else, the committed page's ({@link #dockSurfaceSpec()}).
+     */
+    @NonNull
+    private com.termux.app.dock.DockSurfaceSpec dockRowsSurfaceSpec(@NonNull PlaceLayout layout) {
+        com.termux.app.dock.DockStyle rows = layout == mSeamCrossing.layout()
+            ? mSeamCrossing.rowsDesign() : null;
+        return rows != null ? com.termux.app.dock.DockSurfaceSpec.forStyle(rows)
+            : dockSurfaceSpec();
     }
 
     /** The slab the dock wears on {@code page}: its Dock design's. */
@@ -23954,6 +24000,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The plus opens a terminal window right after the window in front, whichever it is;
             // without split panes there are no windows to open, on either half.
             bar.setCreateButtonShown(workspace && isSplitPanesEnabled());
+            // Seen from Home the selected chip is a window to go to, not one to close.
+            bar.setSelectedChipOffersClose(workspace);
         }
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
@@ -29146,6 +29194,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean activateSessionInPanes(TerminalSession session) {
         if (session == null || mPaneController == null) return false;
         TerminalSession previousFocused = getCurrentSession();
+        if (previousFocused != session) {
+            // Diagnostic for the chip highlight jumping on its own (2026-10-22): every switch of
+            // the focused shell with its caller. Remove once the cause is known.
+            android.util.Log.w("TermuxWindowBar", "activate pid " + session.getPid() + " from pid "
+                + (previousFocused == null ? -1 : previousFocused.getPid()),
+                new Throwable("activateSessionInPanes"));
+        }
         com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.windowOf(session);
         if (w != null && w.isHostedFloat()) {
             // A Terminal widget's shell takes focus by a tap on its widget and no other way: a

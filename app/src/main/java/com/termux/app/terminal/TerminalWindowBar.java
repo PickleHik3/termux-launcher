@@ -402,6 +402,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** The DOWN time of the stream being tracked, so a DOWN seen twice is set up once. */
     private long mStreamDownTime = -1L;
     private int mSelectedIndex = -1;
+    /** See {@link #setSelectedChipOffersClose}; true off Home. */
+    private boolean mSelectedChipOffersClose = true;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private Typeface mTerminalTypeface = Typeface.MONOSPACE;
     /** The terminal's symbol_map ranges, so a tab label's icon is drawn by the face that has it. */
@@ -543,6 +545,20 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     public int restingContentWidthPx() {
         return Math.max(0, mTabs.getMeasuredWidth() - mTabs.closeExtentPx());
+    }
+
+    /**
+     * Whether a tap on the selected chip offers its ×: on the Workspace, where that window is on
+     * screen. On Home the same chip stands for the window in front of the row, which a tap brings
+     * on screen instead (the selected chip could not be reached from Home at all, #90).
+     */
+    public void setSelectedChipOffersClose(boolean offers) {
+        if (mSelectedChipOffersClose == offers) return;
+        mSelectedChipOffersClose = offers;
+        if (!offers) {
+            mReveal.onTouchElsewhere();
+            applyReveal();
+        }
     }
 
     public void setOnWindowSelectedListener(@Nullable OnWindowSelectedListener listener) {
@@ -689,6 +705,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
             && sameActivity(mItems, items)) return;
         int previousSelected = mSelectedIndex;
+        if (previousSelected >= 0 && selectedIndex != previousSelected) {
+            // Diagnostic for the chip highlight jumping on its own (2026-10-22): who refreshed
+            // the bar with a different current window. Remove once the cause is known.
+            android.util.Log.w("TermuxWindowBar", "selection " + previousSelected + " -> "
+                + selectedIndex + " items=" + items.size(), new Throwable("window bar selection"));
+        }
         // A × belongs to one window of one list. A different list, or the same list with the
         // selection somewhere else, is no longer the row it was revealed on.
         if (!sameItems(mItems, items)) mReveal.onItemsChanged();
@@ -753,8 +775,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     private void onChipTapped(int index) {
         if (mChipTapListener != null) mChipTapListener.onWindowChipTapped(index);
-        boolean spentOnTheClose =
-            mReveal.onChipTap(index, mSelectedIndex, SystemClock.uptimeMillis());
+        // On Home the selected chip is the row's front window, which is not on screen: a tap on
+        // it travels to the window rather than offering its ×, so the selection is passed as
+        // "none" and the reveal only puts away whatever it was showing.
+        boolean spentOnTheClose = mReveal.onChipTap(index,
+            mSelectedChipOffersClose ? mSelectedIndex : -1, SystemClock.uptimeMillis());
         applyReveal();
         if (spentOnTheClose) return;
         if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
