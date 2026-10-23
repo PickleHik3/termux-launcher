@@ -46,7 +46,7 @@ public class DockRailFitTest {
     public void sevenPinsInABandThatFitsThreeShowThreeAndScrollTheRest() {
         int band = 3 * SLOT + 100;
         DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(band,
-            DockLayoutPolicy.railContentLengthPx(7, SLOT), SLOT);
+            DockLayoutPolicy.railContentLengthPx(7, 0, SLOT), SLOT);
 
         assertEquals("seven slots end to end", 7 * SLOT, fit.contentLengthPx);
         assertEquals(3, fit.visibleSlots);
@@ -57,9 +57,24 @@ public class DockRailFitTest {
     }
 
     @Test
+    public void theMostUsedAppsAfterThePinsLengthenTheColumnTheScrollTravels() {
+        int band = 3 * SLOT + 100;
+        DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(band,
+            DockLayoutPolicy.railContentLengthPx(7, 3, SLOT), SLOT);
+
+        assertEquals("seven pins and three most-used apps, ten slots", 10 * SLOT,
+            fit.contentLengthPx);
+        assertEquals(3 * SLOT, fit.viewportLengthPx);
+        assertEquals("the scroll's end shows the last most-used app", 10 * SLOT,
+            fit.scrollRangePx() + fit.viewportLengthPx);
+        assertEquals("with the page off the column is the pins", 7 * SLOT,
+            DockLayoutPolicy.railContentLengthPx(7, 0, SLOT));
+    }
+
+    @Test
     public void aBandThatFitsEveryPinDoesNotScroll() {
         DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(1362,
-            DockLayoutPolicy.railContentLengthPx(7, SLOT), SLOT);
+            DockLayoutPolicy.railContentLengthPx(7, 0, SLOT), SLOT);
 
         assertFalse(fit.scrolls);
         assertEquals(7, fit.visibleSlots);
@@ -70,7 +85,7 @@ public class DockRailFitTest {
     @Test
     public void aBandExactlyAsLongAsTheColumnDoesNotScroll() {
         DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(7 * SLOT,
-            DockLayoutPolicy.railContentLengthPx(7, SLOT), SLOT);
+            DockLayoutPolicy.railContentLengthPx(7, 0, SLOT), SLOT);
         assertFalse(fit.scrolls);
         assertEquals(7, fit.visibleSlots);
     }
@@ -78,7 +93,7 @@ public class DockRailFitTest {
     @Test
     public void aBandShorterThanOneSlotShowsWhatItCanAndScrolls() {
         DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(100,
-            DockLayoutPolicy.railContentLengthPx(3, SLOT), SLOT);
+            DockLayoutPolicy.railContentLengthPx(3, 0, SLOT), SLOT);
         assertTrue(fit.scrolls);
         assertEquals(0, fit.visibleSlots);
         assertEquals(100, fit.viewportLengthPx);
@@ -98,7 +113,7 @@ public class DockRailFitTest {
             int slot = DockLayoutPolicy.railSlotLengthPx(density);
             for (int band = 0; band <= 1600; band += 37) {
                 for (int pins = 0; pins <= 14; pins++) {
-                    int content = DockLayoutPolicy.railContentLengthPx(pins, slot);
+                    int content = DockLayoutPolicy.railContentLengthPx(pins, 0, slot);
                     DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(band, content, slot);
                     String at = "density=" + density + " band=" + band + " pins=" + pins;
                     assertTrue(at, fit.viewportLengthPx <= band);
@@ -145,7 +160,7 @@ public class DockRailFitTest {
                     int scrollPx = Math.max(0, side - top - bottom);
                     int band = Math.max(0, scrollPx - 2 * air);
                     DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(band,
-                        DockLayoutPolicy.railContentLengthPx(7, SLOT), SLOT);
+                        DockLayoutPolicy.railContentLengthPx(7, 0, SLOT), SLOT);
                     int railEnd = top + Math.min(scrollPx, air + fit.viewportLengthPx + air);
                     // Where the A–Z card can begin: the band's own end on the Workspace, the
                     // dock's reach above it on Home, the frame's inset kept either way.
