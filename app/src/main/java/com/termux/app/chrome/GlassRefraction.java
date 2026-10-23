@@ -1140,7 +1140,6 @@ public final class GlassRefraction {
         "            col.rgb = half3(mix(float3(col.rgb), bt, bm));\n" +
         "        }\n" +
         "    }\n" +
-        "    }\n" +
         // The pressed key's glow and the faint scatter under a finger stay small additive light.
         "    col.rgb = col.rgb + half3(lensGlow * kKeyGlow + 0.045 * touchG * touchG);\n" +
         // A bead's outline is its own: a pixel wide, anti-aliased, nothing outside it.
