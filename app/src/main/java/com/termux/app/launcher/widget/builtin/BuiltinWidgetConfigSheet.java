@@ -69,7 +69,7 @@ public final class BuiltinWidgetConfigSheet {
         int pad = Math.round(24 * density);
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
-        column.setPadding(pad, Math.round(8 * density), pad, 0);
+        column.setPadding(pad, 0, pad, 0);
         List<TextInputEditText> inputs = new ArrayList<>();
         // The choices' and switches' values as the sheet holds them now: a row shown only for one
         // value of another field follows them live.
@@ -95,9 +95,11 @@ public final class BuiltinWidgetConfigSheet {
             }
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            // 16dp between sections; switches that follow one another are one section.
+            // Rows are 48dp tall already, so 8dp sets sections apart; switches that follow one
+            // another are one section, and the first row sits right under the header.
             boolean isSwitch = field.type == BuiltinWidgetView.ConfigField.Type.SWITCH;
-            params.topMargin = previousSwitch && isSwitch ? 0 : Math.round(16 * density);
+            boolean first = column.getChildCount() == 0;
+            params.topMargin = first || previousSwitch && isSwitch ? 0 : Math.round(8 * density);
             previousSwitch = isSwitch;
             column.addView(row, params);
             if (field.shownWhenKey != null) {
@@ -118,7 +120,8 @@ public final class BuiltinWidgetConfigSheet {
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        header.setPaddingRelative(pad, Math.round(8 * density), Math.round(12 * density), 0);
+        // 7dp: the X's glyph, inset in its 48dp target, ends where the content does.
+        header.setPaddingRelative(pad, Math.round(8 * density), Math.round(7 * density), 0);
         TextView heading = new TextView(context);
         heading.setText(title);
         heading.setTextAppearance(com.google.android.material.R.style
@@ -133,6 +136,15 @@ public final class BuiltinWidgetConfigSheet {
             Math.round(48 * density)));
         root.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
+        // A hairline under the header while the content is scrolled under it.
+        View rule = new View(context);
+        rule.setBackgroundColor(MaterialColors.getColor(heading,
+            com.google.android.material.R.attr.colorOutlineVariant));
+        rule.setVisibility(View.INVISIBLE);
+        root.addView(rule, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            Math.max(1, Math.round(density))));
+        scroll.setOnScrollChangeListener((v, x, y, oldX, oldY) ->
+            rule.setVisibility(y > 0 ? View.VISIBLE : View.INVISIBLE));
         root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             0, 1f));
         TextView failed = new TextView(context);
@@ -267,8 +279,11 @@ public final class BuiltinWidgetConfigSheet {
             .setMessage(R.string.builtin_widget_glass_summary)
             .setPositiveButton(android.R.string.ok, null)
             .show());
-        glassHead.addView(help, new LinearLayout.LayoutParams(Math.round(48 * density),
-            Math.round(48 * density)));
+        // Pulled out so the glyph, not its 48dp target, ends on the content's edge.
+        LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(
+            Math.round(48 * density), Math.round(48 * density));
+        helpParams.setMarginEnd(-Math.round(14 * density));
+        glassHead.addView(help, helpParams);
         glass.addView(glassHead, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         MaterialButtonToggleGroup glassChoice = new MaterialButtonToggleGroup(context);
@@ -303,7 +318,7 @@ public final class BuiltinWidgetConfigSheet {
         glass.addView(glassChoice, choiceParams);
         LinearLayout.LayoutParams glassParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        glassParams.topMargin = Math.round(16 * density);
+        glassParams.topMargin = column.getChildCount() == 0 ? 0 : Math.round(8 * density);
         column.addView(glass, glassParams);
         return () -> {
             for (int i = 0; i < glassValues.length; i++)
@@ -380,8 +395,10 @@ public final class BuiltinWidgetConfigSheet {
         int muted = MaterialColors.getColor(label,
             com.google.android.material.R.attr.colorOnSurfaceVariant);
         summary.setTextColor(muted);
-        head.addView(summary, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        summaryParams.setMarginStart(Math.round(8 * density));
+        head.addView(summary, summaryParams);
         android.widget.ImageView chevron = new android.widget.ImageView(context);
         chevron.setImageResource(R.drawable.ic_editor_expand_more);
         chevron.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
@@ -389,6 +406,7 @@ public final class BuiltinWidgetConfigSheet {
         LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(
             Math.round(24 * density), Math.round(24 * density));
         chevronParams.setMarginStart(Math.round(8 * density));
+        chevronParams.setMarginEnd(-Math.round(6 * density));
         head.addView(chevron, chevronParams);
         column.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
