@@ -16406,12 +16406,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #handleAppDrawerCodePoint}.
      */
     private void requestAppDrawerSearchKeyboard() {
-        // Over a running display the focus is the display's, so the system keyboard below is
-        // refused as "not served" and the search would have no keyboard at all: raise the
-        // launcher's, which the drawer types through, in whatever frame the place keeps it.
-        if (com.termux.app.x11.DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(
-                isDisplayPageShowing(), isEmbeddedDisplayRunning(),
-                mInAppKeyboard != null && mInAppKeyboard.isEnabled())) {
+        // With the built-in keyboard selected the search raises it, on every place: the drawer
+        // types through it and reveals it through the plane. Only the Android keyboard gets the
+        // system ask below (over a running display that ask would not even be served).
+        com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch route = mInAppKeyboard == null
+            ? com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK
+            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(mInAppKeyboard.isEnabled(),
+                mInAppKeyboard.isTurnedOff(), false /* 1.x has no yield-to-hardware-keyboard setting */);
+        // A keyboard that stands aside for a physical one raises nothing; the keys type into the
+        // search through the layer's own key route.
+        if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.NONE) return;
+        if (route != com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK) {
+            boolean wasUp = mInAppKeyboard.isVisible();
+            if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.TURN_ON_AND_RAISE) {
+                // Switched off with the keyboard key, and tapping the search asks for it back.
+                // Nobody's pin either: held off from the visibility listener like the raise below.
+                mRaisingDisplayFrameKeyboard = true;
+                try {
+                    mInAppKeyboard.setTurnedOff(false);
+                } finally {
+                    mRaisingDisplayFrameKeyboard = false;
+                }
+            }
             // The drawer's raise is nobody's pin: it goes down again with the drawer
             // (lowerDrawerSearchKeyboard) unless the keyboard was up first or the user claims it.
             if (isDisplayTouchpadFrame()) {
@@ -16424,6 +16440,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
             }
+            // Raised after the pull, the keyboard was not among the bands the drawer measured;
+            // it measures them again so the reveal can bring it up through the plane.
+            if (mAppDrawerController != null) mAppDrawerController.onBuiltInKeyboardRaised();
             return;
         }
         onSystemImeRequested();
