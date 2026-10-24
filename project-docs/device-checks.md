@@ -425,6 +425,21 @@ dropped; what follows is what still owes a look.
   on again in the dock of that half only; Undo and Discard put the stack back as it was ·
   emulator.
 
+- 2026-10-25 · commit "clock sheet: Show date and Show next alarm" · the Clock widget's gear at 2×2:
+  two new rows after Show seconds (calendar and alarm glyphs, same card style, both on); turning
+  Show date off drops the date and leaves the alarm under the face; turning Show next alarm off
+  drops only the alarm; both off leaves the face alone, centred; the glyphs read at 24dp in both
+  themes; existing clocks show both lines unchanged · pong or emulator (set an alarm first).
+- 2026-10-25 · commit "flip: the AM/PM and the seconds share one centre axis" · Flip face, 12h,
+  seconds on, in the widget at 2×1/2×2 and in the expanded status bar: "AM"/"PM" is centred over
+  the two seconds digits, not left of them; with seconds off the period sits where it did · pong
+  or emulator.
+- 2026-10-25 · commit "flip end pins at the old clips' size" · Flip Clock widget, the expanded bar
+  and the dock: each card shows a clear small rectangle at both ends of the split line (3.2dp by
+  7.4dp at card scale, a pixel past the card's edge), under the digit so none crosses a glyph; no
+  leaf shading at the fold; the flipping leaf carries no pins and they stay put between flips ·
+  pong.
+
 ## Developer
 - 2026-10-24 · commit "feat(editor): live drag over the real frame…" · Appearance editor, hold
   the dock and drag it over the top, side and bottom slots: the frame stays the real launcher (no
