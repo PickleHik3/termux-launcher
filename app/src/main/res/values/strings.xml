@@ -657,7 +657,7 @@
     <string name="settings_app_drawer_enabled_summary">Swipe down on the apps row to open the full-screen app drawer</string>
     <string name="settings_app_drawer_view_type_title">Drawer layout</string>
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
-    <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
+    <string name="settings_app_drawer_view_type_horizontal">Pages</string>
     <string name="settings_app_drawer_view_type_categories">Categories</string>
     <string name="settings_open_only_match_title">Open the only match</string>
     <string name="settings_open_only_match_summary">Opens the app by itself when a search finds just one.</string>

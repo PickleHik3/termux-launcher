@@ -92,8 +92,8 @@ public final class SettingsRowIcons {
 
         // General
         key(R.drawable.ic_ms_speed, "animation_speed", "speech_output_speed", "tai_benchmark");
-        key(R.drawable.ic_ms_animation, "app_launcher_home_page_transition", "terminal_cursor_trail",
-            "terminal_cursor_trail_style");
+        key(R.drawable.ic_ms_animation, "terminal_cursor_trail", "terminal_cursor_trail_style");
+        key(R.drawable.ic_ms_swap_horiz, "app_launcher_home_page_transition");
         key(R.drawable.ic_ms_vibration, "app_haptics_enabled", "keyboard_vibration_link",
             "keyboard_typing_vibration_link");
         key(R.drawable.ic_ms_touch_app, "app_launcher_row_haptics", "keyboard_sub_typing", "touchMode");
@@ -160,7 +160,8 @@ public final class SettingsRowIcons {
         // Dock & drawer, app search
         key(R.drawable.ic_ms_push_pin, "app_launcher_default_buttons", "essential_notification_rules_manage");
         key(R.drawable.ic_ms_star, "app_launcher_most_used_page");
-        key(R.drawable.ic_ms_apps, "app_launcher_drawer_layout");
+        key(R.drawable.ic_ms_grid_view, "app_launcher_drawer_layout");
+        key(R.drawable.ic_ms_desktop_windows, "linux_apps_in_drawer");
         key(R.drawable.ic_ms_search, "app_launcher_sub_search");
         key(R.drawable.ic_ms_tag, "app_launcher_input_char");
         key(R.drawable.ic_ms_rocket_launch, "app_launcher_drawer_open_only_match");
