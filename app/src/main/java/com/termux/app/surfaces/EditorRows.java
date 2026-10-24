@@ -78,6 +78,12 @@ public final class EditorRows {
         DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         SEARCH_FIELD(Kind.SWITCH, R.string.appearance_row_search_field, R.drawable.ic_symbol_search),
         DRAWER_ICON(Kind.SWITCH, R.string.layout_editor_drawer_tile, R.drawable.ic_symbol_apps),
+        /**
+         * How strongly the icons' reflections show on the Peek glass card, 0 (off) to strong;
+         * the Dock card shows it only while Peek glass is the design.
+         */
+        REFLECTION(Kind.STRIP, R.string.appearance_row_reflection,
+            R.drawable.ic_symbol_dock_peek_glass),
         APP_ICONS(Kind.STRIP, R.string.appearance_row_app_icons, R.drawable.ic_symbol_apps),
         TEXT_SIZE(Kind.STRIP, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
@@ -221,7 +227,7 @@ public final class EditorRows {
                 break;
             case DOCK:
                 add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-                    Row.MARGIN, Row.APP_ICONS, Row.VISIBLE);
+                    Row.MARGIN, Row.APP_ICONS, Row.REFLECTION, Row.VISIBLE);
                 add(out, 2, Row.STYLE, Row.DESIGN);
                 add(out, 3, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_DOCK_ITEMS);
                 break;
