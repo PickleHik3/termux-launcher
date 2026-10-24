@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewTreeObserver;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -1446,34 +1447,73 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * The built-in keyboard came up while the plane is open: the search raised it, on a place
      * where it was down when the drawer was pulled. The bands were measured at the pull with no
      * keyboard among them, so the reveal had nothing to bring up; they are measured again once
-     * the keyboard has laid out, and the reveal then brings it up through the plane exactly as it
+     * the keyboard is on screen, and the reveal then brings it up through the plane exactly as it
      * does a keyboard that was up before the drawer opened.
+     *
+     * <p>"On screen" means {@link View#VISIBLE} and laid out, not merely laid out: over glass the
+     * keyboard's open reveal ({@code KeyboardGeometryChoreographer}) lays the container out
+     * {@link View#INVISIBLE} and flips it to visible a frame or two later, once its backdrop is
+     * ready. That flip changes no bounds, so a layout listener never hears it, and a measure taken
+     * on the layout found no visible band: the reveal stayed at zero and the keyboard stayed
+     * under the plane. The wait is a pre-draw check instead, which the flip's redraw reaches.
      */
     public void onBuiltInKeyboardRaised() {
         if (!mEngaged || mTextFieldSearch) return;
         View keyboard = mHost.findView(R.id.inapp_keyboard_container);
         if (keyboard == null) return;
-        if (keyboard.getVisibility() != View.GONE && keyboard.getHeight() > 0
-            && !keyboard.isLayoutRequested()) {
+        if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
+                keyboard.isLayoutRequested())) {
+            stopAwaitingRaisedKeyboard();
             recaptureBandsForRaisedKeyboard();
             return;
         }
-        if (mKeyboardLayoutWatch != null) return;
-        View.OnLayoutChangeListener watch = new View.OnLayoutChangeListener() {
-            @Override public void onLayoutChange(View v, int left, int top, int right, int bottom,
-                                                 int oldLeft, int oldTop, int oldRight,
-                                                 int oldBottom) {
-                v.removeOnLayoutChangeListener(this);
-                if (mKeyboardLayoutWatch == this) mKeyboardLayoutWatch = null;
+        if (mRaisedKeyboardWatch != null) return;
+        ViewTreeObserver.OnPreDrawListener watch = () -> {
+            if (!mEngaged) {
+                stopAwaitingRaisedKeyboard();
+            } else if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
+                    keyboard.isLayoutRequested())) {
+                stopAwaitingRaisedKeyboard();
                 recaptureBandsForRaisedKeyboard();
             }
+            // Never holds a frame back: the check only decides when to measure.
+            return true;
         };
-        mKeyboardLayoutWatch = watch;
-        keyboard.addOnLayoutChangeListener(watch);
+        mRaisedKeyboardWatch = watch;
+        mRaisedKeyboardView = keyboard;
+        mRaisedKeyboardObserver = keyboard.getViewTreeObserver();
+        mRaisedKeyboardObserver.addOnPreDrawListener(watch);
     }
 
-    /** One layout listener at a time for {@link #onBuiltInKeyboardRaised}. */
-    @Nullable private View.OnLayoutChangeListener mKeyboardLayoutWatch;
+    /**
+     * Whether a keyboard the search raised can be measured into the bands: shown (not still
+     * hidden behind its open reveal), with a height, and with no layout pending.
+     */
+    @VisibleForTesting
+    static boolean isRaisedKeyboardMeasurable(int visibility, int heightPx,
+                                              boolean layoutRequested) {
+        return visibility == View.VISIBLE && heightPx > 0 && !layoutRequested;
+    }
+
+    /** The one pre-draw wait for {@link #onBuiltInKeyboardRaised}; gone on close. */
+    private void stopAwaitingRaisedKeyboard() {
+        ViewTreeObserver.OnPreDrawListener watch = mRaisedKeyboardWatch;
+        ViewTreeObserver observer = mRaisedKeyboardObserver;
+        View keyboard = mRaisedKeyboardView;
+        mRaisedKeyboardWatch = null;
+        mRaisedKeyboardObserver = null;
+        mRaisedKeyboardView = null;
+        if (watch == null) return;
+        if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(watch);
+        // An observer taken before the view was attached is merged into the window's on attach.
+        ViewTreeObserver current = keyboard == null ? null : keyboard.getViewTreeObserver();
+        if (current != null && current != observer && current.isAlive())
+            current.removeOnPreDrawListener(watch);
+    }
+
+    @Nullable private ViewTreeObserver.OnPreDrawListener mRaisedKeyboardWatch;
+    @Nullable private ViewTreeObserver mRaisedKeyboardObserver;
+    @Nullable private View mRaisedKeyboardView;
 
     private void recaptureBandsForRaisedKeyboard() {
         Frame dockRect = mDockRect;
@@ -1937,6 +1977,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostClipped = false;
             }
             removeHostLayoutListener();
+            stopAwaitingRaisedKeyboard();
             applyAlpha(mAccessorySurface, 1f);
             applyGroupTranslationY(mDockLiftGroup, 0f);
             applyGroupAlpha(mDockRowFadeGroup, 1f);
