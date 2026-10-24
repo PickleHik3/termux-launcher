@@ -910,6 +910,31 @@ public final class SurfacePresets {
     }
 
     /**
+     * {@link #applyCustom(TermuxAppSharedPreferences, Preset)} for one half of the wall (ADR 0013):
+     * the half's own look out of {@code custom} ({@link #halfOf}) lands on {@code half} alone, so
+     * the Custom stop on one half never writes the other half's values. The values no half holds
+     * (the glass ink, rim, motion, hue, vibrancy and edge) are one for the wall, as a Look's are.
+     */
+    public static void applyCustom(@NonNull TermuxAppSharedPreferences prefs,
+                                   @NonNull Preset custom, @NonNull WallHalf half) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        Batch batch = store == null ? null : new Batch(store);
+        TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
+        forgetSurfaceExtras(into);
+        applyHalf(into, halfOf(custom, half), half, false);
+        keyboardBlurFollowsWhereLinked(into);
+        if (batch != null)
+            batch.applyToStore();
+    }
+
+    /** One half's live look as a Custom, under the plain keys ({@link #captureLook}). */
+    @NonNull
+    static Preset customOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull WallHalf half) {
+        return new Preset(CUSTOM_ID, R.string.termux_surface_preset_custom,
+            captureLook(prefs, half));
+    }
+
+    /**
      * The per-surface glass values outside the preset format, as every Look has them: the
      * keyboard's Keys back to the theme's (-1), every Glass slider position forgotten (Base's and
      * each surface's, so each reads back from the glass it now draws), and, where the Look left the

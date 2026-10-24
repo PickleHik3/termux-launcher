@@ -208,6 +208,47 @@ public class SurfaceEditorCardsTest {
         assertFalse("back on a Look, the strip goes", model.shown(Row.FROST));
     }
 
+    @Test
+    public void openingSlidingAndAThemeChangeNeverWriteHome() {
+        // Home on its own look (Tint), the Workspace on Mist: unequal halves.
+        SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(2),
+            WallHalf.HOME);
+        java.util.Map<String, Object> home = homeKeys();
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.WIDGETS);
+        assertEquals(WallHalf.HOME, editor.half());
+
+        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
+            ReflectionHelpers.ClassParameter.from(WallHalf.class, WallHalf.WORKSPACE),
+            ReflectionHelpers.ClassParameter.from(boolean.class, false));
+        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
+            ReflectionHelpers.ClassParameter.from(WallHalf.class, WallHalf.HOME),
+            ReflectionHelpers.ClassParameter.from(boolean.class, false));
+        model(editor).onValue(Row.THEME, 2, false);
+        model(editor).onReleased(Row.THEME);
+        editor.done();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals(home, homeKeys());
+    }
+
+    @Test
+    public void customOnTheWorkspaceNeverWritesHome() {
+        java.util.List<SurfacePresets.Preset> looks = SurfacePresets.presets(preferences);
+        // A saved Custom that names Home's own look on Solid's numbers, as pong's did.
+        SurfacePresets.applyLook(preferences, looks.get(3), WallHalf.HOME);
+        SurfacePresets.saveCustom(preferences);
+        SurfacePresets.applyLook(preferences, looks.get(2), WallHalf.HOME);
+        java.util.Map<String, Object> home = homeKeys();
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
+        assertEquals(WallHalf.WORKSPACE, editor.half());
+
+        model(editor).onValue(Row.LOOK, AppearanceLooks.CUSTOM_STOP, false);
+        model(editor).onReleased(Row.LOOK);
+
+        assertEquals("the Workspace's Custom leaves Home as it stood", home, homeKeys());
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+    }
+
     // ------------------------------------------------------------------------------- the drive
 
     private SurfaceEditorController open(EditorCard card, PaneWallPage place) {
@@ -223,6 +264,19 @@ public class SurfaceEditorCardsTest {
 
     private static boolean isDirty(SurfaceEditorController editor) {
         return ReflectionHelpers.callInstanceMethod(editor, "isDirty");
+    }
+
+    /** Every key the store holds for Home's half alone, with its value. */
+    private java.util.Map<String, Object> homeKeys() {
+        java.util.Map<String, Object> out = new java.util.TreeMap<>();
+        String suffix = TermuxAppSharedPreferences.surfaceHalfKey("", WallHalf.HOME);
+        for (java.util.Map.Entry<String, ?> entry
+                : preferences.getSharedPreferences().getAll().entrySet()) {
+            if (entry.getKey().endsWith(suffix))
+                out.put(entry.getKey(), entry.getValue());
+        }
+        assertFalse("Home holds its own look", out.isEmpty());
+        return out;
     }
 
     private int opacity(WallHalf half) {

@@ -2564,12 +2564,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             forgetGlassEdgePositions();
             return true;
         }
-        mSessionCustom.enter(into);
+        mSessionCustom.enter(into, mHalf);
         return true;
     }
 
     static final class SessionCustom {
         @Nullable private AppearanceSnapshot mKept;
+        /** {@link #mKept} half by half: what the Custom stop on one half puts back on it alone. */
+        @Nullable private java.util.Map<WallHalf, SurfacePresets.Preset> mKeptHalves;
         /**
          * What Custom stood at when the slider (or a tap at a Look) moved there, while nothing was
          * kept: the Look on screen, or the saved Custom just applied. Custom left exactly as it was
@@ -2586,9 +2588,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void leave(@NonNull TermuxAppSharedPreferences live) {
             AppearanceSnapshot now = AppearanceSnapshot.capture(live);
             mKept = now.signature().equals(mSeedSignature) ? null : now;
+            mKeptHalves = null;
             mSeedSignature = null;
-            if (mKept != null)
+            if (mKept != null) {
+                mKeptHalves = new java.util.EnumMap<>(WallHalf.class);
+                for (WallHalf half : WallHalf.values())
+                    mKeptHalves.put(half, SurfacePresets.customOf(live, half));
                 SurfacePresets.saveCustom(live);
+            }
         }
 
         /**
@@ -2604,6 +2611,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             SurfacePresets.Preset saved = SurfacePresets.custom(into);
             if (saved != null)
                 SurfacePresets.applyCustom(into, saved);
+            mSeedSignature = AppearanceSnapshot.signatureOf(into);
+        }
+
+        /**
+         * The slider returns to Custom on {@code half}, the half the frame shows: that half's kept
+         * values come back, else its part of the saved Custom, else nothing is written. The other
+         * half is never written: a saved Custom that names Home's own look once brought it back
+         * on Home from the Workspace's slider (pong, 2026-10-25: Home stood on Solid's numbers
+         * nobody chose there).
+         */
+        void enter(@NonNull TermuxAppSharedPreferences into, @NonNull WallHalf half) {
+            java.util.Map<WallHalf, SurfacePresets.Preset> kept = mKeptHalves;
+            if (mKept != null && kept != null && kept.get(half) != null) {
+                SurfacePresets.applyCustom(into, kept.get(half), half);
+                return;
+            }
+            SurfacePresets.Preset saved = SurfacePresets.custom(into);
+            if (saved != null)
+                SurfacePresets.applyCustom(into, saved, half);
             mSeedSignature = AppearanceSnapshot.signatureOf(into);
         }
 
@@ -2625,6 +2651,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         void clear() {
             mKept = null;
+            mKeptHalves = null;
             mSeedSignature = null;
         }
 
@@ -2638,6 +2665,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         void copyFrom(@NonNull SessionCustom other) {
             mKept = other.mKept;
+            mKeptHalves = other.mKeptHalves;
             mSeedSignature = other.mSeedSignature;
         }
     }
