@@ -40,6 +40,18 @@ final class AppDrawerKeyboardScrollHide {
         return translationPx(scrolledPx, thresholdPx, travelPx) / travelPx;
     }
 
+    /**
+     * Whether a drag that starts on the list may send the keyboard away: only when the list has
+     * somewhere to go down. A list that fits above the keyboard does not scroll, and a drag on it
+     * neither moves the keyboard nor holds it part-way; the search pill brings nothing back
+     * because nothing went. Measured as the list measures itself
+     * ({@code computeVerticalScroll*}), so it agrees with {@code canScrollVertically(1)}.
+     */
+    static boolean armsOnDrag(int scrollRangePx, int scrollExtentPx, int scrollOffsetPx) {
+        return scrollRangePx - scrollExtentPx > 0
+            && scrollOffsetPx < scrollRangePx - scrollExtentPx;
+    }
+
     /** Whether the list has scrolled far enough for the keyboard to start going. */
     static boolean reachesThreshold(float scrolledPx, float thresholdPx) {
         return scrolledPx > Math.max(0f, thresholdPx);

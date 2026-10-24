@@ -217,6 +217,8 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mKeyboardDismissedByScroll;
     /** True from the finger starting to drag the list until the list comes to rest. */
     private boolean mGridUserScrolling;
+    /** Whether that drag began with somewhere to scroll down, and so may send the keyboard away. */
+    private boolean mGridDragHidesKeyboard;
     @Nullable private KeyboardScrollListener mKeyboardScrollListener;
     /** True while the Android-keyboard search's text field, not the key stream, owns the query. */
     private boolean mTextFieldSearch;
@@ -350,12 +352,20 @@ public final class AppDrawerContentView extends FrameLayout
                 // Only the finger's scroll (and the fling it throws) sends the keyboard away; a
                 // scrub or a query's jump to the top is the launcher moving the list, not the user.
                 KeyboardScrollListener keyboard = mKeyboardScrollListener;
-                if (keyboard != null && mGridUserScrolling && dy > 0) keyboard.onListScrolledDown(dy);
+                if (keyboard != null && mGridUserScrolling && mGridDragHidesKeyboard && dy > 0)
+                    keyboard.onListScrolledDown(dy);
             }
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    if (!mGridUserScrolling) {
+                        // Decided once, as the drag starts: a list that fits has no scroll to give.
+                        mGridDragHidesKeyboard = AppDrawerKeyboardScrollHide.armsOnDrag(
+                            recyclerView.computeVerticalScrollRange(),
+                            recyclerView.computeVerticalScrollExtent(),
+                            recyclerView.computeVerticalScrollOffset());
+                    }
                     mGridUserScrolling = true;
                 } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mGridUserScrolling) {
                     mGridUserScrolling = false;
