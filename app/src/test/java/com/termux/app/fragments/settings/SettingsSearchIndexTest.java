@@ -74,11 +74,11 @@ public class SettingsSearchIndexTest {
     @Test
     public void theSearchedFromSectionRanksFirstAmongEqualHits() {
         SettingsSearchIndex index = index();
-        // "Layout" is a row on both Home and Terminal.
-        List<SettingsSearchIndex.Entry> fromTerminal = index.search("layout", SettingsTree.Section.TERMINAL, 40);
-        List<SettingsSearchIndex.Entry> fromHome = index.search("layout", SettingsTree.Section.HOME, 40);
-        assertEquals(SettingsTree.Section.TERMINAL, firstRow(fromTerminal, "Layout").section);
-        assertEquals(SettingsTree.Section.HOME, firstRow(fromHome, "Layout").section);
+        // "Appearance" is a row on Home, Terminal and Keyboard, and the root's door.
+        List<SettingsSearchIndex.Entry> fromTerminal = index.search("appearance", SettingsTree.Section.TERMINAL, 40);
+        List<SettingsSearchIndex.Entry> fromHome = index.search("appearance", SettingsTree.Section.HOME, 40);
+        assertEquals(SettingsTree.Section.TERMINAL, firstRow(fromTerminal, "Appearance").section);
+        assertEquals(SettingsTree.Section.HOME, firstRow(fromHome, "Appearance").section);
         assertTrue(index.search("   ", null, 40).isEmpty());
         assertFalse(index.search("vibration", null, 40).isEmpty());
     }

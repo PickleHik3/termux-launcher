@@ -8,7 +8,7 @@
         app:key="terminal_layout_editor"
         app:persistent="false"
         app:title="@string/settings_layout_editor_title"
-        app:summary="@string/settings_layout_editor_terminal_summary" />
+        app:summary="@string/settings_appearance_door_summary" />
 
     <Preference
         app:key="terminal_sub_windows"

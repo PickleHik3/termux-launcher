@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Home: the Layout editor first, then the rows that shape the Home half. Every key is the one
-     it always was (the old Apps page, Appearance and the root's Start in row). -->
+<!-- Home: the Appearance editor first, then the rows that shape the Home half. Every key is the
+     one it always was (the old Apps page, Appearance and the root's Start in row). -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -8,7 +8,7 @@
         app:key="home_layout_editor"
         app:persistent="false"
         app:title="@string/settings_layout_editor_title"
-        app:summary="@string/settings_layout_editor_home_summary" />
+        app:summary="@string/settings_appearance_door_summary" />
 
     <!-- How the app icons and folders on Home pages are drawn; the dock draws its own. -->
     <PreferenceCategory app:key="home_icons" app:title="@string/settings_home_icons_header">

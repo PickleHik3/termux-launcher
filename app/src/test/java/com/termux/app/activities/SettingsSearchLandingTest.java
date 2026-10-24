@@ -147,13 +147,14 @@ public class SettingsSearchLandingTest {
 
         SettingsSearchFragment search = (SettingsSearchFragment) searchScreen;
         SettingsSearchPreference box = search.findPreference("settings_search");
-        box.getOnQueryChangedListener().onQueryChanged("layout");
+        box.getOnQueryChangedListener().onQueryChanged("appearance");
         SettingsSearchIndex.Entry layoutRow = null;
         for (SettingsSearchIndex.Entry entry : search.results().results()) {
-            if ("Layout".equals(entry.title)) { layoutRow = entry; break; }
+            if ("Appearance".equals(entry.title)) { layoutRow = entry; break; }
         }
         assertNotNull(layoutRow);
-        assertEquals("Home's own Layout row ranks before Terminal's", SettingsTree.Section.HOME, layoutRow.section);
+        assertEquals("Home's own Appearance row ranks before the others", SettingsTree.Section.HOME,
+            layoutRow.section);
     }
 
     @Test

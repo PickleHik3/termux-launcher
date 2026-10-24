@@ -45,7 +45,7 @@
             app:icon="@drawable/ic_symbol_palette"
             app:persistent="false"
             app:title="@string/settings_look_appearance_editor_title"
-            app:summary="@string/settings_look_appearance_editor_summary" />
+            app:summary="@string/settings_appearance_door_summary" />
         <Preference
             app:key="in_app_keyboard_color_scheme_editor"
             app:icon="@drawable/ic_symbol_palette"

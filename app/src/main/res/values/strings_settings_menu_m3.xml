@@ -23,7 +23,9 @@
     <string name="settings_search_results_header">Results</string>
     <string name="settings_search_no_results">No settings match</string>
 
-    <string name="settings_layout_editor_title">Layout</string>
+    <!-- Every door into the Appearance editor goes by one name (spec §4). -->
+    <string name="settings_layout_editor_title">Appearance</string>
+    <string name="settings_appearance_door_summary">Edit how it looks and sits</string>
     <string name="settings_layout_editor_home_summary">Arrange Home in the Layout editor</string>
     <string name="settings_layout_editor_terminal_summary">Arrange the Terminal in the Layout editor</string>
 

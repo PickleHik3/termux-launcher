@@ -2359,7 +2359,7 @@
     <string name="tool_app_key_inspector">Key inspector</string>
     <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
     <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
-    <string name="tool_appearance_surface_editor">Surface editor</string>
+    <string name="tool_appearance_surface_editor">Appearance</string>
     <string name="tool_app_open_settings">Open settings</string>
     <string name="tool_app_open_look_and_feel">Look and feel settings</string>
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
