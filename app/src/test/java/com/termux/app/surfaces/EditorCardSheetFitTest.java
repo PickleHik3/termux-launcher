@@ -487,7 +487,6 @@ public class EditorCardSheetFitTest {
                     R.string.appearance_folders_default, R.string.appearance_folders_roomy);
                 case NUMERALS: return strings(R.string.appearance_numerals_sans,
                     R.string.appearance_numerals_mono);
-                case FOLDER_LIMIT: return new String[] {"9", "12", "16", "20"};
                 case FORM: return strings(R.string.appearance_form_docked,
                     R.string.appearance_form_floating, R.string.appearance_form_split);
                 case THEME: return strings(R.string.appearance_theme_system,

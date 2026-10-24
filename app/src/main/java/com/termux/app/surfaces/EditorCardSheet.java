@@ -924,6 +924,28 @@ final class EditorCardSheet {
         }
         boolean inline = choices.length == 2
             && labelPx(row) + dp(16) + total + dp(SEGMENT_GAP_DP) <= width;
+        if (!inline && choices.length == 3) {
+            // Three short words stand beside their label like Numerals' two when a smaller text
+            // size lets them: shrunk in steps, never below SEGMENT_MIN_TEXT_SCALE, never cut.
+            float label = labelPx(row);
+            float base = buttons.get(0).getTextSize();
+            for (float scale = 1f; scale >= SEGMENT_MIN_TEXT_SCALE - 0.001f && !inline;
+                 scale -= 0.05f) {
+                float sum = 0f;
+                for (MaterialButton button : buttons) {
+                    button.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, base * scale);
+                    sum += needPx(button);
+                }
+                if (label + dp(16) + sum + dp(SEGMENT_GAP_DP) * 2 <= width) {
+                    inline = true;
+                    total = sum;
+                }
+            }
+            if (!inline) {
+                for (MaterialButton button : buttons)
+                    button.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, base);
+            }
+        }
         int share = choices.length == 0 ? width
             : (width - dp(SEGMENT_GAP_DP) * (choices.length - 1)) / choices.length;
         boolean vertical = !inline && widest > share;
@@ -1530,6 +1552,9 @@ final class EditorCardSheet {
                 : mContext.getResources().getDisplayMetrics().widthPixels);
         return Math.max(1, sheet - dp(ICON_COLUMN_DP) - dp(EDGE_DP));
     }
+
+    /** The smallest share of its text size a three-segment row shrinks to to stand inline. */
+    static final float SEGMENT_MIN_TEXT_SCALE = 0.75f;
 
     /** The width a segment needs for its word whole: its text, its padding and its check. */
     private float needPx(@NonNull MaterialButton button) {

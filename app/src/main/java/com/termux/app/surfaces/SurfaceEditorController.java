@@ -18,6 +18,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.graphics.RectF;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
@@ -60,6 +61,7 @@ import com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment;
 import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
+import com.termux.app.layouteditor.LayoutEditorPlan;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceOrientation;
@@ -95,8 +97,8 @@ import java.util.Locale;
  *
  * <p><b>The frame.</b> {@code terminal_root_container} scaled about a top-centre pivot
  * ({@link AppearanceEditorFrame}), at rest between the top line and the half line over the editor
- * bar ({@link EditorBar}); every surface wears a quiet outline, a hidden one a dashed ghost on its
- * edge. With a card up the frame shrinks and moves so the selected surface, which alone wears the
+ * bar ({@link EditorBar}); every surface wears a quiet outline, and a hidden one is a card in the stack
+ * beside the frame ({@link HiddenStackView}). With a card up the frame shrinks and moves so the selected surface, which alone wears the
  * primary ring, stays in view ({@link EditorFramePose}). While the editor is up the terminal's own
  * touches are taken by the gesture overlay, the in-app keyboard is raised so it can be tapped, and
  * the pane wall's paging is held.</p>
@@ -539,11 +541,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.setOnPlaceShownListener(() -> {
                 pushLayoutShape(layout);
                 restateCard();
+                refreshStack();
+            });
+            layout.setOnTrayOfferListener((offered, hovered) -> {
+                HiddenStackView stack = mStack;
+                if (stack != null) stack.setZone(offered, hovered);
             });
             layout.setOnSelectionListener(this::onCanvasSelection);
             pushLayoutShape(layout);
             layout.begin(place, carried == null ? null : carried.arrangement);
         }
+        attachStack(content);
         if (mBar == null) {
             mBar = new EditorBar(mHost.context());
             mBar.setListener(new BarListener());
@@ -581,7 +589,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (!mOpen || token != mPresentToken)
                     return;
                 // Raised so it can be tapped, where the place shows it; a keyboard the place
-                // keeps down stays down, and its ghost is the way to its card.
+                // keeps down stays down, and its card in the stack is the way to it.
                 LayoutEditorController shown = mHost.layoutEditor();
                 if (!mHost.isInAppKeyboardShown()
                     && (shown == null || shown.isKeyboardShown()))
@@ -785,6 +793,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         frame.invalidateOutline();
         if (mCanvas != null)
             mCanvas.setFrameCornerRadiusPx(mFrameCornerPx + RING_PX);
+        updateCanvasTray();
     }
 
     /** A tap on an element of the canvas (the other orientation): its card. */
@@ -848,6 +857,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (other && mCanvas != null)
             applyModelShape(mCanvas.isModelResized(), true);
         restateCard();
+        refreshStack();
     }
 
     private final class BarListener implements EditorBar.Listener {
@@ -1016,7 +1026,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 SurfaceProperty.GRAIN, SurfaceProperty.OPACITY, SurfaceProperty.TINT);
         Context context = mHost.context();
         for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
-            HomeSettings.KEY_FOLDER_DENSITY, HomeSettings.KEY_FOLDER_CAPACITY,
+            HomeSettings.KEY_FOLDER_DENSITY,
             HomeSettings.KEY_PAGE_INDICATOR})
             AppearanceSettingsStore.putString(context, key, null);
         AppearanceSettingsStore.putBoolean(context, HomeSettings.KEY_LABEL_TWO_LINES,
@@ -1056,6 +1066,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The window every pose is computed from; null until the first measure. */
     @Nullable private EditorFramePose.Window mPoseWindow;
     private float mTargetScale = -1f;
+    private float mTargetTx;
     private float mTargetTy;
     @Nullable private android.animation.ValueAnimator mFrameAnimator;
 
@@ -1101,16 +1112,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // The first pose: the frame grows into place from full size.
             EditorFramePose.Pose pose = targetPose();
             boolean grow = animate && !ReducedMotion.isEnabled(mHost.context());
-            frame.show(pose.scale, 0f, pose.translationY, grow);
+            frame.show(pose.scale, pose.translationX, pose.translationY, grow);
             if (grow)
                 markEntering();
-            setTarget(pose.scale, pose.translationY);
+            setTarget(pose.scale, pose.translationX, pose.translationY);
             placeBar();
         } else {
             applyPose(false);
         }
         if (mEditorWallpaper != null)
             showEditorWallpaper(mEditorWallpaper);
+        refreshStack();
         return true;
     }
 
@@ -1170,9 +1182,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCardSheet sheet = mSheet;
         if (window == null)
             return new EditorFramePose.Pose(1f, 0f, 0f);
+        EditorFramePose.Reserve reserve = poseReserve();
         if (mCard != null && sheet != null)
-            return EditorFramePose.pose(window, window.heightPx - sheet.heightAt(sheet.detent()));
-        return EditorFramePose.restPose(window);
+            return EditorFramePose.pose(window, window.heightPx - sheet.heightAt(sheet.detent()),
+                reserve);
+        return EditorFramePose.pose(window, Float.MAX_VALUE, reserve);
+    }
+
+    /** The band on the frame's left that the stack of hidden items keeps clear. */
+    @NonNull
+    private EditorFramePose.Reserve poseReserve() {
+        AppearanceEditorFrame frame = mFrame;
+        int width = frame == null ? 0 : frame.root().getWidth();
+        return new EditorFramePose.Reserve(
+            mContainerLeftPx + HiddenStackPolicy.reservePx(density()), mContainerLeftPx, width,
+            mWindowWidthPx, dp(HiddenStackPolicy.SIDE_DP));
     }
 
     /**
@@ -1186,7 +1210,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mFrame == null || !mFrameCtxValid || !mOpen || mTargetScale < 0f)
             return;
         EditorFramePose.Pose pose = targetPose();
-        moveFrame(pose.scale, pose.translationY, animate);
+        moveFrame(pose.scale, pose.translationX, pose.translationY, animate);
         placeBar();
     }
 
@@ -1198,7 +1222,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mFrameAnimator != null || mEntering || mFollowingSheet)
             return true;
         View root = frame.root();
-        return root.getScaleX() == mTargetScale && root.getTranslationY() == mTargetTy;
+        return root.getScaleX() == mTargetScale && root.getTranslationX() == mTargetTx
+            && root.getTranslationY() == mTargetTy;
     }
 
     /** The frame's grow-in animation is running; a refit leaves it to land. */
@@ -1211,42 +1236,46 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             root.postDelayed(() -> mEntering = false, AppearanceEditorFrame.ENTER_MS + 20L);
     }
 
-    private void setTarget(float scale, float ty) {
+    private void setTarget(float scale, float tx, float ty) {
         mTargetScale = scale;
+        mTargetTx = tx;
         mTargetTy = ty;
-        setFrameRect(scale, ty);
+        setFrameRect(scale, tx, ty);
         positionLayoutFrame();
         restyleOutlines();
     }
 
     /** Moves the frame to its new pose on the card's clock; the canvas and outlines follow at the end. */
-    private void moveFrame(float scale, float ty, boolean animate) {
+    private void moveFrame(float scale, float tx, float ty, boolean animate) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
             return;
         View root = frame.root();
         boolean onItsWay = mFrameAnimator != null || mEntering;
-        if (scale == mTargetScale && ty == mTargetTy && !mFollowingSheet
-            && (onItsWay || (root.getScaleX() == scale && root.getTranslationY() == ty)))
+        if (scale == mTargetScale && tx == mTargetTx && ty == mTargetTy && !mFollowingSheet
+            && (onItsWay || (root.getScaleX() == scale && root.getTranslationX() == tx
+                && root.getTranslationY() == ty)))
             return;
         mFollowingSheet = false;
         cancelFrameAnimator();
         mEntering = false;
         if (!animate || ReducedMotion.isEnabled(mHost.context()) || !mFramed) {
             root.animate().cancel();
-            frame.show(scale, 0f, ty, false);
-            setTarget(scale, ty);
+            frame.show(scale, tx, ty, false);
+            setTarget(scale, tx, ty);
             return;
         }
         root.animate().cancel();
         final float fromScale = root.getScaleX();
+        final float fromTx = root.getTranslationX();
         final float fromTy = root.getTranslationY();
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(POSE_MS);
         animator.setInterpolator(Motion.settle());
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
-            frame.setPose(fromScale + (scale - fromScale) * f, 0f, fromTy + (ty - fromTy) * f);
+            frame.setPose(fromScale + (scale - fromScale) * f, fromTx + (tx - fromTx) * f,
+                fromTy + (ty - fromTy) * f);
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             private boolean mCancelled;
@@ -1260,12 +1289,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     mFrameAnimator = null;
                 if (mCancelled || !mOpen)
                     return;
-                frame.setPose(scale, 0f, ty);
-                setTarget(scale, ty);
+                frame.setPose(scale, tx, ty);
+                setTarget(scale, tx, ty);
             }
         });
         mFrameAnimator = animator;
         mTargetScale = scale;
+        mTargetTx = tx;
         mTargetTy = ty;
         animator.start();
     }
@@ -1278,12 +1308,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** The scaled container's rect in the content view: the canvas's host. */
-    private void setFrameRect(float scale, float translationY) {
+    private void setFrameRect(float scale, float translationX, float translationY) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
             return;
         View root = frame.root();
-        float scaledLeft = mContainerLeftPx + root.getWidth() * (1f - scale) / 2f;
+        float scaledLeft = mContainerLeftPx + translationX + root.getWidth() * (1f - scale) / 2f;
         float top = mContainerTopPx + translationY;
         mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), (int) Math.floor(top),
             (int) Math.ceil(scaledLeft + root.getWidth() * scale),
@@ -1309,6 +1339,159 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? mWindowHeightPx - sheet.sheetTopPx() + gap
             : barLift + dp(EditorBar.BAR_DP) + gap;
         bar.place(barLift, halfLift);
+        placeStack();
+    }
+
+    // ------------------------------------------------------------------ the hidden items' stack
+
+    @Nullable private HiddenStackView mStack;
+    /** What the edited layout puts away now, in the stack's order. */
+    private final List<HiddenItem> mHidden = new ArrayList<>();
+    /** What the stack was last laid out for, so a pass that changes nothing touches nothing. */
+    @Nullable private String mStackSignature;
+    private int mLabelForHeightPx = -1;
+    private float mLabelForFontScale = -1f;
+    private float mLabelPx;
+    /** The stack's column in the content view, {left, top, right, bottom}, also the drop target. */
+    @Nullable private int[] mStackColumn;
+
+    private void attachStack(@NonNull ViewGroup content) {
+        HiddenStackView stack = mStack;
+        if (stack == null) {
+            stack = new HiddenStackView(mHost.context());
+            stack.setListener(new HiddenStackView.Listener() {
+                @Override public void onShow(@NonNull HiddenItem item) {
+                    showHidden(item, true);
+                }
+
+                @Override public void onDropped(@NonNull HiddenItem item, float rawX, float rawY) {
+                    if (isOverFrame(rawX, rawY))
+                        showHidden(item, false);
+                }
+            });
+            mStack = stack;
+        }
+        if (stack.getParent() != content) {
+            if (stack.getParent() instanceof ViewGroup)
+                ((ViewGroup) stack.getParent()).removeView(stack);
+            content.addView(stack, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+    }
+
+    private void detachStack() {
+        HiddenStackView stack = mStack;
+        if (stack != null && stack.getParent() instanceof ViewGroup)
+            ((ViewGroup) stack.getParent()).removeView(stack);
+        mHidden.clear();
+        mStackSignature = null;
+        mStackColumn = null;
+    }
+
+    /** The items the edited layout puts away, read again; the stack and the frame follow. */
+    private void refreshStack() {
+        LayoutEditorController layout = mHost.layoutEditor();
+        mHidden.clear();
+        if (mOpen && layout != null) {
+            for (LayoutEditorPlan.TrayItem tray : layout.trayItems()) {
+                HiddenItem item = HiddenItem.of(tray);
+                if (item != null) mHidden.add(item);
+            }
+            if (layout.offers(Element.APPS)) {
+                if (!layout.searchField()) mHidden.add(HiddenItem.SEARCH_FIELD);
+                if (!layout.drawerTile()) mHidden.add(HiddenItem.DRAWER_TILE);
+            }
+        }
+        placeStack();
+    }
+
+    /** Lays the cards out for the window and the card up now. */
+    private void placeStack() {
+        HiddenStackView stack = mStack;
+        EditorFramePose.Window window = mPoseWindow;
+        EditorCardSheet sheet = mSheet;
+        if (stack == null || window == null || !mFrameCtxValid || !mOpen)
+            return;
+        float density = density();
+        int top = window.topPx();
+        float cardTop = mCard != null && sheet != null
+            ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
+        int available = Math.max(0,
+            Math.round(EditorFramePose.stackBottomPx(window, cardTop)) - top);
+        int cardHeight = HiddenStackPolicy.cardHeightPx(mHidden.size(), available, density);
+        float fontScale = getResources().getConfiguration().fontScale;
+        if (cardHeight != mLabelForHeightPx || fontScale != mLabelForFontScale) {
+            mLabelPx = HiddenStackView.fittedLabelPx(mHost.context(), cardHeight);
+            mLabelForHeightPx = cardHeight;
+            mLabelForFontScale = fontScale;
+        }
+        int left = mContainerLeftPx + dp(HiddenStackPolicy.SIDE_DP);
+        mStackColumn = new int[] {left, top, left + HiddenStackPolicy.cardWidthPx(density),
+            top + available};
+        String signature = mHidden + "/" + left + "/" + top + "/" + cardHeight + "/" + mLabelPx
+            + "/" + available;
+        if (!signature.equals(mStackSignature)) {
+            mStackSignature = signature;
+            stack.set(mHidden, left, top, cardHeight, mLabelPx, available);
+        }
+        updateCanvasTray();
+    }
+
+    /** The canvas is told where the stack is (in its own coordinates), the place to drop a lifted element. */
+    private void updateCanvasTray() {
+        LayoutCanvasView canvas = mCanvas;
+        int[] column = mStackColumn;
+        int[] frame = mFrameRectInContent;
+        if (canvas == null || column == null || frame == null)
+            return;
+        float dx = frame[0] - RING_PX;
+        float dy = frame[1] - RING_PX;
+        canvas.setExternalTrayRect(new RectF(column[0] - dx, column[1] - dy, column[2] - dx,
+            column[3] - dy));
+    }
+
+    /** Whether a raw screen point is over the frame. */
+    private boolean isOverFrame(float rawX, float rawY) {
+        int[] rect = mFrameRectInContent;
+        View content = mHost.findView(android.R.id.content);
+        if (rect == null || content == null)
+            return false;
+        int[] at = new int[2];
+        content.getLocationOnScreen(at);
+        float x = rawX - at[0];
+        float y = rawY - at[1];
+        return x >= rect[0] && x <= rect[2] && y >= rect[1] && y <= rect[3];
+    }
+
+    /**
+     * Shows a hidden item again where it was (a tap on its card, or the card let go over the
+     * frame), and after a tap raises the card the item belongs to.
+     */
+    private void showHidden(@NonNull HiddenItem item, boolean openItsCard) {
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (!mOpen || layout == null)
+            return;
+        switch (item) {
+            case KEYBOARD:
+                layout.setKeyboardShown(true);
+                if (!mHost.isInAppKeyboardShown())
+                    mRaisedKeyboard = mHost.showInAppKeyboardForEditor() || mRaisedKeyboard;
+                break;
+            case SEARCH_FIELD:
+                layout.setSearchField(true);
+                break;
+            case DRAWER_TILE:
+                layout.setDrawerTile(true);
+                break;
+            default:
+                if (item.tray != null && item.tray.element != null)
+                    layout.setShown(item.tray.element, true);
+                break;
+        }
+        refreshStack();
+        positionTargets();
+        if (openItsCard && item.card.standsOn(mHalf))
+            openCard(item.card, true);
     }
 
     /** The card stands at a new top edge, or settled on a detent. */
@@ -1350,8 +1533,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntering = false;
         frame.root().animate().cancel();
         mFollowingSheet = true;
-        EditorFramePose.Pose pose = EditorFramePose.pose(window, cardTopPx);
-        frame.setPose(pose.scale, 0f, pose.translationY);
+        EditorFramePose.Pose pose = EditorFramePose.pose(window, cardTopPx, poseReserve());
+        frame.setPose(pose.scale, pose.translationX, pose.translationY);
     }
 
     // ---- the display round the frame -----------------------------------------------------------
@@ -1553,6 +1736,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The arrangement moved (a drop, a switch, a height): the dirty state and the card. */
     private void onArrangementChanged() {
         syncDirty();
+        refreshStack();
         if (!mSliderDragActive && mSheet != null && mSheet.isShown())
             mSheet.restate();
     }
@@ -1701,7 +1885,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Home's stored list values, in segment order. */
     private static final String[] LABEL_SIZES = {"small", "default", "large"};
     private static final String[] FOLDER_DENSITIES = {"compact", "default", "comfortable"};
-    private static final String[] FOLDER_LIMITS = {"9", "12", "16", "20"};
     private static final String[] NUMERALS = {"sans", "mono"};
     private static final String[] THEMES = {TermuxPropertyConstants.IVALUE_NIGHT_MODE_SYSTEM,
         TermuxPropertyConstants.IVALUE_NIGHT_MODE_FALSE,
@@ -1818,9 +2001,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case PAGE_DOTS:
                     return "off".equals(AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
-                case FOLDER_LIMIT:
-                    return indexOf(FOLDER_LIMITS, AppearanceSettingsStore.getString(context,
-                        HomeSettings.KEY_FOLDER_CAPACITY, null), 2);
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
@@ -2041,7 +2221,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         R.string.appearance_folders_default, R.string.appearance_folders_roomy);
                 case NUMERALS:
                     return strings(R.string.appearance_numerals_sans, R.string.appearance_numerals_mono);
-                case FOLDER_LIMIT: return FOLDER_LIMITS.clone();
                 case FORM:
                     return strings(R.string.appearance_form_docked, R.string.appearance_form_floating,
                         R.string.appearance_form_split);
@@ -2180,7 +2359,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     if (value != 0 && !mHost.isInAppKeyboardShown()) {
                         mRaisedKeyboard = mHost.showInAppKeyboardForEditor() || mRaisedKeyboard;
                     } else if (value == 0 && mHost.isInAppKeyboardShown()) {
-                        // The frame stops drawing it: off reads off, and its ghost takes its place.
+                        // The frame stops drawing it: off reads off, and its card joins the stack.
                         mHost.hideInAppKeyboardForEditor();
                         mRaisedKeyboard = false;
                     }
@@ -2250,9 +2429,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case PAGE_DOTS:
                 writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
-                break;
-            case FOLDER_LIMIT:
-                writeHomeString(HomeSettings.KEY_FOLDER_CAPACITY, FOLDER_LIMITS[clamp(value, 0, 3)]);
                 break;
             case WALLPAPER_SCROLL:
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
@@ -3335,38 +3511,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Where a card's surface stands in the overlay's space: the surface itself, or, while it is
-     * hidden, its ghost on the edge it would stand on; null when the frame has no such surface.
+     * Where a card's surface stands in the overlay's space; null when the frame has no such
+     * surface (a hidden one is a card in the stack beside the frame, {@link HiddenStackView}).
      * Home's is the whole frame.
      */
     @Nullable
     private int[] targetRect(@Nullable EditorCard card, @NonNull View overlay) {
-        int[] rect = surfaceRect(card, overlay);
-        if (card == null)
-            return rect;
-        if (rect == null)
-            return ghostRect(card, overlay);
-        return besideItsGhost(card, rect, overlay);
-    }
-
-    /**
-     * {@code rect}, a surface on screen, or, when its element is put away while its host still
-     * stands for other rows (the dock's A–Z index with the pinned apps hidden, the status host
-     * with the status bar hidden), grown over the hidden row's band on its edge, dashed.
-     */
-    @NonNull
-    private int[] besideItsGhost(@NonNull EditorCard card, @NonNull int[] rect,
-                                 @NonNull View overlay) {
-        if (card == EditorCard.KEYBOARD || !isGhost(card))
-            return rect;
-        int[] band = ghostBand(card, overlay);
-        return band == null ? rect : EditorFramePose.ghostBeside(rect, band, overlay.getHeight());
-    }
-
-    /** Whether a card's surface is put away (it wears a dashed ghost, and taps still reach it). */
-    private boolean isGhost(@NonNull EditorCard card) {
-        LayoutEditorController layout = mHost.layoutEditor();
-        return layout != null && isHidden(card, layout);
+        return surfaceRect(card, overlay);
     }
 
     /** Where a surface stands in the overlay, or null when it is not on screen. */
@@ -3399,77 +3550,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return new int[] {left, top, left + surface.getWidth(), top + surface.getHeight()};
     }
 
-    /**
-     * A hidden surface's ghost: the status bar or the dock put away, the keyboard switched off.
-     * Null for a surface that is shown, or that the page does not wear.
-     */
-    @Nullable
-    private int[] ghostRect(@NonNull EditorCard card, @NonNull View overlay) {
-        int[] band = ghostBand(card, overlay);
-        LayoutEditorController layout = mHost.layoutEditor();
-        PlaceLayout.Edge edge = layout == null ? null : edgeOfCard(card, layout);
-        if (band == null || edge == null)
-            return null;
-        // Clear of every surface still standing on that edge (the dock's A–Z index under a hidden
-        // keyboard): one target under another took the other's taps, and its card was out of reach.
-        int depth = 0;
-        for (EditorCard other : GHOST_ORDER) {
-            if (other == card || edgeOfCard(other, layout) != edge)
-                continue;
-            int[] standing = surfaceRect(other, overlay);
-            if (standing == null)
-                continue;
-            standing = besideItsGhost(other, standing, overlay);
-            depth = Math.max(depth, EditorFramePose.depthFrom(edge, standing,
-                overlay.getWidth(), overlay.getHeight()));
-        }
-        return EditorFramePose.shiftInward(band, edge, depth);
-    }
-
-    /** A hidden surface's band on its edge, stacked past the other ghosts there; null if shown. */
-    @Nullable
-    private int[] ghostBand(@NonNull EditorCard card, @NonNull View overlay) {
-        LayoutEditorController layout = mHost.layoutEditor();
-        if (layout == null || !isHidden(card, layout))
-            return null;
-        PlaceLayout.Edge edge = edgeOfCard(card, layout);
-        if (edge == null)
-            return null;
-        int stack = 0;
-        for (EditorCard other : GHOST_ORDER) {
-            if (other == card)
-                break;
-            if (isHidden(other, layout) && edgeOfCard(other, layout) == edge
-                && surfaceRect(other, overlay) == null)
-                stack++;
-        }
-        return EditorFramePose.ghostRect(edge, stack, overlay.getWidth(), overlay.getHeight(),
-            dp(EditorFramePose.GHOST_DP), dp(EditorFramePose.GAP_DP));
-    }
-
-    /** The edge a card's surface stands on, or would come back to; null for none. */
-    @Nullable
-    private static PlaceLayout.Edge edgeOfCard(@NonNull EditorCard card,
-                                               @NonNull LayoutEditorController layout) {
-        if (card == EditorCard.KEYBOARD)
-            return PlaceLayout.Edge.BOTTOM;
-        Element element = elementOf(card);
-        return element == null ? null : layout.edgeOf(element);
-    }
-
-    /** The order ghosts stack in from a shared edge. */
-    private static final EditorCard[] GHOST_ORDER = {EditorCard.STATUS, EditorCard.DOCK,
-        EditorCard.KEYBOARD};
-
-    private boolean isHidden(@NonNull EditorCard card, @NonNull LayoutEditorController layout) {
-        if (card == EditorCard.KEYBOARD) {
-            TermuxInAppKeyboard keyboard = keyboard();
-            return keyboard != null && keyboard.isEnabled() && !mHost.isInAppKeyboardShown();
-        }
-        Element element = elementOf(card);
-        return element != null && layout.offers(element) && !layout.isShown(element);
-    }
-
     @Nullable
     private View anchorViewFor(@Nullable SurfaceSlot slot) {
         if (slot == null || !scene().offersSurface(slot))
@@ -3487,7 +3567,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** Lays every tap target over its surface (or its ghost), dressed, then the ring. */
+    /** Lays every tap target over its surface, dressed, then the ring. */
     private void positionTargets() {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
         if (overlay == null || !mOpen || overlay.getWidth() <= 0)
@@ -3543,7 +3623,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Every target's quiet outline (1dp on screen, 40% of colorOutline, along the surface's own
-     * corner), dashed for a ghost; Home's drawn just inside the frame. Rebuilt only when the
+     * corner); Home's drawn just inside the frame. Rebuilt only when the
      * frame's scale or a target's state changes, never per frame.
      */
     private void restyleOutlines() {
@@ -3564,7 +3644,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (group.getBackground() != null) group.setBackground(null);
                 continue;
             }
-            boolean ghost = surfaceRect(card, overlay) == null || isGhost(card);
+            boolean ghost = surfaceRect(card, overlay) == null;
             GradientDrawable ring = new GradientDrawable();
             ring.setColor(0);
             if (ghost) {
@@ -3580,7 +3660,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The selection: one 2dp primary ring round the card's surface (its ghost while hidden), just
+     * The selection: one 2dp primary ring round the card's surface, just
      * outside its edge, inside the frame for Home. Nothing else glows.
      */
     private void positionOutline() {
@@ -4284,7 +4364,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.setOnChangedListener(null);
             layout.setOnPlaceShownListener(null);
             layout.setOnSelectionListener(null);
+            layout.setOnTrayOfferListener(null);
         }
+        detachStack();
         cancelFrameAnimator();
         mFrameCtxValid = false;
         mTargetScale = -1f;

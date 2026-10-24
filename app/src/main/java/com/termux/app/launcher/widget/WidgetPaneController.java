@@ -471,12 +471,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
-     * Settings › Home › Folders: how tightly an open folder lays its apps out, and the most apps a
-     * folder takes. A folder already past a lower cap keeps its apps; it only takes no more.
+     * Settings › Home › Folders: how tightly an open folder lays its apps out. A folder takes
+     * {@link HomeFolderPolicy#MAX_APPS} apps for everyone; one already past that keeps its apps.
      */
-    public void setFolderStyle(@NonNull HomeFolderDensity density, int capacity) {
+    public void setFolderStyle(@NonNull HomeFolderDensity density) {
         folderDensity = density;
-        folderCapacity = HomeFolderPolicy.clampCapacity(capacity);
     }
 
     /** The dots under the grid, or none (Settings › Home › Page indicator). */

@@ -93,7 +93,6 @@ public final class EditorRows {
         FOLDERS(Kind.SEGMENTS, R.string.appearance_row_folders, R.drawable.ic_symbol_folder),
         NUMERALS(Kind.SEGMENTS, R.string.appearance_row_numerals, R.drawable.ic_editor_text_size),
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
-        FOLDER_LIMIT(Kind.SEGMENTS, R.string.appearance_row_folder_limit, R.drawable.ic_symbol_folder),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
         OWN_LAYOUT(Kind.SWITCH, R.string.appearance_row_own_layout, R.drawable.ic_symbol_home),
@@ -203,8 +202,8 @@ public final class EditorRows {
                     Row.GLASS_WIDGETS);
                 add(out, 2, Row.TWO_LINE, Row.LABEL_SHADOW, Row.FOLDERS, Row.NUMERALS,
                     Row.PAGE_DOTS);
-                add(out, 3, Row.FOLDER_LIMIT, Row.WALLPAPER_SCROLL, Row.OWN_LAYOUT,
-                    Row.LINK_GESTURES, Row.LINK_PAGES);
+                add(out, 3, Row.WALLPAPER_SCROLL, Row.OWN_LAYOUT, Row.LINK_GESTURES,
+                    Row.LINK_PAGES);
                 break;
             case STATUS:
                 add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN,

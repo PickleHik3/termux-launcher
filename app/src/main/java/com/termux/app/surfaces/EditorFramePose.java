@@ -1,6 +1,7 @@
 package com.termux.app.surfaces;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.place.PlaceLayout;
 
@@ -108,11 +109,17 @@ final class EditorFramePose {
     /** A pose: the frame's scale and translation, and the half line's top in the content view. */
     static final class Pose {
         final float scale;
+        final float translationX;
         final float translationY;
         final float halfLineTopPx;
 
         Pose(float scale, float translationY, float halfLineTopPx) {
+            this(scale, 0f, translationY, halfLineTopPx);
+        }
+
+        Pose(float scale, float translationX, float translationY, float halfLineTopPx) {
             this.scale = scale;
+            this.translationX = translationX;
             this.translationY = translationY;
             this.halfLineTopPx = halfLineTopPx;
         }
@@ -154,12 +161,67 @@ final class EditorFramePose {
      */
     @NonNull
     static Pose pose(@NonNull Window window, float cardTopPx) {
+        return pose(window, cardTopPx, null);
+    }
+
+    /**
+     * {@link #pose(Window, float)} with a band kept clear on the frame's left (the hidden items'
+     * stack): the scale is capped so the frame's right edge keeps its margin, and the frame is
+     * moved across just far enough that its left edge clears the band.
+     */
+    @NonNull
+    static Pose pose(@NonNull Window window, float cardTopPx, @Nullable Reserve reserve) {
         int top = window.topPx();
         float bottom = Math.min(window.restBottomPx(), window.bottomOverCardPx(cardTopPx));
-        float scale = fitScale(window.visibleHeightPx, top, bottom, restScale(window));
+        float cap = restScale(window);
+        if (reserve != null)
+            cap = Math.min(cap, reserve.maxScale());
+        float scale = fitScale(window.visibleHeightPx, top, bottom, cap);
+        float tx = reserve == null ? 0f : reserve.shiftFor(scale);
         float ty = top + window.revealTopPx * scale - window.containerTopPx;
         float halfLineTop = top + window.visibleHeightPx * scale + window.gapPx();
-        return new Pose(scale, ty, halfLineTop);
+        return new Pose(scale, tx, ty, halfLineTop);
+    }
+
+    /**
+     * The room the hidden items' stack takes on the frame's left, in px of the content view: the
+     * frame's left edge may not stand left of {@link #leftPx}, nor its right edge past the window
+     * less {@link #rightMarginPx}.
+     */
+    static final class Reserve {
+        final int leftPx;
+        final int containerLeftPx;
+        final int containerWidthPx;
+        final int windowWidthPx;
+        final int rightMarginPx;
+
+        Reserve(int leftPx, int containerLeftPx, int containerWidthPx, int windowWidthPx,
+                int rightMarginPx) {
+            this.leftPx = leftPx;
+            this.containerLeftPx = containerLeftPx;
+            this.containerWidthPx = containerWidthPx;
+            this.windowWidthPx = windowWidthPx;
+            this.rightMarginPx = rightMarginPx;
+        }
+
+        /** The largest scale whose frame fits between the band and the right margin. */
+        float maxScale() {
+            if (containerWidthPx <= 0)
+                return 1f;
+            float room = windowWidthPx - rightMarginPx - leftPx;
+            return Math.max(MIN_SCALE, room / containerWidthPx);
+        }
+
+        /** How far across the frame at {@code scale} moves so its left edge clears the band. */
+        float shiftFor(float scale) {
+            float centredLeft = containerLeftPx + containerWidthPx * (1f - scale) / 2f;
+            return Math.max(0f, leftPx - centredLeft);
+        }
+    }
+
+    /** The lowest the stack of hidden items may reach with a card whose top is here. */
+    static float stackBottomPx(@NonNull Window window, float cardTopPx) {
+        return Math.min(window.restBottomPx(), window.bottomOverCardPx(cardTopPx));
     }
 
     /** The pose at rest: no card. */

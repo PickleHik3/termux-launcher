@@ -37,6 +37,8 @@
     <string name="appearance_card_terminal">Terminal</string>
     <string name="appearance_card_dock">Dock</string>
     <string name="appearance_card_keyboard">Keyboard</string>
+    <!-- A card in the stack beside the frame, for something the layout puts away; %1$s is its name. -->
+    <string name="appearance_hidden_card_description">%1$s, hidden. Tap to show, or drag it onto the frame.</string>
     <string name="appearance_card_appearance">Appearance</string>
     <string name="appearance_card_close">Close</string>
     <string name="appearance_card_menu">More options</string>
@@ -81,7 +83,6 @@
     <string name="appearance_row_folders">Folders</string>
     <string name="appearance_row_numerals">Numerals</string>
     <string name="appearance_row_page_dots">Page dots</string>
-    <string name="appearance_row_folder_limit">Folder limit</string>
     <string name="appearance_row_wallpaper_scroll">Wallpaper scroll</string>
     <string name="appearance_row_own_layout">Own layout</string>
     <string name="appearance_row_gestures">Gestures</string>

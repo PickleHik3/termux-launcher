@@ -50,14 +50,6 @@
             app:entryValues="@array/settings_home_folder_density_values"
             app:useSimpleSummaryProvider="true"
             android:defaultValue="default" />
-        <ListPreference
-            app:key="app_launcher_home_folder_capacity"
-            app:title="@string/settings_home_folder_capacity_title"
-            app:dialogTitle="@string/settings_home_folder_capacity_title"
-            app:entries="@array/settings_home_folder_capacity_entries"
-            app:entryValues="@array/settings_home_folder_capacity_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="16" />
     </PreferenceCategory>
 
     <!-- Every gesture in one place (spec §4): first the five on a Home page's free area, whose
