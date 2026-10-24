@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-24 · clock widget meta column (commit "feat(clock): widgets stack AM/PM over the
+  seconds") · on the emulator with a 12-hour clock widget in each face (Numerals, Slab, Minimal,
+  Tape, LED, LCD, Flip) at 2x1, 2x2 and 4x2: the period stands over the seconds like the expanded
+  status bar, nothing clips at the card's right edge; seconds off keeps the period on the digits'
+  row; a 24-hour clock shows the seconds alone and nothing shifts.
 - 2026-10-23 · #142 phase 2 (commit "feat(place): the crossing morphs the dock's row and holds
   every reader") · the audit's slide clips re-shot, frames recorded: Home → window and window →
   Home, Docked and Floating, each of Tray, Beads and Strip → the pinned icons change size and
