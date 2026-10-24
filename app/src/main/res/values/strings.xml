@@ -2114,9 +2114,9 @@
                 <string name="layout_editor_keyboard_forms">Keyboard type</string>
                 <!-- The Dock designs, in Row B while the dock is selected (#93). -->
                 <string name="layout_editor_dock_styles">Dock design</string>
-                <string name="layout_editor_dock_style_glass_tray">#1 Tray</string>
-                <string name="layout_editor_dock_style_lens_beads">#2 Beads</string>
-                <string name="layout_editor_dock_style_wall_strip">#3 Strip</string>
+                <string name="layout_editor_dock_style_glass_tray">Tray</string>
+                <string name="layout_editor_dock_style_lens_beads">Beads</string>
+                <string name="layout_editor_dock_style_wall_strip">Strip</string>
                 <!-- The Search field toggle beside the Dock designs (#96): the command palette's
                      field under the dock's apps row, with any design. The label stands under its
                      chip in a fifth of the row, so it stays one short word. -->
