@@ -116,6 +116,7 @@ final class SoundFiles {
             env.put("PULSE_CLIENTCONFIG", "/dev/null");
         } else {
             env.put("PULSE_SERVER", SoundPaths.PULSE_SERVER);
+            env.put("PULSE_COOKIE", SoundPaths.COOKIE);
             env.put("DBUS_SESSION_BUS_ADDRESS", SoundPaths.BUS_ADDRESS);
         }
         return env;
@@ -124,12 +125,15 @@ final class SoundFiles {
     /**
      * The prefix's client drop-in: every client in the prefix that is not handed
      * {@code PULSE_SERVER} — ssh, Termux:Widget, run-command, services — finds the server
-     * through it (decision 4). No autospawn: a client never starts a second server.
+     * through it (decision 4), with the cookie the server's sockets ask for: without it a client
+     * offers {@code ~/.config/pulse/cookie} and is turned away. No autospawn: a client never
+     * starts a second server.
      */
     @NonNull
-    static String termuxDropIn(@NonNull String server) {
+    static String termuxDropIn(@NonNull String server, @NonNull String cookieFile) {
         return SoundPaths.MARKER + "; it rewrites this file and removes it when Sound is off\n"
             + "default-server = " + server + "\n"
+            + "cookie-file = " + cookieFile + "\n"
             + "autospawn = no\n";
     }
 
@@ -203,6 +207,9 @@ final class SoundFiles {
     static Map<String, String> shellEnvironment(boolean bus) {
         Map<String, String> env = new HashMap<>();
         env.put("PULSE_SERVER", SoundPaths.PULSE_SERVER);
+        // The cookie the server asks for, also named by the prefix's drop-in; a distro never
+        // sees this variable (proot-distro starts from an empty environment).
+        env.put("PULSE_COOKIE", SoundPaths.COOKIE);
         if (bus) {
             env.put("DBUS_SESSION_BUS_ADDRESS", SoundPaths.BUS_ADDRESS);
             // Read by ProotDistro.loginCommand, which hands the bus to a distro only when set.

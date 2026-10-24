@@ -202,7 +202,9 @@ public class SoundPolicyTest {
         assertEquals(SoundPaths.BUS_ADDRESS, withBus.get("DBUS_SESSION_BUS_ADDRESS"));
         assertEquals("unix:path=/tmp/.X11-unix/termux-launcher-bus",
             withBus.get(LauncherSound.DISTRO_BUS_VARIABLE));
-        assertEquals(Collections.singleton("PULSE_SERVER"), without.keySet());
+        assertEquals(SoundPaths.COOKIE, withBus.get("PULSE_COOKIE"));
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("PULSE_SERVER", "PULSE_COOKIE")),
+            without.keySet());
     }
 
     @Test public void theBusSocketIsWhereADistroCanReachItAndIsNeverTakenForADisplay() {
@@ -213,11 +215,13 @@ public class SoundPolicyTest {
 
     // ---- Decisions 4 and 9: the drop-ins and the bus ----------------------------------------------
 
-    @Test public void thePrefixDropInNamesTheSocketAndNeverAutospawns() {
-        String dropIn = SoundFiles.termuxDropIn("unix:/t/native");
+    @Test public void thePrefixDropInNamesTheSocketItsCookieAndNeverAutospawns() {
+        String dropIn = SoundFiles.termuxDropIn("unix:/t/native", "/t/cookie");
 
         assertTrue(SoundFiles.isOurs(dropIn));
         assertTrue(dropIn.contains("\ndefault-server = unix:/t/native\n"));
+        // The server's sockets ask for the launcher's cookie; without it every client is refused.
+        assertTrue(dropIn.contains("\ncookie-file = /t/cookie\n"));
         assertTrue(dropIn.contains("\nautospawn = no\n"));
     }
 
@@ -231,12 +235,12 @@ public class SoundPolicyTest {
     }
 
     @Test public void aFileIsWrittenWhenMissingOrStaleAndNeverWhenItIsSomebodyElses() {
-        String wanted = SoundFiles.termuxDropIn("unix:/t/native");
+        String wanted = SoundFiles.termuxDropIn("unix:/t/native", "/t/cookie");
 
         assertSame(SoundFiles.Write.WRITE, SoundFiles.decide(false, null, wanted));
         assertSame(SoundFiles.Write.KEEP, SoundFiles.decide(true, wanted, wanted));
         assertSame(SoundFiles.Write.WRITE,
-            SoundFiles.decide(true, SoundFiles.termuxDropIn("unix:/old/native"), wanted));
+            SoundFiles.decide(true, SoundFiles.termuxDropIn("unix:/old/native", "/t/cookie"), wanted));
         assertSame(SoundFiles.Write.FOREIGN,
             SoundFiles.decide(true, "default-server = tcp:my.box\n", wanted));
         // Unreadable is not known to be ours.

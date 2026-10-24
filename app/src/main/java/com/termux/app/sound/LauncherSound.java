@@ -494,7 +494,7 @@ public final class LauncherSound {
         ensureCookie();
         writeStartupFile();
         File dropIn = new File(SoundPaths.TERMUX_DROP_IN);
-        String wanted = SoundFiles.termuxDropIn(SoundPaths.PULSE_SERVER);
+        String wanted = SoundFiles.termuxDropIn(SoundPaths.PULSE_SERVER, SoundPaths.COOKIE);
         switch (SoundFiles.decide(dropIn.exists(), readText(dropIn), wanted)) {
             case WRITE:
                 writeText(dropIn, wanted, false, false);
