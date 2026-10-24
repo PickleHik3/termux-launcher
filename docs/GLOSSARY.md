@@ -476,7 +476,8 @@ slides between Home and the Workspace. Its rule is **tap the thing**: tap a surf
 bar, Terminal, Dock, Keyboard) and its **card** rises with everything about it, ordered by how
 often it is touched, rare controls under **More**; drag a surface to move it; tap the **pill** for
 what has no surface (the Look slider, wallpaper, theme, icon pack, text size, full screen, minimal,
-orientation, Undo, Done). It edits the half the frame shows. Users never meet Base, inherit or
+orientation, Undo, Done; that bar is the **editor bar**, never the Pill, which is the dictation
+card). It edits the half the frame shows. Users never meet Base, inherit or
 follow: a moved slider is the surface's own value, marked by a dot, and **Reset** in the card menu
 puts it back on the Look. Undo steps back and Done keeps the changes. Every door to it is named
 Appearance and opens on that door's object.

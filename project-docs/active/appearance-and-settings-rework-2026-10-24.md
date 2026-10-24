@@ -156,3 +156,36 @@ they run in parallel.
 Risks the workers must respect: `SurfaceEditorController` is 4300 lines and already hosts both
 sessions; settings pages have been broken repeatedly, so the row layout change is one worker
 alone; per-half values touch every `resolveSurfaceValue` caller and the crossing (ADR 0012).
+
+## 7. Decisions from the wireframe pass (2026-10-24, night)
+
+Wireframes: `project-docs/reference/launcher/appearance-rework-wireframes/` (README lists the
+measurements and the questions they raised). Resolved as follows:
+
+- **Names.** The glossary's Pill is the dictation card, so the editor's bottom bar is the
+  **editor bar** (orientation chip · Undo · Done · palette). The palette's card is the
+  **Appearance card**. Users see neither name.
+- **A card up hides the editor bar.** ✕, a tap on the frame, or Back puts the card down; Done is
+  on the bar. The card is a bottom sheet with two detents: half (tier 1 visible, the frame at about
+  0.6) and full (the frame at about 0.44). The frame is a live preview, legibility at 0.44 is not
+  required.
+- **Move vs slide.** A plain horizontal swipe on the frame slides between halves (dots and the
+  half's name under the frame). A surface moves by hold-and-drag, the Launcher3 idiom. A tap opens
+  the card.
+- **Custom is a stop** the thumb can land on, and the stop any surface edit sets.
+- **A hidden surface keeps a dashed ghost outline** in the frame so it can still be tapped and shown.
+- **Per half, precisely:** opacity, tint, blur, grain, corners, margin and the Look stop. Dock
+  Style and Design, heights and places stay shared (ADR 0013 §4). The ½ mark in §3 means that.
+- **A tap on a Home icon or widget opens the Home card.** A widget's own settings stay on its
+  long-press on the live Home.
+- **Place** offers the edges the layout engine supports for that element (the dock: top or bottom
+  today; left and right when the engine does).
+- **Landscape** is edited through the orientation chip, which flips the frame.
+- **Font scale 1.3.** Segment labels shorten: Trackpad · Touch · Direct. Segments keep
+  `minWidth=0` and autosize. The half detent may show fewer rows; the sheet scrolls.
+- **Linux apps › Input copy:** "OSK auto-show" becomes "Keyboard pops up :: Opens when you tap a
+  text field and closes when you tap elsewhere"; "Keyboard over display" becomes "Keyboard over the
+  window". Done with the stepped guide work.
+- **The guide's steps vary by edition**: the nix edition starts at the distro step; the progress
+  line counts the steps that exist.
+- The wireframes' icons are placeholders; the build uses Material Symbols Rounded vectors.
