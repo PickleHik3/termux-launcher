@@ -117,6 +117,37 @@ public class PaneWallControllerTest {
         return made;
     }
 
+    @Test public void theEditorsSlideToAnEmptyWorkspaceStartsItsFirstShellAndLandsThere() {
+        host.hasWindow = false;
+        host.canStart = true;
+        controller.refreshPages();
+        controller.goHome(false);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+
+        assertTrue(controller.goToWorkspace(false));
+
+        assertEquals(1, host.shellsStarted);
+        assertEquals("the wall stands on the new window", PaneWallPage.TERMINAL,
+            wall.currentPage());
+    }
+
+    @Test public void theEditorsSlideToAWorkspaceWithAWindowStartsNothing() {
+        controller.goHome(false);
+        assertTrue(controller.goToWorkspace(false));
+        assertEquals(0, host.shellsStarted);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+    }
+
+    @Test public void noWorkspaceToShowLeavesTheWallOnHome() {
+        host.hasWindow = false;
+        host.canStart = false;
+        controller.refreshPages();
+        controller.goHome(false);
+        assertFalse(controller.goToWorkspace(false));
+        assertEquals(0, host.shellsStarted);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+    }
+
     @Test public void theWallsTerminalOffScreenSignalReachesTheHost() {
         assertEquals("the first layout reports the terminal on screen", Boolean.FALSE,
             host.terminalOffScreen);

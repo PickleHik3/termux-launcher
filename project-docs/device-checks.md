@@ -17,19 +17,41 @@ under twenty items; past that, the oldest are re-judged first.
   editor bar") · open Appearance from a corner tab on a window and on Home: the frame grows to about
   ×0.8 under a 16 dp top line, every surface wears a faint 1 dp outline, the half line reads
   "Workspace" or "Home" with the right dot long, the bar (Portrait · Undo greyed · Done · palette)
-  stands 8 dp over the gesture area, nothing overlaps at font scale 1.0 and 1.3 · emulator.
+  stands 8 dp over the gesture area, nothing overlaps at font scale 1.0 and 1.3 (fix commit "pose
+  the frame whole above the half line": the whole frame stands above the half line, which stands
+  above the bar; on Home with no keyboard up too) · emulator.
 - 2026-10-24 · same commit · a plain horizontal swipe on the frame slides the real wall to the
-  other half inside the frame, the half line follows; a hold on the dock lifts it on the layout
+  other half inside the frame, the half line follows (fix commit "slide the frame into the real
+  Workspace": the Workspace shows its window and terminal; with no window in the row the swipe
+  starts the first shell and the frame lands on it; a tap on that terminal opens the Terminal
+  card; a Workspace-only Tint shows on the Workspace's dock); a hold on the dock lifts it on the layout
   drawing and a drop on the top edge moves the live dock there; a tap still opens the card · emulator.
 - 2026-10-24 · #159 cards (commit "feat(surfaces): one card per object") · tap the dock: the card
   rises to its half detent with Opacity, Tint, Height, Visible, Position; the frame shrinks to
-  about ×0.6 and moves so the dock stays above the card; only the dock wears the 2 dp ring; drag
-  the handle up: the frame goes to ×0.44 wholly above the card; ✕, a tap on the frame and Back each
-  put the card down; at font scale 1.3 and 2.0 the last row scrolls clear of the gesture area and
-  three-word segments turn into a list · emulator.
+  about ×0.6, whole (its top under the status bar's line, its bottom over the dots and the word,
+  which stand over the card, never over the keys); only the dock wears the 2 dp ring; drag or
+  fling the handle or the header up: the card goes full and the frame to ×0.44, following the
+  finger; a tap on the handle flips the detents; ✕, a tap on the frame and Back each put the card
+  down; at font scale 1.3 and 2.0 the frame stays whole and below the status bar, the last row
+  scrolls clear of the gesture area and three-word segments turn into a list · emulator.
+- 2026-10-24 · fix commit "hand Back's press to the client when a view has no emulator" · open
+  the Home card from Settings › Home › Appearance, move a slider, hide the dock: Back puts the card
+  down, a second Back asks Keep editing / Discard / Save; Discard: the dock is back, the slider's
+  value is as before (both halves, `layout.*` keys of every layout as at open); the same on the
+  Workspace; Save and Done keep · emulator.
+- 2026-10-24 · fix commit "carry the editor's session across a theme relaunch" · Appearance card,
+  pick a Look stop, then Dark: the activity relaunches into dark and the editor comes back with
+  the Appearance card up and the Look still picked; Undo puts the theme and the Look back (a second
+  relaunch, the editor again comes back); Discard on leaving does the same · emulator.
+- 2026-10-24 · fix commit "polish" (editor card rows) · the Dock card: Tray / Beads / Strip show
+  glyph and word inside their outlines at 1.0 and 1.3; a slider at its maximum keeps the thumb
+  inside the 16 dp margin; the Style row's icon stands 16 dp in and "Floating" is centred in its
+  segment, no check mark in either · emulator.
 - 2026-10-24 · same commit · Visible off on the dock: the dock goes, a dashed ghost stays on its
-  edge, a tap on the ghost opens the Dock card, Visible on brings it back; the same for the status
-  bar and the keyboard · emulator.
+  edge (with the A–Z row still up, the dashed target spans the row and the apps' band over it), a
+  tap on the ghost opens the Dock card, Visible on brings it back; the same for the status bar and
+  the keyboard; the Keyboard card's Visible reads on exactly while the frame draws the keyboard,
+  and on Home without always-on the editor opens with the keyboard down and its ghost · emulator.
 - 2026-10-24 · same commit · every row of the Appearance card writes and shows live: Look stops,
   Wallpaper Change (the picker over the editor, Back returns, Done closes keeping it), Theme
   (the activity relaunches and the editor comes back with its card and Undo), Icon pack (tiles

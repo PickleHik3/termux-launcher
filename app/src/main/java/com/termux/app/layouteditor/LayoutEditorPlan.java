@@ -89,11 +89,12 @@ public final class LayoutEditorPlan {
      */
     @NonNull private PaneWallPage mWindowPlace;
     /**
-     * The arrangement of every variant this session has edited, as the editor found it; what
-     * Discard and ↺ put back. The variant the session opened on first; another is taken the
-     * first time the Home filter shows it, before anything can have been written to it, except to
-     * the sizes the Home and normal layouts share (linked, #84): those it takes from the entry
-     * already kept for the other ({@link #enterVariant}).
+     * The arrangement of every variant as the editor found it; what Discard and ↺ put back. All
+     * of them are taken at open, the one the session opened on first: a card writes the layout
+     * the half on screen wears, and a write must never land on a layout the session has no entry
+     * for, or Discard would leave it behind. A carried session keeps the entries it brought; the
+     * sizes the Home and normal layouts share (linked, #84) come from the entry already kept for
+     * the other ({@link #enterVariant}).
      */
     @NonNull private final EnumMap<LayoutVariant, PlaceArrangeSnapshot> mEntries =
         new EnumMap<>(LayoutVariant.class);
@@ -101,6 +102,8 @@ public final class LayoutEditorPlan {
         new EnumMap<>(LayoutVariant.class);
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
+    /** Whether Home held a layout of its own at open: the switch Discard puts back too. */
+    private final boolean mEntryHomeLayout;
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
                              @NonNull PlaceOrientation deviceOrientation,
@@ -124,6 +127,9 @@ public final class LayoutEditorPlan {
                 keepEntry(entry);
         }
         enterVariant(variant);
+        for (LayoutVariant other : LayoutVariant.values())
+            enterVariant(other);
+        mEntryHomeLayout = places.hasHomeLayout();
     }
 
     private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
@@ -593,6 +599,8 @@ public final class LayoutEditorPlan {
      * — the unsaved-changes question.
      */
     public boolean isDirty() {
+        if (mRoot.hasHomeLayout() != mEntryHomeLayout)
+            return true;
         for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
             if (!entry.getValue().equals(
                     PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
@@ -601,9 +609,20 @@ public final class LayoutEditorPlan {
         return false;
     }
 
-    /** Puts every layout the session reached back the way the editor found it. */
+    /**
+     * Puts every layout back the way the editor found it, and Home's own-layout switch; a layout
+     * nothing moved is left unwritten.
+     */
     public void revert() {
-        for (PlaceArrangeSnapshot entry : mEntries.values())
-            entry.restore(mRoot);
+        if (mRoot.hasHomeLayout() != mEntryHomeLayout)
+            mRoot.setHomeLayout(mEntryHomeLayout);
+        for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
+            String atOpen = mEntrySignatures.get(entry.getKey());
+            if (atOpen == null || !atOpen.equals(
+                    PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
+                entry.getValue().restore(mRoot);
+        }
+        mVariant = dress().layout();
+        mPlaces = mRoot.forVariant(mVariant);
     }
 }

@@ -10236,6 +10236,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void saveAppearanceRelaunch(@NonNull Bundle out) {
         com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried = mAppearance.carry();
+        boolean fromSettings = mAppearanceFromSettings;
+        if (carried == null && mPendingAppearanceRelaunch != null) {
+            // Relaunched again before the handover it took could reopen (a theme change: the
+            // recreate, then the night mode the new window pins): it passes the handover on.
+            carried = mPendingAppearanceRelaunch;
+            fromSettings = mPendingAppearanceFromSettings;
+        }
         if (carried == null) {
             if (mAppearanceRelaunchId != 0 && mAppearanceRelaunchId == sAppearanceRelaunchId) {
                 sAppearanceRelaunch = null;
@@ -10249,7 +10256,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         sAppearanceRelaunchId = id;
         mAppearanceRelaunchId = id;
         out.putInt(ARG_APPEARANCE_RELAUNCH, id);
-        out.putBoolean(ARG_APPEARANCE_FROM_SETTINGS, mAppearanceFromSettings);
+        out.putBoolean(ARG_APPEARANCE_FROM_SETTINGS, fromSettings);
     }
 
     /** Takes the handover the saved state names, when this process still holds it. */
@@ -13234,7 +13241,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The editor's half slide: the wall slides inside the scaled container, gestures held.
         @Override public void slidePaneWallToPlace(@NonNull com.termux.app.wall.PaneWallPage place) {
             if (mPaneWallController == null) return;
-            mPaneWallController.goTo(place, true);
+            // The Workspace with no window: its first shell, as Home's own swipe would start.
+            if (place == com.termux.app.wall.PaneWallPage.TERMINAL)
+                mPaneWallController.goToWorkspace(true);
+            else
+                mPaneWallController.goTo(place, true);
             mPaneWallController.setGesturesEnabled(false);
         }
 

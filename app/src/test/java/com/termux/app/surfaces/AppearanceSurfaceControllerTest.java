@@ -169,6 +169,35 @@ public class AppearanceSurfaceControllerTest {
         assertEquals(editor.session, next.adopted);
     }
 
+    @Test
+    public void aRelaunchWaitsForASlowWindowRatherThanDropTheSession() {
+        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.APPEARANCE, null);
+        settle();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+
+        FakeEditor next = new FakeEditor();
+        next.frameFailures = AppearanceSurfaceController.REOPEN_ATTEMPTS - 1;
+        AppearanceSurfaceController after = new AppearanceSurfaceController(
+            new FakeHost(activity), next);
+        assertTrue(after.reopen(carried));
+        settle();
+
+        assertTrue("the editor came back once the window was laid out", next.presented);
+        assertTrue(after.isOpen());
+        assertEquals(EditorCard.APPEARANCE, next.card);
+        assertEquals("the session it carried", editor.session, next.adopted);
+    }
+
+    @Test
+    public void aDoorThatFindsNoWindowClosesAtOnce() {
+        editor.frameFailures = 1;
+        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.DOCK, null);
+        settle();
+        assertFalse(editor.presented);
+        assertFalse(surface.isOpen());
+    }
+
     private static void settle() {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
@@ -194,6 +223,18 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void awaitWallpaper(@NonNull Runnable ready) {
             ready.run();
+        }
+
+        /** How many waits for the launcher's container time out before one answers. */
+        int frameFailures;
+
+        @Override public void awaitFrame(@NonNull Runnable ready, @NonNull Runnable failed) {
+            if (frameFailures > 0) {
+                frameFailures--;
+                failed.run();
+            } else {
+                ready.run();
+            }
         }
 
         @Override public void present(@Nullable EditorCard card, @Nullable PaneWallPage place,

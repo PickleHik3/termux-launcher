@@ -8,6 +8,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
@@ -91,8 +92,11 @@ final class EditorCardSheet {
         void onClose();
         void onReset();
         void onCopyToOtherHalf();
-        /** The sheet settled on a detent, or (while dragged) stands at a new top edge. */
+        /** The sheet stands at a new top edge: every frame of its motion, and while dragged. */
         void onSheetMoved(int detent, float topPx);
+
+        /** The sheet came to rest: on a detent, or off screen. Once per motion. */
+        default void onSheetSettled(int detent, float topPx) {}
     }
 
     static final int DETENT_HALF = 0;
@@ -135,6 +139,8 @@ final class EditorCardSheet {
     private int mFullPx;
     private int mNavInsetPx;
     private boolean mShown;
+    /** A finger is dragging the sheet by its header. */
+    private boolean mDragging;
 
     EditorCardSheet(@NonNull Context context, @NonNull Model model, @NonNull Listener listener) {
         mContext = context;
@@ -277,6 +283,11 @@ final class EditorCardSheet {
         return mShown;
     }
 
+    /** Whether a finger is dragging the sheet now: the frame follows it pose by pose. */
+    boolean isDragging() {
+        return mDragging;
+    }
+
     @Nullable
     EditorCard card() {
         return mCard;
@@ -301,6 +312,21 @@ final class EditorCardSheet {
     }
 
     private static final Object TIER_ONE_TAG = new Object();
+
+    /**
+     * The least the half detent may stand: the header, the first row and the foot clearance over
+     * the navigation inset, at {@code widthPx}. Under it the card would show no control at all.
+     */
+    int minHalfHeightPx(int widthPx) {
+        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP);
+        if (mRows.getChildCount() == 0)
+            return height + dp(SLIDER_ROW_MIN_DP);
+        int spec = View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY);
+        int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        View first = mRows.getChildAt(0);
+        first.measure(spec, unspecified);
+        return height + first.getMeasuredHeight();
+    }
 
     // ----------------------------------------------------------------------------------- cards
 
@@ -347,6 +373,7 @@ final class EditorCardSheet {
             mSheet.setTranslationY(to);
             mSheet.setVisibility(View.GONE);
             mListener.onSheetMoved(mDetent, sheetTopPx());
+            mListener.onSheetSettled(mDetent, sheetTopPx());
             if (done != null) done.run();
             return;
         }
@@ -355,6 +382,8 @@ final class EditorCardSheet {
             .withEndAction(() -> {
                 mSheet.setVisibility(View.GONE);
                 mSheet.animate().setUpdateListener(null);
+                mListener.onSheetMoved(mDetent, sheetTopPx());
+                mListener.onSheetSettled(mDetent, sheetTopPx());
                 if (done != null) done.run();
             }).start();
     }
@@ -385,6 +414,7 @@ final class EditorCardSheet {
             || mSheet.getTranslationY() == target) {
             mSheet.setTranslationY(target);
             mListener.onSheetMoved(detent, sheetTopPx());
+            mListener.onSheetSettled(detent, sheetTopPx());
             return;
         }
         mSheet.animate().translationY(target).setDuration(MOVE_MS).setInterpolator(Motion.settle())
@@ -392,6 +422,7 @@ final class EditorCardSheet {
             .withEndAction(() -> {
                 mSheet.animate().setUpdateListener(null);
                 mListener.onSheetMoved(detent, sheetTopPx());
+                mListener.onSheetSettled(detent, sheetTopPx());
             }).start();
     }
 
@@ -430,11 +461,19 @@ final class EditorCardSheet {
 
     // ------------------------------------------------------------------------------ header drag
 
+    /**
+     * The header, its handle included, drags the sheet between its detents: a tap flips them, a
+     * fling goes the way it was thrown, a slow release goes to the nearer one, and a drag well
+     * below the half detent puts the card down.
+     */
     @SuppressLint("ClickableViewAccessibility")
     private void bindHeaderDrag() {
-        final int slop = ViewConfiguration.get(mContext).getScaledTouchSlop();
+        ViewConfiguration config = ViewConfiguration.get(mContext);
+        final int slop = config.getScaledTouchSlop();
+        final float flingPxPerS = config.getScaledMinimumFlingVelocity() * 4f;
         final float[] down = new float[2];
         final boolean[] dragging = {false};
+        final VelocityTracker[] tracker = {null};
         mHeader.setOnTouchListener((view, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
@@ -442,11 +481,19 @@ final class EditorCardSheet {
                     down[1] = mSheet.getTranslationY();
                     dragging[0] = false;
                     mSheet.animate().cancel();
+                    if (tracker[0] != null) tracker[0].recycle();
+                    tracker[0] = VelocityTracker.obtain();
+                    trackRaw(tracker[0], event);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
+                    if (tracker[0] != null) trackRaw(tracker[0], event);
                     float dy = event.getRawY() - down[0];
-                    if (!dragging[0] && Math.abs(dy) > slop)
+                    if (!dragging[0] && Math.abs(dy) > slop) {
                         dragging[0] = true;
+                        mDragging = true;
+                        if (view.getParent() != null)
+                            view.getParent().requestDisallowInterceptTouchEvent(true);
+                    }
                     if (dragging[0]) {
                         mSheet.setTranslationY(Math.max(0f, down[1] + dy));
                         mListener.onSheetMoved(mDetent, sheetTopPx());
@@ -454,27 +501,65 @@ final class EditorCardSheet {
                     return true;
                 }
                 case MotionEvent.ACTION_UP: {
+                    mDragging = false;
+                    float velocity = 0f;
+                    if (tracker[0] != null) {
+                        trackRaw(tracker[0], event);
+                        tracker[0].computeCurrentVelocity(1000);
+                        velocity = tracker[0].getYVelocity();
+                        tracker[0].recycle();
+                        tracker[0] = null;
+                    }
                     if (!dragging[0]) {
                         // A tap on the header or its handle flips between the two detents.
                         settle(mDetent == DETENT_FULL ? DETENT_HALF : DETENT_FULL, true);
                         return true;
                     }
-                    float at = mSheet.getTranslationY();
-                    float half = translationFor(DETENT_HALF);
-                    if (at > half + mHalfPx * 0.4f) {
+                    int target = releaseDetent(mSheet.getTranslationY(),
+                        translationFor(DETENT_HALF), mHalfPx, velocity, flingPxPerS);
+                    if (target < 0) {
                         mListener.onClose();
                         return true;
                     }
-                    settle(Math.abs(at) < Math.abs(at - half) ? DETENT_FULL : DETENT_HALF, true);
+                    settle(target, true);
                     return true;
                 }
                 case MotionEvent.ACTION_CANCEL:
+                    mDragging = false;
+                    if (tracker[0] != null) {
+                        tracker[0].recycle();
+                        tracker[0] = null;
+                    }
                     settle(mDetent, true);
                     return true;
                 default:
                     return true;
             }
         });
+    }
+
+    /** The tracker reads screen positions: the header moves under the finger while it drags. */
+    private static void trackRaw(@NonNull VelocityTracker tracker, @NonNull MotionEvent event) {
+        MotionEvent raw = MotionEvent.obtain(event);
+        raw.setLocation(event.getRawX(), event.getRawY());
+        tracker.addMovement(raw);
+        raw.recycle();
+    }
+
+    /**
+     * Where a released drag goes: {@link #DETENT_FULL}, {@link #DETENT_HALF}, or -1 to put the
+     * card down. {@code atPx} is the sheet's translation (0 at the full detent,
+     * {@code halfTranslationPx} at the half one); {@code velocityPxPerS} is positive downwards.
+     */
+    static int releaseDetent(float atPx, float halfTranslationPx, int halfHeightPx,
+                             float velocityPxPerS, float flingPxPerS) {
+        if (atPx > halfTranslationPx + halfHeightPx * 0.4f)
+            return -1;
+        if (velocityPxPerS <= -flingPxPerS)
+            return DETENT_FULL;
+        if (velocityPxPerS >= flingPxPerS)
+            return atPx > halfTranslationPx ? -1 : DETENT_HALF;
+        return Math.abs(atPx) < Math.abs(atPx - halfTranslationPx) ? DETENT_FULL : DETENT_HALF;
     }
 
     // ------------------------------------------------------------------------------------ menu
@@ -646,11 +731,7 @@ final class EditorCardSheet {
                 mModel.onReleased(row);
             }
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        params.setMarginStart(dp(ICON_COLUMN_DP - EDGE_DP));
-        params.setMarginEnd(0);
-        root.addView(slider, params);
+        root.addView(slider, sliderParams(slider));
         views.slider = slider;
         return views;
     }
@@ -688,6 +769,9 @@ final class EditorCardSheet {
             MaterialButton button = (MaterialButton) inflater.inflate(R.layout.segment_button,
                 null, false);
             button.setId(View.generateViewId());
+            // No check mark (wireframe 02): the container colour carries the choice, and a mark's
+            // reserved room would stand every unchosen word off its centre.
+            button.setIcon(null);
             button.setText(choice);
             button.setMinWidth(0);
             button.setMinimumWidth(0);
@@ -707,7 +791,8 @@ final class EditorCardSheet {
         root.setOrientation(inline ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         root.setGravity(inline ? Gravity.CENTER_VERTICAL : Gravity.NO_GRAVITY);
         root.setMinimumHeight(dp(SWITCH_ROW_MIN_DP));
-        root.setPadding(0, dp(8), inline ? dp(EDGE_DP) : 0, dp(8));
+        int edge = inline ? dp(EDGE_DP) : 0;
+        root.setPadding(edge, dp(8), edge, dp(8));
         RowViews views = new RowViews(row, root);
         if (inline) {
             root.addView(iconView(row.iconRes));
@@ -780,6 +865,10 @@ final class EditorCardSheet {
             chip.setMinWidth(0);
             chip.setMinimumWidth(0);
             chip.setMinHeight(dp(56));
+            // The outline is drawn inside the button's insets; without them the glyph and its
+            // word stand inside it rather than running under its bottom edge.
+            chip.setInsetTop(0);
+            chip.setInsetBottom(0);
             chip.setCornerRadius(dp(12));
             chip.setCheckable(true);
             if (icons != null && i < icons.length)
@@ -806,6 +895,19 @@ final class EditorCardSheet {
                 chip.setIconGravity(stacked ? MaterialButton.ICON_GRAVITY_TEXT_START
                     : MaterialButton.ICON_GRAVITY_TOP);
                 chip.setIconPadding(dp(stacked ? 8 : 2));
+                if (!stacked) {
+                    // Glyph over word: the tile is as tall as both and its padding, at any text
+                    // size; the glyph is placed only at layout, too late for the measure to count.
+                    int glyph = chip.getIconSize() > 0 ? chip.getIconSize()
+                        : chip.getIcon().getIntrinsicHeight();
+                    android.graphics.Paint.FontMetricsInt metrics =
+                        chip.getPaint().getFontMetricsInt();
+                    int line = Math.max(chip.getLineHeight(), metrics.bottom - metrics.top);
+                    int need = chip.getPaddingTop() + glyph + chip.getIconPadding() + line
+                        + chip.getPaddingBottom();
+                    chip.setMinHeight(Math.max(dp(56), need));
+                    chip.setMinimumHeight(Math.max(dp(56), need));
+                }
             }
             LinearLayout.LayoutParams params = stacked
                 ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -856,9 +958,7 @@ final class EditorCardSheet {
                 mModel.onReleased(row);
             }
         });
-        LinearLayout.LayoutParams sliderParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        sliderParams.setMarginStart(dp(ICON_COLUMN_DP - EDGE_DP));
+        LinearLayout.LayoutParams sliderParams = sliderParams(slider);
         root.addView(slider, sliderParams);
         LinearLayout stops = new LinearLayout(mContext);
         stops.setOrientation(LinearLayout.HORIZONTAL);
@@ -884,8 +984,9 @@ final class EditorCardSheet {
         }
         LinearLayout.LayoutParams stopsParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        stopsParams.setMarginStart(dp(ICON_COLUMN_DP - EDGE_DP));
-        stopsParams.setMarginEnd(0);
+        // Under the slider's own reach, so each stop's word stands under its stop.
+        stopsParams.setMarginStart(sliderParams.getMarginStart());
+        stopsParams.setMarginEnd(sliderParams.getMarginEnd());
         root.addView(stops, stopsParams);
         views.slider = slider;
         views.stopLabels = labels;
@@ -1069,6 +1170,31 @@ final class EditorCardSheet {
     }
 
     // ------------------------------------------------------------------------------- builders
+
+    /**
+     * A slider's place in its row: its track from the text column to the row's edge, inset by the
+     * thumb's radius at the end, so a thumb at either end stays inside the 16dp margin. The
+     * slider pads its own track by {@link Slider#getTrackSidePadding()}; the margins make up
+     * the rest.
+     */
+    @NonNull
+    private LinearLayout.LayoutParams sliderParams(@NonNull Slider slider) {
+        int side = slider.getTrackSidePadding();
+        int thumbRadius = slider.getThumbWidth() / 2;
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
+        params.setMarginStart(sliderMarginPx(dp(ICON_COLUMN_DP), 0, side));
+        params.setMarginEnd(sliderMarginPx(dp(EDGE_DP), thumbRadius, side));
+        return params;
+    }
+
+    /**
+     * The margin that puts a slider's track end {@code edgePx + insetPx} from the row's edge when
+     * the slider pads its track by {@code sidePaddingPx}; never negative.
+     */
+    static int sliderMarginPx(int edgePx, int insetPx, int sidePaddingPx) {
+        return Math.max(0, edgePx + insetPx - sidePaddingPx);
+    }
 
     @NonNull
     private Slider newSlider() {
