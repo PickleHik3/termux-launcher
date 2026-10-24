@@ -68,10 +68,16 @@ final class GlobalGlass {
         if (property == SurfaceProperty.BLUR && half == null)
             prefs.setInAppKeyboardBlurRadiusRaw(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
         prefs.setSurfaceBaseValue(property, half, clamped);
-        if (property == SurfaceProperty.OPACITY && workspace) {
+        if (property == SurfaceProperty.OPACITY && half == null) {
             // The terminal follows the base now; the setter also keeps the copy the wallpaper
             // mode restores from in step, so turning the wallpaper off and on keeps this number.
             prefs.setTerminalBackgroundOpacity(clamped);
+        } else if (property == SurfaceProperty.OPACITY && workspace
+            && prefs.isUseSystemWallpaperEnabled()) {
+            // The terminal follows the Workspace's base already; only the wallpaper mode's copy
+            // is kept. The terminal's own setter writes the shared base, which would drop both
+            // halves' own values and land this number on Home too.
+            prefs.setWallpaperEnabledTerminalBackgroundOpacity(clamped);
         }
         return clamped;
     }
