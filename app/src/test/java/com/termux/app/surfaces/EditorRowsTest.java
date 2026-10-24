@@ -80,12 +80,15 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theHomeCardIsHomesRowsAndNoGlass() {
-        assertEquals(Arrays.asList(Row.ICON_SIZE, Row.LABEL_SIZE, Row.GLASS_WIDGETS),
-            EditorRows.tier(EditorCard.HOME, ALL, 1));
-        List<Row> all = rowsOf(EditorCard.HOME, ALL);
-        for (Row row : all)
-            assertNull(row + " is not a surface's glass", row.property());
+    public void theHomeCardOpensOnHomesGlassAndItIsAlwaysTheHomeHalfs() {
+        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.ICON_SIZE,
+            Row.LABEL_SIZE, Row.GLASS_WIDGETS), EditorRows.tier(EditorCard.HOME, ALL, 1));
+        for (WallHalf frame : WallHalf.values()) {
+            for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
+                assertEquals(row + " with the frame on " + frame, WallHalf.HOME,
+                    EditorRows.halfFor(EditorCard.HOME, row, frame));
+            assertNull(EditorRows.halfFor(EditorCard.HOME, Row.ICON_SIZE, frame));
+        }
     }
 
     @Test
@@ -105,7 +108,7 @@ public class EditorRowsTest {
     public void frostIsTheOneGlassSliderOnEveryCardWithGlass() {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
-            assertEquals(card + " has Frost", card != EditorCard.HOME, rows.contains(Row.FROST));
+            assertTrue(card + " has Frost", rows.contains(Row.FROST));
         }
         for (Row row : Row.values())
             assertFalse("no separate Blur or Grain row: " + row,
@@ -224,6 +227,8 @@ public class EditorRowsTest {
         assertFalse(EditorRows.marksOwnValue(EditorCard.DOCK, Row.CORNERS));
         assertFalse(EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.TEXT_SIZE));
         assertFalse(EditorRows.marksOwnValue(EditorCard.HOME, Row.ICON_SIZE));
+        assertFalse("Home's glass is the Base itself", EditorRows.marksOwnValue(EditorCard.HOME,
+            Row.FROST));
     }
 
     @Test

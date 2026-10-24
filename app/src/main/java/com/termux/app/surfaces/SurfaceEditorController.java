@@ -977,8 +977,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         syncAfterBulkWrite();
     }
 
-    /** Home's rows back to what they ship with. */
+    /**
+     * Home's rows back to what they ship with, and Home's glass back on the Look the Home half
+     * wore when the editor opened (its Base as captured on entry).
+     */
     private void resetHome() {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs != null && mEntry != null)
+            mEntry.restoreHalfBase(prefs, WallHalf.HOME, SurfaceProperty.BLUR,
+                SurfaceProperty.GRAIN, SurfaceProperty.OPACITY, SurfaceProperty.TINT);
         Context context = mHost.context();
         for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
             HomeSettings.KEY_FOLDER_DENSITY, HomeSettings.KEY_FOLDER_CAPACITY,
@@ -2120,7 +2127,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case TINT:
                 // Each value re-bakes the blurred frames: a drag holds that for its release.
                 holdFrameBakesForDrag();
-                if (card.slot == null)
+                if (card == EditorCard.HOME)
+                    writeHomeGlass(row, value);
+                else if (card.slot == null)
                     writeShared(row, value);
                 else if (!writeLinkedOpacity(row, value, dragging))
                     writeSurface(card, row, value);
@@ -2474,7 +2483,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int grain = GlassControls.grainForGlass(glass);
         WallHalf half = writeHalf(Row.FROST);
         prefs.setSurfaceGlassPosition(card.slot, glass);
-        if (card.slot == null) {
+        if (card == EditorCard.HOME) {
+            // Home's Base alone: a surface that holds its own Home value keeps it.
+            prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME,
+                AppearanceLooks.blurDp(blur));
+            prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME,
+                AppearanceLooks.grainPercent(grain));
+        } else if (card.slot == null) {
             GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
             GlobalGlass.write(prefs, SurfaceProperty.GRAIN, half, grain);
         } else {
@@ -2496,6 +2511,24 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || property == null)
             return;
         GlobalGlass.write(prefs, property, writeHalf(row), value);
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
+        restateGlassRow(row);
+    }
+
+    /**
+     * Home's Opacity or Tint: the Home half's Base, which Home's widgets, status bar and dock
+     * wear while they follow it. Unlike the Appearance card's shared glass it puts no surface
+     * back on the Base: a dock or status bar given its own Home value on its card keeps it.
+     */
+    private void writeHomeGlass(@NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        SurfaceProperty property = row.property();
+        if (prefs == null || property == null)
+            return;
+        int clamped = row == Row.OPACITY ? AppearanceLooks.opacityPercent(value)
+            : AppearanceLooks.tintPercent(value);
+        prefs.setSurfaceBaseValue(property, WallHalf.HOME, clamped);
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
         restateGlassRow(row);

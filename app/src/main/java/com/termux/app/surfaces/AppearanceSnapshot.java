@@ -278,6 +278,29 @@ final class AppearanceSnapshot {
         return out;
     }
 
+    /**
+     * Puts one half's Base back as captured for {@code properties}: the half's own value written
+     * as it was, or dropped where the half followed the shared value then. Home's Reset uses it
+     * to put Home's glass back on the Look it wore when the editor opened.
+     */
+    void restoreHalfBase(@NonNull TermuxAppSharedPreferences prefs,
+                         @NonNull TermuxAppSharedPreferences.WallHalf half,
+                         @NonNull SurfaceProperty... properties) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        SharedPreferences.Editor editor = store.edit();
+        for (SurfaceProperty property : properties) {
+            if (!TermuxAppSharedPreferences.isPerHalfProperty(property))
+                continue;
+            String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(property.baseKey, half);
+            Object value = mHalfKeys.get(halfKey);
+            if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
+            else if (store.contains(halfKey)) editor.remove(halfKey);
+        }
+        editor.apply();
+    }
+
     /** Puts every half's own key back as it was, and drops the ones that were absent. */
     private static void restoreHalfKeys(@NonNull TermuxAppSharedPreferences prefs,
                                         @NonNull java.util.Map<String, Object> halfKeys) {

@@ -197,7 +197,10 @@ public final class EditorRows {
         List<Spec> out = new ArrayList<>();
         switch (card) {
             case HOME:
-                add(out, 1, Row.ICON_SIZE, Row.LABEL_SIZE, Row.GLASS_WIDGETS);
+                // Home's glass first: the Home half's Base, which the widgets, the status bar
+                // and the dock on Home wear while they follow it.
+                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.ICON_SIZE, Row.LABEL_SIZE,
+                    Row.GLASS_WIDGETS);
                 add(out, 2, Row.TWO_LINE, Row.LABEL_SHADOW, Row.FOLDERS, Row.NUMERALS,
                     Row.PAGE_DOTS);
                 add(out, 3, Row.FOLDER_LIMIT, Row.WALLPAPER_SCROLL, Row.OWN_LAYOUT,
@@ -278,13 +281,16 @@ public final class EditorRows {
      * The half a row of {@code card} writes while the frame shows {@code frameHalf}, or null
      * where it writes one value for the wall (ADR 0013 §4): the per-half glass numbers of the
      * dock, the status bar and the keyboard, the Look slider and the shared glass the
-     * Appearance card's Frost, Opacity and Tint write, follow the frame; the terminal's
-     * numbers (it stands on the Workspace alone), corners, margins, heights, places, the Dock's
-     * style and design, and every app-wide choice do not.
+     * Appearance card's Frost, Opacity and Tint write, follow the frame; Home's glass is the Home
+     * half's Base whatever the frame shows; the terminal's numbers (it stands on the Workspace
+     * alone), corners, margins, heights, places, the Dock's style and design, and every app-wide
+     * choice do not.
      */
     @Nullable
     public static WallHalf halfFor(@NonNull EditorCard card, @NonNull Row row,
                                    @NonNull WallHalf frameHalf) {
+        if (card == EditorCard.HOME)
+            return row.property() != null ? WallHalf.HOME : null;
         if (card == EditorCard.APPEARANCE)
             return row == Row.LOOK || row.property() != null ? frameHalf : null;
         SurfaceProperty property = row.property();
