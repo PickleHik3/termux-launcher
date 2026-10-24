@@ -6,9 +6,9 @@ import androidx.annotation.Nullable;
 import java.util.Map;
 
 /**
- * The Glass switch every built-in widget's settings carry, per widget: off by default, the solid
- * card; on, the widget wears the Look's glass — Base's blur, opacity, tint, grain, rim and Fancier
- * Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
+ * The Glass switch every built-in widget's settings carry, per widget: Page by default, which
+ * follows "Widgets on glass" (on unless switched off); off is the solid card; on, the widget
+ * wears the Look's glass — Base's blur, opacity, tint, grain, rim and Fancier Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
  * ({@code PaneGlass} over {@code LookGlassStyle}). A detached terminal, keyboard, status bar or
  * dock never reaches it. Where the glass cannot be shown or the system asks for contrast
  * ({@link #solidFallback}) the widget wears its solid card.
@@ -48,8 +48,8 @@ public final class BuiltinWidgetGlass {
 
     /**
      * Whether a widget wears glass: its own choice when it made one ("on" or "off"), else the
-     * page's "Widgets on glass" switch. Stored before the switch existed, an absent value was
-     * the default off; it now follows the page, and a stored "on" stays an explicit on.
+     * page's "Widgets on glass" switch. An absent value follows the page, which is on
+     * unless the user switched it off; a stored "on", "off" or "bare" stays an explicit choice.
      */
     public static boolean resolve(@Nullable String stored, boolean pageOn) {
         if (ON.equals(stored)) return true;
