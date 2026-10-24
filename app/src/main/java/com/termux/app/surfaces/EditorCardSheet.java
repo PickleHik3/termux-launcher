@@ -871,8 +871,6 @@ final class EditorCardSheet {
             chip.setInsetBottom(0);
             chip.setCornerRadius(dp(12));
             chip.setCheckable(true);
-            if (icons != null && i < icons.length)
-                chip.setIconResource(icons[i]);
             for (String word : choices[i].split(" "))
                 widestWord = Math.max(widestWord, chip.getPaint().measureText(word)
                     + chip.getPaddingLeft() + chip.getPaddingRight() + dp(4));
@@ -891,11 +889,15 @@ final class EditorCardSheet {
         chips.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         for (int i = 0; i < buttons.size(); i++) {
             MaterialButton chip = buttons.get(i);
-            if (chip.getIcon() != null) {
+            if (icons != null && i < icons.length) {
+                // The gravity before the glyph: a glyph set first goes on as a start drawable,
+                // the word is measured beside it, and moving it on top at layout left the word
+                // centred in that narrower box, half a glyph left of the glyph's centre.
                 chip.setIconGravity(stacked ? MaterialButton.ICON_GRAVITY_TEXT_START
                     : MaterialButton.ICON_GRAVITY_TOP);
                 chip.setIconPadding(dp(stacked ? 8 : 2));
-                if (!stacked) {
+                chip.setIconResource(icons[i]);
+                if (!stacked && chip.getIcon() != null) {
                     // Glyph over word: the tile is as tall as both and its padding, at any text
                     // size; the glyph is placed only at layout, too late for the measure to count.
                     int glyph = chip.getIconSize() > 0 ? chip.getIconSize()

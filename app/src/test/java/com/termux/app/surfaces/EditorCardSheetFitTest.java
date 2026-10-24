@@ -136,6 +136,32 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void theDesignTilesCentreTheirWordUnderTheGlyph() {
+        for (float scale : new float[] {1f, 1.3f}) {
+            Fixture fixture = new Fixture(EditorCard.DOCK, scale);
+            fixture.sheet.openMore();
+            fixture.layOut();
+            int tiles = 0;
+            for (MaterialButton tile : buttons(fixture.sheet.rows())) {
+                if (tile.getIcon() == null || tile.getLayout() == null)
+                    continue;
+                tiles++;
+                android.graphics.drawable.Drawable[] sides = tile.getCompoundDrawablesRelative();
+                assertTrue("the glyph stands on top, not at the start", sides[0] == null
+                    && sides[1] != null);
+                assertEquals(tile.getText() + " at " + scale + ": the word is laid out across the"
+                        + " whole tile", tile.getWidth() - tile.getCompoundPaddingLeft()
+                        - tile.getCompoundPaddingRight(), tile.getLayout().getWidth());
+                float wordCentre = tile.getCompoundPaddingLeft()
+                    + (tile.getLayout().getLineLeft(0) + tile.getLayout().getLineRight(0)) / 2f;
+                assertEquals(tile.getText() + " at " + scale + ": under the glyph's centre",
+                    tile.getWidth() / 2f, wordCentre, 2f);
+            }
+            assertEquals(3, tiles);
+        }
+    }
+
+    @Test
     public void anInlineSegmentRowKeepsItsIconOffTheEdgeAndNoCheckMark() {
         Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
         fixture.sheet.openMore();
