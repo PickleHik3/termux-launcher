@@ -135,6 +135,25 @@ public class SettingsTreeTest {
         }
     }
 
+    /** The 10-24 filing (spec §4): the sections in root order, Appearance a door, the lock under Home. */
+    @Test
+    public void theSectionsFollowTheRefiledRoot() {
+        assertEquals(java.util.Arrays.asList(SettingsTree.Section.HOME, SettingsTree.Section.DOCK_DRAWER,
+            SettingsTree.Section.TERMINAL, SettingsTree.Section.LINUX_APPS, SettingsTree.Section.APPEARANCE,
+            SettingsTree.Section.KEYBOARD, SettingsTree.Section.NOTIFICATIONS, SettingsTree.Section.AI,
+            SettingsTree.Section.GENERAL), java.util.Arrays.asList(SettingsTree.Section.values()));
+        assertTrue(SettingsTree.sectionPage(SettingsTree.Section.APPEARANCE).door);
+        assertEquals(PAGES + "X11DisplayPreferencesFragment",
+            SettingsTree.sectionPage(SettingsTree.Section.LINUX_APPS).className);
+        assertEquals(PAGES + "HomePreferencesFragment",
+            SettingsTree.find(PAGES + "LauncherLockPreferencesFragment").parent);
+        assertEquals(PAGES + "AdvancedDiagnosticsPreferencesFragment",
+            SettingsTree.redirect("com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment", null));
+        for (SettingsTree.Screen screen : SettingsTree.screens()) {
+            if (screen.door) assertTrue("only a section is a door", screen.isSectionPage());
+        }
+    }
+
     @Test
     public void theRootStartInRowIsHomes() {
         assertEquals(PAGES + "HomePreferencesFragment",
