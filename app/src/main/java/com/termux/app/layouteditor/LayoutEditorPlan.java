@@ -130,11 +130,13 @@ public final class LayoutEditorPlan {
         }
         enterVariant(variant);
         // What the session may touch: the Workspace layout the launcher stands in, and Home's own
-        // while it holds one and the launcher is not in minimal mode. A session opened in normal mode never
-        // snapshots (so never reverts) Minimal; one opened in Minimal edits Minimal alone.
+        // always, while the launcher is not in minimal mode: a first hide gives Home a layout of its
+        // own, seeded over what Home's variant held, and Discard must put that back too. A session
+        // opened in normal mode never snapshots (so never reverts) Minimal; one opened in Minimal
+        // edits Minimal alone.
         LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
         enterVariant(workspace);
-        if (workspace != LayoutVariant.MINIMAL && places.hasHomeLayout())
+        if (workspace != LayoutVariant.MINIMAL)
             enterVariant(LayoutVariant.HOME);
         mEntryHomeLayout = places.hasHomeLayout();
     }
