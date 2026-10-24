@@ -17,6 +17,12 @@
             app:summary="@string/settings_gui_apps_row_summary"
             app:fragment="com.termux.app.fragments.settings.termux.GuiAppsSetupGuideFragment" />
         <Preference
+            app:key="x11_gpu"
+            app:title="@string/settings_x11_gpu_title"
+            app:persistent="false"
+            app:summary="@string/settings_x11_gpu_entry_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.GraphicsAccelerationFragment" />
+        <Preference
             app:key="x11_hidden_apps"
             app:title="@string/settings_x11_hidden_apps_title"
             app:summary="@string/settings_x11_hidden_apps_summary"

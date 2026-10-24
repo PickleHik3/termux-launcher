@@ -575,6 +575,10 @@ Developer:
   vulkan-wrapper with a score or outcome; if it lost, step 8 removes it (`pacman -Q
   vulkan-wrapper-android` finds nothing) and no `vulkan-wrapper.*` folder is left in
   `$PREFIX/tmp`; if it won, it stays · pong.
+- 2026-10-24 · commit "feat(settings): a Graphics acceleration row on Linux apps" · Settings →
+  Linux apps: a Graphics acceleration row with an icon right under Set up Linux apps; tap it: the
+  page opens, Back returns to Linux apps; search "graphics" finds the page under Linux apps; the
+  guide's own Graphics link still opens it · pong.
 
 ## Found in the sweep (2026-10-24), to triage
 Crops and per-batch tables: `~/reports/device-checks-2026-10-24/`. Each becomes an issue or a
