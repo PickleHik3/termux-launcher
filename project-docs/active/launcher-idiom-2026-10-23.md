@@ -47,9 +47,12 @@ While an icon or folder is dragged on Home, Remove and Uninstall targets stand a
 (56 dp targets, 28 dp apart, 80 dp frame radius), sliding in with the drag and out with it.
 Remove for Home icons and folders, Uninstall for apps. The menu's rows stay as the non-drag route.
 
-Landed 2026-10-24 (beside #154, not the targets themselves): an app picked up in the drawer is
-carried to Home the Launcher3 way. The drawer closes under the finger, the wall turns to Home and
-the icon drops into the free cell nearest the finger, page turns at the edges included
+Landed 2026-10-24 (beside #154, not the targets themselves): an app picked up in the drawer can
+be carried to Home the Launcher3 way. The pickup is the drawer's own drag (folders, its drop
+targets) until the finger leaves through the drawer's top edge, the top of the app list under the
+search pill: held above it 250 ms, or past it by more than 24dp (`DrawerHandOverPolicy`). Then the
+drawer closes under the finger, the wall turns to Home and the icon, at the size the drawer
+carried it, drops into the free cell nearest the finger, page turns at the edges included
 (`HomeAppDrop`, `HomeAppDropPolicy`, the pane's carry path). The Remove and Uninstall targets
 are still to build.
 
