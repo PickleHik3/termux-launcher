@@ -91,17 +91,9 @@ public final class PageOverviewPolicy {
     }
 
     /**
-     * Where a dragged card stands while it is held over {@code over}: the nearest place in its
-     * own half, so the cards of its half make room for it and the other half never moves.
-     */
-    public static int heldPlace(int from, int over, int homeCount, int rowCount) {
-        int[] bounds = halfBounds(from, homeCount, rowCount);
-        return Math.max(bounds[0], Math.min(bounds[1], over));
-    }
-
-    /**
      * Where the card at {@code position} stands while the card from {@code from} is held at
-     * {@code held}: the cards between shift one place toward the gap it left.
+     * {@code held} ({@link #dropTarget}; {@code from} itself while it is held across the seam, so
+     * nothing makes room): the cards between shift one place toward the gap it left.
      */
     public static int shiftedPlace(int position, int from, int held) {
         if (position == from) return held;

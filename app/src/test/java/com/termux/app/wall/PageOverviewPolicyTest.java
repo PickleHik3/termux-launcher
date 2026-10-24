@@ -58,11 +58,9 @@ public class PageOverviewPolicyTest {
     }
 
     @Test
-    public void aHeldCardStaysInItsHalfAndOnlyItsHalfMakesRoom() {
-        assertEquals("a Home page held over a window stops at the seam",
-            2, PageOverviewPolicy.heldPlace(0, 4, HOME, ROW));
-        assertEquals("a window held over a Home page stops at the seam",
-            3, PageOverviewPolicy.heldPlace(5, 0, HOME, ROW));
+    public void onlyTheHeldCardsHalfMakesRoom() {
+        assertEquals("held across the seam: nothing moves",
+            2, PageOverviewPolicy.shiftedPlace(2, 0, 0));
         // Page 0 held at 2: pages 1 and 2 move up one place; the windows stay.
         assertEquals(2, PageOverviewPolicy.shiftedPlace(0, 0, 2));
         assertEquals(0, PageOverviewPolicy.shiftedPlace(1, 0, 2));
