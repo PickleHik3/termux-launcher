@@ -90,7 +90,9 @@ public final class LayoutEditorPlan {
     @NonNull private PaneWallPage mWindowPlace;
     /**
      * The arrangement of every variant as the editor found it; what Discard and ↺ put back. All
-     * of them are taken at open, the one the session opened on first: a card writes the layout
+     * the session may touch are taken at open (never the Minimal layout from a normal-mode
+     * session, nor the normal one from a Minimal-mode session), the one the session opened on
+     * first: a card writes the layout
      * the half on screen wears, and a write must never land on a layout the session has no entry
      * for, or Discard would leave it behind. A carried session keeps the entries it brought; the
      * sizes the Home and normal layouts share (linked, #84) come from the entry already kept for
@@ -127,8 +129,13 @@ public final class LayoutEditorPlan {
                 keepEntry(entry);
         }
         enterVariant(variant);
-        for (LayoutVariant other : LayoutVariant.values())
-            enterVariant(other);
+        // What the session may touch: the Workspace layout the launcher stands in, and Home's own
+        // while it holds one and the launcher is not in minimal mode. A session opened in normal mode never
+        // snapshots (so never reverts) Minimal; one opened in Minimal edits Minimal alone.
+        LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
+        enterVariant(workspace);
+        if (workspace != LayoutVariant.MINIMAL && places.hasHomeLayout())
+            enterVariant(LayoutVariant.HOME);
         mEntryHomeLayout = places.hasHomeLayout();
     }
 
@@ -614,7 +621,8 @@ public final class LayoutEditorPlan {
      * nothing moved is left unwritten.
      */
     public void revert() {
-        if (mRoot.hasHomeLayout() != mEntryHomeLayout)
+        boolean switchMoved = mRoot.hasHomeLayout() != mEntryHomeLayout;
+        if (switchMoved)
             mRoot.setHomeLayout(mEntryHomeLayout);
         for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
             String atOpen = mEntrySignatures.get(entry.getKey());
@@ -622,7 +630,11 @@ public final class LayoutEditorPlan {
                     PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
                 entry.getValue().restore(mRoot);
         }
-        mVariant = dress().layout();
-        mPlaces = mRoot.forVariant(mVariant);
+        // The edited layout only changes if Home's switch did; minimal mode toggled under the
+        // open editor does not move what it edits.
+        if (switchMoved) {
+            mVariant = dress().layout();
+            mPlaces = mRoot.forVariant(mVariant);
+        }
     }
 }
