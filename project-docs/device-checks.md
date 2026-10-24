@@ -2338,6 +2338,19 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   with a check, the rest tonal, small gaps, no outline; General's section filter chips match
   them. Repeat at font scale 1.3 (`settings put system font_scale 1.3`, then force-stop): no
   clipped title or segment label (segments stack instead), rows grow · emulator.
+- 2026-10-24 · Set up Linux apps guide (commit "feat(settings): Set up Linux apps becomes a stepped
+  guide") and the Input copy · Settings › Linux apps › Set up Linux apps opens a full-screen guide:
+  Termux build shows Source, then (A full Linux) Pick a Linux, Starter apps, Copy the command,
+  Graphics, with the pill line counting 5 or 4 (Termux's own apps skip the Linux pick); Debian
+  wears "Recommended" and the badge drops under its name at font scale 2.0; Next reads Done on
+  Graphics; Copy puts the command on the clipboard and Done closes Settings with the notice; Back
+  on step 1 leaves; the Linux apps row then reads "Debian with a browser and a file manager"
+  (and "Not set up yet" on a fresh install); Graphics opens Graphics acceleration and its pick
+  shows on return. Nothing clips at font scale 1.3 and 2.0, light and dark, scheme chrome on.
+  nix build: one page with the advice and Read the docs, no progress line or footer; VAJ build:
+  Termux's own apps offer a file manager only. Input page: "Keyboard pops up", "Keyboard over the
+  window", Trackpad · Touch · Direct with a one-line summary that follows the pick · emulator,
+  one install per edition.
 
 ## Developer
 - 2026-10-24 · #159 model · the dip a differing look now causes on every crossing (the same dip

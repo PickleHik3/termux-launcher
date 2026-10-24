@@ -3237,7 +3237,7 @@
     <string name="help_topic_gui_apps_action">Install one in a terminal, then start it: it appears in the display window.</string>
     <string name="help_topic_gui_apps_step1">Add the repository once with pkg install x11-repo.</string>
     <string name="help_topic_gui_apps_step2">Install an app from it with pkg install, and start the Display.</string>
-    <string name="help_topic_gui_apps_step3">Set up Linux apps, in Settings › Linux apps, installs a few to start with.</string>
+    <string name="help_topic_gui_apps_step3">Set up Linux apps, in Settings › Linux apps, guides you through installing a few to start with.</string>
     <string name="help_topic_gui_apps_aliases">gui, x11, x11-repo, termux-x11, desktop app, linux app, install app, graphical</string>
 
     <!-- Help centre: Something missing? Each one names a symptom in the user's words. -->
