@@ -140,6 +140,9 @@ apt_sim() {
 # prebuilt termux-desktop publishes, pinned here by version and checksum: a download that is not
 # byte for byte the file below is refused. Installed from the file, it is an ordinary package of
 # that name, so the clean-up takes it out by name like any other if it loses.
+# Credit: the wrapper driver is xMeM's (Mesa, MIT core licence; the package installs its
+# license.rst), this build was packaged by lfdevs and is published by sabamdarif/termux-desktop.
+# None of termux-desktop's scripts are used here. See THIRD_PARTY_NOTICES.md.
 WRAPPER_PKG=vulkan-wrapper-android
 WRAPPER_VERSION=25.0.0-3
 WRAPPER_URL=https://github.com/sabamdarif/termux-desktop/releases/download/${WRAPPER_PKG}_$WRAPPER_VERSION

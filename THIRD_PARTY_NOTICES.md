@@ -196,6 +196,24 @@ project.
 - **Remote model provider** — optional and off by default. The user supplies an OpenAI-compatible
   endpoint and their own API key; no key or provider SDK ships with the app.
 
+## Graphics driver downloaded on request
+
+Nothing in this section ships inside the APK. The Linux apps graphics benchmark
+(`termux-x11-gpu-setup`, from `app/src/main/assets/x11/x11-gpu-setup.sh`) downloads it only when it
+tests the Vulkan wrapper profile, accepts it only if it matches the sha256 pinned in that script,
+and removes it again if another profile wins.
+
+- **vulkan-wrapper-android 25.0.0-3** — MIT for the core Mesa library, with Mesa's per-component
+  licenses as listed in the `license.rst` the package installs — Copyright Brian Paul, the Mesa
+  contributors and the driver authors. The Android Vulkan wrapper driver is by
+  [xMeM](https://github.com/xMeM) (the `wrapper` branch of xMeM's Mesa fork, proposed upstream as
+  termux-packages PR #22500); this build was packaged by [lfdevs](https://github.com/lfdevs)
+  ([lfdevs/termux-packages PR #1](https://github.com/lfdevs/termux-packages/pull/1)) and is
+  published in the releases of
+  [sabamdarif/termux-desktop](https://github.com/sabamdarif/termux-desktop/releases/tag/vulkan-wrapper-android_25.0.0-3).
+  Thanks to all three projects. termux-desktop's own scripts (GPL-3.0) are not used: the download,
+  checksum check, install and removal are this project's code.
+
 ## Models downloaded on request
 
 Nothing in this section ships inside the APK. Each model is downloaded from Hugging Face, pinned to
