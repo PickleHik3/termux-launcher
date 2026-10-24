@@ -16,6 +16,7 @@ first within each section. Delete this file with the spec when the work is deliv
 | 4c Wall strip | built, emulator-checked (passes 1–5), on pong for taste | 2b9a5d86a | In `DockStyle.BUILT` (all five now). One taller slab: the 84 dp `WallStripRowView` over the apps row in the row's own host (dashes still above the slab), the air over it = the air under the icons, tiles nest by it; side inset read off the first laid-out icon (14 dp inside the slab without one). Fed from the same chips as the run strip (row windows and the display window, split shapes from `paneCellGeometry`); tiles slide/resize ~420 ms on open/close; tile tap = Workspace in on it, `+` = new row window, long-press = a small menu (no chip menu exists). Reflection lower bevel only at 0.8. The clock ticks alone (tiles in their own RenderNode on API 29+). Style switches ease both bands at once (240 ms). |
 | Emulator pass 2 | done; fix round 2 merged, unchecked on device | 36700127f | Fixed: Lens beads fell back to the slab (row icons wider than a bead's slot, 4ec3b24b1); seam step of the Prompt line / Wall strip bands (36700127f); run strip square glass corners (2c699bc42); empty strip under the palette (b7bfbd122); Wall strip lists floats (622951639). Not changed: equal padding measures equal on pass 2's frames (21/21 px Floating); partial-page centring (see decisions); the landing's frosted frame is the terminal's reflow frost (predates). |
 | Emulator pass 3 | done; final fix round merged (editor Done keyboard, chips, minimised mark, +), unchecked on device | 808f7778d | Pass: Lens beads render and ride their icons, no visible seam step (screenshot-rate), run strip corners and glyphs, Prompt line under the palette and light well, Wall strip floats/font 1.5/3–6 tiles/attention, tray air equal within 1 px (view bounds), live switching. Fix: keyboard flash and tall dock on editor Done; minimised float chip still above the dock under Taskbar and Wall strip; run strip minimised mark missing; Taskbar + tiny at font 1.5. Known: shells idle in ~ are all named "home" (numbers tell them apart); Lens beads draw the tray while the A–Z row is on (by design). |
+| 6 Peek glass | built 2026-10-25, compiled, geometry unit-tested; not run on any device | 9330cc4e3, c796a1084, 15232fab5, 73b48570a | New installs start on it, existing installs keep the tray. Card cut on the glass host's outline, program rect = card, strip under the pill inset. Live reflection (RenderNode + RuntimeShader) under Fancier glass, still per-icon bitmaps otherwise. Reflection slider on the Dock card. Device checks owed on pong (device-checks.md, 2026-10-25). |
 | 5 Pong install | 2026-10-21: `1.1.0-pre.6+dev.5568477bd` (release, after the pong fixes; earlier 120d6f511), launcher up, crash buffer empty | 120d6f511 | Emulator checks after the last fixes (run strip placement, editor Done, chips, marks) all passed; full suite green at 120d6f511. Taste and frame-time checks owed on pong (device-checks.md, Developer). |
 
 ## Side fixes
@@ -59,6 +60,25 @@ records what each pass found.
 
 The developer delegated decisions for this run (2026-10-20, overnight). Each is recorded here with
 its reason so it can be reversed.
+
+- 2026-10-25 · Peek glass: the reflection hangs from the icons' lower edges, not from the card's
+  top edge as the brief's method said. The icons' centres are on the card's top edge, so a mirror
+  about that edge lands exactly on the icons' own boxes and is hidden under them (a 120 px icon at
+  y −60..60 mirrors to −60..60); the goal was reflections fading down the card. One line in
+  `PeekGlassGeometry.compute` (`axis`) if the developer wants another.
+- 2026-10-25 · Peek glass: the long-press app menu is not reflected. It is an `AnchoredMenu`
+  PopupWindow, a window of its own: its pixels are not in the dock's view tree and reaching them
+  would take a capture of that window every frame it is up.
+- 2026-10-25 · Peek glass under Floating draws the Glass tray: the card rises from the screen's
+  edge, and Floating sets every card apart from it with a gap, so a card ending above the gap would
+  show a thin sliver under the icons. The same for a dock not alone on its glass (as Lens beads),
+  the keyboard up, the system keyboard lifting the dock and the Search field under the row.
+- 2026-10-25 · Peek glass narrows the apps row (Docked) by the card's inset plus 4 dp also where
+  it falls back to the tray, since the inset is the layout's and the fallbacks are the chrome's;
+  the icons are a little smaller there. The reflection's band reuses the air under the icons and
+  the strip under the pill rather than growing the dock, so the dock's height is the tray's.
+- 2026-10-25 · Peek glass: the chip is named "Peek" (one word like Tray, Beads and Strip); the
+  design's working name is Peek glass.
 
 - 2026-10-20 · The picker lives in the Layout editor's Row B, shown while Home's dock is selected
   (as the keyboard's tools are), rather than as a new settings row: it keeps the fragile settings
