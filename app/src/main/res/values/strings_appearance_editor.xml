@@ -58,7 +58,6 @@
     <string name="appearance_row_tint">Tint</string>
     <string name="appearance_row_height">Height</string>
     <string name="appearance_row_visible">Visible</string>
-    <string name="appearance_row_position">Position</string>
     <string name="appearance_row_style">Style</string>
     <string name="appearance_row_design">Design</string>
     <!-- Clear to frosted: how much the glass blurs what is behind it, and its grain with it. -->
@@ -133,10 +132,6 @@
     <string name="appearance_readout_times">%1$s×</string>
 
     <!-- Segment choices: short, so three fit a phone at a large font size. -->
-    <string name="appearance_position_top">Top</string>
-    <string name="appearance_position_bottom">Bottom</string>
-    <string name="appearance_position_left">Left</string>
-    <string name="appearance_position_right">Right</string>
     <string name="appearance_contrast_softer">Softer</string>
     <string name="appearance_contrast_default">Default</string>
     <string name="appearance_contrast_harder">Harder</string>

@@ -111,8 +111,9 @@ final class HiddenStackView extends FrameLayout {
     }
 
     /**
-     * Shows {@code items} (top to bottom) as cards {@code cardHeightPx} tall, the first at
-     * {@code topPx}, the stack {@code leftPx} from the view's left; every label at {@code labelPx};
+     * Shows {@code items} (top to bottom) as cards {@code cardHeightPx} tall in a column from
+     * {@code topPx} down {@code zoneHeightPx}, the stack resting on its bottom, {@code leftPx}
+     * from the view's left; every label at {@code labelPx};
      * the drop zone {@code zoneHeightPx} tall under the same column.
      */
     void set(@NonNull List<HiddenItem> items, int leftPx, int topPx, int cardHeightPx,
@@ -123,6 +124,8 @@ final class HiddenStackView extends FrameLayout {
         mLabelPx = labelPx;
         mItems.clear();
         mItems.addAll(items);
+        int stackTopPx = HiddenStackPolicy.stackTopPx(topPx, zoneHeightPx, items.size(),
+            cardHeightPx, mDensity);
         for (HiddenItem item : HiddenItem.values()) {
             MaterialCardView card = mCards.get(item);
             if (!items.contains(item)) {
@@ -138,7 +141,7 @@ final class HiddenStackView extends FrameLayout {
             if (restyle) styleLabel(card);
             LayoutParams params = (LayoutParams) card.getLayoutParams();
             int index = items.indexOf(item);
-            int top = HiddenStackPolicy.cardTopPx(topPx, index, cardHeightPx, mDensity);
+            int top = HiddenStackPolicy.cardTopPx(stackTopPx, index, cardHeightPx, mDensity);
             if (params.width != mCardWidthPx || params.height != cardHeightPx
                 || params.leftMargin != leftPx || params.topMargin != top) {
                 params.width = mCardWidthPx;
@@ -211,7 +214,8 @@ final class HiddenStackView extends FrameLayout {
         card.setFocusable(true);
         TextView label = new TextView(context);
         label.setText(item.labelRes);
-        label.setGravity(Gravity.CENTER);
+        label.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        label.setTextAlignment(TEXT_ALIGNMENT_VIEW_END);
         label.setIncludeFontPadding(false);
         label.setMaxLines(HiddenStackPolicy.MAX_LINES);
         label.setTextColor(MaterialColors.getColor(this,

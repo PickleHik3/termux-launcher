@@ -1399,7 +1399,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             }
             if (layout.offers(Element.APPS)) {
                 if (!layout.searchField()) mHidden.add(HiddenItem.SEARCH_FIELD);
-                if (!layout.drawerTile()) mHidden.add(HiddenItem.DRAWER_TILE);
             }
         }
         placeStack();
@@ -1479,9 +1478,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case SEARCH_FIELD:
                 layout.setSearchField(true);
-                break;
-            case DRAWER_TILE:
-                layout.setDrawerTile(true);
                 break;
             default:
                 if (item.tray != null && item.tray.element != null)
@@ -1867,11 +1863,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return half == null ? WallHalf.WORKSPACE : half;
     }
 
-    /** The edges' names, in {@link PlaceLayout.Edge} order. */
-    private static final int[] EDGE_LABELS = {R.string.appearance_position_top,
-        R.string.appearance_position_bottom, R.string.appearance_position_left,
-        R.string.appearance_position_right};
-
     /** The Dock designs' names and glyphs, in {@link DockStyle#CHOICES} order. */
     private static final int[] DESIGN_LABELS = {R.string.layout_editor_dock_style_glass_tray,
         R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip};
@@ -1954,11 +1945,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                             : mHost.isInAppKeyboardShown()) ? 1 : 0;
                     return layout.isShown(element) ? 1 : 0;
                 }
-                case POSITION: {
-                    Element element = elementOf(card);
-                    if (layout == null || element == null) return 0;
-                    return Math.max(0, layout.edgesFor(element).indexOf(layout.edgeOf(element)));
-                }
                 case STYLE:
                     return prefs.getLayoutStyle() == TermuxAppSharedPreferences.LayoutStyle.FLOATING
                         ? 1 : 0;
@@ -1968,6 +1954,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case MARGIN: return AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false));
                 case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
                 case SEARCH_FIELD: return layout != null && layout.searchField() ? 1 : 0;
+                case DRAWER_ICON: return layout != null && layout.drawerTile() ? 1 : 0;
                 case APP_ICONS: return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
                 case TEXT_SIZE:
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
@@ -2153,12 +2140,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean enabled(@NonNull Row row) {
-            if (row == Row.POSITION) {
-                Element element = elementOf(mCard);
-                LayoutEditorController layout = mHost.layoutEditor();
-                return layout != null && element != null && layout.isShown(element)
-                    && layout.edgesFor(element).size() > 1;
-            }
             return true;
         }
 
@@ -2195,17 +2176,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @NonNull @Override public String[] choices(@NonNull Row row) {
             switch (row) {
-                case POSITION: {
-                    Element element = elementOf(mCard);
-                    LayoutEditorController layout = mHost.layoutEditor();
-                    if (element == null || layout == null)
-                        return new String[0];
-                    List<PlaceLayout.Edge> edges = layout.edgesFor(element);
-                    String[] out = new String[edges.size()];
-                    for (int i = 0; i < out.length; i++)
-                        out[i] = getString(EDGE_LABELS[edges.get(i).ordinal()]);
-                    return out;
-                }
                 case STYLE:
                     return strings(R.string.appearance_editor_style_docked,
                         R.string.appearance_editor_style_floating);
@@ -2369,14 +2339,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 positionTargets();
                 break;
             }
-            case POSITION: {
-                Element element = elementOf(card);
-                if (layout == null || element == null) break;
-                List<PlaceLayout.Edge> edges = layout.edgesFor(element);
-                if (value >= 0 && value < edges.size())
-                    layout.moveTo(element, edges.get(value));
-                break;
-            }
             case STYLE:
                 writeStyle(value == 1);
                 break;
@@ -2388,6 +2350,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case MARGIN: writeMargin(value); break;
             case DEPTH: writeGlassDepth(value); break;
             case SEARCH_FIELD: if (layout != null) layout.setSearchField(value != 0); break;
+            case DRAWER_ICON: if (layout != null) layout.setDrawerTile(value != 0); break;
             case APP_ICONS: writeAppIcons(value); break;
             case TEXT_SIZE: writeTextSize(value); break;
             case CONTRAST: writeLegibility(value); break;

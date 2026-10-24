@@ -2125,7 +2125,7 @@
                 <!-- The Drawer tile toggle after the Search field (#97; once the Taskbar style): a
                      tile among the dock's apps that opens the app drawer, with any style. Its
                      label shares the row the same way, so it too stays one short word. -->
-                <string name="layout_editor_drawer_tile">Drawer tile</string>
+                <string name="layout_editor_drawer_tile">App Drawer Icon</string>
                 <string name="layout_editor_drawer_tile_label">Drawer</string>
                 <!-- What a resize handle shows while it is dragged, in the store's real units. The
                      dp forms are the live launcher measured after the write; the × forms are for

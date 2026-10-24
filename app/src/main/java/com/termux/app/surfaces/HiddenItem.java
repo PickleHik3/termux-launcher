@@ -9,7 +9,7 @@ import com.termux.app.layouteditor.LayoutEditorPlan.TrayItem;
 
 /**
  * The things the editor's stack of cards can hold when the edited layout puts them away: the
- * Layout editor's tray ({@link TrayItem}) plus the dock's Search field and Drawer tile. The order
+ * Layout editor's tray ({@link TrayItem}) plus the dock's Search field. The order
  * here is the order the stack lists them in.
  */
 enum HiddenItem {
@@ -18,10 +18,9 @@ enum HiddenItem {
     AZ_INDEX(TrayItem.AZ_INDEX, R.string.settings_layout_miniature_alphabets, EditorCard.DOCK),
     EXTRA_KEYS(TrayItem.EXTRA_KEYS, R.string.settings_layout_miniature_keys, EditorCard.KEYBOARD),
     KEYBOARD(TrayItem.KEYBOARD, R.string.appearance_card_keyboard, EditorCard.KEYBOARD),
-    SEARCH_FIELD(null, R.string.appearance_row_search_field, EditorCard.DOCK),
-    DRAWER_TILE(null, R.string.layout_editor_drawer_tile, EditorCard.DOCK);
+    SEARCH_FIELD(null, R.string.appearance_row_search_field, EditorCard.DOCK);
 
-    /** The tray chip this item is, or null for the dock's Search field and Drawer tile. */
+    /** The tray chip this item is, or null for the dock's Search field. */
     @Nullable final TrayItem tray;
     @StringRes final int labelRes;
     /** The card that opens for the item once it is back. */

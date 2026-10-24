@@ -472,8 +472,6 @@ public class EditorCardSheetFitTest {
 
         @NonNull @Override public String[] choices(@NonNull Row row) {
             switch (row) {
-                case POSITION: return strings(R.string.appearance_position_top,
-                    R.string.appearance_position_bottom);
                 case STYLE: return strings(R.string.appearance_editor_style_docked,
                     R.string.appearance_editor_style_floating);
                 case DESIGN: return strings(R.string.layout_editor_dock_style_glass_tray,

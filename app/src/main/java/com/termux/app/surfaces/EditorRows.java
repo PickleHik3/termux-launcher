@@ -66,7 +66,6 @@ public final class EditorRows {
         TINT(Kind.STRIP, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
         HEIGHT(Kind.STRIP, R.string.appearance_row_height, R.drawable.ic_editor_height),
         VISIBLE(Kind.SWITCH, R.string.appearance_row_visible, R.drawable.ic_editor_visible),
-        POSITION(Kind.SEGMENTS, R.string.appearance_row_position, R.drawable.ic_editor_position),
         STYLE(Kind.SEGMENTS, R.string.appearance_row_style, R.drawable.ic_style_floating),
         DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_symbol_dock_glass_tray),
         /**
@@ -78,6 +77,7 @@ public final class EditorRows {
         MARGIN(Kind.STRIP, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
         DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         SEARCH_FIELD(Kind.SWITCH, R.string.appearance_row_search_field, R.drawable.ic_symbol_search),
+        DRAWER_ICON(Kind.SWITCH, R.string.layout_editor_drawer_tile, R.drawable.ic_symbol_apps),
         APP_ICONS(Kind.STRIP, R.string.appearance_row_app_icons, R.drawable.ic_symbol_apps),
         TEXT_SIZE(Kind.STRIP, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
@@ -207,7 +207,7 @@ public final class EditorRows {
                 break;
             case STATUS:
                 add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN,
-                    Row.VISIBLE, Row.POSITION);
+                    Row.VISIBLE);
                 add(out, 2, Row.CLOCK_12H, Row.CLOCK_FACE);
                 add(out, 3, Row.LINK_INDICATORS);
                 break;
@@ -221,9 +221,9 @@ public final class EditorRows {
                 break;
             case DOCK:
                 add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-                    Row.MARGIN, Row.APP_ICONS, Row.VISIBLE, Row.POSITION);
+                    Row.MARGIN, Row.APP_ICONS, Row.VISIBLE);
                 add(out, 2, Row.STYLE, Row.DESIGN);
-                add(out, 3, Row.SEARCH_FIELD, Row.LINK_DOCK_ITEMS);
+                add(out, 3, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_DOCK_ITEMS);
                 break;
             case KEYBOARD:
                 // Key opacity stands beside Opacity, the pair the opacity link moves together.
