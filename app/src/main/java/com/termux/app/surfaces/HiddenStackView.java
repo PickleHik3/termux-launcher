@@ -227,8 +227,8 @@ final class HiddenStackView extends FrameLayout {
         card.setFocusable(true);
         TextView label = new TextView(context);
         label.setText(item.labelRes);
-        label.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        label.setTextAlignment(TEXT_ALIGNMENT_VIEW_END);
+        label.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        label.setTextAlignment(TEXT_ALIGNMENT_VIEW_START);
         label.setIncludeFontPadding(false);
         label.setMaxLines(HiddenStackPolicy.MAX_LINES);
         label.setTextColor(MaterialColors.getColor(this,

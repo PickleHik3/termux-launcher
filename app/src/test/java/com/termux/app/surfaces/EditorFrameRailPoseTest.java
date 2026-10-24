@@ -8,7 +8,7 @@ import org.junit.Test;
 /**
  * The frame's pose against the hidden items' rail (SPEC §3.6a item 3), on pong's numbers (411 ×
  * 914 dp at 2.625): something hidden, one fixed offset lifted or not; nothing hidden, centred at
- * rest and moved across, at the same scale, while an element is lifted.
+ * rest and in the hidden pose while an element is lifted.
  */
 public class EditorFrameRailPoseTest {
 
@@ -70,20 +70,19 @@ public class EditorFrameRailPoseTest {
     }
 
     @Test
-    public void withNothingHiddenALiftSlidesTheFrameClearOfTheRailAtTheSameScale() {
+    public void withNothingHiddenALiftTakesTheHiddenPose() {
         for (float cardTop : CARD_TOPS) {
-            EditorFramePose.Pose rest = EditorFramePose.railPose(pong(), cardTop, reserve(), 0,
-                false);
             EditorFramePose.Pose lifted = EditorFramePose.railPose(pong(), cardTop, reserve(), 0,
                 true);
-            assertEquals("translation only", rest.scale, lifted.scale, 0f);
-            assertEquals(rest.translationY, lifted.translationY, 0f);
+            EditorFramePose.Pose hidden = EditorFramePose.railPose(pong(), cardTop, reserve(), 1,
+                false);
+            assertEquals(hidden.scale, lifted.scale, 0f);
+            assertEquals(hidden.translationX, lifted.translationX, 0f);
+            assertEquals(hidden.translationY, lifted.translationY, 0f);
             assertTrue("clear of the rail",
                 frameLeft(lifted) >= HiddenStackPolicy.reservePx(DENSITY) - 0.01f);
+            assertTrue("inside the window",
+                frameLeft(lifted) + WINDOW_W * lifted.scale <= WINDOW_W + 0.01f);
         }
-        // At rest the centred frame stands in the rail's band, so the lift does move it.
-        EditorFramePose.Pose atRest = EditorFramePose.railPose(pong(), Float.MAX_VALUE,
-            reserve(), 0, true);
-        assertTrue(atRest.translationX > 0f);
     }
 }

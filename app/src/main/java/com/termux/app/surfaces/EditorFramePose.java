@@ -190,9 +190,9 @@ final class EditorFramePose {
      *   <li>something hidden: the rail stands, and the frame keeps the one offset {@link
      *   #pose(Window, float, Reserve)} gives, lifted or not;</li>
      *   <li>nothing hidden, nothing lifted: no rail, no reserve, the frame centred;</li>
-     *   <li>nothing hidden, an element lifted: the centred pose's scale, moved across just far
-     *   enough to clear the rail's band, where its empty drop slot shows. Translation only, so
-     *   the slide there and back moves nothing but the frame's position.</li>
+     *   <li>nothing hidden, an element lifted: the pose something hidden would give, so the
+     *   frame slides and shrinks clear of the rail's band in one move, fits the window, and does
+     *   not step again when the drop hides the element.</li>
      * </ul>
      */
     @NonNull
@@ -200,11 +200,9 @@ final class EditorFramePose {
                          int hiddenCount, boolean lifted) {
         if (hiddenCount > 0)
             return pose(window, cardTopPx, reserve);
-        Pose centred = pose(window, cardTopPx, null);
         if (!lifted)
-            return centred;
-        return new Pose(centred.scale, reserve.shiftFor(centred.scale), centred.translationY,
-            centred.halfLineTopPx);
+            return pose(window, cardTopPx, null);
+        return pose(window, cardTopPx, reserve);
     }
 
     /**

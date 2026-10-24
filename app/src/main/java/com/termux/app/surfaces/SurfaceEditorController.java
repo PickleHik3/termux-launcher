@@ -793,6 +793,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // Laid out at the pose now; any carry by translation is spent.
         frame.setTranslationX(0f);
         frame.setTranslationY(0f);
+        frame.setScaleX(1f);
+        frame.setScaleY(1f);
         frame.invalidateOutline();
         if (mCanvas != null)
             mCanvas.setFrameCornerRadiusPx(mFrameCornerPx + RING_PX);
@@ -1292,16 +1294,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(durationMs);
         animator.setInterpolator(Motion.settle());
-        // A move that keeps the scale (the slide to the rail's offset and back) carries the
-        // canvas over the frame with it, by translation, so its slots never leave the frame.
-        final boolean carryCanvas = fromScale == scale;
+        // While a drag's pictures stand on the canvas (the slide to the rail's pose and back),
+        // the canvas is carried over the frame with it, so its slots never leave the frame.
+        FrameLayout carried = mLayoutFrame;
+        final boolean carryCanvas = mLive != null || mLifted
+            || (carried != null && !carried.getMatrix().isIdentity());
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
+            float nowScale = fromScale + (scale - fromScale) * f;
             float nowTx = fromTx + (tx - fromTx) * f;
             float nowTy = fromTy + (ty - fromTy) * f;
-            frame.setPose(fromScale + (scale - fromScale) * f, nowTx, nowTy);
+            frame.setPose(nowScale, nowTx, nowTy);
             if (carryCanvas)
-                carryLayoutFrame(nowTx, nowTy);
+                carryLayoutFrame(nowScale, nowTx, nowTy);
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             private boolean mCancelled;
@@ -1316,6 +1321,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (mCancelled || !mOpen)
                     return;
                 frame.setPose(scale, tx, ty);
+                // The drag's pictures stand in the canvas's px: it stays carried, and is laid
+                // out at the new pose once they are gone (finishLive).
+                if (mLive != null)
+                    return;
                 setTarget(scale, tx, ty);
             }
         });
@@ -1342,13 +1351,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private float mRootInCanvasY;
 
     /**
-     * The canvas's host moved with the frame by translation while the frame slides at one scale:
-     * its laid-out rect is the pose {@link #setFrameRect} last took, and the rest is translation.
+     * The canvas's host moved with the frame while the frame slides: its laid-out rect is the
+     * pose {@link #setFrameRect} last took, and the rest is a scale about the frame's own pivot
+     * (top centre, {@link AppearanceEditorFrame#setPose}) and a translation.
      */
-    private void carryLayoutFrame(float tx, float ty) {
+    private void carryLayoutFrame(float scale, float tx, float ty) {
         FrameLayout host = mLayoutFrame;
-        if (host == null)
+        AppearanceEditorFrame frame = mFrame;
+        if (host == null || frame == null || mFrameRectScale <= 0f)
             return;
+        float pivotX = mContainerLeftPx + frame.root().getWidth() / 2f + mFrameRectTx;
+        float pivotY = mContainerTopPx + mFrameRectTy;
+        float k = scale / mFrameRectScale;
+        host.setPivotX(pivotX - host.getLeft());
+        host.setPivotY(pivotY - host.getTop());
+        host.setScaleX(k);
+        host.setScaleY(k);
         host.setTranslationX(tx - mFrameRectTx);
         host.setTranslationY(ty - mFrameRectTy);
         updateCanvasTray();
@@ -1521,11 +1539,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int[] frame = mFrameRectInContent;
         if (canvas == null || column == null || frame == null)
             return;
+        float dx = frame[0] - RING_PX;
+        float dy = frame[1] - RING_PX;
+        RectF tray = new RectF(column[0] - dx, column[1] - dy, column[2] - dx, column[3] - dy);
+        // Undo the host's carry (scale about its pivot, then translation), if any.
         FrameLayout host = mLayoutFrame;
-        float dx = frame[0] - RING_PX + (host == null ? 0f : host.getTranslationX());
-        float dy = frame[1] - RING_PX + (host == null ? 0f : host.getTranslationY());
-        canvas.setExternalTrayRect(new RectF(column[0] - dx, column[1] - dy, column[2] - dx,
-            column[3] - dy));
+        if (host != null) {
+            android.graphics.Matrix inverse = new android.graphics.Matrix();
+            if (host.getMatrix().invert(inverse))
+                inverse.mapRect(tray);
+        }
+        canvas.setExternalTrayRect(tray);
     }
 
     /** Whether a raw screen point is over the frame. */
@@ -3651,6 +3675,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         mLifted = false;
         applyPose(true, LIFT_SLIDE_MS);
+        // No slide back (the pose holds): the carried canvas is laid out at the pose now.
+        if (mFrameAnimator == null)
+            setTarget(mTargetScale, mTargetTx, mTargetTy);
         positionTargets();
     }
 
@@ -3735,9 +3762,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         LayoutCanvasView canvas = mCanvas;
         if (mChipDrag == null || canvas == null)
             return false;
-        int[] at = new int[2];
-        canvas.getLocationOnScreen(at);
-        canvas.hoverHiddenDrag(rawX - at[0], rawY - at[1]);
+        float[] point = canvasPoint(canvas, rawX, rawY);
+        canvas.hoverHiddenDrag(point[0], point[1]);
         return canvas.drawsHeldOverFrame();
     }
 
@@ -3757,9 +3783,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 showHidden(item, false);
             return;
         }
-        int[] at = new int[2];
-        canvas.getLocationOnScreen(at);
-        canvas.dropHiddenDrag(rawX - at[0], rawY - at[1]);
+        float[] point = canvasPoint(canvas, rawX, rawY);
+        canvas.dropHiddenDrag(point[0], point[1]);
         if (!canvas.isLive() && mCanvasForDrag) {
             mCanvasForDrag = false;
             showCanvas(false, true);
@@ -3780,16 +3805,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** One touch, in the canvas's own coordinates, to the canvas. */
+    /** A raw screen point in the canvas's own px, through the host's carry (scale, translation). */
+    @NonNull
+    private float[] canvasPoint(@NonNull LayoutCanvasView canvas, float rawX, float rawY) {
+        FrameLayout host = mLayoutFrame;
+        View parent = host == null ? null : (View) host.getParent();
+        if (host == null || parent == null || canvas.getParent() != host) {
+            int[] at = new int[2];
+            canvas.getLocationOnScreen(at);
+            return new float[] {rawX - at[0], rawY - at[1]};
+        }
+        int[] at = new int[2];
+        parent.getLocationOnScreen(at);
+        float[] point = {rawX - at[0] - host.getLeft(), rawY - at[1] - host.getTop()};
+        android.graphics.Matrix inverse = new android.graphics.Matrix();
+        if (host.getMatrix().invert(inverse))
+            inverse.mapPoints(point);
+        point[0] -= canvas.getLeft();
+        point[1] -= canvas.getTop();
+        return point;
+    }
+
     private void forwardToCanvas(@NonNull MotionEvent event) {
         LayoutCanvasView canvas = mCanvas;
         if (canvas == null) {
             mForwarding = false;
             return;
         }
-        int[] at = new int[2];
-        canvas.getLocationOnScreen(at);
+        float[] point = canvasPoint(canvas, event.getRawX(), event.getRawY());
         MotionEvent local = MotionEvent.obtain(event);
-        local.setLocation(event.getRawX() - at[0], event.getRawY() - at[1]);
+        local.setLocation(point[0], point[1]);
         canvas.dispatchTouchEvent(local);
         local.recycle();
         int action = event.getActionMasked();
