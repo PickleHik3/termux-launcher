@@ -21,7 +21,6 @@
     <string name="settings_look_appearance_editor_title">Appearance</string>
     <string name="settings_look_appearance_editor_summary">The keyboard\'s glass, height and keys</string>
 
-    <string name="settings_look_appearance_editor_title">Appearance</string>
     <!-- The editor bar: the orientation chip names the orientation the frame shows. -->
     <string name="appearance_bar_portrait">Portrait</string>
     <string name="appearance_bar_landscape">Landscape</string>
