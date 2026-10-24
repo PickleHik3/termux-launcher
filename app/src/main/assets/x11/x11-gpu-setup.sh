@@ -148,7 +148,7 @@ stop_display() {
     kill "$SERVER_PID" 2>/dev/null
     for _ in 1 2 3 4 5 6; do kill -0 "$SERVER_PID" 2>/dev/null || break; sleep 0.5; done
     kill -0 "$SERVER_PID" 2>/dev/null && kill -9 "$SERVER_PID" 2>/dev/null
-    pkill -f "termux-x11 .*:$DISPLAY_NO -ac" 2>/dev/null
+    pkill -f "termux-x11 .* :$DISPLAY_NO -ac" 2>/dev/null
     rm -f "$TMPDIR/.X11-unix/X$DISPLAY_NO" "$HOME/.tmp/.X11-unix/X$DISPLAY_NO"
   fi
   SERVER_PID=""; true
