@@ -3418,12 +3418,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             view.removeCallbacks(hold);
     }
 
-    /** The hold landed: the canvas stands over the frame and takes the finger from here. */
+    /**
+     * The hold landed: the canvas stands over the frame and takes the finger from here. The card
+     * that is up stays up, so the frame keeps its pose from the hold through the drop: putting the
+     * card down here moved the frame to its rest pose, larger and further across, under a finger
+     * already on an element.
+     */
     private void startDrag() {
         LayoutCanvasView canvas = mCanvas;
         if (!mOpen || canvas == null || mLayoutFrame == null)
             return;
-        closeCard(true);
         mCanvasForDrag = !mCanvasShown;
         showCanvas(true, false);
         mForwarding = true;
