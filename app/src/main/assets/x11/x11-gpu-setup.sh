@@ -10,7 +10,9 @@
 #   1. Looks at which graphics chip the phone has.
 #   2. Lists the ways that chip can be used, from the most promising to "no acceleration".
 #   3. Brings the installed packages up to date, then installs the small test program and the
-#      driver packages for each way (remembering which were already there).
+#      driver packages for each way (remembering which were already there). The Vulkan wrapper
+#      is in no Termux repository: it is downloaded from termux-desktop's release and installed
+#      only if it is exactly the file expected.
 #   4. Starts a display of its own for the tests, on the first free number from :7 up. It is
 #      never shown and the launcher leaves it alone, so a display you have open stays exactly as
 #      it was. However the run ends, this display is stopped again.
@@ -32,6 +34,7 @@
 #   --display=N   look for a free display number for the tests from :N up (default :7)
 #   --profiles=FILE  read the ways to try from FILE (the launcher's page writes one) instead of
 #                 asking the launcher with launcherctl
+#   --install-wrapper  only install the Vulkan wrapper (vulkan-wrapper-android), then stop
 #
 # Which ways fit the phone, and what each needs, is the launcher's list (launcherctl x11 gpu
 # --table), not this script's. Nothing here changes the launcher's settings: with the choice on
@@ -40,7 +43,7 @@
 
 set -uo pipefail
 
-KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_FROM=7; PROFILES=""
+KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_FROM=7; PROFILES=""; INSTALL_WRAPPER=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
@@ -48,6 +51,7 @@ for arg in "$@"; do
     --yes) YES=1 ;;
     --display=*) DISPLAY_FROM=${arg#--display=}; DISPLAY_FROM=${DISPLAY_FROM#:} ;;
     --profiles=*) PROFILES=${arg#--profiles=} ;;
+    --install-wrapper) INSTALL_WRAPPER=1 ;;
     -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)"; exit 2 ;;
   esac
@@ -81,7 +85,8 @@ step()   { printf '\n== Step %s of 8: %s ==\n' "$1" "$2"; }
 detail() { printf '   %s\n' "$*"; }
 result() { printf '   -> %s\n' "$*"; }
 
-: > "$LOG"
+# A fresh log per benchmark run; installing only the wrapper adds to the last run's.
+[ $INSTALL_WRAPPER = 1 ] || : > "$LOG"
 
 # ---------------------------------------------------------------------------------------------
 # Termux comes with either apt (the default) or pacman. Both are driven the same way here, and
@@ -130,24 +135,122 @@ apt_sim() {
     awk '{ sub(/\r$/, "") } $1 == "Remv" || $1 == "Purg" { sub(/:.*/, "", $2); printf "%s ", $2 }'
 }
 
+# ---------------------------------------------------------------------------------------------
+# The Vulkan wrapper. vulkan-wrapper-android is in no Termux repository, so it comes from the
+# prebuilt termux-desktop publishes, pinned here by version and checksum: a download that is not
+# byte for byte the file below is refused. Installed from the file, it is an ordinary package of
+# that name, so the clean-up takes it out by name like any other if it loses.
+WRAPPER_PKG=vulkan-wrapper-android
+WRAPPER_VERSION=25.0.0-3
+WRAPPER_URL=https://github.com/sabamdarif/termux-desktop/releases/download/${WRAPPER_PKG}_$WRAPPER_VERSION
+declare -A WRAPPER_SHA256=(
+  [${WRAPPER_PKG}_$WRAPPER_VERSION-aarch64.pkg.tar.xz]=407a024fe25c37e34e83d32a199eb82e204aa1c80f391c5eecc88d5d4ca98f96
+  [${WRAPPER_PKG}_$WRAPPER_VERSION-arm.pkg.tar.xz]=dec9d90eed2cb4d5e21acd665661e3f20476d13711b9c27eb38d9c276a3d4890
+  [${WRAPPER_PKG}_${WRAPPER_VERSION}_aarch64.deb]=fc11784fee6a553eae78b30a4bff267981b735be7b1d4fac4e894e09be8058ca
+  [${WRAPPER_PKG}_${WRAPPER_VERSION}_arm.deb]=2fbbf12d692534e640d270faa8f840c08ef0d38a65cbb191dd1bf896a32b923f
+)
+WRAPPER_DIR=""
+
+# The file for this phone's package manager and processor; fails where there is none.
+wrapper_file() {
+  local arch=""
+  if [ $PM = pacman ]; then
+    arch=$(pacman-conf Architecture 2>/dev/null | head -n 1)
+    case $arch in ''|auto) arch=$(uname -m) ;; esac
+  else
+    arch=$(dpkg --print-architecture 2>/dev/null)
+  fi
+  case $arch in
+    aarch64|arm64) arch=aarch64 ;;
+    arm|armhf|armel|armv7*|armv8l) arch=arm ;;
+    *) return 1 ;;
+  esac
+  if [ $PM = pacman ]; then echo "${WRAPPER_PKG}_$WRAPPER_VERSION-$arch.pkg.tar.xz"
+  else echo "${WRAPPER_PKG}_${WRAPPER_VERSION}_$arch.deb"; fi
+}
+
+drop_wrapper_download() {
+  [ -n "$WRAPPER_DIR" ] && rm -rf "$WRAPPER_DIR"
+  WRAPPER_DIR=""
+  true
+}
+
+# Downloads the wrapper into a folder of its own under TMPDIR, checks it, installs it with the
+# package manager (which brings its dependencies from the official repositories) and deletes the
+# download again, whatever happened.
+install_wrapper() {
+  local name file sum rc
+  if ! name=$(wrapper_file); then
+    detail "The Vulkan wrapper has no build for this phone's processor."
+    return 1
+  fi
+  WRAPPER_DIR=$(mktemp -d "$TMPDIR/vulkan-wrapper.XXXXXX") || { WRAPPER_DIR=""; return 1; }
+  file=$WRAPPER_DIR/$name
+  detail "Downloading the Vulkan wrapper ($name)."
+  if command -v curl >/dev/null; then curl -fL --retry 2 -o "$file" "$WRAPPER_URL/$name"
+  elif command -v wget >/dev/null; then wget -O "$file" "$WRAPPER_URL/$name"
+  else false; fi || {
+    detail "The download did not work."
+    drop_wrapper_download
+    return 1
+  }
+  sum=$(sha256sum "$file" 2>/dev/null | awk '{ print $1 }')
+  if [ -z "$sum" ] || [ "$sum" != "${WRAPPER_SHA256[$name]:-}" ]; then
+    detail "The download is not the expected file, so it was not installed."
+    printf '\n### %s: sha256 %s, expected %s\n' "$name" "${sum:-?}" "${WRAPPER_SHA256[$name]:-?}" >>"$LOG"
+    drop_wrapper_download
+    return 1
+  fi
+  if [ $PM = pacman ]; then pacman -U --noconfirm "$file"
+  else apt-get install -y "$file"; fi
+  rc=$?
+  drop_wrapper_download
+  return $rc
+}
+
 # Keep track of what we install, for the summary in step 3. What is removed again at the end is
 # worked out from the package list itself (see take_out below), so an install that was cut off
-# or only partly worked is covered too.
+# or only partly worked is covered too. The Vulkan wrapper comes from its own download, the rest
+# from the package manager's repositories.
 WE_INSTALLED=(); NOT_AVAILABLE=()
 install_pkgs() {
-  local missing=()
+  local missing=() from_repo=() p wrapper=0
   for p in "$@"; do installed_before "$p" || missing+=("$p"); done
   [ ${#missing[@]} -eq 0 ] && return 0
+  for p in "${missing[@]}"; do
+    if [ "$p" = "$WRAPPER_PKG" ]; then wrapper=1; else from_repo+=("$p"); fi
+  done
   detail "Installing: ${missing[*]}"
   # On the terminal, not in the log: an install can take minutes and must not look stuck.
-  if pm_install "${missing[@]}"; then
-    WE_INSTALLED+=("${missing[@]}")
-    return 0
+  if [ ${#from_repo[@]} -gt 0 ]; then
+    if ! pm_install "${from_repo[@]}"; then
+      NOT_AVAILABLE+=("${missing[@]}")
+      detail "Could not install ${missing[*]} (see the output above)."
+      return 1
+    fi
+    WE_INSTALLED+=("${from_repo[@]}")
   fi
-  NOT_AVAILABLE+=("${missing[@]}")
-  detail "Could not install ${missing[*]} (see the output above)."
-  return 1
+  if [ $wrapper = 1 ]; then
+    if ! install_wrapper; then
+      NOT_AVAILABLE+=("$WRAPPER_PKG")
+      detail "Could not install $WRAPPER_PKG."
+      return 1
+    fi
+    WE_INSTALLED+=("$WRAPPER_PKG")
+  fi
+  return 0
 }
+
+# Only the wrapper, for someone who picked it on the launcher's page without a benchmark run.
+if [ $INSTALL_WRAPPER = 1 ]; then
+  trap drop_wrapper_download EXIT
+  if installed_before "$WRAPPER_PKG"; then echo "The Vulkan wrapper is already installed."; exit 0; fi
+  detail "Bringing the installed packages up to date first."
+  pm_upgrade || { say "The packages could not be brought up to date (see the output above), so nothing was installed."; exit 1; }
+  if install_wrapper; then say "The Vulkan wrapper is installed."; exit 0; fi
+  say "The Vulkan wrapper could not be installed."
+  exit 1
+fi
 
 # Background helpers we start and must stop again.
 SERVER_PID=""; VIRGL_PID=""
@@ -317,7 +420,7 @@ cleanup_prefix() {
 cleanup() {
   [ $CLEANED = 1 ] && return 0; CLEANED=1
   trap '' INT TERM HUP
-  stop_virgl; stop_display
+  stop_virgl; stop_display; drop_wrapper_download
   if [ $FINISHED = 0 ] && { [ -n "$BEFORE" ] || [ -n "$PROOT_BEFORE" ]; }; then
     if [ $KEEP = 1 ]; then say "Stopped before the end. Leaving every installed package in place, as asked."; return 0; fi
     say "Stopped before the end. Putting back what this run installed."

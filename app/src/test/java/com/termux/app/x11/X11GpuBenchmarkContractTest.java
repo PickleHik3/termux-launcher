@@ -159,4 +159,83 @@ public class X11GpuBenchmarkContractTest {
         assertEquals("ours-is-7\nours-is-not-8\n8-in-use\n9-free\nours-stopped\nother-running\n"
             + "socket-gone\nlock-gone\n", output);
     }
+
+    // ---- the Vulkan wrapper ----
+
+    /** The wrapper's pin and its functions, with the package manager and the network stubbed. */
+    private String wrapperPrelude(String pm, String arch, String download) {
+        Matcher m = Pattern.compile("(?ms)^WRAPPER_PKG=.*?^WRAPPER_DIR=\"\"\\n").matcher(script);
+        assertTrue("the script pins the wrapper", m.find());
+        return "TMPDIR=$1; LOG=$1/log; PM=" + pm + "\n"
+            + "detail() { :; }\n"
+            + "pacman-conf() { echo " + arch + "; }\n"
+            + "dpkg() { echo " + arch + "; }\n"
+            + "uname() { echo " + arch + "; }\n"
+            + "curl() { local out=''; while [ $# -gt 1 ]; do [ \"$1\" = -o ] && out=$2; shift; done; "
+            + "echo \"$1\" > \"$TMPDIR/url\"; printf '%s' '" + download + "' > \"$out\"; }\n"
+            + "pacman() { echo \"pacman $*\" >> \"$TMPDIR/calls\"; }\n"
+            + "apt-get() { echo \"apt-get $*\" >> \"$TMPDIR/calls\"; }\n"
+            + m.group() + function("wrapper_file") + function("drop_wrapper_download")
+            + function("install_wrapper");
+    }
+
+    @Test
+    public void theWrapperIsPinnedToFourFilesByChecksum() throws Exception {
+        String output = run(wrapperPrelude("pacman", "aarch64", "")
+            + "for k in \"${!WRAPPER_SHA256[@]}\"; do echo \"$k=${WRAPPER_SHA256[$k]}\"; done | LC_ALL=C sort\n"
+            + "echo \"$WRAPPER_URL\"\n");
+        assertEquals(""
+            + "vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz=407a024fe25c37e34e83d32a199eb82e204aa1c80f391c5eecc88d5d4ca98f96\n"
+            + "vulkan-wrapper-android_25.0.0-3-arm.pkg.tar.xz=dec9d90eed2cb4d5e21acd665661e3f20476d13711b9c27eb38d9c276a3d4890\n"
+            + "vulkan-wrapper-android_25.0.0-3_aarch64.deb=fc11784fee6a553eae78b30a4bff267981b735be7b1d4fac4e894e09be8058ca\n"
+            + "vulkan-wrapper-android_25.0.0-3_arm.deb=2fbbf12d692534e640d270faa8f840c08ef0d38a65cbb191dd1bf896a32b923f\n"
+            + "https://github.com/sabamdarif/termux-desktop/releases/download/vulkan-wrapper-android_25.0.0-3\n",
+            output);
+    }
+
+    @Test
+    public void eachPackageManagerAndProcessorGetsItsOwnFile() throws Exception {
+        assertEquals("vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz\n",
+            run(wrapperPrelude("pacman", "aarch64", "") + "wrapper_file\n"));
+        assertEquals("vulkan-wrapper-android_25.0.0-3_arm.deb\n",
+            run(wrapperPrelude("apt", "arm", "") + "wrapper_file\n"));
+        assertEquals("none\n",
+            run(wrapperPrelude("apt", "x86_64", "") + "wrapper_file || echo none\n"));
+    }
+
+    private static boolean hasSha256sum() {
+        return new File("/usr/bin/sha256sum").canExecute() || new File("/bin/sha256sum").canExecute();
+    }
+
+    @Test
+    public void aDownloadThatIsNotThePinnedFileIsNeverInstalled() throws Exception {
+        Assume.assumeTrue("needs sha256sum", hasSha256sum());
+        String output = run(wrapperPrelude("pacman", "aarch64", "not the wrapper")
+            + "install_wrapper || echo refused\n"
+            + "[ -e \"$TMPDIR/calls\" ] || echo nothing-installed\n"
+            + "ls -d \"$TMPDIR\"/vulkan-wrapper.* 2>/dev/null || echo download-deleted\n");
+        assertEquals("refused\nnothing-installed\ndownload-deleted\n", output);
+    }
+
+    @Test
+    public void thePinnedFileIsInstalledFromDiskAndTheDownloadDeleted() throws Exception {
+        Assume.assumeTrue("needs sha256sum", hasSha256sum());
+        String body = "name=$(wrapper_file)\n"
+            + "WRAPPER_SHA256[$name]=$(printf '%s' 'the wrapper' | sha256sum | awk '{ print $1 }')\n"
+            + "install_wrapper && echo installed\n"
+            + "sed \"s|$TMPDIR/vulkan-wrapper\\.[^/]*/|<tmp>/|\" \"$TMPDIR/calls\"\n"
+            + "cat \"$TMPDIR/url\"\n"
+            + "ls -d \"$TMPDIR\"/vulkan-wrapper.* 2>/dev/null || echo download-deleted\n";
+        String url = "https://github.com/sabamdarif/termux-desktop/releases/download/vulkan-wrapper-android_25.0.0-3/";
+        assertEquals("installed\n"
+                + "pacman -U --noconfirm <tmp>/vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz\n"
+                + url + "vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz\n"
+                + "download-deleted\n",
+            run(wrapperPrelude("pacman", "aarch64", "the wrapper") + body));
+        assertEquals("installed\n"
+                + "apt-get install -y <tmp>/vulkan-wrapper-android_25.0.0-3_aarch64.deb\n"
+                + url + "vulkan-wrapper-android_25.0.0-3_aarch64.deb\n"
+                + "download-deleted\n",
+            run(wrapperPrelude("apt", "aarch64", "the wrapper") + body));
+    }
 }

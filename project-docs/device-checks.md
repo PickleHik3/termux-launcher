@@ -570,6 +570,11 @@ Developer:
 - 2026-10-24 · same · display off, Run benchmark to the end, then once more stopped with Ctrl-C
   during step 5: afterwards no `termux-x11` process (`ps -ef | grep termux-x11`) and no new socket
   in `$PREFIX/tmp/.X11-unix` · pong.
+- 2026-10-24 · commit "fix(x11): the GPU benchmark installs the Vulkan wrapper from its pinned
+  download" · Run benchmark: step 3 downloads vulkan-wrapper-android, installs it, step 5 tests
+  vulkan-wrapper with a score or outcome; if it lost, step 8 removes it (`pacman -Q
+  vulkan-wrapper-android` finds nothing) and no `vulkan-wrapper.*` folder is left in
+  `$PREFIX/tmp`; if it won, it stays · pong.
 
 ## Found in the sweep (2026-10-24), to triage
 Crops and per-batch tables: `~/reports/device-checks-2026-10-24/`. Each becomes an issue or a
