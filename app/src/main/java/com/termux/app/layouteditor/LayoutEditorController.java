@@ -310,8 +310,14 @@ public final class LayoutEditorController {
      */
     public void showHome(boolean home, boolean animate) {
         LayoutEditorPlan plan = mPlan;
-        if (plan == null || plan.showsHome() == home)
+        if (plan == null)
             return;
+        if (plan.showsHome() == home) {
+            // The session already edits that half; the wall may still stand on the other one.
+            if (animate) mHost.slidePaneWallToPlace(plan.place());
+            else mHost.holdPaneWallOnPlace(plan.place(), true);
+            return;
+        }
         PaneWallPage place = plan.showHome(home);
         Views views = mViews;
         if (views != null) {

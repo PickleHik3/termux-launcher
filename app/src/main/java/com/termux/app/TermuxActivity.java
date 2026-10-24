@@ -13241,7 +13241,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The editor's half slide: the wall slides inside the scaled container, gestures held.
         @Override public void slidePaneWallToPlace(@NonNull com.termux.app.wall.PaneWallPage place) {
             if (mPaneWallController == null) return;
-            mPaneWallController.goTo(place, true);
+            // The Workspace with no window: its first shell, as Home's own swipe would start.
+            if (place == com.termux.app.wall.PaneWallPage.TERMINAL)
+                mPaneWallController.goToWorkspace(true);
+            else
+                mPaneWallController.goTo(place, true);
             mPaneWallController.setGesturesEnabled(false);
         }
 

@@ -541,6 +541,23 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * To the Workspace, as Home's swipe past its last page goes there: its window in front, or,
+     * with the row empty, its first shell started and the wall brought there when the window
+     * arrives. False when there is no Workspace to show and none can be started.
+     */
+    public boolean goToWorkspace(boolean animate) {
+        if (mWall.pages().contains(PaneWallPage.TERMINAL))
+            return goTo(PaneWallPage.TERMINAL, animate);
+        if (mHost.hasWindow() || !mHost.canStartWorkspace())
+            return false;
+        if (!mHost.startWorkspaceShell())
+            return false;
+        mWorkspacePending = true;
+        refreshPages();
+        return true;
+    }
+
+    /**
      * To the Workspace's window in front, without animation where the caller is already changing
      * everything (entering the surface editor). Nothing happens while the row has no window.
      */
