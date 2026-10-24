@@ -151,12 +151,12 @@ working state. Check what the visible session is running before treating it as a
 
 ## Blur, wallpaper colors, or transparency look wrong
 
-Open **Settings → Look** and test against the real home screen.
+Open **Settings → Appearance** and test against the real home screen.
 
 - Live wallpapers can limit or disable dock blur.
 - GPU blur requires Android 12 or later; older Android versions use a simpler surface.
 - Without **Wallpaper access** (Settings → General → Permissions & services) the glass bars render flat.
-- **Wallpaper colors**, in **Settings → Look**, changes the generated palette, while the
+- **Wallpaper colors**, in the Appearance editor, changes the generated palette, while the
   opacity controls decide how much wallpaper remains visible.
 - Full-screen TUIs may need a resize after font or surface geometry changes.
 
@@ -296,7 +296,7 @@ The display window hides its
   from that shell puts its socket there and no program finds it; start the server with
   `TMPDIR=$PREFIX/tmp termux-x11 :0`, or leave `TMPDIR` alone. A socket left behind by a server that
   has exited causes the same symptom; remove it from `$PREFIX/tmp/.X11-unix/`.
-- **A black display.** Turn on **Settings → Terminal → Linux apps → Troubleshooting → Compatibility drawing**
+- **A black display.** Turn on **Settings → Linux apps → Fixes → Compatibility drawing**
   (the server's `-legacy-drawing`).
 - **Apps cannot open the display from a proot.** Log in with `--shared-x11`, and check
   `echo $DISPLAY` inside.
@@ -310,7 +310,7 @@ The display window hides its
   drawer under a virgl profile get `--disable-gpu` on their own.
 - **Nothing is accelerated.** `glmark2-es2` names the renderer in its first lines; `llvmpipe`
   means a profile variable is missing or the profile does not fit this GPU. Open
-  **Settings → Terminal → Linux apps → Set up Linux apps → Graphics acceleration** and tap
+  **Settings → Linux apps → Set up Linux apps → Graphics acceleration** and tap
   **Run benchmark**: it tries every graphics profile that fits the phone in the terminal and keeps
   the best, and the page then shows each profile's result and lets you pick one (Automatic follows
   the launcher's ranking). `launcherctl x11 gpu` says which profile fits, which one you picked
@@ -326,7 +326,7 @@ More in [The Linux display](X11_Display.md).
 
 ## Linux apps from a distro do not show or do not open
 
-- **No Linux apps in the drawer at all.** Either nothing is installed yet (use **Settings → Terminal
+- **No Linux apps in the drawer at all.** Either nothing is installed yet (use **Settings
   → Linux apps → Set up Linux apps**), or **Show Linux apps in drawer** is off. Check too that the
   distro was installed by `proot-distro` 5.x.
 - **One app is missing.** Look in **Hidden Linux apps** first. Otherwise the app has no menu entry

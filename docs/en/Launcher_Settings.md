@@ -1,98 +1,108 @@
 # Settings map
 
-This page lists every top-level row in Settings, in the order they appear, with a link to the page
-that explains it.
+This page lists every top-level row in Settings, in the order they appear, with what each page
+holds and a link to the page that explains it.
 
 Open Settings by holding a corner of the terminal and tapping the cog, by long-pressing the
 terminal and choosing **Settings**, from **Settings** in the command palette on Home, or from the
 **Settings** shortcut on the app icon in another launcher. **Search settings** at the top finds any
 setting inside every page, so `fonts`, `ligatures` or `Shizuku` lead straight to the right place.
+Search also finds the settings that live in the Appearance editor (theme, wallpaper, icon pack,
+full screen and the rest) and opens the editor for them.
 
-## Start in
+Settings is grouped in three: **Your launcher** (Home, Apps & dock, Terminal, Linux apps),
+**Everywhere** (Appearance, Keyboard, Notifications, On-device AI) and **System** (General).
 
-The first row: **Home** (the default) or **Terminal**. Where the launcher opens after a restart;
+## Your launcher
+
+### Home
+
+"Pages, widgets, gestures and where you start". **Appearance** opens the Appearance editor on
+Home. Then **Icons and labels**, **Folders**, **Gestures**, **Home widgets** and **Pages** (**Page indicator**, **Edit pages**, **Wallpaper scrolls with pages**, **Lock Home layout** and **Start in**).
+
+**Gestures** holds every gesture in one place: the five on a Home page's free area (swipe up,
+swipe down, double-tap, two-finger swipe up and down), then **Double-tap to lock** (its page picks
+the lock method), **Swipe down for app drawer** and **Swipe on the terminal to switch windows**.
+
+**Start in** is **Home** (the default) or **Terminal**: where the launcher opens after a restart;
 **Terminal** opens the Workspace with one fresh shell window. See
-[Home screen and apps](Home_Screen_And_Apps.md#home-and-the-workspace). (It replaces the
-**Launcher mode** row of older versions.)
+[Home screen and apps](Home_Screen_And_Apps.md) and [Widgets](Widgets.md).
 
-## Appearance
+### Apps & dock
 
-Under **Personalization**. "Wallpaper, theme, fonts and icons": its first row, **Wallpaper, look
-and layout**, opens the Appearance editor over the launcher, with tabs **Wallpaper | Look | Layout |
-Icon pack**. Below it sit **Terminal fonts**, the app theme, wallpaper colours, terminal contrast,
-the wallpaper options, icon options and keyboard look. The palette's **Look and feel settings**
-opens the same page. See [Look and themes](Look_And_Themes.md).
+"Dock, drawer, A–Z and app search": **Pinned apps** and **Most-used apps page** for the dock, then
+**Drawer layout** (its page starts with **Grid**, the drawer's view), **App search** and **Linux
+apps in the drawer**, which opens the Linux apps section. See
+[Home screen and apps](Home_Screen_And_Apps.md).
 
-### Look
+### Terminal
 
-The Look tab of the Appearance editor: the glass look of every surface, the clock face, cursor
-trail and terminal effect. See [Look and themes](Look_And_Themes.md).
+"Windows, panes, status bar and text". **Appearance** opens the Appearance editor on the
+Terminal, then the **Windows & panes**, **Status bar**, **Text & display** (font, edge colours,
+cursor trail, terminal effect) and **Clipboard & compatibility** pages. See
+[Panes, windows and sessions](Panes_Windows_And_Sessions.md), [Status bar](Status_Bar.md),
+[Terminal fonts](Terminal_Fonts.md) and [Touch, links and clipboard](Touch_Links_And_Clipboard.md).
+Whether scripts may open panes is covered on [launcherctl](LauncherCtl.md).
 
-### Layout editor
+### Linux apps
 
-The Layout tab of Appearance: where the bars stand, their sizes, the keyboard type and minimal mode.
-See [Layout and full screen](Layout_And_Full_Screen.md).
+"Desktop apps, their windows and how they start": **Show Linux apps in drawer**, **Set up Linux
+apps**, **Hidden Linux apps**, **Window manager**, then the **Input**, **Resolution and scaling**,
+**Startup** and **Fixes** pages. There is nothing to switch on: the display starts when a Linux app
+asks for it. Builds made without the display leave this row out. See
+[The Linux display](X11_Display.md) and [Linux apps from a distro](Linux_Apps_From_A_Distro.md).
 
-### Theming from a color scheme
+## Everywhere
+
+### Appearance
+
+"Wallpaper, glass, theme, icons and layout". Not a page: the row opens the Appearance editor over
+the live launcher, where you change how everything looks and where it sits. Every way into the
+editor is called **Appearance**: this row, the Appearance rows on Home, Terminal and Keyboard, and
+the corner tab. See [Look and themes](Look_And_Themes.md) and
+[Layout and full screen](Layout_And_Full_Screen.md).
 
 Turning **Wallpaper colors** off, or applying a Termux:Styling scheme, builds the launcher's colours
 from `~/.termux/colors.properties`. See
 [Look and themes](Look_And_Themes.md#theming-from-a-color-scheme).
 
-## Apps
+### Keyboard
 
-"Dock, drawer and search": **Set as default launcher**, **Pinned apps**, **Swipe down for app
-drawer**, **Built-in widget style**, and the **Dock**, **Drawer layout**, **App
-search** and **Double-tap to lock** pages. See [Home screen and apps](Home_Screen_And_Apps.md) and
-[Widgets](Widgets.md).
-
-## Status bar
-
-"Clock, indicators and weather": **12-hour time**, **CPU usage**, **Memory usage**, **Media**,
-**Weather**, **Fahrenheit** and the weather **Location**. See [Status bar](Status_Bar.md).
-
-## Notifications
-
-"Dots, pinned alerts and history": **Notification access**, **Notification dots**, **Pinned
-notifications** and **Notification history**. See [Notifications](Notifications.md).
-
-## Terminal
-
-Under **Workspace**. "Panes, clipboard and effects": **Full screen**, **Extend edge colors**,
-**Cursor trail**, **Terminal effect**, **Keyboard resize workaround**, the clipboard switches, and
-**Split-pane controls** with its pane options. See
-[Panes, windows and sessions](Panes_Windows_And_Sessions.md),
-[Touch, links and clipboard](Touch_Links_And_Clipboard.md) and
-[Layout and full screen](Layout_And_Full_Screen.md#full-screen). Whether scripts may open panes is
-covered on [launcherctl](LauncherCtl.md).
-
-## Keyboard
-
-"Layouts, typing and voice input": **On-screen keyboard** (**Built-in**, **Android** or **Off**),
-**Voice input**, the **Layouts**, **Size and position** and **Typing and feedback** pages,
-**Terminal extra keys** and **Hardware keyboard**. See [Keyboard](Keyboard.md),
+"Layouts, size, typing, voice and look": **On-screen keyboard** (**Built-in**, **Android** or
+**Off**) and **Voice input**; the built-in keyboard's **Layouts**, **Size and position** and
+**Typing and feedback** pages; **Appearance** and **Keyboard theme**; **Terminal extra keys**; and
+**Hardware keyboard** in a group of its own. See [Keyboard](Keyboard.md),
 [Extra keys](Extra_Keys.md) and [Voice input](Voice_Input.md).
 
-## Display
+### Notifications
 
-"Desktop apps and touch controls": the Linux display's input, resolution, Linux apps, startup and
-troubleshooting pages. There is nothing to switch on: the display starts when a Linux app or the
-**Display** entry in the app drawer asks for it. See [The Linux display](X11_Display.md).
+"Dots, pinned alerts and history": **Notification dots**, **Pinned notifications** and
+**Notification history**. **Notification access** itself is on General › Permissions & services.
+See [Notifications](Notifications.md).
 
-## On-device AI
+### On-device AI
 
-"Models, voice and local API": the runtime, the **Model centre**, **Models for this phone**,
-benchmark and the local server. See [On-device AI](On_Device_AI.md).
+"Models, voice and assistant": the runtime, the **Model centre**, **Models for this phone**, a
+link to **Voice input** (which lives under Keyboard), the benchmark and the local server. See
+[On-device AI](On_Device_AI.md).
 
-## App behavior
+## System
 
-Under **App**. "Battery use and vibration": **Reduce idle activity** (lazy mode), the vibration
-switches, and **Show in Recents when not the default launcher**. See
-[Look and themes](Look_And_Themes.md#reduce-idle-activity). **Low-memory preset** is a switch: on, it sets the Solid look,
-an opaque terminal, no cursor trail or terminal effect, no wallpaper parallax and Reduce idle activity;
-off, it puts back what it replaced.
+### General
 
-## Backup & restore
+"Motion, vibration, battery, backup and about": **Animation speed** and **Page transition**;
+**Vibration** (the one place for app, launcher and keyboard vibration); **Battery & performance**;
+the **Backup & restore**, **Permissions & services**, **Diagnostics** and **About & help** pages;
+and **Set as default launcher**, **Restart launcher** and **Show in Recents when not the default
+launcher**.
+
+**Battery & performance** holds **Reduce idle activity** (lazy mode) and **Low-memory preset**,
+with shortcuts to the motion it trims. See
+[Look and themes](Look_And_Themes.md#reduce-idle-activity). **Low-memory preset** is a switch: on,
+it sets the Solid look, an opaque terminal, no cursor trail or terminal effect, no wallpaper
+parallax and Reduce idle activity; off, it puts back what it replaced.
+
+#### Backup & restore
 
 "Move your setup to another phone": **Export settings** saves your launcher setup to one `.zip`
 file (it suggests Downloads), and **Import settings** restores it, on this phone or a new one, on
@@ -116,7 +126,7 @@ Importing replaces your current launcher settings and restarts the launcher, whi
 terminal sessions. Afterwards, add your widgets again, grant the permissions the launcher asks
 for, and pick your downloaded terminal font again so it downloads on this phone.
 
-### AI models
+##### AI models
 
 Downloaded on-device AI models are too large for the settings file, so they have their own rows.
 **Export AI models** shows how many models you have and how much space they take, and copies them
@@ -135,23 +145,25 @@ Import your settings first, then your models.
 
 For your home folder and packages, use `termux-backup` and `termux-restore` in the terminal.
 
-## Permissions & services
+#### Permissions & services
 
 "Access and connected services": **Files and media**, **Wallpaper access**, **Notification
 access**, **Accessibility service**, **App notifications**, **All app permissions**, then
 **Shizuku** and **Termux:API**. An **Action needed** badge is a status, not a failure; fix it only
 if you want the feature that needs it. See [Shizuku](Shizuku.md).
 
-## Diagnostics
+#### Diagnostics
 
-"Logs and troubleshooting": **Log level**, **Log keyboard input**, plugin and crash alerts, **Test
-privileged backend**, **Copy diagnostics**, **Export logs** and **Clear logs**. Diagnostics can
-contain device, package and path details; review them before posting. See
+"Logs and troubleshooting", the one place for logging: **Log level** (the launcher's),
+**Termux:API log level** (shown while Termux:API is installed), **Log keyboard input**, plugin and
+crash alerts, **Test privileged backend**, **Copy diagnostics**, **Export logs** and **Clear
+logs**. Diagnostics can contain device, package and path details; review them before posting. See
 [Troubleshooting](Launcher_Troubleshooting.md).
 
-## About & help
+#### About & help
 
-"Guides and app information": **Documentation**, **Replay tour**, **Send feedback**, **Version and
-build**, **Open-source licenses**, **Source code** and **Donate**. When reporting a bug, include the
-version and edition, Android version, device architecture and the shortest steps to reproduce it.
-See [Learn the launcher](Learn_The_Launcher.md#get-help).
+"Guides and app information": **Help** (the in-app help), **Documentation**, **Discord**,
+**Replay tour**, **Send feedback**, **Version and build**, **What's new**, **Open-source
+licenses** and **Source code**. When reporting a bug, include the version and edition, Android
+version, device architecture and the shortest steps to reproduce it. See
+[Learn the launcher](Learn_The_Launcher.md#get-help).
