@@ -385,6 +385,36 @@ dropped; what follows is what still owes a look.
   Surface: copy text in another app, Ctrl+Shift+V in a terminal window pastes it (confirmation
   notice if the tool asks for one, then the text in the shell); Ctrl+Alt+V still pastes with
   splits off and splits with them on · Surface, hand on the keyboard.
+- 2026-10-24 · 68fba2325 (commit "feat(appearance): Label size and Folders stand inline like
+  Numerals…") · Home card, at font scale 1.0, 1.3 and 2.0 → Label size and Folders stand on one
+  row beside their name like Numerals, with their words smaller; no word is cut or ends in "…";
+  where a scale cannot fit them they wrap onto their own line (never truncate) · emulator.
+- 2026-10-24 · 68fba2325 · the Home card has no Folder limit row; a folder that held 20 apps keeps
+  them and takes no more, one under 16 takes more up to 16; Settings › Home › Folders has no Max
+  folder size row · emulator.
+- 2026-10-24 · 10aced449 (commit "feat(appearance): hidden items as a stack of cards beside the
+  editor frame") · open the editor on Home and on the Workspace, nothing hidden → the frame stands
+  right of an empty left column (smaller than before, never off screen), at font scale 1.0, 1.3
+  and 2.0 and with a card up at both detents · emulator.
+- 2026-10-24 · 10aced449 · hide the status bar (Status card Visible), pinned apps, extra keys and
+  the keyboard on the Workspace → one card each in a stack at the top left, all one size, each
+  label whole inside its card (no "…", no clipping) at font scale 1.0, 1.3 and 2.0; the frame no
+  longer draws dashed ghost bands · emulator.
+- 2026-10-24 · 10aced449 · tap a card → the item comes back where it was and its card (Status,
+  Dock or Keyboard) opens; drag a card into the frame and let go → the item comes back, the card
+  does not open; drag a card and let go outside the frame → it springs back, nothing changes ·
+  emulator.
+- 2026-10-24 · 10aced449 · hold the dock or the status bar in the frame and drag it over the left
+  column → a dashed "drop" zone shows, goes primary-coloured while the finger is over it, and the
+  drop hides the item as a new card; a drop elsewhere moves it as before · emulator.
+- 2026-10-24 · 10aced449 · Home and the Workspace share the layout (Home's own layout off): hide
+  the pinned apps on Home → the Workspace still shows its dock, Home's own layout reads on in the
+  Home card, nothing else on Home moved; then hide the pinned apps on the Workspace first with
+  Home's own layout off → Home keeps its dock · emulator.
+- 2026-10-24 · 10aced449 · the dock's Search field off (Dock card switch) and Drawer tile off
+  (Dock design Tray) → a Search field and a Drawer tile card in the stack; tapping one turns it
+  on again in the dock of that half only; Undo and Discard put the stack back as it was ·
+  emulator.
 
 ## Developer
 - 2026-10-22 · #133 · Slide to Home with Beads, Search field and Drawer tile on: `dumpsys
