@@ -13,6 +13,19 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-24 · "fix(terminal): a pane under a terminal effect wears a bezel" · turn on CRT, CRT
+  amber and TFT: every pane wears a frame (12 dp at the sides, 16 dp top and bottom, 10 dp inner
+  corners) of its own glass with a hairline round the screen. Scanlines and bend stay inside the
+  frame, and no text is cut off at the middle of any edge: run `seq 1 200; printf '%0.sX' {1..300}`
+  and check the first and last column and row are whole. Turning the effect off removes the frame
+  and the grid gets its columns back in one step. Check one pane and a 2×2 split, keyboard up and
+  down, Floating and Docked, light and dark · emulator (API 33+).
+- 2026-10-24 · same commit · Terminal glass Opacity 0 with an effect on: the frame is opaque in
+  the theme's surface colour, light and dark · emulator.
+- 2026-10-24 · "fix(chrome): draw Home's chrome without the terminal effect" · with CRT on, Home's
+  dock icons, status bar and widgets show no scanlines; on the Workspace the status bar, dock,
+  extra keys and keyboard do. The chrome switches when the wall lands, both ways, and stays on
+  the half it landed on · emulator.
 - 2026-10-24 · #159 editor (commit "feat(surfaces): the editor rests as the frame and the
   editor bar") · open Appearance from a corner tab on a window and on Home: the frame grows to about
   ×0.8 under a 16 dp top line, every surface wears a faint 1 dp outline, the half line reads
@@ -2410,6 +2423,12 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   one install per edition.
 
 ## Developer
+- 2026-10-24 · "fix(glass): hold the refraction's corner radius to half its rect" · Floating,
+  dock rows hidden, keyboard down, extra keys alone: the pill's ends are round, with no notch
+  folding in and no line along the middle; same with the keyboard up, light and dark. The
+  emulator never showed the defect, so only pong can confirm the fix · pong.
+- 2026-10-24 · bezel commit · how the CRT bezel looks over a real wallpaper with fancier glass on:
+  does it read as a monitor frame, not a second pane? · pong.
 
 - 2026-10-24 · Appearance + Settings rework (branch feat/appearance-settings-rework, on pong as
   1.1.0-pre.6+dev.f076a2dbe) · taste: the one-rule editor (tap a surface → card; palette glyph →

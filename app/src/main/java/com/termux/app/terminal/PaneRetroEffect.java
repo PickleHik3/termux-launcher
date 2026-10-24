@@ -38,13 +38,27 @@ public final class PaneRetroEffect {
      */
     public static void displayedPoint(@NonNull PaneRetroStyle style, float w, float h, float x, float y,
                                       @NonNull float[] out) {
+        displayedPoint(style, 0f, 0f, w, h, x, y, out);
+    }
+
+    /**
+     * {@link #displayedPoint(PaneRetroStyle, float, float, float, float, float[])} for a bend
+     * worked out over the rect {@code left, top, right, bottom} of the view (a pane's screen
+     * inside its bezel, {@link RetroUniforms#bendLeft}); {@code x}, {@code y} and the answer are in
+     * the view's own px.
+     */
+    public static void displayedPoint(@NonNull PaneRetroStyle style, float left, float top,
+                                      float right, float bottom, float x, float y,
+                                      @NonNull float[] out) {
+        float w = right - left;
+        float h = bottom - top;
         if (!style.usesCrt() || w <= 0f || h <= 0f) {
             out[0] = x;
             out[1] = y;
             return;
         }
-        float sx = x / w * 2f - 1f;
-        float sy = y / h * 2f - 1f;
+        float sx = (x - left) / w * 2f - 1f;
+        float sy = (y - top) / h * 2f - 1f;
         float cx = sx;
         float cy = sy;
         // Fixed point of c = s / f(c); f stays within 8 % of 1, so a few steps settle it.
@@ -53,8 +67,8 @@ public final class PaneRetroEffect {
             cx = sx / f;
             cy = sy / f;
         }
-        out[0] = (cx + 1f) * 0.5f * w;
-        out[1] = (cy + 1f) * 0.5f * h;
+        out[0] = left + (cx + 1f) * 0.5f * w;
+        out[1] = top + (cy + 1f) * 0.5f * h;
     }
 
     /** The period every shader takes its rows and cells from, in px: {@link RetroUniforms#PERIOD_DP}. */
@@ -75,28 +89,50 @@ public final class PaneRetroEffect {
         + "uniform half4 uTint;\n"
         + "uniform float uBend;\n"
         + "uniform float uVignette;\n"
+        // The screen inside the card the effect is drawn on (a pane's bezel stands between the
+        // two, drawn as it is), its radius, and the rect the bend is worked out over.
+        + "uniform float4 uScreen;\n"
+        + "uniform float uScreenRadius;\n"
+        + "uniform float4 uBendBox;\n"
+        + "float roundMask(float2 p, float4 r, float radius) {\n"
+        + "    float2 h = (r.zw - r.xy) * 0.5;\n"
+        + "    float2 q = abs(p - r.xy - h) - (h - radius);\n"
+        + "    float d = length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - radius;\n"
+        + "    return 1.0 - smoothstep(-0.5, 0.5, d);\n"
+        + "}\n"
         // The card's own rounded corners, redrawn here: a view's outline clip does not reach what
         // its own render effect puts out. A container whose children clip themselves is cut to
         // its bounds, which this leaves whole.
         + "float cardMask(float2 p) {\n"
-        + "    float2 h = (uCard.zw - uCard.xy) * 0.5;\n"
-        + "    float2 q = abs(p - uCard.xy - h) - (h - uRadius);\n"
-        + "    float d = length(max(q, float2(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - uRadius;\n"
-        + "    return 1.0 - smoothstep(-0.5, 0.5, d);\n"
+        + "    return roundMask(p, uCard, uRadius);\n"
         + "}\n";
 
     static final String CRT_AGSL = HEAD
         + "const float PI = 3.14159265;\n"
         + "half4 main(float2 p) {\n"
-        + "    float2 c = p / uSize * 2.0 - 1.0;\n"
-        // Barrel bend normalised so the corners stay put: every cell still lands on the card. Flat
-        // (uBend 0) on the chrome, whose keys and icons have to stay under the finger.
+        + "    float m = cardMask(p);\n"
+        + "    float s = roundMask(p, uScreen, uScreenRadius);\n"
+        + "    half4 plain = content.eval(p);\n"
+        // The bezel: the view as it is, no bend and no scanlines.
+        + "    if (s <= 0.0) {\n"
+        + "        return plain * half(m);\n"
+        + "    }\n"
+        + "    float2 lo = uBendBox.xy;\n"
+        + "    float2 size = max(uBendBox.zw - uBendBox.xy, float2(1.0, 1.0));\n"
+        + "    float2 c = (p - lo) / size * 2.0 - 1.0;\n"
+        // Barrel bend normalised so the corners stay put: every cell still lands on the screen.
+        // Flat (uBend 0) on the chrome, whose keys and icons have to stay under the finger. Read
+        // only from inside the screen, so the bezel never shows in the picture.
         + "    float2 w = c * (1.0 + uBend * dot(c, c)) / (1.0 + 2.0 * uBend);\n"
-        + "    float2 sp = clamp((w * 0.5 + 0.5) * uSize, float2(0.5, 0.5), uSize - 0.5);\n"
+        + "    float2 inMin = uScreen.xy + 0.5;\n"
+        + "    float2 inMax = max(uScreen.zw - 0.5, inMin);\n"
+        + "    float2 at = clamp((w * 0.5 + 0.5) * size + lo, inMin, inMax);\n"
         + "    float g = 1.5 * uDensity;\n"
-        + "    half4 col = content.eval(sp);\n"
-        + "    half4 glow = (content.eval(sp + float2(g, 0.0)) + content.eval(sp - float2(g, 0.0))\n"
-        + "                + content.eval(sp + float2(0.0, g)) + content.eval(sp - float2(0.0, g))) * 0.25;\n"
+        + "    half4 col = content.eval(at);\n"
+        + "    half4 glow = (content.eval(clamp(at + float2(g, 0.0), inMin, inMax))\n"
+        + "                + content.eval(clamp(at - float2(g, 0.0), inMin, inMax))\n"
+        + "                + content.eval(clamp(at + float2(0.0, g), inMin, inMax))\n"
+        + "                + content.eval(clamp(at - float2(0.0, g), inMin, inMax))) * 0.25;\n"
         + "    float3 rgb = float3(col.rgb) + 0.35 * float3(glow.rgb);\n"
         + "    float lum = dot(rgb, float3(0.299, 0.587, 0.114));\n"
         + "    rgb = mix(rgb, lum * float3(uTint.rgb) * 1.3, float(uTint.a));\n"
@@ -104,19 +140,22 @@ public final class PaneRetroEffect {
         // the scanlines, so they run on into the surface beside this one.
         + "    float scan = mix(0.70, 1.0, 0.5 + 0.5 * cos(2.0 * PI * (p.y + uOrigin.y) / " + PERIOD + "));\n"
         + "    float vig = 1.0 - uVignette * dot(c, c);\n"
-        + "    float m = cardMask(p);\n"
-        + "    float a = float(col.a) * m;\n"
-        + "    rgb = clamp(rgb * scan * vig * m, 0.0, a);\n"
-        + "    return half4(half3(rgb), half(a));\n"
+        + "    float a = float(col.a);\n"
+        + "    rgb = clamp(rgb * scan * vig, 0.0, a);\n"
+        + "    half4 fx = half4(half3(rgb), half(a));\n"
+        + "    return mix(plain, fx, half(s)) * half(m);\n"
         + "}\n";
 
     static final String TFT_AGSL = HEAD
         + "half4 main(float2 p) {\n"
+        + "    float m = cardMask(p);\n"
+        + "    float s = roundMask(p, uScreen, uScreenRadius);\n"
         + "    half4 col = content.eval(p);\n"
         + "    float2 f = fract((p + uOrigin) / " + PERIOD + ");\n"
         + "    float gap = max(step(f.x, 0.22), step(f.y, 0.22));\n"
-        + "    float m = cardMask(p);\n"
-        + "    return half4(col.rgb * half((1.0 - 0.45 * gap) * m), col.a * half(m));\n"
+        // Inside the screen only: the bezel is drawn as it is.
+        + "    float shade = 1.0 - 0.45 * gap * s;\n"
+        + "    return half4(col.rgb * half(shade * m), col.a * half(m));\n"
         + "}\n";
 
     private Program mProgram;
@@ -173,6 +212,10 @@ public final class PaneRetroEffect {
             shader.setFloatUniform("uTint", tint[0], tint[1], tint[2], tint[3]);
             shader.setFloatUniform("uBend", u.bend);
             shader.setFloatUniform("uVignette", u.vignette);
+            shader.setFloatUniform("uScreen", u.screenLeft, u.screenTop, u.screenRight,
+                u.screenBottom);
+            shader.setFloatUniform("uScreenRadius", u.screenRadius);
+            shader.setFloatUniform("uBendBox", u.bendLeft, u.bendTop, u.bendRight, u.bendBottom);
             // The effect keeps the uniforms it was made with; the next write starts a new copy.
             return RenderEffect.createRuntimeShaderEffect(shader, "content");
         }
