@@ -74,8 +74,41 @@ public class GuiAppsSetupTest {
             assertTrue(command(Route.X11_REPO, Distro.DEBIAN, starters).contains(" pulseaudio"));
             assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
                 TourEdition.VAJ).contains("pulseaudio"));
-            assertFalse(command(Route.DISTRO, Distro.DEBIAN, starters).contains("pulseaudio"));
         }
+    }
+
+    @Test public void theDistroRouteAsksForTheSoundServerOnTheTermuxSideWithoutStoppingForIt() {
+        for (Distro distro : Distro.values()) {
+            String command = command(Route.DISTRO, distro, NONE);
+
+            assertTrue(distro.name(), command.contains(
+                "command -v pulseaudio >/dev/null 2>&1 || pkg install -y pulseaudio || true\n"));
+            assertTrue(command.indexOf("pkg install -y pulseaudio")
+                < command.indexOf("proot-distro login"));
+        }
+    }
+
+    @Test public void aDistroGetsAlsasPulseaudioPluginAndAnAsoundConfOnlyWhereNoneIsTheUsers() {
+        assertEquals("libasound2-plugins", Distro.DEBIAN.alsaPackages);
+        assertEquals("libasound2-plugins", Distro.UBUNTU.alsaPackages);
+        assertEquals("alsa-plugins libpulse", Distro.ARCH.alsaPackages);
+        for (Distro distro : Distro.values()) {
+            String inside = GuiAppsSetup.insideScript(distro, NONE);
+
+            for (String name : distro.alsaPackages.split(" ")) {
+                assertTrue(distro.name() + " " + name, inside.contains(" " + name));
+            }
+            assertTrue(inside.endsWith("if [ ! -e /etc/asound.conf ] || grep -q 'written by "
+                + "termux-launcher' /etc/asound.conf; then printf '%s' "
+                + GuiAppsSetup.singleQuote(GuiAppsSetup.ASOUND_CONF) + " > /etc/asound.conf; fi"));
+            assertTrue(inside.indexOf(distro.alsaPackages.split(" ")[0])
+                < inside.indexOf("/etc/asound.conf"));
+        }
+        assertTrue(GuiAppsSetup.ASOUND_CONF.startsWith("# written by termux-launcher"));
+        assertTrue(GuiAppsSetup.ASOUND_CONF.contains("\npcm.!default { type pulse }\n"));
+        assertTrue(GuiAppsSetup.ASOUND_CONF.contains("\nctl.!default { type pulse }\n"));
+        // It rides inside the single-quoted container script, so it must hold no quote itself.
+        assertFalse(GuiAppsSetup.ASOUND_CONF.contains("'"));
     }
 
     @Test public void theX11RouteWithNothingTickedIsJustTheRepository() {
