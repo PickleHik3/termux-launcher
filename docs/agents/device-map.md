@@ -66,7 +66,7 @@ ad -s emu runas com.termux 'launcherctl pane list'
 | Icon pack | Appearance editor → `appearance_page_mode_icon_pack` (tap a tile by its label, `ad tap Arcticons`; coordinates miss); a pinned override: long-press a dock icon › Change dock icon › a pack › an icon; (the editor reopens on its last page) | tiles `icon_pack_tile_label` (tap the tile art if the label does not take); "Pinned app icons only" is `icon_pack_pinned_only`, on by default. MBE Style (`me.iacn.mbestyle_27.apk`, F-Droid) installs as a PNG pack |
 | AI models | Settings → Model centre; Export/Import use the system folder picker (USE THIS FOLDER, then ALLOW), export lands in `/sdcard/Documents/Termux Launcher models` | Get models goes stale after a `tai delete`: leave and re-enter the page |
 | Keyboard layouts | Settings → Keyboard → Layouts (list at about 487,1242) → Layouts (487,671); a tap on a catalogue row slides its strip open, `ad find` by description works ("Add Colemak to the cycle"); cycle to the next layout by swiping down on the space bar: `ad swipe 540 2200 540 2330 250` | — |
-| App drawer | tap the star at about 40,1625, then a slow swipe down on the dock's empty area: `ad swipe 900 1520 900 2000 600`; the dock's list glyph (about 975,1700) opens Sessions | a swipe on the dock's letters scrubs that letter's apps into the dock instead |
+| App drawer | reliable: on Home's free area `ad swipe 540 1700 540 900 700` opens the palette with the in-app keyboard; type `>` with an up-right flick on the v key (`adb shell input swipe 535 2130 575 2070 250`; a tap types the letter, symbols are corner flicks), then tap d r a w e r at 327,1968 / 381,1826 / 114,1968 / 168,1826 / 273,1826 / 381,1826 (0.3 s apart) and the "App drawer" row at about 300,1195; `ad ui` then shows `app_drawer_host`; `ad back` closes it. The dock's swipe-down gesture opens it only about one time in three on the emulator (`input swipe 540 2150 540 2390 50`; slow swipes never), so do not rely on it. A slow upward drag from the dock row opens Edit pinned apps (Close at 680,2304) | drawer ids `app_drawer_host`, `app_drawer_glass`; a swipe on the dock's letters scrubs that letter's apps into the dock instead |
 | Pinned apps | unpin one: long-press its dock icon → Unpin (about 160,1410; the popup is not in `ui`, screenshot it). Edit sheet: long-press an empty dock spot (about 800,1531, not 540); the first row's remove is about 938,692 and rows shift up after each removal (a tap on a row still animating out is ignored: space taps ~1.5 s); pin from the sheet by searching (field about 540,1484) and ticking the row (`ad swipe x y x y 1200`) → "Edit pinned apps": tap names under MOST USED, then Done; remove with "Remove from pinned apps" | a letter in the dock strip shows that letter's apps in the dock; the letters shift when an app is installed. The dock's grid glyph (about 810,1700) opens a split pane, not the drawer; a pane opened that way is not `launcherctl`'s to close (`exit` in it) |
 | Split panes, window chips | `launcherctl pane open` / `window open -- CMD` (a command is required) is faster than the UI; `window close <id>` | window chips switch windows; on Docked, the grid glyph on the dock row opens a split |
 | Sessions sidebar (legacy) | tap the session indicator `terminal_sessions_indicator`, the number box left of the chips | after it closes, focus stays on the indicator: tap the terminal before typing |
@@ -256,3 +256,77 @@ a Linux app.
   changes (17 on v2 since this port). After installing a build that changed one, check
   `$PREFIX/bin/termux-x11-gpu-setup` and `$PREFIX/bin/termux-x11-im` are the new ones before
   testing them.
+
+## Routes learned in the 2026-10-24 sweep (v2-redesign, 1080×2400 at 420 dpi)
+
+- **Settings root** is Home / Dock & drawer / Terminal / Look / Keyboard / Notifications /
+  On-device AI / General. It reopens on its last sub-page; after a force-stop it opens on the root.
+  The search icon is at about 964,240 and `settings_search_input` exists only after tapping it.
+  "Navigate up" from a top-level page leaves Settings for the home app. Start in: Settings › Home,
+  last row (pref `app_launcher_start_in=home|workspace`). Swipe up / Swipe down: Home › Gestures.
+  Page transition: General › Motion (search "transition"); Battery & performance, Living glass and
+  Glass refraction: General (the glass rows are disabled until a launcher wallpaper is set).
+- **Layout editor** from Home: long-press a free cell (540,1000) → Layout (245,1927), or
+  `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.LAYOUT_EDITOR true --es
+  com.termux.app.extra.LAYOUT_EDITOR_PLACE widgets|terminal` (does nothing while the activity is
+  already up). Tap the preview dock (540,1485, about 4 s after opening) for the chips: #1 Tray
+  138, #2 Beads 332, #3 Strip 525, Search 746, Drawer 940 at y about 2022–2040. Docked/Floating
+  icons about 375/498,1728; the place icon 645,1728 switches Home ↔ window; the tray eye 970,1726
+  lists hidden items (Keyboard chip 190,2020 is tap-to-restore); Done 993,221; Undo 858,219 (reverts
+  to the editor-entry state). Prefs: `layout.dock_design=glass_tray|lens_beads|wall_strip`,
+  `layout.portrait.az_row=false` hides the A–Z row (edit before a force-stop). At 360 dp
+  (density 480, font 1.3) the preview dock sits near 540,1330.
+- **Home sheet** (long-press a free cell) is a dialog: tap coordinates. Page with content: Terminal
+  264,1486, Add a widget 800,1486, Add an app 290,1632, Add a page 790,1632, Edit pages 780,1780,
+  Layout 245,1927, Look 725,2128, Launcher settings about 220,2276. With a Remove page cell (empty
+  second page) or when the launcher is not home ("Set as default home app" row) every row shifts
+  up about 148 px: screenshot before tapping. On a full page the sheet opens only from the gap
+  above the page dots (about 540,2030); elsewhere a hold enters edit mode. A tap on the dock's
+  Terminal entry opens a Home float; long-press → New window opens a window. Float title bar:
+  minimise 725,456, maximise 830,456, close 935,456. Empty Home pages are dropped at restart.
+- **Widgets**: the picker has no tap-to-place; hold the row (`input motionevent DOWN x y`, 1.5 s),
+  MOVE to a free cell, UP; type in its search field (540,556) to find a row. Edit mode: Edit
+  widgets in the sheet, gear 144,280 on the selected widget, check 828,262. Widget numerals:
+  Settings › Home › Home widgets chip. Notification access for the Notifications/Media widgets:
+  `cmd notification allow_listener com.termux/com.termux.launcherctl.LauncherCtlNotificationListener`.
+  Calendar rows: `content insert --uri content://com.android.calendar/events --bind calendar_id:i:1 …`.
+  Tasks file syntax `- [ ] text @today|@16:00|@Wed` in `~/notes/tasks.md`; Notes reads
+  `~/notes/scratch.md`. Battery saver: `dumpsys battery unplug; dumpsys battery set status 3;
+  cmd power set-mode 1` (reset with `cmd power set-mode 0; dumpsys battery reset`).
+- **Folders and icons**: Add an app from the Home sheet places the icon in the next free cell;
+  drop an icon on another in edit mode (DOWN, 1.0 s hold, MOVE steps, UP) to make a folder. Folder
+  prefs `app_launcher_home_folder_density|capacity`, `app_launcher_home_icon_scale`,
+  `app_launcher_home_label_size|two_lines|shadow`; folder contents are JSON in the `state` string
+  of `launcher_widget_repository.xml` (seed after a force-stop; overlapping cells make the app
+  fall back to an old wall, so check the version after seeding).
+- **Palette**: on Home, swipe up on the free area (`swipe 540 1700 540 900 700`); from a window,
+  keyboard up, `input swipe 540 2250 540 1950 400`. `ad type` reaches the query only when the
+  palette was opened from the dock's Search field (tap 540,2190) or after `ad type` with no dock
+  Search field on Home for app names; otherwise tap the in-app keys (letters at y 1826/1968,
+  `>` is an up-right flick on v). Back may not close it; a tap outside does.
+- **Sessions drawer** on Home: the number box at about 80,176; Saved sessions tab by text, then the
+  row, then Add to current / Replace. Saved files: `~/.termux/workspaces/<name>.json` (the `name`
+  field must equal the file name). Close a window by chip: tap the selected chip, then × at 250,177
+  (Display chip × 607,177). Ctrl+Alt+, consume is `input keycombination 113 57 55`, Ctrl+Alt+.
+  expel `113 57 56`, scratchpad Ctrl+Alt+` `113 57 68`. Closing the last window respawns a shell.
+- **Display**: the palette's Display entry opens a Display window at once; `launcherctl launch
+  mousepad|chromium|xeyes` starts the display and the app (about 20 s; xeyes needs `pkg install
+  x11-repo xeyes` and a hand-written `$PREFIX/share/applications/xeyes.desktop`). `ad type` never
+  reaches X apps; launcher-keyboard taps do. Window-to-window swipes rarely leave the display
+  window: tap the home chip (170,177). Keyboard over display: Settings › Terminal › Linux apps ›
+  Input.
+- **Crossing the wall**: Home → window `adb shell input swipe 900 1000 100 1000 800` (or
+  `950 1200 120 1200 700`); window → Home with the keyboard up: the house key in the extra-keys
+  row (about 460,1620). A held mid-slide frame: `motionevent DOWN 150 1000`, MOVE 250/350/450/540,
+  shot, UP; a rightward held drag on terminal text starts selection, not a slide. Gesture nav's
+  back edge eats touches at x < 30: enable the three-button overlay
+  (`cmd overlay enable com.android.internal.systemui.navbar.threebutton`, disable afterwards).
+- **Pins and popups**: pin editor from `motionevent DOWN 700 2165`, 1.5 s, UP (checkboxes at x 932,
+  taps 1.7 s apart); popup menus need the same held DOWN/UP (`ad long` closes them). Icon packs
+  show on Home only with "Pinned app icons only" off. Glass looks need a launcher-set wallpaper
+  (push a PNG, `launcherctl wallpaper set`, relaunch); a wallpaper cannot be unset.
+- **Two-pane Settings**: `wm size 1600x2560` + `wm density 320`, force-stop after. Tour replay:
+  About & help › Replay tour; tour log `logcat -d -s TermuxTour`. `ad shot` can return a stale
+  frame (`adb exec-out screencap -p` was reliable); `ad ui` can be empty right after a launch; the
+  first characters typed into a pane are often lost; `ad logcat -h` hangs. Force-stop does not
+  always relaunch the launcher on a pool slot: `am start -n com.termux/.app.TermuxActivity`.
