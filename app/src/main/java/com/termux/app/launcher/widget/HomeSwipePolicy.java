@@ -2,6 +2,8 @@ package com.termux.app.launcher.widget;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.wall.PagePolicy;
+
 /**
  * Which way a finger on a Home page's free area is going, and what its lift asks for (spec §5.1).
  * The first movement past the touch slop decides, as a launcher does: mostly sideways pages Home,
@@ -20,13 +22,16 @@ public final class HomeSwipePolicy {
     /**
      * The axis for a finger that has moved ({@code dx}, {@code dy}) since it went down: undecided
      * until one way has gone past {@code slopPx}, then whichever way is longer, vertical on a tie.
+     * Sideways is the page's, so it waits for the page's slop ({@link PagePolicy#pastSlop}): four
+     * of them for a finger more than 30 degrees off the axis, which lets a diagonal thumb become
+     * the vertical swipe rather than a turn.
      */
     @NonNull
     public static Axis axis(float dx, float dy, float slopPx) {
         float ax = Math.abs(dx), ay = Math.abs(dy);
         if (Float.isNaN(ax) || Float.isNaN(ay)) return Axis.UNDECIDED;
         if (ay > slopPx && ay >= ax) return Axis.VERTICAL;
-        if (ax > slopPx && ax > ay) return Axis.HORIZONTAL;
+        if (ax > ay && PagePolicy.pastSlop(ax, ay, slopPx)) return Axis.HORIZONTAL;
         return Axis.UNDECIDED;
     }
 

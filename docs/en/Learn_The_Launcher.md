@@ -38,7 +38,7 @@ edge or hidden; see [Layout and full screen](Layout_And_Full_Screen.md).
   on the next place. On the left and right borders, hold until the page ticks and sinks under your
   finger, then drag; holding works on the top and bottom too. A clear sideways swipe across a
   terminal window's text changes place the same way. A scroll, a selection, or a program that uses
-  the mouse keeps its own drag, and **Settings → Terminal → Windows & panes → Swipe on the terminal
+  the mouse keeps its own drag, and **Settings → Home → Gestures → Swipe on the terminal
   to switch windows** turns the text swipe off.
 - **Tap a place icon.** The other two places peek in from the edges of the status bar. Tap one to
   go there.
@@ -148,7 +148,7 @@ Replay it from **Settings → General → About & help → Replay tour**.
 ## Get help
 
 Hold any corner for its tab, then tap **?** to see what the controls on that place do. **Help** is
-also in the command palette and in **Settings → General → Help**, and it opens for the place you are
+also in the command palette and in **Settings → General → About & help → Help**, and it opens for the place you are
 on. On the terminal it opens by topic, grouped from **Find your way** to **Something missing?**:
 pick what you are stuck on. **Try it** on a topic closes help and walks you through that action.
 

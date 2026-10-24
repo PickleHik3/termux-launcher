@@ -5,11 +5,15 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
+import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.ResolvedArrangement;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 import java.util.Arrays;
@@ -20,8 +24,8 @@ import java.util.Objects;
 /**
  * Dock geometry: the one owner of the dock's measurements (ADR 0011). One {@link Snapshot} of both
  * halves of the wall goes in, one {@link DockLayout} comes out, with no reference into the
- * activity. The snapshot carries raw facts — each half's stored layout and dress, which half's
- * rows the frame shows, the device and the live eases — and everything else is derived here:
+ * activity. The snapshot carries raw facts — each half's resolved arrangement and sizes, which
+ * half's rows the frame shows, the device and the live eases — and everything else is derived here:
  * whether the row stands alone, its page strip and air, the put-away row's icon, the rail, the
  * row's usable width from its design's side inset, and the icon one slot draws with the slot fit
  * and the bead fit applied.
@@ -50,11 +54,16 @@ public final class DockGeometry {
     /** The halves asked, in order, for the pinned-apps row a layout puts away: Home first. */
     private static final Side[] PUT_AWAY_ROW_OWNERS = {Side.HOME, Side.WORKSPACE};
 
-    /** One half's raw facts, as its dress and its stored layout hold them. */
+    /**
+     * One half's raw facts: its resolved arrangement (#141), which says its layout, Style, Dock
+     * design and Search field, and the sizes its dress holds.
+     */
     public static final class Half {
-        /** The half's stored layout, in the orientation on screen. */
+        /** The half's resolved arrangement, in the orientation on screen. */
+        @NonNull public final ResolvedArrangement arrangement;
+        /** The half's stored layout ({@link ResolvedArrangement#layout}). */
         @NonNull public final PlaceLayout layout;
-        /** Its Style: Floating (the capsule) or Docked. */
+        /** Its Style: Floating (the capsule) or Docked ({@link ResolvedArrangement#floating}). */
         public final boolean floating;
         /** Its stack dress's dock size, as stored (a raw scale). */
         public final float dockHeightScale;
@@ -72,29 +81,42 @@ public final class DockGeometry {
         public final int wallStripHeightDp;
 
         private Half(@NonNull Builder b) {
-            layout = b.layout;
-            floating = b.floating;
+            arrangement = b.arrangement();
+            layout = arrangement.layout();
+            floating = arrangement.floating();
             dockHeightScale = b.dockHeightScale;
             marginDp = b.marginDp;
             cornersDp = b.cornersDp;
-            design = b.design;
-            searchField = b.searchField;
+            design = arrangement.design();
+            searchField = arrangement.searchField();
             wallStripHeightDp = b.wallStripHeightDp;
         }
 
+        /** A half of {@code arrangement}: its layout, Style, design and Search field as resolved. */
+        @NonNull
+        public static Builder builder(@NonNull ResolvedArrangement arrangement) {
+            return new Builder(arrangement);
+        }
+
+        /**
+         * A half standing {@code layout}, Docked in the Tray with no Search field until the
+         * builder says otherwise: for a reader that has a layout and no arrangement (tests).
+         */
         @NonNull
         public static Builder builder(@NonNull PlaceLayout layout) {
-            return new Builder(layout);
+            return new Builder(ResolvedArrangement.of(layout, LayoutStyle.DOCKED,
+                DockStyle.GLASS_TRAY, false, false, PlaceOrientation.PORTRAIT,
+                LayoutVariant.NORMAL, false));
         }
 
         /** This half with its facts as they are, to change one or two. */
         @NonNull
         public Builder toBuilder() {
-            return new Builder(layout).floating(floating).dockHeightScale(dockHeightScale)
-                .marginDp(marginDp).cornersDp(cornersDp).design(design).searchField(searchField)
-                .wallStripHeightDp(wallStripHeightDp);
+            return new Builder(arrangement).dockHeightScale(dockHeightScale)
+                .marginDp(marginDp).cornersDp(cornersDp).wallStripHeightDp(wallStripHeightDp);
         }
 
+        /** Equal on what the dock measures; the Drawer tile and where it was resolved are not. */
         @Override
         public boolean equals(@Nullable Object other) {
             if (this == other) return true;
@@ -117,19 +139,22 @@ public final class DockGeometry {
         }
 
         public static final class Builder {
-            @NonNull private final PlaceLayout layout;
+            @NonNull private final ResolvedArrangement base;
             private boolean floating;
+            @NonNull private DockStyle design;
+            private boolean searchField;
             private float dockHeightScale =
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
             private int marginDp =
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
             private int cornersDp = -1;
-            @NonNull private DockStyle design = DockStyle.GLASS_TRAY;
-            private boolean searchField;
             private int wallStripHeightDp;
 
-            private Builder(@NonNull PlaceLayout layout) {
-                this.layout = layout;
+            private Builder(@NonNull ResolvedArrangement arrangement) {
+                base = arrangement;
+                floating = arrangement.floating();
+                design = arrangement.design();
+                searchField = arrangement.searchField();
             }
 
             public Builder floating(boolean v) { floating = v; return this; }
@@ -139,6 +164,16 @@ public final class DockGeometry {
             public Builder design(@NonNull DockStyle v) { design = v; return this; }
             public Builder searchField(boolean v) { searchField = v; return this; }
             public Builder wallStripHeightDp(int v) { wallStripHeightDp = v; return this; }
+
+            /** The arrangement as handed in, or remade where the builder changed its dress. */
+            @NonNull
+            private ResolvedArrangement arrangement() {
+                if (floating == base.floating() && design == base.design()
+                    && searchField == base.searchField()) return base;
+                return ResolvedArrangement.of(base.layout(),
+                    floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED, design, searchField,
+                    base.drawerTile(), base.orientation(), base.variant(), base.home());
+            }
 
             @NonNull
             public Half build() {

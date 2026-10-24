@@ -210,6 +210,16 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private RecyclerView mGestureRecycler;
     @Nullable private View mOverpullSurface;
     private boolean mSearchRevealRequested;
+    /**
+     * The user scrolled the search keyboard away. It stays away, query or not, until the search is
+     * asked for again (a pill tap) or the search is reset.
+     */
+    private boolean mKeyboardDismissedByScroll;
+    /** True from the finger starting to drag the list until the list comes to rest. */
+    private boolean mGridUserScrolling;
+    /** Whether that drag began with somewhere to scroll down, and so may send the keyboard away. */
+    private boolean mGridDragHidesKeyboard;
+    @Nullable private KeyboardScrollListener mKeyboardScrollListener;
     /** True while the Android-keyboard search's text field, not the key stream, owns the query. */
     private boolean mTextFieldSearch;
     private float mDownRawY;
@@ -339,6 +349,29 @@ public final class AppDrawerContentView extends FrameLayout
                 // A context menu is anchored to a cell view. Scroll far enough and that view is
                 // recycled under a menu still floating where it used to be.
                 if (dx != 0 || dy != 0) dismissContextPopups();
+                // Only the finger's scroll (and the fling it throws) sends the keyboard away; a
+                // scrub or a query's jump to the top is the launcher moving the list, not the user.
+                KeyboardScrollListener keyboard = mKeyboardScrollListener;
+                if (keyboard != null && mGridUserScrolling && mGridDragHidesKeyboard && dy > 0)
+                    keyboard.onListScrolledDown(dy);
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    if (!mGridUserScrolling) {
+                        // Decided once, as the drag starts: a list that fits has no scroll to give.
+                        mGridDragHidesKeyboard = AppDrawerKeyboardScrollHide.armsOnDrag(
+                            recyclerView.computeVerticalScrollRange(),
+                            recyclerView.computeVerticalScrollExtent(),
+                            recyclerView.computeVerticalScrollOffset());
+                    }
+                    mGridUserScrolling = true;
+                } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mGridUserScrolling) {
+                    mGridUserScrolling = false;
+                    KeyboardScrollListener keyboard = mKeyboardScrollListener;
+                    if (keyboard != null) keyboard.onListScrollIdle();
+                }
             }
         });
         mColumnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
@@ -440,12 +473,22 @@ public final class AppDrawerContentView extends FrameLayout
 
         setOnDragListener((view, event) -> {
             AppDrawerDragController controller = mDragController;
+            if (controller != null && controller.handedToHome(event.getLocalState())) {
+                // Home's now; the drawer is on its way out and only passes the finger on.
+                getLocationOnScreen(mDragLocation);
+                return controller.forwardToHome(event, mDragLocation[0] + event.getX(),
+                    mDragLocation[1] + event.getY());
+            }
             if (controller == null || !controller.owns(event.getLocalState()))
                 return handleFolderEntryDragEvent(event);
             switch (event.getAction()) {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return true;
                 case DragEvent.ACTION_DRAG_LOCATION:
+                    getLocationOnScreen(mDragLocation);
+                    controller.onDragMoved(mDragLocation[0] + event.getX(),
+                        mDragLocation[1] + event.getY());
+                    if (!controller.isDragging()) return true;
                     onContentDragLocation(event.getX(), event.getY());
                     return true;
                 case DragEvent.ACTION_DROP:
@@ -630,6 +673,28 @@ public final class AppDrawerContentView extends FrameLayout
      */
     public void setSearchKeyboardRequestListener(@Nullable Runnable onKeyboardRequested) {
         mKeyboardRequestListener = onKeyboardRequested;
+    }
+
+    /** The list's scroll, as far as the search keyboard is concerned. */
+    public interface KeyboardScrollListener {
+        /** The finger scrolled the list {@code dy} pixels further down (its fling included). */
+        void onListScrolledDown(int dy);
+        /** That scroll has come to rest. */
+        void onListScrollIdle();
+    }
+
+    public void setKeyboardScrollListener(@Nullable KeyboardScrollListener listener) {
+        mKeyboardScrollListener = listener;
+    }
+
+    /**
+     * The list's scroll took the search keyboard away: the reveal target drops to 0 and stays
+     * there, whatever is typed, until the search is asked for again.
+     */
+    public void dismissSearchKeyboardByScroll() {
+        if (mKeyboardDismissedByScroll) return;
+        mKeyboardDismissedByScroll = true;
+        notifyRevealTarget();
     }
 
     /**
@@ -1076,6 +1141,7 @@ public final class AppDrawerContentView extends FrameLayout
     private void resetSearchToTop() {
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
+        mKeyboardDismissedByScroll = false;
         removeCallbacks(mAutoOpenOnlyMatch);
         if (search != null) {
             search.reset();
@@ -1123,6 +1189,7 @@ public final class AppDrawerContentView extends FrameLayout
      * otherwise. The controller owns the spring that chases it; this is only the target.
      */
     public float getRevealFraction() {
+        if (mKeyboardDismissedByScroll) return 0f;
         return mSearchRevealRequested || hasQuery() ? 1f : 0f;
     }
 
@@ -1573,6 +1640,7 @@ public final class AppDrawerContentView extends FrameLayout
      */
     public void requestSearchKeyboard() {
         mSearchRevealRequested = true;
+        mKeyboardDismissedByScroll = false;
         applyLowerStart();
         notifyRevealTarget();
         Runnable request = mKeyboardRequestListener;
@@ -1836,6 +1904,30 @@ public final class AppDrawerContentView extends FrameLayout
                 if (mPendingDockConfigRefresh) onDockConfigChanged();
             });
         }
+    }
+
+    /** Home, for an app picked up here to be carried to; null while there is none. */
+    @Nullable private com.termux.app.launcher.widget.HomeAppDrop.Target mHomeAppDropTarget;
+
+    public void setHomeAppDropTarget(
+            @Nullable com.termux.app.launcher.widget.HomeAppDrop.Target target) {
+        mHomeAppDropTarget = target;
+    }
+
+    @Nullable @Override
+    public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+        return mHomeAppDropTarget;
+    }
+
+    /**
+     * The drawer's top edge for a carried app: the top of its app area, just under the search
+     * pill, where the list starts when it is not lowered. Not the glass sheet's own top, which in
+     * the default style is the screen's edge and cannot be crossed.
+     */
+    @Override public float handOverTopRawY() {
+        if (!isAttachedToWindow()) return Float.NaN;
+        getLocationOnScreen(mDragLocation);
+        return mDragLocation[1] + mGridBaseTopMarginPx;
     }
 
     @NonNull @Override public AppDrawerViewType frozenSourceViewType() {

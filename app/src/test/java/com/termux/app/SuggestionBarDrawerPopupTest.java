@@ -93,7 +93,7 @@ public class SuggestionBarDrawerPopupTest {
         assertEquals(fromDock, fromDrawer);
         assertTrue("expected the unpinned shape, got " + fromDrawer, fromDrawer.contains("Pin"));
         assertTrue("expected the unpinned shape, got " + fromDrawer,
-            fromDrawer.contains("Change app icon"));
+            fromDrawer.contains("Change icon"));
     }
 
     @Test
@@ -108,7 +108,7 @@ public class SuggestionBarDrawerPopupTest {
         assertEquals(fromDock, fromDrawer);
         assertTrue("expected the pinned shape, got " + fromDrawer, fromDrawer.contains("Unpin"));
         assertTrue("expected the pinned shape, got " + fromDrawer,
-            fromDrawer.contains("Change dock icon"));
+            fromDrawer.contains("Change icon"));
     }
 
     // -------------------------------------------------------------------- placement

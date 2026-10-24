@@ -18,7 +18,7 @@ public final class DisplayKeyboardRoute {
 
     /** What the drawer's search asks of the keyboard. */
     public enum DrawerSearch {
-        /** Its own way: a system-keyboard ask aimed at the terminal view. */
+        /** The Android keyboard is selected: a system-keyboard ask aimed at the terminal view. */
         SYSTEM_ASK,
         /** Raise the launcher's keyboard, which is up or down at the user's own say. */
         RAISE_BUILT_IN,
@@ -29,25 +29,29 @@ public final class DisplayKeyboardRoute {
     }
 
     /**
-     * What the drawer's search does about a keyboard. Its request is a system-keyboard ask aimed
-     * at the terminal view, which is served everywhere but over a running display: there the
-     * display's view holds the focus and the ask is dropped, so nothing appears. The launcher's
-     * keyboard has to be raised for it instead — except where the user has taken it away.
+     * What the drawer's search does about a keyboard. With the built-in keyboard selected in
+     * Settings it is always the built-in keyboard, on every place: the search types through it,
+     * and the drawer reveals it through the plane. Only with the Android keyboard selected is the
+     * request a system-keyboard ask aimed at the terminal view (the caller opens the system IME
+     * gate first).
+     *
+     * <p>Before 2026-10-24 the built-in keyboard was raised only over a running display; anywhere
+     * else the ask went to the system IME, so a place that hands the IME back while the built-in
+     * keyboard is down (Home) showed the phone's keyboard although Built-in was selected.
      *
      * <p>"Use system keyboard" (the drawer's own setting) never gets here: the search then has its
      * own text field and the phone's keyboard.
      *
-     * @param builtInEnabled        the launcher's keyboard is switched on in Settings
+     * @param builtInEnabled        the launcher's keyboard is the selected on-screen keyboard
      * @param turnedOff             the user switched it off with the keyboard key; the search, a
      *                              request for one, brings it back
      * @param yieldsToHardwareKeyboard it is set to stay away while a physical keyboard is
      *                              attached, and one is: nothing on screen, keys go to the search
      */
     @NonNull
-    public static DrawerSearch drawerSearch(boolean onDisplayPlace, boolean displayRunning,
-                                            boolean builtInEnabled, boolean turnedOff,
+    public static DrawerSearch drawerSearch(boolean builtInEnabled, boolean turnedOff,
                                             boolean yieldsToHardwareKeyboard) {
-        if (!onDisplayPlace || !displayRunning || !builtInEnabled) return DrawerSearch.SYSTEM_ASK;
+        if (!builtInEnabled) return DrawerSearch.SYSTEM_ASK;
         if (yieldsToHardwareKeyboard) return DrawerSearch.NONE;
         return turnedOff ? DrawerSearch.TURN_ON_AND_RAISE : DrawerSearch.RAISE_BUILT_IN;
     }

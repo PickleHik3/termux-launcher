@@ -101,6 +101,8 @@ import com.termux.app.launcher.folder.FolderRenameTitleView;
 import com.termux.app.launcher.folder.LauncherFolderPopupController;
 import com.termux.app.launcher.popup.AnchoredMenu;
 import com.termux.app.launcher.popup.AnchoredMenuTheme;
+import com.termux.app.launcher.popup.AppMenuCard;
+import com.termux.app.launcher.popup.AppMenuPlan;
 import com.termux.app.launcher.popup.MenuHighlightTracker;
 import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
@@ -128,6 +130,7 @@ import com.termux.app.launcher.drawer.AppDrawerPickupDelegate;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.drawer.AppDrawerPullGeometry;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry;
+import com.termux.app.launcher.drawer.DockRailScrollView;
 import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -161,7 +164,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public final class SuggestionBarView extends GridLayout
-    implements AppDrawerController.AppDrawerDockChoreographyTarget {
+    implements AppDrawerController.AppDrawerDockChoreographyTarget,
+    DockRailScrollView.ScrollFollower {
 
     public interface LaunchRippleListener {
         void onLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
@@ -522,8 +526,12 @@ public final class SuggestionBarView extends GridLayout
     private boolean quickReplyHandedOff;
     /** The page ticks this row carries off the dock; null while it is the dock's own row. */
     @Nullable private PageTickStripView pageIndicator;
-    /** The column length the rail's page count was last worked out from. */
-    private int railPagedAtLengthPx;
+    /**
+     * How many most-used apps the column on screen holds after its last pin: what the last
+     * committed render put there, so the rail's ticks follow the column as drawn rather than a
+     * fresh resolve of the list, which a catalogue in flight can answer empty for.
+     */
+    private int railMostUsedSlots;
     /**
      * The latched owner of the current stream, mirrored from {@link #gestureArbiter} at the two
      * points it is consulted. Replaces the {@code horizontalIntent} boolean the move handler used to
@@ -801,6 +809,13 @@ public final class SuggestionBarView extends GridLayout
         if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
         // Nothing is rendered, or kept queued, for a window that has gone.
         iconBinder.cancelAll();
+        // A morph never outlives the window: a row that comes back lays out the dock's last
+        // answer rather than waiting for a landing that went with the window.
+        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
+        if (dockMorphing && laidOut != null) endDockMorph(laidOut);
+        dockMorphing = false;
+        dockMorphSettling = false;
+        removeCallbacks(dockMorphSettleBackstop);
     }
 
     @Override
@@ -850,7 +865,6 @@ public final class SuggestionBarView extends GridLayout
         }
         scheduleStableDrawReleaseIfPossible();
         if (renderLostWhileUnstable) post(this::reissueLostRender);
-        if (changed) resyncRailPagingForLength();
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
         publishPageIndicator();
     }
@@ -872,28 +886,6 @@ public final class SuggestionBarView extends GridLayout
     /** Whether a render is still owed to the row because it was dropped while unstable. */
     boolean isRenderLostWhileUnstable() {
         return renderLostWhileUnstable;
-    }
-
-    /**
-     * A rail pages by the length of the column it was given, so a column that changed length is a
-     * different number of pages — the keyboard coming up, the canvas band resizing, a turn of the
-     * screen. Re-rendered only when the fit actually moved, never on every layout pass.
-     */
-    private void resyncRailPagingForLength() {
-        if (!vertical) {
-            railPagedAtLengthPx = 0;
-            return;
-        }
-        int length = railUsableLengthPx();
-        if (length <= 0 || length == railPagedAtLengthPx) return;
-        int wasPerPage = railPagedAtLengthPx <= 0 ? -1
-            : DockPagingModel.railItemsPerPage(railPagedAtLengthPx, railSlotLengthPx());
-        railPagedAtLengthPx = length;
-        if (wasPerPage == DockPagingModel.railItemsPerPage(length, railSlotLengthPx())) {
-            publishPageIndicator();
-            return;
-        }
-        post(this::reload);
     }
 
     /**
@@ -959,12 +951,6 @@ public final class SuggestionBarView extends GridLayout
             reload();
             publishPageIndicator();
         }
-        // The dock's reflection is a picture of the row: it is taken again with the tile in its
-        // new slot (DockIconReflection settles the request itself).
-        post(() -> {
-            Runnable invalidated = contentInvalidatedListener;
-            if (invalidated != null) invalidated.run();
-        });
     }
 
     /** Whether the row lays the Drawer tile out: one stands, and the row is lying down. */
@@ -1135,6 +1121,15 @@ public final class SuggestionBarView extends GridLayout
     protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
         if (child == drawerTileSlot && !drawingDrawerTileUnshifted && swipeOffsetDrawn()
             && drawerTileShown()) return false;
+        // A crossing's morph draws the slot at the frame's icon and its share of the frame's row.
+        if (slotMorph(child)) {
+            int save = canvas.save();
+            canvas.translate(slotMorphOut[0], 0f);
+            canvas.scale(slotMorphOut[1], slotMorphOut[1], slotMorphOut[2], slotMorphOut[3]);
+            boolean more = super.drawChild(canvas, child, drawingTime);
+            canvas.restoreToCount(save);
+            return more;
+        }
         return super.drawChild(canvas, child, drawingTime);
     }
 
@@ -1162,11 +1157,12 @@ public final class SuggestionBarView extends GridLayout
         if (this.vertical == vertical) return false;
         this.vertical = vertical;
         invalidateRenderedIconCaches();
+        // A page lying down holds one app fewer beside the Drawer tile, which a rail does not lay.
+        invalidateMostUsedCache();
+        // The slots on screen were laid along the old axis; the next render says what stands now.
+        railMostUsedSlots = 0;
         lastSurfaceRenderSignature = 0;
         childLayoutPending = true;
-        // The turn changes what a page is, so the length the last fit was worked out from is not
-        // the length this form pages by.
-        railPagedAtLengthPx = 0;
         requestLayout();
         return true;
     }
@@ -1245,9 +1241,23 @@ public final class SuggestionBarView extends GridLayout
      * bottom per icon into {@code out}, at most {@code out.length / 4} of them, and how many
      * there are (one more than {@code out} holds when there are more). An app's button or a folder's shell counts; a filler slot, the empty row's hint
      * and a slot faded out do not. Read off layout values only, so an icon in flight (a drag, a
-     * page swipe) answers where it was laid out. The dock's Lens beads stand on these.
+     * page swipe) answers where it was laid out.
      */
     public int layoutIconBoxes(@NonNull float[] out) {
+        return iconBoxes(out, false);
+    }
+
+    /**
+     * The same boxes where a crossing's morph draws them ({@link #slotMorph}): each moved to its
+     * share of the frame's row and scaled to the frame's icon about its centre, and as laid out
+     * whenever no morph draws the row. A swipe's offset is still not in them. The dock's Lens
+     * beads stand on these, so a bead and its icon never part, at rest or mid-slide.
+     */
+    public int drawnIconBoxes(@NonNull float[] out) {
+        return iconBoxes(out, true);
+    }
+
+    private int iconBoxes(@NonNull float[] out, boolean drawn) {
         if (vertical) return 0;
         int max = out.length / 4;
         int count = 0;
@@ -1274,25 +1284,23 @@ public final class SuggestionBarView extends GridLayout
                 }
                 v = p;
             }
-            out[count * 4] = left;
-            out[count * 4 + 1] = top;
-            out[count * 4 + 2] = left + box.getWidth();
-            out[count * 4 + 3] = top + box.getHeight();
+            float halfW = box.getWidth() * 0.5f;
+            float halfH = box.getHeight() * 0.5f;
+            float cx = left + halfW;
+            float cy = top + halfH;
+            if (drawn && slotMorph(slot)) {
+                // The same shift and scale the slot is drawn at, about the same centre.
+                cx += slotMorphOut[0];
+                halfW *= slotMorphOut[1];
+                halfH *= slotMorphOut[1];
+            }
+            out[count * 4] = cx - halfW;
+            out[count * 4 + 1] = cy - halfH;
+            out[count * 4 + 2] = cx + halfW;
+            out[count * 4 + 3] = cy + halfH;
             count++;
         }
         return count;
-    }
-
-    /** Told when one of the row's icons redrew: the dock's reflection of the row re-captures. */
-    @Nullable private Runnable contentInvalidatedListener;
-
-    /**
-     * Who hears that an icon on the row redrew (an icon arrived, a badge changed, a press
-     * faded), or null for nobody. The dock's glass reflects the row and captures it again a
-     * short settle later ({@link com.termux.app.chrome.DockIconReflection}).
-     */
-    public void setContentInvalidatedListener(@Nullable Runnable listener) {
-        contentInvalidatedListener = listener;
     }
 
     /**
@@ -1390,13 +1398,6 @@ public final class SuggestionBarView extends GridLayout
         int center = clamp(Math.round(computeAzAnchorPosition(activeAzLetter, slotCount)), 0,
             slotCount - 1);
         return buildAzPriorityColumnsAround(center, slotCount);
-    }
-
-    @Override
-    public void onDescendantInvalidated(@NonNull View child, @NonNull View target) {
-        super.onDescendantInvalidated(child, target);
-        Runnable listener = contentInvalidatedListener;
-        if (listener != null) listener.run();
     }
 
     public void setTextSize(float textSize) {
@@ -1573,8 +1574,21 @@ public final class SuggestionBarView extends GridLayout
      * The dock's answer for this pass, and the one place the row is told its sizes: the band it
      * lies in (its hint), the icon one of its slots draws lying down, and the rail's icon and slot
      * standing up. The row draws exactly these and works none of them out of its own.
+     *
+     * <p>While a crossing's morph draws the row ({@link #beginDockMorph}) a pass's answer is only
+     * noted, as the layout the row's slots stand in, and the row's own sizes wait for the landing
+     * ({@link #endDockMorph}): no frame of a slide re-renders the row or lays it out.
      */
     public void setDockLayout(@NonNull com.termux.app.dock.DockLayout layout) {
+        dockLaidOutLayout = layout;
+        if (dockMorphing) return;
+        if (dockMorphSettling) {
+            // The dock's answer after a landing: the row is laid out in it by the pass that
+            // draws next, its icons at its own size once their resize has run.
+            dockMorphLandedBase = true;
+            // With no new icon size in it, nothing is left to resize; otherwise the resize ends it.
+            if (Math.max(0, layout.slotIconPx) == dockIconSizePx) settleDockMorphIfLaidOut();
+        }
         int hint = Math.max(0, layout.appsRowBandHintPx);
         int icon = Math.max(0, layout.slotIconPx);
         int railIcon = Math.max(0, layout.railIconSizePx);
@@ -1601,14 +1615,209 @@ public final class SuggestionBarView extends GridLayout
         invalidate();
         scheduleStableDrawReleaseIfPossible();
         if (vertical) {
-            // A rail pages by its slot's length, so its pages are counted again.
-            railPagedAtLengthPx = 0;
+            // A rail's slots are its pitch long, so they are built again at the new one.
             post(this::reload);
             return;
         }
         // The slots already built keep the size they were built at until something resizes
         // them; nothing else re-renders the row when only the dock's size moved.
         scheduleSlotIconResize();
+    }
+
+    // ------------------------------------------------------------------ the dock's morph
+    //
+    // A crossing between Home and the Workspace (ADR 0012) morphs the dock's dress with the wall:
+    // the slot's icon and the row's width and inset go from the leaving half's rest to the
+    // arriving one's. The row cannot be laid out per frame, so it is drawn instead: rendered once
+    // at the larger of the two icons, and each frame every slot is scaled down to the frame's icon
+    // and moved to its share of the frame's row, about the centre its icon is laid out at.
+
+    /** Whether a crossing's morph draws the row, from its begin to its landing. */
+    private boolean dockMorphing;
+    /**
+     * Whether the boxes are still drawn at the row's icon rather than the size they were built at:
+     * from a morph's landing until the slots are resized to the landed size, so the frame between
+     * the two draws the landed icon rather than the one rendered for the slide.
+     */
+    private boolean dockMorphSettling;
+    /** The dock's last answer, whose insets and width the row's slots are laid out in. */
+    @Nullable private com.termux.app.dock.DockLayout dockLaidOutLayout;
+    /** The frame's icon, and the inset and width of the row it is drawn at. */
+    private int morphIconPx;
+    private int morphInsetPx;
+    private int morphWidthPx;
+    /** One slot's draw as {@link #slotMorph} answers it: its shift, scale and pivot. */
+    private final float[] slotMorphOut = new float[4];
+
+    /**
+     * A crossing begins between {@code leaving}'s rest and {@code arriving}'s: the slots are
+     * rendered once at the larger icon of the two, and drawn at {@code leaving}'s until the first
+     * frame ({@link #dockMorphFrame}). A rail on either side, or a row standing up, has no row
+     * lying down to morph and draws as it is laid out.
+     */
+    public void beginDockMorph(@NonNull com.termux.app.dock.DockLayout leaving,
+                               @NonNull com.termux.app.dock.DockLayout arriving) {
+        if (vertical || leaving.railActive || arriving.railActive) return;
+        dockMorphing = true;
+        dockMorphSettling = false;
+        dockMorphLandedBase = false;
+        removeCallbacks(dockMorphSettleBackstop);
+        morphIconPx = Math.max(0, leaving.slotIconPx);
+        morphInsetPx = leaving.appsRowEdgeInsetPx;
+        morphWidthPx = leaving.appsRowUsableWidthPx;
+        int larger = Math.max(Math.max(0, leaving.slotIconPx), Math.max(0, arriving.slotIconPx));
+        if (larger > 0 && larger != dockIconSizePx) {
+            // Rendered at the larger icon so the slide only ever scales it down; the boxes take it
+            // on the next frame, and are drawn at the frame's icon from their own size meanwhile.
+            dockIconSizePx = larger;
+            invalidateRenderedIconCaches();
+            scheduleSlotIconResize();
+        }
+        invalidate();
+    }
+
+    /**
+     * One frame of the morph: the slot's icon {@code iconPx} across, the row's slots sharing
+     * {@code usableWidthPx} from {@code edgeInsetPx} in, and the Drawer tile at
+     * {@code drawerTileAlpha}. Fields and one invalidate: no layout, no allocation.
+     */
+    public void dockMorphFrame(int iconPx, int usableWidthPx, int edgeInsetPx,
+                               float drawerTileAlpha) {
+        if (!dockMorphing) return;
+        View tile = drawerTileSlot;
+        float alpha = drawerTileAlpha < 0f ? 0f : drawerTileAlpha > 1f ? 1f : drawerTileAlpha;
+        if (tile != null && tile.getParent() == this && tile.getAlpha() != alpha)
+            tile.setAlpha(alpha);
+        if (iconPx == morphIconPx && usableWidthPx == morphWidthPx && edgeInsetPx == morphInsetPx)
+            return;
+        morphIconPx = iconPx;
+        morphWidthPx = usableWidthPx;
+        morphInsetPx = edgeInsetPx;
+        invalidate();
+    }
+
+    /**
+     * The crossing landed on {@code landed}'s rest, which the last frame already drew: the row
+     * takes it as its layout, once, and draws its slots at that icon until they are resized to it.
+     */
+    public void endDockMorph(@NonNull com.termux.app.dock.DockLayout landed) {
+        if (!dockMorphing) return;
+        dockMorphing = false;
+        View tile = drawerTileSlot;
+        if (tile != null && tile.getAlpha() != 1f) tile.setAlpha(1f);
+        // The landed rest is the last frame's dress: from here until the boxes are that size and
+        // the row is laid out in the dock's answer after the landing, every frame draws exactly
+        // it, by the same mapping the last morph frame drew, so no frame between shows another.
+        morphIconPx = Math.max(0, landed.slotIconPx);
+        morphInsetPx = landed.appsRowEdgeInsetPx;
+        morphWidthPx = landed.appsRowUsableWidthPx;
+        // Its sizes, once; the row's slots still stand in the layout the activity last laid out.
+        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
+        setDockLayout(landed);
+        dockLaidOutLayout = laidOut;
+        dockMorphSettling = true;
+        dockMorphLandedBase = false;
+        removeCallbacks(dockMorphSettleBackstop);
+        postDelayed(dockMorphSettleBackstop, DOCK_MORPH_SETTLE_BACKSTOP_MS);
+        invalidate();
+    }
+
+    /**
+     * Whether the dock has handed its answer since the landing: the row is laid out in it, so a
+     * slot drawn as laid out is drawn at the landed rest.
+     */
+    private boolean dockMorphLandedBase;
+    /** A settle that never hears the dock again still ends: the row then draws as laid out. */
+    private static final long DOCK_MORPH_SETTLE_BACKSTOP_MS = 500L;
+    private final Runnable dockMorphSettleBackstop = () -> {
+        if (!dockMorphSettling || dockMorphing) return;
+        dockMorphSettling = false;
+        invalidate();
+    };
+
+    /**
+     * The landing's draw lets go once nothing is left between it and the row as laid out: the
+     * boxes resized to the landed icon and the row laid out in the dock's answer after landing.
+     */
+    private void settleDockMorphIfLaidOut() {
+        if (!dockMorphSettling || dockMorphing || slotIconResizePosted || !dockMorphLandedBase)
+            return;
+        dockMorphSettling = false;
+        removeCallbacks(dockMorphSettleBackstop);
+        invalidate();
+    }
+
+    /** Whether a crossing's morph draws the row. Package-visible for the tests. */
+    boolean isDockMorphing() {
+        return dockMorphing;
+    }
+
+    /** Whether the row still draws a landed morph's rest over its layout. For the tests. */
+    boolean isDockMorphSettling() {
+        return dockMorphSettling;
+    }
+
+    /**
+     * How {@code child} is drawn for the morph, into {@link #slotMorphOut}: its shift along the
+     * row, its scale, and the pivot (its icon's centre as laid out). False where it is drawn as
+     * laid out: no morph, not one of the row's slots, or nothing to change.
+     */
+    private boolean slotMorph(@NonNull View child) {
+        if (vertical || (!dockMorphing && !dockMorphSettling)) return false;
+        SlotIcon icon = null;
+        for (int i = 0; i < slotIcons.size(); i++) {
+            if (slotIcons.get(i).slot == child) {
+                icon = slotIcons.get(i);
+                break;
+            }
+        }
+        if (icon == null) return false;
+        View box = icon.box;
+        int boxPx = box.getWidth();
+        if (boxPx <= 0) return false;
+        float cx = box.getWidth() * 0.5f;
+        float cy = box.getHeight() * 0.5f;
+        View at = box;
+        while (at != child) {
+            cx += at.getLeft();
+            cy += at.getTop();
+            ViewParent parent = at.getParent();
+            if (!(parent instanceof View)) return false;
+            at = (View) parent;
+        }
+        cx += child.getLeft();
+        cy += child.getTop();
+        // A morph's frame, or after its landing the landed rest by the same mapping.
+        float scale = com.termux.app.dock.DockMorph.iconScale(morphIconPx, boxPx);
+        float shift = 0f;
+        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
+        if (laidOut != null) {
+            shift = com.termux.app.dock.DockMorph.slotCentreX(cx, laidOut.appsRowEdgeInsetPx,
+                laidOut.appsRowUsableWidthPx, morphInsetPx, morphWidthPx) - cx;
+        }
+        if (scale == 1f && shift == 0f) return false;
+        slotMorphOut[0] = shift;
+        slotMorphOut[1] = scale;
+        slotMorphOut[2] = cx;
+        slotMorphOut[3] = cy;
+        return true;
+    }
+
+    /**
+     * Where slot {@code index}'s icon is drawn on this frame, in the row's coordinates: its
+     * centre's x and its size across. Package-visible for the tests.
+     */
+    @NonNull
+    float[] drawnSlotIcon(int index) {
+        View child = getChildAt(index);
+        View box = null;
+        for (SlotIcon icon : slotIcons) if (icon.slot == child) box = icon.box;
+        if (child == null || box == null) return new float[] {Float.NaN, Float.NaN};
+        if (slotMorph(child))
+            return new float[] {slotMorphOut[2] + slotMorphOut[0], box.getWidth() * slotMorphOut[1]};
+        float cx = box.getWidth() * 0.5f;
+        for (View at = box; at != child; at = (View) at.getParent()) cx += at.getLeft();
+        return new float[] {cx + child.getLeft(), box.getWidth()};
     }
 
     public void setAppBarOpacity(int appBarOpacity) {
@@ -3016,8 +3225,10 @@ public final class SuggestionBarView extends GridLayout
             if (swipeVelocityTracker != null) swipeVelocityTracker.recycle();
             swipeVelocityTracker = VelocityTracker.obtain();
             swipeVelocityTracker.addMovement(event);
+            // A rail's host scrolls it along the axis a row pages on, so the rail leaves its host
+            // free to take an up-and-down drag; a long press takes the stream back once it fires.
             ViewParent parent = getParent();
-            if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+            if (parent != null && !vertical) parent.requestDisallowInterceptTouchEvent(true);
             swipeDownX = event.getX();
             swipeDownY = event.getY();
             swipeDownRawX = event.getRawX();
@@ -3575,6 +3786,7 @@ public final class SuggestionBarView extends GridLayout
             pinnedItems = configRepository.loadPinnedItems();
         }
         boolean pinnedSurface = !azPreview && TextUtils.isEmpty(lastInput.trim()) && pinnedItems != null && !pinnedItems.isEmpty();
+        int mostUsedSlots = 0;
         if (pinnedSurface) {
             pinnedItemsPerPage = computePinnedItemsPerPage();
             int totalPages = getPinnedPagesCount();
@@ -3594,6 +3806,15 @@ public final class SuggestionBarView extends GridLayout
                     if (item != null) pinnedForSlots.add(item);
                 }
                 entries = entriesForPinnedItems(pinnedForSlots, drawnSlotPositions);
+                // A rail is one page, so the most-used page stands after its last pin, bound the
+                // way that page is lying down: launch-only, past the pins' drawn slots.
+                List<LauncherAppEntry> mostUsed = railMostUsedEntries();
+                if (!mostUsed.isEmpty()) {
+                    entries = new ArrayList<>(entries);
+                    entries.addAll(mostUsed);
+                    buttonCount += mostUsed.size();
+                    mostUsedSlots = mostUsed.size();
+                }
             }
         }
         if (!azPreview) {
@@ -3617,10 +3838,14 @@ public final class SuggestionBarView extends GridLayout
             } else {
                 invalidate();
             }
+            // No layout pass follows a render that changed nothing, and the ticks may have been
+            // told something else since the column was last laid out: they hear what stands.
+            publishPageIndicator();
             // The page asked for is the page already on screen, so as far as any caller keeping
             // track of what it rendered is concerned, this rendered it.
             return true;
         }
+        railMostUsedSlots = mostUsedSlots;
 
         boolean keepCurrentFrameVisible = hasStableDisplayLayout() && surfaceRenderSignature != 0 && surfaceRenderSignature != lastSurfaceRenderSignature;
         if (!keepCurrentFrameVisible) {
@@ -4308,6 +4533,8 @@ public final class SuggestionBarView extends GridLayout
     private final Runnable slotIconResizeRunnable = () -> {
         slotIconResizePosted = false;
         resizeSlotIcons();
+        // A morph's landing drew the boxes at the landed icon until now; they are that size.
+        settleDockMorphIfLaidOut();
     };
 
     /**
@@ -4942,11 +5169,15 @@ public final class SuggestionBarView extends GridLayout
         pinEditorListener = listener;
     }
 
-    /** Puts an app on a Home page: the app menu's Add to Home. */
+    /** Puts an app on a Home page: the App menu's Add to home, and its Widgets. */
     public interface AddToHomeListener {
         /** Whether there are Home pages to take an icon right now; no row while there are not. */
         boolean canAddToHome();
         void onAddToHome(@NonNull LauncherAppEntry entry);
+        /** Whether the widget picker can open; the Widgets row shows only while it can. */
+        default boolean canOpenWidgets() { return false; }
+        /** Opens the widget picker for the App menu's Widgets row. */
+        default void onOpenWidgets(@NonNull LauncherAppEntry entry) { }
     }
 
     @Nullable private AddToHomeListener addToHomeListener;
@@ -4954,21 +5185,6 @@ public final class SuggestionBarView extends GridLayout
     /** Who puts an app on Home; null takes the Add to Home row out of the app menu. */
     public void setAddToHomeListener(@Nullable AddToHomeListener listener) {
         addToHomeListener = listener;
-    }
-
-    /** The app menu's Add to Home row, beside Pin/Unpin; nothing while no Home takes icons. */
-    private void addAddToHomeRow(@NonNull LinearLayout shell, @NonNull LauncherAppEntry entry,
-                                 int tintBase) {
-        if (addToHomeListener == null || !addToHomeListener.canAddToHome()) return;
-        Runnable add = () -> {
-            dismissAppContextPopup();
-            AddToHomeListener listener = addToHomeListener;
-            if (listener != null) listener.onAddToHome(entry);
-        };
-        TextView row = menuRows.addActionRow(shell,
-            getResources().getString(R.string.home_add_to_home), R.drawable.ic_symbol_add, false,
-            tintBase, add);
-        pendingMenuRows.add(new MenuRow(row, add, false));
     }
 
     /**
@@ -5739,10 +5955,8 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * Same as the two-arg overload, but with a {@code categoryAction}: when non-null, the popup
-     * this opens drops its Pin/Unpin row and gains a "Category" row that runs it instead — the
-     * app-drawer categories grid's reassignment entry point, reusing this Material popup rather
-     * than jumping straight to a category picker.
+     * Same as the two-arg overload. {@code categoryAction} is no longer shown: the App menu has no
+     * category row (decided 2026-10-23, #151), so the categories grid's callers pass it for nothing.
      */
     public void bindDrawerAppContextLongPress(@NonNull View pressTarget,
                                               @NonNull LauncherAppEntry entry,
@@ -5753,11 +5967,14 @@ public final class SuggestionBarView extends GridLayout
             null, null, pickupDelegate, entry, null);
     }
 
-    /** Shows the Material app-context popup anchored to a drawer view, outside the long-press gesture. */
+    /**
+     * Shows the App menu anchored to a drawer view, outside the long-press gesture.
+     * {@code categoryAction} is ignored, as above.
+     */
     public void showDrawerAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
                                           @Nullable Runnable categoryAction) {
         dismissShortcutsPopup();
-        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null, categoryAction));
+        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null));
     }
 
     private void bindFolderContextLongPress(
@@ -5804,6 +6021,9 @@ public final class SuggestionBarView extends GridLayout
         } else {
             notificationSwipeTargets.remove(pressTarget);
         }
+        // The menu's LONG_PRESS goes through the app's haptics switch when it opens, not the
+        // view's own long-click buzz, so the open is felt exactly once and a refused press not at all.
+        pressTarget.setHapticFeedbackEnabled(false);
         pressTarget.setOnLongClickListener(v -> {
             if (suppressContextLongPressForSwipe) {
                 return true;
@@ -5811,6 +6031,11 @@ public final class SuggestionBarView extends GridLayout
             if (drawerPickup != null && drawerPickupEntry != null
                 && !drawerPickup.claimContext(pressTarget, drawerPickupEntry)) return true;
             showContextPopup.run();
+            Haptics.tick(SuggestionBarView.this, android.view.HapticFeedbackConstants.LONG_PRESS);
+            // The finger now slides onto the menu or picks the icon up; a rail's scrolling host
+            // must not take that slide for a scroll.
+            ViewParent host = getParent();
+            if (host != null) host.requestDisallowInterceptTouchEvent(true);
             LongPressPickupState state = activeLongPressPickupState;
             if (state == null || state.sourceView != pressTarget) {
                 state = new LongPressPickupState(pressTarget, pinnedIndex, 0f, 0f);
@@ -6004,257 +6229,229 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
+    /**
+     * Opens the App menu for {@code context}: the same card on the dock, in a dock folder and in
+     * the drawer, its rows decided by {@link AppMenuPlan} and only their actions by where the icon
+     * lives.
+     */
     private void showAppContextPopup(@NonNull AppMenuContext context) {
         dismissAppContextPopup();
+        LauncherAppEntry entry = context.entry;
         // A Linux app and the launcher's own entries have no Android package behind them.
-        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(context.entry.appRef)
-            || com.termux.app.launcher.LauncherEntries.isEntry(context.entry.appRef);
+        boolean linuxApp = com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)
+            || com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef);
         List<ShortcutInfo> shortcuts = linuxApp ? java.util.Collections.<ShortcutInfo>emptyList()
-            : queryEntryShortcuts(context.entry);
-        boolean hasShortcuts = !shortcuts.isEmpty();
+            : queryEntryShortcuts(entry);
         PinnedFolderItem sourceFolder = resolveLatestFolder(context.sourceFolderId);
         boolean folderSource = sourceFolder != null && context.folderEntryRef != null;
-        int topPinnedIndex = context.pinnedIndex >= 0 ? context.pinnedIndex : findPinnedAppIndex(context.entry.appRef);
+        int topPinnedIndex = context.pinnedIndex >= 0 ? context.pinnedIndex : findPinnedAppIndex(entry.appRef);
         boolean topPinned = topPinnedIndex >= 0;
-        // A category-context popup swaps its Pin/Unpin row for a Category row instead — see below.
-        boolean suppressPinRow = context.categoryAction != null;
+        String packageName = entry.appRef.packageName;
 
-        LinearLayout shell = menuRows.newShell();
         pendingMenuRows.clear();
         menuHighlight.clear();
         shortcutsMainRowView = null;
         activeAppMenuContext = context;
-        activeAppMenuShortcuts = shortcuts;
-
-        TextView header = new TextView(getContext());
-        header.setText(context.entry.label);
-        header.setTextColor(resolveLauncherTextColor());
-        header.setTextSize(12f);
-        header.setTypeface(Typeface.DEFAULT_BOLD);
-        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(8), dp(6), dp(8), dp(7));
-        Drawable headerIcon = resolveMenuHeaderIcon(context.entry);
-        if (headerIcon != null) {
-            headerIcon.setBounds(0, 0, dp(22), dp(22));
-            header.setCompoundDrawablesRelative(headerIcon, null, null, null);
-            header.setCompoundDrawablePadding(dp(10));
-        }
-        shell.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        activeAppMenuShortcuts = null;
 
         int tintBase = sourceFolder != null && sourceFolder.tintOverrideEnabled
             ? (sourceFolder.tintColor & 0x00FFFFFF)
             : (inheritedTintColor & 0x00FFFFFF);
         menuHighlight.setTintBase(tintBase);
 
-        // The Terminal entry's long press: a Home float on the page in view, then a new window,
-        // first, the way an app's shortcuts lead.
-        if (com.termux.app.launcher.LauncherEntries.hasHomeFloat(context.entry.appRef)) {
-            Runnable newFloat = () -> {
-                dismissAppContextPopup();
-                LauncherAppLauncher.launchEntryHomeFloat(context.entry);
-            };
-            TextView newFloatRow = menuRows.addActionRow(shell,
+        // The app's shortcuts: the Terminal entry's own two first (a Home float on the page in
+        // view, a new window), then what the app publishes.
+        List<AppMenuCard.Item> shortcutItems = new ArrayList<>();
+        if (com.termux.app.launcher.LauncherEntries.hasHomeFloat(entry.appRef)) {
+            shortcutItems.add(new AppMenuCard.Item(
                 getResources().getString(R.string.launcher_entry_new_float),
-                R.drawable.ic_symbol_add, false, tintBase, newFloat);
-            pendingMenuRows.add(new MenuRow(newFloatRow, newFloat, false));
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    dismissAppContextPopup();
+                    LauncherAppLauncher.launchEntryHomeFloat(entry);
+                }));
         }
-        if (com.termux.app.launcher.LauncherEntries.hasAlternate(context.entry.appRef)) {
-            Runnable newWindow = () -> {
-                dismissAppContextPopup();
-                LauncherAppLauncher.launchEntryAlternate(context.entry);
-            };
-            TextView newWindowRow = menuRows.addActionRow(shell,
+        if (com.termux.app.launcher.LauncherEntries.hasAlternate(entry.appRef)) {
+            shortcutItems.add(new AppMenuCard.Item(
                 getResources().getString(R.string.launcher_entry_new_window),
-                R.drawable.ic_symbol_add, false, tintBase, newWindow);
-            pendingMenuRows.add(new MenuRow(newWindowRow, newWindow, false));
+                R.drawable.ic_app_menu_shortcut, () -> {
+                    dismissAppContextPopup();
+                    LauncherAppLauncher.launchEntryAlternate(entry);
+                }));
         }
-
-        // Uninstall and App info ask Android about a package; a Linux app has none.
-        if (!linuxApp) {
-            TextView uninstallRow = menuRows.addActionRow(shell, "Uninstall", R.drawable.ic_dock_menu_uninstall, false, tintBase, () -> {
+        int entryShortcuts = shortcutItems.size();
+        int shortcutCount = entryShortcuts + shortcuts.size();
+        int visibleShortcuts = AppMenuPlan.visibleShortcutCount(shortcutCount);
+        // A launched shortcut animates out of its own row, which exists only once the card is built.
+        List<View[]> shortcutSources = new ArrayList<>();
+        for (int i = 0; i < shortcuts.size() && entryShortcuts + i < visibleShortcuts; i++) {
+            ShortcutInfo info = shortcuts.get(i);
+            View[] source = new View[1];
+            shortcutSources.add(source);
+            String label = info.getShortLabel() != null ? info.getShortLabel().toString() : info.getId();
+            shortcutItems.add(new AppMenuCard.Item(label, R.drawable.ic_app_menu_shortcut, () -> {
+                launchShortcut(info, source[0]);
                 dismissAppContextPopup();
-                requestUninstall(context.entry);
-            });
-            pendingMenuRows.add(new MenuRow(uninstallRow, () -> {
-                dismissAppContextPopup();
-                requestUninstall(context.entry);
-            }, false));
-
-            TextView appInfoRow = menuRows.addActionRow(shell, "App info", R.drawable.ic_dock_menu_info, false, tintBase, () -> {
-                dismissAppContextPopup();
-                openAppInfo(context.entry);
-            });
-            pendingMenuRows.add(new MenuRow(appInfoRow, () -> {
-                dismissAppContextPopup();
-                openAppInfo(context.entry);
-            }, false));
-
+            }));
         }
+        List<ShortcutInfo> overflow = shortcutCount > visibleShortcuts
+            ? new ArrayList<>(shortcuts.subList(Math.max(0, visibleShortcuts - entryShortcuts),
+                shortcuts.size()))
+            : java.util.Collections.<ShortcutInfo>emptyList();
+        activeAppMenuShortcuts = overflow.isEmpty() ? null : overflow;
+
+        PinnedAppItem topPinnedApp = topPinned ? pinnedAppAt(topPinnedIndex) : null;
+        PinnedAppItem folderApp = folderSource ? findFolderApp(sourceFolder, context.folderEntryRef) : null;
+        AppMenuPlan.Inputs inputs = new AppMenuPlan.Inputs();
+        inputs.source = folderSource ? AppMenuPlan.Source.FOLDER_MEMBER
+            : topPinned ? AppMenuPlan.Source.PINNED : AppMenuPlan.Source.UNPINNED;
+        inputs.badged = !linuxApp && LauncherNotificationBadgeStore.hasBadge(packageName);
+        inputs.shortcutCount = shortcutCount;
+        inputs.androidPackage = !linuxApp;
+        inputs.hasWidgets = !linuxApp && addToHomeListener != null
+            && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
+        inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
         if (folderSource) {
-            PinnedAppItem folderApp = findFolderApp(sourceFolder, context.folderEntryRef);
-            boolean folderHasCustomIcon = folderApp != null
+            inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
-            TextView changeIconRow = menuRows.addActionRow(shell, "Change icon in folder", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-                dismissAppContextPopup();
-                changeFolderAppIcon(context);
-            });
-            pendingMenuRows.add(new MenuRow(changeIconRow, () -> {
-                dismissAppContextPopup();
-                changeFolderAppIcon(context);
-            }, false));
-
-            if (folderHasCustomIcon) {
-                TextView resetIconRow = menuRows.addActionRow(shell, "Reset icon in folder", R.drawable.ic_dock_menu_reset, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    resetFolderAppIcon(context);
-                });
-                pendingMenuRows.add(new MenuRow(resetIconRow, () -> {
-                    dismissAppContextPopup();
-                    resetFolderAppIcon(context);
-                }, false));
-            }
-
-            addAppWideIconRows(shell, context.entry, tintBase);
-
-            TextView moveToDockRow = menuRows.addActionRow(shell, "Move to dock", R.drawable.ic_dock_menu_move, false, tintBase, () -> {
-                dismissAppContextPopup();
-                moveContextEntryToDock(context);
-            });
-            pendingMenuRows.add(new MenuRow(moveToDockRow, () -> {
-                dismissAppContextPopup();
-                moveContextEntryToDock(context);
-            }, false));
-
-            TextView deleteRow = menuRows.addActionRow(shell, "Delete", R.drawable.ic_dock_menu_uninstall, false, tintBase, () -> {
-                dismissAppContextPopup();
-                removeFromContextSource(context);
-            });
-            pendingMenuRows.add(new MenuRow(deleteRow, () -> {
-                dismissAppContextPopup();
-                removeFromContextSource(context);
-            }, false));
         } else if (topPinned) {
-            final int targetPinnedIndex = topPinnedIndex;
-            PinnedAppItem topPinnedApp = pinnedAppAt(targetPinnedIndex);
-            boolean pinnedHasCustomIcon = topPinnedApp != null
+            inputs.customIcon = topPinnedApp != null
                 && getIconResolver().loadOverride(topPinnedApp.iconOverride) != null;
-            if (LauncherNotificationBadgeStore.hasBadge(context.entry.appRef.packageName)) {
-                TextView notificationsRow = menuRows.addActionRow(shell, "Notifications", R.drawable.ic_dock_menu_info, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    showNotificationPopup(context.entry, context.anchor);
-                });
-                pendingMenuRows.add(new MenuRow(notificationsRow, () -> {
-                    dismissAppContextPopup();
-                    showNotificationPopup(context.entry, context.anchor);
-                }, false));
-            }
-            TextView changeIconRow = menuRows.addActionRow(shell, "Change dock icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-                dismissAppContextPopup();
-                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                if (pinnedApp != null) {
-                    showPinnedIconPackPicker(targetPinnedIndex, pinnedApp);
-                }
-            });
-            pendingMenuRows.add(new MenuRow(changeIconRow, () -> {
-                dismissAppContextPopup();
-                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                if (pinnedApp != null) {
-                    showPinnedIconPackPicker(targetPinnedIndex, pinnedApp);
-                }
-            }, false));
-
-            if (pinnedHasCustomIcon) {
-                TextView resetIconRow = menuRows.addActionRow(shell, "Reset dock icon", R.drawable.ic_dock_menu_reset, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                    if (pinnedApp != null) {
-                        resetPinnedIcon(targetPinnedIndex, pinnedApp);
-                    }
-                });
-                pendingMenuRows.add(new MenuRow(resetIconRow, () -> {
-                    dismissAppContextPopup();
-                    PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
-                    if (pinnedApp != null) {
-                        resetPinnedIcon(targetPinnedIndex, pinnedApp);
-                    }
-                }, false));
-            }
-
-            addAppWideIconRows(shell, context.entry, tintBase);
-
-            if (!suppressPinRow) {
-                TextView unpinRow = menuRows.addActionRow(shell, "Unpin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    removePinnedAt(targetPinnedIndex);
-                });
-                pendingMenuRows.add(new MenuRow(unpinRow, () -> {
-                    dismissAppContextPopup();
-                    removePinnedAt(targetPinnedIndex);
-                }, false));
-            }
-            addAddToHomeRow(shell, context.entry, tintBase);
         } else {
-            if (!suppressPinRow) {
-                TextView pinRow = menuRows.addActionRow(shell, "Pin", R.drawable.ic_dock_menu_pin, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    pinEntryToTopLevel(context.entry);
-                });
-                pendingMenuRows.add(new MenuRow(pinRow, () -> {
-                    dismissAppContextPopup();
-                    pinEntryToTopLevel(context.entry);
-                }, false));
-            }
-            addAddToHomeRow(shell, context.entry, tintBase);
-
-            TextView changeIconRow = menuRows.addActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-                dismissAppContextPopup();
-                changeAppIconForEntry(context.entry);
-            });
-            pendingMenuRows.add(new MenuRow(changeIconRow, () -> {
-                dismissAppContextPopup();
-                changeAppIconForEntry(context.entry);
-            }, false));
-            addResetAppIconRowIfNeeded(shell, context.entry, tintBase);
+            inputs.customIcon = configRepository != null
+                && configRepository.loadAppIconOverride(resolveForSelectionRef(entry.appRef)) != null;
         }
 
-        if (context.categoryAction != null) {
-            Runnable categoryAction = context.categoryAction;
-            TextView categoryRow = menuRows.addActionRow(shell,
-                getResources().getString(R.string.app_drawer_category_menu_entry),
-                R.drawable.ic_dock_menu_category, false, tintBase, () -> {
-                    dismissAppContextPopup();
-                    categoryAction.run();
-                });
-            pendingMenuRows.add(new MenuRow(categoryRow, () -> {
-                dismissAppContextPopup();
-                categoryAction.run();
-            }, false));
-        }
-
-        if (hasShortcuts) {
-            menuRows.addDivider(shell);
-            TextView shortcutsRow = menuRows.addActionRow(shell, "Shortcuts", R.drawable.ic_dock_menu_shortcuts, true, tintBase, () -> {
-                if (shortcutsMenu.isShowing()) {
-                    dismissShortcutsPopup();
-                    menuHighlight.clear();
+        List<List<AppMenuCard.Item>> groups = new ArrayList<>();
+        int moreRowIndex = -1;
+        int flatIndex = 0;
+        int nextShortcut = 0;
+        int nextSource = 0;
+        int[] shortcutRowIndex = new int[shortcutSources.size()];
+        for (List<AppMenuPlan.Row> planGroup : AppMenuPlan.groups(inputs)) {
+            List<AppMenuCard.Item> items = new ArrayList<>(planGroup.size());
+            for (AppMenuPlan.Row row : planGroup) {
+                if (row == AppMenuPlan.Row.SHORTCUT) {
+                    if (nextShortcut >= entryShortcuts) shortcutRowIndex[nextSource++] = flatIndex;
+                    items.add(shortcutItems.get(nextShortcut++));
+                } else if (row == AppMenuPlan.Row.MORE_SHORTCUTS) {
+                    moreRowIndex = flatIndex;
+                    items.add(new AppMenuCard.Item(
+                        getResources().getString(R.string.app_menu_more_shortcuts),
+                        R.drawable.ic_app_menu_more, () -> {
+                            if (!shortcutsMenu.isShowing()) openShortcutsForFocusedRow();
+                        }, true));
                 } else {
-                    showShortcutsPopup(context, shortcuts, shortcutsMainRowView);
+                    items.add(appMenuAction(row, context, topPinnedIndex));
                 }
-            });
-            shortcutsMainRowView = shortcutsRow;
-            pendingMenuRows.add(new MenuRow(shortcutsRow, () -> {
-                if (!shortcutsMenu.isShowing()) {
-                    showShortcutsPopup(context, shortcuts, shortcutsMainRowView);
-                }
-            }, true));
+                flatIndex++;
+            }
+            groups.add(items);
         }
 
-        int rowWidth = MenuRowWidths.normalize(pendingMenuRows);
-        int contentWidth = MenuRowWidths.constrainHeader(header, rowWidth);
-        MenuRowWidths.constrainRows(pendingMenuRows, contentWidth);
+        AppMenuCard card = AppMenuCard.build(getContext(), menuRows, groups);
+        for (int i = 0; i < shortcutSources.size(); i++) {
+            shortcutSources.get(i)[0] = card.rows.get(shortcutRowIndex[i]).rowView;
+        }
+        if (moreRowIndex >= 0) shortcutsMainRowView = card.rows.get(moreRowIndex).rowView;
+        pendingMenuRows.addAll(card.rows);
+        appContextMenu.showAppMenu(card, context.anchor, null);
+    }
 
-        appContextMenu.show(MenuSpec.of(shell, tintBase).rows(pendingMenuRows).build(),
-            context.anchor);
+    /** One App menu action row: its label, glyph and what it runs for the icon in {@code context}. */
+    @NonNull
+    private AppMenuCard.Item appMenuAction(@NonNull AppMenuPlan.Row row,
+                                          @NonNull AppMenuContext context, int pinnedIndex) {
+        LauncherAppEntry entry = context.entry;
+        boolean folderSource = context.folderEntryRef != null
+            && resolveLatestFolder(context.sourceFolderId) != null;
+        boolean pinned = pinnedIndex >= 0;
+        switch (row) {
+            case NOTIFICATIONS: {
+                int count = Math.max(1, LauncherNotificationBadgeStore
+                    .getNotificationsForPackage(entry.appRef.packageName).size());
+                return new AppMenuCard.Item(getResources().getQuantityString(
+                    R.plurals.app_menu_notifications, count, count),
+                    R.drawable.ic_app_menu_notifications, () -> {
+                        dismissAppContextPopup();
+                        showNotificationPopup(entry, context.anchor);
+                    });
+            }
+            case WIDGETS:
+                return appMenuItem(R.string.app_menu_widgets, R.drawable.ic_app_menu_widgets, () -> {
+                    AddToHomeListener listener = addToHomeListener;
+                    if (listener != null) listener.onOpenWidgets(entry);
+                });
+            case APP_INFO:
+                return appMenuItem(R.string.app_menu_app_info, R.drawable.ic_app_menu_info,
+                    () -> openAppInfo(entry));
+            case ADD_TO_HOME:
+                return appMenuItem(R.string.home_add_to_home, R.drawable.ic_app_menu_home, () -> {
+                    AddToHomeListener listener = addToHomeListener;
+                    if (listener != null) listener.onAddToHome(entry);
+                });
+            case PIN:
+                return appMenuItem(R.string.app_menu_pin, R.drawable.ic_app_menu_pin,
+                    () -> pinEntryToTopLevel(entry));
+            case UNPIN:
+                return appMenuItem(R.string.app_menu_unpin, R.drawable.ic_app_menu_pin,
+                    () -> removePinnedAt(pinnedIndex));
+            case MOVE_TO_DOCK:
+                return appMenuItem(R.string.app_menu_move_to_dock, R.drawable.ic_app_menu_move_to_dock,
+                    () -> moveContextEntryToDock(context));
+            case REMOVE_FROM_FOLDER:
+                return appMenuItem(R.string.app_menu_remove_from_folder,
+                    R.drawable.ic_app_menu_remove_from_folder, () -> removeFromContextSource(context));
+            case CHANGE_ICON:
+                return appMenuItem(R.string.app_menu_change_icon, R.drawable.ic_app_menu_change_icon, () -> {
+                    if (folderSource) {
+                        changeFolderAppIcon(context);
+                    } else if (pinned) {
+                        PinnedAppItem pinnedApp = pinnedAppAt(pinnedIndex);
+                        if (pinnedApp != null) showPinnedIconPackPicker(pinnedIndex, pinnedApp);
+                    } else {
+                        changeAppIconForEntry(entry);
+                    }
+                });
+            case RESET_ICON:
+                return appMenuItem(R.string.app_menu_reset_icon, R.drawable.ic_app_menu_reset_icon, () -> {
+                    if (folderSource) {
+                        resetFolderAppIcon(context);
+                    } else if (pinned) {
+                        PinnedAppItem pinnedApp = pinnedAppAt(pinnedIndex);
+                        if (pinnedApp != null) resetPinnedIcon(pinnedIndex, pinnedApp);
+                    } else {
+                        resetAppIcon(entry);
+                    }
+                });
+            case UNINSTALL:
+            default:
+                return appMenuItem(R.string.app_menu_uninstall, R.drawable.ic_app_menu_uninstall,
+                    () -> requestUninstall(entry));
+        }
+    }
+
+    /** An App menu row that closes the card and then runs {@code action}. */
+    @NonNull
+    private AppMenuCard.Item appMenuItem(int labelRes, int glyphRes, @NonNull Runnable action) {
+        return new AppMenuCard.Item(getResources().getString(labelRes), glyphRes, () -> {
+            dismissAppContextPopup();
+            action.run();
+        });
+    }
+
+    /** Whether {@code packageName} offers any app widget, which is when the Widgets row shows. */
+    private boolean hasWidgetProviders(@Nullable String packageName) {
+        if (TextUtils.isEmpty(packageName)) return false;
+        try {
+            android.appwidget.AppWidgetManager manager =
+                android.appwidget.AppWidgetManager.getInstance(getContext());
+            if (manager == null) return false;
+            List<android.appwidget.AppWidgetProviderInfo> providers =
+                manager.getInstalledProvidersForPackage(packageName, null);
+            return providers != null && !providers.isEmpty();
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     @Nullable
@@ -6610,39 +6807,6 @@ public final class SuggestionBarView extends GridLayout
         reloadAllApps();
     }
 
-    private void addAppWideIconRows(
-        @NonNull LinearLayout shell,
-        @NonNull LauncherAppEntry entry,
-        int tintBase
-    ) {
-        TextView change = menuRows.addActionRow(shell, "Change app icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
-            dismissAppContextPopup();
-            changeAppIconForEntry(entry);
-        });
-        pendingMenuRows.add(new MenuRow(change, () -> {
-            dismissAppContextPopup();
-            changeAppIconForEntry(entry);
-        }, false));
-        addResetAppIconRowIfNeeded(shell, entry, tintBase);
-    }
-
-    private void addResetAppIconRowIfNeeded(
-        @NonNull LinearLayout shell,
-        @NonNull LauncherAppEntry entry,
-        int tintBase
-    ) {
-        if (configRepository == null
-            || configRepository.loadAppIconOverride(resolveForSelectionRef(entry.appRef)) == null) return;
-        TextView reset = menuRows.addActionRow(shell, "Reset app icon", R.drawable.ic_dock_menu_reset, false, tintBase, () -> {
-            dismissAppContextPopup();
-            resetAppIcon(entry);
-        });
-        pendingMenuRows.add(new MenuRow(reset, () -> {
-            dismissAppContextPopup();
-            resetAppIcon(entry);
-        }, false));
-    }
-
     /**
      * The untreated artwork for an entry, from the entry itself when it carries bespoke artwork and
      * otherwise from the bounded store. Null when the app has none — the sites that test for that
@@ -6653,17 +6817,6 @@ public final class SuggestionBarView extends GridLayout
         if (entry == null) return null;
         if (entry.icon != null) return entry.icon;
         return LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry);
-    }
-
-    /** A fresh copy of the app icon for the menu header so we don't disturb the row icon's bounds. */
-    @Nullable
-    private Drawable resolveMenuHeaderIcon(@NonNull LauncherAppEntry entry) {
-        Drawable base = artworkOrNull(entry);
-        if (base == null) {
-            return null;
-        }
-        Drawable.ConstantState state = base.getConstantState();
-        return state != null ? state.newDrawable().mutate() : base;
     }
 
     /**
@@ -7045,7 +7198,6 @@ public final class SuggestionBarView extends GridLayout
         final int pinnedIndex;
         @Nullable final String sourceFolderId;
         @Nullable final AppRef folderEntryRef;
-        @Nullable final Runnable categoryAction;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -7054,23 +7206,11 @@ public final class SuggestionBarView extends GridLayout
             @Nullable String sourceFolderId,
             @Nullable AppRef folderEntryRef
         ) {
-            this(entry, anchor, pinnedIndex, sourceFolderId, folderEntryRef, null);
-        }
-
-        AppMenuContext(
-            @NonNull LauncherAppEntry entry,
-            @NonNull View anchor,
-            int pinnedIndex,
-            @Nullable String sourceFolderId,
-            @Nullable AppRef folderEntryRef,
-            @Nullable Runnable categoryAction
-        ) {
             this.entry = entry;
             this.anchor = anchor;
             this.pinnedIndex = pinnedIndex;
             this.sourceFolderId = sourceFolderId;
             this.folderEntryRef = folderEntryRef;
-            this.categoryAction = categoryAction;
         }
     }
 
@@ -8438,6 +8578,13 @@ public final class SuggestionBarView extends GridLayout
         indicator.setVerticalForm(vertical);
         indicator.setGlassInk(glassBackdrop, glassInk);
         indicator.setAccentColor(resolvePageIndicatorAccentColor());
+        if (!azPages && railCarriesMostUsed()) {
+            // The rail's two pages are the pins and the most-used apps after them in one column:
+            // the same two ticks a row shows, the second warm, lit by the scroll, not a page turn.
+            indicator.setPages(2, railScrollPagePosition(), 1);
+            indicator.setVisibility(VISIBLE);
+            return;
+        }
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
         float position = azPages ? getAzVisualPagePosition()
@@ -8446,6 +8593,35 @@ public final class SuggestionBarView extends GridLayout
         // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
         // gained a page would otherwise grow by it and shove the terminal.
         indicator.setVisibility(overflow ? VISIBLE : INVISIBLE);
+    }
+
+    /** A rail's scroll moved its column, so the ticks move with it. */
+    @Override
+    public void onRailScrolled() {
+        if (vertical) publishPageIndicator();
+    }
+
+    /**
+     * Whether the rail's column holds its pins with the most-used apps after them, as last
+     * rendered. Read off the column rather than resolved afresh: the ticks describe what is drawn,
+     * and a resolve while the catalogue reloads answers no apps for a column still showing five.
+     */
+    private boolean railCarriesMostUsed() {
+        return vertical && railMostUsedSlots > 0;
+    }
+
+    /**
+     * Where the rail's scroll stands between its two pages: 0 at the top of the pins, 1 with the
+     * column scrolled to its end, where the most-used apps are; 0 while the column fits.
+     */
+    private float railScrollPagePosition() {
+        ViewParent parent = getParent();
+        if (!(parent instanceof View)) return 0f;
+        View host = (View) parent;
+        int inside = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+        int range = getHeight() - inside;
+        if (range <= 0) return 0f;
+        return Math.max(0f, Math.min(1f, host.getScrollY() / (float) range));
     }
 
     /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */
@@ -9145,36 +9321,18 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * Slots one page holds. Lying down that is the user's own icons-per-page; standing up the
-     * slots are a fixed pitch, so it is however many of them the column's length holds.
+     * Slots one page holds. Lying down that is the user's own icons-per-page; standing up it is
+     * every pin, in one column its scrolling host shows as much of as its band holds
+     * ({@code DockLayoutPolicy.railFit}).
      *
-     * <p>A rail used to answer "every pinned item", which made it one page as tall as its content
-     * however short the column was: the run past the bottom of the canvas was clipped away and the
-     * last icons were simply unreachable. It pages now, the way the row it is has always paged.
+     * <p>A rail paged by its own length for a while, which a column inside a scroll cannot read
+     * right: its box is never shorter than what it holds, so a band that shrank under it (the
+     * keyboard coming up, Floating's taller dock) kept the old count and ran its last slot on
+     * under the dock. One column scrolled by its host has no length to go stale.
      */
     int computePinnedItemsPerPage() {
-        if (vertical)
-            return DockPagingModel.railItemsPerPage(railUsableLengthPx(), railSlotLengthPx());
+        if (vertical) return Math.max(1, pinnedItemCount());
         return DockPagingModel.pinnedItemsPerPage(pinnedRowAppSlots());
-    }
-
-    /**
-     * The length the rail's slots are laid along: the bar's own box, which is its host's minus the
-     * padding the host keeps. Falls back to the host while the bar is between a re-parent and its
-     * first layout, so the first render of a moved rail pages by the column it is about to fill
-     * rather than by nothing.
-     */
-    private int railUsableLengthPx() {
-        int length = getHeight();
-        if (length <= 0) length = getMeasuredHeight();
-        if (length <= 0) {
-            ViewParent parent = getParent();
-            if (parent instanceof View) {
-                View host = (View) parent;
-                length = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
-            }
-        }
-        return Math.max(0, length);
     }
 
     /** Pages occupied by the user's persisted pinned items (excludes the dynamic most-used page). */
@@ -9193,32 +9351,51 @@ public final class SuggestionBarView extends GridLayout
 
     private int getPinnedPagesCount() {
         return DockPagingModel.pinnedPageCount(pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedTrailingPage());
     }
 
     /**
      * The optional dynamic page is shown only when the toggle is on AND there is at least one
      * most-used candidate to fill it. Must NOT call {@link #getPinnedPagesCount()} (recursion).
+     * The same answer standing up: a rail carries the page too, at the end of its column
+     * ({@link #railMostUsedEntries}).
      */
     private boolean hasMostUsedDynamicPage() {
-        // A rail pages by the column since P6, exactly like a row: the trailing page is as
-        // reachable there as anywhere else.
         return mostUsedPageEnabled && !resolveMostUsedPageEntries().isEmpty();
+    }
+
+    /**
+     * Whether the most-used apps are a page of their own after the pins, as they are lying down.
+     * A rail scrolls along the axis a page would turn on, so it stays one page and stands them
+     * after its last pin instead.
+     */
+    private boolean hasMostUsedTrailingPage() {
+        return !vertical && hasMostUsedDynamicPage();
+    }
+
+    /** The most-used apps a rail stands after its last pin; none lying down or with the page off. */
+    @NonNull
+    private List<LauncherAppEntry> railMostUsedEntries() {
+        return vertical ? resolveMostUsedPageEntries() : Collections.emptyList();
     }
 
     /** The dynamic page is always the trailing page, right after the real pinned pages. */
     private boolean isMostUsedDynamicPage(int pageIndex) {
         return DockPagingModel.isMostUsedDynamicPage(pageIndex, pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedTrailingPage());
     }
 
     /** Page index of the dynamic most-used page, or -1 when it isn't shown. */
     public int getPinnedDynamicPageIndex() {
         return DockPagingModel.dynamicPageIndex(pinnedItemCount(),
-            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedDynamicPage());
+            vertical ? computePinnedItemsPerPage() : pinnedRowAppSlots(), hasMostUsedTrailingPage());
     }
 
-    /** Top most-used apps (excluding currently pinned), filling one dock page. Cached until dirty. */
+    /**
+     * Top most-used apps (excluding currently pinned), filling one page of the row lying down.
+     * Standing up that is still the row's page, not the rail's every-pin column, so the rail
+     * carries the same few apps the row's trailing page would. Cached until dirty.
+     */
     @NonNull
     private List<LauncherAppEntry> resolveMostUsedPageEntries() {
         if (!mostUsedPageEnabled) return java.util.Collections.emptyList();
@@ -9242,7 +9419,7 @@ public final class SuggestionBarView extends GridLayout
                 if (!pinnedIds.contains(entry.appRef.stableId())) candidates.add(entry);
             }
             List<LauncherAppEntry> ranked = getUsageStatsStore().rankForAz(candidates);
-            int limit = computePinnedItemsPerPage();
+            int limit = DockPagingModel.pinnedItemsPerPage(pinnedRowAppSlots());
             for (int i = 0; i < ranked.size() && result.size() < limit; i++) {
                 result.add(ranked.get(i));
             }

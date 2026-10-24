@@ -403,6 +403,35 @@ public class ClockWidgetTest {
     }
 
     /**
+     * The period stands over the seconds, as in the expanded status bar: the column is as wide as
+     * the seconds alone, so a 12-hour period costs the face no width, and a 12-hour clock without
+     * seconds keeps its period.
+     */
+    @Test public void thePeriodStacksOverTheSecondsInsteadOfBesideThem() {
+        for (ClockFace face : new ClockFace[] {ClockFace.SLAB, ClockFace.MINIMAL, ClockFace.LED}) {
+            Bundle config = new Bundle();
+            config.putString(ClockWidgetSettings.KEY_FACE, face.key);
+            config.putString(ClockWidgetSettings.KEY_SECONDS, "on");
+            config.putString(ClockWidgetSettings.KEY_24_HOUR, "off");
+            BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
+            ClockWidgetView view = laidOut(services, BuiltinWidgetSpan.FOUR_BY_TWO, 376, 192, config);
+            services.destroy();
+            ClockFaceView faceView = view.faceView();
+            assertNotNull(face + ": face view", faceView);
+            ClockFaceRenderer renderer = faceView.renderer();
+            assertNotNull(face + ": renderer", renderer);
+            float budgetW = faceView.getWidth(), budgetH = faceView.getHeight();
+            renderer.setSeconds(true);
+            renderer.setPeriodShown(true);
+            float[] with = renderer.fitPlan(budgetW, budgetH, false);
+            renderer.setPeriodShown(false);
+            float[] without = renderer.fitPlan(budgetW, budgetH, false);
+            assertEquals(face + ": the period adds no width to the column", without[2], with[2],
+                0.5f);
+        }
+    }
+
+    /**
      * The date takes the longest of its forms that fits its line, never cut (emulator, build
      * 7dbf41b90, font 2.0: "Wed, Oct…"); at every span, size and font scale.
      */

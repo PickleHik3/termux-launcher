@@ -3,12 +3,19 @@ package com.termux.app.launcher.widget.builtin;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import android.os.Bundle;
+
+import com.termux.app.launcher.widget.LauncherWidgetRecord;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 /**
- * The Glass switch every built-in widget's settings carry, per widget: off by default, the solid
- * card; on, the widget wears the Look's glass — Base's blur, opacity, tint, grain, rim and Fancier
- * Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
+ * The Glass switch every built-in widget's settings carry, per widget: Page by default, which
+ * follows "Widgets on glass" (on unless switched off); off is the solid card; on, the widget
+ * wears the Look's glass — Base's blur, opacity, tint, grain, rim and Fancier Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
  * ({@code PaneGlass} over {@code LookGlassStyle}). A detached terminal, keyboard, status bar or
  * dock never reaches it. Where the glass cannot be shown or the system asks for contrast
  * ({@link #solidFallback}) the widget wears its solid card.
@@ -31,6 +38,58 @@ public final class BuiltinWidgetGlass {
 
     private BuiltinWidgetGlass() {}
 
+    /**
+     * The built-in widgets among {@code records} whose own Glass choice is On or Off, each put
+     * back to following the page (the choice left out, as Page is stored), so the Home card's
+     * "Glass widgets" switch shows on every widget. Bare stays: it is a look of its own, not a
+     * glass setting. What each widget held lands in {@code cleared}, by its id, for an Undo.
+     *
+     * @return the records to write, changed
+     */
+    @NonNull
+    public static List<LauncherWidgetRecord> followPage(
+            @NonNull Collection<LauncherWidgetRecord> records,
+            @NonNull Map<Integer, String> cleared) {
+        List<LauncherWidgetRecord> out = new ArrayList<>();
+        for (LauncherWidgetRecord record : records) {
+            if (!record.isBuiltin())
+                continue;
+            Bundle config = record.sizeOptions();
+            String choice = config.getString(CONFIG_KEY);
+            if (!ON.equals(choice) && !OFF.equals(choice))
+                continue;
+            config.remove(CONFIG_KEY);
+            cleared.put(record.appWidgetId, choice);
+            out.add(record.withSizeOptions(config));
+        }
+        return out;
+    }
+
+    /**
+     * {@link #followPage}'s Undo: each widget named in {@code choices} that still follows the
+     * page gets its own choice back. A widget given a choice since is left with it.
+     *
+     * @return the records to write, changed
+     */
+    @NonNull
+    public static List<LauncherWidgetRecord> withChoices(
+            @NonNull Collection<LauncherWidgetRecord> records,
+            @NonNull Map<Integer, String> choices) {
+        List<LauncherWidgetRecord> out = new ArrayList<>();
+        for (LauncherWidgetRecord record : records) {
+            String choice = choices.get(record.appWidgetId);
+            if (choice == null || !record.isBuiltin())
+                continue;
+            Bundle config = record.sizeOptions();
+            String now = config.getString(CONFIG_KEY);
+            if (now != null && !now.isEmpty())
+                continue;
+            config.putString(CONFIG_KEY, choice);
+            out.add(record.withSizeOptions(config));
+        }
+        return out;
+    }
+
     /** Whether the stored choice is Bare. */
     public static boolean choseBare(@Nullable String stored) { return BARE.equals(stored); }
 
@@ -48,8 +107,8 @@ public final class BuiltinWidgetGlass {
 
     /**
      * Whether a widget wears glass: its own choice when it made one ("on" or "off"), else the
-     * page's "Widgets on glass" switch. Stored before the switch existed, an absent value was
-     * the default off; it now follows the page, and a stored "on" stays an explicit on.
+     * page's "Widgets on glass" switch. An absent value follows the page, which is on
+     * unless the user switched it off; a stored "on", "off" or "bare" stays an explicit choice.
      */
     public static boolean resolve(@Nullable String stored, boolean pageOn) {
         if (ON.equals(stored)) return true;

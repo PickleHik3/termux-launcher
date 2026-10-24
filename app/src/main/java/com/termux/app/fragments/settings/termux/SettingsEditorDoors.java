@@ -14,11 +14,13 @@ import androidx.preference.PreferenceFragmentCompat;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.SettingsMotion;
 import com.termux.app.fragments.settings.SettingsTransitions;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.surfaces.AppearanceEditorEntry;
+import com.termux.app.surfaces.EditorCard;
 
 /**
  * The Settings rows that open an editor over the live launcher rather than a page of rows: the
- * Layout rows at the top of Home and of Terminal, Look's Appearance row and Keyboard's. The launcher
+ * root's Appearance row, the Appearance rows at the top of Home, Terminal and Keyboard (each on its own object's card);
+ * a search hit on a row the editor holds (SettingsTree's Appearance door) opens it too. The launcher
  * comes forward growing out of the row that opened it (the window's scale-up from the row's
  * bounds: the container transform's equivalent across two activities), or at once under reduced
  * motion. Every one of these marks its Intent {@code EXTRA_APPEARANCE_FROM_SETTINGS}, so closing
@@ -28,15 +30,33 @@ public final class SettingsEditorDoors {
 
     private SettingsEditorDoors() {}
 
-    /** The Intent that opens the Layout editor on {@code place}, marked as coming from Settings. */
+    /**
+     * The Intent that opens the Appearance editor on {@code card} (null: at rest), marked as coming
+     * from Settings. Every Settings door into the editor is built here.
+     */
     @NonNull
-    public static Intent layoutEditorIntent(@NonNull Context context, @NonNull PaneWallPage place) {
-        Intent intent = new Intent(context, TermuxActivity.class);
-        intent.putExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR, true);
-        intent.putExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR_PLACE, place.toolName());
-        intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        return intent;
+    public static Intent editorIntent(@NonNull Context context, @Nullable EditorCard card) {
+        return AppearanceEditorEntry.intent(context, card, true);
+    }
+
+    /**
+     * The card that holds a searchable Settings row the editor owns (SettingsTree's Appearance
+     * door), by the row's key. Widgets on glass is Home's; every other row the editor holds
+     * (theme, wallpaper, colours, icons, full screen) is the Appearance card's, as is any key not
+     * listed.
+     */
+    @NonNull
+    public static EditorCard cardForSearchKey(@Nullable String key) {
+        if ("widgets_on_glass".equals(key)) return EditorCard.HOME;
+        return EditorCard.APPEARANCE;
+    }
+
+    /** Opens the editor on {@code card} (null: at rest) from {@code row} on {@code page}. */
+    public static void openEditor(@NonNull PreferenceFragmentCompat page, @NonNull Preference row,
+                                  @Nullable EditorCard card) {
+        Context context = page.getContext();
+        if (context == null) return;
+        open(page, row, editorIntent(context, card));
     }
 
     /** The Intent that opens Edit pages over Home, marked as coming from Settings. */
@@ -47,13 +67,6 @@ public final class SettingsEditorDoors {
         intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return intent;
-    }
-
-    public static void openLayoutEditor(@NonNull PreferenceFragmentCompat page, @NonNull Preference row,
-                                        @NonNull PaneWallPage place) {
-        Context context = page.getContext();
-        if (context == null) return;
-        open(page, row, layoutEditorIntent(context, place));
     }
 
     /** Starts {@code intent} from {@code row} on {@code page}, growing out of the row. */

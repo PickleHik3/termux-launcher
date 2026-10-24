@@ -99,7 +99,6 @@ public class DockSurfaceSpecLayoutTest {
         assertFalse(DockSurfaceSpec.GLASS_TRAY.beads);
         assertFalse(DockSurfaceSpec.PLAIN.beads);
         assertTrue(DockSurfaceSpec.LENS_BEADS.wearsGlassFeatures());
-        assertTrue(DockSurfaceSpec.LENS_BEADS.iconReflections);
         assertTrue(DockSurfaceSpec.LENS_BEADS.contactShadow);
         assertTrue("a bead's band is tighter than the tray's",
             DockSurfaceSpec.LENS_BEADS.softRimDp < DockSurfaceSpec.GLASS_TRAY.softRimDp);
@@ -111,38 +110,27 @@ public class DockSurfaceSpecLayoutTest {
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.PROMPT_LINE));
     }
 
-    /**
-     * The Taskbar is the Drawer tile now (#97), a toggle beside any design: a stray stored one
-     * draws the tray, and no spec holds the reflection under the tray's but the Wall strip's.
-     */
+    /** The Taskbar is the Drawer tile now (#97), a toggle beside any design: a stray stored one draws the tray. */
     @Test
     public void aStrayTaskbarDrawsTheTray() {
         assertSame(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.forStyle(DockStyle.TASKBAR));
-        for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN,
-                DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.LENS_BEADS})
-            assertEquals(other.name, 1f, other.reflectionScale, 0f);
     }
 
     @Test
-    public void theWallStripIsTheTraysGlassWithTheRowAndALowerBevelReflection() {
+    public void theWallStripIsTheTraysGlassWithTheRow() {
         assertSame(DockSurfaceSpec.WALL_STRIP, DockSurfaceSpec.forStyle(DockStyle.WALL_STRIP));
         DockSurfaceSpec wall = DockSurfaceSpec.WALL_STRIP;
         DockSurfaceSpec tray = DockSurfaceSpec.GLASS_TRAY;
         assertTrue(wall.wallStrip);
-        assertTrue("the tiles are never reflected: the lower bevel alone",
-            wall.reflectsLowerBevelOnly());
         for (DockSurfaceSpec other : new DockSurfaceSpec[] {DockSurfaceSpec.PLAIN, tray,
                 DockSurfaceSpec.LENS_BEADS}) {
             assertFalse(other.name, other.wallStrip);
-            assertFalse(other.name, other.reflectsLowerBevelOnly());
         }
         assertFalse("one slab, never beads", wall.beads);
         assertEquals(tray.dashesAboveSlab, wall.dashesAboveSlab);
         assertEquals(tray.softRimDp, wall.softRimDp, 0f);
         assertEquals(tray.shelf, wall.shelf, 0f);
-        assertTrue(wall.iconReflections);
         assertTrue(wall.contactShadow);
-        assertTrue(wall.reflectionScale > 0f && wall.reflectionScale <= 1f);
     }
 
     @Test

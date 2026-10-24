@@ -1358,10 +1358,11 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Widgets on glass: whether the built-in widgets wear the Look's glass (Base's values).
-         * A widget's own Glass choice (on or off) still overrides it. Off by default.
+         * A widget's own Glass choice (on or off) still overrides it. On by default, for existing
+         * installs too: the key is deliberately not pinned in adoptShippedSurfaceDefaults.
          */
         public static final String KEY_WIDGETS_ON_GLASS = "widgets_on_glass";
-        public static final boolean DEFAULT_VALUE_WIDGETS_ON_GLASS = false;
+        public static final boolean DEFAULT_VALUE_WIDGETS_ON_GLASS = true;
 
         /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.

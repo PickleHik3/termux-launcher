@@ -39,7 +39,7 @@ public class LauncherDrawerViewTypePreferenceTest {
         PreferenceManager manager = new PreferenceManager(app);
         PreferenceScreen root = manager.inflateFromResource(app, R.xml.root_preferences, null);
         Preference launcher = root.findPreference("dock_drawer");
-        assertEquals("Dock & drawer", launcher.getTitle().toString());
+        assertEquals("Apps & dock", launcher.getTitle().toString());
         assertEquals(LauncherPreferencesFragment.class.getName(), launcher.getFragment());
 
         manager = new PreferenceManager(app);

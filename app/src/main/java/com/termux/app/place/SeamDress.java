@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.place.SeamTravel.DockPlan;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.Objects;
 
@@ -46,28 +47,41 @@ public final class SeamDress {
     }
 
     /**
-     * What the stack wears on one half: the half's Style, Corners and Margin, and the sizes its
-     * layout gives the dock and the keyboard. Two halves that agree on all of it dress the stack
-     * alike, and a slide between them changes nothing the stack shows.
+     * What the stack wears on one half: the half's Style, Corners and Margin, the sizes its
+     * layout gives the dock and the keyboard, and the dock's and keyboard's look values there
+     * (ADR 0013). Two halves that agree on all of it dress the stack alike, and a slide between
+     * them changes nothing the stack shows.
      */
     public static final class StackDress {
         @NonNull public final WallHalfShape shape;
         public final float dockHeightScale;
         public final float keyboardHeightScale;
         public final int keyboardChinDp;
+        /** The half's look; only its stack part (the dock and the keyboard) is compared. */
+        @NonNull public final HalfLook look;
 
         private StackDress(@NonNull WallHalfShape shape, float dockHeightScale,
-                           float keyboardHeightScale, int keyboardChinDp) {
+                           float keyboardHeightScale, int keyboardChinDp,
+                           @NonNull HalfLook look) {
             this.shape = shape;
             this.dockHeightScale = dockHeightScale;
             this.keyboardHeightScale = keyboardHeightScale;
             this.keyboardChinDp = keyboardChinDp;
+            this.look = look;
         }
 
         @NonNull
         public static StackDress of(@NonNull WallHalfShape shape, float dockHeightScale,
                                     float keyboardHeightScale, int keyboardChinDp) {
-            return new StackDress(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp);
+            return of(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp, HalfLook.NONE);
+        }
+
+        @NonNull
+        public static StackDress of(@NonNull WallHalfShape shape, float dockHeightScale,
+                                    float keyboardHeightScale, int keyboardChinDp,
+                                    @NonNull HalfLook look) {
+            return new StackDress(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp,
+                look);
         }
 
         @Override
@@ -78,12 +92,14 @@ public final class SeamDress {
             return shape.equals(that.shape)
                 && Float.compare(dockHeightScale, that.dockHeightScale) == 0
                 && Float.compare(keyboardHeightScale, that.keyboardHeightScale) == 0
-                && keyboardChinDp == that.keyboardChinDp;
+                && keyboardChinDp == that.keyboardChinDp
+                && look.stackEquals(that.look);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp);
+            return Objects.hash(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp,
+                look.stackHashCode());
         }
 
         @NonNull
@@ -124,6 +140,25 @@ public final class SeamDress {
             case FRAME:
             default: return committed == PaneWallPage.WIDGETS;
         }
+    }
+
+    /**
+     * The half of the wall whose look values {@code surface} wears on this frame (ADR 0013): the
+     * half whose dress it wears ({@link #wearsHome}). The stack's look so changes with its rows,
+     * where none of it shows; the status bar wears the Workspace's through a slide and its own
+     * half's at rest; the frame its committed half's.
+     */
+    @NonNull
+    public static WallHalf lookHalf(@NonNull Surface surface, @NonNull PaneWallPage committed,
+                                    @NonNull PaneWallPage stackPage, boolean seamTravel) {
+        return wearsHome(surface, committed, stackPage, seamTravel) ? WallHalf.HOME
+            : WallHalf.WORKSPACE;
+    }
+
+    /** The half of the wall a page stands on, for its look values. */
+    @NonNull
+    public static WallHalf halfOf(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS ? WallHalf.HOME : WallHalf.WORKSPACE;
     }
 
     /**

@@ -49,7 +49,7 @@ Besides the actions, the palette has three sections of its own:
 
 On Home the palette leads with a **Home** section: **Open terminal here** (a
 [Home float](Panes_Windows_And_Sessions.md#home-floats) on this page), **Go to Workspace**, **New
-window**, **Minimise all floats**, **Restore floats**, **Add widget**, **Wallpaper**, **Layout**,
+window**, **Minimise all floats**, **Restore floats**, **Add widget**, **Wallpaper**,
 **Appearance** and **Settings**. Apps, **Linux apps** and contacts follow, and **Windows** lists the
 current session's windows and Home floats by name: a window takes you to it in the Workspace, a float
 goes to its Home page and comes back to the front. Actions that work on a terminal pane (its text,
@@ -201,11 +201,11 @@ not.
 | `appearance.set_wallpaper` | Set wallpaper | | |
 | `appearance.toggle_wallpaper` | Toggle wallpaper | | |
 | `appearance.toggle_cursor_trail` | Toggle cursor trail | | |
-| `appearance.surface_editor` | Surface editor | | |
+| `appearance.surface_editor` | Appearance | | |
 | `fonts.pick` | Terminal fonts | | |
 | `fonts.install` | Install terminal font | `id`: a family id such as `maple-mono` (required); `nerd_icons`: `true` (default) or `false`; `ligatures`: `never`, `cursor` (default), `always`; `weight`: 0 to 1000, 0 keeps the family default | |
 
-The old id `appearance.glass_lab` still runs **Surface editor**.
+The old id `appearance.glass_lab` still runs **Appearance**.
 
 ### App
 
@@ -214,7 +214,7 @@ The old id `appearance.glass_lab` still runs **Surface editor**.
 | `app.command_palette` | Command palette | | `Ctrl+Alt+Shift+P`, `Ctrl+Alt+Space` then `P` |
 | `app.open_settings` | Open settings | | |
 | `app.open_help` | Help | | |
-| `app.open_look_and_feel` | Look and feel settings (opens **Settings → Look**) | | |
+| `app.open_look_and_feel` | Look and feel settings (the theme, wallpaper and icon settings as a list) | | |
 | `app.open_apps_bar` | Apps bar settings | | |
 | `app.key_inspector` | Key inspector | | |
 | `app.open_app_drawer` | App drawer | | |

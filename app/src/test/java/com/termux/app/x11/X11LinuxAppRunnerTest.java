@@ -192,6 +192,87 @@ public class X11LinuxAppRunnerTest {
         assertTrue(X11LinuxAppRunner.installedEnv(X11GpuProbe.evaluate(emulator)).isEmpty());
     }
 
+    private static X11GpuProbe.Inputs adrenoWithTurnipAndVirgl() {
+        X11GpuProbe.Inputs adreno = new X11GpuProbe.Inputs();
+        adreno.kgsl = true;
+        adreno.mesaDri = true;
+        adreno.virglServer = true;
+        adreno.icdFiles = Collections.singletonList("freedreno_icd.aarch64.json");
+        return adreno;
+    }
+
+    @Test public void aPickedInstalledProfileIsUsedOverTheRanking() {
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(adrenoWithTurnipAndVirgl());
+        X11LinuxAppRunner.GpuChoice choice = X11LinuxAppRunner.installedEnv(gpu, "virgl", false);
+        assertEquals(X11GpuProbe.Profile.VIRGL, choice.profile);
+        assertTrue(choice.env.contains("GALLIUM_DRIVER=virpipe"));
+        assertFalse(choice.fellBack);
+
+        assertEquals("virgl's server comes with the pick", "virgl_test_server_android", choice.server);
+
+        X11LinuxAppRunner.GpuChoice auto = X11LinuxAppRunner.installedEnv(gpu, X11GpuProfileStore.AUTO, false);
+        assertEquals("auto keeps the ranking", X11GpuProbe.Profile.TURNIP_ZINK, auto.profile);
+        assertEquals(null, auto.server);
+    }
+
+    @Test public void aProfilesServerIsStartedOnceAndDetachedBeforeTheApp() {
+        assertEquals("", X11LinuxAppRunner.gpuServerBlock(null));
+        assertEquals("if ! pgrep -f 'virgl_test_server_android' >/dev/null 2>&1; then\n"
+            + "(virgl_test_server_android --angle-gl >/dev/null 2>&1 &)\n"
+            + "sleep 1\n"
+            + "fi\n", X11LinuxAppRunner.gpuServerBlock("virgl_test_server_android --angle-gl"));
+    }
+
+    @Test public void aPickThatIsNotInstalledDrawsInSoftwareAndSaysSo() {
+        X11GpuProbe.Inputs adreno = adrenoWithTurnipAndVirgl();
+        adreno.virglServer = false;
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(adreno);
+        X11LinuxAppRunner.GpuChoice choice = X11LinuxAppRunner.installedEnv(gpu, "virgl", false);
+        assertEquals(X11GpuProbe.Profile.SOFTWARE, choice.profile);
+        assertTrue(choice.fellBack);
+        assertEquals(gpu.software().env, choice.env);
+
+        X11LinuxAppRunner.GpuChoice notForThisGpu = X11LinuxAppRunner.installedEnv(gpu, "virgl-angle", false);
+        assertTrue("a profile this GPU has no row for falls back too", notForThisGpu.fellBack);
+    }
+
+    @Test public void anAppsSoftwareSwitchWinsOverThePick() {
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(adrenoWithTurnipAndVirgl());
+        X11LinuxAppRunner.GpuChoice choice = X11LinuxAppRunner.installedEnv(gpu, "virgl", true);
+        assertEquals(X11GpuProbe.Profile.SOFTWARE, choice.profile);
+        assertFalse(choice.fellBack);
+        assertTrue(choice.env.contains("GALLIUM_DRIVER=llvmpipe"));
+        assertFalse("no virgl driver reaches the app", X11LinuxAppRunner.usesVirgl(choice.env));
+    }
+
+    @Test public void onAKnownFreezeGpuAutoDrawsInSoftwareEvenWithVirglInstalled() {
+        X11GpuProbe.Inputs mali = new X11GpuProbe.Inputs();
+        mali.eglVendor = "mali";
+        mali.glRenderer = "Mali-G52 MC2";
+        mali.virglServer = true;
+        mali.angle = true;
+        mali.mesaDri = true;
+        X11GpuProbe.Result gpu = X11GpuProbe.evaluate(mali);
+
+        X11LinuxAppRunner.GpuChoice auto = X11LinuxAppRunner.installedEnv(gpu, X11GpuProfileStore.AUTO, false);
+        assertEquals(X11GpuProbe.Profile.SOFTWARE, auto.profile);
+        assertTrue(auto.env.contains("LIBGL_ALWAYS_SOFTWARE=1"));
+        assertFalse(X11LinuxAppRunner.usesVirgl(auto.env));
+        assertTrue("the exports for a shell are software's too", gpu.toEnv().contains("LIBGL_ALWAYS_SOFTWARE=1"));
+
+        X11LinuxAppRunner.GpuChoice chosen = X11LinuxAppRunner.installedEnv(gpu, "virgl-angle", false);
+        assertEquals("the user may still choose it, warned", X11GpuProbe.Profile.VIRGL_ANGLE, chosen.profile);
+    }
+
+    @Test public void anElectronRetryUnderVirglAlsoDisablesTheGpu() {
+        String virgl = X11LinuxAppRunner.script(app("code-oss"), ":1",
+            Arrays.asList("GALLIUM_DRIVER=virpipe"), true);
+        assertTrue(virgl, virgl.endsWith("exec code-oss --no-sandbox --disable-gpu\n"));
+        String software = X11LinuxAppRunner.script(app("code-oss"), ":1",
+            Arrays.asList("GALLIUM_DRIVER=llvmpipe"), true);
+        assertTrue(software, software.endsWith("exec code-oss --no-sandbox\n"));
+    }
+
     // --- whole desktop sessions ---------------------------------------------------------------
 
     @Test public void aDesktopGetsTheSessionEnvironmentAnAppDoesNot() {

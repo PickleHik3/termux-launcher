@@ -211,12 +211,10 @@ public class TerminalPaneController {
         default void showHelpOverlay() {}
         /** Those controls are going away again, however the user asked for that. */
         default void onPaneControlsDismissed() {}
-        /** The pane corner's old Appearance door; no tab carries it now, the picker leads there. */
+        /** The lone pane's corner asked for "Appearance": the editor on the terminal's card. */
         default void openSurfaceEditor() {}
         /** The pane corner's old Layout door; no tab carries it now, the picker leads there. */
         default void openLayoutEditor() {}
-        /** The lone pane's corner asked for "Appearance": the in-app wallpaper picker. */
-        default void openWallpaperPicker() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
@@ -516,6 +514,8 @@ public class TerminalPaneController {
     private final int[] mCursorViewLocationScratch = new int[2];
     private final int[] mCursorOverlayLocationScratch = new int[2];
     private final float[] mCursorBentScratch = new float[2];
+    /** Scratch for the frame's screen ({@link PaneContentFrame#retroScreen}). */
+    private final float[] mCursorScreenScratch = new float[4];
     /** The text sizing block the cursor stands in: row, column, rows, columns. */
     private final int[] mCursorBlockScratch = new int[4];
 
@@ -587,22 +587,24 @@ public class TerminalPaneController {
             frame.getLocationOnScreen(mCursorViewLocationScratch);
             float frameX = mCursorViewLocationScratch[0] - mCursorOverlayLocationScratch[0];
             float frameY = mCursorViewLocationScratch[1] - mCursorOverlayLocationScratch[1];
+            // The trail stays on the screen the effect is drawn on: inside the bezel while one is
+            // worn, the whole frame otherwise.
+            frame.retroScreen(mCursorScreenScratch);
+            float[] screen = mCursorScreenScratch;
             out.hasClip = true;
-            out.clipLeft = frameX;
-            out.clipTop = frameY;
-            out.clipRight = frameX + frame.getWidth();
-            out.clipBottom = frameY + frame.getHeight();
+            out.clipLeft = frameX + screen[0];
+            out.clipTop = frameY + screen[1];
+            out.clipRight = frameX + screen[2];
+            out.clipBottom = frameY + screen[3];
             // A bent CRT card shows the cursor somewhere else than it sits; aim the trail there.
             PaneRetroStyle retro = frame.retroStyle();
             if (retro.usesCrt()) {
-                float w = frame.getWidth();
-                float h = frame.getHeight();
-                PaneRetroEffect.displayedPoint(retro, w, h, out.left - frameX, out.top - frameY,
-                    mCursorBentScratch);
+                PaneRetroEffect.displayedPoint(retro, screen[0], screen[1], screen[2], screen[3],
+                    out.left - frameX, out.top - frameY, mCursorBentScratch);
                 float left = frameX + mCursorBentScratch[0];
                 float top = frameY + mCursorBentScratch[1];
-                PaneRetroEffect.displayedPoint(retro, w, h, out.right - frameX, out.bottom - frameY,
-                    mCursorBentScratch);
+                PaneRetroEffect.displayedPoint(retro, screen[0], screen[1], screen[2], screen[3],
+                    out.right - frameX, out.bottom - frameY, mCursorBentScratch);
                 out.left = left;
                 out.top = top;
                 out.right = frameX + mCursorBentScratch[0];
@@ -663,6 +665,19 @@ public class TerminalPaneController {
     private void applyEffectiveCursorTrailStyle() {
         mMotionOverlay.setCursorTrailStyle(
             CursorTrailStyle.effective(mKittyCursorTrailStyleId, mPrefCursorTrailStyleId));
+    }
+
+    /**
+     * What a pane's bezel is filled with under the terminal ({@link PaneBezel#fill}): nothing while
+     * the glass shows, the theme's surface while the terminal's glass has no opacity.
+     */
+    private int bezelFill() {
+        android.content.Context context = mHostView.getContext();
+        int surface = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(context, R.color.termux_surface_base));
+        return PaneBezel.fill(paneGlassActive(),
+            mSurfaceStyle != null ? mSurfaceStyle.paneGlassTintColor() : 0, surface);
     }
 
     /** Sets the retro effect on every terminal pane frame (not wall widget pages), now and later. */
@@ -3527,6 +3542,7 @@ public class TerminalPaneController {
                 mPaneAttention.isSet(leaf.session.getPid()), palette);
             frame.setPaneShape(radiusPx, glassShape);
             frame.setRimStrokePx(paneBorderStrokePx(glassShape, true, density));
+            frame.setBezelFill(bezelFill());
             PaneRim rim = mBorderStates.get(leaf.session);
             if (rim == null) rim = new PaneRim();
             if (rim.apply(frame, glassShape, radiusPx, border, mSurfaceStyle)) {
@@ -5470,6 +5486,7 @@ public class TerminalPaneController {
             // to wear is, so the band it fills behind the grid stops at the border's inner edge.
             frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
             frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
+            frame.setBezelFill(bezelFill());
             if (bare) {
                 PaneRim gone = mBorderStates.remove(paneSession);
                 if (gone != null) gone.clear(frame);
@@ -5728,8 +5745,8 @@ public class TerminalPaneController {
         private static final int ACTION_SETTINGS = 6;
         /** Turn automatic tiling on or off. */
         private static final int ACTION_AUTO_TILING = 7;
-        /** Open the wallpaper picker, the one door to wallpaper, Look and Layout. */
-        private static final int ACTION_WALLPAPER = 8;
+        /** Open the Appearance editor on the terminal's card. */
+        private static final int ACTION_APPEARANCE = 8;
         /** Minimal mode on or off for the terminal place; the glyph shows which. */
         private static final int ACTION_MINIMAL = 9;
 
@@ -5830,8 +5847,8 @@ public class TerminalPaneController {
 
         /**
          * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
-         * maximise or close, so it offers the one "Appearance" door instead — the wallpaper
-         * picker, which leads on to the Look and Layout editors, as every place on the wall does —
+         * maximise or close, so it offers the one "Appearance" door instead — the Appearance
+         * editor on the terminal's card, as every place on the wall opens it on its own object —
          * with minimal mode, the tiling switch, settings and help. In a split it is the three things a pane can do to itself
          * and nothing else ({@link #splitTabActions}); the editors are reached from a lone pane's
          * corner, the other places and the terminal long-press menu, not from here.
@@ -5840,7 +5857,7 @@ public class TerminalPaneController {
             List<PaneControlsView.Action> actions = new ArrayList<>(5);
             android.content.Context context = mHostView.getContext();
             if (isLonePane()) {
-                actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
+                actions.add(PaneControlsView.Action.glyph(ACTION_APPEARANCE,
                     CornerTabGlyphs.APPEARANCE,
                     context.getString(R.string.pane_controls_wallpaper_style)));
                 actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark,
@@ -6191,9 +6208,9 @@ public class TerminalPaneController {
             } else if (action == ACTION_SETTINGS) {
                 dismissControls();
                 mHost.openSettings();
-            } else if (action == ACTION_WALLPAPER) {
+            } else if (action == ACTION_APPEARANCE) {
                 dismissControls();
-                mHost.openWallpaperPicker();
+                mHost.openSurfaceEditor();
             }
         }
 

@@ -35,6 +35,10 @@ final class ClockFaceView extends View {
     static final float NUMERALS_META_SHARE = 0.28f;
     /** The gap between the numerals face's time and its seconds, as a share of the time's size. */
     private static final float NUMERALS_META_GAP = 0.12f;
+    /** The numerals' period over the seconds, as a share of the seconds' size (the bar's stack). */
+    private static final float NUMERALS_PERIOD_SHARE = 0.64f;
+    /** The clear row between the seconds and the period over them, as a share of the seconds' cap. */
+    private static final float NUMERALS_STACK_GAP = 0.3f;
 
     @NonNull private final BuiltinWidgetStyle style;
     @NonNull private final Typeface libron;
@@ -179,12 +183,13 @@ final class ClockFaceView extends View {
     /** The Libron numerals' time size that fits the box, its seconds and period beside it. */
     private float numeralsSize(float widthPx, float heightPx) {
         String time = numeralsTime();
-        String meta = numeralsMeta();
+        String ss = numeralsSeconds();
+        String period = numeralsPeriod();
         float low = 0f, high = heightPx / Math.max(0.01f, figureRatio);
-        if (numeralsWidth(time, meta, high) <= widthPx) return high;
+        if (numeralsWidth(time, ss, period, high) <= widthPx) return high;
         for (int i = 0; i < 22; i++) {
             float middle = (low + high) / 2f;
-            if (numeralsWidth(time, meta, middle) <= widthPx) low = middle;
+            if (numeralsWidth(time, ss, period, middle) <= widthPx) low = middle;
             else high = middle;
         }
         return low;
@@ -195,10 +200,27 @@ final class ClockFaceView extends View {
      * its ink where that passes its advance (Libron's serifs can), so a kept period is never
      * shaved at the box's edge.
      */
-    private float numeralsWidth(@NonNull String time, @NonNull String meta, float sizePx) {
-        if (meta.isEmpty()) return runWidth(time, sizePx);
+    private float numeralsWidth(@NonNull String time, @NonNull String ss, @NonNull String period,
+                                float sizePx) {
+        if (ss.isEmpty() && period.isEmpty()) return runWidth(time, sizePx);
         return libronMeasure.widthPx(time, sizePx) + sizePx * NUMERALS_META_GAP
-            + runWidth(meta, metaPx(sizePx));
+            + columnWidth(ss, period, metaPx(sizePx));
+    }
+
+    /** The meta column's width: the seconds, or the period over them where that is wider. */
+    private float columnWidth(@NonNull String ss, @NonNull String period, float metaPx) {
+        float width = ss.isEmpty() ? 0f : runWidth(ss, metaPx);
+        if (!period.isEmpty()) width = Math.max(width, runWidth(period, metaPx * NUMERALS_PERIOD_SHARE));
+        return width;
+    }
+
+    /** How far the stacked column rises above the baseline: the seconds, a gap, then the period. */
+    private float columnRise(@NonNull String ss, @NonNull String period, float metaPx) {
+        float rise = ss.isEmpty() ? 0f : figureRatio * metaPx;
+        if (period.isEmpty()) return rise;
+        float periodPx = metaPx * NUMERALS_PERIOD_SHARE;
+        return rise + (ss.isEmpty() ? 0f : figureRatio * metaPx * NUMERALS_STACK_GAP)
+            + figureRatio * periodPx;
     }
 
     /** A Libron run's advance, or its ink's right edge where that is further. */
@@ -218,12 +240,12 @@ final class ClockFaceView extends View {
         return ClockWidgetFormats.hoursMinutes(now.toLocalTime(), is24);
     }
 
-    @NonNull private String numeralsMeta() {
-        LocalTime local = now.toLocalTime();
-        String period = keptPeriod ? ClockWidgetFormats.amPm(local, is24) : "";
-        String ss = keptSeconds ? ClockWidgetFormats.seconds(local) : "";
-        if (ss.isEmpty()) return period;
-        return period.isEmpty() ? ss : ss + " " + period;
+    @NonNull private String numeralsSeconds() {
+        return keptSeconds ? ClockWidgetFormats.seconds(now.toLocalTime()) : "";
+    }
+
+    @NonNull private String numeralsPeriod() {
+        return keptPeriod ? ClockWidgetFormats.amPm(now.toLocalTime(), is24) : "";
     }
 
     /**
@@ -259,7 +281,10 @@ final class ClockFaceView extends View {
         float with = digitsScale(widthPx, heightPx);
         if (with < bare * META_KEEP) return false;
         if (face == ClockFace.NUMERALS) {
-            return numeralsWidth(numeralsTime(), numeralsMeta(), with) <= widthPx + 0.5f;
+            String ss = numeralsSeconds();
+            String period = numeralsPeriod();
+            return numeralsWidth(numeralsTime(), ss, period, with) <= widthPx + 0.5f
+                && columnRise(ss, period, metaPx(with)) <= figureRatio * with + 0.5f;
         }
         return renderer == null || renderer.fittedWidthPx(widthPx, heightPx) <= widthPx + 0.5f;
     }
@@ -310,9 +335,10 @@ final class ClockFaceView extends View {
 
     private void drawNumerals(@NonNull Canvas canvas, int width, int height) {
         String time = numeralsTime();
-        String meta = numeralsMeta();
+        String ss = numeralsSeconds();
+        String period = numeralsPeriod();
         // Sized again only when the box or the text's run changes ("9:59" to "10:00").
-        String run0 = time + '|' + meta;
+        String run0 = time + '|' + ss + '|' + period;
         if (width != laidOutWidth || height != laidOutHeight || !run0.equals(laidOutRun)) {
             numeralsTextPx = numeralsSize(width, height);
             numeralsMetaPx = metaPx(numeralsTextPx);
@@ -321,7 +347,7 @@ final class ClockFaceView extends View {
             laidOutRun = run0;
         }
         float size = numeralsTextPx;
-        float run = numeralsWidth(time, meta, size);
+        float run = numeralsWidth(time, ss, period, size);
         float x = oneByOne ? Math.max(0f, (width - run) / 2f) : 0f;
         float baseline = height / 2f + figureRatio * size / 2f;
         paint.setTypeface(libron);
@@ -331,11 +357,18 @@ final class ClockFaceView extends View {
         paint.setColor(ink);
         paint.setTextAlign(Paint.Align.LEFT);
         canvas.drawText(time, x, baseline, paint);
-        if (meta.isEmpty()) return;
+        if (ss.isEmpty() && period.isEmpty()) return;
         float metaX = x + paint.measureText(time) + size * NUMERALS_META_GAP;
         paint.setTextSize(numeralsMetaPx);
         paint.setColor(softInk);
-        canvas.drawText(meta, metaX, baseline, paint);
+        if (!ss.isEmpty()) canvas.drawText(ss, metaX, baseline, paint);
+        if (period.isEmpty()) return;
+        // The period stands over the seconds, or on their row when they are shed.
+        float periodPx = numeralsMetaPx * NUMERALS_PERIOD_SHARE;
+        float periodBaseline = ss.isEmpty() ? baseline
+            : baseline - figureRatio * numeralsMetaPx * (1f + NUMERALS_STACK_GAP);
+        paint.setTextSize(periodPx);
+        canvas.drawText(period, metaX, periodBaseline, paint);
     }
 
     private void drawDial(@NonNull Canvas canvas, int width, int height) {
@@ -412,7 +445,7 @@ final class ClockFaceView extends View {
     @VisibleForTesting float[] numeralsSizesPx() {
         shedFor(getWidth(), getHeight());
         float size = numeralsSize(getWidth(), getHeight());
-        return new float[] {size, metaPx(size), numeralsWidth(numeralsTime(), numeralsMeta(), size),
+        return new float[] {size, metaPx(size), numeralsWidth(numeralsTime(), numeralsSeconds(), numeralsPeriod(), size),
             figureRatio * size};
     }
 

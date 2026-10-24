@@ -6,6 +6,7 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.view.DragEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -32,6 +33,11 @@ import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
 public final class WidgetPaneController implements LauncherWidgetHostController.Listener {
     public interface Host {
         boolean reducedMotion();
+        /**
+         * Whether a point on screen is over the dock: an app dragged in from the drawer and let go
+         * there is not put on the page under it.
+         */
+        default boolean isOverDock(float rawX, float rawY) { return false; }
         /** True while the surface holding the widget grid is on screen. */
         boolean isWidgetSurfaceShowing();
         /**
@@ -163,6 +169,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             }
         });
         pane.grid().setAppIconFactory(appIcons);
+        // An app dragged in from the drawer reaches Home as a platform drag the pane follows.
+        pane.setOnDragListener(appDropListener);
         catalog.setBuiltinSource(builtins);
         pane.grid().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> onWallLayout());
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
@@ -365,6 +373,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     public void onStop() {
         dismissFolderPopup();
         abortCarry(true);
+        abortAppDrop(true);
         catalog.cancel(); pane.picker().closeImmediate();
     }
     public void onPackageOrProfileChanged() {
@@ -498,6 +507,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         builtins.destroy();
         appIcons.destroy();
         abortCarry(false);
+        abortAppDrop(false);
+        pane.setOnDragListener(null);
         pane.removeCallbacks(edgeFlip);
         widgets.setListener(null); catalog.cancel();
     }
@@ -909,7 +920,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     @Override public void onWidgetRepositoryChanged(@NonNull LauncherWidgetHostController.AddResult result) {
         // A widget arrived or left: a page with nothing on it goes with it. A carry that has made
         // a page for the widget in the air keeps it until the carry ends, which trims it then.
-        if (carry == null || carry.turn.createdPage < 0) trimPages();
+        if ((carry == null || carry.turn.createdPage < 0)
+            && (appDrop == null || appDrop.turn.createdPage < 0)) trimPages();
         clampCurrentPage();
         render();
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
@@ -1391,6 +1403,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** The pause elapsed with the widget still in the band: the neighbouring page comes in. */
     private void flipDragPage() {
         if (carry != null) { flipCarryPage(carry); return; }
+        if (appDrop != null) { flipAppDropPage(appDrop); return; }
         if (edit == null || edit.dragStartBounds == null || !mayTurn(edit.turn)) return;
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         if (record == null) return;
@@ -1870,8 +1883,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * move. A page the widget landed on, or is waiting on a bind for, is kept by the trim itself.
      */
     private void trimCarryPage(@NonNull CarryState state, boolean redraw) {
-        if (state.turn.createdPage < 0) return;
-        state.turn.createdPage = -1;
+        trimDragPage(state.turn, redraw);
+    }
+
+    /** {@link #trimCarryPage} for any drag that turns pages: the page it made goes if left empty. */
+    private void trimDragPage(@NonNull PageTurn turn, boolean redraw) {
+        if (turn.createdPage < 0) return;
+        turn.createdPage = -1;
         int before = currentPage;
         trimPages();
         clampCurrentPage();
@@ -1921,6 +1939,235 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             : messageFor(result));
         render();
         return false;
+    }
+
+    // ---- An app carried in from the drawer ----------------------------------------------------
+
+    /**
+     * An app icon on its way from the drawer to the cell the finger is choosing for it. The drawer
+     * started the platform drag and went; from here the pane follows it exactly as it follows a
+     * widget carried out of the picker: the same drag layer, edge bands, page turns and ghost.
+     */
+    private static final class AppDropState {
+        @NonNull final HomeAppDrop drop;
+        final PageTurn turn = new PageTurn();
+        /** The free cell nearest the finger on the page under it; null off the grid or when full. */
+        @Nullable WidgetCellRect cell;
+        float lastRawX, lastRawY;
+        /** The cell the finger was over when the target was last worked out, to skip repeats. */
+        int lastColumn = -1, lastRow = -1, lastPage = -1;
+        AppDropState(@NonNull HomeAppDrop drop, int page, float rawX, float rawY) {
+            this.drop = drop;
+            lastRawX = rawX;
+            lastRawY = rawY;
+            turn.start(page, rawX);
+        }
+    }
+
+    @Nullable private AppDropState appDrop;
+
+    /**
+     * Whether an app dragged in from the drawer can be taken now: not while the layout is
+     * locked, and not while another drag, edit session or widget add is already in flight.
+     */
+    public boolean canTakeAppDrop() {
+        return HomeAppDropPolicy.handsOverToHome(true, layoutLocked,
+            carry != null || edit != null || appDrop != null || awaitingExternal);
+    }
+
+    /**
+     * The drawer handed over a drag carrying {@code drop}: the icon is picked up here, under the
+     * finger, on the page in front, at the size the drawer was carrying it so it does not jump; it
+     * takes Home's own size as it settles into a cell. The pane is told where the finger goes from
+     * now on by the platform drag's location events, and by the drawer, through the drop's
+     * follower, for the events its views still catch while it closes.
+     */
+    public void onAppDropStarted(@NonNull HomeAppDrop drop, float rawX, float rawY) {
+        if (!canTakeAppDrop()) return;
+        dismissFolderPopup();
+        AppDropState state = new AppDropState(drop, currentPage, rawX, rawY);
+        appDrop = state;
+        int liftPx = drop.liftPx > 0 ? drop.liftPx : appDropIconPx();
+        pane.widgetDragLayer().liftIcon(drop.icon, liftPx, appDropBounds(rawX, rawY));
+        drop.follow(new HomeAppDrop.Follower() {
+            @Override public void moveTo(float x, float y) {
+                if (appDrop == state) appDropTo(state, x, y);
+            }
+
+            @Override public boolean releaseAt(float x, float y) {
+                return appDrop == state && endAppDrop(x, y, false);
+            }
+        });
+        appDropTo(state, rawX, rawY);
+    }
+
+    /** The icon's size on this grid, as a Home icon in one cell is drawn. */
+    private int appDropIconPx() {
+        Rect cell = pane.grid().metrics().boundsFor(new WidgetCellRect(0, 0, 1, 1));
+        float density = pane.getResources().getDisplayMetrics().density;
+        return HomeAppIconMetrics.of(cell.width(), cell.height(), 0, density,
+            appIcons.style().iconScale()).iconPx;
+    }
+
+    /** Where the carried icon's cell-sized box sits for a finger at {@code rawX, rawY}. */
+    @NonNull private Rect appDropBounds(float rawX, float rawY) {
+        Rect cell = pane.grid().metrics().boundsFor(new WidgetCellRect(0, 0, 1, 1));
+        pane.getLocationOnScreen(paneLocation);
+        int centerX = Math.round(rawX - paneLocation[0]);
+        int centerY = Math.round(rawY - paneLocation[1]);
+        int width = Math.max(1, cell.width());
+        int height = Math.max(1, cell.height());
+        return new Rect(centerX - width / 2, centerY - height / 2,
+            centerX - width / 2 + width, centerY - height / 2 + height);
+    }
+
+    private final View.OnDragListener appDropListener = (view, event) -> {
+        Object local = event.getLocalState();
+        if (!(local instanceof HomeAppDrop)) return false;
+        AppDropState state = appDrop;
+        boolean ours = state != null && state.drop == local;
+        switch (event.getAction()) {
+            case DragEvent.ACTION_DRAG_STARTED:
+                // Interested in every app drag: the hand-over may start it before it reaches us.
+                return true;
+            case DragEvent.ACTION_DRAG_LOCATION:
+                if (ours) {
+                    view.getLocationOnScreen(paneLocation);
+                    appDropTo(state, paneLocation[0] + event.getX(), paneLocation[1] + event.getY());
+                }
+                return true;
+            case DragEvent.ACTION_DRAG_EXITED:
+                // Over something else that takes drags: nothing here is on offer meanwhile.
+                if (ours) clearAppDropTarget(state);
+                return true;
+            case DragEvent.ACTION_DROP:
+                if (!ours) return false;
+                view.getLocationOnScreen(paneLocation);
+                return endAppDrop(paneLocation[0] + event.getX(), paneLocation[1] + event.getY(),
+                    false);
+            case DragEvent.ACTION_DRAG_ENDED:
+                // Released anywhere the pane did not hear of, or cancelled: nothing is put down.
+                if (ours) endAppDrop(state.lastRawX, state.lastRawY, true);
+                return true;
+            default:
+                return true;
+        }
+    };
+
+    /** The carried icon follows the finger, and the page outlines the cell it would take. */
+    private void appDropTo(@NonNull AppDropState state, float rawX, float rawY) {
+        state.lastRawX = rawX;
+        state.lastRawY = rawY;
+        pane.widgetDragLayer().moveTo(appDropBounds(rawX, rawY));
+        watchPageEdge(state.turn, rawX);
+        updateAppDropTarget(state, false);
+    }
+
+    /**
+     * The free cell nearest the finger on the page under it, outlined; red under the finger when
+     * the page has none. Worked out again only when the finger crosses into another cell or the
+     * page turns, so a finger resting in one cell costs nothing.
+     */
+    private void updateAppDropTarget(@NonNull AppDropState state, boolean force) {
+        Rect picture = appDropBounds(state.lastRawX, state.lastRawY);
+        WidgetGridView grid = pane.grid();
+        if (!overGrid(picture.centerX(), picture.centerY())
+            || host.isOverDock(state.lastRawX, state.lastRawY)) {
+            clearAppDropTarget(state);
+            return;
+        }
+        WidgetGridMetrics metrics = grid.metrics();
+        WidgetGridDefinition definition = metrics.definition();
+        int columns = definition.columns;
+        int rows = definition.rows;
+        Rect first = metrics.boundsFor(new WidgetCellRect(0, 0, 1, 1));
+        Rect last = metrics.boundsFor(new WidgetCellRect(columns - 1, rows - 1, columns, rows));
+        float pitchX = columns > 1 ? (last.exactCenterX() - first.exactCenterX()) / (columns - 1)
+            : first.width();
+        float pitchY = rows > 1 ? (last.exactCenterY() - first.exactCenterY()) / (rows - 1)
+            : first.height();
+        float column = HomeAppDropPolicy.toCellUnits(picture.centerX() - grid.getLeft(),
+            first.exactCenterX(), pitchX);
+        float row = HomeAppDropPolicy.toCellUnits(picture.centerY() - grid.getTop(),
+            first.exactCenterY(), pitchY);
+        WidgetCellRect under = HomeAppDropPolicy.cellUnder(columns, rows, column, row);
+        if (!force && under.left == state.lastColumn && under.top == state.lastRow
+            && state.turn.page == state.lastPage) return;
+        state.lastColumn = under.left;
+        state.lastRow = under.top;
+        state.lastPage = state.turn.page;
+        List<WidgetCellRect> occupied = new ArrayList<>();
+        for (LauncherWidgetRecord record : widgets.repository().recordsOnPage(state.turn.page)) {
+            occupied.add(record.cell);
+        }
+        state.cell = HomeAppDropPolicy.nearestFreeCell(columns, rows, occupied, column, row);
+        pane.widgetDragLayer().setGhost(paneBounds(state.cell != null ? state.cell : under),
+            state.cell != null);
+    }
+
+    /** Nothing on offer: off the grid, over the dock, or over something else that takes drags. */
+    private void clearAppDropTarget(@NonNull AppDropState state) {
+        state.cell = null;
+        state.lastColumn = -1;
+        state.lastRow = -1;
+        state.lastPage = -1;
+        pane.widgetDragLayer().setGhost(null, true);
+    }
+
+    /** The finger rested in the edge band: the next page comes in under the icon. */
+    private void flipAppDropPage(@NonNull AppDropState state) {
+        if (!mayTurn(state.turn) || !turnPage(state.turn)) return;
+        updateAppDropTarget(state, true);
+        pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+    }
+
+    /**
+     * The finger let go, or the drag ended without reaching the pane. Over a free cell the icon
+     * goes there (the picture settles onto it); over a full page the page says it has no room;
+     * anywhere else nothing is put down. A page the drag made and left empty goes again.
+     *
+     * @return whether the icon was put down
+     */
+    private boolean endAppDrop(float rawX, float rawY, boolean canceled) {
+        AppDropState state = appDrop;
+        appDrop = null;
+        if (state == null) return false;
+        state.drop.follow(null);
+        pane.removeCallbacks(edgeFlip);
+        state.turn.edgeDirection = 0;
+        if (!canceled) {
+            state.lastRawX = rawX;
+            state.lastRawY = rawY;
+            updateAppDropTarget(state, true);
+        }
+        Rect picture = appDropBounds(rawX, rawY);
+        HomeAppDropPolicy.Outcome outcome = HomeAppDropPolicy.resolve(canceled,
+            host.isOverDock(rawX, rawY), overGrid(picture.centerX(), picture.centerY()),
+            state.cell != null);
+        WidgetCellRect cell = state.cell;
+        boolean placed = outcome == HomeAppDropPolicy.Outcome.PLACE && cell != null
+            && state.turn.page >= 0 && state.turn.page < widgets.repository().pageCount()
+            && widgets.addAppAt(state.drop.app, state.drop.label, state.turn.page, cell) != null;
+        WidgetDragLayerView layer = pane.widgetDragLayer();
+        layer.setGhost(null, true);
+        layer.drop(placed ? paneBounds(cell) : null, appDropIconPx(), !host.reducedMotion());
+        trimDragPage(state.turn, true);
+        if (outcome == HomeAppDropPolicy.Outcome.NO_ROOM) {
+            pane.showNotice(pane.getContext().getString(R.string.widget_no_room_on_page));
+        }
+        return placed;
+    }
+
+    /** Lets go of an app drag the pane can no longer finish; nothing is put down. */
+    private void abortAppDrop(boolean redraw) {
+        AppDropState state = appDrop;
+        if (state == null) return;
+        appDrop = null;
+        state.drop.follow(null);
+        pane.removeCallbacks(edgeFlip);
+        pane.widgetDragLayer().setGhost(null, true);
+        pane.releaseWidgetDragLayer();
+        trimDragPage(state.turn, redraw);
     }
 
     /**
@@ -2007,6 +2254,35 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     private int dp(int value) {
         return Math.round(value * pane.getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off goes
+     * back to following it ({@link com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass#followPage}),
+     * and the page draws again.
+     *
+     * @return what each cleared widget held, by id, for the editor's Undo
+     */
+    @NonNull
+    public java.util.Map<Integer, String> clearBuiltinGlassChoices() {
+        java.util.Map<Integer, String> cleared = new java.util.LinkedHashMap<>();
+        java.util.List<LauncherWidgetRecord> changed =
+            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.followPage(
+                widgets.repository().records(), cleared);
+        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+            render();
+        return cleared;
+    }
+
+    /** The editor's Undo of {@link #clearBuiltinGlassChoices}. */
+    public void restoreBuiltinGlassChoices(@NonNull java.util.Map<Integer, String> choices) {
+        if (choices.isEmpty())
+            return;
+        java.util.List<LauncherWidgetRecord> changed =
+            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.withChoices(
+                widgets.repository().records(), choices);
+        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+            render();
     }
 
     private void render() {

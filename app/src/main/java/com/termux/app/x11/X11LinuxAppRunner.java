@@ -196,6 +196,7 @@ public final class X11LinuxAppRunner {
     @NonNull private final List<QueuedScript> queued = new java.util.ArrayList<>();
     @NonNull private final Handler handler = new Handler(Looper.getMainLooper());
     @NonNull private final X11ElectronSandboxStore sandboxStore;
+    @NonNull private final X11GpuProfileStore profileStore;
     @Nullable private LinuxAppCatalog.LinuxApp pending;
     /** The desktop holding the display, from the moment its script starts until it exits. */
     @Nullable private LinuxAppCatalog.LinuxApp runningSession;
@@ -217,6 +218,7 @@ public final class X11LinuxAppRunner {
         this.context = context.getApplicationContext();
         this.host = host;
         this.sandboxStore = new X11ElectronSandboxStore(this.context);
+        this.profileStore = new X11GpuProfileStore(this.context);
     }
 
     /**
@@ -420,7 +422,9 @@ public final class X11LinuxAppRunner {
             // desktop has ever heard of, so the whole retry stays out of a session's way.
             boolean noSandbox = !app.session && shouldStartWithNoSandbox(app);
             String display = X11DisplayHostController.displayName();
-            List<String> env = installedEnv(X11GpuProbe.probe(context));
+            GpuChoice gpu = installedEnv(X11GpuProbe.probe(context), profileStore.pick(),
+                profileStore.drawsInSoftware(app.id));
+            List<String> env = gpu.env;
             // Reading the setting and looking for the binary are both file work, so they happen
             // here beside the probe rather than on the main thread when the desktop ends.
             String configured = app.session || displayJustStarted ? configuredWindowManager() : "";
@@ -435,13 +439,20 @@ public final class X11LinuxAppRunner {
                 && X11WindowManager.command(configured) != null
                 ? X11WindowManager.awaitCommand(X11WindowManager.AWAIT_MANAGER_FOR_APP_TRIES)
                 : null;
-            String script = app.session ? sessionScript(app, display, env, stopWm)
-                : script(app, display, env, noSandbox, awaitWm);
+            // A virgl profile's server first: without it, GALLIUM_DRIVER=virpipe has nothing to
+            // talk to. A retry finds it already running.
+            String script = gpuServerBlock(gpu.server) + (app.session
+                ? sessionScript(app, display, env, stopWm)
+                : script(app, display, env, noSandbox, awaitWm));
             String restart = startWm == null ? null : windowManagerScript(startWm, display);
             handler.post(() -> {
                 Logger.logInfo(LOG_TAG, "Running " + app.id + " on the display"
                     + (app.session ? " as a desktop" : "")
-                    + (noSandbox ? " with --no-sandbox" : ""));
+                    + (noSandbox ? " with --no-sandbox" : "")
+                    + " with graphics " + (gpu.profile == null ? "default" : gpu.profile.id));
+                if (gpu.fellBack) {
+                    notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
+                }
                 runAndWatch(app, script, noSandbox, display, env, restart);
             });
         });
@@ -630,13 +641,101 @@ public final class X11LinuxAppRunner {
             : com.termux.R.string.termux_x11_app_launch_failed);
     }
 
-    /** The best profile whose packages are actually installed; nothing when none is. */
+    /** What one launch is given for graphics, and how it came to be. */
+    public static final class GpuChoice {
+        /** {@code KEY=VALUE} lines to export; empty leaves Mesa to its own default. */
+        @NonNull public final List<String> env;
+        /** The profile those lines select; null when nothing fits at all. */
+        @Nullable public final X11GpuProbe.Profile profile;
+        /** The user picked a profile that is not installed here, so software stood in for it. */
+        public final boolean fellBack;
+        /**
+         * The helper the profile needs running before the app opens GL, without the trailing
+         * {@code &} ({@code virgl_test_server_android --angle-gl}); null when it needs none.
+         */
+        @Nullable public final String server;
+
+        GpuChoice(@NonNull List<String> env, @Nullable X11GpuProbe.Profile profile, boolean fellBack) {
+            this(env, profile, fellBack, null);
+        }
+
+        GpuChoice(@NonNull X11GpuProbe.Recommendation r) {
+            this(r.env, r.profile, false, r.serverCommand == null ? null
+                : r.serverCommand.replaceAll("\\s*&\\s*$", ""));
+        }
+
+        private GpuChoice(@NonNull List<String> env, @Nullable X11GpuProbe.Profile profile,
+                          boolean fellBack, @Nullable String server) {
+            this.env = env;
+            this.profile = profile;
+            this.fellBack = fellBack;
+            this.server = server;
+        }
+    }
+
+    /**
+     * The lines that start a profile's helper ({@link GpuChoice#server}) before the app, once:
+     * nothing when one with the same program name already runs, so a second app or a second tap
+     * does not start a second server. Detached from the script, so it outlives the app it came
+     * up for and the next app finds it; its output goes nowhere. Empty for no helper. Pure.
+     */
+    @NonNull
+    static String gpuServerBlock(@Nullable String server) {
+        if (server == null || server.trim().isEmpty()) return "";
+        String program = server.trim().split("\\s+")[0];
+        return "if ! pgrep -f " + ProotDistro.singleQuote(program) + " >/dev/null 2>&1; then\n"
+            + "(" + server.trim() + " >/dev/null 2>&1 &)\n"
+            + "sleep 1\n"
+            + "fi\n";
+    }
+
+    /** {@link #installedEnv(X11GpuProbe.Result, String, boolean)} on {@link X11GpuProfileStore#AUTO}. */
     @NonNull
     static List<String> installedEnv(@NonNull X11GpuProbe.Result gpu) {
-        for (X11GpuProbe.Recommendation r : gpu.ranked) {
-            if (r.installed && r.profile != X11GpuProbe.Profile.SOFTWARE) return r.env;
+        return installedEnv(gpu, X11GpuProfileStore.AUTO, false).env;
+    }
+
+    /**
+     * The graphics a launch gets (#162), in this order:
+     * <ul>
+     *   <li>{@code appInSoftware} (the app's own "draw in software" switch): software, whatever the
+     *       pick. Its exports replace a virgl driver from anywhere, which is what the reporter's
+     *       {@code env -u GALLIUM_DRIVER} wrapper did by hand.</li>
+     *   <li>a picked profile: its exports when it is installed; software otherwise, and
+     *       {@link GpuChoice#fellBack} says so, so the user is told.</li>
+     *   <li>{@link X11GpuProfileStore#AUTO}: the probe's ranking, the best installed profile. Software
+     *       reached in the ranking exports nothing, so a phone with no driver installed (or an
+     *       emulator) runs exactly as Mesa would by itself; on a known-freeze GPU software is
+     *       ranked first and exported, so an installed virgl driver is not used there.</li>
+     * </ul>
+     * Pure, so the composition is tested.
+     */
+    @NonNull
+    public static GpuChoice installedEnv(@NonNull X11GpuProbe.Result gpu, @NonNull String pick,
+                                         boolean appInSoftware) {
+        X11GpuProbe.Recommendation software = gpu.software();
+        if (appInSoftware) return new GpuChoice(software.env, X11GpuProbe.Profile.SOFTWARE, false);
+        X11GpuProbe.Profile picked = X11GpuProbe.Profile.of(pick);
+        if (picked != null) {
+            X11GpuProbe.Recommendation r = gpu.find(picked);
+            if (r != null && (r.installed || picked == X11GpuProbe.Profile.SOFTWARE)) {
+                return new GpuChoice(r);
+            }
+            return new GpuChoice(software.env, X11GpuProbe.Profile.SOFTWARE, true);
         }
-        return java.util.Collections.emptyList();
+        for (X11GpuProbe.Recommendation r : gpu.ranked) {
+            if (!r.installed && r.profile != X11GpuProbe.Profile.SOFTWARE) continue;
+            if (r.profile != X11GpuProbe.Profile.SOFTWARE || gpu.knownFreeze) {
+                return new GpuChoice(r);
+            }
+            return new GpuChoice(java.util.Collections.emptyList(), r.profile, false);
+        }
+        return new GpuChoice(java.util.Collections.emptyList(), null, false);
+    }
+
+    /** Whether {@code env} routes OpenGL through the virgl server ({@code GALLIUM_DRIVER=virpipe}). */
+    static boolean usesVirgl(@NonNull List<String> env) {
+        return env.contains("GALLIUM_DRIVER=virpipe");
     }
 
     /**
@@ -680,7 +779,11 @@ public final class X11LinuxAppRunner {
         script.append("cd \"$HOME\"\n");
         script.append(audioBlock(!app.container.isPrefix()));
         if (awaitWindowManager != null) script.append(awaitWindowManager);
-        script.append("exec ").append(noSandbox ? app.commandWith("--no-sandbox") : app.command())
+        // An Electron app under a virgl profile also draws in software (#162): its own GPU path
+        // through the virgl server has frozen whole phones, and Chromium's software path is fine.
+        String extraArgs = noSandbox
+            ? (usesVirgl(env) ? "--no-sandbox --disable-gpu" : "--no-sandbox") : "";
+        script.append("exec ").append(noSandbox ? app.commandWith(extraArgs) : app.command())
             .append('\n');
         return script.toString();
     }

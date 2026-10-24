@@ -147,6 +147,18 @@ public class BuiltinWidgetGlassTest {
         return view.findViewById(android.R.id.background);
     }
 
+    /** A widget never given its own choice, on an install that never touched the switch, is glass. */
+    @Test
+    public void widgetsOnGlassIsOnUntilTheSwitchIsTurnedOff() {
+        assertTrue(TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS);
+        assertTrue(BuiltinWidgetGlass.resolve(null, TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+        assertTrue(BuiltinWidgetGlass.resolve("", TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+        assertFalse(BuiltinWidgetGlass.resolve(BuiltinWidgetGlass.OFF,
+            TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+        assertFalse(BuiltinWidgetGlass.resolve(BuiltinWidgetGlass.BARE,
+            TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+    }
+
     @Test
     public void aWidgetsChoiceOverridesThePageAndAbsentFollowsIt() {
         for (boolean page : new boolean[] {false, true}) {
@@ -552,5 +564,62 @@ public class BuiltinWidgetGlassTest {
         view.applyStyle(style);
         assertEquals(builds + 1, view.builds);
         assertEquals(2, view.corner().trackedCount());
+    }
+
+    // ---------------------------------------------------------- the Home card's switch for all
+
+    @Test
+    public void theSwitchPutsEveryWidgetsOwnOnOrOffBackOnThePage() {
+        java.util.List<com.termux.app.launcher.widget.LauncherWidgetRecord> records =
+            java.util.Arrays.asList(record(-1, BuiltinWidgetGlass.ON),
+                record(-2, BuiltinWidgetGlass.OFF), record(-3, BuiltinWidgetGlass.BARE),
+                record(-4, null), record(-5, ""));
+        java.util.Map<Integer, String> cleared = new java.util.HashMap<>();
+
+        java.util.List<com.termux.app.launcher.widget.LauncherWidgetRecord> changed =
+            BuiltinWidgetGlass.followPage(records, cleared);
+
+        assertEquals(2, changed.size());
+        for (com.termux.app.launcher.widget.LauncherWidgetRecord record : changed) {
+            String stored = record.sizeOptions().getString(BuiltinWidgetGlass.CONFIG_KEY);
+            assertNull("follows the page", stored);
+            assertTrue(BuiltinWidgetGlass.resolve(stored, true));
+            assertFalse(BuiltinWidgetGlass.resolve(stored, false));
+            assertEquals("the widget's own settings stay", "kept",
+                record.sizeOptions().getString("other"));
+        }
+        assertEquals(BuiltinWidgetGlass.ON, cleared.get(-1));
+        assertEquals(BuiltinWidgetGlass.OFF, cleared.get(-2));
+        assertFalse("Bare is a look of its own and stays", cleared.containsKey(-3));
+        assertEquals(2, cleared.size());
+    }
+
+    @Test
+    public void undoGivesEachWidgetItsChoiceBackUnlessItChoseAgain() {
+        java.util.Map<Integer, String> choices = new java.util.HashMap<>();
+        choices.put(-1, BuiltinWidgetGlass.ON);
+        choices.put(-2, BuiltinWidgetGlass.OFF);
+        java.util.List<com.termux.app.launcher.widget.LauncherWidgetRecord> records =
+            java.util.Arrays.asList(record(-1, null), record(-2, BuiltinWidgetGlass.ON),
+                record(-3, null));
+
+        java.util.List<com.termux.app.launcher.widget.LauncherWidgetRecord> changed =
+            BuiltinWidgetGlass.withChoices(records, choices);
+
+        assertEquals(1, changed.size());
+        assertEquals(-1, changed.get(0).appWidgetId);
+        assertEquals(BuiltinWidgetGlass.ON,
+            changed.get(0).sizeOptions().getString(BuiltinWidgetGlass.CONFIG_KEY));
+    }
+
+    @NonNull
+    private static com.termux.app.launcher.widget.LauncherWidgetRecord record(int id,
+                                                                            @Nullable String glass) {
+        Bundle config = new Bundle();
+        config.putString("other", "kept");
+        if (glass != null) config.putString(BuiltinWidgetGlass.CONFIG_KEY, glass);
+        return com.termux.app.launcher.widget.LauncherWidgetRecord.builtin(id,
+            BuiltinWidgetKind.CLOCK.id,
+            new com.termux.app.launcher.widget.WidgetCellRect(0, 0, 2, 2), 0, config);
     }
 }

@@ -59,7 +59,9 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     /** The Look as stored this instant. */
     @NonNull
     public LookGlassSpec spec() {
-        return LookGlassSpec.read(mHost.preferences());
+        // Widgets stand on Home, so they wear Home's Look (ADR 0013).
+        return LookGlassSpec.read(mHost.preferences(),
+            TermuxAppSharedPreferences.WallHalf.HOME);
     }
 
     /**

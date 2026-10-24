@@ -9,6 +9,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 
@@ -33,6 +34,13 @@ import androidx.annotation.Nullable;
 public final class WidgetDragLayerView extends View {
 
     @Nullable private Bitmap picture;
+    /**
+     * An app icon carried in from the drawer, drawn straight from the drawer's own drawable at
+     * {@link #iconPx} in the middle of {@link #bounds}: no photograph, since there is no cell yet.
+     */
+    @Nullable private Drawable icon;
+    private int iconPx;
+    private final Rect iconBoundsScratch = new Rect();
     private final Rect bounds = new Rect();
     private final Rect settleFrom = new Rect();
     private final Rect settleTo = new Rect();
@@ -79,11 +87,27 @@ public final class WidgetDragLayerView extends View {
         }
         cell.draw(new Canvas(next));
         cancelSettle();
+        icon = null;
         picture = next;
         bounds.set(at);
         setVisibility(VISIBLE);
         invalidate();
         return true;
+    }
+
+    /**
+     * Shows {@code drawable} at {@code sizePx} in the middle of {@code at}, in this view's
+     * coordinates: an app icon carried onto Home from outside the page. The drawable is the
+     * caller's and is only borrowed for drawing; its own bounds are put back after every draw.
+     */
+    public void liftIcon(@NonNull Drawable drawable, int sizePx, @NonNull Rect at) {
+        cancelSettle();
+        picture = null;
+        icon = drawable;
+        iconPx = Math.max(1, sizePx);
+        bounds.set(at);
+        setVisibility(VISIBLE);
+        invalidate();
     }
 
     /**
@@ -104,13 +128,13 @@ public final class WidgetDragLayerView extends View {
     public boolean ghostBlocked() { return ghost != null && !ghostValid; }
 
     /** Whether a widget is in the air. */
-    public boolean isLifted() { return picture != null; }
+    public boolean isLifted() { return picture != null || icon != null; }
 
     /** Where the picture is now, in this view's coordinates. */
     @NonNull public Rect pictureBounds() { return new Rect(bounds); }
 
     public void moveTo(@NonNull Rect at) {
-        if (picture == null || bounds.equals(at)) return;
+        if (!isLifted() || bounds.equals(at)) return;
         bounds.set(at);
         invalidate();
     }
@@ -121,8 +145,22 @@ public final class WidgetDragLayerView extends View {
      * with motion turned down, it simply goes.
      */
     public void drop(@Nullable Rect home, boolean animate) {
-        if (picture == null) return;
-        if (home == null || !animate || bounds.equals(home)) { release(); return; }
+        drop(home, 0, animate);
+    }
+
+    /**
+     * {@link #drop(Rect, boolean)}, with a carried app icon also easing from the size it was
+     * carried at to {@code homeIconPx} as it settles, so it lands at the size the page draws it.
+     * {@code homeIconPx} 0 keeps the size it has.
+     */
+    public void drop(@Nullable Rect home, int homeIconPx, boolean animate) {
+        if (!isLifted()) return;
+        int fromIconPx = iconPx;
+        int toIconPx = icon != null && homeIconPx > 0 ? homeIconPx : iconPx;
+        if (home == null || !animate || (bounds.equals(home) && fromIconPx == toIconPx)) {
+            release();
+            return;
+        }
         cancelSettle();
         settleFrom.set(bounds);
         settleTo.set(home);
@@ -135,6 +173,7 @@ public final class WidgetDragLayerView extends View {
                 lerp(settleFrom.top, settleTo.top, fraction),
                 lerp(settleFrom.right, settleTo.right, fraction),
                 lerp(settleFrom.bottom, settleTo.bottom, fraction));
+            iconPx = Math.max(1, lerp(fromIconPx, toIconPx, fraction));
             invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
@@ -153,6 +192,7 @@ public final class WidgetDragLayerView extends View {
     private void release() {
         settle = null;
         picture = null;
+        icon = null;
         ghost = null;
         ghostValid = true;
         setVisibility(GONE);
@@ -177,6 +217,16 @@ public final class WidgetDragLayerView extends View {
             canvas.drawRoundRect(rect, radius, radius,
                 ghostValid ? ghostStrokePaint : blockedStrokePaint);
         }
+        Drawable carried = icon;
+        if (carried != null) {
+            int half = iconPx / 2;
+            iconBoundsScratch.set(carried.getBounds());
+            carried.setBounds(bounds.centerX() - half, bounds.centerY() - half,
+                bounds.centerX() - half + iconPx, bounds.centerY() - half + iconPx);
+            carried.draw(canvas);
+            carried.setBounds(iconBoundsScratch);
+            return;
+        }
         Bitmap drawn = picture;
         if (drawn == null || drawn.isRecycled()) return;
         canvas.drawBitmap(drawn, null, bounds, null);
@@ -185,6 +235,7 @@ public final class WidgetDragLayerView extends View {
     @Override protected void onDetachedFromWindow() {
         cancelSettle();
         picture = null;
+        icon = null;
         ghost = null;
         super.onDetachedFromWindow();
     }

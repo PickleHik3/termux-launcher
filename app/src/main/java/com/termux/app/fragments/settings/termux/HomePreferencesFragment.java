@@ -11,8 +11,8 @@ import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.wall.PaneWallPage;
 
 /**
- * Home: the section for the Home half — the Layout editor first, then gestures, widgets, the
- * wallpaper's scroll and where a cold start lands. Reuses {@link LauncherPreferencesFragment}'s
+ * Home: the section for the Home half — the Appearance editor first, then every gesture, widgets,
+ * the wallpaper's scroll and where a cold start lands. Reuses {@link LauncherPreferencesFragment}'s
  * store and listeners (every row writes the key it always did); only the XML and title differ.
  */
 @Keep
@@ -33,10 +33,19 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         super.onCreatePreferences(savedInstanceState, rootKey);
         Preference layout = findPreference("home_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
-            SettingsEditorDoors.openLayoutEditor(this, row, PaneWallPage.WIDGETS);
+            SettingsEditorDoors.openEditor(this, row, com.termux.app.surfaces.EditorCard.HOME);
             return true;
         });
         HomeGesturesRows.bind(this);
+        Preference drawer = findPreference("app_launcher_drawer_enabled");
+        // The gestures offer Open drawer only while the drawer swipe is on: re-read once written.
+        if (drawer != null) drawer.setOnPreferenceChangeListener((row, value) -> {
+            android.view.View view = getView();
+            if (view != null) view.post(() -> {
+                if (isAdded()) HomeGesturesRows.bind(this);
+            });
+            return true;
+        });
         Preference lock = findPreference(HomeSettings.KEY_LAYOUT_LOCKED);
         if (lock != null) lock.setOnPreferenceChangeListener((row, value) -> {
             showEditPagesRow(Boolean.TRUE.equals(value));

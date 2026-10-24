@@ -565,6 +565,10 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     // --- Appearance ---
 
+    /**
+     * appearance.set_wallpaper: the Appearance editor on its Appearance card, whose Wallpaper row
+     * is in view; its Change raises the picker. The picker is no door of its own.
+     */
     void openWallpaperPicker();
 
     boolean toggleWallpaperMode();

@@ -398,8 +398,9 @@ public class SettingsActivity extends AppCompatActivity implements
                 .commit();
         }
 
-        // A stack saved before the restructure names pages that moved: replay it in today's tree.
-        for (SettingsBackStackState.Entry entry : saved.entriesForCurrentTree()) {
+        // A stack saved before the restructure names pages that moved: replay it in today's tree,
+        // stopping short of an editor (a reopen lands on the page that opened it).
+        for (SettingsBackStackState.Entry entry : saved.entriesToRestore()) {
             Class<?> fragmentClass;
             try {
                 fragmentClass = getClassLoader().loadClass(entry.className);
@@ -530,6 +531,12 @@ public class SettingsActivity extends AppCompatActivity implements
         List<SettingsTree.Screen> path = SettingsTree.path(screenClass);
         if (path.isEmpty()) return;
         hideKeyboard();
+        if (path.get(path.size() - 1).door) {
+            // A row the Appearance editor holds: the editor opens over the launcher on its card.
+            startActivity(com.termux.app.fragments.settings.termux.SettingsEditorDoors.editorIntent(
+                this, com.termux.app.fragments.settings.termux.SettingsEditorDoors.cardForSearchKey(key)));
+            return;
+        }
         jumpTo(path, key);
     }
 
@@ -705,6 +712,8 @@ public class SettingsActivity extends AppCompatActivity implements
                     // list divider creates the unwanted double line between sections.
                     preferenceFragment.setDivider(null);
                     preferenceFragment.setDividerHeight(0);
+                    // Each section's rows share one rounded tonal card instead.
+                    SettingsLayoutUtils.applyGroups(preferenceFragment);
                     // A page opened on a row (a search result, a link with a scroll key) lands on
                     // it and rings it once.
                     SettingsRowRing.ringIfAsked(preferenceFragment);
@@ -884,6 +893,15 @@ public class SettingsActivity extends AppCompatActivity implements
                 return;
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
             SettingsLayoutUtils.applyRootLayout(this);
+            // A build made without the X server has no Linux apps to set up.
+            Preference linuxApps = findPreference(SettingsTree.Section.LINUX_APPS.rootKey);
+            if (linuxApps != null && !com.termux.BuildConfig.X11_SERVER) linuxApps.setVisible(false);
+            // Appearance is the editor itself, over the live launcher, not a page of rows.
+            Preference appearance = findPreference(SettingsTree.Section.APPEARANCE.rootKey);
+            if (appearance != null) appearance.setOnPreferenceClickListener(row -> {
+                com.termux.app.fragments.settings.termux.SettingsEditorDoors.openEditor(this, row, null);
+                return true;
+            });
             SettingsSearchPreference search = findPreference("settings_search");
             // The root searches everything: no section is ranked first.
             if (search != null) mSearch = SettingsSearchResults.attach(this, search, null);

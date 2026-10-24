@@ -75,7 +75,8 @@ it had.
 
 Every widget's settings have a **Glass** row:
 
-- **Page** follows **Widgets on glass** in the Look, so one switch changes every widget at once.
+- **Page** follows **Widgets on glass**, which is on unless you turn it off, so one switch changes
+  every widget at once.
 - **On** and **Off** set this widget apart from the page.
 - **Bare** draws no card at all, only the content on the wallpaper. It is offered on Clock and
   Weather; Glance is always Bare.

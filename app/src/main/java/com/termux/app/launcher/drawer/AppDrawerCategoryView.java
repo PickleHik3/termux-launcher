@@ -640,7 +640,8 @@ public final class AppDrawerCategoryView extends ViewGroup
             return false;
         gesturePolicy.finishOnce();
         boolean commit = !cancelled && AppDrawerCommitPolicy.decide(expansion.progress(),
-            velocityPxPerSec, AppDrawerCommitPolicy.Direction.CLOSING)
+            velocityPxPerSec, AppDrawerCommitPolicy.Direction.CLOSING,
+            getResources().getDisplayMetrics().density)
             == AppDrawerCommitPolicy.Decision.COMMIT_CLOSE;
         expansion.finishCollapseDrag(commit);
         expansionSpring.value = expansion.progress();

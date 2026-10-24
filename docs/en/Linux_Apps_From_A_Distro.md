@@ -20,23 +20,30 @@ browser (none is built for it), and the window manager is `pkg install openbox`.
 
 ## Set it up in one go
 
-**Settings → Terminal → Linux apps → Set up Linux apps** ("Select apps and copy the install
-command.") builds the command that does this. Choose the **Source** (**Termux X11 repo**, or
-**proot distro**), tick the **Starter Apps** you want, then tap **Copy the command**: it goes on the
-clipboard, a notice tells you it is there, and Settings closes so the terminal is in front. Paste
-it and press Enter.
+**Settings → Linux apps → Set up Linux apps** opens a short guide, one choice to a screen, with
+a line of numbered steps along the top and **Back** and **Next** along the bottom. The row says
+"Not set up yet" until you have copied the command, and afterwards what you set up ("Debian with a
+browser and a file manager").
 
-For a full Linux, pick a **Linux Distro** first: Debian, Ubuntu or Arch Linux, Debian if you are not
-sure. The pasted command installs the distro if you have none, then asks you, in the terminal, for a
-username and a password for your account inside it. The password is only ever typed there; the
-launcher never stores it. The username is kept so the launcher knows which account your apps belong
-to, which is what lets a tap on a Linux app open as you. The same command adds the fonts a fresh
-distro does not ship, adds its graphics support, and installs the apps you ticked. It finishes with
-a line telling you it is done.
+1. **Source.** **Termux's own apps** install in a minute or two and offer a smaller choice of apps.
+   **A full Linux** takes longer and runs far more apps. Choosing Termux's own apps skips the next
+   step.
+2. **Pick a Linux.** Debian, Ubuntu or Arch Linux, Debian if you are not sure.
+3. **Starter apps.** Tick a browser and a file manager; each says which app you will get.
+4. **Copy the command.** **Copy** puts it on the clipboard. Paste it in the terminal and press
+   Enter. When you finish the guide, Settings closes so the terminal is in front.
+5. **Graphics.** Optional: choose how apps draw, or **Skip**.
 
-The same screen has a **Graphics** section: **Graphics acceleration** says what this phone's GPU
-can do for Linux apps, and **Copy the graphics command** copies the install line and exports for
-it. See [GPU acceleration for your apps](X11_Display.md#gpu-acceleration-for-your-apps).
+For a full Linux, the pasted command installs it if you have none, then asks you, in the terminal,
+for a username and a password for your account inside it. The password is only ever typed there;
+the launcher never stores it. The username is kept so the launcher knows which account your apps
+belong to, which is what lets a tap on a Linux app open as you. The same command adds the fonts a
+fresh Linux does not ship, adds its graphics support, and installs the apps you ticked. It finishes
+with a line telling you it is done.
+
+The last step of the guide, **Graphics**, opens **Graphics acceleration**: a page where you run
+the graphics benchmark, see how each way of drawing did on this phone, and pick the one Linux apps
+use. See [GPU acceleration for your apps](X11_Display.md#gpu-acceleration-for-your-apps).
 
 The Display place offers this screen by itself when it finds a distro that is not ready. Copy a
 command from it and it stops asking about that distro. The offer is for distros that install with
@@ -76,7 +83,7 @@ start.
 ## Hiding the ones you do not want
 
 A distro installs menu entries for helpers and viewers you may never open by hand.
-**Settings → Terminal → Linux apps → Hidden Linux apps** lists the Linux apps it found; untick one
+**Settings → Linux apps → Hidden Linux apps** lists the Linux apps it found; untick one
 and it leaves the drawer. It is one app at a time, not a whole distro, and it holds across
 restarts. Your Android apps are not in this list.
 

@@ -20,16 +20,16 @@ public class HomeActionsSheetPolicyTest {
     }
 
     @Test public void notTheDefaultHomeOffersEveryRowInOrder() {
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES, LAYOUT,
-                LOCK_LAYOUT, WALLPAPER, LOOK, LAUNCHER_SETTINGS, SET_DEFAULT_HOME, HELP),
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES,
+                LOCK_LAYOUT, WALLPAPER, APPEARANCE, LAUNCHER_SETTINGS, SET_DEFAULT_HOME, HELP),
             items(false, true, false, 1));
     }
 
     @Test public void theDefaultHomeHidesSetAsDefault() {
         List<Item> items = items(true, true, false, 1);
         assertFalse(items.contains(SET_DEFAULT_HOME));
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES, LAYOUT,
-            LOCK_LAYOUT, WALLPAPER, LOOK, LAUNCHER_SETTINGS, HELP), items);
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES,
+            LOCK_LAYOUT, WALLPAPER, APPEARANCE, LAUNCHER_SETTINGS, HELP), items);
     }
 
     @Test public void terminalIsAlwaysFirst() {
@@ -48,8 +48,8 @@ public class HomeActionsSheetPolicyTest {
     }
 
     @Test public void removePageOnlyForAnEmptyPageThatIsNotTheLast() {
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES, LAYOUT,
-                REMOVE_PAGE, LOCK_LAYOUT, WALLPAPER, LOOK, LAUNCHER_SETTINGS, HELP),
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES,
+                REMOVE_PAGE, LOCK_LAYOUT, WALLPAPER, APPEARANCE, LAUNCHER_SETTINGS, HELP),
             items(true, true, true, 2));
         assertTrue(items(true, true, true, 5).contains(REMOVE_PAGE));
         assertFalse("the only page stays", items(true, true, true, 1).contains(REMOVE_PAGE));
@@ -62,18 +62,18 @@ public class HomeActionsSheetPolicyTest {
     }
 
     @Test public void withoutPagesOnlyTheTerminalAndTheLauncherRowsStay() {
-        assertEquals(Arrays.asList(TERMINAL, WALLPAPER, LOOK, LAUNCHER_SETTINGS, HELP),
+        assertEquals(Arrays.asList(TERMINAL, WALLPAPER, APPEARANCE, LAUNCHER_SETTINGS, HELP),
             items(true, false, false, 0));
-        assertEquals(Arrays.asList(TERMINAL, WALLPAPER, LOOK, LAUNCHER_SETTINGS,
+        assertEquals(Arrays.asList(TERMINAL, WALLPAPER, APPEARANCE, LAUNCHER_SETTINGS,
                 SET_DEFAULT_HOME, HELP),
             items(false, false, true, 2));
         assertEquals("nothing to lock without pages",
-            Arrays.asList(TERMINAL, WALLPAPER, LOOK, LAUNCHER_SETTINGS, HELP),
+            Arrays.asList(TERMINAL, WALLPAPER, APPEARANCE, LAUNCHER_SETTINGS, HELP),
             HomeActionsSheetPolicy.itemsFor(true, false, false, 0, true));
     }
 
     @Test public void aLockedLayoutOffersUnlockInsteadOfTheRowsThatChangeIt() {
-        assertEquals(Arrays.asList(TERMINAL, UNLOCK_LAYOUT, LAYOUT, WALLPAPER, LOOK,
+        assertEquals(Arrays.asList(TERMINAL, UNLOCK_LAYOUT, WALLPAPER, APPEARANCE,
                 LAUNCHER_SETTINGS, HELP),
             HomeActionsSheetPolicy.itemsFor(true, true, true, 3, true));
         List<Item> unlocked = items(true, true, true, 3);
@@ -88,10 +88,10 @@ public class HomeActionsSheetPolicyTest {
             if (item.group == Group.LAUNCHER) seenLauncher = true;
             else assertFalse("a page row after a launcher row: " + item, seenLauncher);
         }
-        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES, LAYOUT,
+        assertEquals(Arrays.asList(TERMINAL, ADD_WIDGET, ADD_APP, ADD_PAGE, EDIT_WIDGETS, EDIT_PAGES,
                 REMOVE_PAGE, LOCK_LAYOUT),
             HomeActionsSheetPolicy.inGroup(items, Group.PAGE));
-        assertEquals(Arrays.asList(WALLPAPER, LOOK, LAUNCHER_SETTINGS, SET_DEFAULT_HOME, HELP),
+        assertEquals(Arrays.asList(WALLPAPER, APPEARANCE, LAUNCHER_SETTINGS, SET_DEFAULT_HOME, HELP),
             HomeActionsSheetPolicy.inGroup(items, Group.LAUNCHER));
     }
 

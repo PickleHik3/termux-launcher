@@ -77,6 +77,12 @@ public class SettingsFragmentAliasesTest {
     @Test
     public void keyboardGainsItsLook() {
         PreferenceScreen keyboard = screen(launch(KeyboardPreferencesFragment.class));
+        // The hardware keyboard has its own group; the extra keys group holds extra keys only.
+        androidx.preference.PreferenceGroup hardware = keyboard.findPreference("keyboard_hardware");
+        assertNotNull(hardware.findPreference("keyboard_sub_hardware"));
+        androidx.preference.PreferenceGroup extraKeys = keyboard.findPreference("keyboard_terminal_hardware");
+        assertEquals(2, extraKeys.getPreferenceCount());
+        assertNull(extraKeys.findPreference("keyboard_sub_hardware"));
         assertNotNull(keyboard.findPreference("keyboard_input_method"));
         assertEquals(KeyboardLayoutPreferencesFragment.class.getName(),
             keyboard.findPreference("keyboard_sub_layout").getFragment());
@@ -84,10 +90,23 @@ public class SettingsFragmentAliasesTest {
         assertNotNull(keyboard.findPreference("customize_keyboard_surface"));
         assertEquals(KeyboardColorSchemeFragment.class.getName(),
             keyboard.findPreference("in_app_keyboard_color_scheme_editor").getFragment());
-        assertEquals("the vibration link lands on General", GeneralPreferencesFragment.class.getName(),
-            keyboard.findPreference("keyboard_vibration_link").getFragment());
-        assertEquals("in_app_keyboard_haptics_enabled", keyboard.findPreference("keyboard_vibration_link")
-            .getExtras().getString(SettingsActivity.EXTRA_SCROLL_TO_KEY));
+        assertNull("vibration is General's alone", keyboard.findPreference("keyboard_vibration_link"));
+        assertNull("vibration is General's alone", screen(launch(KeyboardTypingPreferencesFragment.class))
+            .findPreference("keyboard_typing_vibration_link"));
+    }
+
+    @Test
+    public void oneHomePerSetting() {
+        assertNull("access is Permissions' alone", screen(launch(NotificationsPreferencesFragment.class))
+            .findPreference("app_launcher_notification_access"));
+        assertNotNull(screen(launch(ServicesPermissionsPreferencesFragment.class))
+            .findPreference("app_launcher_notification_access"));
+        PreferenceScreen diagnostics = screen(launch(AdvancedDiagnosticsPreferencesFragment.class));
+        for (String key : new String[] {"log_level", "termux_api_log_level", "terminal_view_key_logging_enabled",
+            "plugin_error_notifications_enabled", "crash_report_notifications_enabled",
+            "privileged_backend_smoke_test"}) {
+            assertNotNull(key, diagnostics.findPreference(key));
+        }
     }
 
     @Test
@@ -111,6 +130,14 @@ public class SettingsFragmentAliasesTest {
             "app_launcher_builtin_widget_style", "wallpaper_parallax", "app_launcher_start_in"}) {
             assertNotNull(key, home.findPreference(key));
         }
+        // Gestures gathers every gesture, the lock's page linked from its row.
+        androidx.preference.PreferenceGroup gestures = home.findPreference("home_gestures");
+        for (String key : new String[] {"app_launcher_sub_lock", "app_launcher_drawer_enabled",
+            "terminal_body_swipe"}) {
+            assertNotNull(key, gestures.findPreference(key));
+        }
+        assertEquals(LauncherLockPreferencesFragment.class.getName(),
+            gestures.findPreference("app_launcher_sub_lock").getFragment());
     }
 
     @Test
@@ -118,10 +145,13 @@ public class SettingsFragmentAliasesTest {
         PreferenceScreen general = screen(launch(GeneralPreferencesFragment.class));
         for (String key : new String[] {"app_haptics_enabled", "app_launcher_row_haptics",
             "in_app_keyboard_haptics_enabled", "performance_link", "backup_restore",
-            "services_permissions", "advanced_diagnostics", "about_support", "app_launcher_help",
+            "services_permissions", "advanced_diagnostics", "about_support",
             "app_launcher_set_home", "show_in_recents_when_not_default"}) {
             assertNotNull(key, general.findPreference(key));
         }
+        assertNull("Help folded into About & help", general.findPreference("app_launcher_help"));
+        assertNotNull(screen(launch(com.termux.app.fragments.settings.AboutSupportPreferencesFragment.class))
+            .findPreference("app_launcher_help"));
     }
 
     @Test

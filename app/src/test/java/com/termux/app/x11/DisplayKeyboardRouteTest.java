@@ -30,41 +30,40 @@ public class DisplayKeyboardRouteTest {
     }
 
     /**
-     * The drawer's search types through the launcher's keyboard, and over a display the focus is
-     * the display's own, so the system keyboard it would ask for is refused as "not served": the
-     * launcher's keyboard has to be raised for it there.
+     * Built-in selected: the drawer's search raises the launcher's keyboard on every place, the
+     * Workspace and Home as much as over a running display. The regression of 2026-10-24: off the
+     * display the search asked for the system IME, and Home, which hands the IME back while the
+     * built-in keyboard is down, showed the phone's keyboard.
      */
     @org.junit.Test
-    public void theDrawerSearchRaisesTheBuiltInKeyboardOverARunningDisplay() {
+    public void builtInSelectedRaisesTheBuiltInKeyboardOnEveryPlace() {
         assertEquals(DrawerSearch.RAISE_BUILT_IN,
-            DisplayKeyboardRoute.drawerSearch(true, true, true, false, false));
+            DisplayKeyboardRoute.drawerSearch(true, false, false));
     }
 
     /** Keyboard off is the user's standing say, and a tap on search is a request for one. */
     @org.junit.Test
     public void aKeyboardTheUserSwitchedOffComesBackForTheSearch() {
         assertEquals(DrawerSearch.TURN_ON_AND_RAISE,
-            DisplayKeyboardRoute.drawerSearch(true, true, true, true, false));
+            DisplayKeyboardRoute.drawerSearch(true, true, false));
     }
 
     /** A launcher keyboard set to stay away from a physical keyboard stays away: keys do the typing. */
     @org.junit.Test
     public void aKeyboardThatYieldsToAPhysicalKeyboardRaisesNothing() {
         assertEquals(DrawerSearch.NONE,
-            DisplayKeyboardRoute.drawerSearch(true, true, true, false, true));
+            DisplayKeyboardRoute.drawerSearch(true, false, true));
         assertEquals(DrawerSearch.NONE,
-            DisplayKeyboardRoute.drawerSearch(true, true, true, true, true));
+            DisplayKeyboardRoute.drawerSearch(true, true, true));
     }
 
-    /** Anywhere else the terminal view is served, and the request keeps its old way. */
+    /** Android selected: the system ask, whatever the built-in keyboard's own state. */
     @org.junit.Test
-    public void theDrawerSearchLeavesEveryOtherPlaceAlone() {
+    public void androidSelectedAsksForTheSystemKeyboard() {
         assertEquals(DrawerSearch.SYSTEM_ASK,
-            DisplayKeyboardRoute.drawerSearch(false, true, true, true, true));
+            DisplayKeyboardRoute.drawerSearch(false, false, false));
         assertEquals(DrawerSearch.SYSTEM_ASK,
-            DisplayKeyboardRoute.drawerSearch(true, false, true, true, true));
-        assertEquals(DrawerSearch.SYSTEM_ASK,
-            DisplayKeyboardRoute.drawerSearch(true, true, false, false, false));
+            DisplayKeyboardRoute.drawerSearch(false, true, true));
     }
 
     /** A keyboard the drawer raised, still up and not touched by the user, goes down with it. */

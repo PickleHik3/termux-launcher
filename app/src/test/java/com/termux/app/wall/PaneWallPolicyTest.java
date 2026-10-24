@@ -206,9 +206,12 @@ public class PaneWallPolicyTest {
     }
 
     @Test
-    public void aFlickCommitsWhateverWayTheDragWasHeading() {
-        // Dragged well past the commit distance to the right, then flicked back left.
-        assertEquals(1, PaneWallPolicy.settle(WIDTH * 0.5f, -FLICK, WIDTH, DENSITY, true, true));
+    public void aReversalPastAThirdGoesHome() {
+        // Dragged well past the commit distance to the right, then flicked back left: the page it
+        // started on, not the one beyond (it used to fly on to the right, #152).
+        assertEquals(0, PaneWallPolicy.settle(WIDTH * 0.5f, -FLICK, WIDTH, DENSITY, true, true));
+        // Short of a third, the flick back decides on its own.
+        assertEquals(1, PaneWallPolicy.settle(WIDTH * 0.3f, -FLICK, WIDTH, DENSITY, true, true));
     }
 
     @Test

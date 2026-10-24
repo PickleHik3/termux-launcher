@@ -47,12 +47,6 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
             confirmRestart(context);
             return true;
         });
-        Preference help = findPreference("app_launcher_help");
-        // An ordinary screen on top of this one: Back comes back to Settings.
-        if (help != null) help.setOnPreferenceClickListener(row -> {
-            startActivity(com.termux.app.help.HelpActivity.intent(context, null, null, null));
-            return true;
-        });
     }
 
     /**

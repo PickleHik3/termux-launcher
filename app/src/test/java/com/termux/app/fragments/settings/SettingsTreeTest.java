@@ -51,7 +51,7 @@ public class SettingsTreeTest {
         "AppBehaviorPreferencesFragment", "BackupRestorePreferencesFragment",
         "ServicesPermissionsPreferencesFragment", "PrivilegedAccessPreferencesFragment",
         "AdvancedDiagnosticsPreferencesFragment", "TermuxFontsPreferencesFragment",
-        "NotificationHistoryFragment", "SpeechModelPreferencesFragment",
+        "NotificationHistoryFragment", "SpeechModelPreferencesFragment", "DebuggingPreferencesFragment",
     };
 
     @Test
@@ -93,10 +93,15 @@ public class SettingsTreeTest {
         {"LauncherPreferencesFragment", "app_launcher_builtin_widget_style"},
         {"LauncherPreferencesFragment", "app_launcher_set_home"},
         {"LauncherPreferencesFragment", "app_launcher_help"},
+        {"GeneralPreferencesFragment", "app_launcher_help"},
+        {"TerminalTextPreferencesFragment", "fullscreen"},
         {"LauncherPreferencesFragment", "app_haptics_enabled"},
         {"LauncherPreferencesFragment", "app_launcher_most_used_page"},
         {"LauncherDockPreferencesFragment", "app_launcher_default_buttons"},
         {"LauncherPreferencesFragment", "app_launcher_input_char"},
+        {"LauncherPreferencesFragment", "app_launcher_drawer_enabled"},
+        {"LauncherPreferencesFragment", "app_launcher_sub_lock"},
+        {"TerminalWindowsPreferencesFragment", "terminal_body_swipe"},
         {"TerminalPreferencesFragment", "split_pane_controls"},
         {"TerminalPreferencesFragment", "pane_agent_api"},
         {"TerminalPreferencesFragment", "fullscreen"},
@@ -114,6 +119,7 @@ public class SettingsTreeTest {
         {"X11DisplayPreferencesFragment", "x11_drawer_apps"},
         {"X11DisplayLinuxAppsPreferencesFragment", "x11_window_manager"},
         {"X11DisplayPreferencesFragment", "displayScale"},
+        {"NotificationsPreferencesFragment", "app_launcher_notification_access"},
     };
 
     @Test
@@ -126,6 +132,25 @@ public class SettingsTreeTest {
             PreferenceScreen inflated = new PreferenceManager(context)
                 .inflateFromResource(context, screen.xmlRes, null);
             assertNotNull(moved[0] + "#" + moved[1] + " -> " + page, inflated.findPreference(moved[1]));
+        }
+    }
+
+    /** The 10-24 filing (spec §4): the sections in root order, Appearance a door, the lock under Home. */
+    @Test
+    public void theSectionsFollowTheRefiledRoot() {
+        assertEquals(java.util.Arrays.asList(SettingsTree.Section.HOME, SettingsTree.Section.DOCK_DRAWER,
+            SettingsTree.Section.TERMINAL, SettingsTree.Section.LINUX_APPS, SettingsTree.Section.APPEARANCE,
+            SettingsTree.Section.KEYBOARD, SettingsTree.Section.NOTIFICATIONS, SettingsTree.Section.AI,
+            SettingsTree.Section.GENERAL), java.util.Arrays.asList(SettingsTree.Section.values()));
+        assertTrue(SettingsTree.sectionPage(SettingsTree.Section.APPEARANCE).door);
+        assertEquals(PAGES + "X11DisplayPreferencesFragment",
+            SettingsTree.sectionPage(SettingsTree.Section.LINUX_APPS).className);
+        assertEquals(PAGES + "HomePreferencesFragment",
+            SettingsTree.find(PAGES + "LauncherLockPreferencesFragment").parent);
+        assertEquals(PAGES + "AdvancedDiagnosticsPreferencesFragment",
+            SettingsTree.redirect("com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment", null));
+        for (SettingsTree.Screen screen : SettingsTree.screens()) {
+            if (screen.door) assertTrue("only a section is a door", screen.isSectionPage());
         }
     }
 

@@ -58,6 +58,14 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         super.onResume();
         // Child screens (GUI apps) retitle the activity; take it back when they pop.
         if (getActivity() != null) getActivity().setTitle(titleRes());
+        // The guide's row says what the last run set up.
+        Preference setup = findPreference("x11_gui_apps_setup");
+        Context context = getContext();
+        if (setup != null && context != null) {
+            setup.setSummary(com.termux.app.x11.GuiAppsSetupGuide.rowSummary(context,
+                com.termux.app.x11.GuiAppsSetupGuide.preferences(context),
+                com.termux.app.tour.TourEdition.of(context.getPackageName())));
+        }
     }
 
     @Override

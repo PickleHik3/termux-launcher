@@ -38,7 +38,6 @@ public class CommandPaletteHomeContextTest {
         CommandPaletteHomeSet.TOOL_RESTORE_FLOATS,
         CommandPaletteHomeSet.TOOL_ADD_WIDGET,
         LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER,
-        CommandPaletteHomeSet.TOOL_LAYOUT_EDITOR,
         LauncherToolRegistry.TOOL_APPEARANCE_SURFACE_EDITOR,
         LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS);
 
@@ -95,7 +94,7 @@ public class CommandPaletteHomeContextTest {
         // A claimed registry tool shows once, in the Home section, under its Home name.
         assertEquals(1, Collections.frequency(toolNames(home),
             LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS));
-        assertEquals("Settings", home.get(9).title);
+        assertEquals("Settings", home.get(8).title);
         assertEquals("Wallpaper", home.get(6).title);
         // What is neither terminal-only nor claimed stays, in its own section.
         assertTrue(toolNames(home).contains(LauncherToolRegistry.TOOL_SESSION_NEW));
@@ -163,7 +162,6 @@ public class CommandPaletteHomeContextTest {
             @Override public void minimiseAllFloats() { calls.add("minimise"); }
             @Override public void restoreFloats() { calls.add("restore"); }
             @Override public void addWidget() { calls.add("widget"); }
-            @Override public void openLayoutEditor() { calls.add("layout"); }
             @Override public void restoreFloat(long windowId) { calls.add("float " + windowId); }
         };
         List<CommandPaletteFilter.Entry> home =
@@ -171,8 +169,7 @@ public class CommandPaletteHomeContextTest {
         for (CommandPaletteFilter.Entry entry : home.subList(0, HOME_SECTION.size()))
             assertEquals(entry.toolName, CommandPaletteHomeSet.isHostAction(entry.toolName),
                 CommandPaletteHomeSet.runHostAction(entry, host));
-        assertEquals(Arrays.asList("terminal", "workspace", "minimise", "restore", "widget",
-            "layout"), calls);
+        assertEquals(Arrays.asList("terminal", "workspace", "minimise", "restore", "widget"), calls);
 
         SessionBrowserModel.Window floating = new SessionBrowserModel.Window(9L, 0, true, 0,
             Collections.<SessionBrowserModel.Pane>emptyList(), "f");

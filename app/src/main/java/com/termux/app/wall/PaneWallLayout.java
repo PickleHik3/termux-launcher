@@ -72,24 +72,12 @@ import java.util.WeakHashMap;
  */
 public final class PaneWallLayout extends ViewGroup {
 
-    /**
-     * A slide is a spring ({@link SettleSpring}) that starts where the finger let go and at the
-     * finger's own speed, so the release has no seam, and lands without passing its rest. From
-     * still — a tile, a key, {@code wall.go} — a whole width takes about the 560 ms the terminal's
-     * window pan takes; a flick is carried on by its own speed, and one thrown hard near its rest
-     * stiffens the spring rather than overshooting. The same time whatever the destination, too:
-     * the slide keeps its own clock ({@link WallSlideClock}), so the frames an arrival costs
-     * stretch it rather than skip it.
-     */
-    static final float SLIDE_OMEGA = 18f;
-    static final float SLIDE_MAX_OMEGA = 60f;
-    /** How close to rest, in px, the slide counts as landed. */
-    private static final float SLIDE_REST_PX = 0.5f;
-    /**
-     * The fastest release, in px per second, the slide carries on from: a stray tracker reading
-     * is not a throw.
-     */
-    private static final float SLIDE_MAX_VELOCITY_PX_PER_SEC = 12000f;
+    // A slide is a page's spring (SettleSpring.page, the one the Home pages settle on too) that
+    // starts where the finger let go and at the finger's own speed, so the release has no seam,
+    // and lands without passing its rest. The same time whatever the destination, too: the slide
+    // keeps its own clock (WallSlideClock), so the frames an arrival costs stretch it rather than
+    // skip it.
+
     /**
      * How much longer than its way the slide's ticker is allowed to run before the slide is cut
      * short and settles where it stands: the ceiling under which a run of long frames can stretch
@@ -2504,13 +2492,10 @@ public final class PaneWallLayout extends ViewGroup {
         }
         stopSlide();
         holdStillForSlide();
-        float velocity = Math.max(-SLIDE_MAX_VELOCITY_PX_PER_SEC,
-            Math.min(SLIDE_MAX_VELOCITY_PX_PER_SEC, velocityPxPerSec));
         // General › Animation speed: a slower or faster spring, read once per slide.
-        float time = com.termux.app.AnimationSpeed.springTime(getContext());
-        final SettleSpring spring = SettleSpring.of(mOffsetPx, velocity, SLIDE_OMEGA / time,
-            SLIDE_MAX_OMEGA / time);
-        final long duration = spring.durationMs(SLIDE_REST_PX);
+        final SettleSpring spring = SettleSpring.page(mOffsetPx, velocityPxPerSec,
+            com.termux.app.AnimationSpeed.springTime(getContext()));
+        final long duration = spring.durationMs(SettleSpring.PAGE_REST_PX);
         // The animator is the ticker only. The slide reads its own clock off the ticker's play
         // time, a bounded step per frame (WallSlideClock), so the first frame — which pre-rolls
         // the arriving place's chrome and lays its page out — cannot swallow the take-off. The

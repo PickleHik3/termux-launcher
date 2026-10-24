@@ -1,30 +1,101 @@
 # Look and themes
 
 This page covers the wallpaper, the glass look of the bars, colours, icons and the terminal's cursor
-and screen effects. Home, Terminal and Display share one look, so a change applies to all three.
+and screen effects. Home and the Workspace each wear their own look, equal until you change one.
 
 ## Appearance
 
-Open **Appearance** from **Settings → Look → Wallpaper, look and layout**, from
-**Appearance** on a corner tab, or from the terminal's long-press menu. It has four tabs in a pill at the top: **Wallpaper | Look | Layout |
-Icon pack**. It opens on Wallpaper, or on the tab you last used if you were there in the last half
-hour.
+Open **Appearance** from Settings, from **Appearance** on a corner tab, from the terminal's
+long-press menu or from the command palette. You see your launcher, live, in a frame, and the
+editor bar at the bottom: the orientation chip, **Undo**, **Done** and the palette.
 
-**Done**, top right on every tab, applies everything you changed on any tab and closes. Back or
-Home with a wallpaper not yet applied asks whether to keep editing, discard or save. The Layout tab
-is described on [Layout and full screen](Layout_And_Full_Screen.md).
+The rule is one: **tap the thing**.
 
-**On a tablet in landscape** (smallest width 600dp or more), the controls sit in a side pane on the
-right instead of a sheet at the bottom, and the preview fits and centres to its left. The
-**Wallpaper | Look | Layout | Icon pack** pill stays on top, tall pages scroll inside the pane, and
-the clock face popup opens inside it. Turn the tablet to portrait for the bottom sheet. Phones keep
-the bottom sheet in both orientations.
+- **Tap a surface** in the frame (Home, the status bar, the terminal, the dock, the keyboard) and
+  its card rises with everything about it: how it looks, how big it is, where it sits, whether it
+  shows. The surface you are tuning wears a ring; the others a faint outline.
+- **Tap the palette** for what has no single surface: the Look, the wallpaper, the theme, icons,
+  text size, full screen and minimal mode.
+- **Swipe across the frame** to slide between Home and the Workspace. The dots and the name under
+  the frame say which one you are changing; a card changes that one.
+- **Hold a surface and drag it** to another edge.
+
+A card opens halfway, with the controls you use most; drag its handle up, or open **More**, for
+the rest. ✕, a tap on the frame or Back puts it down. Its ⋮ menu has **Reset** (the surface back on
+the Look) and, for the dock, the status bar, the keyboard and the Look, **Copy to Home** or
+**Copy to Workspace**, which makes the other half look the same.
+
+A slider you move is that surface's own value, marked by a small dot after its name; Reset takes it
+back. Moving one while a Look is chosen turns the Look to **Custom** by itself.
+
+Everything previews as you go. **Done** keeps it all, **Undo** puts everything back to how it was
+when you opened Appearance, and Back or Home with a change asks whether to keep editing, discard
+or save.
+
+A surface you hide (its **Visible** switch off) keeps a dashed outline in the frame, so you can tap
+it and show it again. The orientation chip shows the other orientation as a drawing you can arrange;
+those changes appear when you turn the phone.
+
+## The Appearance card
+
+- **Look**: a slider with five stops, **Clear**, **Mist**, **Tint**, **Solid** and **Custom**, for
+  the half the frame shows. Clear is the most see-through and Solid the least. Custom brings back the
+  look you made yourself.
+- **All surfaces**, at the Custom stop: a row of upright sliders for what every surface shares.
+  **Frost** (clear to frosted: how much the glass blurs what is behind it, with a fine grain that
+  grows with it), **Opacity**, **Tint**, **Edge** and **Depth** where the glass edge is drawn (see
+  [Glass](#glass)), **Vibrancy** and **Text size**. Moving one puts every surface on the half back on
+  it; a surface's own card can set its own again.
+- **Wallpaper**: shown behind the launcher or not, and **Change**, which opens the wallpaper picker
+  over the editor (below). This is the only way to the picker.
+- **Theme**: **System**, **Light** or **Dark**.
+- **Icon pack**, **Monochrome**, **Wallpaper colours**, **Contrast**, **Full screen** and
+  **Minimal**.
+- Under **More**: **Alignment** (lines the wallpaper behind the surfaces up with the one on your
+  screen), **Tint colour**, and **Tool colours** (see
+  [Tools that follow the terminal colours](#tools-that-follow-the-terminal-colours)).
+
+**Text size** makes the terminal text, the keyboard's letters and the labels on the status bar, the
+dock and Home larger or smaller together. Each keeps its own size on top of it: a pinch still zooms
+a terminal pane, and Home's label size still applies.
+
+## The surfaces' cards
+
+Every card with glass opens on a row of upright sliders, each with its name and value beside it
+("Frost · 20%"): **Frost**, **Opacity** and **Tint**, the surface's own glass. A dot after a
+slider's name means the value is set here, on this surface; **Reset** in the card's ⋮ menu puts it
+back on the Look. Sizes (**Height**, **Corners**, **Margin**) are sliders across the card.
+
+- **Home**: **Icon size**, **Label size** and **Glass widgets**; **Two-line labels**,
+  **Label shadow**, **Folders**, **Numerals** and **Page dots**; under More, **Folder limit**,
+  **Wallpaper scroll**, **Own layout** (Home laid out unlike the Workspace) and links to Home's
+  gestures and pages. Moving **Glass widgets** applies it to every widget; a widget can still choose
+  its own look from its settings afterwards.
+- **Status bar**: **Frost**, **Opacity**, **Tint**, **Visible** and **Position**; **Corners**,
+  **Margin**, **12-hour clock** and **Clock face** (see [Status bar](Status_Bar.md#clock)); under
+  More, a link to its indicators.
+- **Terminal**: **Frost**, **Opacity**, **Tint** and **Text size**; **Corners**, **Margin** and
+  **Contrast**; under More, **Cursor trail**, **Effect**, **Edge colours**, **Split gap** and a link
+  to its font.
+- **Dock**: **Frost**, **Opacity**, **Tint**, **Height**, **Visible** and **Position**; **Style**
+  (Docked or Floating), **Design** (Tray, Beads or Strip), **Corners** and **Margin**; under More,
+  **Search field**, **App count** and a link to its items.
+- **Keyboard**: **Frost**, **Opacity**, **Key opacity**, **Tint**, **Key corners**, **Key
+  spacing**, **Height** and **Visible**; **Keyboard theme** (its colours and font, see
+  [Keyboard](Keyboard.md)), **Corners** and **Margin**; under More, **Type** (Docked, Floating or
+  Split) and links to its size and layouts.
+
+The glass of the dock, the status bar and the keyboard (frost, opacity and tint) and the Look are
+held per half. Corners, margin, heights, places, Style and Design are one for both halves, so
+nothing moves when you swipe.
 
 ## Wallpaper
 
-The Wallpaper tab has a **Lock screen** card and a **Home screen** card.
+**Change** on the Appearance card opens the picker over the editor. Back returns to the editor;
+**Done** keeps the wallpaper and everything else you changed and closes Appearance.
 
-- Tap a card, then **Choose photo** to pick an image. It is previewed before anything is applied.
+- The picker has a **Lock screen** card and a **Home screen** card. Tap a card, then **Choose photo**
+  to pick an image. It is previewed before anything is applied.
 - While your current wallpaper was set by another app, a small grey line under **Choose photo**
   reads "Set your wallpaper here to see fancier glass." It goes away once you apply a wallpaper from
   Appearance.
@@ -35,39 +106,10 @@ The Wallpaper tab has a **Lock screen** card and a **Home screen** card.
 **Done** puts Home's picture on Home and Lock's on Lock. Scripts can do the same with
 `launcherctl wallpaper set FILE --home|--lock|--both`; see [launcherctl](LauncherCtl.md).
 
-## Look
-
-The Look tab has a slider with five stops: **Clear**, **Mist**, **Tint**, **Solid** and
-**Custom**. Clear is the most see-through and Solid the least. Custom starts from the Look that is
-on screen, so you tune what you see; **Undo** puts back what you opened with.
-
-At **Custom**, vertical sliders appear:
-
-- With nothing tapped (**All surfaces**), the sliders apply to every surface: **Blur**, **Grain**,
-  **Opacity**, **Tint**, **Margin** and **Corner radius**, the glass and the shape, then
-  **Depth**, how thick the glass edge looks. Picking a Look puts Depth where that Look has it. The
-  rest of the edge comes with the Look: Clear shows the wallpaper sharply through its edge with a
-  touch of colour at the corners, Mist and Tint bend it through their frost, and every glass edge
-  carries the same faint line of light along its top. Depth shows only while the glass edge is
-  drawn: Android 13 or newer, **Fancier Glass** on, Lazy mode off, and a wallpaper set from the
-  Wallpaper tab (see [Glass](#glass)).
-  The last of these sliders, **Text size**, makes the terminal text, the keyboard's letters and
-  the labels on the status bar, the dock and Home larger or smaller together. Each keeps its own
-  size on top of it: a pinch still zooms a terminal pane, and Home's label size still applies.
-- Tap an element in the frame to tune it on its own:
-  - **Status bar**: the four glass sliders, plus a **Clock** button for the face and alignment
-    (see [Status bar](Status_Bar.md#clock)).
-  - **Terminal**: the glass sliders and **Contrast**, plus **Cursor trail** and **Terminal effect**.
-  - **Dock**: the glass sliders, **Icon size** (the dock grows to fit it) and **Icons** (how many
-    app buttons show).
-  - **Keyboard**: the glass sliders, **Radius** and **Spacing**, plus a **Keyboard theme** button
-    for its theme, colours and font (see [Keyboard](Keyboard.md)).
-- Tap bare wallpaper to go back to the global sliders. **Undo** steps back.
-
 ### Glass
 
 Every glass surface bends the wallpaper at its edge, as deeply as the chosen Look says, where the
-phone can. That needs Android 13 and a wallpaper set through the Wallpaper tab or
+phone can. That needs Android 13 and a wallpaper set through Appearance or
 `launcherctl wallpaper set`; with any other wallpaper the glass stays flat. **Reduce idle activity**,
 battery saver and reduced motion switch the extra motion off. There is no switch for it.
 
@@ -76,7 +118,7 @@ General → Permissions & services**; until then they render flat.
 
 ## Cursor trail and terminal effect
 
-Both are on the Terminal element at Custom, and under **Settings → Terminal → Text & display**:
+Both are on the Terminal card under More, and under **Settings → Terminal → Text & display**:
 
 - **Cursor trail**: **Off**, **Default**, **Motion blur**, **Railgun**, **Torpedo**, **Pixie dust**,
   **Comet**.
@@ -85,15 +127,15 @@ Both are on the Terminal element at Custom, and under **Settings → Terminal �
 
 ## Icon pack
 
-The Icon pack tab previews each installed pack on your real dock. Tap a tile to apply it at once;
-the first tile, **System**, uses the apps' own icons. **Pinned app icons only** limits the pack to
-the pinned apps.
+**Icon pack** on the Appearance card opens the installed packs under it, previewed on your real
+dock. Tap a tile to apply it at once; the first tile, **System**, uses the apps' own icons.
+**Pinned app icons only** limits the pack to the pinned apps.
 
 ## Appearance settings
 
 **Settings → Look** is a settings page; the command palette's **Look and feel settings** opens
-it too, and Settings search finds every row on it. Its first row, **Wallpaper, look and layout**,
-opens the Appearance editor above. Below that it holds:
+it too, and Settings search finds every row on it. Its first row opens the Appearance editor
+above; the rows below it write the same settings as the Appearance card. Below that it holds:
 
 - **Terminal fonts**: see [Terminal fonts](Terminal_Fonts.md).
 - **App theme**: **System**, **Light** or **Dark**.
@@ -112,7 +154,7 @@ opens the Appearance editor above. Below that it holds:
   landscape and with animations off.
 - **Wallpaper alignment**: lines up the wallpaper behind the surfaces with the one on your screen.
 - **Monochrome icons**, **Icon pack** and **Pinned-app icon pack**.
-- **Keyboard look**: **Surface style** (opens Appearance) and **Keyboard theme**.
+- **Keyboard look**: **Appearance** (opens the Keyboard card) and **Keyboard theme**.
 
 ## Tools that follow the terminal colours
 

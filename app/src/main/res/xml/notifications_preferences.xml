@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_notifications_access_header">
-        <com.termux.app.fragments.settings.StatusActionPreference
-            app:key="app_launcher_notification_access"
-            app:icon="@drawable/ic_symbol_notifications"
-            app:title="@string/termux_app_launcher_notification_access_settings_title" />
-    </PreferenceCategory>
-
+    <!-- Notification access lives on General › Permissions & services only. -->
     <PreferenceCategory app:title="@string/settings_notifications_home_header">
         <SwitchPreferenceCompat
             app:key="app_launcher_notification_dots"

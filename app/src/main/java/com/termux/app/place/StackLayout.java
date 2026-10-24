@@ -42,7 +42,10 @@ public final class StackLayout {
 
     /** Everything one pass of the stack is a function of. Filled once, then read. */
     public static final class Input {
-        /** The dock's snapshot; its squeeze is ignored, the module works that out. */
+        /**
+         * The dock's snapshot, both halves' resolved arrangements in it; its squeeze is ignored,
+         * the module works that out. The stack's Style is its rows half's.
+         */
         @NonNull public final DockGeometry.Snapshot dock;
         public boolean toolbarShown;
         public boolean keyboardShown;
@@ -53,7 +56,6 @@ public final class StackLayout {
         public int keyboardHeightPx;
         /** A status bar standing along the bottom, with its margin; 0 elsewhere. */
         public int statusBandPx;
-        public boolean roundedDockStyle;
         /** The system keyboard's lift while it stands under the dock. */
         public int imeLiftPx;
         /** What the window holds for the stack before the margin comes off, {@link #NO_CEILING}. */
@@ -119,8 +121,9 @@ public final class StackLayout {
             DockGeometry.Snapshot unsqueezed = in.dock.squeezePx == 0 ? in.dock
                 : in.dock.toBuilder().squeezePx(0).build();
             DockLayout probe = geometry.layout(unsqueezed);
-            Base base = new Base(probe, in.roundedDockStyle, in.dock.arrangement, in.toolbarShown,
-                in.keyboardShown, in.imeLiftPx);
+            // The stack wears the Style of the half whose rows it stands, from its arrangement.
+            Base base = new Base(probe, in.dock.rowsHalf().floating, in.dock.arrangement,
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx);
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
@@ -299,6 +302,26 @@ public final class StackLayout {
         return KeyboardOverlayPolicy.restReservationPx(in.side == Side.HOME, dockContentPx,
             in.flushPaddingPx, in.keyboardShown, in.keyboardOverlays,
             Math.max(0, in.keyboardHeightPx), base.marginPx);
+    }
+
+    /**
+     * The band of the widget pane {@code side}'s dock takes at rest, built the way {@link #layout}
+     * builds {@link Result#homeGridDockReservePx}: its own dock rows in its own Style
+     * ({@code rest}, {@code side}'s rest from {@code in}'s snapshot), its own status band and the
+     * air under the keyboard, and the edge gap under them, while the stack shows. Only Home's dock
+     * floats over a grid; every other side takes none.
+     */
+    public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
+        DockGeometry.Half half = in.dock.half(in.side);
+        Base base = new Base(rest, half.floating, half.layout, in.toolbarShown, in.keyboardShown,
+            in.imeLiftPx);
+        int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
+        int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
+            in.extraKeysRowEnabled, statusBandPx);
+        boolean stackShown = DockRows.stackShown(in.toolbarShown, in.keyboardShown,
+            statusBandPx > 0);
+        return KeyboardOverlayPolicy.homeGridDockReservePx(in.side == Side.HOME && stackShown,
+            dockContentPx, base.edgeGapPx);
     }
 
     /** Whether {@code layout} stands the status bar along the bottom, a band of the stack. */

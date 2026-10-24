@@ -25,13 +25,23 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.models.ReportInfo;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
+import com.termux.shared.termux.settings.preferences.TermuxAPIAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Diagnostics: the one logging page (spec §4). The app's own Debugging page and Termux:API's folded
+ * in here, keys unchanged: {@code log_level} is the launcher's, and {@code termux_api_log_level}
+ * stands for Termux:API's own {@code log_level}, shown only while Termux:API is installed.
+ */
 @Keep
 public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPreferenceFragment {
+
+    /** The row for Termux:API's log level, which Termux:API stores as {@code log_level}. */
+    static final String KEY_TERMUX_API_LOG_LEVEL = "termux_api_log_level";
 
     @Override public void onCreatePreferences(Bundle state, String rootKey) {
         Context context = getContext();
@@ -51,10 +61,22 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
 
     private void configureLogLevel(Context context) {
         ListPreference row = findPreference("log_level");
-        if (row == null) return;
-        DebuggingPreferencesFragment.setLogLevelListPreferenceData(row, context,
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context, true).getLogLevel());
-        row.setEntries(Logger.getLogLevelLabelsArray(context, row.getEntryValues(), false));
+        TermuxAppSharedPreferences app = TermuxAppSharedPreferences.build(context, true);
+        if (row != null && app != null) configureLogLevelRow(context, row, app.getLogLevel());
+        ListPreference api = findPreference(KEY_TERMUX_API_LOG_LEVEL);
+        if (api == null) return;
+        // Never the exiting builder: Termux:API being absent is ordinary here.
+        TermuxAPIAppSharedPreferences apiPreferences = TermuxAPIAppSharedPreferences.build(context);
+        api.setVisible(apiPreferences != null);
+        if (apiPreferences != null) configureLogLevelRow(context, api, apiPreferences.getLogLevel(true));
+    }
+
+    private void configureLogLevelRow(Context context, ListPreference row, int logLevel) {
+        CharSequence[] levels = Logger.getLogLevelsArray();
+        row.setEntryValues(levels);
+        row.setEntries(Logger.getLogLevelLabelsArray(context, levels, false));
+        row.setValue(String.valueOf(logLevel));
+        row.setDefaultValue(Logger.DEFAULT_LOG_LEVEL);
         row.setSummaryProvider(preference -> {
             CharSequence entry = ((ListPreference) preference).getEntry();
             return (entry == null ? getString(R.string.settings_log_level_normal) : entry)
@@ -121,12 +143,52 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
         if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() -> AppNotice.show(context, message, false));
     }
 
+    /**
+     * The launcher's logging switches and level, and Termux:API's level, each written where its
+     * owner reads it.
+     */
     private static final class AdvancedDataStore extends PreferenceDataStore {
-        private final DebuggingPreferencesDataStore debugging;
-        AdvancedDataStore(Context context) { debugging = DebuggingPreferencesDataStore.getInstance(context); }
-        @Override public void putBoolean(String key, boolean value) { debugging.putBoolean(key, value); }
-        @Override public boolean getBoolean(String key, boolean fallback) { return debugging.getBoolean(key, fallback); }
-        @Override public void putString(String key, @Nullable String value) { debugging.putString(key, value); }
-        @Override public String getString(String key, @Nullable String fallback) { return debugging.getString(key, fallback); }
+        private final Context context;
+        @Nullable private final TermuxAppSharedPreferences app;
+        @Nullable private final TermuxAPIAppSharedPreferences api;
+
+        AdvancedDataStore(Context context) {
+            this.context = context;
+            app = TermuxAppSharedPreferences.build(context, true);
+            api = TermuxAPIAppSharedPreferences.build(context);
+        }
+
+        @Override public void putBoolean(String key, boolean value) {
+            if (app == null || key == null) return;
+            switch (key) {
+                case "terminal_view_key_logging_enabled": app.setTerminalViewKeyLoggingEnabled(value); break;
+                case "plugin_error_notifications_enabled": app.setPluginErrorNotificationsEnabled(value); break;
+                case "crash_report_notifications_enabled": app.setCrashReportNotificationsEnabled(value); break;
+                default: break;
+            }
+        }
+
+        @Override public boolean getBoolean(String key, boolean fallback) {
+            if (app == null || key == null) return fallback;
+            switch (key) {
+                case "terminal_view_key_logging_enabled": return app.isTerminalViewKeyLoggingEnabled();
+                case "plugin_error_notifications_enabled": return app.arePluginErrorNotificationsEnabled(false);
+                case "crash_report_notifications_enabled": return app.areCrashReportNotificationsEnabled(false);
+                default: return fallback;
+            }
+        }
+
+        @Override public void putString(String key, @Nullable String value) {
+            if (key == null || value == null) return;
+            if ("log_level".equals(key) && app != null) app.setLogLevel(context, Integer.parseInt(value));
+            else if (KEY_TERMUX_API_LOG_LEVEL.equals(key) && api != null)
+                api.setLogLevel(context, Integer.parseInt(value), true);
+        }
+
+        @Override public String getString(String key, @Nullable String fallback) {
+            if ("log_level".equals(key) && app != null) return String.valueOf(app.getLogLevel());
+            if (KEY_TERMUX_API_LOG_LEVEL.equals(key) && api != null) return String.valueOf(api.getLogLevel(true));
+            return fallback;
+        }
     }
 }

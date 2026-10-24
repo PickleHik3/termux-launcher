@@ -149,17 +149,17 @@ public class DockBeadsLeaveTest {
         DockShelfView shelf = new DockShelfView(activity);
         assertEquals("a new shelf shows its bead shadows whole", 1f, shelf.beadShelfAlpha(), 0f);
 
-        ReflectionHelpers.setField(activity, "mSeamBeadShare", LensBeadGeometry.MELT_COVERED_SHARE);
+        crossingOf(activity).beadShare(LensBeadGeometry.MELT_COVERED_SHARE);
         float covered = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
         assertEquals("beads covering the slab still shadow the wallpaper", 0f, covered, 0.0001f);
         shelf.setBeadShelfAlpha(covered);
         assertEquals(0f, shelf.beadShelfAlpha(), 0.0001f);
 
-        ReflectionHelpers.setField(activity, "mSeamBeadShare", 0.6f);
+        crossingOf(activity).beadShare(0.6f);
         float melting = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
         assertTrue(melting > 0f && melting < 1f);
 
-        ReflectionHelpers.setField(activity, "mSeamBeadShare", Float.NaN);
+        crossingOf(activity).beadShare(Float.NaN);
         float rest = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
         assertEquals("at rest the bead shadows are whole", 1f, rest, 0f);
         shelf.setBeadShelfAlpha(rest);
@@ -179,5 +179,10 @@ public class DockBeadsLeaveTest {
         }
         assertTrue("a settle that moves the slab's top leaves the glass cut at the old height",
             watched);
+    }
+
+    /** The activity's crossing, which holds the bead share the seam once held on the activity. */
+    private static com.termux.app.place.Crossing crossingOf(TermuxActivity activity) {
+        return ReflectionHelpers.getField(activity, "mCrossing");
     }
 }

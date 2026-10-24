@@ -289,7 +289,8 @@ public class SuggestionBarPageCommitTest {
         PlaceLayout layout = arrangement;
         // Stored as well as applied: everything the scrub reads — which band the matches fill and
         // which way the finger travels to reach it — comes from the store through
-        // currentPlaceLayout(), not from the arrangement handed to applyEdgeStacks().
+        // the arrangement on screen (arrangement()), not from the arrangement handed to
+        // applyEdgeStacks().
         PlaceLayoutStore store = ReflectionHelpers.callInstanceMethod(screen, "placeLayoutStore");
         assertNotNull(store);
         for (PaneWallPage place : PaneWallPage.values())
