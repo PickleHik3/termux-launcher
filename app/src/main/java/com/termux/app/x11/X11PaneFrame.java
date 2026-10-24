@@ -16,7 +16,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
-import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
+import com.termux.app.fragments.settings.termux.GuiAppsSetupGuideFragment;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
@@ -787,7 +787,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     private void openDistroSetup() {
         try {
-            getContext().startActivity(GuiAppsSetupPreferencesFragment.intent(getContext())
+            getContext().startActivity(GuiAppsSetupGuideFragment.intent(getContext())
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (RuntimeException e) {
             // A home screen's empty state is not worth a crash; the row in Settings is still there.

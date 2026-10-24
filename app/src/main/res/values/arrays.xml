@@ -335,24 +335,6 @@
         <item>exact</item>
         <item>custom</item>
     </string-array>
-    <string-array name="gui_apps_route_entries">
-        <item>Termux X11 repo</item>
-        <item>proot distro</item>
-    </string-array>
-    <string-array name="gui_apps_route_values">
-        <item>x11</item>
-        <item>distro</item>
-    </string-array>
-    <string-array name="gui_apps_distro_entries">
-        <item>Debian (recommended)</item>
-        <item>Ubuntu</item>
-        <item>Arch Linux</item>
-    </string-array>
-    <string-array name="gui_apps_distro_values">
-        <item>debian</item>
-        <item>ubuntu</item>
-        <item>arch</item>
-    </string-array>
     <string-array name="settings_terminal_cursor_trail_style_entries">
         <item>Default</item>
         <item>Motion blur</item>
