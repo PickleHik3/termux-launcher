@@ -85,6 +85,22 @@ public abstract class BuiltinWidgetView extends FrameLayout
         @Nullable public final String shownWhenValue;
         /** A {@link Type#ZONES} row's second key ({@link #key} is its first); null otherwise. */
         @Nullable public final String secondKey;
+        /** A leading glyph for the field's card, or 0 for none. */
+        @androidx.annotation.DrawableRes public int icon;
+        /** A muted line under the field's title, or null for none. */
+        @Nullable public CharSequence summary;
+
+        /** This field with a leading glyph in its card. */
+        @NonNull public ConfigField withIcon(@androidx.annotation.DrawableRes int icon) {
+            this.icon = icon;
+            return this;
+        }
+
+        /** This field with a muted line under its title. */
+        @NonNull public ConfigField withSummary(@Nullable CharSequence summary) {
+            this.summary = summary;
+            return this;
+        }
 
         public ConfigField(@NonNull String key, @NonNull CharSequence label, @NonNull Type type,
                            @NonNull String fallback) {
@@ -134,7 +150,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         /** This field, shown only while the field {@code key} holds {@code value}. */
         @NonNull public ConfigField shownWhen(@NonNull String key, @NonNull String value) {
             return new ConfigField(this.key, label, type, fallback, options, tiles, key, value,
-                secondKey);
+                secondKey).withIcon(icon).withSummary(summary);
         }
 
         /** Whether the field shows while the sheet's fields hold {@code values}. */

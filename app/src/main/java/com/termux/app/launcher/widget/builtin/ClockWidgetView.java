@@ -90,11 +90,17 @@ public class ClockWidgetView extends BuiltinWidgetView {
             context.getString(R.string.bw_clock_weight), ClockWidgetSettings.WEIGHT_THIN,
             weights, null).shownWhen(ClockWidgetSettings.KEY_FACE, ClockFace.MINIMAL.key));
         fields.add(ConfigField.toggle(ClockWidgetSettings.KEY_SECONDS,
-            context.getString(R.string.bw_clock_seconds), false));
+            context.getString(R.string.bw_clock_seconds), false)
+            .withIcon(R.drawable.ic_clock_sheet_stopwatch)
+            .withSummary(context.getString(R.string.bw_clock_seconds_summary)));
         fields.add(ConfigField.toggle(ClockWidgetSettings.KEY_24_HOUR,
-            context.getString(R.string.bw_clock_24_hour), is24()));
+            context.getString(R.string.bw_clock_24_hour), is24())
+            .withIcon(R.drawable.ic_clock_sheet_hours_24)
+            .withSummary(context.getString(R.string.bw_clock_24_hour_summary)));
         fields.add(ConfigField.zones(ClockWidgetSettings.KEY_ZONE1,
-            ClockWidgetSettings.KEY_ZONE2, context.getString(R.string.bw_clock_zones)));
+            ClockWidgetSettings.KEY_ZONE2, context.getString(R.string.bw_clock_zones))
+            .withIcon(R.drawable.ic_clock_sheet_globe)
+            .withSummary(context.getString(R.string.bw_clock_zones_summary)));
         return fields;
     }
 

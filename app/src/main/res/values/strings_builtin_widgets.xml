@@ -42,7 +42,11 @@
     <string name="terminal_widget_remove">Remove</string>
 
     <string name="builtin_widget_settings_save">Save</string>
-    <string name="builtin_widget_settings_title">%1$s settings</string>
+    <string name="builtin_widget_settings_save_failed">Couldn\'t save. Try again.</string>
+    <string name="builtin_widget_option_selected">Selected</string>
+    <string name="builtin_widget_settings_subtitle">Customize how the widget looks on your home screen</string>
+    <string name="builtin_widget_glass_subtitle">Background style for the widget</string>
+    <string name="builtin_widget_settings_title">%1$s widget settings</string>
     <string name="builtin_widget_glass">Glass</string>
     <string name="builtin_widget_glass_summary">Page follows Widgets on glass in the Look. On or Off sets this widget apart. Bare, on Clock and Weather, draws no card at all.</string>
     <string name="builtin_widget_glass_follow">Page</string>
