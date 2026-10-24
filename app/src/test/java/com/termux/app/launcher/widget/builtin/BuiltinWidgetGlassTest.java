@@ -147,6 +147,18 @@ public class BuiltinWidgetGlassTest {
         return view.findViewById(android.R.id.background);
     }
 
+    /** A widget never given its own choice, on an install that never touched the switch, is glass. */
+    @Test
+    public void widgetsOnGlassIsOnUntilTheSwitchIsTurnedOff() {
+        assertTrue(TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS);
+        assertTrue(BuiltinWidgetGlass.resolve(null, TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+        assertTrue(BuiltinWidgetGlass.resolve("", TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+        assertFalse(BuiltinWidgetGlass.resolve(BuiltinWidgetGlass.OFF,
+            TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+        assertFalse(BuiltinWidgetGlass.resolve(BuiltinWidgetGlass.BARE,
+            TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS));
+    }
+
     @Test
     public void aWidgetsChoiceOverridesThePageAndAbsentFollowsIt() {
         for (boolean page : new boolean[] {false, true}) {

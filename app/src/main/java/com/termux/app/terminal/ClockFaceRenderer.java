@@ -325,22 +325,12 @@ public final class ClockFaceRenderer {
     /** Whether the seconds are drawn; the bar always draws them. */
     private boolean mShowSeconds = true;
     /**
-     * Whether a 12-hour clock's period is drawn beside an inline meta run. A widget too narrow
-     * for it at the Label role sheds it rather than shrink it under the 11sp floor; the digits
-     * stay 12-hour. The bar's stacked column always draws it.
+     * Whether a 12-hour clock's period is drawn in the meta column, over the seconds. A widget too
+     * narrow for the column sheds it; the digits stay 12-hour.
      */
     private boolean mShowPeriod = true;
     /** Whether a seconds digit animates when it changes; a widget's face turns only on the minute. */
     private boolean mSecondsAnimated = true;
-    /**
-     * Whether the seconds and the period run in one line on the digits' baseline, both at the
-     * Label role, rather than stacked with the period at a fraction of it. The widget's: its
-     * period then never paints under the 11sp floor, and a 1×1's short band never has to hold
-     * two rows.
-     */
-    private boolean mInlineMeta;
-    /** The label-space gap between the seconds and the period on an inline meta run. */
-    private static final float INLINE_META_GAP_DP = 4f;
     /** Smallest scale any plan hands out, so a starved budget never inverts the face. */
     private static final float MIN_SCALE = .05f;
     /** Budget the host hands the face; height 0 means no fit (the legacy shrink-only path). */
@@ -370,7 +360,6 @@ public final class ClockFaceRenderer {
         renderer.mDateRow = false;
         renderer.mSecondsAnimated = false;
         renderer.mFitCeiling = WIDGET_FIT_MAX_SCALE;
-        renderer.mInlineMeta = true;
         return renderer;
     }
 
@@ -385,7 +374,7 @@ public final class ClockFaceRenderer {
         return mShowSeconds;
     }
 
-    /** Whether a 12-hour period is drawn on the inline meta run. Returns true if it changed. */
+    /** Whether a 12-hour period is drawn in the meta column. Returns true if it changed. */
     public boolean setPeriodShown(boolean shown) {
         if (mShowPeriod == shown) return false;
         mShowPeriod = shown;
@@ -769,7 +758,6 @@ public final class ClockFaceRenderer {
     /** The FULL meta column — the seconds, with the period over them — at its painted size. */
     private float fullTimeLabelPx() {
         if (!hasMetaColumn()) return 0f;
-        if (mInlineMeta) return inlineMetaWidth();
         if (isStyle(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP)) {
             return fullFlipMetaWidth();
         }
@@ -1554,10 +1542,6 @@ public final class ClockFaceRenderer {
     }
 
     private void drawFullFlipMetaColumn(Canvas canvas, float x, float digitBaseline, long now) {
-        if (mInlineMeta) {
-            drawInlineMeta(canvas, x, digitBaseline, condensedBoldTypeface());
-            return;
-        }
         Typeface face = condensedBoldTypeface();
         float cellWidth = widestDigitsWidth(1, face, mLabelSp) / mScale;
         float secondsSp = labelSp();
@@ -1569,17 +1553,19 @@ public final class ClockFaceRenderer {
         float secondsDescent = mPaint.descent();
         float secondsCapHeight = capHeight(face, secondsSp);
         float split = digitBaseline - secondsCapHeight / 2f;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 2 && mShowSeconds; i++) {
             mFlipMetaCell.set(x + i * cellWidth, digitBaseline + secondsAscent,
                 x + (i + 1) * cellWidth, digitBaseline + secondsDescent);
             drawFullFlipSecond(canvas, i, mFlipMetaCell, split, digitBaseline, now);
         }
 
-        if (mSnapshot.period.isEmpty()) return;
+        if (!mShowPeriod || mSnapshot.period.isEmpty()) return;
         mPaint.setTypeface(face);
         mPaint.setLetterSpacing(.1f);
         mPaint.setTextSize(sp(secondsSp * PERIOD_SCALE));
-        float periodBaseline = digitBaseline + secondsAscent - lp(2f) - mPaint.descent();
+        // With the seconds shed the period takes their row.
+        float periodBaseline = digitBaseline - mPaint.descent()
+            + (mShowSeconds ? secondsAscent - lp(2f) : 0f);
         mPaint.setColor(mPeriodInk);
         mPaint.setAlpha(255);
         mPaint.setTextAlign(Paint.Align.LEFT);
@@ -2120,10 +2106,6 @@ public final class ClockFaceRenderer {
     private void drawStackedMetaColumn(Canvas canvas, float x, float baseline,
                                        Typeface secondsFace, Typeface periodFace,
                                        boolean boxedPeriod, long now, long duration) {
-        if (mInlineMeta) {
-            drawInlineMeta(canvas, x, baseline, secondsFace);
-            return;
-        }
         float secondsSp = labelSp();
         mPaint.setTypeface(secondsFace);
         mPaint.setLetterSpacing(0f);
@@ -2131,7 +2113,7 @@ public final class ClockFaceRenderer {
         mPaint.setTextAlign(Paint.Align.LEFT);
         float secondsAscent = mPaint.ascent();
         float cursor = x;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 2 && mShowSeconds; i++) {
             float eased = ease(secondsProgress(i, now, duration));
             mPaint.setColor(mSecondsInk);
             mPaint.setAlpha(Math.round(Color.alpha(mSecondsInk) * eased));
@@ -2141,8 +2123,11 @@ public final class ClockFaceRenderer {
             cursor += mSecondsAdvances.advance(c, secondsFace, mPaint.getTextSize(), 0f, mMeasure);
         }
         mPaint.setAlpha(255);
-        if (mSnapshot.period.isEmpty()) return;
-        float width = cursor - x;
+        if (!mShowPeriod || mSnapshot.period.isEmpty()) return;
+        // The column is as wide as the seconds would be even when they are shed.
+        // Never wider than the column the fit measured, so a digit pair's rounding cannot push the
+        // period past the box.
+        float width = stackedMetaWidth(secondsFace) / mScale;
         String period = mSnapshot.period;
         float boxPad = boxedPeriod ? lp(BOX_PAD_DP) : 0f;
         float periodDp = secondsSp * PERIOD_SCALE;
@@ -2152,18 +2137,19 @@ public final class ClockFaceRenderer {
         if (natural > room) {
             periodDp *= room / natural;
             natural = room;
-        } else if (!boxedPeriod && room - natural > gaps * dp(periodDp) * MAX_PERIOD_TRACKING) {
+        } else if (!boxedPeriod && room - natural > gaps * sp(periodDp) * MAX_PERIOD_TRACKING) {
             // A narrow label (the monospace faces) would need more tracking than reads as one word;
             // grow it until the cap's worth of tracking fills the width instead. Text width scales
             // with size, so the target size follows from the width-per-pixel-of-size at the current
             // one (both sides in px; the result is converted back to dp).
-            float widthPerPx = natural / dp(periodDp);
-            periodDp = room / (widthPerPx + gaps * MAX_PERIOD_TRACKING) / dp(1f);
+            float widthPerPx = natural / sp(periodDp);
+            periodDp = room / (widthPerPx + gaps * MAX_PERIOD_TRACKING) / sp(1f);
             natural = spacedTextWidth(period, periodFace, periodDp, 0f);
         }
         // Clear of the seconds' own ascent (and the box's stroke), so the rows never touch.
         float gap = lp(2.5f) + (boxedPeriod ? lp(1.5f) : 0f);
-        float periodBaseline = periodBaselineAbove(baseline + secondsAscent - gap, periodFace,
+        float periodBaseline = periodBaselineAbove(
+            mShowSeconds ? baseline + secondsAscent - gap : baseline, periodFace,
             periodDp, boxedPeriod);
         if (boxedPeriod) {
             mPaint.setTypeface(periodFace);
@@ -2183,46 +2169,9 @@ public final class ClockFaceRenderer {
         // Letter spacing is applied half before and half after every glyph, so the tracking that
         // makes the glyph run exactly `width` wide is spread over the gaps between glyphs, and the
         // run starts half a gap before x.
-        float spacing = (width - natural) / (gaps * dp(periodDp));
-        drawLabel(canvas, period, x - spacing * dp(periodDp) / 2f, periodBaseline, periodDp,
+        float spacing = (width - natural) / (gaps * sp(periodDp));
+        drawLabel(canvas, period, x - spacing * sp(periodDp) / 2f, periodBaseline, periodDp,
             periodFace, spacing, mPeriodInk);
-    }
-
-    /** The inline meta run's painted width: the seconds' widest pair, then the period. */
-    private float inlineMetaWidth() {
-        Typeface face = secondsTypeface();
-        float width = mShowSeconds ? widestDigitsWidth(2, face, LABEL_SP) : 0f;
-        if (mShowPeriod && !mSnapshot.period.isEmpty()) {
-            if (mShowSeconds) width += dp(INLINE_META_GAP_DP);
-            width += spacedTextWidth(mSnapshot.period, face, LABEL_SP, 0f);
-        }
-        return width;
-    }
-
-    /**
-     * The seconds and the period in one run on {@code baseline}, both at the Label role, the
-     * seconds in a slot as wide as the face's widest pair so the period never moves.
-     */
-    private void drawInlineMeta(Canvas canvas, float x, float baseline, Typeface face) {
-        float cursor = x;
-        if (mShowSeconds) {
-            float slot = widestDigitsWidth(2, face, mLabelSp) / mScale;
-            mPaint.setTypeface(face);
-            mPaint.setLetterSpacing(0f);
-            mPaint.setTextSize(sp(labelSp()));
-            mPaint.setTextAlign(Paint.Align.LEFT);
-            mPaint.setColor(mSecondsInk);
-            float digit = cursor;
-            for (int i = 0; i < 2; i++) {
-                char c = mSnapshot.ss.charAt(i);
-                canvas.drawText(CharAdvances.charString(c), digit, baseline, mPaint);
-                digit += mSecondsAdvances.advance(c, face, mPaint.getTextSize(), 0f, mMeasure);
-            }
-            cursor += slot + lp(INLINE_META_GAP_DP);
-        }
-        if (mShowPeriod && !mSnapshot.period.isEmpty()) {
-            drawLabel(canvas, mSnapshot.period, cursor, baseline, labelSp(), face, 0f, mPeriodInk);
-        }
     }
 
     /**

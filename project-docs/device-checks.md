@@ -13,6 +13,16 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-24 · widgets on glass default (commit "feat(widgets): glass is on by default") · on an
+  install upgraded from a build that never stored the switch: widgets that never had a Glass choice
+  now wear the Look's glass over the wallpaper; one set to Off or Bare keeps its solid or bare
+  card; turning Widgets on glass off returns the unset ones to the solid card. A fresh install
+  opens with glass widgets.
+- 2026-10-24 · clock widget meta column (commit "feat(clock): widgets stack AM/PM over the
+  seconds") · on the emulator with a 12-hour clock widget in each face (Numerals, Slab, Minimal,
+  Tape, LED, LCD, Flip) at 2x1, 2x2 and 4x2: the period stands over the seconds like the expanded
+  status bar, nothing clips at the card's right edge; seconds off keeps the period on the digits'
+  row; a 24-hour clock shows the seconds alone and nothing shifts.
 - 2026-10-23 · #142 phase 2 (commit "feat(place): the crossing morphs the dock's row and holds
   every reader") · the audit's slide clips re-shot, frames recorded: Home → window and window →
   Home, Docked and Floating, each of Tray, Beads and Strip → the pinned icons change size and
