@@ -48,7 +48,7 @@
             app:summary="@string/settings_appearance_door_summary" />
         <Preference
             app:key="in_app_keyboard_color_scheme_editor"
-            app:icon="@drawable/ic_symbol_palette"
+            app:icon="@drawable/ic_ms_format_paint"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
             app:summary="@string/keyboard_theme_summary"
             app:title="@string/keyboard_theme_title" />
@@ -68,7 +68,7 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:key="keyboard_hardware" app:title="@string/settings_keyboard_sub_hardware_title">
+    <PreferenceCategory app:key="keyboard_hardware">
         <Preference
             app:key="keyboard_sub_hardware"
             app:persistent="false"

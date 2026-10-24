@@ -30,7 +30,7 @@
     <string name="settings_home_gesture_opens_app">Opens %1$s</string>
     <string name="settings_home_gesture_pick_app">Choose an app</string>
     <string name="settings_home_gestures_helper_title">More gestures</string>
-    <string name="settings_home_gestures_helper_summary">Turn on the launcher\'s accessibility service, or connect Shizuku, to lock the screen or open notifications and quick settings with a gesture.</string>
+    <string name="settings_home_gestures_helper_summary">Turn on the launcher\'s accessibility service, or connect Shizuku, to lock the screen or open notifications and quick settings with a gesture</string>
     <string name="home_gesture_needs_helper">Turn on the launcher\'s accessibility service or connect Shizuku for this gesture</string>
     <string name="home_gesture_shade_failed">Shizuku couldn\'t open that. Check that it is running.</string>
     <string name="home_gesture_no_app">Choose an app for this gesture in Settings › Home</string>
@@ -86,7 +86,7 @@
 
     <!-- Lock Home layout (F9) -->
     <string name="settings_home_layout_locked_title">Lock Home layout</string>
-    <string name="settings_home_layout_locked_summary">Stop icons and widgets from being moved by accident. Taps still open them.</string>
+    <string name="settings_home_layout_locked_summary">Stop icons and widgets from being moved by accident. Taps still open them</string>
     <string name="home_actions_lock_layout">Lock layout</string>
     <string name="home_actions_unlock_layout">Unlock layout</string>
     <string name="home_layout_locked_notice">Home layout locked</string>

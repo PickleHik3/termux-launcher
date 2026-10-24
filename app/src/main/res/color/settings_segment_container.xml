@@ -3,5 +3,5 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_enabled="false" android:alpha="0.12" android:color="?attr/colorOnSurface" />
     <item android:state_checked="true" android:color="?attr/colorPrimaryContainer" />
-    <item android:color="?attr/colorSurfaceContainerHighest" />
+    <item android:color="@color/settings_segment_unselected" />
 </selector>
