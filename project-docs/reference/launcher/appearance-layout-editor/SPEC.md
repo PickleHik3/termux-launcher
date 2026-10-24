@@ -239,48 +239,51 @@ its element to its last edge, a tile dragged onto the canvas puts it on the edge
 
 ### 3.6a Dragging in the editor frame, and the hidden items' rail (2026-10-24)
 
-Settled by the developer in a grilling session on 2026-10-24 for the Appearance editor's frame
-(SurfaceEditorController, the hidden items' rail beside the frame). Supersedes §3.5's drop-target
-drawing and §3.6 where they differ. Status per item: **built** on the 2026-10-24 branch, or
-**open** where the decision as written cannot be built as stated (the reason is given).
+Settled by the developer in a grilling session on 2026-10-24, and the open points in a second
+round the same day, for the Appearance editor's frame (SurfaceEditorController, the hidden items'
+rail beside the frame). Supersedes §3.5's drop-target drawing and §3.6 where they differ. Built on
+the 2026-10-24 branch; not yet seen on a device.
 
-1. **Live drag** (open). The live frame stays visible through a drag; the layout canvas keeps its
-   slot and hit-test logic but draws nothing schematic; the held element lifts as its real render
-   (preview scale, slight elevation) and follows the finger; the other elements reflow live to the
-   hovered slot's layout; drop and commit as today. Open: the live chrome reads its arrangement
-   from the store through the host's whole place pass (`applyPlaceArrangement`, which re-hosts the
-   dock, the index and the extra keys and resizes the terminal), and has no way to show a layout
-   that is not written. A live reflow per hovered slot needs a preview arrangement through that
-   pass (or a translate-only reflow layer over every element), a large change outside the editor.
-2. **Rail chip into the preview** (open; rests on 1). A chip stays a chip over the rail and turns
-   into the real element at preview scale once it crosses into the frame.
-3. **Offset rule.** Built: the frame keeps one pose from the hold through the drop. A hold no
-   longer puts the card down (that moved the frame to its rest pose, larger and further across,
-   under the finger); the card that was up stays up through the drag. Open: "nothing hidden → no
-   rail, no reserve, frame centred". A lifted element's only hide target is the rail's drop slot
-   (4), and a centred frame at rest leaves the rail no room (on a 411dp phone at ×0.79 the frame
-   starts about 43dp in; the rail's band is 88dp), so either the frame moves at the lift or the
-   drop slot covers the frame's left edge. The reserve stays on whenever the editor is up until
-   that is settled.
-4. **Rail border.** Built: the rail is one geometry (`HiddenStackPolicy.rail`): the cards, one
-   empty drop slot after the last, and the dotted border round both with the same 4dp of air on
-   every side (in the 8dp either side of the cards' column, so the cards never move when it
-   shows). The rail rests on the column's bottom; the border hugs its content, never the whole
-   column. The border is the drop target. Corners concentric with the cards (12 + 4dp).
-5. **Capsules from real bounds** (open; rests on 1, and see 6). Per-element bounds on the live
-   frame mapped into the canvas, every capsule the real bounds plus one shared inset, its corner
-   the element's own, an empty slot sized as the held element would be there.
-6. **No crossing.** Built (on the canvas's slots): one capsule per slot (`DropCapsulePolicy`).
-   Side-strip slots show only where the held element may stand on a side (the edge policy's
-   targets); where one shows, every row capsule starts after it; whatever still overlaps is cut
-   apart halfway; every capsule stands 1.5dp inside its slot and inside the frame, so no two meet
-   and none runs past the phone. Open with 5: "every valid slot outlined, each sized as the held
-   element would be there, no two meeting" cannot all hold where an edge offers two gaps closer
-   than the held element is thick (a status bar 24dp thick on the top edge offers gaps at 0 and
-   24dp; a 56dp dock dropped at either needs 0–56 and 24–80dp, which overlap).
-7. **States.** Built: every valid slot dotted in the primary; the hovered one solid with the light
-   tint of the primary the hovered gap wore before. The rail's border likewise: dotted while
-   offered, solid and tinted with the finger over it.
+1. **Live drag, a snapshot layer.** No rewrite of the place pass. At a hold the frame is copied
+   once off the window (`PixelCopy`, so glass, frost and refraction come with it) and cut into one
+   picture per element at its real rect (status bar, pinned apps, A–Z, extra keys, keyboard;
+   `LiveDragCapture`). The real views and what stands behind them (the dock's glass, the status
+   band, the off-dock plank, the selection outline) go transparent, alpha only: nothing is laid
+   out, re-hosted or resized, and the terminal never resizes. The layout canvas keeps its slots and
+   hit tests and draws nothing schematic over a transparent host: the pictures and the targets.
+   On a hover change the others move (translation, 150ms) to where the shape model puts them in
+   the arrangement the drop would commit, mapped by the frame's own scale (`LiveDragPolicy`); the
+   held picture follows the finger, slightly raised. Drop: committed once through the existing
+   path; the held picture goes to its capsule, and after two frames every picture settles on its
+   real view's new rect, then the pictures go and the real views show. Cancel: the pictures go
+   back, then go. The pane (terminal or Home's grid) is not a picture and does not move. The
+   other orientation keeps the schematic, the live frame cannot show it.
+   *Lining up:* the pictures start exactly on the real views, and the settle ends exactly on them;
+   in between they stand where the model puts the elements, which is where the real views land as
+   far as the model's thicknesses (the launcher's own dp figures at the frame's scale) are the
+   live ones.
+2. **Rail chip into the preview.** A chip stays a chip over the rail; over a slot in the frame it
+   hides and the element shows at its size there and the others reflow, as in 1. A hidden element
+   has no real render, so it is a tinted stand-in of its model size for the status bar, pinned
+   apps, A–Z and extra keys (no offscreen render is attempted: their views are gone or hosted for
+   another edge). The keyboard and Search field cards stay chips and keep their old drop.
+3. **Offset rule** (`EditorFramePose.railPose`). Something hidden: the rail shows and the frame
+   keeps one offset and scale in every state (the reserve's, as before). Nothing hidden: no
+   reserve, the frame centred at rest; at a lift it slides (200ms, same scale, translation only,
+   the canvas carried with it) to the rail's offset, where the rail shows its empty drop slot in
+   its border; after the drop it stays offset if something is now hidden (at the reserve's scale),
+   otherwise it slides back. A card that is up stays up through the drag.
+4. **Rail border.** The rail is one geometry (`HiddenStackPolicy.rail`): the cards, one empty drop
+   slot after the last, and the dotted border round both with the same 4dp of air on every side.
+   Cards are always sized for the one extra slot. The border hugs its content and is the drop
+   target; corners concentric with the cards (12 + 4dp).
+5. **Capsules** (`DropCapsulePolicy`). Every valid slot shows a slim marker (4dp, fully rounded,
+   dotted) on its gap line, running the slot's length. Side-strip slots show only where the held
+   element may stand on a side; where one shows, every row marker starts after it; markers never
+   meet and never cross the frame's edge (1.5dp inside it). The hovered slot opens to the held
+   element's full size there as the shape model gives it, at its own corners, solid with a light
+   tint, and the pictures beside it move aside (1).
+6. **States.** Valid slots dotted; the hovered one solid and tinted. The rail's border likewise.
 
 ### 3.7 Style (2026-10-01)
 
