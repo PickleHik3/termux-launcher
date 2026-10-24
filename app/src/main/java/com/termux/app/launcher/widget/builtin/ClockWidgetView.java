@@ -62,6 +62,10 @@ public class ClockWidgetView extends BuiltinWidgetView {
 
     private boolean seconds() { return ClockWidgetSettings.seconds(settings()); }
 
+    private boolean showDate() { return ClockWidgetSettings.showDate(settings()); }
+
+    private boolean showAlarm() { return ClockWidgetSettings.showAlarm(settings()); }
+
     private boolean is24() {
         return ClockWidgetSettings.is24Hour(settings(), DateFormat.is24HourFormat(getContext()));
     }
@@ -93,6 +97,14 @@ public class ClockWidgetView extends BuiltinWidgetView {
             context.getString(R.string.bw_clock_seconds), false)
             .withIcon(R.drawable.ic_clock_sheet_stopwatch)
             .withSummary(context.getString(R.string.bw_clock_seconds_summary)));
+        fields.add(ConfigField.toggle(ClockWidgetSettings.KEY_SHOW_DATE,
+            context.getString(R.string.bw_clock_show_date), true)
+            .withIcon(R.drawable.ic_clock_sheet_calendar)
+            .withSummary(context.getString(R.string.bw_clock_show_date_summary)));
+        fields.add(ConfigField.toggle(ClockWidgetSettings.KEY_SHOW_ALARM,
+            context.getString(R.string.bw_clock_show_alarm), true)
+            .withIcon(R.drawable.ic_clock_sheet_alarm)
+            .withSummary(context.getString(R.string.bw_clock_show_alarm_summary)));
         fields.add(ConfigField.toggle(ClockWidgetSettings.KEY_24_HOUR,
             context.getString(R.string.bw_clock_24_hour), is24())
             .withIcon(R.drawable.ic_clock_sheet_hours_24)
@@ -139,11 +151,12 @@ public class ClockWidgetView extends BuiltinWidgetView {
         faceView.configure(face, ClockWidgetSettings.medium(settings()), seconds(), is24,
             span == BuiltinWidgetSpan.ONE_BY_ONE, lazy(), now);
         faceView.setGround(groundSurface());
-        String date = ClockWidgetSupport.date("EEEdMMM", now);
+        String date = shownDateText(now);
         // The date's shorter forms, for a line too narrow for the whole one: never cut.
-        List<String> dates = java.util.Arrays.asList(date,
-            ClockWidgetSupport.date("dMMM", now), ClockWidgetSupport.date("EEEd", now));
-        String alarm = span.isTall() ? alarmText(now, is24) : "";
+        List<String> dates = date.isEmpty() ? java.util.Collections.<String>emptyList()
+            : java.util.Arrays.asList(date,
+                ClockWidgetSupport.date("dMMM", now), ClockWidgetSupport.date("EEEd", now));
+        String alarm = shownAlarmText(span, now, is24);
         List<ClockLayoutPlanner.ZoneColumn> zones = zoneColumns(now, is24, span);
         shownDate = date;
         shownAlarm = alarm;
@@ -163,13 +176,26 @@ public class ClockWidgetView extends BuiltinWidgetView {
         describe(now, date, alarm, zones, is24);
     }
 
+    /** The date line's text, or empty when the sheet's Show date is off. */
+    @NonNull private String shownDateText(@NonNull ZonedDateTime now) {
+        return showDate() ? ClockWidgetSupport.date("EEEdMMM", now) : "";
+    }
+
+    /** The alarm line's text: empty below 2×2, with Show next alarm off, or with no alarm set. */
+    @NonNull private String shownAlarmText(@NonNull BuiltinWidgetSpan span,
+                                           @NonNull ZonedDateTime now, boolean is24) {
+        return span.isTall() && showAlarm() ? alarmText(now, is24) : "";
+    }
+
     /** "Clock, 13:40, Tuesday 6 October", with the alarm when it shows. */
     private void describe(@NonNull ZonedDateTime now, @NonNull String date, @NonNull String alarm,
                           @NonNull List<ClockLayoutPlanner.ZoneColumn> zones, boolean is24) {
         String time = ClockWidgetFormats.hoursMinutes(now.toLocalTime(), is24) + " "
             + ClockWidgetFormats.amPm(now.toLocalTime(), is24);
-        StringBuilder text = new StringBuilder(getContext().getString(R.string.bw_clocks_description,
-            time.trim(), ClockWidgetSupport.date("EEEEdMMMM", now)));
+        StringBuilder text = new StringBuilder(date.isEmpty()
+            ? getContext().getString(R.string.bw_clocks_description_time, time.trim())
+            : getContext().getString(R.string.bw_clocks_description,
+                time.trim(), ClockWidgetSupport.date("EEEEdMMMM", now)));
         if (!alarm.isEmpty()) {
             text.append(". ").append(getContext().getString(R.string.bw_clock_alarm, alarm));
         }
@@ -258,8 +284,8 @@ public class ClockWidgetView extends BuiltinWidgetView {
     private void onMinute() {
         if (!isStarted()) return;
         ZonedDateTime now = now();
-        String date = ClockWidgetSupport.date("EEEdMMM", now);
-        String alarm = span().isTall() ? alarmText(now, is24()) : "";
+        String date = shownDateText(now);
+        String alarm = shownAlarmText(span(), now, is24());
         List<ClockLayoutPlanner.ZoneColumn> zones = zoneColumns(now, is24(), span());
         if (!date.equals(shownDate) || !alarm.equals(shownAlarm)
             || !zonesKey(zones).equals(shownZones)) {

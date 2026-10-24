@@ -27,6 +27,9 @@ public final class ClockWidgetSettings {
     /** Minimal's weight: {@link #WEIGHT_THIN} (the default) or {@link #WEIGHT_MEDIUM}. */
     public static final String KEY_WEIGHT = "weight";
     public static final String KEY_SECONDS = "seconds";
+    /** The date line and the next-alarm line; absent is on, so clocks placed before keep both. */
+    public static final String KEY_SHOW_DATE = "show_date";
+    public static final String KEY_SHOW_ALARM = "show_alarm";
     /** 24-hour time; absent follows the phone's format, as the old clocks did. */
     public static final String KEY_24_HOUR = "h24";
     /** The two cities the analog clock kept; the Clock's two extra time zones (#113); empty or absent is none. */
@@ -84,6 +87,16 @@ public final class ClockWidgetSettings {
 
     public static boolean seconds(@NonNull Bundle settings) {
         return ON.equals(settings.getString(KEY_SECONDS));
+    }
+
+    /** Whether the date line shows: on unless the sheet turned it off. */
+    public static boolean showDate(@NonNull Bundle settings) {
+        return !OFF.equals(settings.getString(KEY_SHOW_DATE));
+    }
+
+    /** Whether the next-alarm line shows: on unless the sheet turned it off. */
+    public static boolean showAlarm(@NonNull Bundle settings) {
+        return !OFF.equals(settings.getString(KEY_SHOW_ALARM));
     }
 
     /** The zones the Clock shows beyond the phone's: the stored ones that name a real zone, at most two. */

@@ -126,6 +126,8 @@ public final class ClockFaceRenderer {
     private static final long SECONDS_FLIP_DURATION_MS = 340L;
     /** Period label size as a share of the seconds it stacks over — the slab's proportion. */
     private static final float PERIOD_SCALE = .64f;
+    /** The tracking (em) of the full flip's period label. */
+    private static final float FLIP_PERIOD_TRACKING = .1f;
     /** Most tracking (em) the period takes before it grows to fill the seconds' width instead. */
     private static final float MAX_PERIOD_TRACKING = .25f;
     /** Inset between the LCD period box and its label. */
@@ -921,7 +923,7 @@ public final class ClockFaceRenderer {
         float seconds = widestDigitsWidth(2, condensedBoldTypeface(), LABEL_SP);
         if (mSnapshot.period.isEmpty()) return seconds;
         return Math.max(seconds, spacedTextWidth(mSnapshot.period, condensedBoldTypeface(),
-            LABEL_SP * PERIOD_SCALE, .1f));
+            LABEL_SP * PERIOD_SCALE, FLIP_PERIOD_TRACKING));
     }
 
     /** A Label row's height at its painted size: the face's ascent to its descent. */
@@ -1683,15 +1685,31 @@ public final class ClockFaceRenderer {
         float secondsDescent = mPaint.descent();
         float secondsCapHeight = capHeight(face, secondsSp);
         float split = digitBaseline - secondsCapHeight / 2f;
+        // The period and the seconds share one centre axis: the column's middle. The column is as
+        // wide as the wider of the two seconds cells and the period's own ink.
+        boolean period = mShowPeriod && !mSnapshot.period.isEmpty();
+        float secondsWidth = mShowSeconds ? 2f * cellWidth : 0f;
+        float periodWidth = 0f;
+        if (period) {
+            mPaint.setTypeface(face);
+            mPaint.setLetterSpacing(FLIP_PERIOD_TRACKING);
+            mPaint.setTextSize(sp(secondsSp * PERIOD_SCALE));
+            // Tracking trails the last glyph too; the ink ends before it.
+            periodWidth = mPaint.measureText(mSnapshot.period)
+                - FLIP_PERIOD_TRACKING * mPaint.getTextSize();
+            mPaint.setLetterSpacing(0f);
+        }
+        float axis = x + Math.max(secondsWidth, periodWidth) / 2f;
         for (int i = 0; i < 2 && mShowSeconds; i++) {
-            mFlipMetaCell.set(x + i * cellWidth, digitBaseline + secondsAscent,
-                x + (i + 1) * cellWidth, digitBaseline + secondsDescent);
+            float left = axis - cellWidth + i * cellWidth;
+            mFlipMetaCell.set(left, digitBaseline + secondsAscent,
+                left + cellWidth, digitBaseline + secondsDescent);
             drawFullFlipSecond(canvas, i, mFlipMetaCell, split, digitBaseline, now);
         }
 
-        if (!mShowPeriod || mSnapshot.period.isEmpty()) return;
+        if (!period) return;
         mPaint.setTypeface(face);
-        mPaint.setLetterSpacing(.1f);
+        mPaint.setLetterSpacing(FLIP_PERIOD_TRACKING);
         mPaint.setTextSize(sp(secondsSp * PERIOD_SCALE));
         // With the seconds shed the period takes their row.
         float periodBaseline = digitBaseline - mPaint.descent()
@@ -1699,7 +1717,7 @@ public final class ClockFaceRenderer {
         mPaint.setColor(mPeriodInk);
         mPaint.setAlpha(255);
         mPaint.setTextAlign(Paint.Align.LEFT);
-        canvas.drawText(mSnapshot.period, x, periodBaseline, mPaint);
+        canvas.drawText(mSnapshot.period, axis - periodWidth / 2f, periodBaseline, mPaint);
         mPaint.setLetterSpacing(0f);
     }
 

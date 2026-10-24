@@ -12,6 +12,8 @@
 
     <!-- Read aloud for the widget: %1$s the time, %2$s the date. -->
     <string name="bw_clocks_description">Clock, %1$s, %2$s</string>
+    <!-- The Clock's description with Show date off. -->
+    <string name="bw_clocks_description_time">Clock, %1$s</string>
     <!-- Appended per world clock: %1$s the city, %2$s its time. -->
     <string name="bw_clocks_description_zone">%1$s %2$s</string>
 
@@ -24,6 +26,8 @@
     <string name="bw_clock_weight_thin">Thin</string>
     <string name="bw_clock_weight_medium">Medium</string>
     <string name="bw_clock_seconds">Show seconds</string>
+    <string name="bw_clock_show_date">Show date</string>
+    <string name="bw_clock_show_alarm">Show next alarm</string>
     <string name="bw_clock_24_hour">24-hour time</string>
     <!-- The Clock's next alarm at 2×2: %1$s its time, like "07:00" or "Thu 07:00". -->
     <string name="bw_clock_zones">Time zones</string>
@@ -31,6 +35,8 @@
     <string name="bw_clock_zone_hint">City or time zone</string>
     <string name="bw_clock_zones_summary">Add additional clocks to your widget</string>
     <string name="bw_clock_seconds_summary">Display seconds on the clock</string>
+    <string name="bw_clock_show_date_summary">Display the date under the time</string>
+    <string name="bw_clock_show_alarm_summary">Display your next alarm under the date</string>
     <string name="bw_clock_24_hour_summary">Use 0\u201323 for hours instead of AM/PM</string>
     <string name="bw_clock_settings_subtitle">Customize how the clock looks and behaves on your home screen</string>
     <string name="bw_clock_zone_clear">Clear</string>

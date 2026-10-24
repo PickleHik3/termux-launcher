@@ -139,7 +139,7 @@ final class ClockLayoutPlanner {
         Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(span));
         List<Part> parts = new ArrayList<>();
         boolean showsDate = span != BuiltinWidgetSpan.ONE_BY_ONE && !date.isEmpty();
-        boolean showsAlarm = showsDate && span.isTall() && !alarm.isEmpty();
+        boolean showsAlarm = span != BuiltinWidgetSpan.ONE_BY_ONE && span.isTall() && !alarm.isEmpty();
         Texts texts = new Texts(dates, showsDate, alarm, showsAlarm, fontScale, measure);
         Box left = inner;
         if (span.isWide() && !zones.isEmpty()) {
@@ -304,7 +304,7 @@ final class ClockLayoutPlanner {
             this.fontScale = fontScale; this.measure = measure;
         }
 
-        boolean any() { return showsDate; }
+        boolean any() { return showsDate || showsAlarm; }
 
         @NonNull Role dateRole() { return TEXT_ROLES[step][0]; }
         @NonNull Role alarmRole() { return TEXT_ROLES[step][1]; }
@@ -315,19 +315,20 @@ final class ClockLayoutPlanner {
 
         /** The texts stacked under a face, with the gap above them. */
         float stackDp() {
-            if (!showsDate) return 0f;
-            return GAP_S + dateLine() + (showsAlarm ? GAP_M + alarmLine() : 0f);
+            if (!any()) return 0f;
+            return GAP_S + stackBesideDp();
         }
 
         /** The texts stacked beside a dial, no gap above. */
         float stackBesideDp() {
-            if (!showsDate) return 0f;
-            return dateLine() + (showsAlarm ? GAP_M + alarmLine() : 0f);
+            if (!any()) return 0f;
+            return (showsDate ? dateLine() : 0f) + (showsDate && showsAlarm ? GAP_M : 0f)
+                + (showsAlarm ? alarmLine() : 0f);
         }
 
         /** One step less: a smaller role, then no alarm, then no date. False when nothing is left. */
         boolean shed() {
-            if (!showsDate) return false;
+            if (!any()) return false;
             if (step < TEXT_ROLES.length - 1) { step++; return true; }
             if (showsAlarm) { showsAlarm = false; return true; }
             showsDate = false;
@@ -337,17 +338,24 @@ final class ClockLayoutPlanner {
         /** The texts under a face whose ink ends at {@code y}, left-aligned or centred. */
         void addUnder(float left, float y, float width, boolean centred,
                       @NonNull List<Part> parts) {
-            if (!showsDate) return;
-            float top = y + GAP_S;
-            addDate(left, top, width, centred, parts);
-            if (showsAlarm) addAlarm(left, top + dateLine() + GAP_M, width, centred, parts);
+            if (!any()) return;
+            addColumn(left, y + GAP_S, width, centred, parts);
         }
 
         /** The texts in a column from ({@code left}, {@code top}). */
         void addBeside(float left, float top, float width, @NonNull List<Part> parts) {
-            if (!showsDate) return;
-            addDate(left, top, width, false, parts);
-            if (showsAlarm) addAlarm(left, top + dateLine() + GAP_M, width, false, parts);
+            if (!any()) return;
+            addColumn(left, top, width, false, parts);
+        }
+
+        /** The date, then the alarm under it, whichever of the two shows. */
+        private void addColumn(float left, float top, float width, boolean centred,
+                               @NonNull List<Part> parts) {
+            if (showsDate) {
+                addDate(left, top, width, centred, parts);
+                top += dateLine() + GAP_M;
+            }
+            if (showsAlarm) addAlarm(left, top, width, centred, parts);
         }
 
         private void addDate(float left, float top, float width, boolean centred,
