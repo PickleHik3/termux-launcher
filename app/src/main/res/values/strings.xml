@@ -436,6 +436,13 @@
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead</string>
+    <string name="settings_x11_group_sound">Audio</string>
+    <string name="settings_launcher_sound_title">Sound</string>
+    <string name="settings_launcher_sound_summary">Play sound from the terminal and Linux apps</string>
+    <string name="settings_launcher_media_controls_title">Media controls</string>
+    <string name="settings_launcher_media_controls_summary">Show what\'s playing and control it from notifications</string>
+    <string name="settings_launcher_sound_user_setup">Using your own sound setup</string>
+    <string name="settings_launcher_sound_gave_up">Sound kept stopping, so it is off for now. It starts again with your next terminal or Linux app.</string>
     <string name="launcher_media_channel_name">Media controls</string>
     <string name="launcher_media_play">Play</string>
     <string name="launcher_media_pause">Pause</string>

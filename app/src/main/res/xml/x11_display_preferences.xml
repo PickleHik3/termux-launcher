@@ -29,6 +29,28 @@
             app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
     </PreferenceCategory>
 
+    <!-- The launcher's sound server and media controls (project-docs/active/launcher-sound-2026-10-25.md).
+         The last row says when the user's own setup is in use or the server kept stopping, and
+         is hidden otherwise. -->
+    <PreferenceCategory app:title="@string/settings_x11_group_sound">
+        <SwitchPreferenceCompat
+            app:key="launcher_sound"
+            app:title="@string/settings_launcher_sound_title"
+            app:summary="@string/settings_launcher_sound_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="launcher_media_controls"
+            app:title="@string/settings_launcher_media_controls_title"
+            app:summary="@string/settings_launcher_media_controls_summary"
+            app:dependency="launcher_sound"
+            android:defaultValue="true" />
+        <Preference
+            app:key="launcher_sound_status"
+            app:selectable="false"
+            app:persistent="false"
+            app:isPreferenceVisible="false" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_x11_group_desktop">
         <EditTextPreference
             app:key="x11_window_manager"
