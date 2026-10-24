@@ -33,8 +33,17 @@ public final class EditorRows {
 
     /** How a row is drawn and what it reports. */
     public enum Kind {
-        /** A Material slider with its value at the end of the label line. */
+        /**
+         * A horizontal Material slider with its value at the end of the label line: the sizes
+         * (Height, Corners, Margin) and the few counts beside them.
+         */
         SLIDER,
+        /**
+         * A vertical slider in the card's glass strip ({@link LegendSlider}): its name and value
+         * read upward beside the track ("Frost · 20%"). Strip rows that follow one another in a
+         * tier stand side by side as one strip, as the previous editor's Custom row did.
+         */
+        STRIP,
         /** A switch. */
         SWITCH,
         /** A connected button group: one of a few named choices. */
@@ -55,8 +64,8 @@ public final class EditorRows {
 
     /** Every row any card has. */
     public enum Row {
-        OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
-        TINT(Kind.SLIDER, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
+        OPACITY(Kind.STRIP, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
+        TINT(Kind.STRIP, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
         HEIGHT(Kind.SLIDER, R.string.appearance_row_height, R.drawable.ic_editor_height),
         VISIBLE(Kind.SWITCH, R.string.appearance_row_visible, R.drawable.ic_editor_visible),
         POSITION(Kind.SEGMENTS, R.string.appearance_row_position, R.drawable.ic_editor_position),
@@ -66,13 +75,13 @@ public final class EditorRows {
          * Frost: blur and grain together along {@link GlassControls}' curve, the one glass slider
          * the cards have (BLUR and GRAIN are still the stored properties underneath).
          */
-        FROST(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
+        FROST(Kind.STRIP, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         CORNERS(Kind.SLIDER, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
         MARGIN(Kind.SLIDER, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
-        DEPTH(Kind.SLIDER, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
+        DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         SEARCH_FIELD(Kind.SWITCH, R.string.appearance_row_search_field, R.drawable.ic_symbol_search),
         APP_ICONS(Kind.SLIDER, R.string.appearance_row_app_icons, R.drawable.ic_symbol_apps),
-        TEXT_SIZE(Kind.SLIDER, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
+        TEXT_SIZE(Kind.STRIP, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
@@ -93,9 +102,9 @@ public final class EditorRows {
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
         CLOCK_FACE(Kind.MENU, R.string.appearance_row_clock_face, R.drawable.ic_editor_clock),
         KEYBOARD_THEME(Kind.LINK, R.string.appearance_row_keyboard_theme, R.drawable.ic_symbol_palette),
-        KEY_OPACITY(Kind.SLIDER, R.string.appearance_row_key_opacity, R.drawable.ic_editor_opacity),
-        KEY_CORNERS(Kind.SLIDER, R.string.appearance_row_key_corners, R.drawable.ic_editor_corners),
-        KEY_SPACING(Kind.SLIDER, R.string.appearance_row_key_spacing, R.drawable.ic_editor_margin),
+        KEY_OPACITY(Kind.STRIP, R.string.appearance_row_key_opacity, R.drawable.ic_editor_opacity),
+        KEY_CORNERS(Kind.STRIP, R.string.appearance_row_key_corners, R.drawable.ic_editor_corners),
+        KEY_SPACING(Kind.STRIP, R.string.appearance_row_key_spacing, R.drawable.ic_editor_margin),
         FORM(Kind.SEGMENTS, R.string.appearance_row_form, R.drawable.ic_symbol_keyboard_floating),
         LOOK(Kind.LOOK, R.string.appearance_row_look, R.drawable.ic_editor_contrast),
         WALLPAPER(Kind.WALLPAPER, R.string.appearance_row_wallpaper, R.drawable.ic_symbol_wallpaper),
@@ -107,9 +116,9 @@ public final class EditorRows {
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
         MINIMAL(Kind.SWITCH, R.string.appearance_row_minimal, R.drawable.ic_corner_minimal_enter),
         ALIGNMENT(Kind.SLIDER, R.string.appearance_row_alignment, R.drawable.ic_symbol_wallpaper),
-        VIBRANCY(Kind.SLIDER, R.string.appearance_row_vibrancy, R.drawable.ic_symbol_palette),
+        VIBRANCY(Kind.STRIP, R.string.appearance_row_vibrancy, R.drawable.ic_symbol_palette),
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
-        GLASS_EDGE(Kind.SLIDER, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
+        GLASS_EDGE(Kind.STRIP, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
         LINK_PAGES(Kind.LINK, R.string.appearance_row_pages, R.drawable.ic_symbol_grid_view),

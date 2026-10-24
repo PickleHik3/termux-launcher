@@ -120,6 +120,11 @@
     <string name="appearance_wallpaper_change">Change</string>
     <string name="appearance_wallpaper_shown">Show wallpaper</string>
 
+    <!-- A glass strip's legend beside its track: the row's name and its value ("Frost · 20%"). -->
+    <string name="appearance_strip_legend">%1$s · %2$s</string>
+    <!-- Over the Appearance card's glass strip at the Custom stop: the values every surface shares. -->
+    <string name="appearance_strip_all_surfaces">All surfaces</string>
+
     <!-- Row values. -->
     <string name="appearance_readout_percent">%1$d%%</string>
     <string name="appearance_readout_dp">%1$d dp</string>

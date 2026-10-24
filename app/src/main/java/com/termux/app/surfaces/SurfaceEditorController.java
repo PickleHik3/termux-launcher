@@ -283,6 +283,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private String mEntryCustom;
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
+    /**
+     * The halves the Look slider was put on Custom this visit while their values still match a
+     * Look: Custom then writes nothing (the Look on screen is its seed), so without this the
+     * slider would read the Look again and the All surfaces strip would never show.
+     */
+    @NonNull private final java.util.EnumSet<WallHalf> mHeldCustom =
+        java.util.EnumSet.noneOf(WallHalf.class);
     /** The last Depth position the user set this session ({@link GlassEdgeControls}). */
     private int mDepthSet = GlassEdgeControls.NONE;
     /** The half the frame shows: where a card writes. */
@@ -484,6 +491,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mSettingsNow = mEntrySettings.signature();
         mEntryMinimal = mHost.isMinimalMode();
         mSessionCustom.clear();
+        mHeldCustom.clear();
         forgetGlassEdgePositions();
         CarriedSession carried = mCarriedNext;
         mCarriedNext = null;
@@ -1775,7 +1783,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         if (FORMS[i] == layout.keyboardForm()) return i;
                     return 0;
                 }
-                case LOOK: return matchingStop(mHalf);
+                case LOOK: return lookStop(mHalf);
                 case WALLPAPER:
                     return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
                         ? 1 : 0;
@@ -2023,6 +2031,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void onAction(@NonNull Row row, @NonNull View anchor) {
             onRowAction(row, anchor);
+        }
+
+        @Override public boolean shown(@NonNull Row row) {
+            // All surfaces is the Custom stop's, as the Look page's Custom row was.
+            if (mCard == EditorCard.APPEARANCE && row.kind == EditorRows.Kind.STRIP)
+                return AppearanceLooks.isCustomStop(lookStop(mHalf));
+            return true;
+        }
+
+        @Nullable @Override public CharSequence stripHeading(@NonNull Row first) {
+            return mCard == EditorCard.APPEARANCE
+                ? getString(R.string.appearance_strip_all_surfaces) : null;
         }
     }
 
@@ -2484,6 +2504,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ---- the Look slider ---------------------------------------------------------------------
 
+    /** Where the Look slider stands for a half: Custom where it was put there, else the match. */
+    private int lookStop(@NonNull WallHalf half) {
+        return mHeldCustom.contains(half) ? AppearanceLooks.CUSTOM_STOP : matchingStop(half);
+    }
+
     /** The stop a half wears: the Look it matches, or Custom. */
     private int matchingStop(@NonNull WallHalf half) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -2508,8 +2533,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         settleLookDrag();
         TermuxAppSharedPreferences prefs = prefs();
+        boolean custom = AppearanceLooks.isCustomStop(stop);
+        // Leaving Custom for the Look the values still match writes nothing, but the slider
+        // and the All surfaces strip follow the stop.
+        boolean held = custom ? mHeldCustom.add(mHalf) : mHeldCustom.remove(mHalf);
         if (prefs != null && moveToStop(prefs, stop))
             syncAfterBulkWrite();
+        else if (held && mSheet != null)
+            mSheet.restate();
     }
 
     /**
@@ -4007,6 +4038,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mHost.isMinimalMode() != mEntryMinimal)
             mHost.setMinimalMode(mEntryMinimal);
         mSessionCustom.clear();
+        mHeldCustom.clear();
         forgetGlassEdgePositions();
         syncAfterBulkWrite();
     }

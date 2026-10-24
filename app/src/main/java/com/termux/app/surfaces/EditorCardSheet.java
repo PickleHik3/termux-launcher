@@ -53,7 +53,9 @@ import java.util.Map;
  * below the screen, so the last row still scrolls clear of the navigation inset by 16dp.</p>
  *
  * <p><b>Rows.</b> Content-driven heights (a slider row is at least 72dp, a switch row 56dp),
- * labels on one line, ellipsized. A row of segments stands beside its label when it has two short
+ * labels on one line, ellipsized. The glass rows ({@link Kind#STRIP}) stand side by side as one
+ * strip of vertical {@link LegendSlider}s, each its name and value beside its track, as the
+ * previous editor's Custom row drew them; the sizes stay horizontal sliders. A row of segments stands beside its label when it has two short
  * choices, under it otherwise, and turns into a vertical list when a choice's word would not fit
  * its share of the width. Every restatement compares before it sets.</p>
  */
@@ -85,6 +87,20 @@ final class EditorCardSheet {
         void onReleased(@NonNull Row row);
         /** A menu, link, the wallpaper's Change or an expander was tapped. */
         void onAction(@NonNull Row row, @NonNull View anchor);
+
+        /**
+         * Whether the row stands in the card now: the Appearance card's All surfaces strip shows
+         * only at the Custom stop. A strip whose columns are all put away is put away whole.
+         */
+        default boolean shown(@NonNull Row row) {
+            return true;
+        }
+
+        /** The words over a glass strip that starts with {@code first}, or null for none. */
+        @Nullable
+        default CharSequence stripHeading(@NonNull Row first) {
+            return null;
+        }
     }
 
     /** What the header and the sheet itself report. */
@@ -109,6 +125,8 @@ final class EditorCardSheet {
     private static final int ICON_COLUMN_DP = 56;
     private static final int EDGE_DP = 16;
     private static final int SLIDER_ROW_MIN_DP = 72;
+    /** The gap between a strip's columns. */
+    private static final int STRIP_GAP_DP = 12;
     private static final int SWITCH_ROW_MIN_DP = 56;
     private static final int SEGMENT_GAP_DP = 2;
     private static final int SEGMENT_HEIGHT_DP = 40;
@@ -612,6 +630,9 @@ final class EditorCardSheet {
         @Nullable TextView summary;
         @Nullable View dot;
         @Nullable Slider slider;
+        @Nullable LegendSlider legend;
+        /** The strip a glass column stands in, put away when all its columns are. */
+        @Nullable Strip strip;
         @Nullable MaterialSwitch toggle;
         @Nullable MaterialButtonToggleGroup segments;
         @Nullable List<MaterialButton> buttons;
@@ -625,12 +646,25 @@ final class EditorCardSheet {
         }
     }
 
+    /** One glass strip: its root (heading and columns) and the columns it holds. */
+    private static final class Strip {
+        @NonNull final LinearLayout root;
+        @NonNull final LinearLayout columns;
+        @NonNull final List<RowViews> members = new ArrayList<>();
+
+        Strip(@NonNull LinearLayout root, @NonNull LinearLayout columns) {
+            this.root = root;
+            this.columns = columns;
+        }
+    }
+
     private void build(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> specs) {
         mRows.removeAllViews();
         mRowViews.clear();
         mMore = null;
         mMoreRow = null;
         int tier = 0;
+        Strip strip = null;
         for (EditorRows.Spec spec : specs) {
             if (spec.tier != tier) {
                 if (tier != 0)
@@ -638,15 +672,97 @@ final class EditorCardSheet {
                 if (spec.tier == 3)
                     addMore();
                 tier = spec.tier;
+                strip = null;
             }
+            LinearLayout into = spec.tier == 3 && mMore != null ? mMore : mRows;
+            if (spec.row.kind == Kind.STRIP) {
+                // Glass rows in a run share one strip, a column each.
+                if (strip == null) {
+                    strip = newStrip(spec.row);
+                    if (spec.tier == 1)
+                        strip.root.setTag(TIER_ONE_TAG);
+                    into.addView(strip.root);
+                }
+                mRowViews.put(spec.row, stripColumn(spec.row, strip));
+                continue;
+            }
+            strip = null;
             RowViews row = buildRow(spec.row);
             mRowViews.put(spec.row, row);
             if (spec.tier == 1)
                 row.root.setTag(TIER_ONE_TAG);
-            LinearLayout into = spec.tier == 3 && mMore != null ? mMore : mRows;
             into.addView(row.root);
         }
         restate();
+    }
+
+    /** A strip's root: its heading, if the model gives one, over a row of equal columns. */
+    @NonNull
+    private Strip newStrip(@NonNull Row first) {
+        LinearLayout root = new LinearLayout(mContext);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setMinimumHeight(dp(SLIDER_ROW_MIN_DP));
+        root.setPadding(dp(EDGE_DP), dp(8), dp(EDGE_DP), dp(8));
+        CharSequence heading = mModel.stripHeading(first);
+        if (heading != null) {
+            TextView title = new TextView(mContext);
+            EditorViews.textAppearance(title,
+                com.google.android.material.R.attr.textAppearanceTitleSmall);
+            title.setTextColor(EditorViews.color(mContext,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+            title.setSingleLine(true);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            title.setText(heading);
+            androidx.core.view.ViewCompat.setAccessibilityHeading(title, true);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.bottomMargin = dp(8);
+            root.addView(title, params);
+        }
+        LinearLayout columns = new LinearLayout(mContext);
+        columns.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(columns, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            mContext.getResources().getDimensionPixelSize(R.dimen.appearance_editor_slider_length)));
+        return new Strip(root, columns);
+    }
+
+    /**
+     * One glass column: a vertical slider whose legend is the row's name and value
+     * ("Frost · 20%"), reported to the model as any slider row is.
+     */
+    @NonNull
+    private RowViews stripColumn(@NonNull Row row, @NonNull Strip strip) {
+        LegendSlider slider = new LegendSlider(mContext);
+        String name = mContext.getString(row.labelRes);
+        slider.setContentDescription(name);
+        slider.setLegend(value -> mContext.getString(R.string.appearance_strip_legend, name,
+            mModel.readout(row, Math.round(value))));
+        RowViews views = new RowViews(row, slider);
+        slider.addOnChangeListener((s, value, fromUser) -> {
+            if (mRestating || !fromUser)
+                return;
+            mModel.onValue(row, Math.round(value), views.tracking);
+        });
+        slider.addOnSliderTouchListener(new LegendSlider.OnSliderTouchListener() {
+            @Override public void onStartTrackingTouch(@NonNull LegendSlider s) {
+                views.tracking = true;
+            }
+
+            @Override public void onStopTrackingTouch(@NonNull LegendSlider s) {
+                views.tracking = false;
+                mModel.onValue(row, Math.round(s.getValue()), false);
+                mModel.onReleased(row);
+            }
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        if (!strip.members.isEmpty())
+            params.setMarginStart(dp(STRIP_GAP_DP));
+        strip.columns.addView(slider, params);
+        strip.members.add(views);
+        views.legend = slider;
+        views.strip = strip;
+        return views;
     }
 
     private void addMore() {
@@ -1101,6 +1217,18 @@ final class EditorCardSheet {
             restate(views);
     }
 
+    /** A strip stands while any of its columns does. */
+    private static void restateStrip(@NonNull Strip strip) {
+        boolean any = false;
+        for (RowViews member : strip.members) {
+            if (member.root.getVisibility() == View.VISIBLE) {
+                any = true;
+                break;
+            }
+        }
+        EditorViews.setVisible(strip.root, any);
+    }
+
     /** One row read again from the model. */
     void restate(@NonNull Row row) {
         RowViews views = mRowViews.get(row);
@@ -1114,6 +1242,9 @@ final class EditorCardSheet {
         int value = mModel.value(row);
         mRestating = true;
         try {
+            EditorViews.setVisible(views.root, mModel.shown(row));
+            if (views.strip != null)
+                restateStrip(views.strip);
             if (views.root.isEnabled() != enabled)
                 views.root.setEnabled(enabled);
             views.root.setAlpha(enabled ? 1f : 0.5f);
@@ -1143,6 +1274,17 @@ final class EditorCardSheet {
                 styleStops(views, clamped);
             } else if (views.value != null && row.kind == Kind.SLIDER) {
                 EditorViews.setText(views.value, mModel.readout(row, value));
+            }
+            if (views.legend != null && !views.tracking) {
+                LegendSlider legend = views.legend;
+                int from = mModel.from(row);
+                int to = Math.max(from + 1, mModel.to(row));
+                int step = Math.max(1, mModel.step(row));
+                if (legend.getValueFrom() != from) legend.setValueFrom(from);
+                if (legend.getValueTo() != to) legend.setValueTo(to);
+                if (legend.getStepSize() != step) legend.setStepSize(step);
+                if (legend.getValue() != value) legend.setValue(value);
+                legend.setMarked(mModel.ownValue(row));
             }
             if (views.toggle != null) {
                 boolean on = value != 0;

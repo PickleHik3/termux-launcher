@@ -150,6 +150,64 @@ public class SurfaceEditorCardsTest {
         assertEquals(EditorCard.HOME, editor.shownCard());
     }
 
+    @Test
+    public void frostOnASurfaceWritesItsOwnBlurAndGrainOnTheHalf() {
+        SurfaceEditorController editor = open(EditorCard.STATUS, PaneWallPage.WIDGETS);
+        int workspaceBlur = preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
+            WallHalf.WORKSPACE);
+
+        model(editor).onValue(Row.FROST, 40, false);
+        model(editor).onReleased(Row.FROST);
+
+        assertEquals(GlassControls.blurForGlass(40), preferences.getSurfaceValue(
+            SurfaceSlot.STATUS, SurfaceProperty.BLUR, WallHalf.HOME));
+        assertEquals(GlassControls.grainForGlass(40), preferences.getSurfaceValue(
+            SurfaceSlot.STATUS, SurfaceProperty.GRAIN, WallHalf.HOME));
+        assertEquals("the Workspace keeps its status bar", workspaceBlur,
+            preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
+                WallHalf.WORKSPACE));
+        assertEquals("Frost reads back where it was left", 40, model(editor).value(Row.FROST));
+        assertTrue("the dot: Home's own frost", model(editor).ownValue(Row.FROST));
+    }
+
+    @Test
+    public void allSurfacesStandsAtTheCustomStopAndWritesTheHalfsSharedGlass() {
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
+        assertEquals(WallHalf.WORKSPACE, editor.half());
+        EditorCardSheet.Model model = model(editor);
+        assertFalse("a Look stop shows no strip", model.shown(Row.FROST));
+
+        model.onValue(Row.LOOK, AppearanceLooks.CUSTOM_STOP, false);
+        model.onReleased(Row.LOOK);
+        assertEquals("Custom holds though nothing changed yet", AppearanceLooks.CUSTOM_STOP,
+            model.value(Row.LOOK));
+        assertTrue(model.shown(Row.FROST));
+        assertTrue(model.shown(Row.TEXT_SIZE));
+
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE, 9);
+        int home = preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME);
+        model.onValue(Row.OPACITY, 33, false);
+        model.onReleased(Row.OPACITY);
+        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE));
+        assertEquals("every surface on the half wears it", 33, opacity(WallHalf.WORKSPACE));
+        assertEquals("Home keeps its own", home,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+
+        model.onValue(Row.FROST, 75, false);
+        model.onReleased(Row.FROST);
+        assertEquals(GlassControls.blurForGlass(75),
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
+        assertEquals(GlassControls.grainForGlass(75),
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE));
+        assertEquals(75, model.value(Row.FROST));
+
+        model.onValue(Row.LOOK, 1, false);
+        model.onReleased(Row.LOOK);
+        assertFalse("back on a Look, the strip goes", model.shown(Row.FROST));
+    }
+
     // ------------------------------------------------------------------------------- the drive
 
     private SurfaceEditorController open(EditorCard card, PaneWallPage place) {

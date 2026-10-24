@@ -84,8 +84,8 @@ public class EditorCardSheetFitTest {
         float density = fixture.themed.getResources().getDisplayMetrics().density;
         LinearLayout column = (LinearLayout) ((ViewGroup) fixture.sheet.view()).getChildAt(0);
         assertEquals(Math.round(64 * density), column.getChildAt(0).getHeight());
-        View opacity = fixture.sheet.rows().getChildAt(0);
-        assertTrue("a slider row is at least 72dp", opacity.getHeight() >= Math.round(72 * density));
+        View strip = fixture.sheet.rows().getChildAt(0);
+        assertTrue("the glass strip is at least 72dp", strip.getHeight() >= Math.round(72 * density));
     }
 
     @Test
@@ -185,6 +185,62 @@ public class EditorCardSheetFitTest {
         assertTrue("the icon stands 16dp in", at[0] - parentAt[0] >= fixture.dp(16) - 1);
         for (int i = 0; i < style.getChildCount(); i++)
             assertEquals(null, ((MaterialButton) style.getChildAt(i)).getIcon());
+    }
+
+    @Test
+    public void everyGlassStripsLegendsStandWholeInTheirColumnsAtAnyTextSize() {
+        for (float scale : new float[] {1f, 1.3f, 2f}) {
+            for (EditorCard card : EditorCard.values()) {
+                Fixture fixture = new Fixture(card, scale);
+                fixture.sheet.openMore();
+                fixture.layOut();
+                List<LegendSlider> legends = legends(fixture.sheet.rows());
+                assertEquals(card + " has a glass strip", card != EditorCard.HOME,
+                    !legends.isEmpty());
+                for (LegendSlider slider : legends) {
+                    assertTrue(card + ": a strip column is laid out", slider.getWidth() > 0
+                        && slider.getHeight() > 0);
+                    android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
+                        slider.getWidth(), slider.getHeight(),
+                        android.graphics.Bitmap.Config.ARGB_8888);
+                    slider.draw(new android.graphics.Canvas(bitmap));
+                    String at = card + " at " + scale + ", \"" + slider.legendText() + "\"";
+                    assertTrue(at + " overruns its track", slider.legendFits());
+                    assertTrue(at + " leaves its column", slider.legendInsideColumn());
+                    assertEquals(at + " is cut", slider.legendText().toString(),
+                        slider.shownLegend().toString());
+                }
+            }
+        }
+    }
+
+    @Test
+    public void theSetHereDotRidesOnTheRotatedLegend() {
+        Fixture fixture = new Fixture(EditorCard.KEYBOARD, 1f);
+        fixture.layOut();
+        int marked = 0;
+        for (LegendSlider slider : legends(fixture.sheet.rows())) {
+            boolean opacity = slider.getContentDescription().toString().equals(
+                fixture.themed.getString(R.string.appearance_row_opacity));
+            assertEquals(String.valueOf(slider.getContentDescription()), opacity,
+                slider.isMarked());
+            if (slider.isMarked())
+                marked++;
+        }
+        assertEquals(1, marked);
+    }
+
+    @NonNull
+    private static List<LegendSlider> legends(@NonNull View view) {
+        List<LegendSlider> out = new ArrayList<>();
+        if (view instanceof LegendSlider) {
+            out.add((LegendSlider) view);
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                out.addAll(legends(group.getChildAt(i)));
+        }
+        return out;
     }
 
     @NonNull
@@ -323,7 +379,8 @@ public class EditorCardSheetFitTest {
         }
 
         @Override public int value(@NonNull Row row) {
-            return row.kind == EditorRows.Kind.SLIDER ? 50 : 0;
+            return row.kind == EditorRows.Kind.SLIDER || row.kind == EditorRows.Kind.STRIP
+                ? 50 : 0;
         }
 
         @Override public int from(@NonNull Row row) {
