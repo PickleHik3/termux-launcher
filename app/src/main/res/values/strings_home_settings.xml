@@ -98,30 +98,23 @@
     <string name="settings_home_edit_pages_summary">Reorder, add or remove Home pages, and choose the one Home opens on</string>
     <string name="home_actions_edit_widgets">Edit widgets</string>
     <string name="home_pages_editor_title">Edit pages</string>
-    <string name="home_pages_editor_add">Add page</string>
-    <string name="home_pages_editor_done">Done</string>
     <string name="home_pages_editor_page">Page %1$d</string>
-    <string name="home_pages_editor_empty">Empty</string>
-    <plurals name="home_pages_editor_items">
-        <item quantity="one">%1$d item</item>
-        <item quantity="other">%1$d items</item>
-    </plurals>
-    <string name="home_pages_editor_default_detail">Home opens here · %1$s</string>
-    <string name="home_pages_editor_move_up">Move page %1$d up</string>
-    <string name="home_pages_editor_move_down">Move page %1$d down</string>
     <string name="home_pages_editor_make_default">Open Home on page %1$d</string>
     <string name="home_pages_editor_remove">Remove page %1$d</string>
-    <string name="home_pages_editor_remove_confirm_title">Remove page %1$d?</string>
-    <plurals name="home_pages_editor_remove_confirm_items">
-        <item quantity="one">The item on it goes too.</item>
-        <item quantity="other">The %1$d items on it go too.</item>
-    </plurals>
-    <string name="home_pages_editor_remove_confirm_floats">Terminals on it stay open on another page.</string>
-    <string name="home_pages_editor_remove_confirm">Remove</string>
-    <plurals name="home_pages_editor_remove_confirm_folder_apps">
-        <item quantity="one">That includes the app in its folder.</item>
-        <item quantity="other">That includes the %1$d apps in its folders.</item>
-    </plurals>
+    <!-- The page overview: Home's pages and the session's windows as cards. -->
+    <string name="page_overview_default_page">Page %1$d, Home opens here</string>
+    <string name="page_overview_terminal">Terminal %1$d</string>
+    <string name="page_overview_display">Display</string>
+    <string name="page_overview_open">Open %1$s</string>
+    <string name="page_overview_close_terminal">Close terminal %1$d</string>
+    <string name="page_overview_close_display">Close the display</string>
+    <string name="page_overview_add_page">+ Add page</string>
+    <string name="page_overview_add_terminal">+ Add terminal</string>
+    <string name="page_overview_add_display">+ Add display</string>
+    <string name="page_overview_page_removed">Page %1$d removed</string>
+    <string name="page_overview_terminal_closed">Terminal closed</string>
+    <string name="page_overview_display_closed">Display closed</string>
+    <string name="page_overview_undo">Undo</string>
     <string name="home_pages_editor_remove_pending">A widget is still being added to this page</string>
     <string name="settings_home_edit_pages_locked">Unlock the Home layout to edit pages</string>
 

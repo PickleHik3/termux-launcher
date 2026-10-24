@@ -82,6 +82,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         default void onHomeDoubleTap() { }
         /** A two-finger swipe up ({@code up}) or down on the page's free area. */
         default void onHomeTwoFingerSwipe(boolean up) { }
+        /** Two fingers pinched in on the page's free area: the page overview. */
+        default void onHomePinchIn() { }
         /**
          * The Home page's content moved sideways under Home's own swipe, or as a page slides in
          * or back; {@link #homePageShiftFraction} says where it stands. Per frame of the motion.
@@ -210,6 +212,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onFreeAreaTwoFingerSwipe(boolean up) {
                 host.onHomeTwoFingerSwipe(up);
             }
+            @Override public void onFreeAreaPinchIn() { host.onHomePinchIn(); }
             @Override public void onContentShifted() { host.onHomePageShifted(); }
         }, new WidgetPickerAdapter.Listener() {
             @Override public void onProviderSelected(@NonNull WidgetProviderItem item) {

@@ -39,6 +39,8 @@ public final class WidgetPaneView extends FrameLayout {
     private static final int DOTS_HEIGHT_DP = 14;
     private static final int DOTS_BOTTOM_MARGIN_DP = 4;
     private static final int DOTS_GAP_DP = 4;
+    /** How far two fingers must close in before a pinch opens the page overview. */
+    private static final float PINCH_COMMIT_DP = 48f;
 
     public interface Listener {
         /** The horizontal page swipe committed; the coordinator re-renders onto this page. */
@@ -65,6 +67,11 @@ public final class WidgetPaneView extends FrameLayout {
          * sent only while {@link #setExtraGestures} watches for it.
          */
         default void onFreeAreaTwoFingerSwipe(boolean up) { }
+        /**
+         * Two fingers that set off on the free area pinched in: the page overview. Always
+         * watched, whatever the gesture settings say.
+         */
+        default void onFreeAreaPinchIn() { }
         /**
          * The page's content moved sideways: the swipe drags it, or a page slides in or back.
          * Per frame of that motion; {@link #contentShiftFraction} says where it stands.
@@ -212,6 +219,11 @@ public final class WidgetPaneView extends FrameLayout {
     private boolean twoFingerTracking;
     private boolean twoFingerDragging;
     private float twoFingerDownX, twoFingerDownY;
+    /** Two fingers set off on the free area, watched for a pinch in; then claimed. */
+    private boolean pinchTracking;
+    /** A pinch fired: the rest of the gesture is this view's, and does nothing more. */
+    private boolean pinchClaimed;
+    private float pinchStartSpan;
 
     public WidgetPaneView(@NonNull Context context, AttributeSet attrs) { this(context); }
 
@@ -660,6 +672,8 @@ public final class WidgetPaneView extends FrameLayout {
                 freePress = verticalCandidate;
                 twoFingerTracking = false;
                 twoFingerDragging = false;
+                pinchTracking = false;
+                pinchClaimed = false;
                 secondTap = watchDoubleTap && freePress && HomeGestures.isSecondTap(lastTapUpMs,
                     lastTapX, lastTapY, event.getEventTime(), event.getX(), event.getY(),
                     ViewConfiguration.getDoubleTapTimeout(), doubleTapSlop);
@@ -674,6 +688,23 @@ public final class WidgetPaneView extends FrameLayout {
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
+                if (pinchClaimed) return true;
+                if (pinchTracking) {
+                    float span = pinchSpan(event);
+                    float commit = PINCH_COMMIT_DP * getResources().getDisplayMetrics().density;
+                    if (com.termux.app.wall.PageOverviewPolicy.isPinchIn(pinchStartSpan, span,
+                            commit)) {
+                        // The page overview: claimed, so whatever was under the fingers is
+                        // cancelled, and the rest of the gesture does nothing more.
+                        pinchTracking = false;
+                        twoFingerTracking = false;
+                        pinchClaimed = true;
+                        if (listener != null) listener.onFreeAreaPinchIn();
+                        return true;
+                    }
+                    // Spreading is not a pinch in.
+                    if (span - pinchStartSpan > touchSlop) pinchTracking = false;
+                }
                 if (twoFingerTracking) {
                     float tdx = meanX(event) - twoFingerDownX;
                     float tdy = meanY(event) - twoFingerDownY;
@@ -739,8 +770,11 @@ public final class WidgetPaneView extends FrameLayout {
                 secondTap = false;
                 // The second finger of a two-finger swipe, when one is set and the first finger
                 // is still on the free area; a third finger is nobody's.
-                twoFingerTracking = watchTwoFinger && freePress && event.getPointerCount() == 2
+                boolean twoOnFree = freePress && event.getPointerCount() == 2
                     && !pagingDragging && !verticalDragging && !widgetEditActive();
+                twoFingerTracking = watchTwoFinger && twoOnFree;
+                pinchTracking = twoOnFree;
+                if (pinchTracking) pinchStartSpan = pinchSpan(event);
                 freePress = false;
                 if (twoFingerTracking) {
                     twoFingerDownX = meanX(event);
@@ -752,18 +786,26 @@ public final class WidgetPaneView extends FrameLayout {
                 pagingTracking = false;
                 verticalCandidate = false;
                 twoFingerTracking = false;
+                pinchTracking = false;
                 break;
             case MotionEvent.ACTION_CANCEL:
                 pagingTracking = false;
                 verticalCandidate = false;
                 twoFingerTracking = false;
+                pinchTracking = false;
                 freePress = false;
                 secondTap = false;
                 break;
             default:
                 break;
         }
-        return pagingDragging || verticalDragging || twoFingerDragging;
+        return pagingDragging || verticalDragging || twoFingerDragging || pinchClaimed;
+    }
+
+    /** How far apart the first two fingers are; 0 with fewer. */
+    private static float pinchSpan(@NonNull MotionEvent event) {
+        if (event.getPointerCount() < 2) return 0f;
+        return (float) Math.hypot(event.getX(0) - event.getX(1), event.getY(0) - event.getY(1));
     }
 
     /**
@@ -824,6 +866,13 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
+        if (pinchClaimed) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                pinchClaimed = false;
+            }
+            return true;
+        }
         if (twoFingerDragging) return onTwoFingerTouch(event);
         if (verticalDragging) return onVerticalTouch(event);
         if (!pagingDragging) return false;
