@@ -8,6 +8,7 @@ import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceScreen;
 import androidx.preference.SwitchPreferenceCompat;
 import androidx.preference.TwoStatePreference;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.termux.CategorySortProgressPreference;
@@ -34,6 +35,13 @@ public final class SettingsLayoutUtils {
         PreferenceScreen screen = fragment.getPreferenceScreen();
         if (screen == null) return;
         applyLayouts(screen, false);
+    }
+
+    /** Gives the page's list its grouped tonal cards ({@link SettingsGroupDecoration}), once its
+     *  list exists. */
+    public static void applyGroups(@NonNull PreferenceFragmentCompat fragment) {
+        RecyclerView list = fragment.getListView();
+        if (list != null) SettingsGroupDecoration.attach(list);
     }
 
     /** A row added after the page was built (a search result) gets a sub-page row's look. */
