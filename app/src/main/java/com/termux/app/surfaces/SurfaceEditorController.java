@@ -196,6 +196,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         default void setMinimalMode(boolean minimal) {}
         /** Home's rows were written: the live Home takes them now. */
         default void applyHomeSettings() {}
+        /**
+         * The window wears {@code mode} (a {@code night-mode} value) without storing it; the
+         * activity relaunches into it when the day or night it shows changes.
+         */
+        default void previewTheme(@NonNull String mode) {}
+        /** Stores {@code mode} as Settings' theme row does, for a window already wearing it. */
+        default void commitTheme(@NonNull String mode) {}
     }
 
     @NonNull private final Host mHost;
@@ -462,6 +469,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (rootContainer == null || content == null)
             return;
         final int token = ++mPresentToken;
+        // A theme preview no carried session owns (its relaunch lost the handover) is kept, as
+        // every other write of a session that ended without Discard is.
+        if (mCarriedNext == null)
+            commitThemePreview();
         mOpen = true;
         mHost.retainGlassCapture(true);
         if (mLookDrag == null)
@@ -1501,6 +1512,52 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mSettingsNow = EditorSettingsSnapshot.signatureOf(settingsStore());
     }
 
+    // ------------------------------------------------------------------------------- the theme
+    //
+    // The theme is the one choice a window cannot preview in place: its colours are fixed when
+    // it is built. A pick is shown by relaunching into it unstored (ThemePreview); the relaunch
+    // hands this session to the next activity's editor, and the stored theme changes on Done.
+
+    @Nullable
+    private String storedTheme() {
+        return settingsStore().getString("theme_mode");
+    }
+
+    /** The Theme row picked {@code mode}: the window shows it, stored only on Done. */
+    private void previewTheme(@NonNull String mode) {
+        String stored = storedTheme();
+        String shown = ThemePreview.effective(stored);
+        ThemePreview.set(mode, stored);
+        syncDirty();
+        if (!mode.equals(shown))
+            mHost.previewTheme(mode);
+    }
+
+    /** Undo and Discard: the window goes back to the stored theme. */
+    private void dropThemePreview() {
+        if (ThemePreview.pending() == null)
+            return;
+        String stored = storedTheme();
+        ThemePreview.set(null, stored);
+        mHost.previewTheme(ThemePreview.orSystem(stored));
+    }
+
+    /** Done and Save, or a session ending without Discard: the shown theme is stored. */
+    private void commitThemePreview() {
+        String pending = ThemePreview.pending();
+        if (pending == null)
+            return;
+        ThemePreview.set(null, null);
+        mHost.commitTheme(pending);
+        refreshSettingsSignature();
+    }
+
+    /** Saves what the session changed: the look, and the theme it previewed. */
+    private void commitSession() {
+        commitLook();
+        commitThemePreview();
+    }
+
     @Override
     public void undo() {
         if (mOpen)
@@ -1725,8 +1782,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
                         ? 1 : 0;
                 case THEME:
-                    return indexOf(THEMES, AppearanceSettingsStore.getString(context,
-                        "theme_mode", null), 0);
+                    return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
                 case MONOCHROME:
                     return AppearanceSettingsStore.getBoolean(context, "app_launcher_bw_icons", false)
                         ? 1 : 0;
@@ -2136,8 +2192,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 settingsWritten();
                 break;
             case THEME:
-                AppearanceSettingsStore.putString(context, "theme_mode", THEMES[clamp(value, 0, 2)]);
-                settingsWritten();
+                previewTheme(THEMES[clamp(value, 0, 2)]);
                 break;
             case MONOCHROME:
                 AppearanceSettingsStore.putBoolean(context, "app_launcher_bw_icons", value != 0);
@@ -3819,8 +3874,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean settings = mEntrySettings != null && mSettingsNow != null
             && !mEntrySettings.signature().equals(mSettingsNow);
         boolean minimal = mHost.isMinimalMode() != mEntryMinimal;
+        boolean theme = ThemePreview.pending() != null;
         LayoutEditorController layout = mHost.layoutEditor();
-        return look || settings || minimal || (layout != null && layout.isDirty());
+        return look || settings || minimal || theme || (layout != null && layout.isDirty());
     }
 
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
@@ -3841,6 +3897,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (!written.isEmpty())
                 mHost.applyHomeSettings();
         }
+        dropThemePreview();
         if (mHost.isMinimalMode() != mEntryMinimal)
             mHost.setMinimalMode(mEntryMinimal);
         mSessionCustom.clear();
@@ -3873,7 +3930,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void commitAndExit() {
         if (mSliderDragActive)
             endDrag();
-        commitLook();
+        commitSession();
         Runnable onDone = mOnDone;
         if (onDone != null)
             onDone.run();
@@ -3898,7 +3955,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         showUnsavedDialog(() -> {
-            commitLook();
+            commitSession();
             proceed.run();
         }, proceed);
     }
@@ -3911,7 +3968,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         showUnsavedDialog(() -> {
             if (mOpen)
-                commitLook();
+                commitSession();
             onSave.run();
         }, onDiscard);
     }
@@ -4050,6 +4107,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void finishSession() {
         if (mOpen || !mSession)
             return;
+        // Every write here is kept unless Discard or Undo put it back, and so is the theme.
+        commitThemePreview();
         mSession = false;
         mCarriedNext = null;
         mWallpaperToken++;
