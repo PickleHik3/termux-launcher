@@ -49,6 +49,7 @@
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/segmented_pill_track"
+        style="@style/Widget.Termux.SegmentGroup"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/settings_space_s"

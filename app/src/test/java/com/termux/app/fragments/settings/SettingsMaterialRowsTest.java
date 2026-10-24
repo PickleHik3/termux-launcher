@@ -7,12 +7,21 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Looper;
+import android.view.ContextThemeWrapper;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -21,6 +30,11 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceGroup;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.SettingsRowGroups.Kind;
@@ -215,5 +229,86 @@ public class SettingsMaterialRowsTest {
         row.setFragment("com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment");
         assertEquals(R.drawable.ic_ms_bug_report, SettingsRowIcons.forPreference(row));
         assertEquals(0, SettingsRowIcons.forPreference(new Preference(RuntimeEnvironment.getApplication())));
+    }
+
+    // ---- Filled segments ----------------------------------------------------------------------
+
+    private static final int[] CHECKED = {android.R.attr.state_enabled, android.R.attr.state_checked};
+    private static final int[] UNCHECKED = {android.R.attr.state_enabled};
+
+    private static Context themed(float fontScale) {
+        Context app = RuntimeEnvironment.getApplication();
+        Configuration configuration = new Configuration(app.getResources().getConfiguration());
+        configuration.fontScale = fontScale;
+        return new ContextThemeWrapper(app.createConfigurationContext(configuration),
+            R.style.Theme_TermuxApp_DayNight_NoActionBar);
+    }
+
+    private static int color(Context context, int attr) {
+        return MaterialColors.getColor(context, attr, "settings colour");
+    }
+
+    @Test public void segmentsAreFilledWithNoOutline() {
+        Context context = themed(1f);
+        View row = LayoutInflater.from(context).inflate(R.layout.preference_segmented_pill,
+            new FrameLayout(context), false);
+        MaterialButtonToggleGroup group = row.findViewById(R.id.segmented_pill_track);
+        assertTrue("neighbouring tonal segments keep a gap", group.getSpacing() > 0);
+        MaterialButton segment = row.findViewById(R.id.segmented_pill_default);
+        assertEquals(0, segment.getStrokeWidth());
+        assertEquals(0, segment.getMinWidth());
+        ColorStateList container = segment.getBackgroundTintList();
+        assertNotNull(container);
+        assertEquals(color(context, com.google.android.material.R.attr.colorPrimaryContainer),
+            container.getColorForState(CHECKED, 0));
+        assertEquals(color(context, com.google.android.material.R.attr.colorSurfaceContainerHighest),
+            container.getColorForState(UNCHECKED, 0));
+        assertEquals(color(context, com.google.android.material.R.attr.colorOnPrimaryContainer),
+            segment.getTextColors().getColorForState(CHECKED, 0));
+    }
+
+    @Test public void theSectionFilterChipsAreFilledSegments() {
+        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
+        View chipsRow = fragment.getSectionChipsRow();
+        assertNotNull(chipsRow);
+        ChipGroup chips = chipsRow.findViewById(R.id.settings_section_chips_group);
+        assertTrue(chips.getChildCount() > 0);
+        Chip chip = (Chip) chips.getChildAt(0);
+        assertEquals(0f, chip.getChipStrokeWidth(), 0f);
+        assertFalse(chip.isCheckedIconVisible());
+        ColorStateList background = chip.getChipBackgroundColor();
+        assertNotNull(background);
+        assertEquals(color(chip.getContext(), com.google.android.material.R.attr.colorPrimaryContainer),
+            background.getColorForState(CHECKED, 0));
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void anIconRowHoldsItsSlotAndGrowsWithLargeText() {
+        Context context = themed(1.3f);
+        float density = context.getResources().getDisplayMetrics().density;
+        ViewGroup row = (ViewGroup) LayoutInflater.from(context).inflate(R.layout.preference_settings_row,
+            new FrameLayout(context), false);
+        ImageView icon = row.findViewById(android.R.id.icon);
+        icon.setImageResource(R.drawable.ic_ms_history);
+        icon.setVisibility(View.VISIBLE);
+        TextView title = row.findViewById(android.R.id.title);
+        TextView summary = row.findViewById(android.R.id.summary);
+        title.setText("Show in Recents when not the default launcher");
+        summary.setText("Keep this app in the Recents screen while another launcher is home");
+        // A 380dp phone, less the two card gutters.
+        int width = Math.round((380 - 2 * 16) * density);
+        row.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        row.layout(0, 0, width, row.getMeasuredHeight());
+
+        assertEquals(Math.round(24 * density), icon.getWidth());
+        View text = (View) title.getParent();
+        assertTrue("the title starts after the icon slot", text.getLeft() >= icon.getRight());
+        int textHeight = title.getHeight() + summary.getHeight()
+            + row.getPaddingTop() + row.getPaddingBottom();
+        assertTrue("the row grows with its text instead of clipping it",
+            row.getMeasuredHeight() >= textHeight);
+        assertTrue(row.getMeasuredHeight() >= Math.round(56 * density));
     }
 }

@@ -277,20 +277,22 @@ public final class SettingsSectionChips {
 
         android.content.Context context = chipsRow.getContext();
         CharSequence allLabel = context.getString(R.string.settings_section_chip_all);
-        group.addView(createChip(context, allLabel, selected == null,
+        group.addView(createChip(group, allLabel, selected == null,
             () -> listener.onSectionSelected(null)));
 
         for (PreferenceCategory section : sections) {
             CharSequence title = section.getTitle();
             if (title == null) title = allLabel;
-            group.addView(createChip(context, title, section.equals(selected),
+            group.addView(createChip(group, title, section.equals(selected),
                 () -> listener.onSectionSelected(section)));
         }
     }
 
-    private static Chip createChip(@NonNull android.content.Context context, @NonNull CharSequence label,
+    private static Chip createChip(@NonNull ChipGroup group, @NonNull CharSequence label,
                                    boolean checked, @NonNull Runnable onClick) {
-        Chip chip = new Chip(context);
+        // Inflated, not constructed, so the filled-segment style applies.
+        Chip chip = (Chip) android.view.LayoutInflater.from(group.getContext())
+            .inflate(R.layout.settings_section_chip, group, false);
         chip.setId(View.generateViewId());
         chip.setText(label);
         chip.setContentDescription(label);
