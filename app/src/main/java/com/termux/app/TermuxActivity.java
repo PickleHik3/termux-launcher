@@ -21825,8 +21825,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void openSurfaceEditor() {
-        // The look is every place's, so the editor opens over whatever place is on screen.
-        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR);
+        // The page's own object: Home's card on Home, the terminal's over a window, none over the
+        // display (appearance-and-settings-rework §4: every door opens on its page's object).
+        com.termux.app.wall.PaneWallPage page = currentWallPlace();
+        openSurfaceEditor(page == com.termux.app.wall.PaneWallPage.WIDGETS
+            ? com.termux.app.surfaces.EditorCard.HOME
+            : page == com.termux.app.wall.PaneWallPage.TERMINAL
+                ? com.termux.app.surfaces.EditorCard.TERMINAL : null);
+    }
+
+    /** Opens the editor with {@code card} up, or at rest for null. */
+    void openSurfaceEditor(@Nullable com.termux.app.surfaces.EditorCard card) {
+        mAppearanceFromSettings = false;
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR,
+            card == null ? null : card.key, null, null);
     }
 
     void openSettings() {
