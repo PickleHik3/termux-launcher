@@ -64,6 +64,18 @@ public class HiddenStackPolicyTest {
     }
 
     @Test
+    public void stackRestsOnTheColumnBottom() {
+        int h = 100;
+        int gap = Math.round(HiddenStackPolicy.GAP_DP * DENSITY);
+        int top = HiddenStackPolicy.stackTopPx(50, 1000, 3, h, DENSITY);
+        assertEquals(50 + 1000 - (3 * h + 2 * gap), top);
+        int last = HiddenStackPolicy.cardTopPx(top, 2, h, DENSITY);
+        assertEquals(50 + 1000, last + h);
+        assertEquals(50, HiddenStackPolicy.stackTopPx(50, 100, 5, h, DENSITY));
+        assertEquals(1050, HiddenStackPolicy.stackTopPx(50, 1000, 0, h, DENSITY));
+    }
+
+    @Test
     public void everyLabelStandsWholeInItsCardAtEveryFontScale() {
         int width = HiddenStackPolicy.cardWidthPx(DENSITY);
         int pad = Math.round(HiddenStackPolicy.PAD_DP * DENSITY) + 1;

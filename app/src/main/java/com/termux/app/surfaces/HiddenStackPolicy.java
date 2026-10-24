@@ -59,6 +59,19 @@ final class HiddenStackPolicy {
         return Math.max(min, Math.min(max, fit));
     }
 
+    /**
+     * Where the first card's top stands so the last card's bottom rests on the bottom of the
+     * column ({@code columnTopPx} down {@code columnHeightPx}) holding {@code count} cards; never
+     * above the column's top, so a stack too long for it still starts there.
+     */
+    static int stackTopPx(int columnTopPx, int columnHeightPx, int count, int cardHeightPx,
+                          float density) {
+        int n = Math.max(0, count);
+        int gap = Math.round(GAP_DP * density);
+        int used = n == 0 ? 0 : n * cardHeightPx + (n - 1) * gap;
+        return columnTopPx + Math.max(0, columnHeightPx - used);
+    }
+
     /** The top of card {@code index}, counted from the stack's top. */
     static int cardTopPx(int stackTopPx, int index, int cardHeightPx, float density) {
         return stackTopPx + index * (cardHeightPx + Math.round(GAP_DP * density));

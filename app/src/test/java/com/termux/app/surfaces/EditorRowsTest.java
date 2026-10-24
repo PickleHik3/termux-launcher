@@ -52,18 +52,18 @@ public class EditorRowsTest {
     @Test
     public void theDockCardOpensOnItsStripThenItsPlace() {
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-            Row.MARGIN, Row.APP_ICONS, Row.VISIBLE, Row.POSITION),
+            Row.MARGIN, Row.APP_ICONS, Row.VISIBLE),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         assertEquals(Arrays.asList(Row.STYLE, Row.DESIGN),
             EditorRows.tier(EditorCard.DOCK, ALL, 2));
-        assertEquals(Arrays.asList(Row.SEARCH_FIELD, Row.LINK_DOCK_ITEMS),
+        assertEquals(Arrays.asList(Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_DOCK_ITEMS),
             EditorRows.tier(EditorCard.DOCK, ALL, 3));
     }
 
     @Test
     public void theStatusBarAndKeyboardCardsOpenOnTheirStripAndPlace() {
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN,
-            Row.VISIBLE, Row.POSITION), EditorRows.tier(EditorCard.STATUS, ALL, 1));
+            Row.VISIBLE), EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT,
             Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN, Row.VISIBLE),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
@@ -76,7 +76,6 @@ public class EditorRowsTest {
             Row.MARGIN, Row.SPLIT_GAP), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
-        assertFalse(all.contains(Row.POSITION));
     }
 
     @Test
@@ -195,7 +194,7 @@ public class EditorRowsTest {
         for (WallHalf half : WallHalf.values()) {
             assertNull(EditorRows.halfFor(EditorCard.TERMINAL, Row.OPACITY, half));
             for (EditorCard card : EditorCard.values()) {
-                for (Row row : new Row[] {Row.CORNERS, Row.MARGIN, Row.HEIGHT, Row.POSITION,
+                for (Row row : new Row[] {Row.CORNERS, Row.MARGIN, Row.HEIGHT,
                     Row.VISIBLE, Row.STYLE, Row.DESIGN, Row.TEXT_SIZE})
                     assertNull(card + " " + row, EditorRows.halfFor(card, row, half));
             }
