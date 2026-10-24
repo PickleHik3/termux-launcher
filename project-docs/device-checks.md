@@ -434,10 +434,11 @@ dropped; what follows is what still owes a look.
   seconds on, in the widget at 2×1/2×2 and in the expanded status bar: "AM"/"PM" is centred over
   the two seconds digits, not left of them; with seconds off the period sits where it did · pong
   or emulator.
-- 2026-10-25 · the flip end pins on pong · compare the pins against the 2026-10-24 screenshot: if
-  the build predates "flip cards carry end pins at the split line" they should appear now; if
-  they are there but read as missing, they are about 0.9dp by 2.1dp (the hinge clips they replace
-  were 3.2dp by 7.4dp) and the developer says whether to grow them · pong.
+- 2026-10-25 · commit "flip end pins at the old clips' size" · Flip Clock widget, the expanded bar
+  and the dock: each card shows a clear small rectangle at both ends of the split line (3.2dp by
+  7.4dp at card scale, a pixel past the card's edge), under the digit so none crosses a glyph; no
+  leaf shading at the fold; the flipping leaf carries no pins and they stay put between flips ·
+  pong.
 
 ## Developer
 - 2026-10-24 · commit "feat(editor): live drag over the real frame…" · Appearance editor, hold

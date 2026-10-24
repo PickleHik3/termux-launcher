@@ -74,46 +74,44 @@ public class ClockFlipEndPinsTest {
 
     // ----- geometry -----------------------------------------------------------------------------
 
-    @Test public void thePinsStandOnTheRimAtTheEndsOfTheSplitLine() {
+    @Test public void thePinsAreTheOldClipsSizeCentredOnTheSplitAtTheCardEdges() {
         RectF card = new RectF(10f, 20f, 36f, 55.5f);
         RectF left = new RectF(), right = new RectF();
-        ClockFaceRenderer.flipEndPins(card, .5f, 5f, left, right);
-        float height = ClockFaceRenderer.FLIP_PIN_HEIGHT_FRACTION * card.height();
-        float width = ClockFaceRenderer.FLIP_PIN_WIDTH_FRACTION * card.height();
-        assertEquals(height, left.height(), 1e-4f);
-        assertEquals(width, left.width(), 1e-4f);
+        ClockFaceRenderer.flipEndPins(card, 3.2f, 7.4f, 1f, left, right);
+        assertEquals(3.2f, left.width(), 1e-4f);
+        assertEquals(7.4f, left.height(), 1e-4f);
+        assertEquals(3.2f, right.width(), 1e-4f);
+        assertEquals(7.4f, right.height(), 1e-4f);
         assertEquals(card.centerY(), left.centerY(), 1e-4f);
         assertEquals(card.centerY(), right.centerY(), 1e-4f);
-        assertEquals("the left pin starts at the card's edge", card.left, left.left, 1e-4f);
-        assertEquals("the right pin ends at the card's edge", card.right, right.right, 1e-4f);
-        assertEquals(left.width(), right.width(), 1e-4f);
-        assertEquals(left.height(), right.height(), 1e-4f);
+        assertEquals("the left pin starts 1 left of the edge", card.left - 1f, left.left, 1e-4f);
+        assertEquals("the right pin ends 1 past the edge", card.right + 1f, right.right, 1e-4f);
     }
 
-    @Test public void thePinsGrowWithTheCard() {
-        RectF small = new RectF(0f, 0f, 26f, 35.5f), large = new RectF(0f, 0f, 104f, 142f);
-        RectF smallLeft = new RectF(), smallRight = new RectF();
-        RectF largeLeft = new RectF(), largeRight = new RectF();
-        ClockFaceRenderer.flipEndPins(small, .5f, 5f, smallLeft, smallRight);
-        ClockFaceRenderer.flipEndPins(large, 2f, 20f, largeLeft, largeRight);
-        assertEquals(4f * smallLeft.width(), largeLeft.width(), 1e-4f);
-        assertEquals(4f * smallLeft.height(), largeLeft.height(), 1e-4f);
-    }
-
-    @Test public void aPinIsNeverNarrowerThanTheRimNorWiderThanTheRoomBesideTheDigit() {
+    @Test public void thePinsHaveNoClampWhateverTheDigitFillsOfTheCard() {
+        // Whatever room a digit leaves, the pins keep their full size: the geometry takes none.
         RectF card = new RectF(0f, 0f, 26f, 35.5f);
         RectF left = new RectF(), right = new RectF();
-        // A floored rim (a small face) is wider than the share: the pin reaches past it.
-        ClockFaceRenderer.flipEndPins(card, 1.4f, 5f, left, right);
-        assertEquals(1.4f, left.width(), 1e-4f);
-        // Little room between the edge and the digit: the pin keeps to it.
-        ClockFaceRenderer.flipEndPins(card, 1.4f, .4f, left, right);
-        assertEquals(.4f, left.width(), 1e-4f);
-        assertEquals(.4f, right.width(), 1e-4f);
-        // No room at all: no pin.
-        ClockFaceRenderer.flipEndPins(card, 1.4f, -2f, left, right);
-        assertTrue(left.isEmpty());
-        assertTrue(right.isEmpty());
+        ClockFaceRenderer.flipEndPins(card, ClockFaceRenderer.FLIP_PIN_WIDTH_DP,
+            ClockFaceRenderer.FLIP_PIN_HEIGHT_DP, ClockFaceRenderer.FLIP_PIN_OVERHANG, left, right);
+        assertEquals(3.2f, left.width(), 1e-4f);
+        assertEquals(7.4f, left.height(), 1e-4f);
+        assertEquals(3.2f, right.width(), 1e-4f);
+        assertEquals(7.4f, right.height(), 1e-4f);
+    }
+
+    @Test public void thePinsGrowWithTheBar() {
+        // In the bar the face is scaled: the pins' painted size is the clips' size times it.
+        ClockFaceRenderer renderer = barRenderer(DARK);
+        int width = Math.round(340f * DENSITY), height = Math.round(65f * DENSITY);
+        renderer.setFitBudget(width, 49f * DENSITY, false);
+        float scale = renderer.fittedScale(width, 49f * DENSITY);
+        RectF left = new RectF(), right = new RectF();
+        assertTrue(renderer.flipEndPinsPx(width, height, 0, left, right));
+        assertEquals(3.2f * DENSITY * scale, left.width(), .01f);
+        assertEquals(7.4f * DENSITY * scale, left.height(), .01f);
+        // The widest digit leaves less room than the pin's width: the pin still is full size.
+        assertTrue(left.width() > 0f);
     }
 
     @Test public void onlyTheFullFlipHasPins() {
@@ -167,8 +165,8 @@ public class ClockFlipEndPinsTest {
             assertTrue(where + ": card " + digit + " has pins",
                 renderer.flipEndPinsPx(width, height, digit, left, right));
             assertFalse(where + ": card " + digit + " pins are not empty", left.isEmpty());
-            assertTrue(where + ": card " + digit + " pins lie inside the box " + left + right,
-                left.left >= 0f && right.right <= width && left.top >= 0f
+            assertTrue(where + ": card " + digit + " pins reach into the box " + left + right,
+                left.right > 0f && right.left < width && left.top >= 0f
                     && left.bottom <= height);
             pins[digit] = new RectF[] {left, right};
         }

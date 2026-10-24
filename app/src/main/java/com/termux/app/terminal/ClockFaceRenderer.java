@@ -174,13 +174,16 @@ public final class ClockFaceRenderer {
     private static final float FLIP_SEAM_FRACTION = 1f / 36f;
     private static final float FLIP_RIM_FRACTION = 1f / 36f;
     /**
-     * A flip card's end pins, at the two ends of its split line, as shares of the card's height:
-     * small enough to read as the leaves' axle, never as a line ({@link #flipEndPins}).
+     * A full flip card's end pins, the old hinge clips' rectangles (and only them): 3.2dp by
+     * 7.4dp in the card's own units, so they scale with it, centred on the split line, each
+     * standing 1 unit past the card's edge as the clips did ({@link #flipEndPins}).
      */
     @VisibleForTesting
-    static final float FLIP_PIN_HEIGHT_FRACTION = .06f;
+    static final float FLIP_PIN_WIDTH_DP = 3.2f;
     @VisibleForTesting
-    static final float FLIP_PIN_WIDTH_FRACTION = .025f;
+    static final float FLIP_PIN_HEIGHT_DP = 7.4f;
+    @VisibleForTesting
+    static final float FLIP_PIN_OVERHANG = 1f;
     /**
      * How much of the backdrop a flip card's two passes (the base, then a leaf gradient, each
      * about half opaque) cover: what its digits are measured against.
@@ -270,6 +273,7 @@ public final class ClockFaceRenderer {
      */
     private final RectF mFlipHalfClip = new RectF();
     /** A full flip card's two end pins ({@link #flipEndPins}), and whether they are drawn. */
+    private int mFlipPinInk;
     private final RectF mFlipPinLeft = new RectF();
     private final RectF mFlipPinRight = new RectF();
     private boolean mFlipEndPinsDrawn = true;
@@ -672,6 +676,7 @@ public final class ClockFaceRenderer {
             mLowerFlipColors[2] = alpha(leaf, .46f);
             mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.SHADE, .16f), .5f);
             mFlipRim = alpha(mOutlineVariant, .6f);
+            mFlipPinInk = alpha(mOutlineVariant, 1f);
             mFlipSeam = alpha(GlassTokens.SHADE, .6f);
             mFlipShadow = ColorUtils.setAlphaComponent(GlassTokens.SHADE, 70);
         } else {
@@ -682,6 +687,7 @@ public final class ClockFaceRenderer {
             mLowerFlipColors[2] = alpha(leaf, .5f);
             mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, on, .05f), .52f);
             mFlipRim = alpha(mOutlineVariant, .8f);
+            mFlipPinInk = alpha(mOutlineVariant, 1f);
             mFlipSeam = alpha(mOnSurface, .3f);
             mFlipShadow = alpha(mOnSurface, .12f);
         }
@@ -1528,21 +1534,17 @@ public final class ClockFaceRenderer {
                 90f * (1f - eased), 1f - eased);
         }
 
-        drawFlipRimAndSeam(canvas, card, dp(1.5f), dp(FULL_FLIP_CARD_HEIGHT_DP), true);
+        drawFlipRimAndSeam(canvas, card, dp(1.5f), dp(FULL_FLIP_CARD_HEIGHT_DP));
         return card.right;
     }
 
     /**
-     * A card's rim and its one hinge seam, both band strokes, and — on the full card — its two
-     * end pins. The hinge clips that used to sit across the seam stay gone: with the leaves' own
-     * shading at the fold they drew three lines through every digit, and one clean seam is what
-     * says "split flap". The end pins are back by decision (2026-10-25): two small tabs on the
-     * rim at the ends of the split line give the leaves an axle without a mark across the digits,
-     * since they sit wholly inside the clearance between the card's edge and its digit
-     * ({@link #flipEndPins}). The compact card is too small for them to read.
+     * A card's rim and its one hinge seam, both band strokes. The hinge clips that used to sit
+     * across the seam stay gone: with the leaves' own shading at the fold they drew three lines
+     * through every digit. The full card's end pins are drawn with its halves, under the digit
+     * ({@link #drawFlipPins}).
      */
-    private void drawFlipRimAndSeam(Canvas canvas, RectF card, float corner, float bandPx,
-                                    boolean endPins) {
+    private void drawFlipRimAndSeam(Canvas canvas, RectF card, float corner, float bandPx) {
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.STROKE);
         float rim = bandStroke(FLIP_RIM_FRACTION, bandPx);
@@ -1554,38 +1556,41 @@ public final class ClockFaceRenderer {
         float split = card.centerY();
         mFillPaint.setColor(mFlipSeam);
         canvas.drawRect(card.left, split - half, card.right, split + half, mFillPaint);
-        if (!endPins || !mFlipEndPinsDrawn) return;
-        flipEndPins(card, rim, fullFlipDigitClearance(card), mFlipPinLeft, mFlipPinRight);
-        if (mFlipPinLeft.isEmpty()) return;
-        float radius = mFlipPinLeft.width() / 2f;
-        mFillPaint.setColor(mFlipRim);
-        canvas.drawRoundRect(mFlipPinLeft, radius, radius, mFillPaint);
-        canvas.drawRoundRect(mFlipPinRight, radius, radius, mFillPaint);
     }
 
     /**
-     * A flip card's two end pins: {@link #FLIP_PIN_HEIGHT_FRACTION} of the card's height tall and
-     * centred on its split line, each standing on the rim from the card's edge inward. They are
-     * {@link #FLIP_PIN_WIDTH_FRACTION} of the height wide, but at least the rim's stroke (half of
-     * which falls outside the card, so a narrower pin would hide in it), and never wider than
-     * {@code clearance}, the room between the card's edge and its digit, so a pin never reaches
-     * the digit. Nothing lands outside the card. Empty pins when there is no clearance.
+     * A flip card's two end pins: {@code width} by {@code height} (the card's own units),
+     * centred on its split line, the left one starting {@code overhang} left of the card's edge
+     * and the right one ending {@code overhang} past it, as the old hinge clips stood. Nothing
+     * clamps them to the digit: the half pass draws them under the digit.
      */
     @VisibleForTesting
-    static void flipEndPins(@NonNull RectF card, float rimStroke, float clearance,
+    static void flipEndPins(@NonNull RectF card, float width, float height, float overhang,
                             @NonNull RectF left, @NonNull RectF right) {
-        float width = Math.min(Math.max(FLIP_PIN_WIDTH_FRACTION * card.height(), rimStroke),
-            Math.max(0f, clearance));
-        float half = FLIP_PIN_HEIGHT_FRACTION * card.height() / 2f;
+        float half = height / 2f;
         float split = card.centerY();
-        left.set(card.left, split - half, card.left + width, split + half);
-        right.set(card.right - width, split - half, card.right, split + half);
+        left.set(card.left - overhang, split - half, card.left - overhang + width, split + half);
+        right.set(card.right + overhang - width, split - half, card.right + overhang,
+            split + half);
     }
 
-    /** The room between a full flip card's edge and the widest digit centred in it. */
-    private float fullFlipDigitClearance(@NonNull RectF card) {
-        return (card.width() - widestDigitsWidth(1, condensedBoldTypeface(), FULL_FLIP_DIGIT_SP))
-            / 2f;
+    /** One half's share of the end pins, above the card fill and below the digit. */
+    private void drawFlipPins(Canvas canvas, RectF card, boolean top) {
+        flipEndPins(card, dp(FLIP_PIN_WIDTH_DP), dp(FLIP_PIN_HEIGHT_DP), FLIP_PIN_OVERHANG,
+            mFlipPinLeft, mFlipPinRight);
+        float split = card.centerY();
+        canvas.save();
+        canvas.clipRect(card.left - FLIP_PIN_OVERHANG, top ? card.top : split,
+            card.right + FLIP_PIN_OVERHANG, top ? split : card.bottom);
+        mFillPaint.setShader(null);
+        mFillPaint.setStyle(Paint.Style.FILL);
+        // The paint's colour alpha scales the leaf shaders drawn after this: give it back.
+        int kept = mFillPaint.getColor();
+        mFillPaint.setColor(mFlipPinInk);
+        canvas.drawRect(mFlipPinLeft, mFillPaint);
+        canvas.drawRect(mFlipPinRight, mFillPaint);
+        mFillPaint.setColor(kept);
+        canvas.restore();
     }
 
     /**
@@ -1610,8 +1615,8 @@ public final class ClockFaceRenderer {
             x += dp(FULL_FLIP_CARD_DP) + dp(flipGapAfterDp(d, FULL_FLIP_DIGIT_GAP_DP));
         }
         RectF card = new RectF(x, 0f, x + dp(FULL_FLIP_CARD_DP), dp(FULL_FLIP_CARD_HEIGHT_DP));
-        float rim = bandStroke(FLIP_RIM_FRACTION, card.height(), scale, dp(STROKE_FLOOR_DP));
-        flipEndPins(card, rim, fullFlipDigitClearance(card), left, right);
+        flipEndPins(card, dp(FLIP_PIN_WIDTH_DP), dp(FLIP_PIN_HEIGHT_DP), FLIP_PIN_OVERHANG,
+            left, right);
         for (RectF pin : new RectF[] {left, right}) {
             pin.set((bandDx + pin.left) * scale, top + pin.top * scale,
                 (bandDx + pin.right) * scale, top + pin.bottom * scale);
@@ -1641,6 +1646,11 @@ public final class ClockFaceRenderer {
             : lowerFlipShader(split, card.bottom));
         canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
         mFillPaint.setShader(null);
+        canvas.restore();
+        // The pins stay put with the static halves; a flying leaf carries none.
+        if (foldShade <= 0f && mFlipEndPinsDrawn) drawFlipPins(canvas, card, top);
+        canvas.save();
+        canvas.clipRect(mFlipHalfClip);
         if (drawDigit) {
             mPaint.setTypeface(condensedBoldTypeface());
             mPaint.setLetterSpacing(0f);
@@ -1839,7 +1849,7 @@ public final class ClockFaceRenderer {
                 90f * (1f - eased), 1f - eased);
         }
 
-        drawFlipRimAndSeam(canvas, card, dp(1f), dp(24f), false);
+        drawFlipRimAndSeam(canvas, card, dp(1f), dp(24f));
         return card.right;
     }
 
