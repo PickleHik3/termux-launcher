@@ -92,7 +92,9 @@ public final class SettingsBackStackState {
     /**
      * The entries a reopen rebuilds: {@link #entriesForCurrentTree}, cut before the first editor
      * (SettingsTree's {@code editor} screens, the Set up Linux apps guide among them). An editor is
-     * a task, not a place: a reopen lands on the page that opened it, never back inside it.
+     * a task, not a place: a reopen lands on the page that opened it, never back inside it. That
+     * page is kept even when the stack did not hold it (the guide opened straight from the root's
+     * row): the path to it is rebuilt from the tree, so the reopen does not fall back to the root.
      */
     @NonNull
     List<Entry> entriesToRestore() {
@@ -100,7 +102,22 @@ public final class SettingsBackStackState {
         for (Entry entry : entriesForCurrentTree()) {
             com.termux.app.fragments.settings.SettingsTree.Screen screen =
                 com.termux.app.fragments.settings.SettingsTree.find(entry.className);
-            if (screen != null && screen.editor) break;
+            if (screen != null && screen.editor) {
+                // The page under the editor: its parent, past any editor that opened it.
+                com.termux.app.fragments.settings.SettingsTree.Screen page =
+                    com.termux.app.fragments.settings.SettingsTree.find(screen.parent);
+                while (page != null && page.editor)
+                    page = com.termux.app.fragments.settings.SettingsTree.find(page.parent);
+                Entry last = out.isEmpty() ? null : out.get(out.size() - 1);
+                if (page != null && (last == null || !last.className.equals(page.className))) {
+                    out.clear();
+                    for (com.termux.app.fragments.settings.SettingsTree.Screen up
+                        : com.termux.app.fragments.settings.SettingsTree.path(page.className)) {
+                        out.add(new Entry(up.className, up.titleRes, null, null, null));
+                    }
+                }
+                break;
+            }
             out.add(entry);
         }
         return out;
