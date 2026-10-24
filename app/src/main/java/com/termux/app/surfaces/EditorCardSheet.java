@@ -285,9 +285,23 @@ final class EditorCardSheet {
             params.height = full;
             mSheet.setLayoutParams(params);
         }
-        if (mShown)
+        if (mShown && mParked && full > 0) {
+            // A card raised before the window was measured rises now, from below the screen.
+            mParked = false;
+            mSheet.setTranslationY(full);
+            mSheet.setVisibility(View.VISIBLE);
+            settle(mDetent, mParkedAnimate);
+        } else if (mShown && !mParked) {
             settle(mDetent, false);
+        }
     }
+
+    /**
+     * The card is up but the sheet has no detents yet: it waits out of sight, and
+     * {@link #setGeometry} raises it ({@code mParkedAnimate}: with the slide or at once).
+     */
+    private boolean mParked;
+    private boolean mParkedAnimate;
 
     /** How tall the sheet stands at {@code detent}. */
     int heightAt(int detent) {
@@ -369,12 +383,20 @@ final class EditorCardSheet {
         mSheet.setContentDescription(mContext.getString(card.titleRes));
         boolean wasShown = mShown;
         mShown = true;
+        if (!wasShown || !sameCard)
+            mDetent = DETENT_HALF;
+        if (mFullPx <= 0) {
+            // A restatement while parked keeps the slide the card was raised with.
+            mParkedAnimate = (mParked && mParkedAnimate) || animate;
+            mParked = true;
+            mSheet.animate().cancel();
+            mSheet.setVisibility(View.GONE);
+            return;
+        }
         if (mSheet.getVisibility() != View.VISIBLE) {
             mSheet.setTranslationY(mFullPx);
             mSheet.setVisibility(View.VISIBLE);
         }
-        if (!wasShown || !sameCard)
-            mDetent = DETENT_HALF;
         settle(mDetent, animate);
     }
 
@@ -386,6 +408,7 @@ final class EditorCardSheet {
             return;
         }
         mShown = false;
+        mParked = false;
         mSheet.animate().cancel();
         float to = Math.max(mFullPx, mSheet.getHeight());
         if (!animate || ReducedMotion.isEnabled(mContext)) {
