@@ -1,6 +1,9 @@
 package com.termux.app.place;
 
+import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -194,7 +197,8 @@ public final class PlaceLayoutStore {
     /**
      * A layout's Dock design, one value for both orientations: {@code layout.dock_design},
      * {@code layout.minimal.dock_design}, {@code layout.home.dock_design}, a {@link DockStyle}
-     * id. Absent or unknown is the glass tray.
+     * id. Absent or unknown is the glass tray; a new install's first run writes
+     * {@link DockStyle#NEW_INSTALL_DEFAULT} into each ({@link #startsOnNewInstallDefault}).
      */
     private static final String KEY_DOCK_DESIGN = "dock_design";
     /**
@@ -1530,8 +1534,60 @@ public final class PlaceLayoutStore {
         if (fromVersion < 11) migratePromptLineToTheSearchField();
         if (fromVersion < 12) migrateTaskbarToTheDrawerTile();
         if (fromVersion < 13) migrateToLinkedKeys();
+        // A new install starts on the new default design; an install that ran this store before
+        // (fromVersion above 0) or was updated from an earlier build keeps the absent key's tray.
+        if (startsOnNewInstallDefault(fromVersion, installTimes())) seedNewInstallDockDesign();
         mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
+    }
+
+    /**
+     * Whether this first run of the store is a new install's, which starts on
+     * {@link DockStyle#NEW_INSTALL_DEFAULT} rather than the tray an absent design reads as. Only
+     * an install the store has never migrated ({@code migratedFrom} 0: no build since 2026-09-06
+     * has run on it) whose package was installed and never updated (the two install times equal,
+     * as Android sets them on a fresh install). An install updated from an older build has
+     * {@code migratedFrom} 0 too when that build predates the store, but its last update is later
+     * than its first install, so it keeps the tray. {@code installTimes} is null where the
+     * package manager cannot answer, which keeps the tray.
+     */
+    @VisibleForTesting
+    static boolean startsOnNewInstallDefault(int migratedFrom, @Nullable long[] installTimes) {
+        if (migratedFrom != 0 || installTimes == null || installTimes.length < 2) return false;
+        long first = installTimes[0];
+        long last = installTimes[1];
+        return first > 0L && first == last;
+    }
+
+    /** This package's first install and last update times, or null where they cannot be read. */
+    @Nullable
+    private long[] installTimes() {
+        try {
+            Context context = mPreferences.getContext();
+            PackageManager manager = context == null ? null : context.getPackageManager();
+            if (manager == null) return null;
+            PackageInfo info = manager.getPackageInfo(context.getPackageName(), 0);
+            return info == null ? null : new long[] {info.firstInstallTime, info.lastUpdateTime};
+        } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * A new install's layouts hold {@link DockStyle#NEW_INSTALL_DEFAULT}, each written where
+     * nothing is stored yet, so the absent key goes on reading as the tray for every install that
+     * predates the new default.
+     */
+    private void seedNewInstallDockDesign() {
+        SharedPreferences.Editor editor = mStore.edit();
+        boolean wrote = false;
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String key = layoutWideKey(variant, KEY_DOCK_DESIGN);
+            if (mStore.contains(key)) continue;
+            editor.putString(key, DockStyle.NEW_INSTALL_DEFAULT.storageValue());
+            wrote = true;
+        }
+        if (wrote) editor.apply();
     }
 
     /**
