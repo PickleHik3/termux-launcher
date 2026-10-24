@@ -97,17 +97,17 @@ public class LauncherLayoutDirectionTest {
     }
 
     @Test
-    public void theAppearanceEditorPanelMirrors() {
+    public void theWallpaperSheetOverTheEditorMirrors() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         FrameLayout parent = new FrameLayout(activity);
         parent.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         View panel = LayoutInflater.from(activity)
-            .inflate(R.layout.appearance_editor_panel, parent, false);
+            .inflate(R.layout.appearance_wallpaper_sheet, parent, false);
         parent.addView(panel);
         resolve(parent);
         resolve(panel);
 
-        assertEquals("pinned content root or not, its labels and sliders read right to left",
+        assertEquals("pinned content root or not, its bar reads right to left",
             View.LAYOUT_DIRECTION_RTL, panel.getLayoutDirection());
     }
 

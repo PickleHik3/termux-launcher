@@ -23,6 +23,7 @@ import com.termux.app.place.Slot;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -71,13 +72,14 @@ public class SurfaceEditorRelaunchTest {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
         SurfaceEditorController before = editorOnNewActivity();
         present(before);
-        int stopAtOpen = stop(before);
         // An edit, written through to the preferences as every editor write is.
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
             EDITED_KEYBOARD_OPACITY);
         String edited = AppearanceSnapshot.signatureOf(preferences);
         assertNotEquals(atOpen, edited);
         assertTrue(isDirty(before));
+        // The stop is read from the look on screen: the edit left it at Custom.
+        int stopBefore = stop(before);
 
         AppearanceSurfaceController.EditorSession carried = before.carrySession();
         assertNotNull("an editor that is up has a session to carry", carried);
@@ -90,7 +92,7 @@ public class SurfaceEditorRelaunchTest {
         assertEquals("the edit is still on screen", edited,
             AppearanceSnapshot.signatureOf(preferences));
         assertTrue("and still unsaved: the question and Undo are as they were", isDirty(after));
-        assertEquals(stopAtOpen, stop(after));
+        assertEquals(stopBefore, stop(after));
 
         after.undo();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -132,7 +134,7 @@ public class SurfaceEditorRelaunchTest {
         // Still waiting to be presented: a second relaunch now hands the same session on.
         assertEquals(carried, after.carrySession());
         present(after);
-        after.dismiss(-1f, 0f, null);
+        after.endSession();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
         assertNull("a dismissed editor carries nothing", after.carrySession());
@@ -141,7 +143,7 @@ public class SurfaceEditorRelaunchTest {
     // ------------------------------------------------------------------------------- the drive
 
     private static void present(SurfaceEditorController editor) {
-        editor.present(EditorMode.LOOK, null, null, 0f, 0f, null);
+        editor.present(null, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
@@ -150,7 +152,8 @@ public class SurfaceEditorRelaunchTest {
     }
 
     private static int stop(SurfaceEditorController editor) {
-        return ReflectionHelpers.getField(editor, "mStop");
+        return ReflectionHelpers.callInstanceMethod(editor, "matchingStop",
+            ReflectionHelpers.ClassParameter.from(WallHalf.class, WallHalf.WORKSPACE));
     }
 
     /** An activity with the views the editor looks for, and an editor over it. */

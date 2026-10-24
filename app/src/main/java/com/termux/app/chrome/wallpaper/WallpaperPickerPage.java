@@ -536,7 +536,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
      * thousandth of its size; null then, and the frame grows from full size instead.
      */
     @Nullable
-    @Override
     public View sharedCard() {
         WallpaperPreviewView card = card(mCentred);
         if (card == null) card = card(WallpaperSlots.Slot.HOME);
@@ -589,18 +588,15 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     }
 
     @NonNull
-    @Override
     public List<View> leavingViews() {
         return Collections.singletonList(mStripCard);
     }
 
     @NonNull
-    @Override
     public List<View> fadingViews() {
         return Arrays.asList(mProgress, mPager);
     }
 
-    @Override
     public void setBackgroundAlpha(float alpha) {
         if (mBackground == null) {
             Drawable background = mRoot.getBackground();

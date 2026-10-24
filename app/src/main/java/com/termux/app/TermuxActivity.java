@@ -1615,6 +1615,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.chrome.wallpaper.WallpaperSlots.Slot mWallpaperPhotoSlot;
     @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState mWallpaperPhotoReturn;
+    /**
+     * The editor's session while Android's photo picker and the crop run: the editor goes down for
+     * them and comes back on the picker with its session (its Undo, its unsaved state) continued.
+     */
+    @Nullable private com.termux.app.surfaces.AppearanceSurfaceController.Relaunch mWallpaperPhotoCarry;
     /** The help screen, launched for its result: what the reader asked the launcher to do. */
     @Nullable private ActivityResultLauncher<android.content.Intent> mHelpScreenLauncher;
     /** The page the reader was on when they asked, so closing the overlay lands them back on it. */
@@ -13061,7 +13066,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
-        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK,
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR,
             initialSection, null, null);
         // Keyboard's Appearance row in Settings: closing the editor goes back to Settings.
         if (fromSettings) mAppearanceFromSettings = true;
@@ -13074,10 +13079,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_WALLPAPER_STYLE);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
-        // The door is another activity's: cover the launcher at once, so its home screen never
-        // shows between Settings closing and the Overview standing (the "flash").
-        mAppearance.coverNextOpen();
-        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR);
         // Settings' Appearance row: closing the surface goes back to Settings, as its old Look page did.
         mAppearanceFromSettings = fromSettings;
     }
@@ -13143,7 +13145,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
         // The wall has to be built before the editor can be held on a place, and a cold start
         // delivers the intent while the root view is still being laid out.
-        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LAYOUT,
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR,
             null, place, null);
     }
 
@@ -13231,12 +13233,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return getTermuxThemeColor(attr, fallbackRes);
         }
 
-        // The dock's own corner, resolved as the dock draws it — the configured Corners value or
-        // the follow-the-style radius — unclamped, for the miniature to scale onto its cards.
-        @Override public float dockCornerRadiusDp() {
-            float density = getResources().getDisplayMetrics().density;
-            return density <= 0f ? 0f
-                : appliedDockLayout().capsuleCornerRadiusPx(Integer.MAX_VALUE) / density;
+        // The editor's half slide: the wall slides inside the scaled container, gestures held.
+        @Override public void slidePaneWallToPlace(@NonNull com.termux.app.wall.PaneWallPage place) {
+            if (mPaneWallController == null) return;
+            mPaneWallController.goTo(place, true);
+            mPaneWallController.setGesturesEnabled(false);
         }
 
         // The pinned apps as laid out: the dock's row, or the rail or off-dock row where the
@@ -13367,6 +13368,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void editorSessionEnded() {
             if (mWidgetPaneController != null) mWidgetPaneController.onEditorSessionEnded();
+        }
+
+        @Override public boolean isMinimalMode() {
+            return TermuxActivity.this.isMinimalMode();
+        }
+
+        @Override public void setMinimalMode(boolean minimal) {
+            TermuxActivity.this.setMinimalMode(minimal);
+        }
+
+        @Override public void applyHomeSettings() {
+            TermuxActivity.this.applyHomeSettings();
         }
 
         @Override public void redressChrome() {
@@ -17609,8 +17622,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 slot != null ? slot : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME, photo,
                 com.termux.app.chrome.wallpaper.WallpaperSlots.read(this));
         if (restore == null) return;
+        // The editor the photo picker interrupted comes back with its session, on the picker.
+        final com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried = mWallpaperPhotoCarry;
+        mWallpaperPhotoCarry = null;
+        if (carried != null && !mAppearance.isOpen()) {
+            mOverviewRestore = restore;
+            View root = findViewById(R.id.activity_termux_root_view);
+            Runnable reopen = () -> {
+                if (isFinishing() || isDestroyed() || mAppearance.isOpen()) return;
+                if (!mAppearance.reopen(carried))
+                    openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER, null, null, restore);
+            };
+            if (root != null) root.post(reopen);
+            else reopen.run();
+            return;
+        }
         // Posted by the opener: results arrive while the activity is still coming back to the front.
-        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW,
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER,
             null, null, restore);
     }
 
@@ -17758,7 +17786,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return true;
             case CONTEXT_MENU_SET_WALLPAPER_ID:
                 // The Overview on every API level: Photo… there, previewed before Apply.
-                openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER);
                 return true;
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
@@ -21481,7 +21509,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // delivers the intent while the root view is still being laid out.
         View root = findViewById(R.id.activity_termux_root_view);
         Runnable open = () -> {
-            if (!isFinishing() && !isDestroyed()) mAppearance.open(page, section, place);
+            if (!isFinishing() && !isDestroyed())
+                mAppearance.open(page, com.termux.app.surfaces.EditorCard.forKey(section), place);
         };
         if (root != null) root.post(open);
         else open.run();
@@ -21496,12 +21525,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Nullable @Override public ViewGroup content() {
             return findViewById(android.R.id.content);
-        }
-
-        @Override public void createOverview(
-                @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator,
-                @NonNull java.util.function.Consumer<com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage> ready) {
-            createOverview(navigator, null, ready);
         }
 
         @Override public void createOverview(
@@ -21540,26 +21563,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
                         slots, overviewListener(), navigator::close,
                         start, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
-                // The surface's one bar (back, the Wallpaper | Look | Layout pill, Done) around
-                // the page; the Wallpaper segment is this page.
-                final com.termux.app.surfaces.AppearanceEditorPage shell =
-                    com.termux.app.surfaces.AppearanceEditorPage.overview(TermuxActivity.this, navigator,
+                // The picker's frame over the editor: back to the editor, and the editor's Done.
+                final com.termux.app.surfaces.WallpaperSheet shell =
+                    new com.termux.app.surfaces.WallpaperSheet(TermuxActivity.this, navigator,
                         picker.root());
                 ready.accept(new com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage() {
                     @NonNull @Override public View root() { return shell.root(); }
-                    @NonNull @Override public View slidingPart() { return shell.content(); }
                     @NonNull @Override public CharSequence title() { return picker.title(); }
                     @Override public void onShown() { picker.onShown(); }
                     @Override public void onHidden() { picker.onHidden(); }
                     @Override public void release() { picker.release(); }
-                    @Nullable @Override public View sharedCard() { return picker.sharedCard(); }
-                    @NonNull @Override public java.util.List<View> leavingViews() { return picker.leavingViews(); }
-                    @NonNull @Override public java.util.List<View> fadingViews() { return picker.fadingViews(); }
-                    @Override public void setBackgroundAlpha(float alpha) {
-                        shell.setBackgroundAlpha(alpha);
-                        picker.setBackgroundAlpha(alpha);
-                    }
-                    @Override public void setBarVisible(boolean visible) { shell.setBarVisible(visible); }
                     @Nullable @Override public String centredSlotName() { return picker.centredSlot().name(); }
                     @Override public void whenReady(@NonNull Runnable ready) { picker.whenReady(ready); }
                     @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
@@ -21644,6 +21657,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @NonNull com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
                 // The surface goes away while Android's photo picker and the crop run; it opens
                 // again on the Overview with the cropped photo as that card's pending choice.
+                mWallpaperPhotoCarry = mAppearance.carry();
                 mAppearance.closeNow();
                 launchManagedWallpaperPicker(slot, back);
             }
@@ -21658,15 +21672,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void onOpenLook() {
-                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK);
+                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR);
             }
 
             @Override public void onOpenLayout() {
-                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LAYOUT);
+                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR);
             }
 
             @Override public void onOpenIcons() {
-                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.ICONS);
+                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR);
             }
         };
     }
@@ -21811,9 +21825,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void openSurfaceEditor() {
-        // The look is every place's, so the editor opens over whatever place is on screen and
-        // what it moves lands everywhere.
-        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK);
+        // The look is every place's, so the editor opens over whatever place is on screen.
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.EDITOR);
     }
 
     void openSettings() {
@@ -24447,7 +24460,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void openWallpaperPicker() {
                 TermuxActivity.this.openAppearanceSurface(
-                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER);
             }
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
@@ -24835,7 +24848,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void openWallpaperPicker() {
                 TermuxActivity.this.openAppearanceSurface(
-                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER);
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { startEmbeddedDisplay(); }
@@ -25709,7 +25722,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             case WALLPAPER:
                 openAppearanceSurface(
-                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER);
                 break;
             case LOOK: openSurfaceEditor(); break;
             case LAUNCHER_SETTINGS: openSettings(); break;
@@ -30308,7 +30321,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openWallpaperPicker() {
             TermuxActivity.this.openAppearanceSurface(
-                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER);
         }
 
         @Override public void openSettings() {
@@ -31130,7 +31143,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openWallpaperPicker() {
             TermuxActivity.this.openAppearanceSurface(
-                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER);
         }
 
         @Override public boolean toggleWallpaperMode() {

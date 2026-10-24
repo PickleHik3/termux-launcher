@@ -91,4 +91,130 @@
     <string name="appearance_editor_mode_look">Look</string>
     <!-- Tooltip of the eye-off control before any count is known. -->
     <string name="appearance_editor_hidden_tooltip">Hidden elements</string>
+
+    <!-- The editor bar: the orientation chip names the orientation the frame shows. -->
+    <string name="appearance_bar_portrait">Portrait</string>
+    <string name="appearance_bar_landscape">Landscape</string>
+    <!-- Under the frame: which half of the wall the frame shows, and what a card changes. -->
+    <string name="appearance_half_home">Home</string>
+    <string name="appearance_half_workspace">Workspace</string>
+    <string name="appearance_half_description">Editing %1$s. Swipe across the preview to switch.</string>
+    <!-- A surface in the preview, as accessibility names it. -->
+    <string name="appearance_target_description">%1$s. Tap to change it, hold to move it.</string>
+
+    <!-- The cards' titles: one per thing you can tap, and the palette's. -->
+    <string name="appearance_card_home">Home</string>
+    <string name="appearance_card_status">Status bar</string>
+    <string name="appearance_card_terminal">Terminal</string>
+    <string name="appearance_card_dock">Dock</string>
+    <string name="appearance_card_keyboard">Keyboard</string>
+    <string name="appearance_card_appearance">Appearance</string>
+    <string name="appearance_card_close">Close</string>
+    <string name="appearance_card_menu">More options</string>
+    <string name="appearance_card_more">More</string>
+    <string name="appearance_card_more_open">Fewer</string>
+
+    <!-- The card menu: back on the Look, or the same look on the other half. -->
+    <string name="appearance_reset_home">Reset Home</string>
+    <string name="appearance_reset_status">Reset status bar</string>
+    <string name="appearance_reset_terminal">Reset terminal</string>
+    <string name="appearance_reset_dock">Reset dock</string>
+    <string name="appearance_reset_keyboard">Reset keyboard</string>
+    <string name="appearance_reset_look">Reset surfaces</string>
+    <string name="appearance_copy_to_home">Copy to Home</string>
+    <string name="appearance_copy_to_workspace">Copy to Workspace</string>
+
+    <!-- Card rows: a label of one or two words each. -->
+    <string name="appearance_row_opacity">Opacity</string>
+    <string name="appearance_row_tint">Tint</string>
+    <string name="appearance_row_height">Height</string>
+    <string name="appearance_row_visible">Visible</string>
+    <string name="appearance_row_position">Position</string>
+    <string name="appearance_row_style">Style</string>
+    <string name="appearance_row_design">Design</string>
+    <string name="appearance_row_blur">Blur</string>
+    <string name="appearance_row_corners">Corners</string>
+    <string name="appearance_row_margin">Margin</string>
+    <string name="appearance_row_grain">Grain</string>
+    <string name="appearance_row_depth">Depth</string>
+    <string name="appearance_row_search_field">Search field</string>
+    <string name="appearance_row_app_icons">App count</string>
+    <string name="appearance_row_text_size">Text size</string>
+    <string name="appearance_row_contrast">Contrast</string>
+    <string name="appearance_row_cursor_trail">Cursor trail</string>
+    <string name="appearance_row_effect">Effect</string>
+    <string name="appearance_row_edge_colours">Edge colours</string>
+    <string name="appearance_row_split_gap">Split gap</string>
+    <string name="appearance_row_font">Font</string>
+    <string name="appearance_row_icon_size">Icon size</string>
+    <string name="appearance_row_label_size">Label size</string>
+    <string name="appearance_row_glass_widgets">Glass widgets</string>
+    <string name="appearance_row_two_line">Two-line labels</string>
+    <string name="appearance_row_label_shadow">Label shadow</string>
+    <string name="appearance_row_folders">Folders</string>
+    <string name="appearance_row_numerals">Numerals</string>
+    <string name="appearance_row_page_dots">Page dots</string>
+    <string name="appearance_row_folder_limit">Folder limit</string>
+    <string name="appearance_row_wallpaper_scroll">Wallpaper scroll</string>
+    <string name="appearance_row_own_layout">Own layout</string>
+    <string name="appearance_row_gestures">Gestures</string>
+    <string name="appearance_row_pages">Pages</string>
+    <string name="appearance_row_clock_12h">12-hour clock</string>
+    <string name="appearance_row_clock_face">Clock face</string>
+    <string name="appearance_row_indicators">Indicators</string>
+    <string name="appearance_row_keyboard_theme">Keyboard theme</string>
+    <string name="appearance_row_key_opacity">Key opacity</string>
+    <string name="appearance_row_key_corners">Key corners</string>
+    <string name="appearance_row_key_spacing">Key spacing</string>
+    <string name="appearance_row_form">Type</string>
+    <string name="appearance_row_keyboard_size">Size</string>
+    <string name="appearance_row_layouts">Layouts</string>
+    <string name="appearance_row_dock_items">Dock items</string>
+    <string name="appearance_row_look">Look</string>
+    <string name="appearance_row_wallpaper">Wallpaper</string>
+    <string name="appearance_row_theme">Theme</string>
+    <string name="appearance_row_icon_pack">Icon pack</string>
+    <string name="appearance_row_monochrome">Monochrome</string>
+    <string name="appearance_row_wallpaper_colours">Wallpaper colours</string>
+    <string name="appearance_row_full_screen">Full screen</string>
+    <string name="appearance_row_minimal">Minimal</string>
+    <string name="appearance_row_alignment">Alignment</string>
+    <string name="appearance_row_vibrancy">Vibrancy</string>
+    <string name="appearance_row_tint_hue">Tint colour</string>
+    <string name="appearance_row_glass_edge">Glass edge</string>
+    <string name="appearance_row_tool_colours">Tool colours</string>
+    <!-- The dot after a row's label, as accessibility reads it. -->
+    <string name="appearance_row_own_value">Set here</string>
+    <!-- Under Visible while the frame shows the other orientation. -->
+    <string name="appearance_other_orientation_note">Changes the other orientation. You see them when you turn the phone.</string>
+    <string name="appearance_wallpaper_change">Change</string>
+    <string name="appearance_wallpaper_shown">Show wallpaper</string>
+
+    <!-- Row values. -->
+    <string name="appearance_readout_percent">%1$d%%</string>
+    <string name="appearance_readout_dp">%1$d dp</string>
+    <string name="appearance_readout_times">%1$s×</string>
+
+    <!-- Segment choices: short, so three fit a phone at a large font size. -->
+    <string name="appearance_position_top">Top</string>
+    <string name="appearance_position_bottom">Bottom</string>
+    <string name="appearance_position_left">Left</string>
+    <string name="appearance_position_right">Right</string>
+    <string name="appearance_contrast_softer">Softer</string>
+    <string name="appearance_contrast_default">Default</string>
+    <string name="appearance_contrast_harder">Harder</string>
+    <string name="appearance_size_small">Small</string>
+    <string name="appearance_size_medium">Medium</string>
+    <string name="appearance_size_large">Large</string>
+    <string name="appearance_folders_compact">Compact</string>
+    <string name="appearance_folders_default">Default</string>
+    <string name="appearance_folders_roomy">Roomy</string>
+    <string name="appearance_numerals_sans">Sans</string>
+    <string name="appearance_numerals_mono">Mono</string>
+    <string name="appearance_form_docked">Docked</string>
+    <string name="appearance_form_floating">Floating</string>
+    <string name="appearance_form_split">Split</string>
+    <string name="appearance_theme_system">System</string>
+    <string name="appearance_theme_light">Light</string>
+    <string name="appearance_theme_dark">Dark</string>
 </resources>
