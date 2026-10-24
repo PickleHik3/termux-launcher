@@ -13,6 +13,41 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-24 · #159 editor (commit "feat(surfaces): the editor rests as the frame and the
+  editor bar") · open Appearance from a corner tab on a window and on Home: the frame grows to about
+  ×0.8 under a 16 dp top line, every surface wears a faint 1 dp outline, the half line reads
+  "Workspace" or "Home" with the right dot long, the bar (Portrait · Undo greyed · Done · palette)
+  stands 8 dp over the gesture area, nothing overlaps at font scale 1.0 and 1.3 · emulator.
+- 2026-10-24 · same commit · a plain horizontal swipe on the frame slides the real wall to the
+  other half inside the frame, the half line follows; a hold on the dock lifts it on the layout
+  drawing and a drop on the top edge moves the live dock there; a tap still opens the card · emulator.
+- 2026-10-24 · #159 cards (commit "feat(surfaces): one card per object") · tap the dock: the card
+  rises to its half detent with Opacity, Tint, Height, Visible, Position; the frame shrinks to
+  about ×0.6 and moves so the dock stays above the card; only the dock wears the 2 dp ring; drag
+  the handle up: the frame goes to ×0.44 wholly above the card; ✕, a tap on the frame and Back each
+  put the card down; at font scale 1.3 and 2.0 the last row scrolls clear of the gesture area and
+  three-word segments turn into a list · emulator.
+- 2026-10-24 · same commit · Visible off on the dock: the dock goes, a dashed ghost stays on its
+  edge, a tap on the ghost opens the Dock card, Visible on brings it back; the same for the status
+  bar and the keyboard · emulator.
+- 2026-10-24 · same commit · every row of the Appearance card writes and shows live: Look stops,
+  Wallpaper Change (the picker over the editor, Back returns, Done closes keeping it), Theme
+  (the activity relaunches and the editor comes back with its card and Undo), Icon pack (tiles
+  open under the row), Monochrome, Text size, Wallpaper colours, Contrast, Full screen, Minimal;
+  Undo puts every one back · emulator.
+- 2026-10-24 · same commit · the Home card on Home: Icon size, Label size, Glass widgets, Two-line
+  labels, Label shadow, Folders, Numerals, Page dots, Folder limit and Own layout change the live
+  Home at once; Reset Home puts them back as shipped · emulator.
+- 2026-10-24 · #159 halves (commit "feat(surfaces): cards write the half the frame shows") · on
+  Home, the Dock card's Opacity changes Home's dock only; swipe to the Workspace: its dock is as it
+  was, the card's dot is gone; ⋮ Copy to Workspace makes them equal; Reset dock puts Home's back on
+  its Look; the Look slider moves one half's stop; Undo after edits on both halves puts both back
+  · emulator.
+- 2026-10-24 · #159 doors (commit "feat(surfaces): every door opens on its object") · the corner
+  tab on Home opens the Home card, on a window the Terminal card; the terminal's long-press
+  Appearance opens the Terminal card; the palette's Appearance tool opens the page's card; a
+  Settings deep link with `dock` opens the Dock card · emulator.
+
 - 2026-10-24 · widgets on glass default (commit "feat(widgets): glass is on by default") · on an
   install upgraded from a build that never stored the switch: widgets that never had a Glass choice
   now wear the Look's glass over the wallpaper; one set to Off or Bare keeps its solid or bare
@@ -2303,6 +2338,11 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-24 · #159 editor · the card's rise, the frame's shrink and the half line moving with the
+  card read as one motion; a header drag between detents follows the thumb; no dropped frame while
+  a slider drags on the dock card · pong.
+- 2026-10-24 · same · the hold-and-drag on the live frame: the switch to the layout drawing under
+  the thumb is acceptable, or a drag on the live frame itself is wanted · pong.
 - 2026-10-24 · #159 model · the dip a differing look now causes on every crossing (the same dip
   a differing icon size gets) is acceptable to the eye, or the status bar's change at the landing
   on Home reads as a snap · pong.
