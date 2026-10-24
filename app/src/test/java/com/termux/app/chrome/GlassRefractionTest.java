@@ -1497,4 +1497,20 @@ public class GlassRefractionTest {
         assertFalse(GlassRefraction.AGSL.contains("reflection"));
         assertFalse(GlassRefraction.AGSL.contains("uReflect"));
     }
+
+    @Test
+    public void theProgramNeverDrawsARadiusPastHalfTheRect() {
+        // A one-row band 40 px tall handed the dock's 56 px Corners before its height was known:
+        // the program draws it as the capsule its clip is, not with ends folding in.
+        assertEquals(20f, GlassRefraction.rectRadiusPx(0f, 0f, 300f, 40f, 56f), 0.001f);
+        assertEquals(12f, GlassRefraction.rectRadiusPx(0f, 0f, 300f, 40f, 12f), 0.001f);
+        // A column is held by its width.
+        assertEquals(15f, GlassRefraction.rectRadiusPx(10f, 0f, 40f, 400f, 99f), 0.001f);
+        // A seam pushes the rect out, and the hold is the pushed rect's, as the program sees it.
+        float[] rim = new float[4];
+        GlassRefraction.rimRect(rim, new Rect(0, 0, 300, 40), 30f, GlassRefraction.SEAM_TOP);
+        assertEquals(35f, GlassRefraction.rectRadiusPx(rim[0], rim[1], rim[2], rim[3], 56f), 0.001f);
+        assertEquals(0f, GlassRefraction.rectRadiusPx(0f, 0f, 300f, 40f, -5f), 0.001f);
+        assertEquals(0f, GlassRefraction.rectRadiusPx(0f, 0f, 0f, 0f, 12f), 0.001f);
+    }
 }

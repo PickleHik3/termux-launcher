@@ -21794,8 +21794,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Push the cursor trail style and retro terminal effect preferences into the pane controller
      * (kitty.conf {@code custom_shaders} still wins for the trail inside it) and the effect onto
-     * the chrome. The retro effect is global: terminal pane frames (never wall widget pages), and
-     * the status bar, dock, bars and keyboard around them. Called when the controller is created,
+     * the chrome. The retro effect draws on terminal pane frames (never wall widget pages) and, on
+     * the Workspace only, the status bar, dock, bars and keyboard around them. Called when the controller is created,
      * from the Appearance editor's live preview and from {@link #reloadActivityStyling}.
      */
     private void applyTrailStyleAndRetroEffect() {
@@ -21806,8 +21806,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View root = findViewById(R.id.activity_termux_root_view);
             if (root != null) mChromeRetroEffect = new com.termux.app.chrome.ChromeRetroEffect(root);
         }
-        if (mChromeRetroEffect != null)
+        if (mChromeRetroEffect != null) {
+            mChromeRetroEffect.setOnHome(
+                settledWallPage() == com.termux.app.wall.PaneWallPage.WIDGETS);
             mChromeRetroEffect.setStyle(com.termux.app.terminal.PaneRetroStyle.fromId(retroEffect));
+        }
         if (mPaneController == null)
             return;
         mPaneController.setCursorTrailStylePreference(mPreferences.getTerminalCursorTrailStyle());
@@ -23067,6 +23070,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Wall.settleChrome");
         try {
             doSettlePlaceChrome(page);
+            // The terminal effect is the Workspace's: Home's chrome lands plain (ChromeRetroEffect).
+            if (mChromeRetroEffect != null)
+                mChromeRetroEffect.setOnHome(page == com.termux.app.wall.PaneWallPage.WIDGETS);
         } finally {
             Trace.endSection();
         }

@@ -126,4 +126,21 @@ public class ChromeRetroEffectTest {
         assertEquals(PaneRetroStyle.NONE, effect.style());
         assertFalse(effect.targets().isEmpty());
     }
+
+    @Test public void homeChromeIsDrawnPlainAndTheWorkspaceWearsTheStyle() {
+        for (PaneRetroStyle style : PaneRetroStyle.values()) {
+            assertEquals(PaneRetroStyle.NONE, ChromeRetroEffect.chromeStyle(style, true));
+            assertEquals(style, ChromeRetroEffect.chromeStyle(style, false));
+        }
+        assertEquals(PaneRetroStyle.NONE, ChromeRetroEffect.chromeStyle(null, false));
+    }
+
+    @Test public void landingOnHomeKeepsTheUsersStyleAndDrawsNone() {
+        View root = inflateRoot();
+        ChromeRetroEffect effect = new ChromeRetroEffect(root);
+        effect.setOnHome(true);
+        assertEquals(PaneRetroStyle.NONE, effect.drawnStyle());
+        effect.setOnHome(false);
+        assertEquals(effect.style(), effect.drawnStyle());
+    }
 }

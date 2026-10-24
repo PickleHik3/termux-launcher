@@ -516,6 +516,8 @@ public class TerminalPaneController {
     private final int[] mCursorViewLocationScratch = new int[2];
     private final int[] mCursorOverlayLocationScratch = new int[2];
     private final float[] mCursorBentScratch = new float[2];
+    /** Scratch for the frame's screen ({@link PaneContentFrame#retroScreen}). */
+    private final float[] mCursorScreenScratch = new float[4];
     /** The text sizing block the cursor stands in: row, column, rows, columns. */
     private final int[] mCursorBlockScratch = new int[4];
 
@@ -587,22 +589,24 @@ public class TerminalPaneController {
             frame.getLocationOnScreen(mCursorViewLocationScratch);
             float frameX = mCursorViewLocationScratch[0] - mCursorOverlayLocationScratch[0];
             float frameY = mCursorViewLocationScratch[1] - mCursorOverlayLocationScratch[1];
+            // The trail stays on the screen the effect is drawn on: inside the bezel while one is
+            // worn, the whole frame otherwise.
+            frame.retroScreen(mCursorScreenScratch);
+            float[] screen = mCursorScreenScratch;
             out.hasClip = true;
-            out.clipLeft = frameX;
-            out.clipTop = frameY;
-            out.clipRight = frameX + frame.getWidth();
-            out.clipBottom = frameY + frame.getHeight();
+            out.clipLeft = frameX + screen[0];
+            out.clipTop = frameY + screen[1];
+            out.clipRight = frameX + screen[2];
+            out.clipBottom = frameY + screen[3];
             // A bent CRT card shows the cursor somewhere else than it sits; aim the trail there.
             PaneRetroStyle retro = frame.retroStyle();
             if (retro.usesCrt()) {
-                float w = frame.getWidth();
-                float h = frame.getHeight();
-                PaneRetroEffect.displayedPoint(retro, w, h, out.left - frameX, out.top - frameY,
-                    mCursorBentScratch);
+                PaneRetroEffect.displayedPoint(retro, screen[0], screen[1], screen[2], screen[3],
+                    out.left - frameX, out.top - frameY, mCursorBentScratch);
                 float left = frameX + mCursorBentScratch[0];
                 float top = frameY + mCursorBentScratch[1];
-                PaneRetroEffect.displayedPoint(retro, w, h, out.right - frameX, out.bottom - frameY,
-                    mCursorBentScratch);
+                PaneRetroEffect.displayedPoint(retro, screen[0], screen[1], screen[2], screen[3],
+                    out.right - frameX, out.bottom - frameY, mCursorBentScratch);
                 out.left = left;
                 out.top = top;
                 out.right = frameX + mCursorBentScratch[0];
@@ -663,6 +667,19 @@ public class TerminalPaneController {
     private void applyEffectiveCursorTrailStyle() {
         mMotionOverlay.setCursorTrailStyle(
             CursorTrailStyle.effective(mKittyCursorTrailStyleId, mPrefCursorTrailStyleId));
+    }
+
+    /**
+     * What a pane's bezel is filled with under the terminal ({@link PaneBezel#fill}): nothing while
+     * the glass shows, the theme's surface while the terminal's glass has no opacity.
+     */
+    private int bezelFill() {
+        android.content.Context context = mHostView.getContext();
+        int surface = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(context, R.color.termux_surface_base));
+        return PaneBezel.fill(paneGlassActive(),
+            mSurfaceStyle != null ? mSurfaceStyle.paneGlassTintColor() : 0, surface);
     }
 
     /** Sets the retro effect on every terminal pane frame (not wall widget pages), now and later. */
@@ -3527,6 +3544,7 @@ public class TerminalPaneController {
                 mPaneAttention.isSet(leaf.session.getPid()), palette);
             frame.setPaneShape(radiusPx, glassShape);
             frame.setRimStrokePx(paneBorderStrokePx(glassShape, true, density));
+            frame.setBezelFill(bezelFill());
             PaneRim rim = mBorderStates.get(leaf.session);
             if (rim == null) rim = new PaneRim();
             if (rim.apply(frame, glassShape, radiusPx, border, mSurfaceStyle)) {
@@ -5470,6 +5488,7 @@ public class TerminalPaneController {
             // to wear is, so the band it fills behind the grid stops at the border's inner edge.
             frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
             frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
+            frame.setBezelFill(bezelFill());
             if (bare) {
                 PaneRim gone = mBorderStates.remove(paneSession);
                 if (gone != null) gone.clear(frame);
