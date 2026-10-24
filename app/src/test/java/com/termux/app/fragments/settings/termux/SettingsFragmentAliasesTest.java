@@ -111,6 +111,14 @@ public class SettingsFragmentAliasesTest {
             "app_launcher_builtin_widget_style", "wallpaper_parallax", "app_launcher_start_in"}) {
             assertNotNull(key, home.findPreference(key));
         }
+        // Gestures gathers every gesture, the lock's page linked from its row.
+        androidx.preference.PreferenceGroup gestures = home.findPreference("home_gestures");
+        for (String key : new String[] {"app_launcher_sub_lock", "app_launcher_drawer_enabled",
+            "terminal_body_swipe"}) {
+            assertNotNull(key, gestures.findPreference(key));
+        }
+        assertEquals(LauncherLockPreferencesFragment.class.getName(),
+            gestures.findPreference("app_launcher_sub_lock").getFragment());
     }
 
     @Test

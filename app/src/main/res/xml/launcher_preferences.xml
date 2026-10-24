@@ -16,12 +16,8 @@
             android:defaultValue="false" />
     </PreferenceCategory>
 
+    <!-- Swipe down for app drawer and Double-tap to lock moved to Home › Gestures. -->
     <PreferenceCategory app:key="dock_drawer_drawer" app:title="@string/settings_drawer_header">
-        <SwitchPreferenceCompat
-            app:key="app_launcher_drawer_enabled"
-            app:title="@string/settings_app_drawer_enabled_title"
-            app:summary="@string/settings_app_drawer_enabled_summary"
-            android:defaultValue="true" />
         <Preference
             app:key="app_launcher_drawer_layout"
             app:title="@string/settings_app_drawer_view_type_title"
@@ -32,12 +28,6 @@
             app:title="@string/settings_apps_sub_search_title"
             app:summary="@string/settings_apps_sub_search_summary"
             app:fragment="com.termux.app.fragments.settings.termux.LauncherSearchPreferencesFragment" />
-        <Preference
-            app:key="app_launcher_sub_lock"
-            app:persistent="false"
-            app:title="@string/settings_apps_sub_lock_title"
-            app:summary="@string/settings_apps_sub_lock_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.LauncherLockPreferencesFragment" />
         <!-- Opens the Linux apps section; hidden in a build made without the X server. -->
         <Preference
             app:key="linux_apps_in_drawer"

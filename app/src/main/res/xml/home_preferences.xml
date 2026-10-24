@@ -60,9 +60,11 @@
             android:defaultValue="16" />
     </PreferenceCategory>
 
-    <!-- Gestures on a Home page's free area. Each row's choices are filled in code
-         (HomeGesturesRows): the actions that need the accessibility service or Shizuku are listed
-         only while one is there. Swipe up keeps the old palette gesture's key and values. -->
+    <!-- Every gesture in one place (spec §4): first the five on a Home page's free area, whose
+         choices are filled in code (HomeGesturesRows; the actions that need the accessibility
+         service or Shizuku are listed only while one is there, and Swipe up keeps the old palette
+         gesture's key and values), then the ones elsewhere: double-tap A–Z to lock (its page holds
+         the method picker), swipe down for the drawer, swipe on the terminal. Keys unchanged. -->
     <PreferenceCategory app:key="home_gestures" app:title="@string/settings_home_gestures_header">
         <ListPreference
             app:key="app_launcher_home_palette_gesture"
@@ -90,6 +92,22 @@
             app:isPreferenceVisible="false"
             app:title="@string/settings_home_gestures_helper_title"
             app:summary="@string/settings_home_gestures_helper_summary" />
+        <Preference
+            app:key="app_launcher_sub_lock"
+            app:persistent="false"
+            app:title="@string/settings_apps_sub_lock_title"
+            app:summary="@string/settings_apps_sub_lock_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.LauncherLockPreferencesFragment" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_drawer_enabled"
+            app:title="@string/settings_app_drawer_enabled_title"
+            app:summary="@string/settings_app_drawer_enabled_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_body_swipe"
+            app:title="@string/settings_terminal_body_swipe_title"
+            app:summary="@string/settings_terminal_body_swipe_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="home_widgets" app:title="@string/settings_home_widgets_header">

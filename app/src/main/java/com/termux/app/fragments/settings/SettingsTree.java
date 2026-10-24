@@ -121,8 +121,11 @@ public final class SettingsTree {
 
     static {
         // Your launcher
-        section(Section.HOME, PAGES + "HomePreferencesFragment", R.string.settings_section_home,
-            R.xml.home_preferences);
+        String home = PAGES + "HomePreferencesFragment";
+        section(Section.HOME, home, R.string.settings_section_home, R.xml.home_preferences);
+        // Home › Gestures links the lock's page: it holds the method picker.
+        page(home, PAGES + "LauncherLockPreferencesFragment", R.string.settings_apps_sub_lock_title,
+            R.xml.launcher_lock_preferences);
 
         String dock = PAGES + "LauncherPreferencesFragment";
         section(Section.DOCK_DRAWER, dock, R.string.settings_section_dock_drawer, R.xml.launcher_preferences);
@@ -130,8 +133,6 @@ public final class SettingsTree {
             R.xml.app_drawer_preferences);
         page(dock, PAGES + "LauncherSearchPreferencesFragment", R.string.settings_apps_sub_search_title,
             R.xml.launcher_search_preferences);
-        page(dock, PAGES + "LauncherLockPreferencesFragment", R.string.settings_apps_sub_lock_title,
-            R.xml.launcher_lock_preferences);
 
         String terminal = PAGES + "TerminalPreferencesFragment";
         section(Section.TERMINAL, terminal, R.string.settings_destination_terminal, R.xml.terminal_preferences);
@@ -335,7 +336,8 @@ public final class SettingsTree {
                 if (key.equals("app_launcher_az_lock_method") || key.equals("app_launcher_az_double_tap_lock"))
                     return "LauncherLockPreferencesFragment";
                 if (key.equals("app_launcher_home_palette_gesture") || key.equals("app_launcher_widget_pane_enabled")
-                    || key.equals("app_launcher_builtin_widget_style"))
+                    || key.equals("app_launcher_builtin_widget_style") || key.equals("app_launcher_drawer_enabled")
+                    || key.equals("app_launcher_sub_lock"))
                     return "HomePreferencesFragment";
                 if (key.equals("app_haptics_enabled") || key.equals("app_launcher_row_haptics")
                     || key.equals("show_in_recents_when_not_default") || key.equals("app_launcher_set_home")
@@ -360,6 +362,8 @@ public final class SettingsTree {
                     case "split_pane_controls": case "show_key_hints": case "pane_dwindle_default":
                     case "pane_focus_grows": case "pane_agent_api":
                         return "TerminalWindowsPreferencesFragment";
+                    case "terminal_body_swipe":
+                        return "HomePreferencesFragment";
                     case "fullscreen": case "terminal_padding_fill": case "terminal_cursor_trail_style":
                     case "terminal_retro_effect": case "terminal_fonts":
                         return "TerminalTextPreferencesFragment";
@@ -377,6 +381,8 @@ public final class SettingsTree {
                     default:
                         return null;
                 }
+            case "TerminalWindowsPreferencesFragment":
+                return key.equals("terminal_body_swipe") ? "HomePreferencesFragment" : null;
             case "StatusBarPreferencesFragment":
                 return key.equals("status_bar_notifications_link") ? "NotificationsPreferencesFragment" : null;
             case "X11DisplayPreferencesFragment":

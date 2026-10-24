@@ -377,9 +377,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
-    /** Lazy mode and Fancier Glass are stored by the terminal I/O store, whoever asks this one. */
+    /**
+     * Lazy mode, Fancier Glass and the terminal swipe (on Home › Gestures) are stored by the
+     * terminal I/O store, whoever asks this one.
+     */
     private static boolean isTerminalIoToggle(String key) {
-        return "lazy_mode".equals(key) || "fancier_glass".equals(key);
+        return "lazy_mode".equals(key) || "fancier_glass".equals(key) || "terminal_body_swipe".equals(key);
     }
 
     @Override
