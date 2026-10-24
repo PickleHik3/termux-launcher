@@ -357,7 +357,7 @@ public final class AppearanceSurfaceController {
                 opening = back.editorCard();
         }
         beginOpen(content);
-        presentEditor(opening, place, page == PageId.WALLPAPER);
+        presentEditor(opening, place, page == PageId.WALLPAPER, 1);
     }
 
     /** Marks the surface open, begins the session, and adds the host view and the scrim. */
@@ -381,10 +381,31 @@ public final class AppearanceSurfaceController {
         fadeScrim(1f);
     }
 
-    /** Presents the editor once its wallpaper and the launcher's container are ready. */
+    /**
+     * How many times a relaunch's reopen waits for the launcher's container before giving up. A
+     * theme change rebuilds the whole window, and its first layout can take seconds on a slow
+     * phone; giving up early would drop a session whose changes are already written live.
+     */
+    static final int REOPEN_ATTEMPTS = 6;
+
+    /**
+     * Presents the editor once its wallpaper and the launcher's container are ready, trying up to
+     * {@code attempts} times before the surface closes.
+     */
     private void presentEditor(@Nullable EditorCard card, @Nullable PaneWallPage place,
-                               boolean thenWallpaper) {
+                               boolean thenWallpaper, int attempts) {
         final int token = mToken;
+        final Runnable gaveUp = () -> {
+            if (!mOpen || token != mToken)
+                return;
+            if (attempts > 1) {
+                presentEditor(card, place, thenWallpaper, attempts - 1);
+                return;
+            }
+            Logger.logWarn(LOG_TAG, "The editor could not open; closing the surface");
+            mLeaveRemembered = true;
+            closeNow();
+        };
         mEditor.awaitWallpaper(() -> {
             if (!mOpen || token != mToken)
                 return;
@@ -393,19 +414,12 @@ public final class AppearanceSurfaceController {
                     return;
                 mEditor.present(card, place, null);
                 if (!mEditor.isPresented()) {
-                    Logger.logWarn(LOG_TAG, "The editor could not open; closing the surface");
-                    mLeaveRemembered = true;
-                    closeNow();
+                    gaveUp.run();
                     return;
                 }
                 if (thenWallpaper)
                     showWallpaper();
-            }, () -> {
-                if (mOpen && token == mToken) {
-                    mLeaveRemembered = true;
-                    closeNow();
-                }
-            });
+            }, gaveUp);
         });
     }
 
@@ -436,7 +450,7 @@ public final class AppearanceSurfaceController {
         beginOpen(content);
         mEditor.adoptSessionNext(carried.editor);
         presentEditor(carried.where.editorCard(), null,
-            carried.where.page == PageId.WALLPAPER);
+            carried.where.page == PageId.WALLPAPER, REOPEN_ATTEMPTS);
         return true;
     }
 
