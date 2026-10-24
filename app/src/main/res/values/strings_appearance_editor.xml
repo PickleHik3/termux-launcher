@@ -125,6 +125,9 @@
     <!-- Over the Appearance card's glass strip at the Custom stop: the values every surface shares. -->
     <string name="appearance_strip_all_surfaces">All surfaces</string>
 
+    <!-- Under the Home card's Glass widgets switch: moving it resets every widget's own choice. -->
+    <string name="appearance_glass_widgets_note">Applies to every widget. A widget can still choose its own look in its settings.</string>
+
     <!-- Row values. -->
     <string name="appearance_readout_percent">%1$d%%</string>
     <string name="appearance_readout_dp">%1$d dp</string>

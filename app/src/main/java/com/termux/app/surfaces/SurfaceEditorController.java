@@ -197,6 +197,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         /** Home's rows were written: the live Home takes them now. */
         default void applyHomeSettings() {}
         /**
+         * The "Glass widgets" switch moved: every built-in widget's own glass choice goes back to
+         * following it. Returns what each cleared widget held, by id, for Undo.
+         */
+        @NonNull
+        default java.util.Map<Integer, String> clearWidgetGlassChoices() {
+            return java.util.Collections.emptyMap();
+        }
+        /** Undo of {@link #clearWidgetGlassChoices}: the widgets get their own choices back. */
+        default void restoreWidgetGlassChoices(@NonNull java.util.Map<Integer, String> choices) {}
+        /**
          * The window wears {@code mode} (a {@code night-mode} value) without storing it; the
          * activity relaunches into it when the day or night it shows changes.
          */
@@ -283,6 +293,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private String mEntryCustom;
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
+    /**
+     * The widgets' own glass choices the "Glass widgets" switch cleared this visit, by id, as
+     * each first stood: what Undo gives back.
+     */
+    @NonNull private final java.util.Map<Integer, String> mClearedWidgetGlass =
+        new java.util.LinkedHashMap<>();
     /**
      * The halves the Look slider was put on Custom this visit while their values still match a
      * Look: Custom then writes nothing (the Look on screen is its seed), so without this the
@@ -492,6 +508,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntryMinimal = mHost.isMinimalMode();
         mSessionCustom.clear();
         mHeldCustom.clear();
+        mClearedWidgetGlass.clear();
         forgetGlassEdgePositions();
         CarriedSession carried = mCarriedNext;
         mCarriedNext = null;
@@ -1946,6 +1963,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         R.array.appearance_editor_tint_hue_values, prefs.getSurfaceGlassTintHue());
                 case CLOCK_FACE:
                     return getString(clockStyleLabel(prefs.getTopPaneClockStyle()));
+                case GLASS_WIDGETS:
+                    return getString(R.string.appearance_glass_widgets_note);
                 case VISIBLE: {
                     LayoutEditorController layout = mHost.layoutEditor();
                     if (layout != null && layout.showsOtherOrientation())
@@ -2167,6 +2186,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case GLASS_WIDGETS:
                 AppearanceSettingsStore.putBoolean(context, "widgets_on_glass", value != 0);
+                // A widget's own On or Off overrode the switch, so on a phone whose widgets
+                // predate it (they stored "on") it did nothing: the switch now applies to every
+                // widget, and each can still choose its own look afterwards.
+                for (java.util.Map.Entry<Integer, String> entry
+                        : mHost.clearWidgetGlassChoices().entrySet())
+                    mClearedWidgetGlass.putIfAbsent(entry.getKey(), entry.getValue());
                 settingsWritten();
                 break;
             case TWO_LINE:
@@ -4067,6 +4092,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mHost.setMinimalMode(mEntryMinimal);
         mSessionCustom.clear();
         mHeldCustom.clear();
+        if (!mClearedWidgetGlass.isEmpty()) {
+            mHost.restoreWidgetGlassChoices(new java.util.LinkedHashMap<>(mClearedWidgetGlass));
+            mClearedWidgetGlass.clear();
+        }
         forgetGlassEdgePositions();
         syncAfterBulkWrite();
     }

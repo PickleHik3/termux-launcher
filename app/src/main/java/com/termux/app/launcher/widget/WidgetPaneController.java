@@ -2009,6 +2009,35 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return Math.round(value * pane.getResources().getDisplayMetrics().density);
     }
 
+    /**
+     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off goes
+     * back to following it ({@link com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass#followPage}),
+     * and the page draws again.
+     *
+     * @return what each cleared widget held, by id, for the editor's Undo
+     */
+    @NonNull
+    public java.util.Map<Integer, String> clearBuiltinGlassChoices() {
+        java.util.Map<Integer, String> cleared = new java.util.LinkedHashMap<>();
+        java.util.List<LauncherWidgetRecord> changed =
+            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.followPage(
+                widgets.repository().records(), cleared);
+        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+            render();
+        return cleared;
+    }
+
+    /** The editor's Undo of {@link #clearBuiltinGlassChoices}. */
+    public void restoreBuiltinGlassChoices(@NonNull java.util.Map<Integer, String> choices) {
+        if (choices.isEmpty())
+            return;
+        java.util.List<LauncherWidgetRecord> changed =
+            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.withChoices(
+                widgets.repository().records(), choices);
+        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+            render();
+    }
+
     private void render() {
         // Any surviving drag preview belongs to the layout this render is about to replace.
         clearDisplacementPreview(false);

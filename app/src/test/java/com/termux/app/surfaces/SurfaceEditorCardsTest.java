@@ -249,6 +249,40 @@ public class SurfaceEditorCardsTest {
         assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
     }
 
+    @Test
+    public void theGlassWidgetsSwitchAppliesToEveryWidgetAndUndoGivesTheirChoicesBack() {
+        java.util.List<String> calls = new java.util.ArrayList<>();
+        java.util.Map<Integer, String> held = java.util.Collections.singletonMap(-1, "on");
+        Object[] restored = {null};
+        EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
+            if (method.equals("clearWidgetGlassChoices")) {
+                calls.add("clear");
+                return held;
+            }
+            if (method.equals("restoreWidgetGlassChoices")) {
+                calls.add("restore");
+                restored[0] = args[0];
+            }
+            return null;
+        });
+        SurfaceEditorController editor = harness.editor;
+        editor.present(EditorCard.HOME, PaneWallPage.WIDGETS, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals(EditorCard.HOME, editor.shownCard());
+        assertTrue("the row says it applies to every widget",
+            model(editor).summary(Row.GLASS_WIDGETS) != null);
+
+        model(editor).onValue(Row.GLASS_WIDGETS, 0, false);
+        model(editor).onValue(Row.GLASS_WIDGETS, 1, false);
+        assertEquals(java.util.Arrays.asList("clear", "clear"), calls);
+
+        editor.undo();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals(java.util.Arrays.asList("clear", "clear", "restore"), calls);
+        assertEquals("each widget's choice as it first stood", held, restored[0]);
+    }
+
     // ------------------------------------------------------------------------------- the drive
 
     private SurfaceEditorController open(EditorCard card, PaneWallPage place) {

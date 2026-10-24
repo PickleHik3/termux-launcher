@@ -13352,6 +13352,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.setMinimalMode(minimal);
         }
 
+        @NonNull @Override public java.util.Map<Integer, String> clearWidgetGlassChoices() {
+            return mWidgetPaneController == null ? java.util.Collections.emptyMap()
+                : mWidgetPaneController.clearBuiltinGlassChoices();
+        }
+
+        @Override public void restoreWidgetGlassChoices(
+                @NonNull java.util.Map<Integer, String> choices) {
+            if (mWidgetPaneController != null)
+                mWidgetPaneController.restoreBuiltinGlassChoices(choices);
+        }
+
         @Override public void applyHomeSettings() {
             TermuxActivity.this.applyHomeSettings();
         }
