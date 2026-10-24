@@ -1497,7 +1497,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_SHARE_TRANSCRIPT_ID = 1;
 
-    private static final int CONTEXT_MENU_SET_WALLPAPER_ID = 2;
+    private static final int CONTEXT_MENU_APPEARANCE_ID = 2;
 
     private static final int CONTEXT_MENU_REMOVE_WALLPAPER_ID = 3;
 
@@ -17812,9 +17812,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_SHARE_TRANSCRIPT_ID:
                 mTermuxTerminalViewClient.shareSessionTranscript();
                 return true;
-            case CONTEXT_MENU_SET_WALLPAPER_ID:
-                // The Appearance card, whose Wallpaper row is in view: Change leads to the picker.
-                openSurfaceEditor(com.termux.app.surfaces.EditorCard.APPEARANCE);
+            case CONTEXT_MENU_APPEARANCE_ID:
+                // The editor at rest on the Workspace half, no card up: the terminal is the
+                // thing held, so its frame is what the person meets first.
+                openSurfaceEditorAtRest(com.termux.app.surfaces.AppearanceEditorEntry
+                    .terminalMenuPlace(currentWallPlace()));
                 return true;
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
@@ -17926,8 +17928,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         items.add(new TerminalActionItem(CONTEXT_MENU_COMMAND_PALETTE_ID, getString(R.string.action_command_palette)));
         items.add(new TerminalActionItem(CONTEXT_MENU_SELECT_URL_ID, getString(R.string.action_select_url)));
         items.add(new TerminalActionItem(CONTEXT_MENU_SHARE_TRANSCRIPT_ID, getString(R.string.action_share_transcript)));
-        // One door to the wallpaper, the Look and the Layout, the same one the corner tab carries.
-        items.add(new TerminalActionItem(CONTEXT_MENU_SET_WALLPAPER_ID, getString(R.string.action_wallpaper_style)));
+        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Workspace.
+        items.add(new TerminalActionItem(CONTEXT_MENU_APPEARANCE_ID, getString(R.string.action_wallpaper_style)));
         items.add(new TerminalActionItem(
             CONTEXT_MENU_REMOVE_WALLPAPER_ID,
             getString(shouldUseWallpaperPassthroughMode()
@@ -21922,6 +21924,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openSurfaceEditor(@Nullable com.termux.app.surfaces.EditorCard card) {
         mAppearanceFromSettings = false;
         openAppearanceSurface(card == null ? null : card.key, null, null);
+    }
+
+    /**
+     * Opens the editor at rest on {@code place}'s half, no card up. Naming the place also skips
+     * the card a recent visit left up, which a door with neither card nor place reopens.
+     */
+    private void openSurfaceEditorAtRest(@NonNull com.termux.app.wall.PaneWallPage place) {
+        mAppearanceFromSettings = false;
+        openAppearanceSurface(null, place, null);
     }
 
     void openSettings() {
