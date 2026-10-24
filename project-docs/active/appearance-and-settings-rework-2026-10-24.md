@@ -189,3 +189,29 @@ measurements and the questions they raised). Resolved as follows:
 - **The guide's steps vary by edition**: the nix edition starts at the distro step; the progress
   line counts the steps that exist.
 - The wireframes' icons are placeholders; the build uses Material Symbols Rounded vectors.
+
+## 8. From the blind review (Codex, no context, 2026-10-24)
+
+The review is kept beside the wireframes (`REVIEW-codex-blind-2026-10-24.md`). Adopted:
+
+- **Selectable vs selected.** At rest every surface wears a quiet 1dp outline at 40% of the
+  outline colour; the selected surface alone wears the 2dp primary ring, and its card header names
+  it. A hidden surface's ghost outline is dashed.
+- **Scoped menu labels.** "Reset dock" (the card's object), "Copy to Home" / "Copy to Workspace"
+  (a one-time copy, never a link). The ⋮ menu anchors so it never covers a slider's value.
+- **Every slider shows its value** (Opacity 72%, Height 56dp, Text size 100%) and announces it.
+- **Labels.** "Visible" (switch) and "Position" (segments) replace Shown and Place. The dot after
+  a label means "set here"; its content description says so.
+- **Black** is a switch that applies with Dark; under Light it is disabled with the reason in its
+  summary.
+- **Reachability.** The sheet's last row clears the navigation inset by 16dp at both detents; a
+  partially visible control is a bug. Rows use content-driven height; at font scale 1.3 and 2.0
+  nothing clips and segments reflow to a vertical radio list when their labels no longer fit.
+- **Previews demonstrate the control.** The Home card's preview carries a long app name and a
+  folder; the Dock card's frame scrolls so the dock is in view at the half detent.
+- **Plain words in Linux apps.** "Pick a Linux" (not distro) with one-line consequences per
+  choice; touch modes get one-line summaries ("Trackpad: drag to move the pointer, tap to click").
+
+Not adopted: replacing the Look slider with a mode picker (the five-stop slider is a decided
+element; it snaps to stops and Custom is both a stop and a consequence), and the suggestion to
+make the editor's scope explicit with text (the frame, the ring and the card title carry it).
