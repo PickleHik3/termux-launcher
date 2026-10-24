@@ -51,7 +51,8 @@ import java.util.TimeZone;
  * with the face, and its strokes are fractions of the band's height with a
  * {@link #STROKE_FLOOR_DP} floor ({@link #bandStroke}). The seconds and the date are text at the
  * Label role ({@link #LABEL_SP}) and keep that painted size at every scale: the fit plan shrinks
- * the digits to make room for them, never the labels.
+ * the digits to make room for them, never the labels. A widget's face, drawn far past the bar's
+ * size, grows its labels with it beyond scale 1 instead ({@link #mLabelGrows}).
  *
  * <p>Nothing is allocated while drawing; the scratch rects, the fit plan and the flip gradients
  * are kept between frames.
@@ -239,6 +240,12 @@ public final class ClockFaceRenderer {
     private float mScale = 1f;
     private float mLabelSp = LABEL_SP;
     /**
+     * How much the Label role has grown at the scale being drawn ({@link #labelGrowth}): 1, or the
+     * scale itself past 1 where the Label role grows with the face. Label-space lengths
+     * ({@link #lp}) grow with it. 1 outside a draw.
+     */
+    private float mLabelGrowth = 1f;
+    /**
      * Scratch rects and cached flip gradients.
      *
      * <p>The flip face repaints at vsync for as long as a digit is turning, and it used to build a
@@ -331,6 +338,14 @@ public final class ClockFaceRenderer {
     private boolean mShowPeriod = true;
     /** Whether a seconds digit animates when it changes; a widget's face turns only on the minute. */
     private boolean mSecondsAnimated = true;
+    /**
+     * Whether the Label role grows with the face once it is drawn past scale 1. A widget's does: its
+     * card holds the face at several times the bar's size, and a meta column held at the bar's
+     * 12sp shrank to a speck beside the cards, the period over it smaller still. Growing, the
+     * seconds and the period keep the expanded bar's proportions to the digits at any size, and
+     * never paint under {@link #LABEL_SP}. The bar holds its labels at their painted size.
+     */
+    private boolean mLabelGrows;
     /** Smallest scale any plan hands out, so a starved budget never inverts the face. */
     private static final float MIN_SCALE = .05f;
     /** Budget the host hands the face; height 0 means no fit (the legacy shrink-only path). */
@@ -360,6 +375,7 @@ public final class ClockFaceRenderer {
         renderer.mDateRow = false;
         renderer.mSecondsAnimated = false;
         renderer.mFitCeiling = WIDGET_FIT_MAX_SCALE;
+        renderer.mLabelGrows = true;
         return renderer;
     }
 
@@ -684,6 +700,7 @@ public final class ClockFaceRenderer {
         parts.band = band;
         parts.timeScaled = fullTimeScaledPx();
         parts.timeFixed = fullTimeLabelPx();
+        parts.timeFixedGrows = mLabelGrows;
         if (!mDateRow) {
             // The host sets the date: the column is the band, with Tape's minute track under it.
             parts.columnScaled = band;
@@ -928,6 +945,7 @@ public final class ClockFaceRenderer {
         }
         mScale = 1f;
         mLabelSp = LABEL_SP;
+        mLabelGrowth = 1f;
     }
 
     /**
@@ -1013,7 +1031,8 @@ public final class ClockFaceRenderer {
         float column = parts.column(scale, showsDate);
         float bandDx = fullBandDx(widthPx / scale, parts.timeWidth(scale) / scale);
         mScale = scale;
-        mLabelSp = LABEL_SP;
+        mLabelGrowth = labelGrowth(mLabelGrows, scale);
+        mLabelSp = LABEL_SP * mLabelGrowth;
         canvas.save();
         canvas.translate(0f, Math.max(0f, (heightPx - column) / 2f));
         canvas.scale(scale, scale);
@@ -1129,6 +1148,7 @@ public final class ClockFaceRenderer {
         float scale = compactScale(widthPx, heightPx);
         mScale = scale;
         mLabelSp = LABEL_SP;
+        mLabelGrowth = 1f;
         canvas.save();
         canvas.translate(0f, Math.max(0f, (heightPx - dp(columnDp) * scale) / 2f));
         canvas.scale(scale, scale);
@@ -1244,6 +1264,8 @@ public final class ClockFaceRenderer {
         float strokeFloor;
         float timeScaled;
         float timeFixed;
+        /** Whether {@code timeFixed} grows with the scale past 1 (a widget's Label role). */
+        boolean timeFixedGrows;
         float dateScaled;
         float dateFixed;
 
@@ -1264,7 +1286,17 @@ public final class ClockFaceRenderer {
         }
 
         float timeWidth(float scale) {
-            return timeScaled * scale + timeFixed;
+            return timeScaled * scale + timeFixed * labelGrowth(timeFixedGrows, scale);
+        }
+
+        /** The largest scale at which the time row fits {@code width}. */
+        float timeWidthScale(float width) {
+            if (timeFixedGrows && timeScaled + timeFixed > 0f) {
+                // Past 1 the meta column grows with the digits, so the whole row scales together.
+                float together = width / (timeScaled + timeFixed);
+                if (together >= 1f) return together;
+            }
+            return widthScale(width, timeScaled, timeFixed);
         }
 
         float dateWidth(float scale) {
@@ -1298,14 +1330,13 @@ public final class ClockFaceRenderer {
         boolean date;
         if (byColumn >= floor) {
             scale = Math.min(byColumn, ceiling);
-            scale = Math.min(scale, widthScale(widthBudget, parts.timeScaled, parts.timeFixed));
+            scale = Math.min(scale, parts.timeWidthScale(widthBudget));
             scale = Math.min(scale, widthScale(widthBudget, parts.dateScaled, parts.dateFixed));
             date = true;
         } else {
             float byBand = Math.max(floor,
                 Math.min(heightBudget / Math.max(.01f, parts.band), ceiling));
-            scale = Math.min(byBand,
-                widthScale(widthBudget, parts.timeScaled, parts.timeFixed));
+            scale = Math.min(byBand, parts.timeWidthScale(widthBudget));
             date = false;
         }
         scale = Math.max(MIN_SCALE, scale);
@@ -1340,9 +1371,18 @@ public final class ClockFaceRenderer {
         return mLabelSp / mScale;
     }
 
-    /** A label-space length: {@code value} dp once painted, whatever the face's scale. */
+    /**
+     * A label-space length: {@code value} dp once painted, whatever the face's scale, grown with
+     * the Label role where it grows.
+     */
     private float lp(float value) {
-        return dp(value) / mScale;
+        return dp(value) * mLabelGrowth / mScale;
+    }
+
+    /** The Label role's growth at {@code scale}: none, or the scale itself past 1 where it grows. */
+    @VisibleForTesting
+    static float labelGrowth(boolean grows, float scale) {
+        return grows ? Math.max(1f, scale) : 1f;
     }
 
     private float fullBandHeightDp() {
@@ -2063,6 +2103,7 @@ public final class ClockFaceRenderer {
     private void drawMonoChip(Canvas canvas, int heightPx) {
         mScale = 1f;
         mLabelSp = LABEL_MIN_SP;
+        mLabelGrowth = 1f;
         float label = LABEL_MIN_SP;
         float rowHeight = dp(17f);
         float top = Math.max(0f, (heightPx - rowHeight) / 2f);
@@ -2127,7 +2168,7 @@ public final class ClockFaceRenderer {
         // The column is as wide as the seconds would be even when they are shed.
         // Never wider than the column the fit measured, so a digit pair's rounding cannot push the
         // period past the box.
-        float width = stackedMetaWidth(secondsFace) / mScale;
+        float width = stackedMetaWidth(secondsFace) * mLabelGrowth / mScale;
         String period = mSnapshot.period;
         float boxPad = boxedPeriod ? lp(BOX_PAD_DP) : 0f;
         float periodDp = secondsSp * PERIOD_SCALE;
