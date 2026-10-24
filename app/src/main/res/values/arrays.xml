@@ -299,8 +299,8 @@
     </string-array>
     <string-array name="x11_touch_mode_entries">
         <item>Trackpad</item>
-        <item>Touchscreen (Default, custom behavior)</item>
-        <item>Direct touch</item>
+        <item>Touch</item>
+        <item>Direct</item>
     </string-array>
     <string-array name="x11_touch_mode_values">
         <item>1</item>

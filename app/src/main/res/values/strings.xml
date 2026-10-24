@@ -372,11 +372,14 @@
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="settings_x11_category_display">Display</string>
     <string name="settings_x11_touch_mode_title">Touch</string>
+    <string name="settings_x11_touch_mode_trackpad">Drag to move the pointer, tap to click.</string>
+    <string name="settings_x11_touch_mode_touch">Taps land where you touch.</string>
+    <string name="settings_x11_touch_mode_direct">Every touch goes straight to the app.</string>
     <string name="settings_x11_android_keyboard_title">Use Android keyboard</string>
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
-    <string name="settings_x11_keyboard_follows_text_title">OSK auto-show</string>
-    <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
-    <string name="settings_x11_keyboard_over_display_title">Keyboard over display</string>
+    <string name="settings_x11_keyboard_follows_text_title">Keyboard pops up</string>
+    <string name="settings_x11_keyboard_follows_text_summary">Opens when you tap a text field and closes when you tap elsewhere.</string>
+    <string name="settings_x11_keyboard_over_display_title">Keyboard over the window</string>
     <string name="settings_x11_keyboard_over_display_overlay">Overlay</string>
     <string name="settings_x11_keyboard_over_display_resize">Resize display</string>
     <string name="settings_x11_keyboard_over_display_differs">Portrait: %1$s · Landscape: %2$s</string>
