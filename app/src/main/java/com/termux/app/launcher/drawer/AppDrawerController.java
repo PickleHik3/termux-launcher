@@ -136,6 +136,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
 
+        /**
+         * The built-in keyboard came up under the engaged plane: lay the accessory stack out for it
+         * once, through the freeze. The stack is held at the height it had at the pull, and a
+         * keyboard raised inside it is measured against that height and cut off at the bottom.
+         * One pass, at the decision; everything after it stays frozen until the close.
+         */
+        void layOutAccessoryStackForRaisedKeyboard();
+
         /** Claims (or releases) the in-app keyboard's single interceptor slot for the search. */
         void setInterceptorActive(boolean active);
 
@@ -287,6 +295,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     // Captured once per gesture. Everything below is read-only until the next capture.
     @Nullable private Frame mDockRect;
+    /**
+     * Where the dock rests once the stack has been laid out for a keyboard the search raised. The
+     * close lands the plane here; taken on only at full open, where the plane's frame does not
+     * read the dock at all, so taking it on never moves the plane.
+     */
+    @Nullable private Frame mRaisedKeyboardDockRect;
     @Nullable private Frame mOpenRect;
     @Nullable private AppDrawerAccessoryChoreography.Band mExtraKeysBand;
     @Nullable private AppDrawerAccessoryChoreography.Band mKeyboardBand;
@@ -1198,6 +1212,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame dockRect = frameOf(dock);
         if (dockRect == null) return false;
         mDockRect = dockRect;
+        mRaisedKeyboardDockRect = null;
 
         // One dock-geometry snapshot for the whole capture: style, seed radius and (via
         // resolveOpenRect) the outer inset all come off the same value.
@@ -1461,8 +1476,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (!mEngaged || mTextFieldSearch) return;
         View keyboard = mHost.findView(R.id.inapp_keyboard_container);
         if (keyboard == null) return;
+        // The stack was frozen at the pull with the keyboard down, and a keyboard raised inside it
+        // is measured against that height: whole rows cut off the bottom. It is laid out for the
+        // keyboard once here, and the bands are measured on the layout that pass books.
+        if (keyboard.getVisibility() != View.GONE) mHost.layOutAccessoryStackForRaisedKeyboard();
         if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
-                keyboard.isLayoutRequested())) {
+                isLayoutPending(keyboard))) {
             stopAwaitingRaisedKeyboard();
             recaptureBandsForRaisedKeyboard();
             return;
@@ -1472,7 +1491,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             if (!mEngaged) {
                 stopAwaitingRaisedKeyboard();
             } else if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
-                    keyboard.isLayoutRequested())) {
+                    isLayoutPending(keyboard))) {
                 stopAwaitingRaisedKeyboard();
                 recaptureBandsForRaisedKeyboard();
             }
@@ -1493,6 +1512,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     static boolean isRaisedKeyboardMeasurable(int visibility, int heightPx,
                                               boolean layoutRequested) {
         return visibility == View.VISIBLE && heightPx > 0 && !layoutRequested;
+    }
+
+    /**
+     * A layout pending anywhere above the keyboard, not only on it: the stack's resize books its
+     * layout on the stack and its ancestors and leaves the keyboard's own flag clear while its
+     * bounds are still the cut-off ones.
+     */
+    private static boolean isLayoutPending(@NonNull View keyboard) {
+        return keyboard.isLayoutRequested() || keyboard.getRootView().isLayoutRequested();
     }
 
     /** The one pre-draw wait for {@link #onBuiltInKeyboardRaised}; gone on close. */
@@ -1522,14 +1550,41 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean hadBands = mHasBands;
         float gap = mCapturedGapPx;
         host.getLocationOnScreen(mHostLocation);
-        captureBands(dockRect, true);
-        // The gap was measured against the dock at the pull; the stack may have moved since, so a
-        // gap already known is kept rather than measured against a dock rect that is now stale.
-        if (hadBands && mHasBands) mCapturedGapPx = gap;
+        // The stack has been laid out for the keyboard, so the dock stands above it now: the gap
+        // is measured against where the dock rests, and the close lands the plane there.
+        Frame restingDock = restingDockRect();
+        captureBands(restingDock != null ? restingDock : dockRect, true);
+        // Without a dock to measure, a gap already known is kept rather than measured against the
+        // dock rect of the pull, which the stack's relayout has left stale.
+        if (restingDock == null && hadBands && mHasBands) mCapturedGapPx = gap;
+        if (restingDock != null) {
+            mRaisedKeyboardDockRect = restingDock;
+            adoptRaisedKeyboardDockRect(mProgress.value);
+        }
         retargetReveal();
         applyContentInsets();
         applyFrame(mProgress.value);
         kick();
+    }
+
+    /** The seed view where its layout puts it, less the lift; null when it is not showing. */
+    @Nullable
+    private Frame restingDockRect() {
+        View dock = mAccessorySurface;
+        if (dock == null || dock.getVisibility() != View.VISIBLE || dock.getWidth() <= 0
+            || dock.getHeight() <= 0) return null;
+        return restingFrameOf(dock);
+    }
+
+    /**
+     * Takes on the dock rect measured for a raised keyboard once the plane is fully open. Below
+     * that the plane's frame is still part dock, and swapping its seed would jump the plane.
+     */
+    private void adoptRaisedKeyboardDockRect(float progress) {
+        Frame raised = mRaisedKeyboardDockRect;
+        if (raised == null || progress < 1f) return;
+        mDockRect = raised;
+        mRaisedKeyboardDockRect = null;
     }
 
     /** {@code -1} on the preference means "follow the rounded-surface token", as the dock's does. */
@@ -1768,6 +1823,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame openRect = mOpenRect;
         if (plane == null || mHostLayout == null || dockRect == null || openRect == null) return;
         float p = AppDrawerTransitionGeometry.clamp01(progress);
+        if (mRaisedKeyboardDockRect != null && p >= 1f) {
+            adoptRaisedKeyboardDockRect(p);
+            dockRect = mDockRect;
+        }
 
         float lift = -mLiftPx * AppDrawerTransitionGeometry.dockLiftFraction(p);
         Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p, lift);
@@ -1978,6 +2037,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             }
             removeHostLayoutListener();
             stopAwaitingRaisedKeyboard();
+            mRaisedKeyboardDockRect = null;
             applyAlpha(mAccessorySurface, 1f);
             applyGroupTranslationY(mDockLiftGroup, 0f);
             applyGroupAlpha(mDockRowFadeGroup, 1f);

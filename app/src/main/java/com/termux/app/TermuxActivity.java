@@ -11601,18 +11601,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPendingRootBottomMargin();
         // Same freeze as setTerminalToolbarHeight: while the drawer plane owns the stack every
         // band moves by translation/clip only, and a relayout here would fight it. Replayed on close.
-        if (isAppDrawerEngaged()) {
+        // The one exception is the pass the drawer books for a keyboard its search raised.
+        boolean thawed = mDrawerKeyboardStackPassPending;
+        mDrawerKeyboardStackPassPending = false;
+        if (isAppDrawerEngaged() && !thawed) {
             mAppDrawerGeometryFreezePending = true;
             return;
         }
-        // Only a pass that moved something needs the frame's apply. The layout listeners that
-        // drive this pass fire on every band resize during a page slide, and each one used to book
-        // an apply whether or not the dock and the stack came out where they already were.
-        boolean dockMoved = updateAppLauncherBarHeight();
-        boolean stackMoved = setTerminalToolbarHeight(true);
-        if (dockMoved || stackMoved)
-            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mAccessoryGeometryThawedForDrawer = thawed;
+        try {
+            // Only a pass that moved something needs the frame's apply. The layout listeners that
+            // drive this pass fire on every band resize during a page slide, and each one used to
+            // book an apply whether or not the dock and the stack came out where they already were.
+            boolean dockMoved = updateAppLauncherBarHeight();
+            boolean stackMoved = setTerminalToolbarHeight(true);
+            if (dockMoved || stackMoved)
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        } finally {
+            mAccessoryGeometryThawedForDrawer = false;
+        }
     }
+
+    /**
+     * The built-in keyboard came up under the open drawer, inside a stack the drawer froze at the
+     * height it had with the keyboard down: measured against that height, the keyboard loses its
+     * bottom rows. One pass lays the stack out for it, as it would be with no drawer; the passes
+     * after it stay frozen until the close replays them. Booked rather than run inline when a pass
+     * or a batch is open, and the pass that runs next is the one let through.
+     */
+    private void layOutAccessoryStackForDrawerKeyboard() {
+        if (!isAppDrawerEngaged()) return;
+        mDrawerKeyboardStackPassPending = true;
+        mGeometry.requestNow(GeometryScheduler.Reason.DRAWER, GeometryScheduler.ResizePolicy.NOW);
+    }
+
+    /** The next accessory geometry pass runs through the drawer's freeze; see above. */
+    private boolean mDrawerKeyboardStackPassPending;
+    /** True for the length of that one pass, so setTerminalToolbarHeight lets it through too. */
+    private boolean mAccessoryGeometryThawedForDrawer;
 
     /**
      * The root view's IME margin ({@link TermuxActivityRootView}): kept until the next geometry
@@ -15985,7 +16011,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean setTerminalToolbarHeight(boolean requestTerminalResize) {
         // Frozen while the app drawer plane is engaged: this path resizes the toolbar and the
         // terminal, and driving it per animation frame is a SIGWINCH storm. Replayed on close.
-        if (isAppDrawerEngaged()) {
+        // The drawer's one pass for a keyboard its search raised comes through.
+        if (isAppDrawerEngaged() && !mAccessoryGeometryThawedForDrawer) {
             mAppDrawerGeometryFreezePending = true;
             return false;
         }
@@ -18161,6 +18188,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void flushPendingAccessoryGeometry() {
             TermuxActivity.this.flushPendingAccessoryGeometry();
+        }
+
+        @Override public void layOutAccessoryStackForRaisedKeyboard() {
+            layOutAccessoryStackForDrawerKeyboard();
         }
 
         @Override public void setInterceptorActive(boolean active) {
