@@ -10,8 +10,11 @@ import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
+
+import androidx.annotation.NonNull;
 
 import com.termux.R;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -60,8 +63,9 @@ public class AppDrawerRaisedKeyboardRevealTest {
         keyboard = new FrameLayout(activity);
         keyboard.setId(R.id.inapp_keyboard_container);
         keyboard.setVisibility(View.GONE);
-        root.addView(keyboard);
-        root.layout(0, 0, WIDTH, HEIGHT);
+        root.addView(keyboard, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            HEIGHT - KEYBOARD_TOP, Gravity.BOTTOM));
+        layOut(root);
 
         FakeAppDrawerHost host = new FakeAppDrawerHost(activity, preferences);
         host.viewRoot = root;
@@ -73,7 +77,8 @@ public class AppDrawerRaisedKeyboardRevealTest {
         content.setSearchKeyboardRequestListener(() -> {
             raises++;
             keyboard.setVisibility(raisedVisibility);
-            keyboard.layout(0, KEYBOARD_TOP, WIDTH, HEIGHT);
+            // A whole traversal, so no layout is left pending anywhere above the keyboard either.
+            layOut(root);
             controller.onBuiltInKeyboardRaised();
         });
         ReflectionHelpers.setField(controller, "mContent", content);
@@ -143,6 +148,12 @@ public class AppDrawerRaisedKeyboardRevealTest {
         assertFalse(AppDrawerController.isRaisedKeyboardMeasurable(View.GONE, 300, false));
         assertFalse(AppDrawerController.isRaisedKeyboardMeasurable(View.VISIBLE, 0, false));
         assertFalse(AppDrawerController.isRaisedKeyboardMeasurable(View.VISIBLE, 300, true));
+    }
+
+    private static void layOut(@NonNull View root) {
+        root.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, WIDTH, HEIGHT);
     }
 
     private void settleOpen() {
