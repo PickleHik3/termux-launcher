@@ -16,6 +16,9 @@ judge the layout before any code and a reviewer can critique the measurements.
 
 ## The PNGs
 
+Since 2026-10-25 the built cards' glass rows are **Frost · Opacity · Tint** (a strip of vertical
+sliders, one Frost for blur and grain); the Blur row these drawings show is not built.
+
 | File | Shows |
 |---|---|
 | `01-editor-rest.png`, `-annotated` | Resting editor: the live Workspace in a frame at ×0.84, every tappable surface outlined, the dots and the word for the half being edited, the pill (orientation chip · Undo, disabled until a change · Done · palette). |

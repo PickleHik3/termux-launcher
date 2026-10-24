@@ -13,6 +13,29 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-25 · commits "one Frost slider…" and "glass rows as a strip of vertical sliders…" ·
+  the Status bar, Terminal and Dock cards open on a strip of upright sliders reading "Frost · n%",
+  "Opacity · n%", "Tint · n%" (the Terminal's adds "Text size"), the Keyboard's on Frost, Opacity,
+  Key opacity, Tint, Key corners, Key spacing; no Blur or Grain row anywhere; a moved slider shows
+  the dot after its legend and Reset takes it away; Height, Corners and Margin stay sliders across
+  the card; at font scale 1.3 and 2.0 every legend reads whole beside its track · emulator.
+- 2026-10-25 · same commits · the Appearance card at a Look stop shows no strip; tap Custom: the
+  slider holds Custom and "All surfaces" shows Frost, Opacity, Tint, Vibrancy, Text size (with Edge
+  and Depth on Android 13 with a launcher wallpaper); Frost changes every surface on the half the
+  frame shows and not the other half; a Look stop puts the strip away · emulator.
+- 2026-10-25 · commit "every door opens the one editor…" · the lone terminal pane's corner tab
+  Appearance opens the editor on the Terminal card (no picker); Home's tab opens the Home card; the
+  display window's tab opens the editor at rest; the terminal menu's Set wallpaper and Home's
+  Wallpaper action open the Appearance card with Wallpaper in view; Change raises the picker, Back
+  puts it down; Photo… and back returns to the picker over the editor · emulator.
+- 2026-10-25 · commit "the Glass widgets switch applies to every widget" · with a Clock widget whose
+  own Glass is On (its settings), the Home card's Glass widgets off makes it solid at once and its
+  settings read Page; Undo gives it On back; the row's note reads whole at 1.0 · emulator.
+- 2026-10-25 · commit "the Custom stop on one half never writes the other half" · halves on
+  different Looks: on the Workspace move the Look to Custom and back, slide to Home and back,
+  change Theme, Done: Home's dock and status bar look as before. Pong still holds Solid's numbers
+  on Home from before the fix: the developer picks Home's Look once (or Copy to Home) · pong, with
+  the developer's go-ahead.
 - 2026-10-24 · #159 editor (commit "feat(surfaces): the editor rests as the frame and the
   editor bar") · open Appearance from a corner tab on a window and on Home: the frame grows to about
   ×0.8 under a 16 dp top line, every surface wears a faint 1 dp outline, the half line reads

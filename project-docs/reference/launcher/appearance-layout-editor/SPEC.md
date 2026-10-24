@@ -139,9 +139,10 @@ Rules:
 
 #### Amended 2026-10-02: layout editor v2 (DECISIONS items 13–15)
 
-- **The global row.** At the Custom stop with nothing tapped, row 2 is **Blur · Grain · Opacity ·
-  Tint · Margin · Corner radius** (heading "All surfaces"), writing the base
-  `SurfaceProperty.BLUR / GRAIN / OPACITY / TINT`. Each write
+- **The global row.** At the Custom stop with nothing tapped, row 2 is **Frost · Opacity · Tint**
+  and the glass edge's sliders (heading "All surfaces"; Frost writes blur and grain together, the
+  base `SurfaceProperty.BLUR / GRAIN`, beside `OPACITY / TINT`; this row's first draft had Blur and
+  Grain apart, folded into Frost by 2026-10-17 and kept so in the 2026-10-25 cards). Each write
   re-attaches every surface, terminal included, to the base, as Blur always did; the terminal's own
   Opacity (Darkness) then detaches it again for fine-tuning. Opacity and Grain run 0–100%, the
   stored values' own range, which covers every Look. There is no global row on the Look stops, and

@@ -314,9 +314,9 @@ capsule, rounded
 
 **Surface**:
 One piece of glass whose look can be set: the dock, the keyboard, the status bar or the canvas
-(the terminal pane). In code it is a `SurfaceSlot`. Each surface carries some of blur, opacity,
-grain, tint, corner radius and side gap, and each of those either follows **Base** or holds an
-override of its own. AGENTS.md's "Hit every surface" uses the word more broadly, for every path a
+(the terminal pane). In code it is a `SurfaceSlot`. The user sets its **Frost**, opacity, tint,
+corner radius and side gap (Frost is stored as the blur and grain properties), and each of those
+either follows **Base** or holds an override of its own. AGENTS.md's "Hit every surface" uses the word more broadly, for every path a
 change has to cover.
 _Avoid_: panel, layer, widget
 
@@ -363,8 +363,9 @@ pane is not visible, and after about ten seconds without input, resuming on the 
 _Avoid_: animated background, live wallpaper (removed), animation
 
 **Base**:
-The shared value of a surface property (blur, opacity, grain, tint, corner radius, side gap) that
-every surface follows until it is given its own. A surface that follows Base is **inherited**; one
+The shared value of a surface property (Frost, opacity, tint, corner radius, side gap; Frost is
+stored as blur and grain) that every surface follows until it is given its own. The Appearance
+card's All surfaces strip sets it. A surface that follows Base is **inherited**; one
 with its own value is **detached**, holding an override. The resolution happens in
 `TermuxAppSharedPreferences`, so every getter returns the resolved value. Setters write through the
 link, so a slider or the wallpaper mode leaves a surface inherited.
@@ -386,7 +387,8 @@ and `project-docs/active/fancier-glass/SPEC.md`.
 _Avoid_: glass mode, refraction mode
 
 **Frost** (the slider):
-Look › Custom's first slider, clear to frosted: it moves a surface's blur and grain together along
+The glass strip's first slider on every card with glass (and All surfaces' on the Appearance
+card), clear to frosted: it moves a surface's blur and grain together along
 one curve (`surfaces/GlassControls`; the code still calls it Glass, `GLASS`, `surface_glass_position`).
 Clear sits at 20, Tint at 40, Mist at 75; Solid has no frost and sits off it. Storage keeps blur and
 grain; the slider reads them back. Not the frost layer itself (the blurred picture a surface draws).
