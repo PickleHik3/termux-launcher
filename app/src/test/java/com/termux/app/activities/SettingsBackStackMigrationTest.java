@@ -89,11 +89,11 @@ public class SettingsBackStackMigrationTest {
     }
 
     @Test
-    public void theOldDisplaySubpageOpensUnderTerminalAndLinuxApps() throws Exception {
+    public void theOldDisplaySubpageOpensUnderLinuxApps() throws Exception {
         saveOldStack(PAGES + "X11DisplayPreferencesFragment", PAGES + "X11DisplayInputPreferencesFragment");
         SettingsActivity activity = reopen();
         assertEquals(PAGES + "X11DisplayInputPreferencesFragment", shown(activity));
-        assertEquals(3, activity.getSupportFragmentManager().getBackStackEntryCount());
+        assertEquals("Linux apps, then Input", 2, activity.getSupportFragmentManager().getBackStackEntryCount());
     }
 
     @Test

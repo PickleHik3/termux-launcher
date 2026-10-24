@@ -10,7 +10,7 @@
     <string name="settings_section_home_summary">Pages, widgets, gestures and where you start</string>
     <string name="settings_section_dock_drawer">Dock &amp; drawer</string>
     <string name="settings_section_dock_drawer_summary">Pinned apps, drawer, A–Z and app search</string>
-    <string name="settings_section_terminal_summary">Windows, panes, status bar and Linux apps</string>
+    <string name="settings_section_terminal_summary">Windows, panes, status bar and text</string>
     <string name="settings_section_look">Appearance</string>
     <string name="settings_section_look_summary">Wallpaper, glass, theme, icons and layout</string>
     <string name="settings_section_keyboard_summary">Layouts, size, typing, voice and look</string>
@@ -41,7 +41,7 @@
     <string name="settings_terminal_sub_clipboard_title">Clipboard &amp; compatibility</string>
     <string name="settings_terminal_sub_clipboard_summary">Clipboard access and the system keyboard</string>
     <string name="settings_terminal_sub_linux_apps_title">Linux apps</string>
-    <string name="settings_terminal_sub_linux_apps_summary">Desktop apps in a window of the Terminal</string>
+    <string name="settings_terminal_sub_linux_apps_summary">Desktop apps, their windows and how they start</string>
 
     <string name="settings_keyboard_look_title">Look</string>
 
@@ -124,7 +124,7 @@
     <string name="settings_x11_sub_resolution_summary">Size in percent, filtering and density in dpi</string>
     <string name="settings_x11_sub_startup_title">Startup</string>
     <string name="settings_x11_sub_startup_summary">Auto-start and shell connection</string>
-    <string name="settings_x11_sub_troubleshooting_title">Troubleshooting</string>
+    <string name="settings_x11_sub_troubleshooting_title">Fixes</string>
     <string name="settings_x11_sub_troubleshooting_summary">Black screen or wrong colors</string>
 
     <!-- Other destinations: group headings -->

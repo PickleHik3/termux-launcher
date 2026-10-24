@@ -29,9 +29,10 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
 /**
- * The settings root by the wall's halves (settings restructure 10-19): the search box, then Your
- * launcher (Home, Dock &amp; drawer, Terminal), Shared (Look, Keyboard, Notifications, On-device AI)
- * and System (General). Each row opens its section's page, as SettingsTree names it.
+ * The settings root by the wall's halves (settings restructure 10-19, refiled 10-24): the search
+ * box, then Your launcher (Home, Apps &amp; dock, Terminal, Linux apps), Everywhere (Appearance,
+ * Keyboard, Notifications, On-device AI) and System (General). Each row opens its section's page,
+ * as SettingsTree names it; Appearance opens the editor.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -40,7 +41,7 @@ public class RootPreferencesSearchIndexTest {
 
     private static final String[] EXPECTED_GROUPS = {"root_your_launcher", "root_shared", "root_system"};
     private static final String[][] EXPECTED_ROWS = {
-        {"home", "dock_drawer", "terminal"},
+        {"home", "dock_drawer", "terminal", "linux_apps"},
         {"look", "keyboard_input", "notifications", "on_device_ai"},
         {"general"}
     };

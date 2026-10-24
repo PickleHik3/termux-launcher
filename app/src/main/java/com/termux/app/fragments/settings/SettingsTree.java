@@ -40,6 +40,7 @@ public final class SettingsTree {
         HOME(R.string.settings_section_home, "home"),
         DOCK_DRAWER(R.string.settings_section_dock_drawer, "dock_drawer"),
         TERMINAL(R.string.settings_destination_terminal, "terminal"),
+        LINUX_APPS(R.string.settings_terminal_sub_linux_apps_title, "linux_apps"),
         /** A door, not a page: the root's row opens the Appearance editor. */
         APPEARANCE(R.string.settings_section_look, "look"),
         KEYBOARD(R.string.settings_destination_keyboard_input, "keyboard_input"),
@@ -144,8 +145,11 @@ public final class SettingsTree {
             R.xml.termux_fonts_preferences);
         page(terminal, PAGES + "TerminalClipboardPreferencesFragment",
             R.string.settings_terminal_sub_clipboard_title, R.xml.terminal_clipboard_preferences);
+
+        // Linux apps sits beside Terminal again (spec §4; the word Display stays retired).
         String linuxApps = PAGES + "X11DisplayPreferencesFragment";
-        page(terminal, linuxApps, R.string.settings_terminal_sub_linux_apps_title, R.xml.x11_display_preferences);
+        section(Section.LINUX_APPS, linuxApps, R.string.settings_terminal_sub_linux_apps_title,
+            R.xml.x11_display_preferences);
         page(linuxApps, PAGES + "GuiAppsSetupPreferencesFragment", R.string.settings_gui_apps_title,
             R.xml.gui_apps_setup_preferences);
         page(PAGES + "GuiAppsSetupPreferencesFragment", PAGES + "GraphicsAccelerationFragment",

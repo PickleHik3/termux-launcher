@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Terminal: the Layout editor first, then one row per part of the Terminal half. The rows this
-     page used to hold moved, keys unchanged, to Windows & panes, Text & display and Clipboard &
-     compatibility; Status bar and the display (now Linux apps) joined from the root. -->
+<!-- Terminal: the Appearance editor first, then one row per part of the Terminal half. The rows
+     this page used to hold moved, keys unchanged, to Windows & panes, Text & display and Clipboard &
+     compatibility; Status bar joined from the root, and Linux apps went back to the root. -->
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <Preference
@@ -37,11 +37,4 @@
         app:title="@string/settings_terminal_sub_clipboard_title"
         app:summary="@string/settings_terminal_sub_clipboard_summary"
         app:fragment="com.termux.app.fragments.settings.termux.TerminalClipboardPreferencesFragment" />
-
-    <Preference
-        app:key="display"
-        app:persistent="false"
-        app:title="@string/settings_terminal_sub_linux_apps_title"
-        app:summary="@string/settings_terminal_sub_linux_apps_summary"
-        app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
 </PreferenceScreen>

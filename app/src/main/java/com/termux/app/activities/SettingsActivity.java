@@ -894,6 +894,9 @@ public class SettingsActivity extends AppCompatActivity implements
                 return;
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
             SettingsLayoutUtils.applyRootLayout(this);
+            // A build made without the X server has no Linux apps to set up.
+            Preference linuxApps = findPreference(SettingsTree.Section.LINUX_APPS.rootKey);
+            if (linuxApps != null && !com.termux.BuildConfig.X11_SERVER) linuxApps.setVisible(false);
             // Appearance is the editor itself, over the live launcher, not a page of rows.
             Preference appearance = findPreference(SettingsTree.Section.APPEARANCE.rootKey);
             if (appearance != null) appearance.setOnPreferenceClickListener(row -> {
