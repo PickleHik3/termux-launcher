@@ -88,6 +88,106 @@ public class EditorCardSheetFitTest {
         assertTrue("a slider row is at least 72dp", opacity.getHeight() >= Math.round(72 * density));
     }
 
+    @Test
+    public void aSlidersThumbAtEitherEndStaysInsideTheMargins() {
+        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
+        fixture.sheet.openMore();
+        fixture.layOut();
+        int width = fixture.parent.getWidth();
+        int checked = 0;
+        for (com.google.android.material.slider.Slider slider : sliders(fixture.sheet.rows())) {
+            if (slider.getWidth() <= 0)
+                continue;
+            int[] at = new int[2];
+            slider.getLocationInWindow(at);
+            int[] parentAt = new int[2];
+            fixture.parent.getLocationInWindow(parentAt);
+            int left = at[0] - parentAt[0];
+            int trackStart = left + slider.getTrackSidePadding();
+            int trackEnd = left + slider.getWidth() - slider.getTrackSidePadding();
+            int radius = slider.getThumbWidth() / 2;
+            assertTrue("the thumb at the end clears the 16dp margin: " + (trackEnd + radius)
+                + " vs " + (width - fixture.dp(16)), trackEnd + radius <= width - fixture.dp(16) + 1);
+            assertEquals("the track starts at the text column", fixture.dp(56), trackStart, 1);
+            checked++;
+        }
+        assertTrue(checked > 0);
+    }
+
+    @Test
+    public void theDesignTilesHoldTheirGlyphAndWordInsideTheirOutline() {
+        for (float scale : new float[] {1f, 1.3f}) {
+            Fixture fixture = new Fixture(EditorCard.DOCK, scale);
+            fixture.sheet.openMore();
+            fixture.layOut();
+            int tiles = 0;
+            for (MaterialButton tile : buttons(fixture.sheet.rows())) {
+                if (tile.getIcon() == null || tile.getLayout() == null)
+                    continue;
+                tiles++;
+                assertEquals("no inset under the outline", 0, tile.getInsetBottom());
+                int textBottom = tile.getTotalPaddingTop() + tile.getLayout().getHeight();
+                assertTrue(tile.getText() + " at " + scale + ": the word ends at " + textBottom
+                        + " inside " + tile.getHeight(),
+                    textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
+            }
+            assertEquals(3, tiles);
+        }
+    }
+
+    @Test
+    public void anInlineSegmentRowKeepsItsIconOffTheEdgeAndNoCheckMark() {
+        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
+        fixture.sheet.openMore();
+        fixture.layOut();
+        com.google.android.material.button.MaterialButtonToggleGroup style = null;
+        for (com.google.android.material.button.MaterialButtonToggleGroup group
+                : toggleGroups(fixture.sheet.rows())) {
+            if (group.getParent() instanceof LinearLayout && ((LinearLayout) group.getParent())
+                    .getOrientation() == LinearLayout.HORIZONTAL) {
+                style = group;
+                break;
+            }
+        }
+        assertTrue("the Dock card has a row of segments beside its label", style != null);
+        ViewGroup row = (ViewGroup) style.getParent();
+        View icon = row.getChildAt(0);
+        int[] at = new int[2];
+        icon.getLocationInWindow(at);
+        int[] parentAt = new int[2];
+        fixture.parent.getLocationInWindow(parentAt);
+        assertTrue("the icon stands 16dp in", at[0] - parentAt[0] >= fixture.dp(16) - 1);
+        for (int i = 0; i < style.getChildCount(); i++)
+            assertEquals(null, ((MaterialButton) style.getChildAt(i)).getIcon());
+    }
+
+    @NonNull
+    private static List<com.google.android.material.slider.Slider> sliders(@NonNull View view) {
+        List<com.google.android.material.slider.Slider> out = new ArrayList<>();
+        if (view instanceof com.google.android.material.slider.Slider) {
+            out.add((com.google.android.material.slider.Slider) view);
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                out.addAll(sliders(group.getChildAt(i)));
+        }
+        return out;
+    }
+
+    @NonNull
+    private static List<com.google.android.material.button.MaterialButtonToggleGroup> toggleGroups(
+            @NonNull View view) {
+        List<com.google.android.material.button.MaterialButtonToggleGroup> out = new ArrayList<>();
+        if (view instanceof com.google.android.material.button.MaterialButtonToggleGroup) {
+            out.add((com.google.android.material.button.MaterialButtonToggleGroup) view);
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                out.addAll(toggleGroups(group.getChildAt(i)));
+        }
+        return out;
+    }
+
     // ------------------------------------------------------------------------------- the drive
 
     private static void assertFits(@NonNull EditorCard card, float scale) {

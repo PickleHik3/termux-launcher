@@ -731,11 +731,7 @@ final class EditorCardSheet {
                 mModel.onReleased(row);
             }
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        params.setMarginStart(dp(ICON_COLUMN_DP - EDGE_DP));
-        params.setMarginEnd(0);
-        root.addView(slider, params);
+        root.addView(slider, sliderParams(slider));
         views.slider = slider;
         return views;
     }
@@ -773,6 +769,9 @@ final class EditorCardSheet {
             MaterialButton button = (MaterialButton) inflater.inflate(R.layout.segment_button,
                 null, false);
             button.setId(View.generateViewId());
+            // No check mark (wireframe 02): the container colour carries the choice, and a mark's
+            // reserved room would stand every unchosen word off its centre.
+            button.setIcon(null);
             button.setText(choice);
             button.setMinWidth(0);
             button.setMinimumWidth(0);
@@ -792,7 +791,8 @@ final class EditorCardSheet {
         root.setOrientation(inline ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         root.setGravity(inline ? Gravity.CENTER_VERTICAL : Gravity.NO_GRAVITY);
         root.setMinimumHeight(dp(SWITCH_ROW_MIN_DP));
-        root.setPadding(0, dp(8), inline ? dp(EDGE_DP) : 0, dp(8));
+        int edge = inline ? dp(EDGE_DP) : 0;
+        root.setPadding(edge, dp(8), edge, dp(8));
         RowViews views = new RowViews(row, root);
         if (inline) {
             root.addView(iconView(row.iconRes));
@@ -865,6 +865,10 @@ final class EditorCardSheet {
             chip.setMinWidth(0);
             chip.setMinimumWidth(0);
             chip.setMinHeight(dp(56));
+            // The outline is drawn inside the button's insets; without them the glyph and its
+            // word stand inside it rather than running under its bottom edge.
+            chip.setInsetTop(0);
+            chip.setInsetBottom(0);
             chip.setCornerRadius(dp(12));
             chip.setCheckable(true);
             if (icons != null && i < icons.length)
@@ -891,6 +895,19 @@ final class EditorCardSheet {
                 chip.setIconGravity(stacked ? MaterialButton.ICON_GRAVITY_TEXT_START
                     : MaterialButton.ICON_GRAVITY_TOP);
                 chip.setIconPadding(dp(stacked ? 8 : 2));
+                if (!stacked) {
+                    // Glyph over word: the tile is as tall as both and its padding, at any text
+                    // size; the glyph is placed only at layout, too late for the measure to count.
+                    int glyph = chip.getIconSize() > 0 ? chip.getIconSize()
+                        : chip.getIcon().getIntrinsicHeight();
+                    android.graphics.Paint.FontMetricsInt metrics =
+                        chip.getPaint().getFontMetricsInt();
+                    int line = Math.max(chip.getLineHeight(), metrics.bottom - metrics.top);
+                    int need = chip.getPaddingTop() + glyph + chip.getIconPadding() + line
+                        + chip.getPaddingBottom();
+                    chip.setMinHeight(Math.max(dp(56), need));
+                    chip.setMinimumHeight(Math.max(dp(56), need));
+                }
             }
             LinearLayout.LayoutParams params = stacked
                 ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -941,9 +958,7 @@ final class EditorCardSheet {
                 mModel.onReleased(row);
             }
         });
-        LinearLayout.LayoutParams sliderParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        sliderParams.setMarginStart(dp(ICON_COLUMN_DP - EDGE_DP));
+        LinearLayout.LayoutParams sliderParams = sliderParams(slider);
         root.addView(slider, sliderParams);
         LinearLayout stops = new LinearLayout(mContext);
         stops.setOrientation(LinearLayout.HORIZONTAL);
@@ -969,8 +984,9 @@ final class EditorCardSheet {
         }
         LinearLayout.LayoutParams stopsParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        stopsParams.setMarginStart(dp(ICON_COLUMN_DP - EDGE_DP));
-        stopsParams.setMarginEnd(0);
+        // Under the slider's own reach, so each stop's word stands under its stop.
+        stopsParams.setMarginStart(sliderParams.getMarginStart());
+        stopsParams.setMarginEnd(sliderParams.getMarginEnd());
         root.addView(stops, stopsParams);
         views.slider = slider;
         views.stopLabels = labels;
@@ -1154,6 +1170,31 @@ final class EditorCardSheet {
     }
 
     // ------------------------------------------------------------------------------- builders
+
+    /**
+     * A slider's place in its row: its track from the text column to the row's edge, inset by the
+     * thumb's radius at the end, so a thumb at either end stays inside the 16dp margin. The
+     * slider pads its own track by {@link Slider#getTrackSidePadding()}; the margins make up
+     * the rest.
+     */
+    @NonNull
+    private LinearLayout.LayoutParams sliderParams(@NonNull Slider slider) {
+        int side = slider.getTrackSidePadding();
+        int thumbRadius = slider.getThumbWidth() / 2;
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
+        params.setMarginStart(sliderMarginPx(dp(ICON_COLUMN_DP), 0, side));
+        params.setMarginEnd(sliderMarginPx(dp(EDGE_DP), thumbRadius, side));
+        return params;
+    }
+
+    /**
+     * The margin that puts a slider's track end {@code edgePx + insetPx} from the row's edge when
+     * the slider pads its track by {@code sidePaddingPx}; never negative.
+     */
+    static int sliderMarginPx(int edgePx, int insetPx, int sidePaddingPx) {
+        return Math.max(0, edgePx + insetPx - sidePaddingPx);
+    }
 
     @NonNull
     private Slider newSlider() {
