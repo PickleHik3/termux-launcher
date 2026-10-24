@@ -2410,6 +2410,17 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   one install per edition.
 
 ## Developer
+
+- 2026-10-24 · Appearance + Settings rework (branch feat/appearance-settings-rework, on pong as
+  1.1.0-pre.6+dev.f076a2dbe) · taste: the one-rule editor (tap a surface → card; palette glyph →
+  Appearance card; swipe the frame between Home and Workspace; hold-drag moves), the per-half dock
+  look while sliding (the stack dips and comes back in the arriving half's glass), the M3 settings
+  pages in your scheme, the clock widgets' stacked AM/PM, glass widgets by default · pong.
+- 2026-10-24 · same · known small items from the emulator: Settings reopened after a force-stop
+  while inside the Set up Linux apps guide lands on the root, not Linux apps; after Done with a
+  theme change the Settings screen behind the editor keeps the old theme until reopened; the
+  "Windows restored" toast can overlap the editor bar right after a restart; the status bar's
+  hidden ghost was not exercised · pong or emulator.
 - 2026-10-24 · #159 editor · the card's rise, the frame's shrink and the half line moving with the
   card read as one motion; a header drag between detents follows the thumb; no dropped frame while
   a slider drags on the dock card · pong.
