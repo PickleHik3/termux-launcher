@@ -20,6 +20,37 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "feat(sound): one launcher-run sound server and media controls for
+  every shell and distro" · with `pulseaudio` installed and Sound on: after the first terminal opens, one
+  `pulseaudio -n -F …/termux-launcher/sound/startup.pa` runs as the app's child (`ps -A -o
+  PID,PPID,ARGS`), `echo $PULSE_SERVER` in a session names `$PREFIX/tmp/termux-launcher-pulse/native`
+  and `pactl info` answers; close every terminal, wait 60 s: same pid still running · pong with
+  the developer's go-ahead (emulator banned).
+- 2026-10-25 · same commit · `kill -9` the server: a new pid within a second and `pactl info`
+  answers again; kill it three times within a minute: it stays down, Settings › Terminal › Linux
+  apps › Audio shows "Sound kept stopping…", opening a new terminal starts it again and the line
+  goes · pong.
+- 2026-10-25 · same commit · `pactl info` from an ssh login (sshd in Termux, no PULSE_SERVER)
+  reaches the launcher's server through `$PREFIX/etc/pulse/client.conf.d/termux-launcher.conf`;
+  `paplay` of a wav plays from a session, from ssh and from `proot-distro login debian` (the
+  distro's `/etc/pulse/client.conf.d/termux-launcher.conf` names tcp:127.0.0.1:4713 and the
+  cookie copy; `PULSE_COOKIE=/dev/null paplay` in the distro is refused) · pong.
+- 2026-10-25 · same commit · decision 8: Sound off, run `pactl info` in a session (autospawns
+  a stock `pulseaudio --start --log-target=syslog`), Sound on: the stock server is gone and the
+  launcher's runs. Decision 7: put a `default.pa` in `~/.config/pulse`, force-stop and reopen: no
+  launcher server, no drop-in, sessions get no PULSE_SERVER, the Audio section says "Using your
+  own sound setup"; remove the file to restore · pong.
+- 2026-10-25 · same commit · Sound off: server, `dbus-daemon --config-file=…/bus.conf` and the
+  media helper are gone at once, both drop-ins (prefix and every distro) removed, a new session
+  has no PULSE_SERVER/DBUS_SESSION_BUS_ADDRESS; Media controls greys out · pong.
+- 2026-10-25 · same commit · `kew` playing in a session (built with MPRIS): the media notification shows title, artist and
+  local cover art; play/pause, next, previous and seeking from the notification and the lock
+  screen drive kew; the status-pane media row and the home Media widget show it (notification
+  access on) · pong.
+- 2026-10-25 · same commit · focus: kew playing, start playback in another Android app: kew
+  pauses; a navigation prompt / short transient: kew pauses and resumes by itself; a duck (a
+  notification sound while playing): volume dips and returns; Firefox from the drawer playing a
+  video (no MPRIS) is muted while the other app plays and unmuted once one of them stops · pong.
 - 2026-10-25 · commit "feat(dock): a new install starts on Peek glass, existing installs keep the
   tray" · a fresh install (uninstall, then `adb install`, launch) opens on Peek glass
   (`layout.dock_design=peek_glass`); an update over an install that never picked a design
@@ -447,6 +478,13 @@ dropped; what follows is what still owes a look.
   pong.
 
 ## Developer
+- 2026-10-25 · commit "feat(settings): Sound and Media controls switches on the Linux apps page" · the
+  Audio section's two switches and its status line read right and do not clip at font scale 1.3
+  and in dark/light/scheme themes; Media controls greys out with Sound off · pong.
+- 2026-10-25 · commit "feat(sound): one launcher-run sound server and media controls for every
+  shell and distro" · a day of real use: sound from kew, Firefox and an xfce
+  desktop survives closing them, the screen off and an hour idle (the reporter's moto g15 case);
+  battery at rest no worse than before (the server suspends its sink when idle) · pong.
 - 2026-10-25 · commit "feat(dock): draw the Peek glass card and the icons' reflections on it" ·
   Home, Docked, Dock card → Design → Peek: a dark glass card inset about 3% from each side with
   generous top corners, the icons' centres on its top edge, no lower corners anywhere, the card

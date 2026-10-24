@@ -228,20 +228,43 @@ asking, which pins the keyboard until you put it down again.
 
 ## Sound for Linux apps
 
-Linux apps opened from the app drawer play sound with no setup beyond "Set up Linux apps", which
-installs `pulseaudio`. Whenever you open an app or a desktop and no sound server answers, the
-launcher starts one (detached, kept running; it suspends its audio output when idle, so it costs
-next to nothing) and points the app at it with `PULSE_SERVER`. The launcher's server has a runtime
-directory of its own, `$PREFIX/tmp/termux-launcher-pulse`, so a PulseAudio you started yourself
-does not get in its way, and apps in the Termux prefix use its socket there whatever your shell
-sets `TMPDIR` to. Apps in a proot container cannot see the prefix's tmp, so when one is opened the
-launcher also has the server listen on `127.0.0.1:4713` (this phone only) and the container
-connects to `tcp:127.0.0.1:4713`. If another program already holds that port, the container is
-silent; the launcher's server and the prefix's apps are not affected.
+The launcher runs one PulseAudio server for everything: terminal sessions, Linux apps from the
+drawer and proot distros. It needs `pulseaudio`, which "Set up Linux apps" installs
+(`pkg install pulseaudio` does too), and two switches under **Settings › Terminal › Linux apps ›
+Audio** control it, both on by default.
 
-To opt out, `pkg uninstall pulseaudio`: the launcher then adds nothing and an app runs as before.
-A `client.conf` naming a `default-server` is ignored while the launcher starts its own server,
-but an app you start from your own shell uses whatever your shell is set up to use.
+- **Sound.** The server starts with your first terminal or Linux app and keeps running when you
+  close them; it suspends its output when idle, so it costs next to nothing. It plays through
+  AAudio, or OpenSL ES on a phone where AAudio will not open. If it stops, it starts again at
+  once; after three stops within a minute it stays off and the page says so, until your next
+  terminal or Linux app.
+- **Media controls.** A Linux player that speaks MPRIS (kew, Firefox, VLC, mpv with its MPRIS
+  plugin and most desktop players) shows in Android's media controls: the notification, the lock
+  screen, Bluetooth buttons, and the launcher's own media widgets, with its title, artist and
+  local cover art. Play/pause, previous, next and seeking work when the player offers them. While
+  anything plays through the server, the launcher holds Android's audio focus: when another app
+  starts playing, Linux players pause (and resume after a short interruption such as a navigation
+  prompt), and sound from apps without MPRIS is muted, or lowered where Android allows it.
+
+How apps find the server: every terminal session and Linux app gets `PULSE_SERVER`; anything
+else in Termux (ssh, Termux:Widget, services) reads
+`$PREFIX/etc/pulse/client.conf.d/termux-launcher.conf`; and each proot distro gets
+`/etc/pulse/client.conf.d/termux-launcher.conf`, which points at `127.0.0.1:4713` with a copy of
+the server's cookie, so other apps on the phone cannot use it. The setup guide also installs
+ALSA's PulseAudio plugin in the distro and writes `/etc/asound.conf` (unless you have your own).
+Terminal sessions and Linux apps also get a session bus (`DBUS_SESSION_BUS_ADDRESS`) when the
+`dbus` package is installed; that bus is what media players announce themselves on.
+
+**Your own setup comes first.** If `~/.config/pulse` holds a configuration of yours
+(`client.conf`, `default.pa`, `daemon.conf` and the like), or a PulseAudio you started with options
+of your own is running, the launcher starts nothing and writes nothing, and the page says it is
+using your own setup. A server that an app merely started for itself, with no configuration, is
+replaced by the launcher's. You no longer need `pulseaudio --start` in your shell's startup files;
+with the launcher's server running it only prints that it refuses to start a second one.
+
+Turning **Sound** off stops the server and the bus at once and removes the launcher's drop-ins.
+With `fcitx5` installed, apps opened from the drawer in the Termux prefix join the display's own
+bus (it carries text-field focus), so a player among them does not show in the media controls.
 
 ## GPU acceleration for your apps
 

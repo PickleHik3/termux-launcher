@@ -250,6 +250,19 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_DRAWER_APPS = true;
 
+        /**
+         * The launcher's own PulseAudio server for every terminal session, Linux app and proot
+         * distro, started when something first may want sound.
+         */
+        public static final String KEY_LAUNCHER_SOUND = "launcher_sound";
+
+        public static final boolean DEFAULT_LAUNCHER_SOUND = true;
+
+        /** Mirror Linux media players into Android's media controls, and hold audio focus. */
+        public static final String KEY_LAUNCHER_MEDIA_CONTROLS = "launcher_media_controls";
+
+        public static final boolean DEFAULT_LAUNCHER_MEDIA_CONTROLS = true;
+
         /** The window manager the launcher starts with the server, so windows open full size. Empty for none. */
         public static final String KEY_X11_WINDOW_MANAGER = "x11_window_manager";
 
