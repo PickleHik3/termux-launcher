@@ -426,6 +426,11 @@ dropped; what follows is what still owes a look.
   emulator.
 
 ## Developer
+- 2026-10-24 · widget settings sheet (7fd67a8c8) · Clock gear: the bottom sheet of cards matches
+  the mockup (~/reports/clock-settings-2026-10-24/); real faces in the tiles, check badge on the
+  selected one; Save and the Glass labels show their text; the selected Glass segment's corners are
+  rounded; Save stays above the keyboard in the Second clock editor; Cancel, Back and swipe-down
+  discard; Weather's gear in the same cards · pong (no emulator).
 - 2026-10-22 · #133 · Slide to Home with Beads, Search field and Drawer tile on: `dumpsys
   gfxinfo` framestats over ten slides each way against the merge note's baseline (median 17 ms,
   p99 57 ms); no worse, no visible step at the settle; both Styles · pong, release build.
