@@ -543,6 +543,21 @@ public final class GlassRefraction {
     }
 
     /**
+     * The corner radius the program draws a rim rect at: {@code cornerRadiusPx}, held to half the
+     * rect's shorter side, the most a rounded rect can take. The program's distance field
+     * ({@code sdRoundRect}) does not hold it itself, and past half the height it goes wrong in a
+     * way that shows: the two ends' arcs cross into a point folding in from each end, and the
+     * light creases along the centre line. A surface clipped as a capsule (a one-row band under
+     * the keyboard, given the dock's Corners before its own height was known) is cut to the same
+     * half-height, so the rim lands on its outline again.
+     */
+    public static float rectRadiusPx(float left, float top, float right, float bottom,
+                                     float cornerRadiusPx) {
+        float half = Math.min(Math.max(0f, right - left), Math.max(0f, bottom - top)) / 2f;
+        return Math.max(0f, Math.min(cornerRadiusPx, half));
+    }
+
+    /**
      * How far a seam edge is pushed out: past the band (or the gathered light, where a narrow
      * band ends inside its reach; the bold edge's split lies inside the light's reach), the pull
      * and the corner arc, with a little to spare.
@@ -2224,9 +2239,12 @@ public final class GlassRefraction {
             mRight = right;
             mBottom = bottom;
             mRadius = cornerRadiusPx;
+            float drawnRight = Math.max(left + 1f, right);
+            float drawnBottom = Math.max(top + 1f, bottom);
             mShader.setFloatUniform("uRectMin", left, top);
-            mShader.setFloatUniform("uRectMax", Math.max(left + 1f, right), Math.max(top + 1f, bottom));
-            mShader.setFloatUniform("uRadius", Math.max(0f, cornerRadiusPx));
+            mShader.setFloatUniform("uRectMax", drawnRight, drawnBottom);
+            mShader.setFloatUniform("uRadius",
+                rectRadiusPx(left, top, drawnRight, drawnBottom, cornerRadiusPx));
         }
 
         /** The knobs, converted at this program's density. The gathered light is fixed and takes none. */
