@@ -42,6 +42,20 @@ final class HiddenStackView extends FrameLayout {
 
         /** A card was dragged and let go at ({@code rawX}, {@code rawY}); whether that is in the frame. */
         void onDropped(@NonNull HiddenItem item, float rawX, float rawY);
+
+        /** A card began to be dragged. */
+        default void onDragStarted(@NonNull HiddenItem item) {}
+
+        /**
+         * The dragged card is at ({@code rawX}, {@code rawY}): true while the frame draws its
+         * element there instead (SPEC §3.6a item 2), and the card then hides.
+         */
+        default boolean onDragMoved(@NonNull HiddenItem item, float rawX, float rawY) {
+            return false;
+        }
+
+        /** The drag was taken away before it was let go. */
+        default void onDragCancelled(@NonNull HiddenItem item) {}
     }
 
     private static final float DRAG_ALPHA = 0.9f;
@@ -258,10 +272,15 @@ final class HiddenStackView extends FrameLayout {
                         view.setAlpha(DRAG_ALPHA);
                         view.setElevation(8f * mDensity);
                         view.bringToFront();
+                        if (mListener != null) mListener.onDragStarted(mItem);
                     }
                     if (mDragging) {
                         view.setTranslationX(dx);
                         view.setTranslationY(dy);
+                        // A chip over the rail, the element itself once the frame draws it.
+                        boolean inFrame = mListener != null
+                            && mListener.onDragMoved(mItem, event.getRawX(), event.getRawY());
+                        view.setAlpha(inFrame ? 0f : DRAG_ALPHA);
                     }
                     return true;
                 }
@@ -284,6 +303,7 @@ final class HiddenStackView extends FrameLayout {
                 }
                 case MotionEvent.ACTION_CANCEL:
                     view.getParent().requestDisallowInterceptTouchEvent(false);
+                    if (mDragging && mListener != null) mListener.onDragCancelled(mItem);
                     mDragging = false;
                     view.setAlpha(1f);
                     view.setElevation(2f * mDensity);
