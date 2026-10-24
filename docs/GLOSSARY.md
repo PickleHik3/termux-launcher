@@ -76,7 +76,9 @@ manager. It appears when something asks for it (a **Linux app** tapped in the dr
 entry under Linux Apps), joining the end of the current session's row, and leaves when the display
 stops. It is an ordinary window of the row (2026-10-19): it has a chip among the windows' chips,
 can be dragged to another place in the row, and its chip's × closes it, which stops the display.
-There is one at most, no Display page, and no switch or mode for it.
+There is one at most, no Display page, and no switch or mode for it. Settings has a root entry
+named **Linux apps** (2026-10-24), never Display: set-up, drawer visibility and the window's input,
+resolution, start-up and fixes.
 See `docs/en/X11_Display.md`.
 _Avoid_: Display place, Display page, the third place, X11 page, Termux:X11 (the server is our fork
 of it, but the window is the display)
@@ -426,9 +428,10 @@ less often. It is meant to become the default. See `docs/en/Launcher_Settings.md
 _Avoid_: battery saver (Android's own), low-power mode
 
 **Look**:
-The one appearance the launcher has, set by the Appearance editor's slider. The slider has five
-stops: Clear, Mist, Tint, Solid and Custom. Only Custom shows controls for each surface. One look
-covers every page and both orientations.
+The appearance of one half of the wall, set by the Appearance editor's slider. The slider has five
+stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Look to Custom by
+itself; Custom is never a gate. Home and the Workspace each hold their own Look and own surface
+values, equal until one is edited (ADR 0013); one look covers both orientations.
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
 
 **Material palette**:
@@ -468,12 +471,16 @@ _Avoid_: screenshot, freeze frame
 ### Editing
 
 **Appearance editor**:
-The editor for how the launcher looks: a **Look** slider with the stops Clear, Mist, Tint, Solid and
-Custom, over the launcher scaled into a frame. At Custom a tap on an element shows Darkness,
-Legibility, Blur, Key corners and Soft wallpaper with Dim. Entered from the corner tab; exits
-straight back to the live page. There is one look, so what it edits lands on every page. Undo
-steps back and Done keeps the changes.
-_Avoid_: surface editor (legacy umbrella name), look editor, style editor, full editor
+The one editor for how the launcher looks and sits, over the launcher scaled into a frame that
+slides between Home and the Workspace. Its rule is **tap the thing**: tap a surface (Home, Status
+bar, Terminal, Dock, Keyboard) and its **card** rises with everything about it, ordered by how
+often it is touched, rare controls under **More**; drag a surface to move it; tap the **pill** for
+what has no surface (the Look slider, wallpaper, theme, icon pack, text size, full screen, minimal,
+orientation, Undo, Done). It edits the half the frame shows. Users never meet Base, inherit or
+follow: a moved slider is the surface's own value, marked by a dot, and **Reset** in the card menu
+puts it back on the Look. Undo steps back and Done keeps the changes. Every door to it is named
+Appearance and opens on that door's object.
+_Avoid_: surface editor, look editor, Look page, Layout page (the 2026-10-24 merge removed the pages), style editor
 
 **Corner tab**:
 The small control strip revealed by holding a page's corner. On a Home page it carries Appearance,
@@ -506,18 +513,12 @@ segment previews Home. It is to the layout what a surface's override is to **Bas
 _Avoid_: Home variant, Home place
 
 **Layout editor**:
-The editor for where the elements sit and how big they are: bars, dock, keyboard, widget grid,
-hidden or shown. It has no rows of controls (spec `project-docs/reference/launcher/appearance-layout-editor/SPEC.md`
-§3.5): a bar moves by pressing it anywhere and dragging, anything is put away by dropping it in the **restore tray** and
-brought back by its chip there, and a tap selects an element and shows its **handle** — the dock's
-height, the keyboard's height and chin, Home's grid cells — with a readout in real units while it
-is held. The selected keyboard shows its type chips (docked, floating, split), the selected dock
-its **Dock design**. One layout dresses both halves of the wall (decided 2026-10-21): opened on any
-page it edits that layout (normal or minimal variant), and Home simply leaves out the extra keys.
-Only when Home holds a **Home layout** does a Home page open that one instead; the layout canvas shows the page it was opened on, one orientation at a time with a glyph
-toggle to the other. Entered from the corner tab's Layout glyph, the long-press menu, or the Layout
-row in Settings.
-_Avoid_: arrange mode, surface editor, place editor
+Legacy name for the Appearance editor's move and size controls (2026-10-24: there is one editor,
+see **Appearance editor**). The engine underneath keeps the name in code: a bar moves by dragging,
+anything is put away by dropping it in the **restore tray**, and a selected element shows its
+**handle** with a readout in real units. One layout dresses both halves of the wall; only look
+values differ per half (ADR 0013).
+_Avoid_: Layout page, Layout tab, Layout (as the name of a door; the door is Appearance)
 
 **Layout canvas**:
 The scaled model of a page's layout that the user drags elements around on, in the Layout
