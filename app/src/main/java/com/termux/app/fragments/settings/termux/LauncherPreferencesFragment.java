@@ -64,6 +64,8 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         configurePermissionActions(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
+        Preference linuxApps = findPreference("linux_apps_in_drawer");
+        if (linuxApps != null && !com.termux.BuildConfig.X11_SERVER) linuxApps.setVisible(false);
 
         Preference lockMethodPreference = findPreference("app_launcher_az_lock_method");
         if (lockMethodPreference != null) {

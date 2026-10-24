@@ -8,8 +8,8 @@
     <string name="settings_root_system_header">System</string>
     <string name="settings_section_home">Home</string>
     <string name="settings_section_home_summary">Pages, widgets, gestures and where you start</string>
-    <string name="settings_section_dock_drawer">Dock &amp; drawer</string>
-    <string name="settings_section_dock_drawer_summary">Pinned apps, drawer, A–Z and app search</string>
+    <string name="settings_section_dock_drawer">Apps &amp; dock</string>
+    <string name="settings_section_dock_drawer_summary">Dock, drawer, A–Z and app search</string>
     <string name="settings_section_terminal_summary">Windows, panes, status bar and text</string>
     <string name="settings_section_look">Appearance</string>
     <string name="settings_section_look_summary">Wallpaper, glass, theme, icons and layout</string>
@@ -32,6 +32,9 @@
 
     <string name="settings_dock_header">Dock</string>
     <string name="settings_drawer_header">Drawer</string>
+    <string name="settings_app_drawer_grid_title">Grid</string>
+    <string name="settings_apps_linux_apps_link_title">Linux apps in the drawer</string>
+    <string name="settings_apps_linux_apps_link_summary">Show, hide and set them up</string>
 
     <string name="settings_terminal_sub_windows_title">Windows &amp; panes</string>
     <string name="settings_terminal_sub_windows_summary">Tiling, focus, hints and program control</string>
