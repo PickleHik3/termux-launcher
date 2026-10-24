@@ -134,6 +134,19 @@ public class EditorFramePoseTest {
     }
 
     @Test
+    public void aPutAwayRowsGhostStandsAgainstItsSurfacesInnerSide() {
+        int[] azRow = {20, 1700, 980, 1780};
+        int[] bottomBand = EditorFramePose.ghostRect(PlaceLayout.Edge.BOTTOM, 0, 1000, 2000,
+            100, 20);
+        assertArrayEquals("over the A-Z row, where the apps stood", new int[] {20, 1600, 980, 1780},
+            EditorFramePose.ghostBeside(azRow, bottomBand, 2000));
+        int[] topRow = {20, 200, 980, 280};
+        int[] topBand = EditorFramePose.ghostRect(PlaceLayout.Edge.TOP, 0, 1000, 2000, 100, 20);
+        assertArrayEquals(new int[] {20, 200, 980, 380},
+            EditorFramePose.ghostBeside(topRow, topBand, 2000));
+    }
+
+    @Test
     public void ghostsStandOnTheirEdgeAndStackInwards() {
         int band = 100;
         int margin = 20;

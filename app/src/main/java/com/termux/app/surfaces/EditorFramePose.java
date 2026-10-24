@@ -193,6 +193,24 @@ final class EditorFramePose {
     }
 
     /**
+     * A surface that still stands while one of its rows is put away (the dock showing its A–Z
+     * index with its pinned apps hidden), with the hidden row's ghost {@code band} (as
+     * {@link #ghostRect} gives it) moved against the surface's inner side: the surface's rect
+     * grown by the band's thickness towards the middle of the frame, so the row can be tapped
+     * where it would stand.
+     */
+    @NonNull
+    static int[] ghostBeside(@NonNull int[] surface, @NonNull int[] band, int heightPx) {
+        int thickness = Math.max(0, band[3] - band[1]);
+        boolean bottomEdge = band[1] + band[3] > heightPx;
+        if (bottomEdge)
+            return new int[] {surface[0], Math.max(0, surface[1] - thickness), surface[2],
+                surface[3]};
+        return new int[] {surface[0], surface[1], surface[2],
+            Math.min(heightPx, surface[3] + thickness)};
+    }
+
+    /**
      * A hidden surface's ghost in the container's own px, {left, top, right, bottom}: a band
      * {@code bandPx} thick on {@code edge}, {@code marginPx} in from the container's sides, and
      * {@code stack} bands in from the edge where several ghosts share it.

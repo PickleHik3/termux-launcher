@@ -537,7 +537,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             content.postDelayed(() -> {
                 if (!mOpen || token != mPresentToken)
                     return;
-                if (!mHost.isInAppKeyboardShown())
+                // Raised so it can be tapped, where the place shows it; a keyboard the place
+                // keeps down stays down, and its ghost is the way to its card.
+                LayoutEditorController shown = mHost.layoutEditor();
+                if (!mHost.isInAppKeyboardShown()
+                    && (shown == null || shown.isKeyboardShown()))
                     mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
                 if (onSettled != null)
                     onSettled.run();
@@ -1643,7 +1647,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case VISIBLE: {
                     if (layout == null) return 1;
                     Element element = elementOf(card);
-                    if (element == null) return layout.isKeyboardShown() ? 1 : 0;
+                    // The keyboard reads what the frame draws (the canvas, for the other
+                    // orientation): the one answer the switch and the preview can share.
+                    if (element == null)
+                        return (layout.showsOtherOrientation() ? layout.isKeyboardShown()
+                            : mHost.isInAppKeyboardShown()) ? 1 : 0;
                     return layout.isShown(element) ? 1 : 0;
                 }
                 case POSITION: {
@@ -2027,8 +2035,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 Element element = elementOf(card);
                 if (element == null) {
                     layout.setKeyboardShown(value != 0);
-                    if (value != 0 && !mHost.isInAppKeyboardShown())
+                    if (value != 0 && !mHost.isInAppKeyboardShown()) {
                         mRaisedKeyboard = mHost.showInAppKeyboardForEditor() || mRaisedKeyboard;
+                    } else if (value == 0 && mHost.isInAppKeyboardShown()) {
+                        // The frame stops drawing it: off reads off, and its ghost takes its place.
+                        mHost.hideInAppKeyboardForEditor();
+                        mRaisedKeyboard = false;
+                    }
                 } else {
                     layout.setShown(element, value != 0);
                 }
@@ -3059,9 +3072,24 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable
     private int[] targetRect(@Nullable EditorCard card, @NonNull View overlay) {
         int[] rect = surfaceRect(card, overlay);
-        if (rect != null || card == null)
+        if (card == null)
             return rect;
-        return ghostRect(card, overlay);
+        if (rect == null)
+            return ghostRect(card, overlay);
+        if (card == EditorCard.DOCK && isGhost(card)) {
+            // The pinned apps put away while the dock still stands for its other rows (the
+            // A–Z index): the target reaches over the apps' band on their edge, dashed.
+            int[] band = ghostRect(card, overlay);
+            if (band != null)
+                return EditorFramePose.ghostBeside(rect, band, overlay.getHeight());
+        }
+        return rect;
+    }
+
+    /** Whether a card's surface is put away (it wears a dashed ghost, and taps still reach it). */
+    private boolean isGhost(@NonNull EditorCard card) {
+        LayoutEditorController layout = mHost.layoutEditor();
+        return layout != null && isHidden(card, layout);
     }
 
     /** Where a surface stands in the overlay, or null when it is not on screen. */
@@ -3127,7 +3155,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private boolean isHidden(@NonNull EditorCard card, @NonNull LayoutEditorController layout) {
         if (card == EditorCard.KEYBOARD) {
             TermuxInAppKeyboard keyboard = keyboard();
-            return keyboard != null && keyboard.isEnabled() && !layout.isKeyboardShown();
+            return keyboard != null && keyboard.isEnabled() && !mHost.isInAppKeyboardShown();
         }
         Element element = elementOf(card);
         return element != null && layout.offers(element) && !layout.isShown(element);
@@ -3227,7 +3255,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (group.getBackground() != null) group.setBackground(null);
                 continue;
             }
-            boolean ghost = surfaceRect(card, overlay) == null;
+            boolean ghost = surfaceRect(card, overlay) == null || isGhost(card);
             GradientDrawable ring = new GradientDrawable();
             ring.setColor(0);
             if (ghost) {
