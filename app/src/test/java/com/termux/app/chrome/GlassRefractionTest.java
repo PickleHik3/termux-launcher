@@ -312,11 +312,11 @@ public class GlassRefractionTest {
             last = pull;
         }
         // The program runs exactly these expressions.
-        assertTrue(GlassRefraction.AGSL.contains("float t = clamp(inside / uBand, 0.0, 1.0);"));
+        assertTrue(GlassRefraction.AGSL.contains("float t = clamp(inside / min(uBand, hs), 0.0, 1.0);"));
         assertTrue(GlassRefraction.AGSL.contains(
             "float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
         // The pull is an offset that vanishes on the face, so a face pixel samples exactly fragCoord.
-        assertTrue(GlassRefraction.AGSL.contains("float2 sampleCoord = fragCoord - n * pull;"));
+        assertTrue(GlassRefraction.AGSL.contains("float2 sampleCoord = fragCoord - nb * pull;"));
     }
 
     @Test
@@ -349,7 +349,8 @@ public class GlassRefractionTest {
             float pull = GlassRefraction.pullPx(inside, band, strength, half, rimW);
             assertTrue("at " + inside + ": " + pull, pull <= half);
         }
-        assertEquals("a dock is held at its own half height", half * GlassRefraction.edgeProfile(rimW / band),
+        // Its band is held there too, so the profile runs out by the middle line.
+        assertEquals("a dock is held at its own half height", half * GlassRefraction.edgeProfile(rimW / half),
             GlassRefraction.pullPx(rimW, band, strength, half, rimW), 1e-3f);
         assertEquals("a large surface is not", strength * GlassRefraction.edgeProfile(rimW / band),
             GlassRefraction.pullPx(rimW, band, strength, 1000f, rimW), 1e-3f);

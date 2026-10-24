@@ -2490,6 +2490,11 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   one install per edition.
 
 ## Developer
+- 2026-10-24 · "fix(glass): draw a lone band as a whole card under Fancier Glass" · Fancier Glass
+  on (bend 21, edge width 14), Floating, Corners 3, dock rows hidden, keyboard down: the extra-keys
+  bar alone has no chevron at either end and no line across its middle; same with the keyboard
+  up (the card under it), in Docked, and at a capsule Corners; a tall dock's small corners show no
+  crease running in from the corner · pong (the emulator never showed it).
 - 2026-10-25 · terminal effect at terminal Opacity 0 (emulator b-bezel-opaque.png) · the scanlines
   fade from the pane's interior and are faint on the bezel while the bezel should carry none; check
   whether the effect rides the glass layer and should instead sit over the text at any opacity ·
