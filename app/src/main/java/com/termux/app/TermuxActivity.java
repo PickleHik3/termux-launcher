@@ -10858,7 +10858,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new SuggestionBarView.AppDrawerGestureListener() {
                 @Override
                 public boolean isAppDrawerEnabled() {
-                    return mPreferences != null && mPreferences.isAppLauncherDrawerEnabled();
+                    return true;
                 }
 
                 @Override
@@ -11052,8 +11052,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Whether anything on this install lists apps, and so has a use for package broadcasts. */
     private boolean consumesPackageChanges() {
-        return isLauncherCatalogEnabled() || mWidgetHostController != null
-            || (mPreferences != null && mPreferences.isAppLauncherDrawerEnabled());
+        return true;
     }
 
     /**
@@ -11818,6 +11817,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
         applySuggestionBarSurfaceStyling();
         mSuggestionBarView.setNotificationBadgesEnabled(mPreferences.isAppLauncherNotificationDotsEnabled());
+        mSuggestionBarView.setQuickReplySwipeEnabled(mPreferences.isAppLauncherQuickReplySwipeEnabled());
         boolean rowHapticsEnabled = mPreferences.isAppLauncherRowHapticsEnabled();
         mSuggestionBarView.setRowHapticsEnabled(rowHapticsEnabled);
         if (mAzScrubRowView != null)
@@ -14646,7 +14646,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override
             public AppDrawerGestureArbiter.Eligibility captureDrawerEligibility() {
                 return new AppDrawerGestureArbiter.Eligibility(
-                    mPreferences != null && mPreferences.isAppLauncherDrawerEnabled(),
+                    true,
                     true,
                     true,
                     appliedDockLayout().railPull,
@@ -23573,7 +23573,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The app drawer, grown out of the pinned apps row wherever it lies, as the palette opens it. */
     private void openAppDrawerFromHome() {
-        if (mPreferences == null || !mPreferences.isAppLauncherDrawerEnabled()) return;
         PlaceLayout.Edge edge = arrangement().appsEdge();
         getAppDrawerController().open(AppDrawerPullGeometry.pullFor(edge),
             AppDrawerPullGeometry.seedFor(edge));
@@ -31312,7 +31311,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openAppDrawer() {
-            if (mPreferences == null || !mPreferences.isAppLauncherDrawerEnabled()) return;
             // The same edge choice the pinned apps row's own pull makes, so the plane grows out
             // of the row wherever it lies.
             PlaceLayout.Edge edge = arrangement().appsEdge();
@@ -32210,7 +32208,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mIsVisible
             && mSuggestionBarView != null
             && mPreferences != null
-            && mPreferences.isAppLauncherDrawerEnabled()
             && !mSurfaceEditor.isActive()
             && !isCommandPaletteOpen()
             && !isAppDrawerEngaged()

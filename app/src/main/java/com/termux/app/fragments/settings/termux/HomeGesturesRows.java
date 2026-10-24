@@ -91,12 +91,7 @@ final class HomeGesturesRows {
     @NonNull
     static HomeGestures.Availability availability(@NonNull Context context) {
         return new HomeGestures.Availability(HomeGestureActions.helperAvailable(context),
-            isDrawerEnabled(context));
-    }
-
-    private static boolean isDrawerEnabled(@NonNull Context context) {
-        return TermuxStylePreferencesDataStore.getInstance(context).getBoolean(
-            "app_launcher_drawer_enabled", true);
+            true);
     }
 
     @StringRes

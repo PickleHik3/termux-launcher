@@ -348,7 +348,8 @@ public final class SettingsTree {
                 if (key.equals("app_launcher_az_lock_method") || key.equals("app_launcher_az_double_tap_lock"))
                     return "LauncherLockPreferencesFragment";
                 if (key.equals("app_launcher_home_palette_gesture") || key.equals("app_launcher_widget_pane_enabled")
-                    || key.equals("app_launcher_builtin_widget_style") || key.equals("app_launcher_drawer_enabled")
+                    || key.equals("app_launcher_builtin_widget_style")
+                    || key.equals("app_launcher_quick_reply_swipe")
                     || key.equals("app_launcher_sub_lock"))
                     return "HomePreferencesFragment";
                 if (key.equals("app_launcher_help")) return ABOUT;

@@ -316,6 +316,8 @@ public final class SuggestionBarView extends GridLayout
     private int blurRadiusDp = 10;
     private int inheritedTintColor = 0;
     private boolean notificationBadgesEnabled = false;
+    /** Whether a swipe up on a badged icon opens its quick reply; off, the icon swipes like any other. */
+    private boolean quickReplySwipeEnabled = true;
     @NonNull private NotificationBadgeStyle notificationBadgeLook = NotificationBadgeStyle.DOT;
     private boolean rowHapticsEnabled = true;
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
@@ -1202,6 +1204,7 @@ public final class SuggestionBarView extends GridLayout
      * that is when the quick reply is decided and the icon's own listener has not run yet.
      */
     public boolean isBadgedIconAt(float rawX, float rawY) {
+        if (!quickReplySwipeEnabled) return false;
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child == null || child.getVisibility() != View.VISIBLE) continue;
@@ -1834,6 +1837,10 @@ public final class SuggestionBarView extends GridLayout
         if (notificationBadgeLook == style) return;
         notificationBadgeLook = style;
         invalidateNotificationBadgeViews();
+    }
+
+    public void setQuickReplySwipeEnabled(boolean enabled) {
+        quickReplySwipeEnabled = enabled;
     }
 
     public void setNotificationBadgesEnabled(boolean enabled) {
@@ -6060,7 +6067,7 @@ public final class SuggestionBarView extends GridLayout
                     event.getRawY()
                 );
                 down.downAtMs = SystemClock.uptimeMillis();
-                down.notificationBadged = notificationSwipeAction != null
+                down.notificationBadged = quickReplySwipeEnabled && notificationSwipeAction != null
                     && LauncherNotificationBadgeStore.hasBadge(notificationPackage);
                 activeLongPressPickupState = down;
             } else if (action == MotionEvent.ACTION_MOVE) {

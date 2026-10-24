@@ -446,12 +446,10 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
         public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
 
-        /**
-         * Defines the key for enabling the full-screen app launcher drawer.
-         */
-        public static final String KEY_APP_LAUNCHER_DRAWER_ENABLED = "app_launcher_drawer_enabled";
+        /** Whether swiping up on a badged dock icon opens its quick reply. */
+        public static final String KEY_APP_LAUNCHER_QUICK_REPLY_SWIPE = "app_launcher_quick_reply_swipe";
 
-        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_ENABLED = true;
+        public static final boolean DEFAULT_APP_LAUNCHER_QUICK_REPLY_SWIPE = true;
 
         public static final String KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             "app_launcher_drawer_view_type";
