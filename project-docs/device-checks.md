@@ -407,6 +407,14 @@ under twenty items; past that, the oldest are re-judged first.
   read that as the bug.)
 
 ## Developer
+### Graphics setup leaves your display alone (10-24)
+- 2026-10-24 · fix(display) graphics setup uses a private headless display · On pong, run
+  `termux-x11-gpu-setup --yes`: (1) with the Linux display on and an app open, it stays connected
+  with no reset and the glass is kept; (2) with the display off, `pgrep -af termux-x11` and
+  `ls $PREFIX/tmp/.X11-unix` show nothing left afterwards; (3) the Vulkan wrapper is downloaded,
+  tested and removed again if it lost (kept if it won), and a wrong checksum is refused · pong,
+  by hand.
+
 ### Flick on a mouse-tracking TUI (10-20)
 - 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
   in landscape and portrait: repeated short and long flicks scroll it and never raise the

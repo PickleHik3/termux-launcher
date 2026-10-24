@@ -308,8 +308,8 @@ The Display place exists only while **Settings → Display → Display** is on, 
   to a display at all; the first two causes above are the usual ones, and the full log it names
   shows the test program's own message.
 - **A profile's package is "not available here".** Not every package source carries every driver
-  (pacman's repositories have no `vulkan-wrapper-android`, for instance). The script skips that
-  profile and tries the rest.
+  (the Vulkan wrapper is in neither package source, so the script downloads it and checks its
+  checksum). The script skips that profile and tries the rest.
 
 More in [The Linux display](X11_Display.md).
 
