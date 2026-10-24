@@ -79,20 +79,20 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   docked); it switches the orientation the phone is in, and each orientation keeps its own. If an
   older version left the display making room in portrait without you choosing it, the update
   puts it back to floating once; the same button switches it back.
-  Settings → Linux apps → Input → Keyboard over display switches both orientations
+  Settings → Linux apps → Input → Keyboard over the window switches both orientations
   at once.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts or stops the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
   anywhere else to put them away.
 - **Touch.** **Settings → Linux apps → Input → Touch** says what a finger on the display does.
-  **Touchscreen** is the tablet: fingers are touches, so a page scrolls, pinches, drags and
+  **Touch** is the tablet (taps land where you touch): fingers are touches, so a page scrolls, pinches, drags and
   long-presses where you put them, and an app written for a touchscreen behaves as it would on
   one. Apps that only understand a mouse still get taps and drags as clicks. The keyboard follows
   text fields in this mode, and pinching zooms what is on the display rather than the picture of
-  it; use the scale rail for that. **Trackpad** turns the whole display into a laptop touchpad
-  for apps that want a pointer and nothing else. **Direct touch** sends the same touches as
-  Touchscreen, without the launcher's keyboard and pinch behaviour on top. Apps started from the
+  it; use the scale rail for that. **Trackpad** (drag to move the pointer, tap to click) turns the whole display into a laptop touchpad
+  for apps that want a pointer and nothing else. **Direct** (every touch goes straight to the app) sends the same touches as
+  Touch, without the launcher's keyboard and pinch behaviour on top. Apps started from the
   drawer are told to take touch, so Firefox needs no setup.
 - **Mouse mode.** The **Mouse mode** action (on the extra-keys row, the in-app keyboard as a
   `tool:mouse.toggle` key, or a chord) swaps the keyboard for a touchpad of the same size while
@@ -127,7 +127,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   running display picks a change up at once.
   - On the page itself: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux
     apps** and **Window manager**.
-  - **Input**: **Touch**, **Use Android keyboard**, **OSK auto-show** and **Share the clipboard**.
+  - **Input**: **Touch**, **Use Android keyboard**, **Keyboard pops up** and **Share the clipboard**.
   - **Resolution and scaling**: **Resolution**, **Scale**, **Fixed size** or **Custom size**,
     **Scaling** (filtering) and **Display density**.
   - **Startup**: **Start with the launcher**, **Start command**, and **Connect new shells**
@@ -146,9 +146,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## The keyboard follows text fields
 
 Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
-again. It is on by default (**Settings → Linux apps → Input → OSK auto-show**) and it
-works in every touch mode. A tap counts where its click lands: under your finger in Touchscreen and
-Direct touch, at the pointer in Trackpad.
+again. It is on by default (**Settings → Linux apps → Input → Keyboard pops up**) and it
+works in every touch mode. A tap counts where its click lands: under your finger in Touch and
+Direct, at the pointer in Trackpad.
 
 A keyboard you opened yourself is yours: it stays until you close it, and taps on the desktop
 never take it away. Only a keyboard that came up for a text field is put away for one.

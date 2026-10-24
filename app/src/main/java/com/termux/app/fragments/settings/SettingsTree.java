@@ -151,9 +151,9 @@ public final class SettingsTree {
         String linuxApps = PAGES + "X11DisplayPreferencesFragment";
         section(Section.LINUX_APPS, linuxApps, R.string.settings_terminal_sub_linux_apps_title,
             R.xml.x11_display_preferences);
-        page(linuxApps, PAGES + "GuiAppsSetupPreferencesFragment", R.string.settings_gui_apps_title,
-            R.xml.gui_apps_setup_preferences);
-        page(PAGES + "GuiAppsSetupPreferencesFragment", PAGES + "GraphicsAccelerationFragment",
+        // Set up Linux apps is a stepped guide, a task of its own like the editors.
+        editor(linuxApps, PAGES + "GuiAppsSetupGuideFragment", R.string.settings_gui_apps_title);
+        page(PAGES + "GuiAppsSetupGuideFragment", PAGES + "GraphicsAccelerationFragment",
             R.string.settings_x11_gpu_title, 0);
         page(linuxApps, PAGES + "HiddenAppsPreferencesFragment", R.string.settings_x11_hidden_apps_title, 0);
         page(linuxApps, PAGES + "X11DisplayInputPreferencesFragment", R.string.settings_x11_sub_input_title,
@@ -238,6 +238,7 @@ public final class SettingsTree {
         ALIASES.put(PAGES + "AppBehaviorPreferencesFragment", general);
         ALIASES.put(PAGES + "LauncherDockPreferencesFragment", dock);
         ALIASES.put(PAGES + "X11DisplayLinuxAppsPreferencesFragment", linuxApps);
+        ALIASES.put(PAGES + "GuiAppsSetupPreferencesFragment", PAGES + "GuiAppsSetupGuideFragment");
         ALIASES.put(PAGES + "TerminalStatusPreferencesFragment", terminal);
         // The two Debugging pages folded into Diagnostics.
         ALIASES.put(PAGES + "DebuggingPreferencesFragment", PAGES + "AdvancedDiagnosticsPreferencesFragment");

@@ -7,6 +7,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.Nullable;
 import androidx.preference.ListPreference;
 
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
@@ -23,7 +24,17 @@ public class X11DisplayInputPreferencesFragment extends X11DisplayPreferencesFra
 
     private static final String KEY_KEYBOARD_OVER_DISPLAY = "x11_keyboard_over_display";
 
+    private static final String KEY_TOUCH_MODE = "touchMode";
+
     @Nullable private PlaceLayoutStore mPlaces;
+
+    /** One plain line for the touch mode in force, shown under the segments. */
+    private String touchModeSummary(@Nullable String value) {
+        int res = "1".equals(value) ? com.termux.R.string.settings_x11_touch_mode_trackpad
+            : "3".equals(value) ? com.termux.R.string.settings_x11_touch_mode_direct
+            : com.termux.R.string.settings_x11_touch_mode_touch;
+        return getString(res);
+    }
 
     @Override
     protected int preferencesXml() {
@@ -38,6 +49,14 @@ public class X11DisplayInputPreferencesFragment extends X11DisplayPreferencesFra
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         super.onCreatePreferences(savedInstanceState, rootKey);
+        SegmentedPillPreference touch = findPreference(KEY_TOUCH_MODE);
+        if (touch != null) {
+            touch.setSummary(touchModeSummary(touch.getValue()));
+            touch.setOnPreferenceChangeListener((preference, value) -> {
+                preference.setSummary(touchModeSummary(String.valueOf(value)));
+                return true;
+            });
+        }
         ListPreference row = findPreference(KEY_KEYBOARD_OVER_DISPLAY);
         if (row == null) return;
         row.setOnPreferenceChangeListener((preference, value) -> {
