@@ -45,8 +45,7 @@ final class EditorBar {
     private static final int PAD_DP = 4;
     /** The bar stands this far above the navigation inset. */
     static final int FOOT_GAP_DP = 8;
-    /** The half line: 16dp tall, dots 6dp, the shown half's dot 16 × 6. */
-    static final int HALF_ROW_DP = 16;
+    /** The half line's dots: 6dp, the shown half's dot 16 × 6; its height is the pose's. */
     private static final int DOT_DP = 6;
     private static final int ACTIVE_DOT_DP = 16;
 
@@ -124,7 +123,7 @@ final class EditorBar {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         nameParams.setMarginStart(dp(12));
         mHalfRow.addView(mHalfName, nameParams);
-        mHalfRow.setMinimumHeight(dp(HALF_ROW_DP));
+        mHalfRow.setMinimumHeight(dp(EditorFramePose.HALF_ROW_DP));
         setOrientation(false);
         setHalf(WallHalf.WORKSPACE);
         setDirty(false);
@@ -156,6 +155,18 @@ final class EditorBar {
             content.addView(mBar, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(BAR_DP),
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+        }
+    }
+
+    /**
+     * The half line's height, as the frame's pose counts it ({@link EditorFramePose#halfRowPx}):
+     * set only when it changes, so the line and the room left for it always agree.
+     */
+    void setHalfRowHeight(int px) {
+        ViewGroup.LayoutParams params = mHalfRow.getLayoutParams();
+        if (params != null && params.height != px) {
+            params.height = px;
+            mHalfRow.setLayoutParams(params);
         }
     }
 

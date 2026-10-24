@@ -91,8 +91,11 @@ final class EditorCardSheet {
         void onClose();
         void onReset();
         void onCopyToOtherHalf();
-        /** The sheet settled on a detent, or (while dragged) stands at a new top edge. */
+        /** The sheet stands at a new top edge: every frame of its motion, and while dragged. */
         void onSheetMoved(int detent, float topPx);
+
+        /** The sheet came to rest: on a detent, or off screen. Once per motion. */
+        default void onSheetSettled(int detent, float topPx) {}
     }
 
     static final int DETENT_HALF = 0;
@@ -135,6 +138,8 @@ final class EditorCardSheet {
     private int mFullPx;
     private int mNavInsetPx;
     private boolean mShown;
+    /** A finger is dragging the sheet by its header. */
+    private boolean mDragging;
 
     EditorCardSheet(@NonNull Context context, @NonNull Model model, @NonNull Listener listener) {
         mContext = context;
@@ -277,6 +282,11 @@ final class EditorCardSheet {
         return mShown;
     }
 
+    /** Whether a finger is dragging the sheet now: the frame follows it pose by pose. */
+    boolean isDragging() {
+        return mDragging;
+    }
+
     @Nullable
     EditorCard card() {
         return mCard;
@@ -301,6 +311,21 @@ final class EditorCardSheet {
     }
 
     private static final Object TIER_ONE_TAG = new Object();
+
+    /**
+     * The least the half detent may stand: the header, the first row and the foot clearance over
+     * the navigation inset, at {@code widthPx}. Under it the card would show no control at all.
+     */
+    int minHalfHeightPx(int widthPx) {
+        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP);
+        if (mRows.getChildCount() == 0)
+            return height + dp(SLIDER_ROW_MIN_DP);
+        int spec = View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY);
+        int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        View first = mRows.getChildAt(0);
+        first.measure(spec, unspecified);
+        return height + first.getMeasuredHeight();
+    }
 
     // ----------------------------------------------------------------------------------- cards
 
@@ -347,6 +372,7 @@ final class EditorCardSheet {
             mSheet.setTranslationY(to);
             mSheet.setVisibility(View.GONE);
             mListener.onSheetMoved(mDetent, sheetTopPx());
+            mListener.onSheetSettled(mDetent, sheetTopPx());
             if (done != null) done.run();
             return;
         }
@@ -355,6 +381,8 @@ final class EditorCardSheet {
             .withEndAction(() -> {
                 mSheet.setVisibility(View.GONE);
                 mSheet.animate().setUpdateListener(null);
+                mListener.onSheetMoved(mDetent, sheetTopPx());
+                mListener.onSheetSettled(mDetent, sheetTopPx());
                 if (done != null) done.run();
             }).start();
     }
@@ -385,6 +413,7 @@ final class EditorCardSheet {
             || mSheet.getTranslationY() == target) {
             mSheet.setTranslationY(target);
             mListener.onSheetMoved(detent, sheetTopPx());
+            mListener.onSheetSettled(detent, sheetTopPx());
             return;
         }
         mSheet.animate().translationY(target).setDuration(MOVE_MS).setInterpolator(Motion.settle())
@@ -392,6 +421,7 @@ final class EditorCardSheet {
             .withEndAction(() -> {
                 mSheet.animate().setUpdateListener(null);
                 mListener.onSheetMoved(detent, sheetTopPx());
+                mListener.onSheetSettled(detent, sheetTopPx());
             }).start();
     }
 
@@ -445,8 +475,10 @@ final class EditorCardSheet {
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dy = event.getRawY() - down[0];
-                    if (!dragging[0] && Math.abs(dy) > slop)
+                    if (!dragging[0] && Math.abs(dy) > slop) {
                         dragging[0] = true;
+                        mDragging = true;
+                    }
                     if (dragging[0]) {
                         mSheet.setTranslationY(Math.max(0f, down[1] + dy));
                         mListener.onSheetMoved(mDetent, sheetTopPx());
@@ -454,6 +486,7 @@ final class EditorCardSheet {
                     return true;
                 }
                 case MotionEvent.ACTION_UP: {
+                    mDragging = false;
                     if (!dragging[0]) {
                         // A tap on the header or its handle flips between the two detents.
                         settle(mDetent == DETENT_FULL ? DETENT_HALF : DETENT_FULL, true);
@@ -469,6 +502,7 @@ final class EditorCardSheet {
                     return true;
                 }
                 case MotionEvent.ACTION_CANCEL:
+                    mDragging = false;
                     settle(mDetent, true);
                     return true;
                 default:

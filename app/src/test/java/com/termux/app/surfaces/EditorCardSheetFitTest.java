@@ -168,11 +168,11 @@ public class EditorCardSheetFitTest {
             sheet.show(card, EditorRows.rows(card, new EditorRows.Offers(true, true)),
                 card.perHalf() ? "Copy to Home" : null, "Reset", false);
             layOut();
-            int half = EditorFramePose.halfSheetPx(mHeight, sheet.tierOneHeightPx(mWidth),
-                EditorFramePose.fullSheetPx(mHeight, Math.round(57 * density),
-                    mHeight, Math.round(16 * density), density));
-            int fullPx = EditorFramePose.fullSheetPx(mHeight, Math.round(57 * density),
-                mHeight, Math.round(16 * density), density);
+            EditorFramePose.Window window = new EditorFramePose.Window(mHeight,
+                Math.round(41 * density), navPx, density, fontScale, Math.round(41 * density),
+                mHeight, 0, Math.round(48 * density), Math.round(8 * density));
+            int fullPx = EditorFramePose.fullSheetPx(window);
+            int half = EditorFramePose.halfSheetPx(window, sheet.minHalfHeightPx(mWidth), fullPx);
             sheet.setGeometry(half, fullPx, navPx);
             layOut();
         }

@@ -526,8 +526,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (!mOpen || token != mPresentToken)
                 return;
             frameSizeChanged();
-            layoutFrame(true);
             mFramed = true;
+            if (!layoutFrame(true))
+                layoutFrameWhenReady(content, token, FRAME_RETRIES);
             positionTargets();
             if (card != null)
                 openCard(card, true);
@@ -908,6 +909,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onSheetMoved(int detent, float topPx) {
             onCardMoved(detent, topPx);
         }
+
+        @Override public void onSheetSettled(int detent, float topPx) {
+            onCardSettled();
+        }
     }
 
     /** Reset in the card's menu: the object back on the half's Look (Home: back as it shipped). */
@@ -970,26 +975,28 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mWindowWidthPx;
     private int mNavInsetPx;
     private int mFrameTopPx;
+    private int mTopInsetPx;
     private int mContainerTopPx;
     private int mContainerLeftPx;
-    private int mRestBottomPx;
-    private float mRestScale = 1f;
+    /** The window every pose is computed from; null until the first measure. */
+    @Nullable private EditorFramePose.Window mPoseWindow;
     private float mTargetScale = -1f;
     private float mTargetTy;
     @Nullable private android.animation.ValueAnimator mFrameAnimator;
 
     /**
-     * Measures the window round the frame (insets, the display's bands), sizes the card's two
-     * detents and puts the frame at its pose: at rest, or with the card that is up.
+     * Measures the window round the frame (insets, the display's bands, the font scale), sizes
+     * the card's two detents and puts the frame at its pose: at rest, or with the card that is
+     * up. False when the window is not laid out yet; the caller tries again.
      */
-    private void layoutFrame(boolean animate) {
+    private boolean layoutFrame(boolean animate) {
         AppearanceEditorFrame frame = mFrame;
         ViewGroup content = mHost.findView(android.R.id.content);
         if (frame == null || content == null || content.getHeight() <= 0)
-            return;
+            return false;
         View root = frame.root();
         if (root.getHeight() <= 0 || !(root.getParent() instanceof View))
-            return;
+            return false;
         int windowHeight = content.getHeight();
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
         Insets bars = insets == null ? Insets.NONE
@@ -1005,31 +1012,59 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             insets == null ? mHost.statusBarInsetTop() : sides.top, contentInWindow[1]);
         int[] parentOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset))
-            return;
+            return false;
         mContainerTopPx = parentOffset[1] + root.getTop();
         mContainerLeftPx = parentOffset[0] + root.getLeft();
         mWindowHeightPx = windowHeight;
         mWindowWidthPx = content.getWidth();
-        mFrameTopPx = EditorFramePose.topPx(topInset, density());
+        mTopInsetPx = topInset;
         pushDisplayInsets(content);
-        mRestBottomPx = EditorFramePose.restBottomPx(windowHeight, mNavInsetPx,
-            dp(EditorBar.BAR_DP), dp(EditorBar.FOOT_GAP_DP), dp(EditorBar.HALF_ROW_DP),
-            density());
-        mRestScale = EditorFramePose.restScale(visibleHeightPx(), mFrameTopPx, mRestBottomPx);
+        refreshPoseWindow();
         mFrameCtxValid = true;
         layoutSheet();
         if (mTargetScale < 0f) {
             // The first pose: the frame grows into place from full size.
-            float ty = EditorFramePose.translationY(mFrameTopPx, mContainerTopPx, mRevealTopPx,
-                mRestScale, mRestBottomPx, null);
-            frame.show(mRestScale, 0f, ty, animate && !ReducedMotion.isEnabled(mHost.context()));
-            setTarget(mRestScale, ty);
+            EditorFramePose.Pose pose = targetPose();
+            boolean grow = animate && !ReducedMotion.isEnabled(mHost.context());
+            frame.show(pose.scale, 0f, pose.translationY, grow);
+            if (grow)
+                markEntering();
+            setTarget(pose.scale, pose.translationY);
             placeBar();
         } else {
             applyPose(false);
         }
         if (mEditorWallpaper != null)
             showEditorWallpaper(mEditorWallpaper);
+        return true;
+    }
+
+    /** The opening pass found no laid-out window: it tries again on the next frames, a few times. */
+    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts) {
+        if (!mOpen || token != mPresentToken || mFrameCtxValid || attempts <= 0)
+            return;
+        content.postOnAnimation(() -> {
+            if (!mOpen || token != mPresentToken || mFrameCtxValid)
+                return;
+            frameSizeChanged();
+            if (layoutFrame(true))
+                positionTargets();
+            else
+                layoutFrameWhenReady(content, token, attempts - 1);
+        });
+    }
+
+    private static final int FRAME_RETRIES = 30;
+
+    /** The window the poses are computed from, read again after a measure. */
+    private void refreshPoseWindow() {
+        mPoseWindow = new EditorFramePose.Window(mWindowHeightPx, mTopInsetPx, mNavInsetPx,
+            density(), getResources().getConfiguration().fontScale, mContainerTopPx,
+            visibleHeightPx(), mRevealTopPx, dp(EditorBar.BAR_DP), dp(EditorBar.FOOT_GAP_DP));
+        mFrameTopPx = mPoseWindow.topPx();
+        EditorBar bar = mBar;
+        if (bar != null)
+            bar.setHalfRowHeight(mPoseWindow.halfRowPx());
     }
 
     /** The launcher's container plus the bands of the display the frame shows round it. */
@@ -1042,55 +1077,61 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The card's detents for the window and the card up now. */
     private void layoutSheet() {
         EditorCardSheet sheet = mSheet;
-        if (sheet == null || !mFrameCtxValid)
+        EditorFramePose.Window window = mPoseWindow;
+        if (sheet == null || !mFrameCtxValid || window == null)
             return;
-        int full = EditorFramePose.fullSheetPx(mWindowHeightPx, mFrameTopPx, visibleHeightPx(),
-            dp(EditorBar.HALF_ROW_DP), density());
-        int tierOne = mCard == null ? 0 : sheet.tierOneHeightPx(mWindowWidthPx);
-        int half = EditorFramePose.halfSheetPx(mWindowHeightPx, tierOne, full);
+        int full = EditorFramePose.fullSheetPx(window);
+        int half = EditorFramePose.halfSheetPx(window, sheet.minHalfHeightPx(mWindowWidthPx), full);
         sheet.setGeometry(half, full, mNavInsetPx);
     }
 
-    /** Where the frame stands now: at rest, or with the card that is up at its detent. */
-    private void applyPose(boolean animate) {
-        AppearanceEditorFrame frame = mFrame;
+    /**
+     * The pose the frame is heading for: with a card up, over the card at the detent it is
+     * settling on; at rest, over the editor bar.
+     */
+    @NonNull
+    private EditorFramePose.Pose targetPose() {
+        EditorFramePose.Window window = mPoseWindow;
         EditorCardSheet sheet = mSheet;
-        if (frame == null || !mFrameCtxValid || !mOpen)
+        if (window == null)
+            return new EditorFramePose.Pose(1f, 0f, 0f);
+        if (mCard != null && sheet != null)
+            return EditorFramePose.pose(window, window.heightPx - sheet.heightAt(sheet.detent()));
+        return EditorFramePose.restPose(window);
+    }
+
+    /**
+     * Where the frame stands now: at rest, or with the card that is up at its detent. The card
+     * moves on the same clock and curve ({@link #POSE_MS}, {@link Motion#settle()}), so the frame
+     * and the card's top edge keep their gap all the way.
+     */
+    private void applyPose(boolean animate) {
+        if (mFrame == null || !mFrameCtxValid || !mOpen)
             return;
-        float scale;
-        float ty;
-        if (mCard != null && sheet != null) {
-            int detent = sheet.detent();
-            scale = EditorFramePose.cardScale(detent, mRestScale);
-            int halfRow = dp(EditorBar.HALF_ROW_DP);
-            int gap = dp(EditorFramePose.GAP_DP);
-            int visibleBottom = mWindowHeightPx - sheet.heightAt(detent) - gap - halfRow - gap;
-            ty = EditorFramePose.translationY(mFrameTopPx, mContainerTopPx, mRevealTopPx, scale,
-                visibleBottom, selectedSpan());
-        } else {
-            scale = mRestScale;
-            ty = EditorFramePose.translationY(mFrameTopPx, mContainerTopPx, mRevealTopPx, scale,
-                mRestBottomPx, null);
-        }
-        moveFrame(scale, ty, animate);
+        EditorFramePose.Pose pose = targetPose();
+        moveFrame(pose.scale, pose.translationY, animate);
         placeBar();
     }
 
-    /** The selected surface's {top, bottom} in the container's own px, or null. */
-    @Nullable
-    private int[] selectedSpan() {
-        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
-        View root = mHost.findView(R.id.terminal_root_container);
-        if (overlay == null || root == null || mCard == null || mCard == EditorCard.APPEARANCE
-            || mCard == EditorCard.HOME)
-            return null;
-        int[] rect = targetRect(mCard, overlay);
-        if (rect == null)
-            return null;
-        int[] overlayOffset = new int[2];
-        if (!AppearanceEditorFrame.offsetIn(overlay, root, overlayOffset))
-            return null;
-        return new int[] {rect[1] + overlayOffset[1], rect[3] + overlayOffset[1]};
+    /** Whether the frame stands where its last pose put it (or is on its way there). */
+    private boolean poseHolds() {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null || mTargetScale < 0f)
+            return true;
+        if (mFrameAnimator != null || mEntering || mFollowingSheet)
+            return true;
+        View root = frame.root();
+        return root.getScaleX() == mTargetScale && root.getTranslationY() == mTargetTy;
+    }
+
+    /** The frame's grow-in animation is running; a refit leaves it to land. */
+    private boolean mEntering;
+
+    private void markEntering() {
+        mEntering = true;
+        View root = mFrame == null ? null : mFrame.root();
+        if (root != null)
+            root.postDelayed(() -> mEntering = false, AppearanceEditorFrame.ENTER_MS + 20L);
     }
 
     private void setTarget(float scale, float ty) {
@@ -1106,13 +1147,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
             return;
-        if (scale == mTargetScale && ty == mTargetTy)
-            return;
-        cancelFrameAnimator();
         View root = frame.root();
+        boolean onItsWay = mFrameAnimator != null || mEntering;
+        if (scale == mTargetScale && ty == mTargetTy && !mFollowingSheet
+            && (onItsWay || (root.getScaleX() == scale && root.getTranslationY() == ty)))
+            return;
+        mFollowingSheet = false;
+        cancelFrameAnimator();
+        mEntering = false;
         if (!animate || ReducedMotion.isEnabled(mHost.context()) || !mFramed) {
             root.animate().cancel();
-            frame.show(scale, 0f, ty, !mFramed && animate);
+            frame.show(scale, 0f, ty, false);
             setTarget(scale, ty);
             return;
         }
@@ -1173,7 +1218,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * The bar over the navigation inset, and the half line: over the bar at rest, over the card
-     * while one is up. By translation, every frame of the card's motion included.
+     * while one is up, the frame above it either way (the poses leave it the room). By
+     * translation, every frame of the card's motion included.
      */
     private void placeBar() {
         EditorBar bar = mBar;
@@ -1190,13 +1236,45 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The card stands at a new top edge, or settled on a detent. */
     private int mLastDetent = -1;
+    /** The frame follows a card the finger is dragging, pose by pose, with no animator. */
+    private boolean mFollowingSheet;
 
     private void onCardMoved(int detent, float topPx) {
         placeBar();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.isDragging()) {
+            followSheet(topPx);
+            return;
+        }
+        if (mFollowingSheet) {
+            // The finger let go: the card settles, and the frame goes with it from where it is.
+            mLastDetent = -1;
+        }
         if (detent != mLastDetent) {
             mLastDetent = detent;
             applyPose(true);
         }
+    }
+
+    /** The card came to rest: the frame's pose, the canvas and the outlines are made final. */
+    private void onCardSettled() {
+        mLastDetent = -1;
+        if (mFrameAnimator == null)
+            applyPose(false);
+    }
+
+    /** Under a dragged card the frame takes the pose for the card's top edge at once. */
+    private void followSheet(float cardTopPx) {
+        AppearanceEditorFrame frame = mFrame;
+        EditorFramePose.Window window = mPoseWindow;
+        if (frame == null || window == null || !mFrameCtxValid || !mOpen)
+            return;
+        cancelFrameAnimator();
+        mEntering = false;
+        frame.root().animate().cancel();
+        mFollowingSheet = true;
+        EditorFramePose.Pose pose = EditorFramePose.pose(window, cardTopPx);
+        frame.setPose(pose.scale, 0f, pose.translationY);
     }
 
     // ---- the display round the frame -----------------------------------------------------------
@@ -1275,7 +1353,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (measureTopReveal(frame.root()) == mRevealTopPx)
             return;
         pushDisplayInsets(content);
-        mRestScale = EditorFramePose.restScale(visibleHeightPx(), mFrameTopPx, mRestBottomPx);
+        refreshPoseWindow();
         layoutSheet();
         applyPose(true);
     }
@@ -3224,10 +3302,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (signature == mLayoutSignature)
                 return;
             mLayoutSignature = signature;
-            if (mFramed && frameSizeChanged())
+            if (mFramed && (frameSizeChanged() || !mFrameCtxValid))
                 layoutFrame(false);
             else if (mFramed)
                 refitTopReveal();
+            if (mFramed && mFrameCtxValid && !poseHolds())
+                applyPose(false);
             positionTargets();
         };
         host.getViewTreeObserver().addOnGlobalLayoutListener(mLayoutListener);
@@ -3864,6 +3944,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         cancelFrameAnimator();
         mFrameCtxValid = false;
         mTargetScale = -1f;
+        mFollowingSheet = false;
+        mEntering = false;
         mCanvasForDrag = false;
         showCanvas(false, false);
         setOverlayVisible(false);
