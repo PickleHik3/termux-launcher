@@ -153,6 +153,23 @@ public final class LauncherWidgetRepository {
     }
 
     /**
+     * Puts an app icon on Home at {@code cell} of {@code page}: the cell a drag chose, so no other
+     * page or cell is tried. One commit. Returns the icon as stored, or null when the page is not
+     * there, the cell is taken or off the grid, or the write failed, with nothing changed.
+     */
+    @Nullable
+    public synchronized LauncherWidgetRecord addAppAt(@NonNull com.termux.app.launcher.model.AppRef app,
+                                                      int page, @NonNull WidgetCellRect cell,
+                                                      @Nullable Bundle options) {
+        if (page < 0 || page >= pageCount) return null;
+        LauncherWidgetRecord record = LauncherWidgetRecord.app(allocateBuiltinId(), app, cell, page,
+            options);
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.put(record.appWidgetId, record);
+        return commitValidated(next, pending, grid, pageCount, revision + 1) ? record : null;
+    }
+
+    /**
      * Drops the app icon {@code draggedId} on {@code targetId} ({@link HomeFolderPolicy}): onto
      * another app icon, the two become one folder in the target's cell, under the target's key (so
      * a turned screen's shelved layout still places it), named after the dropped app ({@code fallbackName} when it has no label); onto a folder, the app

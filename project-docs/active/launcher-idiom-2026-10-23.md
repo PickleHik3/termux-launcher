@@ -47,11 +47,21 @@ While an icon or folder is dragged on Home, Remove and Uninstall targets stand a
 (56 dp targets, 28 dp apart, 80 dp frame radius), sliding in with the drag and out with it.
 Remove for Home icons and folders, Uninstall for apps. The menu's rows stay as the non-drag route.
 
+Landed 2026-10-24 (beside #154, not the targets themselves): an app picked up in the drawer is
+carried to Home the Launcher3 way. The drawer closes under the finger, the wall turns to Home and
+the icon drops into the free cell nearest the finger, page turns at the edges included
+(`HomeAppDrop`, `HomeAppDropPolicy`, the pane's carry path). The Remove and Uninstall targets
+are still to build.
+
 ### 5. Live dock reorder (#155)
 
 A drag over the dock parts the other icons after a 650 ms hover (150 ms slide) and drops into the
 slot; resting on an icon still previews and makes a folder. The pinned apps editor stays for bulk
 changes. Dock slots stay size-driven (the four size presets); no count setting.
+
+Landed 2026-10-24 (#155 partial): the dock still takes drops only from its own pins, so an app
+dragged out of the drawer and let go over the dock is not put down. Dock pinning by drag from the
+drawer and the live reorder are still open.
 
 ### 6. Dock items (#156)
 

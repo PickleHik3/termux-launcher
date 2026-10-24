@@ -26,6 +26,28 @@ under twenty items; past that, the oldest are re-judged first.
   dock icons, status bar and widgets show no scanlines; on the Workspace the status bar, dock,
   extra keys and keyboard do. The chrome switches when the wall lands, both ways, and stays on
   the half it landed on · emulator.
+- 2026-10-24 · commit "feat(home): carry an app from the drawer onto a Home page" · open the
+  drawer from Home and from the Workspace, long-press an app and slide sideways: the menu goes, the
+  drawer closes under the finger, Home comes in and the icon rides the finger at Home's icon size
+  with a white cell outline under it; let go over a free cell and the icon settles there; over a
+  taken cell it goes to the nearest free one; rest at a side edge for ~350 ms and the page turns
+  (past the last page a new one is made and kept only if the icon lands there); a full page shows
+  a red outline and "No room on this page."; let go over the dock or off the grid and nothing is
+  added. With Home's layout locked the pickup stays the drawer's own drag · emulator.
+- 2026-10-24 · commit "feat(drawer): the search keyboard slides away as the list scrolls" · open
+  the drawer with the built-in keyboard revealed under the search (a pill tap), then scroll the
+  vertical list down: nothing moves for the first ~24 dp, then the keyboard slides down with the
+  finger until it is gone and the list grows to the full height without jumping; scrolling back up
+  does not bring it back, a pill tap does. A scroll stopped with the keyboard less than halfway down
+  springs it back up. With the Android keyboard (and with "Use system keyboard") the phone's
+  keyboard goes at the threshold and the pill brings it back · emulator.
+- 2026-10-24 · commit "fix(drawer): the search raises the built-in keyboard on every place" · with
+  Settings › Keyboard › On-screen keyboard = Built-in and the drawer's "Open keyboard
+  automatically" on, open the drawer on Home (keyboard down) and on the Workspace (keyboard up and
+  down): the built-in keyboard rises through the plane under the search and the phone's keyboard
+  never shows; typing filters; closing the drawer puts down a keyboard the drawer raised and keeps
+  one that was up before. With Android selected, and with "Use system keyboard" on, the phone's
+  keyboard shows instead · emulator.
 - 2026-10-24 · #159 editor (commit "feat(surfaces): the editor rests as the frame and the
   editor bar") · open Appearance from a corner tab on a window and on Home: the frame grows to about
   ×0.8 under a 16 dp top line, every surface wears a faint 1 dp outline, the half line reads
@@ -2429,6 +2451,9 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   emulator never showed the defect, so only pong can confirm the fix · pong.
 - 2026-10-24 · bezel commit · how the CRT bezel looks over a real wallpaper with fancier glass on:
   does it read as a monitor frame, not a second pane? · pong.
+- 2026-10-24 · commit "feat(home): carry an app from the drawer onto a Home page" · the drawer to
+  Home hand-over feels like one gesture: no flash or jump of the icon as the drawer closes and the
+  wall slides, and the drop settle reads like Home's own · pong.
 
 - 2026-10-24 · Appearance + Settings rework (branch feat/appearance-settings-rework, on pong as
   1.1.0-pre.6+dev.f076a2dbe) · taste: the one-rule editor (tap a surface → card; palette glyph →

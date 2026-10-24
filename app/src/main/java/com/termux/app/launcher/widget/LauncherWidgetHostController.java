@@ -516,6 +516,18 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         return placed;
     }
 
+    /** {@link LauncherWidgetRepository#addAppAt}, with the label kept as {@link #addApp} keeps it. */
+    @Nullable
+    public LauncherWidgetRecord addAppAt(@NonNull com.termux.app.launcher.model.AppRef app,
+                                         @NonNull String label, int page,
+                                         @NonNull WidgetCellRect cell) {
+        Bundle options = new Bundle();
+        options.putString(LauncherWidgetRecord.APP_LABEL, label);
+        LauncherWidgetRecord placed = repository.addAppAt(app, page, cell, options);
+        if (placed != null) notifyChanged(AddResult.IGNORED);
+        return placed;
+    }
+
     /**
      * Takes an app out of a folder onto Home as an icon, the page in front first
      * ({@link LauncherWidgetRepository#removeFromFolder}). The icon as placed, or null when

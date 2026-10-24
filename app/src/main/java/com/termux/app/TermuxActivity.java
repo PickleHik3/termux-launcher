@@ -18182,6 +18182,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             requestAppDrawerSearchKeyboard();
         }
 
+        @Override public void dismissSearchSystemKeyboard() {
+            // Scrolled away, as launchers do: the field keeps its focus and its query, so a tap on
+            // the search brings the keyboard straight back.
+            if (getWindow() == null) return;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .hide(Type.ime());
+        }
+
         @Override public void beginTextFieldSearch(@NonNull EditText field) {
             // The toolbar text input's seam, less the relayout: the built-in keyboard yields its
             // window flags but stays put under the plane, then the field takes focus and the IME.
@@ -18213,7 +18221,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
                 R.string.settings_app_drawer_view_type_title));
         }
+
+        @Nullable @Override
+        public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+            return mHomeAppDropTarget;
+        }
     }
+
+    /**
+     * Home's end of an app dragged out of the drawer: the drawer closes under the finger, the wall
+     * turns to Home, and Home's pane takes the drag over and puts the icon on its grid.
+     */
+    private final com.termux.app.launcher.widget.HomeAppDrop.Target mHomeAppDropTarget =
+        new com.termux.app.launcher.widget.HomeAppDrop.Target() {
+            @Override public boolean canTakeAppDrop() {
+                return mWidgetPaneController != null && mPaneWallController != null
+                    && mWidgetPaneController.canTakeAppDrop();
+            }
+
+            @Override public void onAppDropStarted(
+                    @NonNull com.termux.app.launcher.widget.HomeAppDrop drop, float rawX, float rawY) {
+                if (mWidgetPaneController == null || mPaneWallController == null) return;
+                if (mAppDrawerController != null) mAppDrawerController.close(false);
+                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+                mWidgetPaneController.onAppDropStarted(drop, rawX, rawY);
+            }
+        };
 
     /**
      * True while the app drawer plane owns the accessory stack's transforms — open, or mid open/
@@ -19105,13 +19138,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #handleAppDrawerCodePoint}.
      */
     private void requestAppDrawerSearchKeyboard() {
-        // Over a running display the focus is the display's, so the system keyboard below is
-        // refused as "not served" and the search would have no keyboard at all: raise the
-        // launcher's, which the drawer types through, in whatever frame the place keeps it.
+        // With the built-in keyboard selected the search raises it, on every place: the drawer
+        // types through it and reveals it through the plane. Only the Android keyboard gets the
+        // system ask below (over a running display that ask would not even be served).
         com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch route = mInAppKeyboard == null
             ? com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK
-            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(
-                isDisplayWindowShowing(), isEmbeddedDisplayRunning(), mInAppKeyboard.isEnabled(),
+            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(mInAppKeyboard.isEnabled(),
                 mInAppKeyboard.isTurnedOff(), mInAppKeyboard.yieldsToHardwareKeyboard());
         // A keyboard that stands aside for a physical one raises nothing; the keys type into the
         // search through the layer's own key route.
@@ -19140,6 +19172,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
             }
+            // Raised after the pull, the keyboard was not among the bands the drawer measured;
+            // it measures them again so the reveal can bring it up through the plane.
+            if (mAppDrawerController != null) mAppDrawerController.onBuiltInKeyboardRaised();
             return;
         }
         onSystemImeRequested();
@@ -26821,6 +26856,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             (com.termux.app.launcher.widget.WidgetPaneView) view, mWidgetHostController,
             new com.termux.app.launcher.widget.WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+                // An app dragged in from the drawer and let go over the dock is not put on the
+                // page: the dock takes no drops from the drawer, so the drag simply ends.
+                private final int[] dockAt = new int[2];
+                @Override public boolean isOverDock(float rawX, float rawY) {
+                    View dock = mSuggestionBarView;
+                    if (dock == null || !dock.isShown()) return false;
+                    int[] at = dockAt;
+                    dock.getLocationOnScreen(at);
+                    return rawX >= at[0] && rawX < at[0] + dock.getWidth()
+                        && rawY >= at[1] && rawY < at[1] + dock.getHeight();
+                }
                 // The widget grid lives on the wall's Widgets page, and nowhere else.
                 @Override public boolean isWidgetSurfaceShowing() {
                     return mPaneWallController != null && mPaneWallController.currentPage()
