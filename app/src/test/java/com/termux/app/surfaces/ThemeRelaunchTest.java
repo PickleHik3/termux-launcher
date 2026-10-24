@@ -117,7 +117,7 @@ public class ThemeRelaunchTest {
     @Test
     public void aHandoverTakenButNotYetOpenedIsPassedOnNotDropped() {
         AppearanceSurfaceController.Relaunch carried = new AppearanceSurfaceController.Relaunch(
-            new AppearanceReturnState.Builder(AppearanceSurfaceController.PageId.EDITOR)
+            new AppearanceReturnState.Builder(false)
                 .card(EditorCard.APPEARANCE).build(0L), null);
         Bundle first = new Bundle();
         new AppearanceRelaunchHandover().save(carried, true, first);
@@ -169,7 +169,7 @@ public class ThemeRelaunchTest {
 
     private Side openOnAppearance() {
         Side side = newSide();
-        side.surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.APPEARANCE, null);
+        side.surface.open(EditorCard.APPEARANCE, null);
         settle();
         assertEquals(EditorCard.APPEARANCE, side.harness.editor.shownCard());
         return side;

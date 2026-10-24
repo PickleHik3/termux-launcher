@@ -7,7 +7,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.activities.SettingsBackStackState;
-import com.termux.app.surfaces.AppearanceSurfaceController.PageId;
 
 import org.junit.Test;
 
@@ -18,11 +17,11 @@ public class AppearanceReturnStateTest {
 
     @Test
     public void theCardAndThePickersCardComeBack() {
-        AppearanceReturnState state = new AppearanceReturnState.Builder(PageId.EDITOR)
+        AppearanceReturnState state = new AppearanceReturnState.Builder(false)
             .card(EditorCard.DOCK).wallpaperSlot("HOME").build(NOW);
         AppearanceReturnState back = AppearanceReturnState.parse(state.serialize());
         assertNotNull(back);
-        assertEquals(PageId.EDITOR, back.page);
+        assertFalse(back.wallpaper);
         assertEquals(EditorCard.DOCK, back.editorCard());
         assertEquals("HOME", back.wallpaperSlot);
         assertEquals(NOW, back.leftAtEpochMs);
@@ -30,11 +29,11 @@ public class AppearanceReturnStateTest {
 
     @Test
     public void noCardReadsAsNone() {
-        AppearanceReturnState state = new AppearanceReturnState.Builder(PageId.WALLPAPER)
+        AppearanceReturnState state = new AppearanceReturnState.Builder(true)
             .card(null).build(NOW);
         AppearanceReturnState back = AppearanceReturnState.parse(state.serialize());
         assertNotNull(back);
-        assertEquals(PageId.WALLPAPER, back.page);
+        assertTrue(back.wallpaper);
         assertNull(back.editorCard());
     }
 
@@ -44,7 +43,7 @@ public class AppearanceReturnStateTest {
             AppearanceReturnState back = AppearanceReturnState.parse(
                 "{\"page\":\"" + old + "\",\"target\":\"DOCK\",\"left_at_epoch_ms\":" + NOW + "}");
             assertNotNull(old, back);
-            assertEquals(old, PageId.EDITOR, back.page);
+            assertFalse(old, back.wallpaper);
             assertNull("an old selection is not a card", back.editorCard());
         }
     }
@@ -59,7 +58,7 @@ public class AppearanceReturnStateTest {
 
     @Test
     public void itIsKeptForSettingsWindowAndNoLonger() {
-        AppearanceReturnState state = new AppearanceReturnState.Builder(PageId.EDITOR)
+        AppearanceReturnState state = new AppearanceReturnState.Builder(false)
             .card(EditorCard.HOME).build(NOW);
         assertTrue(state.isFresh(NOW + 1000));
         assertFalse(state.isFresh(NOW + SettingsBackStackState.RETAIN_WINDOW_MS));

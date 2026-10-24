@@ -34,8 +34,8 @@ import java.util.function.Consumer;
  * editor when the Appearance card's Wallpaper row asks for it.
  *
  * <p><b>One page.</b> There are no tabs and no mode: every door opens the editor, on the object
- * it names ({@link #open(PageId, EditorCard, PaneWallPage)}), or with no card up. The picker is
- * not a page beside the editor but a sheet over it: the editor's session, its frame and its Undo
+ * it names ({@link #open(EditorCard, PaneWallPage)}), or with no card up. The picker is not a
+ * door of its own: the Appearance card's Wallpaper › Change raises it as a sheet over the editor: the editor's session, its frame and its Undo
  * stay where they are underneath, and Back puts the picker down. Done on the picker is the
  * editor's Done.</p>
  *
@@ -50,9 +50,6 @@ import java.util.function.Consumer;
  */
 public final class AppearanceSurfaceController {
     private static final String LOG_TAG = "AppearanceSurface";
-
-    /** The editor, or the wallpaper picker over it. */
-    public enum PageId { EDITOR, WALLPAPER }
 
     /** A page of content the surface or the editor hosts: the picker, the icon packs. */
     public interface Page {
@@ -308,12 +305,9 @@ public final class AppearanceSurfaceController {
         return mOpen;
     }
 
-    /** The page on screen now; null while closed. */
-    @Nullable
-    public PageId shownPage() {
-        if (!mOpen)
-            return null;
-        return mWallpaperShown ? PageId.WALLPAPER : PageId.EDITOR;
+    /** Whether the wallpaper picker stands over the editor now. */
+    public boolean isWallpaperShown() {
+        return mOpen && mWallpaperShown;
     }
 
     @Nullable
@@ -324,23 +318,19 @@ public final class AppearanceSurfaceController {
 
     // -------------------------------------------------------------------------------------- open
 
-    /** {@link #open(PageId, EditorCard, PaneWallPage)} with no card and no place. */
-    public void open(@NonNull PageId page) {
-        open(page, null, null);
+    /** {@link #open(EditorCard, PaneWallPage)} with no card and no place. */
+    public void open() {
+        open(null, null);
     }
 
     /**
-     * Opens the editor with {@code card} up (a door's object), on {@code place}'s half; for
-     * {@link PageId#WALLPAPER} the picker rises over it once it stands. A door that names no card
-     * reopens the one the person left up within Settings' window. Open already, it raises that
-     * card (or the picker).
+     * Opens the editor with {@code card} up (a door's object), on {@code place}'s half. A door
+     * that names no card reopens the one the person left up within Settings' window. Open
+     * already, it puts the picker down and raises that card.
      */
-    public void open(@NonNull PageId page, @Nullable EditorCard card,
-                     @Nullable PaneWallPage place) {
+    public void open(@Nullable EditorCard card, @Nullable PaneWallPage place) {
         if (mOpen) {
-            if (page == PageId.WALLPAPER) {
-                showWallpaper();
-            } else if (mEditor.isPresented()) {
+            if (mEditor.isPresented()) {
                 if (mWallpaperShown) hideWallpaper();
                 if (card != null || place != null) mEditor.present(card, place, null);
             }
@@ -350,14 +340,31 @@ public final class AppearanceSurfaceController {
         if (content == null)
             return;
         EditorCard opening = card;
-        if (opening == null && page == PageId.EDITOR && place == null) {
+        if (opening == null && place == null) {
             AppearanceReturnState back = AppearanceReturnState.freshFrom(
                 mHost.readReturnState(), mHost.now());
             if (back != null)
                 opening = back.editorCard();
         }
         beginOpen(content);
-        presentEditor(opening, place, page == PageId.WALLPAPER, 1);
+        presentEditor(opening, place, false, 1);
+    }
+
+    /**
+     * Brings the picker back over the Appearance card, for the picker's own Photo… on its way
+     * back from the photo pick when the session it interrupted could not be carried. No door
+     * opens the picker: it is the Wallpaper row's Change.
+     */
+    public void resumeWallpaper() {
+        if (mOpen) {
+            showWallpaper();
+            return;
+        }
+        ViewGroup content = mHost.content();
+        if (content == null)
+            return;
+        beginOpen(content);
+        presentEditor(EditorCard.APPEARANCE, null, true, 1);
     }
 
     /** Marks the surface open, begins the session, and adds the host view and the scrim. */
@@ -428,8 +435,7 @@ public final class AppearanceSurfaceController {
     public Relaunch carry() {
         if (!mOpen)
             return null;
-        AppearanceReturnState.Builder out = new AppearanceReturnState.Builder(
-            mWallpaperShown ? PageId.WALLPAPER : PageId.EDITOR);
+        AppearanceReturnState.Builder out = new AppearanceReturnState.Builder(mWallpaperShown);
         out.card(mEditor.shownCard());
         OverviewPage overview = mOverview;
         if (overview != null)
@@ -450,7 +456,7 @@ public final class AppearanceSurfaceController {
         beginOpen(content);
         mEditor.adoptSessionNext(carried.editor);
         presentEditor(carried.where.editorCard(), null,
-            carried.where.page == PageId.WALLPAPER, REOPEN_ATTEMPTS);
+            carried.where.wallpaper, REOPEN_ATTEMPTS);
         return true;
     }
 
@@ -618,8 +624,7 @@ public final class AppearanceSurfaceController {
     private void rememberWhere() {
         if (!mOpen)
             return;
-        AppearanceReturnState.Builder where = new AppearanceReturnState.Builder(
-            mWallpaperShown ? PageId.WALLPAPER : PageId.EDITOR);
+        AppearanceReturnState.Builder where = new AppearanceReturnState.Builder(mWallpaperShown);
         where.card(mEditor.shownCard());
         OverviewPage overview = mOverview;
         if (overview != null)
