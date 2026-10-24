@@ -23,6 +23,17 @@ under twenty items; past that, the oldest are re-judged first.
   Tape, LED, LCD, Flip) at 2x1, 2x2 and 4x2: the period stands over the seconds like the expanded
   status bar, nothing clips at the card's right edge; seconds off keeps the period on the digits'
   row; a 24-hour clock shows the seconds alone and nothing shifts.
+- 2026-10-24 · #159 model (commit "feat(chrome): the dock, status bar and keyboard wear the
+  look of the half they stand on") · with Home's dock opacity set apart from the Workspace's
+  (`run-as` + an `app_bar_opacity_home` / `surface_base_opacity_home` key, edited before a
+  force-stop), each half at rest shows its own dock, keyboard and status bar glass; an untouched
+  install looks exactly as before · emulator.
+- 2026-10-24 · same commit · a slide Home ↔ window between halves whose dock looks differ: the
+  stack dips and comes back up in the arriving half's glass, never changing while it shows; the
+  status bar takes Home's glass only as the slide lands on Home, Docked and Floating, keyboard up
+  and down · emulator.
+- 2026-10-24 · same commit · a Home glass widget wears Home's Look (Base) and not the
+  Workspace's once the two differ · emulator.
 - 2026-10-23 · #142 phase 2 (commit "feat(place): the crossing morphs the dock's row and holds
   every reader") · the audit's slide clips re-shot, frames recorded: Home → window and window →
   Home, Docked and Floating, each of Tray, Beads and Strip → the pinned icons change size and
@@ -2292,6 +2303,9 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   stands just above the dock. Nothing at rest redraws · emulator.
 
 ## Developer
+- 2026-10-24 · #159 model · the dip a differing look now causes on every crossing (the same dip
+  a differing icon size gets) is acceptable to the eye, or the status bar's change at the landing
+  on Home reads as a snap · pong.
 - 2026-10-24 · finding (emulator, #152) · a 35° drag from the bottom gap, 500 px across, did not
   turn the page under injection though the ramp asks ~2.6 slops: a thumb at about 35° on pong turns
   the page, and one past 60° never does · pong.
