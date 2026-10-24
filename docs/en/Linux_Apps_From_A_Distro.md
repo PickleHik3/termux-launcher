@@ -109,7 +109,13 @@ proot-distro login debian --shared-x11 -e DISPLAY=:0 -- xeyes
 - **Nothing else.** You do not need `-ac` on the server, and you do not need `xauth` in the
   distro. The display accepts the connection because both sides are the same Android app.
 
-Sound needs no setup either: `proot-distro` already sets `PULSE_SERVER=127.0.0.1` for you.
+Sound needs no setup either. The launcher's sound server listens on `127.0.0.1:4713`, and the
+launcher writes `/etc/pulse/client.conf.d/termux-launcher.conf` into every distro, pointing at it
+with the cookie it asks for; the setup guide also points ALSA at it through `/etc/asound.conf`.
+See [Sound for Linux apps](X11_Display.md#sound-for-linux-apps). For a player started this way
+to show in Android's media controls, hand it the launcher's bus as well:
+`-e DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/.X11-unix/termux-launcher-bus` (it needs
+`--shared-x11` too). From the drawer the launcher does both.
 
 Apps built on Electron (Typora, VS Code, Obsidian) need `--no-sandbox` on the end of their command
 when you start them this way. From the drawer the launcher takes care of it.
