@@ -207,9 +207,9 @@ public abstract class WallpaperPickerPageTestBase {
     public void thePageHasNoBarOfItsOwnAndEachCardCarriesItsOwnLabel() {
         WallpaperPickerPage page = open();
         assertEquals("the page opens on Home", WallpaperSlots.Slot.HOME, page.centredSlot());
-        // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame.
-        assertNull(page.root().findViewById(R.id.appearance_page_back));
-        assertNull(page.root().findViewById(R.id.appearance_page_done));
+        // The bar (back and Done) is the frame the editor stands the picker in, not the page's.
+        assertNull(page.root().findViewById(R.id.appearance_wallpaper_back));
+        assertNull(page.root().findViewById(R.id.appearance_wallpaper_done));
         assertEquals("Appearance", mThemed.getString(R.string.wallpaper_picker_title));
         assertEquals("Appearance", page.title().toString());
         page.centre(WallpaperSlots.Slot.LOCK);

@@ -1,0 +1,170 @@
+package com.termux.app.surfaces;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.os.Build;
+
+import com.termux.app.surfaces.EditorRows.Row;
+import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowLooper;
+import org.robolectric.util.ReflectionHelpers;
+
+/**
+ * The editor's cards through the controller: a card writes the half the frame shows, Reset puts
+ * the surface back on that half's Look, Copy makes the other half look the same, one dirty state
+ * covers both halves, and Undo puts both back.
+ */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P)
+public class SurfaceEditorCardsTest {
+
+    private TermuxAppSharedPreferences preferences;
+
+    @Before
+    public void setUp() {
+        Context context = RuntimeEnvironment.getApplication();
+        SharedPreferences store = context.getSharedPreferences("surface-editor-cards",
+            Context.MODE_PRIVATE);
+        store.edit().clear().commit();
+        preferences = new TermuxAppSharedPreferences(context, store, null);
+        SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
+    }
+
+    @Test
+    public void aDockSliderOnHomeWritesHomeAlone() {
+        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.WIDGETS);
+        assertEquals(WallHalf.HOME, editor.half());
+        int workspace = opacity(WallHalf.WORKSPACE);
+
+        model(editor).onValue(Row.OPACITY, 23, false);
+        model(editor).onReleased(Row.OPACITY);
+
+        assertEquals(23, opacity(WallHalf.HOME));
+        assertEquals("the Workspace keeps its dock", workspace, opacity(WallHalf.WORKSPACE));
+        assertTrue("the dot: Home's own value", model(editor).ownValue(Row.OPACITY));
+    }
+
+    @Test
+    public void theTerminalsSliderWritesTheOneTerminal() {
+        SurfaceEditorController editor = open(EditorCard.TERMINAL, null);
+        model(editor).onValue(Row.TINT, 61, false);
+        model(editor).onReleased(Row.TINT);
+        assertEquals(61, preferences.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT,
+            WallHalf.WORKSPACE));
+    }
+
+    @Test
+    public void aSurfacesOwnValueLeavesTheHalfAtCustom() {
+        SurfaceEditorController editor = open(EditorCard.DOCK, null);
+        assertEquals("Mist at open", 1, model(editor).value(Row.LOOK));
+        model(editor).onValue(Row.OPACITY, 7, false);
+        model(editor).onReleased(Row.OPACITY);
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+    }
+
+    @Test
+    public void resetPutsTheSurfaceBackOnTheHalfsLook() {
+        SurfaceEditorController editor = open(EditorCard.STATUS, PaneWallPage.WIDGETS);
+        model(editor).onValue(Row.TINT, 80, false);
+        model(editor).onReleased(Row.TINT);
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            WallHalf.HOME));
+
+        ReflectionHelpers.callInstanceMethod(editor, "resetCard");
+
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            WallHalf.HOME));
+        assertFalse(model(editor).ownValue(Row.TINT));
+    }
+
+    @Test
+    public void copyMakesTheOtherHalfLookTheSame() {
+        SurfaceEditorController editor = open(EditorCard.KEYBOARD, null);
+        model(editor).onValue(Row.BLUR, 31, false);
+        model(editor).onReleased(Row.BLUR);
+        assertNotEquals(31, preferences.getSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
+            WallHalf.HOME));
+
+        ReflectionHelpers.callInstanceMethod(editor, "copyCard");
+
+        assertEquals(31, preferences.getSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
+            WallHalf.HOME));
+    }
+
+    @Test
+    public void oneDirtyStateCoversBothHalvesAndUndoPutsBothBack() {
+        String atOpen = AppearanceSnapshot.signatureOf(preferences);
+        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.WIDGETS);
+        assertFalse(isDirty(editor));
+
+        model(editor).onValue(Row.OPACITY, 15, false);
+        model(editor).onReleased(Row.OPACITY);
+        assertTrue("a Home write is unsaved", isDirty(editor));
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
+            WallHalf.WORKSPACE, 9);
+
+        editor.undo();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals(atOpen, AppearanceSnapshot.signatureOf(preferences));
+        assertFalse(isDirty(editor));
+    }
+
+    @Test
+    public void aVisitThatChangedNoLookKeepsTheSavedCustom() {
+        preferences.setSurfaceCustomPreset("{\"surface_material\":\"frost\"}");
+        String saved = preferences.getSurfaceCustomPreset();
+        SurfaceEditorController editor = open(EditorCard.KEYBOARD, null);
+
+        editor.done();
+
+        assertEquals(saved, preferences.getSurfaceCustomPreset());
+    }
+
+    @Test
+    public void theTerminalsCardIsNotOfferedOnHome() {
+        SurfaceEditorController editor = open(EditorCard.TERMINAL, PaneWallPage.WIDGETS);
+        assertNull("the terminal stands on the Workspace alone", editor.shownCard());
+        editor.present(EditorCard.HOME, null, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals(EditorCard.HOME, editor.shownCard());
+    }
+
+    // ------------------------------------------------------------------------------- the drive
+
+    private SurfaceEditorController open(EditorCard card, PaneWallPage place) {
+        EditorTestHarness harness = new EditorTestHarness(preferences, null);
+        harness.editor.present(card, place, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        return harness.editor;
+    }
+
+    private static EditorCardSheet.Model model(SurfaceEditorController editor) {
+        return ReflectionHelpers.getField(editor, "mModel");
+    }
+
+    private static boolean isDirty(SurfaceEditorController editor) {
+        return ReflectionHelpers.callInstanceMethod(editor, "isDirty");
+    }
+
+    private int opacity(WallHalf half) {
+        return preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, half);
+    }
+}

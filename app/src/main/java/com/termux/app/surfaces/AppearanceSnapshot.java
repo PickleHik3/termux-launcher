@@ -73,6 +73,11 @@ final class AppearanceSnapshot {
     private final String mRetroEffect;
     private final String mClockStyle;
     private final String mClockAlignment;
+    /**
+     * Every half's own key as stored (ADR 0013): a key absent here is absent in the store, so a
+     * half that followed the shared value at open follows it again after a restore.
+     */
+    private final java.util.TreeMap<String, Object> mHalfKeys;
 
     private AppearanceSnapshot(@NonNull TermuxAppSharedPreferences prefs) {
         mLinks = linkSignature(prefs);
@@ -127,6 +132,7 @@ final class AppearanceSnapshot {
         mRetroEffect = prefs.getTerminalRetroEffect();
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
+        mHalfKeys = halfKeys(prefs);
     }
 
     private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {
@@ -184,6 +190,8 @@ final class AppearanceSnapshot {
         prefs.setTerminalRetroEffect(mRetroEffect);
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
+        // Last: every shared write above dropped the halves' own keys.
+        restoreHalfKeys(prefs, mHalfKeys);
     }
 
     /** The captured state as one string; equal strings mean nothing to save or put back. */
@@ -211,6 +219,7 @@ final class AppearanceSnapshot {
             .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
+            .append('|').append(mHalfKeys)
             .toString();
     }
 
@@ -221,6 +230,76 @@ final class AppearanceSnapshot {
     }
 
     // ------------------------------------------------------------------------------ helpers
+
+    /**
+     * The shared keys a half may hold its own copy of: the per-half Base numbers, every per-half
+     * surface cell and its link, the material point, and the keyboard's backdrop fade.
+     */
+    @NonNull
+    static List<String> halfAbleKeys() {
+        List<String> keys = new java.util.ArrayList<>();
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (TermuxAppSharedPreferences.isPerHalfProperty(property))
+                keys.add(property.baseKey);
+        }
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!TermuxAppSharedPreferences.isPerHalf(slot, property))
+                    continue;
+                String own = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+                if (own != null) keys.add(own);
+                keys.add(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key);
+            }
+        }
+        keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL);
+        keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY);
+        keys.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+        return keys;
+    }
+
+    /** Each half's own key that the store holds, by name, with its value. */
+    @NonNull
+    private static java.util.TreeMap<String, Object> halfKeys(
+            @NonNull TermuxAppSharedPreferences prefs) {
+        java.util.TreeMap<String, Object> out = new java.util.TreeMap<>();
+        SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
+        if (store == null)
+            return out;
+        java.util.Map<String, ?> all = store.getAll();
+        for (String key : halfAbleKeys()) {
+            for (TermuxAppSharedPreferences.WallHalf half
+                    : TermuxAppSharedPreferences.WallHalf.values()) {
+                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+                Object value = all.get(halfKey);
+                if (value != null)
+                    out.put(halfKey, value);
+            }
+        }
+        return out;
+    }
+
+    /** Puts every half's own key back as it was, and drops the ones that were absent. */
+    private static void restoreHalfKeys(@NonNull TermuxAppSharedPreferences prefs,
+                                        @NonNull java.util.Map<String, Object> halfKeys) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        SharedPreferences.Editor editor = store.edit();
+        for (String key : halfAbleKeys()) {
+            for (TermuxAppSharedPreferences.WallHalf half
+                    : TermuxAppSharedPreferences.WallHalf.values()) {
+                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+                Object value = halfKeys.get(halfKey);
+                if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
+                else if (value instanceof Boolean) editor.putBoolean(halfKey, (Boolean) value);
+                else if (value instanceof String) editor.putString(halfKey, (String) value);
+                else if (value instanceof Float) editor.putFloat(halfKey, (Float) value);
+                else if (value instanceof Long) editor.putLong(halfKey, (Long) value);
+                else if (store.contains(halfKey)) editor.remove(halfKey);
+            }
+        }
+        editor.apply();
+    }
 
     @NonNull
     private static String linkSignature(@NonNull TermuxAppSharedPreferences prefs) {
