@@ -12,6 +12,8 @@ import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -77,6 +79,14 @@ public final class LegendSlider extends View {
      */
     private static final float SHRINK_STEP_PX = 0.25f;
     private static final int SHRINK_PASSES = 8;
+    /**
+     * How long a finger has to rest on the column, off the handle, before the slider takes the
+     * gesture from the card's scroll. Before then a scroll is the likelier intent; a finger that
+     * has not left the slop by then means the slider.
+     */
+    static final long HOLD_TO_CLAIM_MS = 150L;
+    /** The handle's touch target along the track: M3's 48dp minimum, centred on the handle. */
+    private static final float HANDLE_TOUCH_DP = 48f;
     private static final int DISABLED_ALPHA = 97;
     private static final int DISABLED_TRACK_ALPHA = 31;
 
@@ -122,6 +132,59 @@ public final class LegendSlider extends View {
     private float mFitRoomPx;
     private boolean mDragging;
 
+    /** A touch off the handle, waiting for {@link #HOLD_TO_CLAIM_MS} or the slop to decide it. */
+    private boolean mClaimPending;
+    private float mDownX;
+    private float mDownY;
+    private long mDownTimeMs;
+    private float mLastY;
+    private final float mTouchSlopPx;
+    private final float mHandleTouchHalfPx;
+    private final Runnable mHoldClaim = () -> {
+        if (mClaimPending)
+            claimGesture(mLastY);
+    };
+
+    /** What a touch on the column has decided so far. */
+    enum Claim {
+        /** The slider takes the gesture: it tracks the finger and the scroll is held off. */
+        CLAIM,
+        /** The gesture is the card's scroll; the slider lets go of it untouched. */
+        SCROLL,
+        /** Not decided yet: the finger is inside the slop and the hold has not elapsed. */
+        WAIT
+    }
+
+    /**
+     * The claim rule for a vertical slider inside a vertically scrolling card, where the slider's
+     * axis is the scroll's: a touch on the handle (or anywhere, outside a scrolling container)
+     * drags at once; anywhere else on the column the slider takes the gesture only after the
+     * finger has rested {@link #HOLD_TO_CLAIM_MS} inside the touch slop, and a finger that leaves
+     * the slop before then is scrolling.
+     *
+     * @param onHandle   the touch went down on the handle's touch target
+     * @param inScroller an ancestor scrolls ({@link ViewGroup#shouldDelayChildPressedState})
+     * @param movedPx    how far the finger has travelled from where it went down
+     * @param slopPx     the touch slop
+     * @param heldMs     how long since it went down
+     */
+    @NonNull
+    static Claim claim(boolean onHandle, boolean inScroller, float movedPx, float slopPx,
+                       long heldMs) {
+        if (onHandle || !inScroller)
+            return Claim.CLAIM;
+        if (movedPx > slopPx && heldMs < HOLD_TO_CLAIM_MS)
+            return Claim.SCROLL;
+        if (heldMs >= HOLD_TO_CLAIM_MS)
+            return Claim.CLAIM;
+        return Claim.WAIT;
+    }
+
+    /** Whether a touch at {@code y} lands on the handle's touch target. */
+    static boolean onHandle(float y, float handleCentreY, float touchHalfPx) {
+        return Math.abs(y - handleCentreY) <= touchHalfPx;
+    }
+
     public LegendSlider(@NonNull Context context) {
         this(context, null);
     }
@@ -146,6 +209,8 @@ public final class LegendSlider extends View {
         mEndInsetPx = 4f * density;
         mDotPx = 6f * density;
         mDotGapPx = 6f * density;
+        mTouchSlopPx = ViewConfiguration.get(context).getScaledTouchSlop();
+        mHandleTouchHalfPx = HANDLE_TOUCH_DP * density / 2f;
         setClickable(true);
         setFocusable(true);
         resolvePaint();
@@ -528,34 +593,102 @@ public final class LegendSlider extends View {
         if (!isEnabled())
             return false;
         switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                mDragging = true;
-                ViewParent parent = getParent();
-                if (parent != null)
-                    parent.requestDisallowInterceptTouchEvent(true);
-                for (OnSliderTouchListener listener : new ArrayList<>(mTouchListeners))
-                    listener.onStartTrackingTouch(this);
-                setValueInternal(valueAt(event.getY()), true);
+            case MotionEvent.ACTION_DOWN: {
+                abandonPendingClaim();
+                mDownX = event.getX();
+                mDownY = event.getY();
+                mLastY = mDownY;
+                mDownTimeMs = event.getEventTime();
+                Claim decision = claim(onHandle(mDownY, handleCentreY(), mHandleTouchHalfPx),
+                    isInScrollingContainer(), 0f, mTouchSlopPx, 0L);
+                if (decision == Claim.CLAIM) {
+                    claimGesture(mDownY);
+                } else {
+                    // The scroll keeps its say until the hold or the slop decides: no disallow
+                    // yet, and nothing moves.
+                    mClaimPending = true;
+                    postDelayed(mHoldClaim, HOLD_TO_CLAIM_MS);
+                }
                 return true;
+            }
             case MotionEvent.ACTION_MOVE:
-                if (!mDragging)
+                if (mDragging) {
+                    setValueInternal(valueAt(event.getY()), true);
+                    return true;
+                }
+                if (!mClaimPending)
                     return false;
-                setValueInternal(valueAt(event.getY()), true);
+                mLastY = event.getY();
+                Claim decision = claim(false, true,
+                    (float) Math.hypot(event.getX() - mDownX, event.getY() - mDownY),
+                    mTouchSlopPx, event.getEventTime() - mDownTimeMs);
+                if (decision == Claim.SCROLL) {
+                    abandonPendingClaim();
+                    return false;
+                }
+                if (decision == Claim.CLAIM)
+                    claimGesture(mLastY);
                 return true;
             case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
+                // A tap off the handle, inside the slop and the hold: the value jumps there, as a
+                // horizontal slider's tap does.
+                if (mClaimPending)
+                    claimGesture(event.getY());
                 if (!mDragging)
                     return false;
-                if (event.getActionMasked() == MotionEvent.ACTION_UP)
-                    setValueInternal(valueAt(event.getY()), true);
-                mDragging = false;
-                for (OnSliderTouchListener listener : new ArrayList<>(mTouchListeners))
-                    listener.onStopTrackingTouch(this);
+                setValueInternal(valueAt(event.getY()), true);
+                endGesture();
                 performClick();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                abandonPendingClaim();
+                if (!mDragging)
+                    return false;
+                endGesture();
                 return true;
             default:
                 return super.onTouchEvent(event);
         }
+    }
+
+    /** The slider takes the gesture: the scroll is held off from here, and the value follows. */
+    private void claimGesture(float y) {
+        abandonPendingClaim();
+        mDragging = true;
+        ViewParent parent = getParent();
+        if (parent != null)
+            parent.requestDisallowInterceptTouchEvent(true);
+        for (OnSliderTouchListener listener : new ArrayList<>(mTouchListeners))
+            listener.onStartTrackingTouch(this);
+        setValueInternal(valueAt(y), true);
+    }
+
+    private void endGesture() {
+        mDragging = false;
+        for (OnSliderTouchListener listener : new ArrayList<>(mTouchListeners))
+            listener.onStopTrackingTouch(this);
+    }
+
+    private void abandonPendingClaim() {
+        mClaimPending = false;
+        removeCallbacks(mHoldClaim);
+    }
+
+    /** Material's own test: an ancestor that delays its children's pressed state scrolls. */
+    private boolean isInScrollingContainer() {
+        ViewParent parent = getParent();
+        while (parent instanceof ViewGroup) {
+            if (((ViewGroup) parent).shouldDelayChildPressedState())
+                return true;
+            parent = parent.getParent();
+        }
+        return false;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        abandonPendingClaim();
+        super.onDetachedFromWindow();
     }
 
     @Override
