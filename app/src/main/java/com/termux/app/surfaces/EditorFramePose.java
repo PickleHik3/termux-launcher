@@ -233,4 +233,36 @@ final class EditorFramePose {
                     heightPx - offset};
         }
     }
+
+    /**
+     * How far {@code rect} reaches in from {@code edge} of a container {@code widthPx} by
+     * {@code heightPx}: the depth a surface standing on that edge takes up, which a ghost on the
+     * same edge has to clear.
+     */
+    static int depthFrom(@NonNull PlaceLayout.Edge edge, @NonNull int[] rect, int widthPx,
+                         int heightPx) {
+        switch (edge) {
+            case TOP: return Math.max(0, rect[3]);
+            case LEFT: return Math.max(0, rect[2]);
+            case RIGHT: return Math.max(0, widthPx - rect[0]);
+            case BOTTOM:
+            default: return Math.max(0, heightPx - rect[1]);
+        }
+    }
+
+    /**
+     * A ghost {@code band} on {@code edge} moved {@code px} further in, past the surfaces still
+     * standing on that edge, so it never lies under another surface's tap target.
+     */
+    @NonNull
+    static int[] shiftInward(@NonNull int[] band, @NonNull PlaceLayout.Edge edge, int px) {
+        int by = Math.max(0, px);
+        switch (edge) {
+            case TOP: return new int[] {band[0], band[1] + by, band[2], band[3] + by};
+            case LEFT: return new int[] {band[0] + by, band[1], band[2] + by, band[3]};
+            case RIGHT: return new int[] {band[0] - by, band[1], band[2] - by, band[3]};
+            case BOTTOM:
+            default: return new int[] {band[0], band[1] - by, band[2], band[3] - by};
+        }
+    }
 }

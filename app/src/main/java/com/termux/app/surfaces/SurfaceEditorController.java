@@ -3131,14 +3131,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return rect;
         if (rect == null)
             return ghostRect(card, overlay);
-        if (card == EditorCard.DOCK && isGhost(card)) {
-            // The pinned apps put away while the dock still stands for its other rows (the
-            // A–Z index): the target reaches over the apps' band on their edge, dashed.
-            int[] band = ghostRect(card, overlay);
-            if (band != null)
-                return EditorFramePose.ghostBeside(rect, band, overlay.getHeight());
-        }
-        return rect;
+        return besideItsGhost(card, rect, overlay);
+    }
+
+    /**
+     * {@code rect}, a surface on screen, or, when its element is put away while its host still
+     * stands for other rows (the dock's A–Z index with the pinned apps hidden, the status host
+     * with the status bar hidden), grown over the hidden row's band on its edge, dashed.
+     */
+    @NonNull
+    private int[] besideItsGhost(@NonNull EditorCard card, @NonNull int[] rect,
+                                 @NonNull View overlay) {
+        if (card == EditorCard.KEYBOARD || !isGhost(card))
+            return rect;
+        int[] band = ghostBand(card, overlay);
+        return band == null ? rect : EditorFramePose.ghostBeside(rect, band, overlay.getHeight());
     }
 
     /** Whether a card's surface is put away (it wears a dashed ghost, and taps still reach it). */
@@ -3183,24 +3190,56 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     @Nullable
     private int[] ghostRect(@NonNull EditorCard card, @NonNull View overlay) {
+        int[] band = ghostBand(card, overlay);
+        LayoutEditorController layout = mHost.layoutEditor();
+        PlaceLayout.Edge edge = layout == null ? null : edgeOfCard(card, layout);
+        if (band == null || edge == null)
+            return null;
+        // Clear of every surface still standing on that edge (the dock's A–Z index under a hidden
+        // keyboard): one target under another took the other's taps, and its card was out of reach.
+        int depth = 0;
+        for (EditorCard other : GHOST_ORDER) {
+            if (other == card || edgeOfCard(other, layout) != edge)
+                continue;
+            int[] standing = surfaceRect(other, overlay);
+            if (standing == null)
+                continue;
+            standing = besideItsGhost(other, standing, overlay);
+            depth = Math.max(depth, EditorFramePose.depthFrom(edge, standing,
+                overlay.getWidth(), overlay.getHeight()));
+        }
+        return EditorFramePose.shiftInward(band, edge, depth);
+    }
+
+    /** A hidden surface's band on its edge, stacked past the other ghosts there; null if shown. */
+    @Nullable
+    private int[] ghostBand(@NonNull EditorCard card, @NonNull View overlay) {
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout == null || !isHidden(card, layout))
             return null;
-        PlaceLayout.Edge edge = card == EditorCard.KEYBOARD ? PlaceLayout.Edge.BOTTOM
-            : layout.edgeOf(elementOf(card));
+        PlaceLayout.Edge edge = edgeOfCard(card, layout);
         if (edge == null)
             return null;
         int stack = 0;
         for (EditorCard other : GHOST_ORDER) {
             if (other == card)
                 break;
-            PlaceLayout.Edge otherEdge = other == EditorCard.KEYBOARD ? PlaceLayout.Edge.BOTTOM
-                : layout.edgeOf(elementOf(other));
-            if (isHidden(other, layout) && otherEdge == edge)
+            if (isHidden(other, layout) && edgeOfCard(other, layout) == edge
+                && surfaceRect(other, overlay) == null)
                 stack++;
         }
         return EditorFramePose.ghostRect(edge, stack, overlay.getWidth(), overlay.getHeight(),
             dp(EditorFramePose.GHOST_DP), dp(EditorFramePose.GAP_DP));
+    }
+
+    /** The edge a card's surface stands on, or would come back to; null for none. */
+    @Nullable
+    private static PlaceLayout.Edge edgeOfCard(@NonNull EditorCard card,
+                                               @NonNull LayoutEditorController layout) {
+        if (card == EditorCard.KEYBOARD)
+            return PlaceLayout.Edge.BOTTOM;
+        Element element = elementOf(card);
+        return element == null ? null : layout.edgeOf(element);
     }
 
     /** The order ghosts stack in from a shared edge. */
