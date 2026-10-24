@@ -51,7 +51,7 @@ public class SettingsTreeTest {
         "AppBehaviorPreferencesFragment", "BackupRestorePreferencesFragment",
         "ServicesPermissionsPreferencesFragment", "PrivilegedAccessPreferencesFragment",
         "AdvancedDiagnosticsPreferencesFragment", "TermuxFontsPreferencesFragment",
-        "NotificationHistoryFragment", "SpeechModelPreferencesFragment",
+        "NotificationHistoryFragment", "SpeechModelPreferencesFragment", "DebuggingPreferencesFragment",
     };
 
     @Test
@@ -117,6 +117,7 @@ public class SettingsTreeTest {
         {"X11DisplayPreferencesFragment", "x11_drawer_apps"},
         {"X11DisplayLinuxAppsPreferencesFragment", "x11_window_manager"},
         {"X11DisplayPreferencesFragment", "displayScale"},
+        {"NotificationsPreferencesFragment", "app_launcher_notification_access"},
     };
 
     @Test

@@ -136,6 +136,8 @@
     <string name="settings_status_indicators_header">Indicators</string>
     <string name="settings_status_weather_header">Weather</string>
     <string name="settings_diagnostics_logging_header">Logging</string>
+    <string name="settings_termux_api_log_level_title">Termux:API log level</string>
+    <string name="settings_termux_api_logs_summary">Termux:API log level, with the app\'s logs</string>
     <string name="settings_diagnostics_alerts_header">Alerts</string>
     <string name="settings_diagnostics_checks_header">Checks</string>
     <string name="settings_about_help_header">Help</string>

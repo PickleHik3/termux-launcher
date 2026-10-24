@@ -84,10 +84,23 @@ public class SettingsFragmentAliasesTest {
         assertNotNull(keyboard.findPreference("customize_keyboard_surface"));
         assertEquals(KeyboardColorSchemeFragment.class.getName(),
             keyboard.findPreference("in_app_keyboard_color_scheme_editor").getFragment());
-        assertEquals("the vibration link lands on General", GeneralPreferencesFragment.class.getName(),
-            keyboard.findPreference("keyboard_vibration_link").getFragment());
-        assertEquals("in_app_keyboard_haptics_enabled", keyboard.findPreference("keyboard_vibration_link")
-            .getExtras().getString(SettingsActivity.EXTRA_SCROLL_TO_KEY));
+        assertNull("vibration is General's alone", keyboard.findPreference("keyboard_vibration_link"));
+        assertNull("vibration is General's alone", screen(launch(KeyboardTypingPreferencesFragment.class))
+            .findPreference("keyboard_typing_vibration_link"));
+    }
+
+    @Test
+    public void oneHomePerSetting() {
+        assertNull("access is Permissions' alone", screen(launch(NotificationsPreferencesFragment.class))
+            .findPreference("app_launcher_notification_access"));
+        assertNotNull(screen(launch(ServicesPermissionsPreferencesFragment.class))
+            .findPreference("app_launcher_notification_access"));
+        PreferenceScreen diagnostics = screen(launch(AdvancedDiagnosticsPreferencesFragment.class));
+        for (String key : new String[] {"log_level", "termux_api_log_level", "terminal_view_key_logging_enabled",
+            "plugin_error_notifications_enabled", "crash_report_notifications_enabled",
+            "privileged_backend_smoke_test"}) {
+            assertNotNull(key, diagnostics.findPreference(key));
+        }
     }
 
     @Test

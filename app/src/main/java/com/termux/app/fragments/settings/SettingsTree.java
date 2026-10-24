@@ -239,6 +239,10 @@ public final class SettingsTree {
         ALIASES.put(PAGES + "LauncherDockPreferencesFragment", dock);
         ALIASES.put(PAGES + "X11DisplayLinuxAppsPreferencesFragment", linuxApps);
         ALIASES.put(PAGES + "TerminalStatusPreferencesFragment", terminal);
+        // The two Debugging pages folded into Diagnostics.
+        ALIASES.put(PAGES + "DebuggingPreferencesFragment", PAGES + "AdvancedDiagnosticsPreferencesFragment");
+        ALIASES.put(SETTINGS + "termux_api.DebuggingPreferencesFragment",
+            PAGES + "AdvancedDiagnosticsPreferencesFragment");
     }
 
     /** Every screen, sections first within each section, in root order. */
@@ -383,6 +387,9 @@ public final class SettingsTree {
                 }
             case "TerminalWindowsPreferencesFragment":
                 return key.equals("terminal_body_swipe") ? "HomePreferencesFragment" : null;
+            case "NotificationsPreferencesFragment":
+                return key.equals("app_launcher_notification_access")
+                    ? "ServicesPermissionsPreferencesFragment" : null;
             case "StatusBarPreferencesFragment":
                 return key.equals("status_bar_notifications_link") ? "NotificationsPreferencesFragment" : null;
             case "X11DisplayPreferencesFragment":

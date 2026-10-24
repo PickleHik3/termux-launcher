@@ -200,8 +200,8 @@ public class KeyboardPreferencesFragmentTest {
     }
 
     /**
-     * Android IME and Off dim only the built-in keyboard's own pages; voice, the hardware page,
-     * extra keys and the vibration shortcut stay usable.
+     * Android IME and Off dim only the built-in keyboard's own pages; voice, the hardware page and
+     * extra keys stay usable.
      */
     @Test
     public void switchingTheInputMethodDisablesOnlyTheBuiltInKeyboardLinks() {
@@ -212,7 +212,7 @@ public class KeyboardPreferencesFragmentTest {
         assertNotNull(method);
         String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"};
         String[] always = {"keyboard_sub_voice", "keyboard_sub_hardware", "edit_extra_keys_row",
-            "extra_keys_text_all_caps", "keyboard_vibration_link"};
+            "extra_keys_text_all_caps"};
         assertEnabled(fragment, true, builtInOnly);
         assertEnabled(fragment, true, always);
         for (String value : new String[] {"android", "none"}) {
