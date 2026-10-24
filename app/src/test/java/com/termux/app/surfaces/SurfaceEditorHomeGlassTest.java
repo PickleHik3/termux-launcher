@@ -144,15 +144,9 @@ public class SurfaceEditorHomeGlassTest {
     private SurfaceEditorController open(PaneWallPage place) {
         EditorTestHarness harness = new EditorTestHarness(preferences, null);
         harness.editor.present(EditorCard.HOME, place, null);
+        assertEquals("the card is up when present returns", EditorCard.HOME,
+            harness.editor.shownCard());
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        if (harness.editor.shownCard() != EditorCard.HOME) {
-            // Raised once more on the open editor, the synchronous way in: the first present
-            // has been seen to leave no card up when run after another test in this class.
-            boolean open = ReflectionHelpers.getField(harness.editor, "mOpen");
-            System.err.println("SurfaceEditorHomeGlassTest: no card after present, open=" + open);
-            harness.editor.present(EditorCard.HOME, place, null);
-            ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        }
         assertEquals(EditorCard.HOME, harness.editor.shownCard());
         return harness.editor;
     }
