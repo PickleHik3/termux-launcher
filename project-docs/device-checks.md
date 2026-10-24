@@ -536,6 +536,31 @@ dropped; what follows is what still owes a look.
 - 2026-10-22 · second drop · Home → window 2 → window 1 by chips leaves no wallpaper gap above the
   extra keys, also split; the apps row → Home slide shows icons at their final size, Docked,
   Floating, Beads · pong.
+- 2026-10-25 · commit "feat(wall): the page overview replaces the Edit pages list" · Pinch in
+  on Home's free area, Home's sheet › Edit pages, and Settings › Home › Edit pages all zoom out to
+  one strip: Home pages, a gap with a thin divider, then the session's windows (display where its
+  chip stands); the zoom out and back in has no jank and no flash at either end; the wallpaper
+  stays full-screen behind; the focused card is live (clock ticks, terminal text scrolls, dock
+  shows) and the next card peeks in from the right; red × centred on each card's top edge (none on
+  the last Home page), home button on the bottom edge of Home cards only, filled on the default
+  page and outlined elsewhere, tap makes that page the default; dots below, three dark pills at the
+  bottom, legible at font scale 1.3 · pong.
+- 2026-10-25 · same commit · Scroll and fling settle on a card; cards you have scrolled past show
+  their picture afterwards (not the live page or a wrong page); a terminal card never focused shows
+  its text; the display card shows the display's picture, and the display's surface never shows
+  through the cards; hold a card and drag: its own half makes room, dropped across the seam it
+  springs back, dropped in its half the order sticks after the overview closes (Home pages, floats
+  and the default page follow; window chips follow) · pong.
+- 2026-10-25 · same commit · × on an empty page or an idle terminal goes at once; on a page with
+  items, a terminal running something (`sleep 100`) or the display: the card goes with an
+  "Undo" snackbar above the pills; Undo brings it back in place; after the snackbar times out, or
+  another action, or closing the overview, it is really gone (the `sleep` shell is killed only
+  then; the display stops) · pong.
+- 2026-10-25 · same commit · + Add page with a Home page focused inserts right after it, with a
+  window focused after the last Home page; + Add terminal / + Add display after the focused window,
+  or first from a Home page; + Add display greyed while a display is open; Back and a tap on a card
+  zoom into that card and the wall rests there (Back from the Settings row returns to Settings
+  › Home); TalkBack reads each card, its × and its home button · pong.
 
 ## Graphics acceleration page (#162)
 
