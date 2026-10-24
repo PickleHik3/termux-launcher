@@ -52,7 +52,7 @@ public class EditorRowsTest {
     @Test
     public void theDockCardOpensOnItsStripThenItsPlace() {
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-            Row.MARGIN, Row.APP_ICONS, Row.VISIBLE),
+            Row.MARGIN, Row.APP_ICONS, Row.REFLECTION, Row.VISIBLE),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         assertEquals(Arrays.asList(Row.STYLE, Row.DESIGN),
             EditorRows.tier(EditorCard.DOCK, ALL, 2));

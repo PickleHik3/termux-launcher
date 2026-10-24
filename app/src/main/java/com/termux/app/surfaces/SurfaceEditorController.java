@@ -48,6 +48,8 @@ import com.termux.app.ReducedMotion;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.chrome.GlassMotion;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.PeekGlassGeometry;
+import com.termux.app.dock.PeekGlassPreferences;
 import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.fragments.settings.termux.AppearanceSettingsStore;
 import com.termux.app.fragments.settings.termux.HomePreferencesFragment;
@@ -1969,9 +1971,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The Dock designs' names and glyphs, in {@link DockStyle#CHOICES} order. */
     private static final int[] DESIGN_LABELS = {R.string.layout_editor_dock_style_glass_tray,
-        R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip};
+        R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
+        R.string.layout_editor_dock_style_peek_glass};
     private static final int[] DESIGN_ICONS = {R.drawable.ic_symbol_dock_glass_tray,
-        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip};
+        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
+        R.drawable.ic_symbol_dock_peek_glass};
 
     /** The keyboard's forms, as the Type segments name them. */
     private static final PlaceLayout.KeyboardForm[] FORMS = {PlaceLayout.KeyboardForm.DOCKED,
@@ -2059,6 +2063,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
                 case SEARCH_FIELD: return layout != null && layout.searchField() ? 1 : 0;
                 case DRAWER_ICON: return layout != null && layout.drawerTile() ? 1 : 0;
+                case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
                 case APP_ICONS: return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
                 case TEXT_SIZE:
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
@@ -2143,6 +2148,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         mHost.isAppsRowAlone(), density())[0];
                 case DEPTH: return GlassEdgeControls.MIN;
                 case APP_ICONS: return AppearanceLooks.APP_ICONS_MIN;
+                case REFLECTION: return PeekGlassGeometry.REFLECTION_MIN;
                 case TEXT_SIZE: return Control.TEXT_SIZE.min;
                 case ICON_SIZE: return HOME_ICON_MIN;
                 case KEY_OPACITY: return Control.KEY_OPACITY.min;
@@ -2169,6 +2175,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case MARGIN: return AppearanceLooks.MARGIN_MAX_DP;
                 case DEPTH: return GlassEdgeControls.MAX;
                 case APP_ICONS: return AppearanceLooks.APP_ICONS_MAX;
+                case REFLECTION: return PeekGlassGeometry.REFLECTION_MAX;
                 case TEXT_SIZE: return Control.TEXT_SIZE.max;
                 case SPLIT_GAP: return Control.SPLIT_GAP.max;
                 case ICON_SIZE: return HOME_ICON_MAX;
@@ -2187,6 +2194,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             switch (row) {
                 case TEXT_SIZE: return Control.TEXT_SIZE.step;
                 case ICON_SIZE: return HOME_ICON_STEP;
+                case REFLECTION: return PeekGlassGeometry.REFLECTION_STEP;
                 default: return 1;
             }
         }
@@ -2202,6 +2210,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case KEY_OPACITY:
                 case ALIGNMENT:
                 case GLASS_EDGE:
+                case REFLECTION:
                     return getString(R.string.appearance_readout_percent, value);
                 case HEIGHT:
                     return mCard == EditorCard.KEYBOARD
@@ -2347,6 +2356,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // wallpaper's Alignment stands at every stop.
             if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row))
                 return AppearanceLooks.isCustomStop(lookStop(mHalf));
+            // Reflection is Peek glass's own knob: it stands only while that is the design.
+            if (row == Row.REFLECTION) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                return layout != null && layout.dockStyle() == DockStyle.PEEK_GLASS;
+            }
             return true;
         }
 
@@ -2449,6 +2463,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case DESIGN:
                 if (layout != null && value >= 0 && value < DockStyle.CHOICES.size())
                     layout.setDockStyle(DockStyle.CHOICES.get(value));
+                // Peek glass's Reflection stands with that design alone.
+                if (mSheet != null) mSheet.restate(Row.REFLECTION);
+                break;
+            case REFLECTION:
+                PeekGlassPreferences.setReflection(prefs.getSharedPreferences(), value);
                 break;
             case CORNERS: writeCorners(value); break;
             case MARGIN: writeMargin(value); break;

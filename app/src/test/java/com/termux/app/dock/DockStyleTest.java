@@ -21,6 +21,7 @@ public class DockStyleTest {
         assertEquals("taskbar", DockStyle.TASKBAR.storageValue());
         assertEquals("prompt_line", DockStyle.PROMPT_LINE.storageValue());
         assertEquals("wall_strip", DockStyle.WALL_STRIP.storageValue());
+        assertEquals("peek_glass", DockStyle.PEEK_GLASS.storageValue());
     }
 
     @Test
@@ -84,6 +85,18 @@ public class DockStyleTest {
     @Test
     public void thePickerOffersTheDesignsInOrder() {
         assertEquals(Arrays.asList(DockStyle.GLASS_TRAY, DockStyle.LENS_BEADS,
-            DockStyle.WALL_STRIP), DockStyle.CHOICES);
+            DockStyle.WALL_STRIP, DockStyle.PEEK_GLASS), DockStyle.CHOICES);
+    }
+
+    /**
+     * Peek glass is drawn and offered, and is what a new install starts on; the absent key stays
+     * the tray, so an existing install that never chose is not switched.
+     */
+    @Test
+    public void peekGlassIsBuiltAndIsTheNewInstallDefaultOnly() {
+        assertEquals(DockStyle.PEEK_GLASS, DockStyle.effectiveStyle(DockStyle.PEEK_GLASS));
+        assertEquals(DockStyle.PEEK_GLASS, DockStyle.NEW_INSTALL_DEFAULT);
+        assertEquals(DockStyle.GLASS_TRAY, DockStyle.parse(null));
+        assertEquals(DockStyle.PEEK_GLASS, DockStyle.parse("peek_glass"));
     }
 }

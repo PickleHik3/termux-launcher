@@ -102,6 +102,43 @@ the last icon ends.
 - Tap a tile to open that window; long-press keeps the window's existing menu.
 - Home's own clock widget is the user's business; this style does not add or remove widgets.
 
+### Peek glass (2026-10-25; the default of a new install)
+
+A glass card rises from the screen's bottom edge, inset about 3% of the width from each side, its
+top corners a generous 28 dp, its lower corners past the screen's edge so they never show. The
+icons' centres stand on the card's top edge (round icons half above it), no labels, and blurred
+mirror reflections of the icons fade down the card. The gesture pill draws over the card; the
+strip under the pill is the card's foot, inset as the card is.
+
+- **Picker and default.** The Dock card's Design chips offer it as "Peek" (working name;
+  `DockStyle.PEEK_GLASS`, stored `peek_glass`). A new install starts on it: the layout store's
+  first run writes `peek_glass` into every layout's `dock_design` only when the store was never
+  migrated and the package's first install time equals its last update time. The absent key
+  still reads as the Glass tray, so an existing install that never picked keeps the tray; an
+  unknown or unbuilt id still falls back to the tray.
+- **Glass.** The global Look (Base), as every dock: the host's frost, tint and glass program,
+  cut to the card (the host's outline; the program's rect is the card's, its bottom a seam). Below
+  Android 13 the rim under the glass follows the card's top and sides.
+- **Geometry** (`dock/PeekGlassGeometry`, unit-tested): side inset `round(0.03 × width)`; the apps
+  row's side inset under Peek glass Docked is that plus 4 dp, so the end icons stand on the card;
+  the card's top is the icons' centre line; the reflection hangs from the icons' lower edges over
+  0.6 of an icon's height, never past the screen's edge.
+- **Reflection.** Live while Fancier glass is active (Android 13, managed wallpaper, the switch):
+  the row recorded flipped into a RenderNode whose icons are references to their own nodes, so a
+  press, a dot or a new icon shows with nothing recorded again; a RuntimeShader effect fades it
+  as (1 − t)² and blurs it up to 6 dp. Recorded again on layout, on an icon's invalidation (once
+  a frame at most) and on each frame of a page swipe; nothing at rest. Otherwise one flipped
+  quarter-size bitmap per icon with the fade drawn in (a light RenderEffect blur from Android 12),
+  rebuilt 160 ms after the row last changed and put away while a swipe carries the icons.
+- **Reflection knob.** One Reflection slider on the Dock card, shown only under Peek glass:
+  0 (off) to 100, default 50 (`dock_peek_reflection`).
+- **Where it is the tray.** Floating, the keyboard up, the system keyboard lifting the dock, the
+  Search field under the row, another band on the dock's glass (A–Z row, extra keys), a joined
+  Docked frame standing in for the dock's sheet: the dock draws the Glass tray's slab, shelf and
+  shadow included, and no reflection.
+- **Not reflected.** The long-press app menu: a window of its own, which only a capture of that
+  window on every frame could reach.
+
 ## Order of work
 
 1. The Dock style preference, its migration and the Layout editor picker.

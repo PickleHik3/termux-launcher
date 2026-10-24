@@ -1261,6 +1261,25 @@ public class PlaceLayoutStoreTest {
         assertEquals(Edge.TOP, store.slot(PORTRAIT, Element.APPS).edge);
     }
 
+    /**
+     * Only a new install starts on the new default design: never migrated, installed and never
+     * updated. Anything else, an update from a build before the store included, keeps the
+     * absent key's tray.
+     */
+    @Test
+    public void onlyANewInstallStartsOnTheNewDefaultDesign() {
+        long[] fresh = {1000L, 1000L};
+        long[] updated = {1000L, 2000L};
+        assertTrue(PlaceLayoutStore.startsOnNewInstallDefault(0, fresh));
+        assertFalse("ran the store before", PlaceLayoutStore.startsOnNewInstallDefault(13, fresh));
+        assertFalse("ran an early store", PlaceLayoutStore.startsOnNewInstallDefault(1, fresh));
+        assertFalse("updated from a build before the store",
+            PlaceLayoutStore.startsOnNewInstallDefault(0, updated));
+        assertFalse("no install times", PlaceLayoutStore.startsOnNewInstallDefault(0, null));
+        assertFalse("unknown install times",
+            PlaceLayoutStore.startsOnNewInstallDefault(0, new long[] {0L, 0L}));
+    }
+
     @Test
     public void theDockDesignIsEachLayoutsOwnKey() {
         PlaceLayoutStore store = store();

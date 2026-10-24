@@ -17,7 +17,10 @@ import java.util.Set;
  *
  * <p>The stored id is the contract: it is what the preference holds, so a style is renamed in
  * code and strings, never in {@link #storageValue}. Anything the store cannot read, an absent key
- * included, is {@link #GLASS_TRAY}, which is what every existing install migrates to.
+ * included, is {@link #GLASS_TRAY}, which is what every existing install migrates to. A new
+ * install is the one exception: the layout store writes {@link #NEW_INSTALL_DEFAULT} into every
+ * layout's key on its first run ({@code PlaceLayoutStore}), so an install that predates Peek glass
+ * and never chose keeps the tray.
  *
  * <p>A style can be chosen before it is drawn: {@link #effective} answers what the dock really
  * draws, so a style that is not in {@link #BUILT} yet renders as the glass tray.
@@ -42,7 +45,21 @@ public enum DockStyle {
      */
     PROMPT_LINE("prompt_line"),
     /** A first row for the Workspace (a clock and the terminals) above the apps. */
-    WALL_STRIP("wall_strip");
+    WALL_STRIP("wall_strip"),
+    /**
+     * A glass card rising from the screen's bottom edge, its top edge through the icons' centres,
+     * the icons' reflections fading down it ({@link PeekGlassGeometry}). The default of a new
+     * install ({@link #NEW_INSTALL_DEFAULT}).
+     */
+    PEEK_GLASS("peek_glass");
+
+    /**
+     * What a new install's layouts hold before anyone picks: written once, by the layout store's
+     * first run on an install that has none of the launcher's earlier state, never read as the
+     * absent key's meaning (that stays {@link #GLASS_TRAY} for every existing install).
+     */
+    @NonNull
+    public static final DockStyle NEW_INSTALL_DEFAULT = PEEK_GLASS;
 
     /**
      * The styles the dock can draw today. A style joins this set in the change that draws it;
@@ -50,12 +67,12 @@ public enum DockStyle {
      */
     @NonNull
     public static final Set<DockStyle> BUILT = Collections.unmodifiableSet(EnumSet.of(GLASS_TRAY, LENS_BEADS,
-        WALL_STRIP));
+        WALL_STRIP, PEEK_GLASS));
 
     /** The designs the Layout editor's picker offers, in the order it shows them. */
     @NonNull
     public static final List<DockStyle> CHOICES = Collections.unmodifiableList(Arrays.asList(
-        GLASS_TRAY, LENS_BEADS, WALL_STRIP));
+        GLASS_TRAY, LENS_BEADS, WALL_STRIP, PEEK_GLASS));
 
     @NonNull private final String mId;
 

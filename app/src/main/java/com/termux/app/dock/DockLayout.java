@@ -129,6 +129,14 @@ public final class DockLayout {
      */
     public final int appsRowEdgeInsetPx;
 
+    /**
+     * The side inset the dock's apps row takes under Peek glass (Docked, the row on the dock):
+     * the card's inset from the screen's side and the clearance inside it
+     * ({@link PeekGlassGeometry#rowSideInsetPx}), so the end icons stand on the card. Zero for
+     * every other surface, and under Floating, where the dock draws the tray's slab.
+     */
+    public final int peekRowSideInsetPx;
+
     /** The air a rail keeps around its icons on every side: a lone row's, standing up. */
     public final int railAirPx;
 
@@ -268,6 +276,7 @@ public final class DockLayout {
         this.appsRowUsableWidthPx = Math.max(0, b.appsRowUsableWidthPx);
         this.slotIconPx = Math.max(0, b.slotIconPx);
         this.appsRowEdgeInsetPx = Math.max(0, b.appsRowEdgeInsetPx);
+        this.peekRowSideInsetPx = Math.max(0, b.peekRowSideInsetPx);
         this.railAirPx = Math.max(0, b.railAirPx);
         this.surface = b.surface != null ? b.surface : DockSurfaceSpec.PLAIN;
         this.slabTopInsetPx = Math.max(0, b.slabTopInsetPx);
@@ -315,8 +324,8 @@ public final class DockLayout {
      * ({@link DockLayoutPolicy#appsRowSideInsetPx}).
      */
     public int appsRowSideInsetPx() {
-        return DockLayoutPolicy.appsRowSideInsetPx(
-            capsule ? capsuleContentInsetPx : horizontalInsetPx, surface.beads, density);
+        return Math.max(peekRowSideInsetPx, DockLayoutPolicy.appsRowSideInsetPx(
+            capsule ? capsuleContentInsetPx : horizontalInsetPx, surface.beads, density));
     }
 
     /**
@@ -392,6 +401,7 @@ public final class DockLayout {
         int appsRowUsableWidthPx;
         int slotIconPx;
         int appsRowEdgeInsetPx;
+        int peekRowSideInsetPx;
         int railAirPx;
         DockSurfaceSpec surface = DockSurfaceSpec.PLAIN;
         int slabTopInsetPx;

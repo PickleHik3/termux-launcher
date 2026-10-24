@@ -20,6 +20,12 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "feat(dock): a new install starts on Peek glass, existing installs keep the
+  tray" · a fresh install (uninstall, then `adb install`, launch) opens on Peek glass
+  (`layout.dock_design=peek_glass`); an update over an install that never picked a design
+  (`adb install -r` over a build from before this commit) keeps the Glass tray and writes no
+  `dock_design` key; an install that picked a design keeps it · pong with the developer's go-ahead
+  (emulator banned).
 - 2026-10-24 · commit "feat(gestures): the drawer swipe is always on; quick reply gets its own
   switch" · Home › Gestures no longer lists Swipe down for app drawer; a gesture's choices always
   include Open drawer; swiping down on the apps row/dock opens the drawer (also after updating from
@@ -441,6 +447,37 @@ dropped; what follows is what still owes a look.
   pong.
 
 ## Developer
+- 2026-10-25 · commit "feat(dock): draw the Peek glass card and the icons' reflections on it" ·
+  Home, Docked, Dock card → Design → Peek: a dark glass card inset about 3% from each side with
+  generous top corners, the icons' centres on its top edge, no lower corners anywhere, the card
+  running on under the gesture pill with no seam or step where the strip under the pill starts,
+  the rim on its top and sides continuing down the strip's sides; the row's end icons stand inside
+  the card · pong.
+- 2026-10-25 · same · Fancier glass on (managed wallpaper, Android 13+): each icon's reflection
+  hangs from its lower edge and fades and blurs down the card into the strip; pressing an icon,
+  a notification dot arriving and an icon changing show in the reflection on the same frame; a
+  page swipe carries the reflections with the icons; at rest the GPU bars stay flat (no redraw)
+  and nothing janks during a swipe · pong.
+- 2026-10-25 · same · Fancier glass off: the reflections are soft still pictures that come back
+  about 0.2 s after an icon or a dot changes, step away during a page swipe and return on the page
+  the row lands on; no redraws at rest · pong.
+- 2026-10-25 · same · the reflection hangs from the icons' lower edges, not from the card's top
+  edge as the brief said (mirrored about the icons' centres it falls exactly under the icons and
+  never shows); judge the look, the line is one constant (`PeekGlassGeometry.compute`) · pong.
+- 2026-10-25 · commit "feat(editor): a Reflection slider on the Dock card for Peek glass" · Dock
+  card: Reflection shows only while Peek is the design (Tray/Beads/Strip hide it, picking Peek
+  brings it back without closing the card); 0 hides the reflections, 100 is strong, the default
+  50 is clearly visible; dragging it updates the dock live without stutter; the card's other rows
+  look exactly as before · pong.
+- 2026-10-25 · same commits · Peek glass falls back to the tray's slab (shelf and shadow under
+  Floating included) with no reflection left behind: Floating; the keyboard up; the system
+  keyboard lifting the dock; Search field on; the A–Z row on the dock; a Workspace window with the
+  extra keys; and comes back as the card when each goes away. The long-press app menu over the
+  icons is not reflected (by design) and nothing flickers under it · pong.
+- 2026-10-25 · same · Peek glass Docked narrows the apps row by the card's inset plus 4 dp, also
+  where it falls back to the tray (a Workspace window on the shared layout): judge the icons'
+  size there; 3-button navigation (taller strip, buttons over the card) and no navigation bar
+  (the reflection only has the air under the icons) · pong.
 - 2026-10-24 · commit "feat(editor): live drag over the real frame…" · Appearance editor, hold
   the dock and drag it over the top, side and bottom slots: the frame stays the real launcher (no
   grey tiles, clock outline or icon dock), the dock's own picture follows the finger slightly
