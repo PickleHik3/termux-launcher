@@ -2475,6 +2475,10 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   one install per edition.
 
 ## Developer
+- 2026-10-25 · terminal effect at terminal Opacity 0 (emulator b-bezel-opaque.png) · the scanlines
+  fade from the pane's interior and are faint on the bezel while the bezel should carry none; check
+  whether the effect rides the glass layer and should instead sit over the text at any opacity ·
+  emulator or pong.
 - 2026-10-24 · "fix(glass): hold the refraction's corner radius to half its rect" · Floating,
   dock rows hidden, keyboard down, extra keys alone: the pill's ends are round, with no notch
   folding in and no line along the middle; same with the keyboard up, light and dark. The
