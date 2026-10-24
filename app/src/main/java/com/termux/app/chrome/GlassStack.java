@@ -165,14 +165,24 @@ public final class GlassStack {
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
+        return keyboard(preferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE, dockAlpha,
+            cornerRadiusPx, fancierLook);
+    }
+
+    /** The keyboard's glass on one half of the wall, which may hold its own values (ADR 0013). */
+    @NonNull
+    public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences,
+                                @NonNull TermuxAppSharedPreferences.WallHalf half, float dockAlpha,
+                                float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
-        float tint = linked ? dockAlpha : preferences.getInAppKeyboardBackgroundOpacity() / 100f;
-        return Spec.of(preferences.getInAppKeyboardBlurRadius(), tint,
-            preferences.getInAppKeyboardGrain(), cornerRadiusPx, fancierLook)
-            .withTintStrength(preferences.getInAppKeyboardTintStrength())
-            .withStackAlpha(keyboardStackAlphaPercent(preferences));
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+        float tint = linked ? dockAlpha
+            : preferences.getInAppKeyboardBackgroundOpacity(half) / 100f;
+        return Spec.of(preferences.getInAppKeyboardBlurRadius(half), tint,
+            preferences.getInAppKeyboardGrain(half), cornerRadiusPx, fancierLook)
+            .withTintStrength(preferences.getInAppKeyboardTintStrength(half))
+            .withStackAlpha(keyboardStackAlphaPercent(preferences, half));
     }
 
     /**
@@ -183,10 +193,17 @@ public final class GlassStack {
      * Opacity row applies. The under-keyboard strip asks here too, so both fade together.
      */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences) {
+        return keyboardStackAlphaPercent(preferences,
+            TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+    }
+
+    /** {@link #keyboardStackAlphaPercent(TermuxAppSharedPreferences)} on one half of the wall. */
+    public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences,
+                                                @NonNull TermuxAppSharedPreferences.WallHalf half) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
-        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity();
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(half);
     }
 
     /**

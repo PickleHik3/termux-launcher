@@ -1,5 +1,6 @@
 package com.termux.app.chrome;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -46,8 +47,14 @@ public final class LookGlassSpec {
             clamp(tintPercent, 0, 100), cornerRadiusDp(storedCornersDp));
     }
 
-    /** The Look as stored now; the shipped Base when there is no store to read. */
+    /** The Workspace's Look as stored now; the shipped Base when there is no store to read. */
     public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences) {
+        return read(preferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+    }
+
+    /** One half's Look as stored now (ADR 0013); the shipped Base when there is no store. */
+    public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences,
+                                     @NonNull TermuxAppSharedPreferences.WallHalf half) {
         if (preferences == null) {
             return of(false, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
                 TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
@@ -55,10 +62,10 @@ public final class LookGlassSpec {
                 TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS);
         }
         return of(preferences.isUseSystemWallpaperEnabled(),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN),
-            preferences.getSurfaceBaseValue(SurfaceProperty.TINT),
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, half),
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, half),
+            preferences.getSurfaceBaseValue(SurfaceProperty.TINT, half),
             preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
     }
 
