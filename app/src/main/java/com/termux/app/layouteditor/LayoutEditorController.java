@@ -125,6 +125,7 @@ public final class LayoutEditorController {
     @Nullable private Runnable mOnChanged;
     /** Told when the session moved to another page, so the host restates what that page wears. */
     @Nullable private Runnable mOnPlaceShown;
+    @Nullable private java.util.function.BiConsumer<Boolean, Boolean> mOnTrayOffer;
     /** Told when the canvas's selection moves (a tap on an element while it shows). */
     @Nullable private Consumer<LayoutCanvasView.Block> mOnSelection;
     @NonNull private LayoutStyle mStyle = LayoutStyle.parse(TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE);
@@ -383,6 +384,7 @@ public final class LayoutEditorController {
         LayoutEditorPlan plan = mPlan;
         if (plan == null || isShown(element) == shown)
             return;
+        ownHomeLayoutFor(element);
         LayoutEditorPlan.Drop drop;
         if (shown) {
             LayoutEditorPlan.TrayItem item = trayItemOf(element);
@@ -399,8 +401,59 @@ public final class LayoutEditorController {
     }
 
     public void setKeyboardShown(boolean shown) {
-        if (mPlan != null)
-            afterWrite(mPlan.setKeyboardShown(shown));
+        if (mPlan == null)
+            return;
+        if (shown != mPlan.shownLayout().keyboardShown)
+            ownHomeLayoutFor(null);
+        afterWrite(mPlan.setKeyboardShown(shown));
+    }
+
+    /** What the edited layout puts away, in the tray's order (the Layout editor's tray chips). */
+    @NonNull
+    public List<LayoutEditorPlan.TrayItem> trayItems() {
+        return mPlan == null ? new ArrayList<>() : mPlan.trayItems();
+    }
+
+    /** Whether the edited layout carries the Drawer tile. */
+    public boolean drawerTile() {
+        return mPlan != null && mPlan.drawerTile();
+    }
+
+    public void setDrawerTile(boolean on) {
+        if (mPlan == null)
+            return;
+        if (on != mPlan.drawerTile())
+            ownHomeLayoutFor(null);
+        afterWrite(mPlan.setDrawerTile(on));
+    }
+
+    /**
+     * Home and the Workspace keep each their own hidden set, always. While Home wears the shared
+     * layout a hide or a show on either half would land on both, so the first one gives Home a
+     * layout of its own, seeded from the shared one so nothing visibly changes, before it is
+     * written. Quiet about the canvas: a drop that triggers it is still being reported.
+     *
+     * @param element what is about to be hidden or shown, or null for the keyboard and the
+     *     dock's Search field and Drawer tile, which Home always wears
+     */
+    private void ownHomeLayoutFor(@Nullable Element element) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null || plan.hasHomeLayout())
+            return;
+        PlaceLayoutStore places = mHost.places();
+        if (!plan.showsHome() && places != null && element != null
+            && !com.termux.app.chrome.DressResolver.of(places)
+                .dressOf(PaneWallPage.WIDGETS).wears(element))
+            return;
+        plan.setHomeLayout(true);
+        mHost.applyPlaceArrangement();
+        if (mOnPlaceShown != null)
+            mOnPlaceShown.run();
+    }
+
+    /** Told when a lifted element is offered the stack to be put away in, and when it hovers it. */
+    public void setOnTrayOfferListener(@Nullable java.util.function.BiConsumer<Boolean, Boolean> l) {
+        mOnTrayOffer = l;
     }
 
     /** The edge {@code element} stands on (or returns to while it is put away). */
@@ -518,8 +571,11 @@ public final class LayoutEditorController {
     }
 
     public void setSearchField(boolean on) {
-        if (mPlan != null)
-            afterWrite(mPlan.setSearchField(on));
+        if (mPlan == null)
+            return;
+        if (on != mPlan.searchField())
+            ownHomeLayoutFor(null);
+        afterWrite(mPlan.setSearchField(on));
     }
 
     /** The keyboard's form in the shown orientation. */
@@ -621,9 +677,16 @@ public final class LayoutEditorController {
                 notifyChanged();
             }
 
+            @Override public void onTrayOfferChanged(boolean offered, boolean hovered) {
+                if (mOnTrayOffer != null)
+                    mOnTrayOffer.accept(offered, hovered);
+            }
+
             @Override public void onKeyboardPutAway() {
-                if (mPlan != null)
+                if (mPlan != null) {
+                    ownHomeLayoutFor(null);
                     afterWrite(mPlan.setKeyboardShown(false));
+                }
             }
 
             @Override public void onKeyboardRestored() {
@@ -640,6 +703,8 @@ public final class LayoutEditorController {
         MiniatureDragPolicy.Bar bar = LayoutCanvasView.barOf(block);
         if (mPlan == null || bar == null)
             return;
+        if (edge == null)
+            ownHomeLayoutFor(bar.element());
         if (mPlan.drop(bar, edge, index, underKeyboard) == LayoutEditorPlan.Drop.LIVE)
             mHost.applyPlaceArrangement();
         sync();
