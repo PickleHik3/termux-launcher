@@ -24,14 +24,15 @@
     <string name="bw_clock_weight_thin">Thin</string>
     <string name="bw_clock_weight_medium">Medium</string>
     <string name="bw_clock_seconds">Show seconds</string>
-    <string name="bw_clock_24_hour">24-hour format</string>
+    <string name="bw_clock_24_hour">24-hour time</string>
     <!-- The Clock's next alarm at 2×2: %1$s its time, like "07:00" or "Thu 07:00". -->
-    <string name="bw_clock_zones">Additional clocks</string>
+    <string name="bw_clock_zones">Time zones</string>
     <string name="bw_clock_zones_none">None</string>
-    <plurals name="bw_clock_zones_configured">
-        <item quantity="one">%d configured</item>
-        <item quantity="other">%d configured</item>
-    </plurals>
-    <string name="bw_clock_zone_placeholder">City or time zone</string>
+    <string name="bw_clock_zone_hint">City or time zone</string>
+    <string name="bw_clock_zones_summary">Add additional clocks to your widget</string>
+    <string name="bw_clock_seconds_summary">Display seconds on the clock</string>
+    <string name="bw_clock_24_hour_summary">Use 0\u201323 for hours instead of AM/PM</string>
+    <string name="bw_clock_settings_subtitle">Customize how the clock looks and behaves on your home screen</string>
+    <string name="bw_clock_zone_clear">Clear</string>
     <string name="bw_clock_alarm">Alarm %1$s</string>
 </resources>
