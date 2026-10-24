@@ -170,8 +170,8 @@ public final class X11GpuProbe {
             StringBuilder out = new StringBuilder();
             out.append("# ").append(gpu).append(": ").append(best.profile.id).append(" — ")
                 .append(best.reason).append('\n');
-            if (!best.installed) out.append("# install first: pkg install ")
-                .append(String.join(" ", best.packages)).append('\n');
+            if (!best.installed) out.append("# install first: ").append(installCommand(best.packages))
+                .append('\n');
             for (String line : best.env) out.append("export ").append(line).append('\n');
             if (best.serverCommand != null) out.append("# keep running in Termux: ")
                 .append(best.serverCommand).append('\n');
@@ -371,6 +371,24 @@ public final class X11GpuProbe {
             "virgl_test_server_android &");
     }
 
+    /**
+     * The Vulkan wrapper's package. It is in no Termux repository: the benchmark script downloads
+     * a pinned build and checks it ({@code termux-x11-gpu-setup --install-wrapper}), and that
+     * script is the one place its address and checksums are kept.
+     */
+    static final String WRAPPER_PACKAGE = "vulkan-wrapper-android";
+
+    /** What a shell runs to install {@code packages}: the wrapper through the script, the rest by name. */
+    @NonNull
+    static String installCommand(@NonNull List<String> packages) {
+        List<String> fromRepo = new ArrayList<>(packages);
+        boolean wrapper = fromRepo.remove(WRAPPER_PACKAGE);
+        String repo = fromRepo.isEmpty() ? "" : "pkg install " + String.join(" ", fromRepo);
+        if (!wrapper) return repo;
+        String own = "termux-x11-gpu-setup --install-wrapper";
+        return repo.isEmpty() ? own : own + " && " + repo;
+    }
+
     private static Recommendation vulkanWrapper(Inputs in, boolean mali) {
         List<String> env = new ArrayList<>(Arrays.asList(
             "VK_ICD_FILENAMES=" + ICD_DIR + "wrapper_icd.aarch64.json",
@@ -378,7 +396,7 @@ public final class X11GpuProbe {
         if (mali) env.addAll(Arrays.asList("MESA_VK_WSI_PRESENT_MODE=mailbox", "MESA_VK_WSI_DEBUG=blit"));
         return new Recommendation(Profile.VULKAN_WRAPPER,
             "the phone's Vulkan driver, wrapped for Zink",
-            in.hasIcd("wrapper") && in.mesaDri, Arrays.asList("vulkan-wrapper-android", "mesa"),
+            in.hasIcd("wrapper") && in.mesaDri, Arrays.asList(WRAPPER_PACKAGE, "mesa"),
             env, null);
     }
 

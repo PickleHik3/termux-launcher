@@ -466,6 +466,7 @@
     <string name="settings_x11_force_bgra_summary">Try this if colours look wrong on the display.</string>
     <string name="settings_x11_category_graphics">Graphics</string>
     <string name="settings_x11_gpu_title">Graphics acceleration</string>
+    <string name="settings_x11_gpu_entry_summary">Test and choose the fastest graphics for Linux apps</string>
     <string name="settings_x11_gpu_probing">Checking what this phone can do…</string>
     <!-- The Graphics acceleration page (GraphicsAccelerationFragment) and its entry row. -->
     <string name="settings_x11_gpu_row_summary">%1$s · %2$s</string>

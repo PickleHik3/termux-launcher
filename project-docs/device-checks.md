@@ -562,6 +562,23 @@ Developer:
   fastest wins, the Automatic row and the Set up Linux apps summary name it; pick another
   installed profile and open a GPU app: it draws, and glmark2-es2 names that renderer · pong, by
   hand.
+- 2026-10-24 · commits "feat(x11-server): a headless server never announces itself…" and
+  "fix(x11): the GPU benchmark tests on a headless display of its own…" · display on and showing
+  a session, Run benchmark: the display window never switches or reloads during the run, and
+  afterwards shows the same session, still connected, glass intact, no "soft reset"; the log
+  names the test display (:7 or the first free number above) · pong.
+- 2026-10-24 · same · display off, Run benchmark to the end, then once more stopped with Ctrl-C
+  during step 5: afterwards no `termux-x11` process (`ps -ef | grep termux-x11`) and no new socket
+  in `$PREFIX/tmp/.X11-unix` · pong.
+- 2026-10-24 · commit "fix(x11): the GPU benchmark installs the Vulkan wrapper from its pinned
+  download" · Run benchmark: step 3 downloads vulkan-wrapper-android, installs it, step 5 tests
+  vulkan-wrapper with a score or outcome; if it lost, step 8 removes it (`pacman -Q
+  vulkan-wrapper-android` finds nothing) and no `vulkan-wrapper.*` folder is left in
+  `$PREFIX/tmp`; if it won, it stays · pong.
+- 2026-10-24 · commit "feat(settings): a Graphics acceleration row on Linux apps" · Settings →
+  Linux apps: a Graphics acceleration row with an icon right under Set up Linux apps; tap it: the
+  page opens, Back returns to Linux apps; search "graphics" finds the page under Linux apps; the
+  guide's own Graphics link still opens it · pong.
 
 ## Found in the sweep (2026-10-24), to triage
 Crops and per-batch tables: `~/reports/device-checks-2026-10-24/`. Each becomes an issue or a

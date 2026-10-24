@@ -153,8 +153,8 @@ public final class SettingsTree {
             R.xml.x11_display_preferences);
         // Set up Linux apps is a stepped guide, a task of its own like the editors.
         editor(linuxApps, PAGES + "GuiAppsSetupGuideFragment", R.string.settings_gui_apps_title);
-        page(PAGES + "GuiAppsSetupGuideFragment", PAGES + "GraphicsAccelerationFragment",
-            R.string.settings_x11_gpu_title, 0);
+        // Its row sits right under the guide's on Linux apps; the guide's last step links it too.
+        page(linuxApps, PAGES + "GraphicsAccelerationFragment", R.string.settings_x11_gpu_title, 0);
         page(linuxApps, PAGES + "HiddenAppsPreferencesFragment", R.string.settings_x11_hidden_apps_title, 0);
         page(linuxApps, PAGES + "X11DisplayInputPreferencesFragment", R.string.settings_x11_sub_input_title,
             R.xml.x11_display_input_preferences);

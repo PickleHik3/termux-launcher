@@ -221,4 +221,14 @@ public class X11GpuProbeTest {
         in.glRenderer = "Mali-G78";
         assertFalse(X11GpuProbe.evaluate(in).toTable().contains("SKIP["));
     }
+
+    @Test
+    public void theWrapperIsInstalledThroughTheScriptNeverByName() {
+        assertEquals("termux-x11-gpu-setup --install-wrapper && pkg install mesa",
+            X11GpuProbe.installCommand(Arrays.asList("vulkan-wrapper-android", "mesa")));
+        assertEquals("termux-x11-gpu-setup --install-wrapper",
+            X11GpuProbe.installCommand(Arrays.asList("vulkan-wrapper-android")));
+        assertEquals("pkg install virglrenderer-android mesa",
+            X11GpuProbe.installCommand(Arrays.asList("virglrenderer-android", "mesa")));
+    }
 }
