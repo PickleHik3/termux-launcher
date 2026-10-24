@@ -406,7 +406,10 @@ public final class BuiltinWidgetConfigSheet {
         String start = startValue(field, current);
         picked.put(field.key, start);
         LinearLayout card = card(context);
-        card.addView(head(context, field, null));
+        // A bare title: nothing to tap in it, so no 48dp row to centre it in.
+        LinearLayout head = head(context, field, null);
+        head.setMinimumHeight(0);
+        card.addView(head);
         BuiltinWidgetView.ConfigField.TileArt art = field.tiles;
         if (art == null) {
             com.google.android.material.button.MaterialButtonToggleGroup group =
@@ -450,9 +453,8 @@ public final class BuiltinWidgetConfigSheet {
         Runnable dress = () -> {
             for (int i = 0; i < frames.size(); i++) {
                 boolean selected = values.get(i).equals(picked.get(field.key));
-                frames.get(i).setBackground(rounded(context, 12, selected
-                    ? androidx.core.graphics.ColorUtils.setAlphaComponent(primary, 36)
-                    : android.graphics.Color.TRANSPARENT, selected ? 2 : 1,
+                frames.get(i).setBackground(rounded(context, 12,
+                    android.graphics.Color.TRANSPARENT, selected ? 2 : 1,
                     selected ? primary : outline));
                 badges.get(i).setVisibility(selected ? View.VISIBLE : View.GONE);
                 View tile = (View) frames.get(i).getParent().getParent();
@@ -521,7 +523,6 @@ public final class BuiltinWidgetConfigSheet {
             ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        scrollParams.topMargin = dp(context, 4);
         card.addView(scroll, scrollParams);
         return card;
     }
@@ -554,8 +555,7 @@ public final class BuiltinWidgetConfigSheet {
         head.setClickable(true);
         head.setFocusable(true);
         card.addView(head);
-        // Open at first: the chevron points up.
-        chevron.setRotation(180f);
+        // Open at first, the chevron pointing down as in the mockup; closed, it points along.
 
         LinearLayout rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
@@ -620,7 +620,7 @@ public final class BuiltinWidgetConfigSheet {
         head.setOnClickListener(v -> {
             boolean open = rows.getVisibility() != View.VISIBLE;
             rows.setVisibility(open ? View.VISIBLE : View.GONE);
-            float to = open ? 180f : 0f;
+            float to = open ? 0f : -90f;
             if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
                 chevron.animate().rotation(to).setDuration(150).start();
             } else {
