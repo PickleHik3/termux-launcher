@@ -1319,6 +1319,24 @@ public final class SuggestionBarView extends GridLayout
         iconMotionListener = listener;
     }
 
+    /**
+     * Told when one of the row's icons asked to be drawn again (an icon arrived, a notification
+     * dot or a press changed): the Peek glass reflection of the row hears it. Null for nobody.
+     */
+    @Nullable private Runnable contentInvalidatedListener;
+
+    /** Who hears that an icon on the row asked to be drawn again, or null for nobody. */
+    public void setContentInvalidatedListener(@Nullable Runnable listener) {
+        contentInvalidatedListener = listener;
+    }
+
+    @Override
+    public void onDescendantInvalidated(@NonNull View child, @NonNull View target) {
+        super.onDescendantInvalidated(child, target);
+        Runnable listener = contentInvalidatedListener;
+        if (listener != null) listener.run();
+    }
+
     private void notifyIconsMoved() {
         // A page switch slides the whole row; the Drawer tile is no page's, so it holds its place.
         View tile = drawerTileSlot;
