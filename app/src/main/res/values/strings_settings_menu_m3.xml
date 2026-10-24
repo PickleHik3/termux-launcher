@@ -14,7 +14,7 @@
     <string name="settings_section_look">Appearance</string>
     <string name="settings_section_look_summary">Wallpaper, glass, theme, icons and layout</string>
     <string name="settings_section_keyboard_summary">Layouts, size, typing, voice and look</string>
-    <string name="settings_section_notifications_summary">Access, dots, pinned alerts and history</string>
+    <string name="settings_section_notifications_summary">Dots, pinned alerts and history</string>
     <string name="settings_section_ai_summary">Models, voice and assistant</string>
     <string name="settings_section_general">General</string>
     <string name="settings_section_general_summary">Motion, vibration, battery, backup and about</string>
