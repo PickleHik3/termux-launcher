@@ -186,8 +186,8 @@ measurements and the questions they raised). Resolved as follows:
 - **Linux apps › Input copy:** "OSK auto-show" becomes "Keyboard pops up :: Opens when you tap a
   text field and closes when you tap elsewhere"; "Keyboard over display" becomes "Keyboard over the
   window". Done with the stepped guide work.
-- **The guide's steps vary by edition**: the nix edition starts at the distro step; the progress
-  line counts the steps that exist.
+- **The guide's steps vary by edition**: the nix edition has no install route, so it shows its
+  advice and the docs link with no steps; elsewhere the progress line counts the steps that exist.
 - The wireframes' icons are placeholders; the build uses Material Symbols Rounded vectors.
 
 ## 8. From the blind review (Codex, no context, 2026-10-24)
