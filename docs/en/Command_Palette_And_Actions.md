@@ -49,7 +49,7 @@ Besides the actions, the palette has three sections of its own:
 
 On Home the palette leads with a **Home** section: **Open terminal here** (a
 [Home float](Panes_Windows_And_Sessions.md#home-floats) on this page), **Go to Workspace**, **New
-window**, **Minimise all floats**, **Restore floats**, **Add widget**, **Wallpaper**, **Layout**,
+window**, **Minimise all floats**, **Restore floats**, **Add widget**, **Wallpaper**,
 **Appearance** and **Settings**. Apps, **Linux apps** and contacts follow, and **Windows** lists the
 current session's windows and Home floats by name: a window takes you to it in the Workspace, a float
 goes to its Home page and comes back to the front. Actions that work on a terminal pane (its text,

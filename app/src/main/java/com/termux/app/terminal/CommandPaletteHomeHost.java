@@ -29,9 +29,6 @@ public interface CommandPaletteHomeHost {
     /** Starts adding a widget to the Home page in view. */
     default void addWidget() { }
 
-    /** Opens the Layout editor. */
-    default void openLayoutEditor() { }
-
     /** Pages Home to the float's page and restores it there. */
     default void restoreFloat(long windowId) { }
 

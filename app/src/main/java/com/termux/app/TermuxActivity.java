@@ -1518,8 +1518,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
 
-    private static final int CONTEXT_MENU_LAYOUT_EDITOR_ID = 12;
-
     /** One row of the long-press action dialog. */
     private static final class TerminalActionItem {
         final int id;
@@ -17803,9 +17801,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_SURFACE_EDITOR_ID:
                 openSurfaceEditor();
                 return true;
-            case CONTEXT_MENU_LAYOUT_EDITOR_ID:
-                openLayoutEditor(null);
-                return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 com.termux.app.terminal.TerminalCommandPalette.show(this);
                 return true;
@@ -25719,7 +25714,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 page.runPencil(new android.graphics.RectF(x, y, x, y));
                 break;
             }
-            case LAYOUT: openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS); break;
             case REMOVE_PAGE:
                 if (mWidgetPaneController != null) mWidgetPaneController.removeCurrentPage();
                 break;
@@ -25736,7 +25730,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 openAppearanceSurface(
                     com.termux.app.surfaces.AppearanceSurfaceController.PageId.WALLPAPER);
                 break;
-            case LOOK: openSurfaceEditor(); break;
+            case APPEARANCE: openSurfaceEditor(com.termux.app.surfaces.EditorCard.HOME); break;
             case LAUNCHER_SETTINGS: openSettings(); break;
             case SET_DEFAULT_HOME: HomeAppChooser.open(this); break;
             case HELP: showHelpOverlay(); break;
@@ -30164,10 +30158,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mWidgetPaneController == null || mPaneWallController == null) return;
             mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
             mWidgetPaneController.openPicker();
-        }
-
-        @Override public void openLayoutEditor() {
-            TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
         }
 
         @Override public void restoreFloat(long windowId) {

@@ -42,7 +42,7 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         if (retro != null) retro.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
         androidx.preference.Preference layout = findPreference("terminal_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
-            SettingsEditorDoors.openLayoutEditor(this, row, com.termux.app.wall.PaneWallPage.TERMINAL);
+            SettingsEditorDoors.openEditor(this, row, com.termux.app.surfaces.EditorCard.TERMINAL);
             return true;
         });
         SettingsLayoutUtils.applyScreenLayout(this);

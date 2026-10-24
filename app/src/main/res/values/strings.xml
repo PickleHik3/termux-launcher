@@ -25,10 +25,9 @@
     <string name="home_folder_remove_app">Remove from folder</string>
     <string name="home_actions_add_page">Add a page</string>
     <string name="home_actions_edit_pages">Edit pages</string>
-    <string name="home_actions_layout">Layout</string>
     <string name="home_actions_remove_page">Remove page</string>
     <string name="home_actions_wallpaper">Wallpaper</string>
-    <string name="home_actions_look">Look</string>
+    <string name="home_actions_appearance">Appearance</string>
     <string name="home_actions_launcher_settings">Launcher settings</string>
     <string name="home_actions_set_default_home">Set as default home app</string>
     <string name="home_actions_help">Help</string>
@@ -2288,8 +2287,6 @@
     <string name="palette_home_restore_floats_hint">Bring back every minimised floating terminal</string>
     <string name="palette_home_add_widget_hint">Place a widget on this page</string>
     <string name="palette_home_wallpaper">Wallpaper</string>
-    <string name="palette_home_layout">Layout</string>
-    <string name="palette_home_layout_hint">Arrange what Home and the Workspace show</string>
     <string name="palette_home_appearance">Appearance</string>
     <string name="palette_home_settings">Settings</string>
     <string name="palette_jump_window_unnamed">Window %1$d</string>

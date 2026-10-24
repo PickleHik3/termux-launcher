@@ -44,7 +44,6 @@ final class CommandPaletteHomeSet {
     static final String TOOL_MINIMISE_FLOATS = "home.minimise_floats";
     static final String TOOL_RESTORE_FLOATS = "home.restore_floats";
     static final String TOOL_ADD_WIDGET = "home.add_widget";
-    static final String TOOL_LAYOUT_EDITOR = "home.layout_editor";
     /** A float's jump row; carries {@code window_id}. */
     static final String TOOL_RESTORE_FLOAT = "home.restore_float";
 
@@ -75,8 +74,6 @@ final class CommandPaletteHomeSet {
         new Action(TOOL_ADD_WIDGET, R.string.widget_add, R.string.palette_home_add_widget_hint),
         new Action(LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER,
             R.string.palette_home_wallpaper, 0),
-        new Action(TOOL_LAYOUT_EDITOR, R.string.palette_home_layout,
-            R.string.palette_home_layout_hint),
         new Action(LauncherToolRegistry.TOOL_APPEARANCE_SURFACE_EDITOR,
             R.string.palette_home_appearance, 0),
         new Action(LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS, R.string.palette_home_settings, 0),
@@ -224,7 +221,6 @@ final class CommandPaletteHomeSet {
             case TOOL_MINIMISE_FLOATS: host.minimiseAllFloats(); return true;
             case TOOL_RESTORE_FLOATS: host.restoreFloats(); return true;
             case TOOL_ADD_WIDGET: host.addWidget(); return true;
-            case TOOL_LAYOUT_EDITOR: host.openLayoutEditor(); return true;
             case TOOL_RESTORE_FLOAT: {
                 long id = entry.arguments == null ? -1 : entry.arguments.optLong("window_id", -1);
                 if (id >= 0) host.restoreFloat(id);
