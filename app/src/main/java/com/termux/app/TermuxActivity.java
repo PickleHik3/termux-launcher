@@ -18221,7 +18221,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
                 R.string.settings_app_drawer_view_type_title));
         }
+
+        @Nullable @Override
+        public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+            return mHomeAppDropTarget;
+        }
     }
+
+    /**
+     * Home's end of an app dragged out of the drawer: the drawer closes under the finger, the wall
+     * turns to Home, and Home's pane takes the drag over and puts the icon on its grid.
+     */
+    private final com.termux.app.launcher.widget.HomeAppDrop.Target mHomeAppDropTarget =
+        new com.termux.app.launcher.widget.HomeAppDrop.Target() {
+            @Override public boolean canTakeAppDrop() {
+                return mWidgetPaneController != null && mPaneWallController != null
+                    && mWidgetPaneController.canTakeAppDrop();
+            }
+
+            @Override public void onAppDropStarted(
+                    @NonNull com.termux.app.launcher.widget.HomeAppDrop drop, float rawX, float rawY) {
+                if (mWidgetPaneController == null || mPaneWallController == null) return;
+                if (mAppDrawerController != null) mAppDrawerController.close(false);
+                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, isVisible());
+                mWidgetPaneController.onAppDropStarted(drop, rawX, rawY);
+            }
+        };
 
     /**
      * True while the app drawer plane owns the accessory stack's transforms — open, or mid open/
@@ -26825,6 +26850,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             (com.termux.app.launcher.widget.WidgetPaneView) view, mWidgetHostController,
             new com.termux.app.launcher.widget.WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+                // An app dragged in from the drawer and let go over the dock is not put on the
+                // page: the dock takes no drops from the drawer, so the drag simply ends.
+                private final int[] dockAt = new int[2];
+                @Override public boolean isOverDock(float rawX, float rawY) {
+                    View dock = mSuggestionBarView;
+                    if (dock == null || !dock.isShown()) return false;
+                    int[] at = dockAt;
+                    dock.getLocationOnScreen(at);
+                    return rawX >= at[0] && rawX < at[0] + dock.getWidth()
+                        && rawY >= at[1] && rawY < at[1] + dock.getHeight();
+                }
                 // The widget grid lives on the wall's Widgets page, and nowhere else.
                 @Override public boolean isWidgetSurfaceShowing() {
                     return mPaneWallController != null && mPaneWallController.currentPage()

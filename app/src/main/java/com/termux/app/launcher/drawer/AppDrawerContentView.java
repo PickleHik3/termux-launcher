@@ -1886,6 +1886,19 @@ public final class AppDrawerContentView extends FrameLayout
         }
     }
 
+    /** Home, for an app picked up here to be carried to; null while there is none. */
+    @Nullable private com.termux.app.launcher.widget.HomeAppDrop.Target mHomeAppDropTarget;
+
+    public void setHomeAppDropTarget(
+            @Nullable com.termux.app.launcher.widget.HomeAppDrop.Target target) {
+        mHomeAppDropTarget = target;
+    }
+
+    @Nullable @Override
+    public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+        return mHomeAppDropTarget;
+    }
+
     @NonNull @Override public AppDrawerViewType frozenSourceViewType() {
         return mGestureViewType;
     }

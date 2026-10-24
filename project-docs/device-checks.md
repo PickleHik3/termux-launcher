@@ -13,6 +13,14 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-24 · commit "feat(home): carry an app from the drawer onto a Home page" · open the
+  drawer from Home and from the Workspace, long-press an app and slide sideways: the menu goes, the
+  drawer closes under the finger, Home comes in and the icon rides the finger at Home's icon size
+  with a white cell outline under it; let go over a free cell and the icon settles there; over a
+  taken cell it goes to the nearest free one; rest at a side edge for ~350 ms and the page turns
+  (past the last page a new one is made and kept only if the icon lands there); a full page shows
+  a red outline and "No room on this page."; let go over the dock or off the grid and nothing is
+  added. With Home's layout locked the pickup stays the drawer's own drag · emulator.
 - 2026-10-24 · commit "feat(drawer): the search keyboard slides away as the list scrolls" · open
   the drawer with the built-in keyboard revealed under the search (a pill tap), then scroll the
   vertical list down: nothing moves for the first ~24 dp, then the keyboard slides down with the
@@ -2424,6 +2432,9 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   one install per edition.
 
 ## Developer
+- 2026-10-24 · commit "feat(home): carry an app from the drawer onto a Home page" · the drawer to
+  Home hand-over feels like one gesture: no flash or jump of the icon as the drawer closes and the
+  wall slides, and the drop settle reads like Home's own · pong.
 
 - 2026-10-24 · Appearance + Settings rework (branch feat/appearance-settings-rework, on pong as
   1.1.0-pre.6+dev.f076a2dbe) · taste: the one-rule editor (tap a surface → card; palette glyph →

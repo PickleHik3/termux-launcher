@@ -23,6 +23,7 @@ import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.data.LauncherConfigSnapshot;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedFolderItem;
+import com.termux.app.launcher.widget.HomeAppDrop;
 
 /** Platform drag coordinator. Local state contains stable identity/revision only. */
 public final class AppDrawerDragController implements AppDrawerPickupDelegate {
@@ -46,6 +47,12 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
          *     drop lands past the last app.
          */
         @NonNull String drawerAnchorFor(@Nullable String targetStableId);
+
+        /**
+         * Home, when it can take an app dragged out of the drawer; null when there is no Home to
+         * hand over to, and the pickup stays the drawer's own drag.
+         */
+        @Nullable default HomeAppDrop.Target homeAppDropTarget() { return null; }
     }
 
     private final SuggestionBarView dock;
@@ -72,6 +79,8 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         LauncherConfigSnapshot snapshot = dock.getLauncherConfigSnapshot();
         PickupArtwork artwork = pickupArtwork(source);
         if (artwork == null) return false;
+        HomeAppDrop.Target home = host.homeAppDropTarget();
+        if (home != null && home.canTakeAppDrop()) return handOverToHome(source, entry, artwork, home);
         int size = artwork.sizePx;
         Drawable drawable = artwork.drawable;
         host.armTerminalDispatchDragLatch();
@@ -89,6 +98,31 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
             : source.startDrag(clip, shadow, active, 0);
         if (!started) cleanup();
         else host.onDragStateChanged(true);
+        return started;
+    }
+
+    /**
+     * Launcher3's way: an app picked up in the drawer is carried to Home. The drawer starts the
+     * platform drag with no shadow of its own and hands it over at once; Home closes the drawer
+     * under the finger, draws the icon in its drag layer and puts it down on its grid. The drawer
+     * keeps no state for it, so nothing here has to be cleaned up when it ends.
+     */
+    private boolean handOverToHome(@NonNull View source, @NonNull LauncherAppEntry entry,
+                                   @NonNull PickupArtwork artwork,
+                                   @NonNull HomeAppDrop.Target home) {
+        int[] location = new int[2];
+        source.getLocationOnScreen(location);
+        float rawX = location[0] + source.getWidth() / 2f;
+        float rawY = location[1] + source.getHeight() / 2f;
+        HomeAppDrop drop = new HomeAppDrop(entry.appRef, entry.label == null ? "" : entry.label,
+            artwork.drawable);
+        // Public payload is intentionally empty; all identity remains in process-local state.
+        ClipData clip = ClipData.newPlainText("launcher-item", "");
+        View.DragShadowBuilder shadow = HomeAppDrop.invisibleShadow();
+        boolean started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+            ? source.startDragAndDrop(clip, shadow, drop, 0)
+            : source.startDrag(clip, shadow, drop, 0);
+        if (started) home.onAppDropStarted(drop, rawX, rawY);
         return started;
     }
 

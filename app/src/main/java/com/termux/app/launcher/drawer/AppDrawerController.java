@@ -163,6 +163,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         /** The app-drawer settings page, where categorization is run. */
         void openAppDrawerSettings();
+
+        /**
+         * Home, for an app picked up in the drawer to be carried to (it closes the drawer and
+         * takes the drag over); null where there is no Home, and the drawer's own drag runs.
+         */
+        @Nullable default com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+            return null;
+        }
     }
 
     /**
@@ -1078,6 +1086,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
         content.setSearchKeyboardRequestListener(this::onSearchKeyboardRequested);
+        content.setHomeAppDropTarget(mHost.homeAppDropTarget());
         content.setKeyboardScrollListener(new AppDrawerContentView.KeyboardScrollListener() {
             @Override public void onListScrolledDown(int dy) { onKeyboardScrollStep(dy); }
             @Override public void onListScrollIdle() { onKeyboardScrollIdle(); }
