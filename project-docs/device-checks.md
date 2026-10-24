@@ -562,6 +562,14 @@ Developer:
   fastest wins, the Automatic row and the Set up Linux apps summary name it; pick another
   installed profile and open a GPU app: it draws, and glmark2-es2 names that renderer · pong, by
   hand.
+- 2026-10-24 · commits "feat(x11-server): a headless server never announces itself…" and
+  "fix(x11): the GPU benchmark tests on a headless display of its own…" · display on and showing
+  a session, Run benchmark: the display window never switches or reloads during the run, and
+  afterwards shows the same session, still connected, glass intact, no "soft reset"; the log
+  names the test display (:7 or the first free number above) · pong.
+- 2026-10-24 · same · display off, Run benchmark to the end, then once more stopped with Ctrl-C
+  during step 5: afterwards no `termux-x11` process (`ps -ef | grep termux-x11`) and no new socket
+  in `$PREFIX/tmp/.X11-unix` · pong.
 
 ## Found in the sweep (2026-10-24), to triage
 Crops and per-batch tables: `~/reports/device-checks-2026-10-24/`. Each becomes an issue or a

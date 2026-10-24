@@ -11,7 +11,9 @@
 #   2. Lists the ways that chip can be used, from the most promising to "no acceleration".
 #   3. Brings the installed packages up to date, then installs the small test program and the
 #      driver packages for each way (remembering which were already there).
-#   4. Starts a private display for the tests, so nothing you have open is disturbed.
+#   4. Starts a display of its own for the tests, on the first free number from :7 up. It is
+#      never shown and the launcher leaves it alone, so a display you have open stays exactly as
+#      it was. However the run ends, this display is stopped again.
 #   5. Tries every way with a short 3D test, hardest scenes first. A way passes only if it
 #      really uses the graphics chip, finishes without crashing, and is clearly faster than
 #      the no-acceleration baseline.
@@ -27,7 +29,7 @@
 #   --keep        leave every installed package in place afterwards
 #   --skip-proot  do not test inside the Debian container
 #   --yes         do not pause for confirmation before installing anything
-#   --display=N   use display :N for the tests (default :7)
+#   --display=N   look for a free display number for the tests from :N up (default :7)
 #   --profiles=FILE  read the ways to try from FILE (the launcher's page writes one) instead of
 #                 asking the launcher with launcherctl
 #
@@ -38,18 +40,19 @@
 
 set -uo pipefail
 
-KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_NO=7; PROFILES=""
+KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_FROM=7; PROFILES=""
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
     --skip-proot) SKIP_PROOT=1 ;;
     --yes) YES=1 ;;
-    --display=*) DISPLAY_NO=${arg#--display=} ;;
+    --display=*) DISPLAY_FROM=${arg#--display=}; DISPLAY_FROM=${DISPLAY_FROM#:} ;;
     --profiles=*) PROFILES=${arg#--profiles=} ;;
     -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)"; exit 2 ;;
   esac
 done
+case $DISPLAY_FROM in ''|*[!0-9]*) echo "--display wants a number, such as --display=7"; exit 2 ;; esac
 
 PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 # X programs in Termux look for the display's socket in the prefix's tmp, whatever TMPDIR a shell
@@ -65,7 +68,8 @@ LOG=$TMPDIR/x11-gpu-setup.log
 # used installed-rootfs/<name>. Take whichever is there.
 DISTRO_ROOT=$PREFIX/var/lib/proot-distro/containers/debian/rootfs
 [ -d "$DISTRO_ROOT" ] || DISTRO_ROOT=$PREFIX/var/lib/proot-distro/installed-rootfs/debian
-TEST_DISPLAY=":$DISPLAY_NO"
+# The test display, picked in step 4.
+DISPLAY_NO=""; TEST_DISPLAY=""
 
 # The short 3D test. Off-screen so the display does not pace it, three heavy scenes so software
 # rendering cannot keep up, five seconds each. About 20 seconds per attempt.
@@ -148,9 +152,62 @@ install_pkgs() {
 # Background helpers we start and must stop again.
 SERVER_PID=""; VIRGL_PID=""
 stop_virgl()   { [ -n "$VIRGL_PID" ] && kill "$VIRGL_PID" 2>/dev/null; VIRGL_PID=""; pkill -f virgl_test_server_android 2>/dev/null; true; }
+
+# Whether process PID is a termux-x11 server for display :N, read off its command line: the
+# server names itself "termux-x11 <package> <its arguments>", and until it has started it is the
+# termux-x11 script with the same arguments. A process of another user, or one that is gone,
+# is not.
+is_x11_server() {
+  local args
+  args=$(tr '\0' ' ' 2>/dev/null <"/proc/$1/cmdline") || return 1
+  case " $args" in *termux-x11*) ;; *) return 1 ;; esac
+  case " $args " in *" :$2 "*|*" :$2."*) return 0 ;; esac
+  return 1
+}
+
+# Whether an X client gets an answer on :N.
+display_answers() {
+  if command -v xdpyinfo >/dev/null; then
+    DISPLAY=":$1" timeout 5 xdpyinfo >/dev/null 2>&1
+  else
+    DISPLAY=":$1" timeout 10 glmark2-es2 --off-screen -s 64x64 -b build:duration=0.2 >/dev/null 2>&1
+  fi
+}
+
+# Whether something already holds display :N: a termux-x11 server for it, a live lock, or any
+# server answering on its socket. A socket alone proves nothing: a display that was killed
+# leaves its socket behind.
+display_in_use() {
+  local p lpid=""
+  for p in /proc/[0-9]*; do is_x11_server "${p#/proc/}" "$1" && return 0; done
+  if [ -f "$TMPDIR/.X$1-lock" ]; then
+    read -r lpid <"$TMPDIR/.X$1-lock" 2>/dev/null
+    lpid=${lpid//[!0-9]/}
+    [ -n "$lpid" ] && kill -0 "$lpid" 2>/dev/null && return 0
+  fi
+  [ -S "$TMPDIR/.X11-unix/X$1" ] && display_answers "$1" && return 0
+  return 1
+}
+
+# Stops the test display this run started, and nothing else. termux-x11 replaces itself with the
+# server, so the pid "&" gave is the server's own; it is checked to still be that server (a pid is
+# reused once its process is gone), asked to stop, and killed if it has not within three seconds.
+# Its socket and lock go once it has.
 stop_display() {
-  [ -n "$SERVER_PID" ] && { kill "$SERVER_PID" 2>/dev/null; sleep 1; rm -f "$TMPDIR/.X11-unix/X$DISPLAY_NO"; }
-  SERVER_PID=""; true
+  [ -n "$SERVER_PID" ] || return 0
+  local pid=$SERVER_PID
+  SERVER_PID=""
+  if is_x11_server "$pid" "$DISPLAY_NO"; then
+    kill "$pid" 2>/dev/null
+    for _ in 1 2 3 4 5 6; do is_x11_server "$pid" "$DISPLAY_NO" || break; sleep 0.5; done
+    if is_x11_server "$pid" "$DISPLAY_NO"; then
+      kill -9 "$pid" 2>/dev/null
+      sleep 0.5
+    fi
+  fi
+  is_x11_server "$pid" "$DISPLAY_NO" ||
+    rm -f "$TMPDIR/.X11-unix/X$DISPLAY_NO" "$TMPDIR/.X$DISPLAY_NO-lock" "$HOME/.tmp/.X11-unix/X$DISPLAY_NO"
+  true
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -291,8 +348,8 @@ else
 fi
 case $TABLE in
   *"PKGS['software']="*) eval "$TABLE" ;;
-  *) say "Could not get the list of graphics settings from the launcher. Open Settings > Terminal >"
-     say "Linux apps > Set up Linux apps > Graphics acceleration and tap Run benchmark there."
+  *) say "Could not get the list of graphics settings from the launcher. Open Settings > Linux apps >"
+     say "Graphics acceleration and tap Run benchmark there."
      exit 1 ;;
 esac
 detail "Graphics chip: $GPU_NAME"
@@ -368,29 +425,36 @@ for p in $ALL_PKGS; do case " ${WE_INSTALLED[*]} ${NOT_AVAILABLE[*]} " in *" $p 
 result "newly installed: ${WE_INSTALLED[*]:-none}; already on the phone:${ALREADY:- none}; not available here: ${NOT_AVAILABLE[*]:-none}"
 
 # ---------------------------------------------------------------------------------------------
-step 4 "Starting a private display for the tests"
-SOCKET=$TMPDIR/.X11-unix/X$DISPLAY_NO
-# A socket file alone proves nothing: an earlier run may have left one behind. Ask the display.
-display_answers() { DISPLAY=$TEST_DISPLAY timeout 10 glmark2-es2 --off-screen -s 64x64 -b build:duration=0.2 >/dev/null 2>&1; }
-if [ -S "$SOCKET" ] && display_answers; then
-  detail "A display $TEST_DISPLAY is already running; using it."
-else
-  if [ -e "$SOCKET" ]; then
-    detail "Removing a leftover socket from an earlier run."
-    rm -f "$SOCKET" "$HOME/.tmp/.X11-unix/X$DISPLAY_NO"
-  fi
-  if ! command -v termux-x11 >/dev/null; then
-    say "The display command (termux-x11) is not installed. Turn the Linux display on in the launcher's settings first."; exit 1
-  fi
-  # A display only for measuring: no fcitx5 beside it, however it is set up for the real one.
-  TERMUX_X11_IM=0 termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
-  SERVER_PID=$!
-  for _ in $(seq 1 20); do [ -S "$SOCKET" ] && break; sleep 0.5; done
-  if [ ! -S "$SOCKET" ]; then
-    say "The display did not start. Its messages are in $LOG."; exit 1
-  fi
-  detail "Display $TEST_DISPLAY is up. Nothing is shown on screen; the tests draw off-screen."
+step 4 "Starting a display of its own for the tests"
+if ! command -v termux-x11 >/dev/null; then
+  say "The display command (termux-x11) is not installed. Turn the Linux display on in the launcher's settings first."; exit 1
 fi
+# Never one that is already there: that may be the display you use, and it stays as it is.
+for n in $(seq "$DISPLAY_FROM" $((DISPLAY_FROM + 56))); do
+  display_in_use "$n" || { DISPLAY_NO=$n; break; }
+done
+if [ -z "$DISPLAY_NO" ]; then
+  say "Every display number from :$DISPLAY_FROM to :$((DISPLAY_FROM + 56)) is in use, so the tests have nowhere to run."; exit 1
+fi
+TEST_DISPLAY=":$DISPLAY_NO"
+SOCKET=$TMPDIR/.X11-unix/X$DISPLAY_NO
+if [ -e "$SOCKET" ] || [ -e "$TMPDIR/.X$DISPLAY_NO-lock" ]; then
+  detail "Removing what an earlier display $TEST_DISPLAY left behind."
+  rm -f "$SOCKET" "$TMPDIR/.X$DISPLAY_NO-lock" "$HOME/.tmp/.X11-unix/X$DISPLAY_NO"
+fi
+# Headless: the launcher is never told about it, so its own display window is left alone. And no
+# fcitx5 beside it, however the real display is set up.
+TERMUX_X11_HEADLESS=1 TERMUX_X11_IM=0 termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 20); do
+  [ -S "$SOCKET" ] && break
+  kill -0 "$SERVER_PID" 2>/dev/null || break
+  sleep 0.5
+done
+if [ ! -S "$SOCKET" ]; then
+  say "The test display did not start. Its messages are in $LOG."; exit 1
+fi
+detail "Test display $TEST_DISPLAY is up. Nothing is shown on screen; the tests draw off-screen."
 export DISPLAY=$TEST_DISPLAY
 
 # ---------------------------------------------------------------------------------------------

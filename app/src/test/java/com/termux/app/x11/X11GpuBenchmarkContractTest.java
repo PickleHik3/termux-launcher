@@ -28,6 +28,7 @@ public class X11GpuBenchmarkContractTest {
 
     @Rule public TemporaryFolder temp = new TemporaryFolder();
 
+    private String script;
     private String writeResults;
 
     @Before
@@ -36,7 +37,7 @@ public class X11GpuBenchmarkContractTest {
             || new File("/usr/bin/bash").canExecute());
         File asset = new File("src/main/assets/x11/x11-gpu-setup.sh");
         if (!asset.isFile()) asset = new File("app/src/main/assets/x11/x11-gpu-setup.sh");
-        String script = new String(Files.readAllBytes(asset.toPath()), StandardCharsets.UTF_8);
+        script = new String(Files.readAllBytes(asset.toPath()), StandardCharsets.UTF_8);
         Matcher m = Pattern.compile("(?ms)^write_results\\(\\) \\{\\n.*?^\\}\\n").matcher(script);
         assertTrue("the script has write_results", m.find());
         writeResults = m.group();
@@ -102,5 +103,60 @@ public class X11GpuBenchmarkContractTest {
         String output = bash(gpu, ""
             + "for c in \"${CANDIDATES[@]}\"; do [ -n \"${SKIP[$c]:-}\" ] && printf '%s ' \"$c\"; done\n");
         assertEquals("virgl-angle vulkan-wrapper virgl ", output);
+    }
+
+    // ---- the test display ----
+
+    /** The script's own definition of shell function {@code name}. */
+    private String function(String name) {
+        Matcher m = Pattern.compile("(?ms)^" + Pattern.quote(name) + "\\(\\) \\{\\n.*?^\\}\\n").matcher(script);
+        assertTrue("the script has " + name, m.find());
+        return m.group();
+    }
+
+    /** Runs {@code body} in bash with {@code $1} a fresh folder; returns what it printed. */
+    private String run(String body) throws Exception {
+        File dir = temp.newFolder();
+        Process process = new ProcessBuilder(Arrays.asList("bash", "-c", "set -uo pipefail\n" + body,
+            "bash", dir.getAbsolutePath())).redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertTrue(process.waitFor(60, TimeUnit.SECONDS));
+        assertEquals(output, 0, process.exitValue());
+        return output;
+    }
+
+    @Test
+    public void theTestDisplayIsAlwaysANewOneTheLauncherIsNeverToldAbout() {
+        assertTrue("started headless, without the input-method helper", script.contains(
+            "TERMUX_X11_HEADLESS=1 TERMUX_X11_IM=0 termux-x11 \"$TEST_DISPLAY\" -ac"));
+        assertTrue("a display that is already running is never reused",
+            script.contains("display_in_use \"$n\" || { DISPLAY_NO=$n; break; }"));
+        assertTrue("never a broad pkill of display servers", !script.contains("pkill -f termux-x11")
+            && !script.contains("pkill termux-x11"));
+    }
+
+    @Test
+    public void stoppingTheTestDisplayStopsThatServerAndNoOther() throws Exception {
+        Assume.assumeTrue("needs /proc", new File("/proc/self/cmdline").canRead());
+        String output = run(""
+            + "TMPDIR=$1; HOME=$1; DISPLAY_NO=7\n"
+            + function("is_x11_server") + function("display_answers") + function("display_in_use")
+            + function("stop_display")
+            + "mkdir -p \"$TMPDIR/.X11-unix\"; : > \"$TMPDIR/.X11-unix/X7\"; echo 1 > \"$TMPDIR/.X7-lock\"\n"
+            + "(exec -a 'termux-x11 com.test :7 -ac' sleep 30) & SERVER_PID=$!\n"
+            + "(exec -a 'termux-x11 com.test :8 -ac' sleep 30) & OTHER=$!\n"
+            + "sleep 0.3\n"
+            + "is_x11_server $SERVER_PID 7 && echo ours-is-7\n"
+            + "is_x11_server $SERVER_PID 8 || echo ours-is-not-8\n"
+            + "display_in_use 8 && echo 8-in-use\n"
+            + "display_in_use 9 || echo 9-free\n"
+            + "pid=$SERVER_PID; stop_display\n"
+            + "is_x11_server $pid 7 || echo ours-stopped\n"
+            + "kill -0 $OTHER && echo other-running\n"
+            + "[ -e \"$TMPDIR/.X11-unix/X7\" ] || echo socket-gone\n"
+            + "[ -e \"$TMPDIR/.X7-lock\" ] || echo lock-gone\n"
+            + "kill $OTHER\n");
+        assertEquals("ours-is-7\nours-is-not-8\n8-in-use\n9-free\nours-stopped\nother-running\n"
+            + "socket-gone\nlock-gone\n", output);
     }
 }
