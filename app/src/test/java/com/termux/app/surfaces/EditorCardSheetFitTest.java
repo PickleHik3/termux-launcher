@@ -1,6 +1,8 @@
 package com.termux.app.surfaces;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -35,9 +37,10 @@ import java.util.List;
 
 /**
  * Every card fits pong at the default text size, at Large (1.3) and at 2.0, at both detents: the
- * last row scrolls clear of the navigation inset by 16dp (a partly visible control is a bug), and
- * no choice's word is cut (segments turn into a list instead). Native graphics, so text is
- * measured with real font metrics.
+ * last row scrolls clear of the navigation inset by 16dp (a partly visible control is a bug), no
+ * choice's word is cut (segments turn into a list instead), every row is there without a More,
+ * and every slider but the Look's is a strip column whose legend stands whole. Native graphics,
+ * so text is measured with real font metrics.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
@@ -64,7 +67,6 @@ public class EditorCardSheetFitTest {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
             for (EditorCard card : EditorCard.values()) {
                 Fixture fixture = new Fixture(card, scale);
-                fixture.sheet.openMore();
                 fixture.layOut();
                 for (MaterialButton button : buttons(fixture.sheet.rows())) {
                     Layout layout = button.getLayout();
@@ -90,8 +92,7 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void aSlidersThumbAtEitherEndStaysInsideTheMargins() {
-        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
-        fixture.sheet.openMore();
+        Fixture fixture = new Fixture(EditorCard.APPEARANCE, 1f);
         fixture.layOut();
         int width = fixture.parent.getWidth();
         int checked = 0;
@@ -118,7 +119,6 @@ public class EditorCardSheetFitTest {
     public void theDesignTilesHoldTheirGlyphAndWordInsideTheirOutline() {
         for (float scale : new float[] {1f, 1.3f}) {
             Fixture fixture = new Fixture(EditorCard.DOCK, scale);
-            fixture.sheet.openMore();
             fixture.layOut();
             int tiles = 0;
             for (MaterialButton tile : buttons(fixture.sheet.rows())) {
@@ -139,7 +139,6 @@ public class EditorCardSheetFitTest {
     public void theDesignTilesCentreTheirWordUnderTheGlyph() {
         for (float scale : new float[] {1f, 1.3f}) {
             Fixture fixture = new Fixture(EditorCard.DOCK, scale);
-            fixture.sheet.openMore();
             fixture.layOut();
             int tiles = 0;
             for (MaterialButton tile : buttons(fixture.sheet.rows())) {
@@ -164,7 +163,6 @@ public class EditorCardSheetFitTest {
     @Test
     public void anInlineSegmentRowKeepsItsIconOffTheEdgeAndNoCheckMark() {
         Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
-        fixture.sheet.openMore();
         fixture.layOut();
         com.google.android.material.button.MaterialButtonToggleGroup style = null;
         for (com.google.android.material.button.MaterialButtonToggleGroup group
@@ -192,11 +190,9 @@ public class EditorCardSheetFitTest {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
             for (EditorCard card : EditorCard.values()) {
                 Fixture fixture = new Fixture(card, scale);
-                fixture.sheet.openMore();
                 fixture.layOut();
                 List<LegendSlider> legends = legends(fixture.sheet.rows());
-                assertEquals(card + " has a glass strip", card != EditorCard.HOME,
-                    !legends.isEmpty());
+                assertFalse(card + " has a strip", legends.isEmpty());
                 for (LegendSlider slider : legends) {
                     assertTrue(card + ": a strip column is laid out", slider.getWidth() > 0
                         && slider.getHeight() > 0);
@@ -212,6 +208,77 @@ public class EditorCardSheetFitTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void everySliderButTheLooksIsAStripColumnAndEveryRowIsThere() {
+        for (EditorCard card : EditorCard.values()) {
+            Fixture fixture = new Fixture(card, 1f);
+            fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+            fixture.layOut();
+            int strips = 0;
+            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
+                if (spec.row.kind == EditorRows.Kind.STRIP)
+                    strips++;
+            }
+            List<LegendSlider> legends = legends(fixture.sheet.rows());
+            assertEquals(card + ": a column for every value slider", strips, legends.size());
+            for (LegendSlider legend : legends)
+                assertTrue(card + ": " + legend.getContentDescription() + " stands open, no More",
+                    legend.isShown() && legend.getWidth() > 0);
+            List<com.google.android.material.slider.Slider> sliders = sliders(fixture.sheet.rows());
+            assertEquals(card + ": the Look's is the one horizontal slider",
+                card == EditorCard.APPEARANCE ? 1 : 0, sliders.size());
+            for (TextView text : texts(fixture.sheet.rows()))
+                assertTrue(card + " has no More row", !"More".contentEquals(text.getText()));
+        }
+    }
+
+    @Test
+    public void aStripWrapsOntoBalancedLinesAndKeepsItsColumnsInOneGrid() {
+        assertArrayEquals(new int[] {5, 4}, EditorCardSheet.stripLines(9, 7));
+        assertArrayEquals(new int[] {4, 3, 3}, EditorCardSheet.stripLines(10, 4));
+        assertArrayEquals(new int[] {3}, EditorCardSheet.stripLines(3, 7));
+        assertArrayEquals(new int[0], EditorCardSheet.stripLines(0, 7));
+        assertEquals(7, EditorCardSheet.stripCapacity(379, 42, 12));
+        assertEquals(1, EditorCardSheet.stripCapacity(30, 42, 12));
+        for (float scale : new float[] {1f, 1.3f, 2f}) {
+            for (EditorCard card : EditorCard.values()) {
+                Fixture fixture = new Fixture(card, scale);
+                fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+                fixture.layOut();
+                List<LegendSlider> legends = legends(fixture.sheet.rows());
+                int width = legends.get(0).getWidth();
+                for (LegendSlider legend : legends) {
+                    String at = card + " at " + scale + ", " + legend.getContentDescription();
+                    assertTrue(at + " is narrower than its legend needs: " + legend.getWidth()
+                        + " < " + legend.minColumnWidthPx(),
+                        legend.getWidth() >= legend.minColumnWidthPx() - 1);
+                    if (legend.getParent() == legends.get(0).getParent()
+                        || isStripOf(legend, legends.get(0)))
+                        assertEquals(at + " leaves the grid", width, legend.getWidth(), 2);
+                }
+            }
+        }
+    }
+
+    /** Whether two columns stand in the same strip (lines under one root). */
+    private static boolean isStripOf(@NonNull View a, @NonNull View b) {
+        return a.getParent() != null && b.getParent() != null
+            && ((View) a.getParent()).getParent() == ((View) b.getParent()).getParent();
+    }
+
+    @NonNull
+    private static List<TextView> texts(@NonNull View view) {
+        List<TextView> out = new ArrayList<>();
+        if (view instanceof TextView) {
+            out.add((TextView) view);
+        } else if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                out.addAll(texts(group.getChildAt(i)));
+        }
+        return out;
     }
 
     @Test
@@ -274,7 +341,6 @@ public class EditorCardSheetFitTest {
 
     private static void assertFits(@NonNull EditorCard card, float scale) {
         Fixture fixture = new Fixture(card, scale);
-        fixture.sheet.openMore();
         for (int detent : new int[] {EditorCardSheet.DETENT_HALF, EditorCardSheet.DETENT_FULL}) {
             fixture.sheet.setDetent(detent, false);
             fixture.layOut();
@@ -293,16 +359,10 @@ public class EditorCardSheetFitTest {
         }
     }
 
-    /** The card's last row: tier 3's last, inside the open More. */
+    /** The card's last row: tier 3's last, every row shown. */
     @NonNull
     private static View lastRow(@NonNull LinearLayout rows) {
-        View last = rows.getChildAt(rows.getChildCount() - 1);
-        if (last instanceof LinearLayout && last.getVisibility() == View.VISIBLE
-            && ((LinearLayout) last).getChildCount() > 0) {
-            LinearLayout group = (LinearLayout) last;
-            return group.getChildAt(group.getChildCount() - 1);
-        }
-        return last;
+        return rows.getChildAt(rows.getChildCount() - 1);
     }
 
     @NonNull
@@ -379,8 +439,7 @@ public class EditorCardSheetFitTest {
         }
 
         @Override public int value(@NonNull Row row) {
-            return row.kind == EditorRows.Kind.SLIDER || row.kind == EditorRows.Kind.STRIP
-                ? 50 : 0;
+            return row.kind == EditorRows.Kind.STRIP ? 50 : 0;
         }
 
         @Override public int from(@NonNull Row row) {

@@ -7,6 +7,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxActivity;
+import com.termux.app.place.SeamDress;
+import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 /**
  * Every door into the Appearance editor from outside the launcher's window (appearance-and-
@@ -53,6 +56,21 @@ public final class AppearanceEditorEntry {
         if (!(context instanceof android.app.Activity))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(intent);
+    }
+
+    /**
+     * Where the terminal long-press menu's Appearance opens the editor: at rest, no card up, on
+     * the Workspace half. The page on screen is kept when it stands on the Workspace (a terminal
+     * or the display window), so the frame does not slide; anything else lands on the terminal.
+     *
+     * <pre>
+     *   openAppearanceSurface(null, AppearanceEditorEntry.terminalMenuPlace(currentWallPlace()), null);
+     * </pre>
+     */
+    @NonNull
+    public static PaneWallPage terminalMenuPlace(@Nullable PaneWallPage onScreen) {
+        return onScreen != null && SeamDress.halfOf(onScreen) == WallHalf.WORKSPACE
+            ? onScreen : PaneWallPage.TERMINAL;
     }
 
     /** The card an intent's section names, or null for none. */

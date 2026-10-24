@@ -44,7 +44,7 @@ import java.util.Map;
 /**
  * One card of the Appearance editor (appearance-and-settings-rework §3, §7, §8; wireframes 02–04):
  * a bottom sheet with a 64dp header (the object's icon and name, ⋮ and ✕) over its rows, tier by
- * tier, the third folded under More. Views only: every value is read from {@link Model} and every
+ * tier, every row always shown; the rows scroll. Views only: every value is read from {@link Model} and every
  * touch reported to it, so the same sheet is every card.
  *
  * <p><b>Detents.</b> The sheet is laid out once at the full detent's height and stands at the
@@ -52,10 +52,13 @@ import java.util.Map;
  * out per frame. At the half detent the rows' bottom padding grows by the part of the sheet
  * below the screen, so the last row still scrolls clear of the navigation inset by 16dp.</p>
  *
- * <p><b>Rows.</b> Content-driven heights (a slider row is at least 72dp, a switch row 56dp),
- * labels on one line, ellipsized. The glass rows ({@link Kind#STRIP}) stand side by side as one
- * strip of vertical {@link LegendSlider}s, each its name and value beside its track, as the
- * previous editor's Custom row drew them; the sizes stay horizontal sliders. A row of segments stands beside its label when it has two short
+ * <p><b>Rows.</b> Content-driven heights (a strip is at least 72dp, a switch row 56dp), labels
+ * on one line, ellipsized. Every value slider ({@link Kind#STRIP}), glass and sizes alike, stands
+ * in a strip of vertical {@link LegendSlider}s, each its name and value beside its track, as the
+ * previous editor's Custom row drew them. A strip holds as many columns on a line as fit the
+ * width at the least a legend needs beside a track ({@link LegendSlider#minColumnWidthPx}), and
+ * wraps the rest onto balanced lines ({@link #stripLines}). The Look's stop slider is the one
+ * horizontal slider. A row of segments stands beside its label when it has two short
  * choices, under it otherwise, and turns into a vertical list when a choice's word would not fit
  * its share of the width. Every restatement compares before it sets.</p>
  */
@@ -145,8 +148,6 @@ final class EditorCardSheet {
     @NonNull private final ScrollView mScroll;
     @NonNull private final LinearLayout mRows;
     @NonNull private final Map<Row, RowViews> mRowViews = new EnumMap<>(Row.class);
-    @Nullable private LinearLayout mMore;
-    @Nullable private View mMoreRow;
     @Nullable private ListPopupWindow mMenu;
     @Nullable private EditorCard mCard;
     @Nullable private String mCopyLabel;
@@ -646,57 +647,136 @@ final class EditorCardSheet {
         }
     }
 
-    /** One glass strip: its root (heading and columns) and the columns it holds. */
+    /** One strip: its root (heading and lines), the lines and the columns it holds. */
     private static final class Strip {
         @NonNull final LinearLayout root;
-        @NonNull final LinearLayout columns;
+        @NonNull final List<LinearLayout> lines = new ArrayList<>();
         @NonNull final List<RowViews> members = new ArrayList<>();
 
-        Strip(@NonNull LinearLayout root, @NonNull LinearLayout columns) {
+        Strip(@NonNull LinearLayout root) {
             this.root = root;
-            this.columns = columns;
         }
     }
 
+    /**
+     * The rows, tier by tier with a divider between tiers, every one of them shown. Strip rows
+     * that follow one another share one strip, a column each, even across a tier's edge: the
+     * strip stands in the tier of its first column.
+     */
     private void build(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> specs) {
         mRows.removeAllViews();
         mRowViews.clear();
-        mMore = null;
-        mMoreRow = null;
         int tier = 0;
         Strip strip = null;
         for (EditorRows.Spec spec : specs) {
-            if (spec.tier != tier) {
-                if (tier != 0)
-                    mRows.addView(divider());
-                if (spec.tier == 3)
-                    addMore();
-                tier = spec.tier;
-                strip = null;
-            }
-            LinearLayout into = spec.tier == 3 && mMore != null ? mMore : mRows;
             if (spec.row.kind == Kind.STRIP) {
-                // Glass rows in a run share one strip, a column each.
                 if (strip == null) {
+                    if (tier != 0 && spec.tier != tier)
+                        mRows.addView(divider());
+                    tier = spec.tier;
                     strip = newStrip(spec.row);
                     if (spec.tier == 1)
                         strip.root.setTag(TIER_ONE_TAG);
-                    into.addView(strip.root);
+                    mRows.addView(strip.root);
                 }
                 mRowViews.put(spec.row, stripColumn(spec.row, strip));
                 continue;
             }
+            if (strip != null)
+                layOutStrip(strip);
             strip = null;
+            if (tier != 0 && spec.tier != tier)
+                mRows.addView(divider());
+            tier = spec.tier;
             RowViews row = buildRow(spec.row);
             mRowViews.put(spec.row, row);
             if (spec.tier == 1)
                 row.root.setTag(TIER_ONE_TAG);
-            into.addView(row.root);
+            mRows.addView(row.root);
         }
+        if (strip != null)
+            layOutStrip(strip);
         restate();
     }
 
-    /** A strip's root: its heading, if the model gives one, over a row of equal columns. */
+    /**
+     * How a strip of {@code count} columns stands on lines of at most {@code capacity}: as few
+     * lines as hold them, the columns spread evenly, the fuller lines first ({@code 9, 7} gives
+     * {@code [5, 4]}, {@code 10, 4} gives {@code [4, 3, 3]}).
+     */
+    @NonNull
+    static int[] stripLines(int count, int capacity) {
+        if (count <= 0)
+            return new int[0];
+        int perLine = Math.max(1, capacity);
+        int lines = (count + perLine - 1) / perLine;
+        int base = count / lines;
+        int extra = count % lines;
+        int[] out = new int[lines];
+        for (int i = 0; i < lines; i++)
+            out[i] = base + (i < extra ? 1 : 0);
+        return out;
+    }
+
+    /**
+     * How many columns of at least {@code columnPx} stand on one line of {@code widthPx}, with
+     * {@code gapPx} between neighbours; never fewer than one.
+     */
+    static int stripCapacity(int widthPx, int columnPx, int gapPx) {
+        return Math.max(1, (widthPx + gapPx) / Math.max(1, columnPx + gapPx));
+    }
+
+    /**
+     * Puts a strip's columns on their lines ({@link #stripLines}), every column as wide as the
+     * fullest line's, so the tracks stand in one grid and a shorter last line leaves its end
+     * empty rather than widening its columns.
+     */
+    private void layOutStrip(@NonNull Strip strip) {
+        int count = strip.members.size();
+        if (count == 0)
+            return;
+        int gap = dp(STRIP_GAP_DP);
+        LegendSlider first = strip.members.get(0).legend;
+        int column = first == null ? 1 : first.minColumnWidthPx();
+        int[] lines = stripLines(count, stripCapacity(stripWidthPx(), column, gap));
+        int length = mContext.getResources()
+            .getDimensionPixelSize(R.dimen.appearance_editor_slider_length);
+        int next = 0;
+        for (int i = 0; i < lines.length; i++) {
+            LinearLayout line = new LinearLayout(mContext);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            line.setWeightSum(lines[0]);
+            LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, length);
+            if (i > 0)
+                lineParams.topMargin = gap;
+            strip.root.addView(line, lineParams);
+            strip.lines.add(line);
+            for (int c = 0; c < lines[i]; c++) {
+                RowViews member = strip.members.get(next++);
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+                if (c > 0)
+                    params.setMarginStart(gap);
+                line.addView(member.root, params);
+            }
+            int missing = lines[0] - lines[i];
+            if (missing > 0) {
+                // The missing columns' share, gaps included, so the columns keep the grid.
+                LinearLayout.LayoutParams rest = new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.MATCH_PARENT, missing);
+                rest.setMarginStart(gap * missing);
+                line.addView(new View(mContext), rest);
+            }
+        }
+    }
+
+    /** The width a strip's lines share: the sheet less the 16dp edge on either side. */
+    private int stripWidthPx() {
+        return Math.max(1, availableWidthPx() + dp(ICON_COLUMN_DP) - dp(EDGE_DP));
+    }
+
+    /** A strip's root: its heading, if the model gives one; the lines follow at its run's end. */
     @NonNull
     private Strip newStrip(@NonNull Row first) {
         LinearLayout root = new LinearLayout(mContext);
@@ -719,16 +799,13 @@ final class EditorCardSheet {
             params.bottomMargin = dp(8);
             root.addView(title, params);
         }
-        LinearLayout columns = new LinearLayout(mContext);
-        columns.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(columns, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            mContext.getResources().getDimensionPixelSize(R.dimen.appearance_editor_slider_length)));
-        return new Strip(root, columns);
+        return new Strip(root);
     }
 
     /**
-     * One glass column: a vertical slider whose legend is the row's name and value
-     * ("Frost · 20%"), reported to the model as any slider row is.
+     * One strip column: a vertical slider whose legend is the row's name and value
+     * ("Frost · 20%", "Corners · 16 dp", in the model's own units and range), reported to the
+     * model as any slider is. {@link #layOutStrip} puts it on its line.
      */
     @NonNull
     private RowViews stripColumn(@NonNull Row row, @NonNull Strip strip) {
@@ -754,56 +831,15 @@ final class EditorCardSheet {
                 mModel.onReleased(row);
             }
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.MATCH_PARENT, 1f);
-        if (!strip.members.isEmpty())
-            params.setMarginStart(dp(STRIP_GAP_DP));
-        strip.columns.addView(slider, params);
         strip.members.add(views);
         views.legend = slider;
         views.strip = strip;
         return views;
     }
 
-    private void addMore() {
-        LinearLayout row = horizontalRow(SWITCH_ROW_MIN_DP);
-        row.addView(iconView(R.drawable.ic_symbol_tune));
-        TextView label = label(R.string.appearance_card_more);
-        row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        ImageView chevron = new ImageView(mContext);
-        chevron.setImageResource(R.drawable.ic_editor_expand_more);
-        chevron.setImageTintList(ColorStateList.valueOf(EditorViews.color(mContext,
-            com.google.android.material.R.attr.colorOnSurfaceVariant)));
-        row.addView(chevron, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        LinearLayout more = new LinearLayout(mContext);
-        more.setOrientation(LinearLayout.VERTICAL);
-        more.setVisibility(View.GONE);
-        row.setOnClickListener(v -> {
-            boolean open = more.getVisibility() != View.VISIBLE;
-            more.setVisibility(open ? View.VISIBLE : View.GONE);
-            chevron.setRotation(open ? 180f : 0f);
-            row.setContentDescription(mContext.getString(open
-                ? R.string.appearance_card_more_open : R.string.appearance_card_more));
-            if (open)
-                setDetent(DETENT_FULL, true);
-        });
-        row.setContentDescription(mContext.getString(R.string.appearance_card_more));
-        mRows.addView(row);
-        mRows.addView(more);
-        mMore = more;
-        mMoreRow = row;
-    }
-
-    /** Opens More, for a test or a door into a tier-3 row. */
-    void openMore() {
-        if (mMore != null && mMore.getVisibility() != View.VISIBLE && mMoreRow != null)
-            mMoreRow.performClick();
-    }
-
     @NonNull
     private RowViews buildRow(@NonNull Row row) {
         switch (row.kind) {
-            case SLIDER: return sliderRow(row);
             case SWITCH: return switchRow(row);
             case SEGMENTS: return segmentsRow(row);
             case CHIPS: return chipsRow(row);
@@ -815,41 +851,6 @@ final class EditorCardSheet {
             default:
                 return actionRow(row);
         }
-    }
-
-    @NonNull
-    private RowViews sliderRow(@NonNull Row row) {
-        LinearLayout root = new LinearLayout(mContext);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setMinimumHeight(dp(SLIDER_ROW_MIN_DP));
-        root.setPadding(0, dp(8), 0, 0);
-        RowViews views = new RowViews(row, root);
-        LinearLayout line = labelLine(row, views, true);
-        root.addView(line);
-        Slider slider = newSlider();
-        slider.setContentDescription(mContext.getString(row.labelRes));
-        slider.setLabelFormatter(value -> mModel.readout(row, Math.round(value)));
-        slider.addOnChangeListener((s, value, fromUser) -> {
-            if (mRestating || !fromUser)
-                return;
-            int v = Math.round(value);
-            EditorViews.setText(views.value, mModel.readout(row, v));
-            mModel.onValue(row, v, views.tracking);
-        });
-        slider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
-            @Override public void onStartTrackingTouch(@NonNull Slider s) {
-                views.tracking = true;
-            }
-
-            @Override public void onStopTrackingTouch(@NonNull Slider s) {
-                views.tracking = false;
-                mModel.onValue(row, Math.round(s.getValue()), false);
-                mModel.onReleased(row);
-            }
-        });
-        root.addView(slider, sliderParams(slider));
-        views.slider = slider;
-        return views;
     }
 
     @NonNull
@@ -1217,14 +1218,20 @@ final class EditorCardSheet {
             restate(views);
     }
 
-    /** A strip stands while any of its columns does. */
+    /** A strip's line stands while any of its columns does, and the strip while any line does. */
     private static void restateStrip(@NonNull Strip strip) {
         boolean any = false;
-        for (RowViews member : strip.members) {
-            if (member.root.getVisibility() == View.VISIBLE) {
-                any = true;
-                break;
+        for (LinearLayout line : strip.lines) {
+            boolean lineShown = false;
+            for (int i = 0; i < line.getChildCount(); i++) {
+                View child = line.getChildAt(i);
+                if (child instanceof LegendSlider && child.getVisibility() == View.VISIBLE) {
+                    lineShown = true;
+                    break;
+                }
             }
+            EditorViews.setVisible(line, lineShown);
+            any |= lineShown;
         }
         EditorViews.setVisible(strip.root, any);
     }
@@ -1272,8 +1279,6 @@ final class EditorCardSheet {
                     slider.setEnabled(enabled);
                 EditorViews.setText(views.value, mModel.readout(row, clamped));
                 styleStops(views, clamped);
-            } else if (views.value != null && row.kind == Kind.SLIDER) {
-                EditorViews.setText(views.value, mModel.readout(row, value));
             }
             if (views.legend != null && !views.tracking) {
                 LegendSlider legend = views.legend;
@@ -1358,7 +1363,7 @@ final class EditorCardSheet {
         return slider;
     }
 
-    /** The label line over a slider or under-placed segments: icon, label, dot, value. */
+    /** The label line over the Look's slider or under-placed segments: icon, label, dot, value. */
     @NonNull
     private LinearLayout labelLine(@NonNull Row row, @NonNull RowViews views, boolean withValue) {
         LinearLayout line = horizontalRow(24);

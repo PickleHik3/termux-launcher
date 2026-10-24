@@ -50,50 +50,54 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theDockCardIsTheSpecsWithTheRenames() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.VISIBLE,
-            Row.POSITION), EditorRows.tier(EditorCard.DOCK, ALL, 1));
-        assertEquals(Arrays.asList(Row.STYLE, Row.DESIGN, Row.CORNERS, Row.MARGIN),
+    public void theDockCardOpensOnItsStripThenItsPlace() {
+        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
+            Row.MARGIN, Row.APP_ICONS, Row.VISIBLE, Row.POSITION),
+            EditorRows.tier(EditorCard.DOCK, ALL, 1));
+        assertEquals(Arrays.asList(Row.STYLE, Row.DESIGN),
             EditorRows.tier(EditorCard.DOCK, ALL, 2));
-        assertEquals(Arrays.asList(Row.SEARCH_FIELD, Row.APP_ICONS, Row.LINK_DOCK_ITEMS),
+        assertEquals(Arrays.asList(Row.SEARCH_FIELD, Row.LINK_DOCK_ITEMS),
             EditorRows.tier(EditorCard.DOCK, ALL, 3));
     }
 
     @Test
-    public void theStatusBarAndKeyboardCardsOpenOnTheirGlassAndPlace() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.VISIBLE, Row.POSITION),
-            EditorRows.tier(EditorCard.STATUS, ALL, 1));
+    public void theStatusBarAndKeyboardCardsOpenOnTheirStripAndPlace() {
+        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN,
+            Row.VISIBLE, Row.POSITION), EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT,
-            Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT, Row.VISIBLE),
+            Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN, Row.VISIBLE),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
         assertTrue(EditorRows.tier(EditorCard.KEYBOARD, ALL, 2).contains(Row.KEYBOARD_THEME));
     }
 
     @Test
     public void theTerminalCardHasNoPlaceOfItsOwn() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE),
-            EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
+        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE, Row.CORNERS,
+            Row.MARGIN, Row.SPLIT_GAP), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
         assertFalse(all.contains(Row.POSITION));
     }
 
     @Test
-    public void theHomeCardIsHomesRowsAndNoGlass() {
-        assertEquals(Arrays.asList(Row.ICON_SIZE, Row.LABEL_SIZE, Row.GLASS_WIDGETS),
-            EditorRows.tier(EditorCard.HOME, ALL, 1));
-        List<Row> all = rowsOf(EditorCard.HOME, ALL);
-        for (Row row : all)
-            assertNull(row + " is not a surface's glass", row.property());
+    public void theHomeCardOpensOnHomesGlassAndItIsAlwaysTheHomeHalfs() {
+        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.ICON_SIZE,
+            Row.LABEL_SIZE, Row.GLASS_WIDGETS), EditorRows.tier(EditorCard.HOME, ALL, 1));
+        for (WallHalf frame : WallHalf.values()) {
+            for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
+                assertEquals(row + " with the frame on " + frame, WallHalf.HOME,
+                    EditorRows.halfFor(EditorCard.HOME, row, frame));
+            assertNull(EditorRows.halfFor(EditorCard.HOME, Row.ICON_SIZE, frame));
+        }
     }
 
     @Test
     public void theAppearanceCardOpensOnTheLookAllSurfacesTheWallpaperAndTheTheme() {
         assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.GLASS_EDGE,
-            Row.VIBRANCY, Row.DEPTH, Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME),
+            Row.VIBRANCY, Row.DEPTH, Row.TEXT_SIZE, Row.WALLPAPER, Row.ALIGNMENT, Row.THEME),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.VIBRANCY,
-            Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME),
+            Row.TEXT_SIZE, Row.WALLPAPER, Row.ALIGNMENT, Row.THEME),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         List<Row> two = EditorRows.tier(EditorCard.APPEARANCE, ALL, 2);
         assertTrue(two.containsAll(Arrays.asList(Row.ICON_PACK, Row.MONOCHROME,
@@ -104,7 +108,7 @@ public class EditorRowsTest {
     public void frostIsTheOneGlassSliderOnEveryCardWithGlass() {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
-            assertEquals(card + " has Frost", card != EditorCard.HOME, rows.contains(Row.FROST));
+            assertTrue(card + " has Frost", rows.contains(Row.FROST));
         }
         for (Row row : Row.values())
             assertFalse("no separate Blur or Grain row: " + row,
@@ -123,7 +127,50 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theRareRowsAreUnderMore() {
+    public void everyValueSliderIsAStripColumnAndTheLookIsTheOneHorizontalSlider() {
+        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
+            Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP, Row.ICON_SIZE, Row.APP_ICONS,
+            Row.ALIGNMENT, Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
+            Row.VIBRANCY, Row.GLASS_EDGE})
+            assertEquals(row + " is vertical", Kind.STRIP, row.kind);
+        for (Row row : Row.values()) {
+            if (row != Row.LOOK)
+                assertTrue(row + " is no second horizontal slider", row.kind != Kind.LOOK);
+        }
+    }
+
+    @Test
+    public void aCardsSlidersStandInOneStripTheAlignmentWithTheWallpaper() {
+        for (EditorCard card : EditorCard.values()) {
+            List<Row> rows = rowsOf(card, ALL);
+            int runs = 0;
+            boolean inRun = false;
+            for (Row row : rows) {
+                boolean strip = row.kind == Kind.STRIP;
+                if (strip && !inRun)
+                    runs++;
+                inRun = strip;
+            }
+            int expected = card == EditorCard.APPEARANCE ? 2 : 1;
+            assertEquals(card + "'s sliders stand together", expected, runs);
+        }
+        List<Row> appearance = rowsOf(EditorCard.APPEARANCE, ALL);
+        assertEquals("the Alignment stands under the Wallpaper",
+            appearance.indexOf(Row.WALLPAPER) + 1, appearance.indexOf(Row.ALIGNMENT));
+    }
+
+    @Test
+    public void allSurfacesIsTheGlassAndTheTextSizeNotTheAlignment() {
+        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.GLASS_EDGE, Row.VIBRANCY,
+            Row.DEPTH, Row.TEXT_SIZE})
+            assertTrue(row.name(), EditorRows.isAllSurfaces(row));
+        assertFalse(EditorRows.isAllSurfaces(Row.ALIGNMENT));
+        assertFalse(EditorRows.isAllSurfaces(Row.LOOK));
+        assertFalse(EditorRows.isAllSurfaces(Row.WALLPAPER));
+    }
+
+    @Test
+    public void theLinksToSettingsComeLast() {
         for (EditorCard card : EditorCard.values()) {
             for (Spec spec : EditorRows.rows(card, ALL)) {
                 if (spec.row.kind == Kind.LINK && spec.row != Row.KEYBOARD_THEME)
@@ -180,6 +227,8 @@ public class EditorRowsTest {
         assertFalse(EditorRows.marksOwnValue(EditorCard.DOCK, Row.CORNERS));
         assertFalse(EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.TEXT_SIZE));
         assertFalse(EditorRows.marksOwnValue(EditorCard.HOME, Row.ICON_SIZE));
+        assertFalse("Home's glass is the Base itself", EditorRows.marksOwnValue(EditorCard.HOME,
+            Row.FROST));
     }
 
     @Test

@@ -120,6 +120,8 @@ public final class LegendSlider extends View {
     private float mBaseTextSizePx;
     /** The least text size a legend is drawn at: {@link #MIN_TEXT_SCALE} of the unscaled base. */
     private float mMinTextSizePx;
+    /** The legend's line height at its base size, before any fitting shrinks it. */
+    private float mBaseBandPx;
 
     /** The "set here" dot after the legend: its diameter and the gap before it. */
     private final float mDotPx;
@@ -369,6 +371,8 @@ public final class LegendSlider extends View {
         probe.setTextAppearance(appearance);
         mTextPaint.set(probe.getPaint());
         mBaseTextSizePx = mTextPaint.getTextSize();
+        Paint.FontMetrics base = mTextPaint.getFontMetrics();
+        mBaseBandPx = base.descent - base.ascent;
         float fontScale = Math.max(1f, getResources().getConfiguration().fontScale);
         mMinTextSizePx = mBaseTextSizePx * MIN_TEXT_SCALE / fontScale;
     }
@@ -391,6 +395,17 @@ public final class LegendSlider extends View {
     private float legendBandPx() {
         Paint.FontMetrics metrics = mTextPaint.getFontMetrics();
         return metrics.descent - metrics.ascent;
+    }
+
+    /**
+     * The narrowest column that still holds the legend at its full size beside the narrowest
+     * track: what a strip asks before it decides how many columns stand on a line. It follows
+     * the font scale, so a larger text size puts fewer columns on a line instead of shrinking
+     * every legend.
+     */
+    public int minColumnWidthPx() {
+        return (int) Math.ceil(2f * mHandleOverhangPx + mMinTrackWidthPx + mLegendGapPx
+            + mBaseBandPx);
     }
 
     /** The track's width in this column: 28dp where the legend still fits beside it. */

@@ -13,6 +13,15 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-25 · appearance fixes ("the terminal menu's Appearance opens the editor at rest", "every
+  value slider is a strip column", "Home's card opens on Home's own glass") · (1) long-press a
+  terminal › More › Appearance: the editor opens with no card, frame on the Workspace, never a
+  Settings page; same over the display window. (2) Every card: no horizontal slider except the
+  Look's, no More row, every row reachable by scrolling; the Keyboard card's strip wraps onto two
+  lines; at font scale 1.3 and 2.0 every rotated legend reads whole. (3) Home card: Frost, Opacity,
+  Tint at the top read Home's values; moving them changes the widgets, status bar and dock on Home
+  in the frame at once and live after Done, the Workspace unchanged; Reset Home puts them back ·
+  emulator, then pong (Home opacity 92, blur 0).
 - 2026-10-25 · drawer keyboard (commits "lay the stack out for a keyboard raised under the open
   drawer", "reveal the built-in keyboard the open raised") · Built-in keyboard + Open keyboard
   automatically: the keyboard shows all four rows right above the nav inset and the list's last row
