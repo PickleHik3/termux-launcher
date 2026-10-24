@@ -65,7 +65,7 @@ behaviour that is not appearance.
 
 **Pill (global).** Orientation chip, Undo, Done in the pill itself.
 1. Look slider ½ (Clear · Mist · Tint · Solid · Custom) · Wallpaper (shown, pick) · Theme (System ·
-   Light · Dark, Black)
+   Light · Dark; the app has no black theme, so the wireframe's Black switch is not built)
 2. Icon pack · Monochrome · Text size · Wallpaper colours · Contrast (terminal) · Full screen ·
    Minimal
 3. More: Alignment (wallpaper) · Terminal palette for tools · Presets (save, load) · Depth
@@ -202,8 +202,7 @@ The review is kept beside the wireframes (`REVIEW-codex-blind-2026-10-24.md`). A
 - **Every slider shows its value** (Opacity 72%, Height 56dp, Text size 100%) and announces it.
 - **Labels.** "Visible" (switch) and "Position" (segments) replace Shown and Place. The dot after
   a label means "set here"; its content description says so.
-- **Black** is a switch that applies with Dark; under Light it is disabled with the reason in its
-  summary.
+- **Black**: dropped; there is no black app theme to switch on.
 - **Reachability.** The sheet's last row clears the navigation inset by 16dp at both detents; a
   partially visible control is a bug. Rows use content-driven height; at font scale 1.3 and 2.0
   nothing clips and segments reflow to a vertical radio list when their labels no longer fit.
