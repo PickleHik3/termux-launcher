@@ -55,6 +55,13 @@ public final class SegmentedPillPreference extends Preference {
     /** True once a label did not fit side by side ({@link #labelsDoNotFit}): the segments then
      *  stack full-width so no label is cut or shrunk. Reset when the segment set changes. */
     private boolean mStacked;
+    /** True once a label fitted only with the segments' side padding trimmed to
+     *  {@link #COMPACT_PADDING_DP}: a large text size keeps the row on one line that way before
+     *  it stacks. Reset when the segment set changes. */
+    private boolean mCompact;
+    /** The side padding a segment keeps around its label when the style's 12dp would push the
+     *  row into a stack. */
+    private static final int COMPACT_PADDING_DP = 4;
 
     public SegmentedPillPreference(@NonNull Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -108,6 +115,7 @@ public final class SegmentedPillPreference extends Preference {
         mLabelResIds = labelResIds;
         mLabelText = new CharSequence[values.length];
         mStacked = false;
+        mCompact = false;
         mValue = normalize(getPersistedString(mValues[0]));
         notifyChanged();
     }
@@ -126,6 +134,7 @@ public final class SegmentedPillPreference extends Preference {
         mLabelResIds = new int[values.length];
         mLabelText = labels;
         mStacked = false;
+        mCompact = false;
         mValue = normalize(getPersistedString(mValues[0]));
         notifyChanged();
     }
@@ -186,6 +195,8 @@ public final class SegmentedPillPreference extends Preference {
             button.setEnabled(isEnabled());
         }
         group.setContentDescription(getTitle());
+        // Every bind: the row's view may have been another pill's, trimmed or not.
+        applyPadding(buttons, mCompact);
         applyStacking(group, buttons, mStacked);
         int selected = selectedIndex();
         if (selected < 0) group.clearChecked();
@@ -213,6 +224,30 @@ public final class SegmentedPillPreference extends Preference {
         };
         group.addOnButtonCheckedListener(listener);
         group.setTag(R.id.segmented_pill_track, listener);
+    }
+
+    /**
+     * The segments' side padding: the style's, kept on each button the first time it is seen, or
+     * {@link #COMPACT_PADDING_DP}. Compares before setting.
+     */
+    private static void applyPadding(@NonNull MaterialButton[] buttons, boolean compact) {
+        for (MaterialButton button : buttons) {
+            Object kept = button.getTag(R.id.segmented_pill_track);
+            int[] style;
+            if (kept instanceof int[]) {
+                style = (int[]) kept;
+            } else {
+                style = new int[] {button.getPaddingStart(), button.getPaddingEnd()};
+                button.setTag(R.id.segmented_pill_track, style);
+            }
+            int side = Math.round(COMPACT_PADDING_DP
+                * button.getResources().getDisplayMetrics().density);
+            int start = compact ? Math.min(side, style[0]) : style[0];
+            int end = compact ? Math.min(side, style[1]) : style[1];
+            if (button.getPaddingStart() == start && button.getPaddingEnd() == end) continue;
+            button.setPaddingRelative(start, button.getPaddingTop(), end,
+                button.getPaddingBottom());
+        }
     }
 
     /** Full-width stacked segments (vertical) or the weighted single row. */
@@ -278,6 +313,16 @@ public final class SegmentedPillPreference extends Preference {
     private void fitAfterLayout(@NonNull MaterialButtonToggleGroup group,
                                 @NonNull MaterialButton[] buttons) {
         if (group.getWidth() == 0) return;
+        if (!mStacked && labelsDoNotFit(buttons, mValues.length) && !mCompact) {
+            // The segments' widths do not move with their padding: trimmed, the labels are judged
+            // again at once, and stack only when even that is not enough.
+            mCompact = true;
+            applyPadding(buttons, true);
+            if (labelsDoNotFit(buttons, mValues.length)) {
+                mCompact = false;
+                applyPadding(buttons, false);
+            }
+        }
         if (!mStacked && labelsDoNotFit(buttons, mValues.length)) {
             mStacked = true;
             applyStacking(group, buttons, true);
