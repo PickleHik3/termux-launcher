@@ -439,6 +439,17 @@ public class GuiAppsSetupGuideFragment extends Fragment {
     private void renderCommand(@NonNull Context context) {
         heading(context, R.string.settings_gui_apps_command_headline,
             R.string.settings_gui_apps_command_sentence);
+        // Copy is the step's one action, so it sits under the heading where it is always in
+        // view; the command below it can run long and scrolls with the body.
+        MaterialButton copy = new MaterialButton(context);
+        copy.setText(mCopied ? R.string.settings_gui_apps_copy_button_done
+            : R.string.settings_gui_apps_copy_button);
+        copy.setOnClickListener(v -> {
+            copyCommand(context);
+            copy.setText(R.string.settings_gui_apps_copy_button_done);
+        });
+        mBody.addView(copy, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         String command = GuiAppsSetupGuide.command(mPrefs, mEdition);
         TextView code = new TextView(context);
         code.setText(command == null ? "" : command);
@@ -452,19 +463,10 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         shape.setColor(M3.surfaceContainerLow(context));
         shape.setCornerRadius(dp(context, 16));
         code.setBackground(shape);
-        mBody.addView(code, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        MaterialButton copy = new MaterialButton(context);
-        copy.setText(mCopied ? R.string.settings_gui_apps_copy_button_done
-            : R.string.settings_gui_apps_copy_button);
-        copy.setOnClickListener(v -> {
-            copyCommand(context);
-            copy.setText(R.string.settings_gui_apps_copy_button_done);
-        });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(context, 16);
-        mBody.addView(copy, lp);
+        mBody.addView(code, lp);
     }
 
     private void renderGraphics(@NonNull Context context) {
