@@ -145,8 +145,22 @@ public final class WidgetDragLayerView extends View {
      * with motion turned down, it simply goes.
      */
     public void drop(@Nullable Rect home, boolean animate) {
+        drop(home, 0, animate);
+    }
+
+    /**
+     * {@link #drop(Rect, boolean)}, with a carried app icon also easing from the size it was
+     * carried at to {@code homeIconPx} as it settles, so it lands at the size the page draws it.
+     * {@code homeIconPx} 0 keeps the size it has.
+     */
+    public void drop(@Nullable Rect home, int homeIconPx, boolean animate) {
         if (!isLifted()) return;
-        if (home == null || !animate || bounds.equals(home)) { release(); return; }
+        int fromIconPx = iconPx;
+        int toIconPx = icon != null && homeIconPx > 0 ? homeIconPx : iconPx;
+        if (home == null || !animate || (bounds.equals(home) && fromIconPx == toIconPx)) {
+            release();
+            return;
+        }
         cancelSettle();
         settleFrom.set(bounds);
         settleTo.set(home);
@@ -159,6 +173,7 @@ public final class WidgetDragLayerView extends View {
                 lerp(settleFrom.top, settleTo.top, fraction),
                 lerp(settleFrom.right, settleTo.right, fraction),
                 lerp(settleFrom.bottom, settleTo.bottom, fraction));
+            iconPx = Math.max(1, lerp(fromIconPx, toIconPx, fraction));
             invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {

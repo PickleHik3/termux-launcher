@@ -26,14 +26,21 @@ under twenty items; past that, the oldest are re-judged first.
   dock icons, status bar and widgets show no scanlines; on the Workspace the status bar, dock,
   extra keys and keyboard do. The chrome switches when the wall lands, both ways, and stays on
   the half it landed on · emulator.
-- 2026-10-24 · commit "feat(home): carry an app from the drawer onto a Home page" · open the
-  drawer from Home and from the Workspace, long-press an app and slide sideways: the menu goes, the
-  drawer closes under the finger, Home comes in and the icon rides the finger at Home's icon size
-  with a white cell outline under it; let go over a free cell and the icon settles there; over a
-  taken cell it goes to the nearest free one; rest at a side edge for ~350 ms and the page turns
-  (past the last page a new one is made and kept only if the icon lands there); a full page shows
-  a red outline and "No room on this page."; let go over the dock or off the grid and nothing is
-  added. With Home's layout locked the pickup stays the drawer's own drag · emulator.
+- 2026-10-24 · commits "feat(home): carry an app from the drawer onto a Home page" and
+  "feat(drawer): an app goes to Home only when carried out through the drawer's top" · open the
+  drawer from Home and from the Workspace, long-press an app and slide: the drag stays the
+  drawer's, so dropping it on another app makes a folder, on a folder fills it, and a folder tile
+  still moves, as before. Carry the app up past the top of the app list (onto the search pill) and
+  either rest there ~¼ s or go a thumb's width further: the drawer closes under the finger, Home
+  comes in and the icon keeps its size and place under the finger with no jump (it takes Home's
+  size only as it settles), with a white cell outline under it, and follows the finger while the
+  drawer is still closing. Dip back into the list before the ¼ s and nothing happens. Then on
+  Home: let go over a free cell and the icon settles there; over a taken cell it goes to the
+  nearest free one; rest at a side edge for ~350 ms and the page turns (past the last page a new
+  one is made and kept only if the icon lands there); a full page shows a red outline and "No room
+  on this page."; let go over the dock or off the grid and nothing is added. Opened from the
+  Workspace, a still finger during the wall's turn may let the icon ride the page until it moves.
+  With Home's layout locked the app never leaves the drawer · emulator.
 - 2026-10-24 · commit "feat(drawer): the search keyboard slides away as the list scrolls" · open
   the drawer with the built-in keyboard revealed under the search (a pill tap), then scroll the
   vertical list down: nothing moves for the first ~24 dp, then the keyboard slides down with the

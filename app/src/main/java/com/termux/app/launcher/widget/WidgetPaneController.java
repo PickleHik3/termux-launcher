@@ -1977,15 +1977,27 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /**
      * The drawer handed over a drag carrying {@code drop}: the icon is picked up here, under the
-     * finger, on the page in front. The pane is told where the finger goes from now on by the
-     * platform drag's location events.
+     * finger, on the page in front, at the size the drawer was carrying it so it does not jump; it
+     * takes Home's own size as it settles into a cell. The pane is told where the finger goes from
+     * now on by the platform drag's location events, and by the drawer, through the drop's
+     * follower, for the events its views still catch while it closes.
      */
     public void onAppDropStarted(@NonNull HomeAppDrop drop, float rawX, float rawY) {
         if (!canTakeAppDrop()) return;
         dismissFolderPopup();
         AppDropState state = new AppDropState(drop, currentPage, rawX, rawY);
         appDrop = state;
-        pane.widgetDragLayer().liftIcon(drop.icon, appDropIconPx(), appDropBounds(rawX, rawY));
+        int liftPx = drop.liftPx > 0 ? drop.liftPx : appDropIconPx();
+        pane.widgetDragLayer().liftIcon(drop.icon, liftPx, appDropBounds(rawX, rawY));
+        drop.follow(new HomeAppDrop.Follower() {
+            @Override public void moveTo(float x, float y) {
+                if (appDrop == state) appDropTo(state, x, y);
+            }
+
+            @Override public boolean releaseAt(float x, float y) {
+                return appDrop == state && endAppDrop(x, y, false);
+            }
+        });
         appDropTo(state, rawX, rawY);
     }
 
@@ -2120,6 +2132,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         AppDropState state = appDrop;
         appDrop = null;
         if (state == null) return false;
+        state.drop.follow(null);
         pane.removeCallbacks(edgeFlip);
         state.turn.edgeDirection = 0;
         if (!canceled) {
@@ -2137,7 +2150,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             && widgets.addAppAt(state.drop.app, state.drop.label, state.turn.page, cell) != null;
         WidgetDragLayerView layer = pane.widgetDragLayer();
         layer.setGhost(null, true);
-        layer.drop(placed ? paneBounds(cell) : null, !host.reducedMotion());
+        layer.drop(placed ? paneBounds(cell) : null, appDropIconPx(), !host.reducedMotion());
         trimDragPage(state.turn, true);
         if (outcome == HomeAppDropPolicy.Outcome.NO_ROOM) {
             pane.showNotice(pane.getContext().getString(R.string.widget_no_room_on_page));
@@ -2150,6 +2163,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         AppDropState state = appDrop;
         if (state == null) return;
         appDrop = null;
+        state.drop.follow(null);
         pane.removeCallbacks(edgeFlip);
         pane.widgetDragLayer().setGhost(null, true);
         pane.releaseWidgetDragLayer();

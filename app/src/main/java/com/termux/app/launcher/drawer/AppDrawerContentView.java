@@ -463,12 +463,22 @@ public final class AppDrawerContentView extends FrameLayout
 
         setOnDragListener((view, event) -> {
             AppDrawerDragController controller = mDragController;
+            if (controller != null && controller.handedToHome(event.getLocalState())) {
+                // Home's now; the drawer is on its way out and only passes the finger on.
+                getLocationOnScreen(mDragLocation);
+                return controller.forwardToHome(event, mDragLocation[0] + event.getX(),
+                    mDragLocation[1] + event.getY());
+            }
             if (controller == null || !controller.owns(event.getLocalState()))
                 return handleFolderEntryDragEvent(event);
             switch (event.getAction()) {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return true;
                 case DragEvent.ACTION_DRAG_LOCATION:
+                    getLocationOnScreen(mDragLocation);
+                    controller.onDragMoved(mDragLocation[0] + event.getX(),
+                        mDragLocation[1] + event.getY());
+                    if (!controller.isDragging()) return true;
                     onContentDragLocation(event.getX(), event.getY());
                     return true;
                 case DragEvent.ACTION_DROP:
@@ -1897,6 +1907,17 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable @Override
     public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
         return mHomeAppDropTarget;
+    }
+
+    /**
+     * The drawer's top edge for a carried app: the top of its app area, just under the search
+     * pill, where the list starts when it is not lowered. Not the glass sheet's own top, which in
+     * the default style is the screen's edge and cannot be crossed.
+     */
+    @Override public float handOverTopRawY() {
+        if (!isAttachedToWindow()) return Float.NaN;
+        getLocationOnScreen(mDragLocation);
+        return mDragLocation[1] + mGridBaseTopMarginPx;
     }
 
     @NonNull @Override public AppDrawerViewType frozenSourceViewType() {

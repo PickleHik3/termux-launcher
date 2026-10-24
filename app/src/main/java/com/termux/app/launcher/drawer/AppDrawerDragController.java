@@ -8,6 +8,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.SystemClock;
 import android.view.DragEvent;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
@@ -49,10 +50,16 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         @NonNull String drawerAnchorFor(@Nullable String targetStableId);
 
         /**
-         * Home, when it can take an app dragged out of the drawer; null when there is no Home to
-         * hand over to, and the pickup stays the drawer's own drag.
+         * Home, for an app carried out of the drawer through its top edge; null when there is no
+         * Home to hand over to, and the drag stays the drawer's own wherever it goes.
          */
         @Nullable default HomeAppDrop.Target homeAppDropTarget() { return null; }
+
+        /**
+         * The drawer's top edge on screen, which a carried app crosses to go to Home
+         * ({@link DrawerHandOverPolicy}); NaN while there is none, and nothing is handed over.
+         */
+        default float handOverTopRawY() { return Float.NaN; }
     }
 
     private final SuggestionBarView dock;
@@ -60,6 +67,18 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
     private final Host host;
     @Nullable private LocalState active;
     private boolean cleaned = true;
+    /** Whether the finger has left the drawer through its top edge, asked on every move. */
+    private final DrawerHandOverPolicy handOver = new DrawerHandOverPolicy();
+    /** A finger resting above the top: asked again when its hold runs out. */
+    private final Runnable handOverHold = this::onHandOverHoldElapsed;
+    private boolean handOverHoldPosted;
+    private float lastRawX, lastRawY;
+    private final int[] location = new int[2];
+    /**
+     * The drag this drawer handed to Home, until it ends. While the drawer closes its views still
+     * catch the drag's events, and pass them on to Home rather than eat them.
+     */
+    @Nullable private HomeAppDrop handed;
 
     public AppDrawerDragController(@NonNull SuggestionBarView dock,
                                    @NonNull AppDrawerDragOverlayView overlay,
@@ -79,51 +98,130 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         LauncherConfigSnapshot snapshot = dock.getLauncherConfigSnapshot();
         PickupArtwork artwork = pickupArtwork(source);
         if (artwork == null) return false;
-        HomeAppDrop.Target home = host.homeAppDropTarget();
-        if (home != null && home.canTakeAppDrop()) return handOverToHome(source, entry, artwork, home);
         int size = artwork.sizePx;
         Drawable drawable = artwork.drawable;
         host.armTerminalDispatchDragLatch();
         Rect bounds = new Rect();
         source.getGlobalVisibleRect(bounds);
         overlay.begin(drawable, size, bounds);
+        // The drag is the drawer's (folders, its drop targets) until the finger leaves through the
+        // top edge. Its local state is already what Home will take it as, since a platform drag's
+        // local state cannot change on the way; Home ignores it until it is handed over.
+        HomeAppDrop drop = new HomeAppDrop(entry.appRef, entry.label == null ? "" : entry.label,
+            drawable, size);
         active = new LocalState(entry.appRef.stableId(), snapshot.revision, bounds,
-            host.frozenSourceViewType());
+            host.frozenSourceViewType(), drop);
         cleaned = false;
+        handed = null;
+        resetHandOver();
+        lastRawX = bounds.exactCenterX();
+        lastRawY = bounds.exactCenterY();
         // Public payload is intentionally empty; all identity remains in process-local state.
         ClipData clip = ClipData.newPlainText("launcher-item", "");
         View.DragShadowBuilder shadow = new DrawableShadow(drawable, size);
         boolean started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
-            ? source.startDragAndDrop(clip, shadow, active, 0)
-            : source.startDrag(clip, shadow, active, 0);
+            ? source.startDragAndDrop(clip, shadow, drop, 0)
+            : source.startDrag(clip, shadow, drop, 0);
         if (!started) cleanup();
         else host.onDragStateChanged(true);
         return started;
     }
 
     /**
-     * Launcher3's way: an app picked up in the drawer is carried to Home. The drawer starts the
-     * platform drag with no shadow of its own and hands it over at once; Home closes the drawer
-     * under the finger, draws the icon in its drag layer and puts it down on its grid. The drawer
-     * keeps no state for it, so nothing here has to be cleaned up when it ends.
+     * The finger carrying the drawer's drag is at ({@code rawX}, {@code rawY}) on screen. An app
+     * carried out through the drawer's top edge ({@link DrawerHandOverPolicy}) goes to Home, if
+     * Home can take it; a folder tile never leaves the drawer.
      */
-    private boolean handOverToHome(@NonNull View source, @NonNull LauncherAppEntry entry,
-                                   @NonNull PickupArtwork artwork,
-                                   @NonNull HomeAppDrop.Target home) {
-        int[] location = new int[2];
-        source.getLocationOnScreen(location);
-        float rawX = location[0] + source.getWidth() / 2f;
-        float rawY = location[1] + source.getHeight() / 2f;
-        HomeAppDrop drop = new HomeAppDrop(entry.appRef, entry.label == null ? "" : entry.label,
-            artwork.drawable);
-        // Public payload is intentionally empty; all identity remains in process-local state.
-        ClipData clip = ClipData.newPlainText("launcher-item", "");
-        View.DragShadowBuilder shadow = HomeAppDrop.invisibleShadow();
-        boolean started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
-            ? source.startDragAndDrop(clip, shadow, drop, 0)
-            : source.startDrag(clip, shadow, drop, 0);
-        if (started) home.onAppDropStarted(drop, rawX, rawY);
-        return started;
+    public void onDragMoved(float rawX, float rawY) {
+        LocalState state = active;
+        if (state == null || state.homeDrop == null) return;
+        lastRawX = rawX;
+        lastRawY = rawY;
+        long now = SystemClock.uptimeMillis();
+        DrawerHandOverPolicy.Decision decision = handOver.onMove(rawY, host.handOverTopRawY(),
+            overlay.getResources().getDisplayMetrics().density, now);
+        if (decision == DrawerHandOverPolicy.Decision.HAND_OVER) {
+            cancelHandOverHold();
+            handOverToHome();
+            return;
+        }
+        long wait = handOver.msUntilHandOver(now);
+        if (wait < 0L) {
+            cancelHandOverHold();
+        } else if (!handOverHoldPosted) {
+            handOverHoldPosted = true;
+            overlay.postDelayed(handOverHold, Math.max(1L, wait));
+        }
+    }
+
+    /** A finger held above the drawer's top: the platform sends no moves while it rests. */
+    private void onHandOverHoldElapsed() {
+        handOverHoldPosted = false;
+        onDragMoved(lastRawX, lastRawY);
+    }
+
+    private void cancelHandOverHold() {
+        if (!handOverHoldPosted) return;
+        handOverHoldPosted = false;
+        overlay.removeCallbacks(handOverHold);
+    }
+
+    private void resetHandOver() {
+        cancelHandOverHold();
+        handOver.reset();
+    }
+
+    /**
+     * Launcher3's way, once the finger has left the drawer: the drawer's drag ends here and Home
+     * takes the platform drag over. The platform's shadow is swapped for nothing and Home's drag
+     * layer draws the icon at the same size under the same finger, so nothing jumps; Home closes
+     * the drawer, turns the wall to itself and puts the icon down on its grid. Stays the drawer's
+     * drag when Home cannot take it (no Home, its layout locked, another drag in flight).
+     */
+    private boolean handOverToHome() {
+        LocalState state = active;
+        if (state == null || state.homeDrop == null) return false;
+        HomeAppDrop.Target home = host.homeAppDropTarget();
+        if (home == null || !home.canTakeAppDrop()) return false;
+        HomeAppDrop drop = state.homeDrop;
+        overlay.updateDragShadow(HomeAppDrop.invisibleShadow());
+        // The drawer's part ends before Home's begins: Home closes the drawer, and the close
+        // cancels whatever drag the drawer still thinks it has.
+        resetHandOver();
+        cleaned = true;
+        active = null;
+        overlay.clear();
+        host.onDragStateChanged(false);
+        handed = drop;
+        home.onAppDropStarted(drop, lastRawX, lastRawY);
+        return true;
+    }
+
+    /** Whether {@code localState} is a drag this drawer handed to Home, whose events it passes on. */
+    public boolean handedToHome(@Nullable Object localState) {
+        return handed != null && localState == handed;
+    }
+
+    /**
+     * An event of a drag handed to Home that landed on one of the drawer's views while it closes,
+     * the finger at ({@code rawX}, {@code rawY}) on screen: passed on to Home's follower.
+     */
+    public boolean forwardToHome(@NonNull DragEvent event, float rawX, float rawY) {
+        HomeAppDrop drop = handed;
+        if (drop == null || event.getLocalState() != drop) return false;
+        HomeAppDrop.Follower follower = drop.follower();
+        switch (event.getAction()) {
+            case DragEvent.ACTION_DRAG_LOCATION:
+                if (follower != null) follower.moveTo(rawX, rawY);
+                return true;
+            case DragEvent.ACTION_DROP:
+                return follower != null && follower.releaseAt(rawX, rawY);
+            case DragEvent.ACTION_DRAG_ENDED:
+                handed = null;
+                return true;
+            default:
+                return true;
+        }
     }
 
     /**
@@ -141,8 +239,10 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         source.getGlobalVisibleRect(bounds);
         overlay.begin(artwork.drawable, artwork.sizePx, bounds);
         active = new LocalState(folder.id, snapshot.revision, bounds,
-            host.frozenSourceViewType(), true);
+            host.frozenSourceViewType(), true, null);
         cleaned = false;
+        handed = null;
+        resetHandOver();
         ClipData clip = ClipData.newPlainText("launcher-item", "");
         View.DragShadowBuilder shadow = new DrawableShadow(artwork.drawable, artwork.sizePx);
         boolean started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
@@ -198,17 +298,28 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
 
     public void bindTarget(@NonNull View view, @NonNull AppDrawerItem item) {
         view.setOnDragListener((target, event) -> {
-            if (event.getLocalState() == active && (event.getAction() == DragEvent.ACTION_DRAG_ENTERED
+            Object local = event.getLocalState();
+            if (handedToHome(local)) {
+                target.getLocationOnScreen(location);
+                return forwardToHome(event, location[0] + event.getX(),
+                    location[1] + event.getY());
+            }
+            if (owns(local) && (event.getAction() == DragEvent.ACTION_DRAG_ENTERED
                 || event.getAction() == DragEvent.ACTION_DRAG_LOCATION)) {
                 overlay.moveTo(target, event.getX(), event.getY(),
                     item.kind == AppDrawerItem.Kind.FOLDER);
+                if (event.getAction() == DragEvent.ACTION_DRAG_LOCATION) {
+                    target.getLocationOnScreen(location);
+                    onDragMoved(location[0] + event.getX(), location[1] + event.getY());
+                    if (active == null) return true;
+                }
             }
             return handleTarget(event, item);
         });
     }
 
     private boolean handleTarget(@NonNull DragEvent event, @NonNull AppDrawerItem target) {
-        if (event.getLocalState() != active || active == null) return false;
+        if (active == null || !owns(event.getLocalState())) return false;
         switch (event.getAction()) {
             case DragEvent.ACTION_DRAG_STARTED: return true;
             case DragEvent.ACTION_DRAG_ENTERED:
@@ -280,8 +391,11 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
 
     public boolean isDragging() { return active != null; }
 
+    /** Whether {@code localState} is the drawer's own drag in flight (not one handed to Home). */
     public boolean owns(@Nullable Object localState) {
-        return active != null && localState == active;
+        LocalState state = active;
+        return state != null && localState != null
+            && (localState == state || localState == state.homeDrop);
     }
 
     public void onHostDragEnded(@NonNull DragEvent event) {
@@ -293,6 +407,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
     private void cleanup() {
         if (cleaned) return;
         cleaned = true;
+        resetHandOver();
         LocalState finished = active;
         active = null;
         if (finished == null) overlay.clear();
@@ -308,18 +423,25 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         final String sourceSurface = "drawer";
         /** A folder tile on the move; its stable id is the folder id, not an app's. */
         final boolean folderSource;
+        /**
+         * An app's drag: the platform drag's local state, and what Home takes over if the finger
+         * leaves the drawer through its top edge. Null for a folder tile, which stays here.
+         */
+        @Nullable final HomeAppDrop homeDrop;
         boolean accepted;
         LocalState(String sourceStableId, long revision, Rect frozenSourceBounds,
-                   AppDrawerViewType sourceViewType) {
-            this(sourceStableId, revision, frozenSourceBounds, sourceViewType, false);
+                   AppDrawerViewType sourceViewType, @NonNull HomeAppDrop homeDrop) {
+            this(sourceStableId, revision, frozenSourceBounds, sourceViewType, false, homeDrop);
         }
         LocalState(String sourceStableId, long revision, Rect frozenSourceBounds,
-                   AppDrawerViewType sourceViewType, boolean folderSource) {
+                   AppDrawerViewType sourceViewType, boolean folderSource,
+                   @Nullable HomeAppDrop homeDrop) {
             this.sourceStableId = sourceStableId;
             this.revision = revision;
             this.frozenSourceBounds = new Rect(frozenSourceBounds);
             this.sourceViewType = sourceViewType;
             this.folderSource = folderSource;
+            this.homeDrop = homeDrop;
         }
     }
 
