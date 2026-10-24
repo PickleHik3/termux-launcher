@@ -237,6 +237,51 @@ tap opens the hidden tiles in Row B's place, each with the restore arrow; a tile
 its element to its last edge, a tile dragged onto the canvas puts it on the edge it is dropped on
 (§3.5, v2). The glossary term is **Hidden elements**.
 
+### 3.6a Dragging in the editor frame, and the hidden items' rail (2026-10-24)
+
+Settled by the developer in a grilling session on 2026-10-24 for the Appearance editor's frame
+(SurfaceEditorController, the hidden items' rail beside the frame). Supersedes §3.5's drop-target
+drawing and §3.6 where they differ. Status per item: **built** on the 2026-10-24 branch, or
+**open** where the decision as written cannot be built as stated (the reason is given).
+
+1. **Live drag** (open). The live frame stays visible through a drag; the layout canvas keeps its
+   slot and hit-test logic but draws nothing schematic; the held element lifts as its real render
+   (preview scale, slight elevation) and follows the finger; the other elements reflow live to the
+   hovered slot's layout; drop and commit as today. Open: the live chrome reads its arrangement
+   from the store through the host's whole place pass (`applyPlaceArrangement`, which re-hosts the
+   dock, the index and the extra keys and resizes the terminal), and has no way to show a layout
+   that is not written. A live reflow per hovered slot needs a preview arrangement through that
+   pass (or a translate-only reflow layer over every element), a large change outside the editor.
+2. **Rail chip into the preview** (open; rests on 1). A chip stays a chip over the rail and turns
+   into the real element at preview scale once it crosses into the frame.
+3. **Offset rule.** Built: the frame keeps one pose from the hold through the drop. A hold no
+   longer puts the card down (that moved the frame to its rest pose, larger and further across,
+   under the finger); the card that was up stays up through the drag. Open: "nothing hidden → no
+   rail, no reserve, frame centred". A lifted element's only hide target is the rail's drop slot
+   (4), and a centred frame at rest leaves the rail no room (on a 411dp phone at ×0.79 the frame
+   starts about 43dp in; the rail's band is 88dp), so either the frame moves at the lift or the
+   drop slot covers the frame's left edge. The reserve stays on whenever the editor is up until
+   that is settled.
+4. **Rail border.** Built: the rail is one geometry (`HiddenStackPolicy.rail`): the cards, one
+   empty drop slot after the last, and the dotted border round both with the same 4dp of air on
+   every side (in the 8dp either side of the cards' column, so the cards never move when it
+   shows). The rail rests on the column's bottom; the border hugs its content, never the whole
+   column. The border is the drop target. Corners concentric with the cards (12 + 4dp).
+5. **Capsules from real bounds** (open; rests on 1, and see 6). Per-element bounds on the live
+   frame mapped into the canvas, every capsule the real bounds plus one shared inset, its corner
+   the element's own, an empty slot sized as the held element would be there.
+6. **No crossing.** Built (on the canvas's slots): one capsule per slot (`DropCapsulePolicy`).
+   Side-strip slots show only where the held element may stand on a side (the edge policy's
+   targets); where one shows, every row capsule starts after it; whatever still overlaps is cut
+   apart halfway; every capsule stands 1.5dp inside its slot and inside the frame, so no two meet
+   and none runs past the phone. Open with 5: "every valid slot outlined, each sized as the held
+   element would be there, no two meeting" cannot all hold where an edge offers two gaps closer
+   than the held element is thick (a status bar 24dp thick on the top edge offers gaps at 0 and
+   24dp; a 56dp dock dropped at either needs 0–56 and 24–80dp, which overlap).
+7. **States.** Built: every valid slot dotted in the primary; the hovered one solid with the light
+   tint of the primary the hovered gap wore before. The rail's border likewise: dotted while
+   offered, solid and tinted with the finger over it.
+
 ### 3.7 Style (2026-10-01)
 
 Settled by the developer in three Lavish rounds on 2026-10-01 from the `termux-layout-assets` pack

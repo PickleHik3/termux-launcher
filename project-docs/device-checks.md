@@ -426,6 +426,20 @@ dropped; what follows is what still owes a look.
   emulator.
 
 ## Developer
+- 2026-10-24 · commit "fix(editor): a hold keeps the frame's pose through the drag" · Appearance
+  editor with one element hidden: tap the dock (its card comes up), then hold it and drag to
+  another edge and drop: the frame does not grow or slide at the hold, during the drag or at the
+  drop, and the card stays up throughout; the same with nothing hidden · pong (no emulator).
+- 2026-10-24 · commit "feat(editor): the hidden rail's border hugs its cards…" · two elements
+  hidden, hold a third: the rail's dotted border wraps both chips and one empty slot under them
+  with even air on all four sides, ends there (not down at the bar), and the chips do not move
+  when it shows; finger over it, solid and tinted; drop there hides the element; with nothing
+  hidden the border wraps the empty slot alone · pong.
+- 2026-10-24 · commit "feat(layout-canvas): one drop capsule per slot…" · hold the A–Z index and
+  then the status bar: one dotted capsule per slot, no two touching, none past the frame's edge,
+  the top and bottom capsules starting after the side strips where those show; side strips only
+  for an element that can stand on a side; the capsule under the finger solid with a light tint;
+  drops land where they did before · pong.
 - 2026-10-24 · widget settings sheet (7fd67a8c8) · Clock gear: the bottom sheet of cards matches
   the mockup (~/reports/clock-settings-2026-10-24/); real faces in the tiles, check badge on the
   selected one; Save and the Glass labels show their text; the selected Glass segment's corners are
