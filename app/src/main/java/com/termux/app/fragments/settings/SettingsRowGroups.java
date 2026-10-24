@@ -1,5 +1,7 @@
 package com.termux.app.fragments.settings;
 
+import android.text.TextUtils;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.Preference;
@@ -27,6 +29,9 @@ public final class SettingsRowGroups {
     public enum Kind {
         /** A section header: never inside a group, and ends the one before it. */
         HEADER,
+        /** A section with no title: draws nothing and takes no height, but still ends the group
+         *  before it, so the group after it opens with the ordinary group spacing. */
+        SPACER,
         /** An ordinary row: shares its group's container. */
         ROW,
         /** A row that is a card already (status cards, the search field): stands alone. */
@@ -77,8 +82,8 @@ public final class SettingsRowGroups {
 
     /**
      * Whether a group that opens at {@code position} needs space above it: a header already pads
-     * its section, but a group at the top of the list or straight after another group or a card
-     * would otherwise touch it.
+     * its section, but a group at the top of the list, straight after another group or a card, or
+     * after an untitled section (which takes no height) would otherwise touch it.
      */
     public static boolean needsLeadingSpace(@NonNull Rows rows, int position) {
         return position == 0 || rows.kindAt(position - 1) != Kind.HEADER;
@@ -104,7 +109,9 @@ public final class SettingsRowGroups {
 
     @NonNull
     public static Kind kindOf(@NonNull Preference preference) {
-        if (preference instanceof PreferenceCategory) return Kind.HEADER;
+        if (preference instanceof PreferenceCategory) {
+            return TextUtils.isEmpty(preference.getTitle()) ? Kind.SPACER : Kind.HEADER;
+        }
         if (STANDALONE_LAYOUTS.contains(preference.getLayoutResource())) return Kind.STANDALONE;
         return Kind.ROW;
     }

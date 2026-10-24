@@ -100,6 +100,23 @@ public class SettingsMaterialRowsTest {
         assertTrue(SettingsRowGroups.needsLeadingSpace(rows, 4));
     }
 
+    @Test public void anUntitledSectionIsASpacerAndTheGroupAfterItGetsLeadingSpace() {
+        Application app = RuntimeEnvironment.getApplication();
+        androidx.preference.PreferenceCategory untitled = new androidx.preference.PreferenceCategory(app);
+        assertEquals(Kind.SPACER, SettingsRowGroups.kindOf(untitled));
+        untitled.setTitle("Help");
+        assertEquals(Kind.HEADER, SettingsRowGroups.kindOf(untitled));
+
+        FakeRows rows = new FakeRows(
+            new Kind[]{Kind.SPACER, Kind.ROW, Kind.ROW, Kind.SPACER, Kind.ROW},
+            new Object[]{"page", "a", "a", "page", "b"});
+        assertEquals(Shape.NONE, SettingsRowGroups.shapeAt(rows, 0));
+        assertTrue(SettingsRowGroups.needsLeadingSpace(rows, 1));
+        assertEquals(Shape.LAST, SettingsRowGroups.shapeAt(rows, 2));
+        assertEquals(Shape.SOLO, SettingsRowGroups.shapeAt(rows, 4));
+        assertTrue(SettingsRowGroups.needsLeadingSpace(rows, 4));
+    }
+
     @Test public void shapesKnowWhichCornersAreRounded() {
         assertTrue(Shape.SOLO.opens() && Shape.SOLO.closes());
         assertTrue(Shape.FIRST.opens() && !Shape.FIRST.closes());
@@ -189,6 +206,28 @@ public class SettingsMaterialRowsTest {
         assertNotNull(holder);
         assertEquals(0, list.getLayoutManager().getTopDecorationHeight(holder.itemView));
         assertTrue(holder.itemView.getClipToOutline());
+    }
+
+    @Test public void anUntitledSectionTakesNoHeightAndItsCardKeepsOnlyTheGroupSpacing() {
+        // About & help opens with an untitled Help section: no blank band where a header stood.
+        AboutSupportPreferencesFragment fragment = launch(AboutSupportPreferencesFragment.class);
+        RecyclerView list = laidOutList(fragment);
+        RecyclerView.Adapter<?> adapter = list.getAdapter();
+        assertTrue(adapter instanceof PreferenceGroup.PreferencePositionCallback);
+        int help = ((PreferenceGroup.PreferencePositionCallback) adapter)
+            .getPreferenceAdapterPosition("app_launcher_help");
+        assertTrue(help > 0);
+        Preference section = SettingsGroupDecoration.itemAt(adapter, help - 1);
+        assertNotNull(section);
+        assertEquals(Kind.SPACER, SettingsRowGroups.kindOf(section));
+        RecyclerView.ViewHolder spacer = list.findViewHolderForAdapterPosition(help - 1);
+        RecyclerView.ViewHolder row = list.findViewHolderForAdapterPosition(help);
+        assertNotNull(spacer);
+        assertNotNull(row);
+        assertEquals("an untitled section draws no band", 0, spacer.itemView.getHeight());
+        assertEquals(list.getResources().getDimensionPixelSize(R.dimen.settings_space_m),
+            list.getLayoutManager().getTopDecorationHeight(row.itemView));
+        assertTrue(row.itemView.getClipToOutline());
     }
 
     // ---- Leading icons ------------------------------------------------------------------------
