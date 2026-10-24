@@ -261,7 +261,7 @@ public class SettingsMaterialRowsTest {
         assertNotNull(container);
         assertEquals(color(context, com.google.android.material.R.attr.colorPrimaryContainer),
             container.getColorForState(CHECKED, 0));
-        assertEquals(color(context, com.google.android.material.R.attr.colorSurfaceContainerHighest),
+        assertEquals(color(context, com.google.android.material.R.attr.colorSurfaceContainerLowest),
             container.getColorForState(UNCHECKED, 0));
         assertEquals(color(context, com.google.android.material.R.attr.colorOnPrimaryContainer),
             segment.getTextColors().getColorForState(CHECKED, 0));
