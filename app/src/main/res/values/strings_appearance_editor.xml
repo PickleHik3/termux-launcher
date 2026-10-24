@@ -1,96 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The Appearance editor (appearance-layout-editor SPEC §3): the frame's tap targets, the bottom
-  area's mode pill, Look slider, the Custom row's vertical sliders, Layout mode's Style toggle and
-  Corner radius / Margin sliders, and the doors that open it. Kept in their own file so the editor's copy travels
-  together.
+  The Appearance editor (appearance-and-settings-rework §2-§3): the editor bar, the half line, the
+  cards and their rows, and the doors that open it. Kept in their own file so the editor's copy
+  travels together.
 -->
 <resources>
     <string name="appearance_editor_undo">Undo</string>
     <string name="appearance_editor_done">Done</string>
-    <!-- The page bar's title over the scaled frame, by mode. -->
-    <string name="appearance_page_wallpaper">Wallpaper</string>
-    <string name="appearance_page_look">Look</string>
-    <string name="appearance_page_layout">Layout</string>
 
-    <string name="appearance_editor_mode_description">Editor mode</string>
-    <string name="appearance_editor_look_description">Look</string>
-    <!-- Row B's sliders before an element names them; the label text replaces it in code. -->
-    <string name="appearance_editor_control_description">Element setting</string>
-    <string name="appearance_editor_style_description">Style</string>
+    <!-- The dock card's Style segments. -->
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
 
-
-    <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
-    <string name="appearance_editor_target_status">Status bar</string>
-    <string name="appearance_editor_target_terminal">Terminal</string>
-    <string name="appearance_editor_target_dock">Dock</string>
-    <string name="appearance_editor_target_keyboard">Keyboard</string>
-    <string name="appearance_editor_target_wallpaper">Wallpaper</string>
-    <!-- Row 2's heading at the Custom stop with nothing tapped: the global glass row. -->
-    <string name="appearance_editor_target_all">All surfaces</string>
-    <string name="appearance_editor_target_description">Tune %1$s</string>
-
-    <!-- Row 2's controls; the number is the control's own read-out. -->
-    <string name="appearance_editor_legibility_low">Contrast · Softer</string>
-    <string name="appearance_editor_legibility_unavailable">Contrast · off</string>
-    <!-- The keyboard's key caps: how solid they are, from clear to opaque. -->
-    <string name="appearance_editor_key_opacity">Key opacity · %1$d%%</string>
-    <!-- The keyboard's own Opacity: its background behind the keys, beside Key opacity. -->
-    <string name="appearance_editor_bg_opacity">BG opacity · %1$d%%</string>
-    <!-- The button over Key opacity and BG opacity; checked, the two move together. -->
-    <string name="appearance_editor_opacity_link">Move key and background opacity together</string>
-    <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
-    <string name="appearance_editor_legibility_normal">Contrast · Default</string>
-    <string name="appearance_editor_legibility_high">Contrast · Harder</string>
-    <!-- The terminal's two menu pills: the heading over the chosen option. -->
-    <string name="appearance_editor_trail_title">Cursor trail</string>
-    <string name="appearance_editor_effect_title">Terminal effect</string>
-    <!-- The global set's menu pill, beside its name: which accent Tint mixes in. Short, so it
-         fits beside "All surfaces" on a 360dp phone. -->
-    <string name="appearance_editor_tint_hue_title">Hue</string>
-    <string name="appearance_editor_tint_hue_description">Tint colour, %1$s</string>
-    <!-- The status bar's button: opens the clock face and position popup. -->
-    <string name="appearance_editor_clock">Clock</string>
-    <!-- The Custom row's own legends; the number is the slider's read-out. -->
-    <string name="appearance_editor_icon_size">Icon size · %1$d dp</string>
-    <string name="appearance_editor_app_icons">Icons · %1$d</string>
-    <string name="appearance_editor_key_spacing">Spacing · %1$s</string>
-    <string name="appearance_editor_trail_description">Cursor trail, %1$s</string>
-    <string name="appearance_editor_effect_description">Terminal effect, %1$s</string>
-    <!-- The global row (layout editor v2): the base values every surface follows. -->
-    <!-- Frost: clear to frosted, how much the glass blurs what is behind it, and its grain with it. -->
-    <string name="appearance_editor_glass">Frost · %1$d%%</string>
-    <string name="appearance_editor_opacity">Opacity · %1$d%%</string>
-    <string name="appearance_editor_tint">Tint · %1$d%%</string>
+    <!-- A surface's Tint, as its accessibility row names it. -->
     <string name="appearance_editor_tint_name">Tint</string>
-    <!-- While the glass edge is drawn: the coloured light along the glass's edge, from none to bold. -->
-    <string name="appearance_editor_edge">Edge · %1$d%%</string>
-    <!-- How colourful the wallpaper looks through the glass; 1.00× is as it is. -->
-    <string name="appearance_editor_vibrancy">Vibrancy · %1$s×</string>
-    <!-- The global set's last slider, while the glass edge is drawn: how thick it looks. -->
-    <string name="appearance_editor_depth">Depth · %1$d%%</string>
-    <!-- The global set's last slider: the size of the terminal text, the key legends and the
-         labels together, as a percent of each one's own size. -->
-    <string name="appearance_editor_text_size">Text size · %1$d%%</string>
     <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
-    <!-- Layout mode's global shape: no Look sets these. -->
-    <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
-    <string name="appearance_editor_corners_description">Corner radius</string>
-    <string name="appearance_editor_split_gap">Split gap · %1$d dp</string>
-    <string name="appearance_editor_margin">Margin · %1$d dp</string>
-    <string name="appearance_editor_margin_description">Margin</string>
-
-    <!-- The doors. -->
+    <!-- The doors: Settings › Keyboard's row opens the editor on the Keyboard card. -->
     <string name="settings_look_appearance_editor_title">Appearance</string>
     <string name="settings_look_appearance_editor_summary">The keyboard\'s glass, height and keys</string>
-    <!-- The mode pill's first segment: the Looks slider and the tune row. Short on purpose: the pill shares its row with Undo and Done at 360dp. -->
-    <string name="appearance_editor_mode_look">Look</string>
-    <!-- Tooltip of the eye-off control before any count is known. -->
-    <string name="appearance_editor_hidden_tooltip">Hidden elements</string>
 
     <!-- The editor bar: the orientation chip names the orientation the frame shows. -->
     <string name="appearance_bar_portrait">Portrait</string>

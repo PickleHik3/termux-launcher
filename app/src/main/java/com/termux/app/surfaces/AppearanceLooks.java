@@ -5,29 +5,17 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
  * The Appearance editor's arithmetic (appearance-layout-editor SPEC §3.3–3.4), as pure functions.
  *
  * <p>The Look slider has five stops: the four Looks in {@link SurfacePresets#presets()} order —
- * Clear, Mist, Tint, Solid — and Custom last. At Custom the sheet shows a row of vertical sliders
- * whose set follows the selection ({@link #controls}): the global set with nothing tapped, or the
- * tapped element's own, with the buttons above them ({@link #doors}). Glass (blur and grain as
- * one, {@link GlassControls}), Opacity and Tint are the shared glass on the global set and the
- * element's own values on an element. The global set adds Vibrancy, and, where the glass edge is
- * drawn at all, the edge's two sliders: Edge (its colour split, no fringe to a bold coloured
- * edge) after Tint and Depth at the end; its pill is Tint colour. Those are global and never an
- * element's.</p>
- *
- * <p>Layout mode's Corners and Margin (SPEC §3.5) are here too: the global shape, which no Look
- * sets (2026-10-01). They are Layout's alone since the glass controls took the Custom row's
- * columns (2026-10-17): seven columns are all a 360 dp phone holds at the 36 dp floor.</p>
+ * Clear, Mist, Tint, Solid — and Custom last; a surface's own value leaves a half at Custom by
+ * itself. The ranges and conversions of the cards' controls ({@link Control}) are here too, and
+ * the shape no Look sets: Corners and Margin.</p>
  *
  * <p>No views and no {@code Context}, so the rules are held by JVM tests.</p>
  */
@@ -82,48 +70,10 @@ public final class AppearanceLooks {
         return null;
     }
 
-    /** The slider's float value for a stop (the Slider works in floats, one step per stop). */
-    public static float sliderValueForStop(int stop) {
-        return clamp(stop, 0, CUSTOM_STOP);
-    }
-
-    /** The stop a slider value lands on. */
-    public static int stopForSliderValue(float value) {
-        return clamp(Math.round(value), 0, CUSTOM_STOP);
-    }
-
-    // ------------------------------------------------------------------------ what can be tapped
-
-    /** The elements a tap in the frame can select. The bare wallpaper selects none. */
-    public enum Target {
-        STATUS(SurfaceSlot.STATUS),
-        TERMINAL(SurfaceSlot.CANVAS),
-        DOCK(SurfaceSlot.DOCK),
-        KEYBOARD(SurfaceSlot.KEYBOARD);
-
-        /** The surface this target is. */
-        @NonNull public final SurfaceSlot slot;
-
-        Target(@NonNull SurfaceSlot slot) {
-            this.slot = slot;
-        }
-
-        @Nullable
-        public static Target forSlot(@Nullable SurfaceSlot slot) {
-            if (slot == null)
-                return null;
-            for (Target target : values()) {
-                if (target.slot == slot)
-                    return target;
-            }
-            return null;
-        }
-    }
-
-    // ------------------------------------------------------------------ the control sets
+    // ------------------------------------------------------------------ the controls
 
     /**
-     * A vertical slider of the Custom row, with the integer range its stored value maps onto.
+     * A slider of the editor's cards, with the integer range its stored value maps onto.
      * Icon size is the pinned icon in dp, and its slider runs over the range the dock gives under
      * the Style ({@link #iconSizeRangeDp}); the bounds here are only the ones no dock passes, the
      * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; Key opacity
@@ -169,101 +119,12 @@ public final class AppearanceLooks {
         }
     }
 
-    /**
-     * A button above the sliders: a door to another page, a menu, or the clock's popup. Keyboard
-     * theme and Clock are tonal buttons; Trail and Effect are the outlined menu buttons.
-     */
-    public enum Door {
-        KEYBOARD_THEME,
-        CLOCK,
-        TRAIL,
-        EFFECT,
-        /** The global set's pill: which accent Tint mixes in (primary, secondary, tertiary). */
-        TINT_HUE
-    }
-
     /** Key spacing is the key margin scale, 0.0 to 8.0, in tenths. */
     public static final int KEY_SPACING_MAX_TENTHS = 80;
 
     /** The dock's visible app buttons. */
     public static final int APP_ICONS_MIN = 3;
     public static final int APP_ICONS_MAX = 10;
-
-    /** The Custom row's sliders for a selection, the global set without Depth. */
-    @NonNull
-    public static List<Control> controls(@Nullable Target target) {
-        return controls(target, false);
-    }
-
-    /**
-     * The sliders of the Custom row for a selection, in legend order (left to right): the global
-     * set for nothing tapped (null), or the element's own. Glass, Opacity and Tint come first, so
-     * the same three columns stay under the user's thumb as the selection changes, except that
-     * the keyboard puts Key opacity between Opacity and Tint, so its two opacities stand side by
-     * side under their link ({@link OpacityLink}). The global set
-     * adds Vibrancy and, while the glass edge is drawn ({@code glassEdge}), Edge after Tint and
-     * Depth after Vibrancy: the edge is not drawn otherwise, so neither is offered. Text size ends
-     * the global set, after the glass. An element never has those.
-     */
-    @NonNull
-    public static List<Control> controls(@Nullable Target target, boolean glassEdge) {
-        if (target == null)
-            return glassEdge
-                ? Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT, Control.EDGE,
-                    Control.VIBRANCY, Control.DEPTH, Control.TEXT_SIZE)
-                : Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-                    Control.VIBRANCY, Control.TEXT_SIZE);
-        switch (target) {
-            case KEYBOARD:
-                // Key opacity stands beside Opacity (its BG opacity), under their link.
-                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.KEY_OPACITY,
-                    Control.TINT, Control.KEY_RADIUS, Control.KEY_SPACING);
-            case DOCK:
-                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-                    Control.ICON_SIZE, Control.APP_ICONS);
-            case TERMINAL:
-                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-                    Control.CONTRAST, Control.SPLIT_GAP);
-            case STATUS:
-            default:
-                return Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT);
-        }
-    }
-
-    /**
-     * The buttons above the sliders for a selection, in order. The global set's is one pill, Tint
-     * colour, after its name.
-     */
-    @NonNull
-    public static List<Door> doors(@Nullable Target target) {
-        if (target == null)
-            return Collections.singletonList(Door.TINT_HUE);
-        switch (target) {
-            case KEYBOARD:
-                return Collections.singletonList(Door.KEYBOARD_THEME);
-            case TERMINAL:
-                return Arrays.asList(Door.TRAIL, Door.EFFECT);
-            case STATUS:
-                return Collections.singletonList(Door.CLOCK);
-            case DOCK:
-            default:
-                return Collections.emptyList();
-        }
-    }
-
-    /**
-     * The most sliders any selection has (the global set with the glass edge): the sheet's
-     * columns. Seven still fit a 360 dp phone at the 36 dp floor; eight would not.
-     */
-    public static final int MAX_CONTROLS = 7;
-
-    /** The name in a legend such as "Blur · 12 dp": the part before the separator. */
-    @NonNull
-    public static String legendName(@NonNull CharSequence legend) {
-        String text = legend.toString();
-        int cut = text.indexOf(" \u00b7 ");
-        return cut > 0 ? text.substring(0, cut) : text;
-    }
 
     /**
      * The Icon size slider's ends, {@code {min, max}} in dp: the smallest and largest pinned icon
@@ -332,36 +193,6 @@ public final class AppearanceLooks {
     /** Where the App icons slider stands for a stored button count. */
     public static int appIconsValueFor(int count) {
         return Control.APP_ICONS.clamp(count);
-    }
-
-    /** What row 2 holds (DECISIONS item 13). */
-    public enum Row {
-        /** Down: a Look stop. */
-        NONE,
-        /** The global glass: the Custom stop with nothing tapped. */
-        GLOBAL,
-        /** The tapped element's own controls. */
-        ELEMENT
-    }
-
-    /**
-     * Row 2 for a stop and a selection: nothing at a Look stop, the tapped element's controls at
-     * Custom with one tapped, and the global row at Custom with nothing tapped.
-     */
-    @NonNull
-    public static Row rowFor(int stop, @Nullable Target target) {
-        if (!isCustomStop(stop))
-            return Row.NONE;
-        return target == null ? Row.GLOBAL : Row.ELEMENT;
-    }
-
-    /**
-     * Whether a tap on the bare wallpaper deselects and brings the global set back: at the Custom
-     * stop it does; at a Look stop there is nothing selected and nothing to open, so it does
-     * nothing. The wallpaper has no controls of its own any more (Soften and Dim left the editor).
-     */
-    public static boolean wallpaperTapDeselects(int stop) {
-        return isCustomStop(stop);
     }
 
     // ------------------------------------------------------------------------------ the controls
