@@ -45,21 +45,24 @@ moves the Look slider to Custom by itself; Custom is a consequence, never a gate
 
 ### 2.3 Frequency decides order
 
-Every card orders its controls in three tiers, so position teaches frequency:
+Every card orders its controls in three tiers, so position teaches frequency. Tiers only order
+the rows: every row is always shown and the sheet scrolls (2026-10-25: there is no More).
 
-| Tier | What | Shown |
+| Tier | What | Order |
 |---|---|---|
-| 1 | Touched often: the glass strip (Frost, Opacity, Tint), size, place, shown or hidden | first, always open |
-| 2 | Tuned once: corner radius, margin, style | below |
-| 3 | Rare: edge colours, alignment, effects, links | collapsed under **More** |
+| 1 | Touched often: the card's strip (glass, then sizes), place, shown or hidden | first |
+| 2 | Tuned once: style, theme, contrast | below |
+| 3 | Rare: edge colours, effects, links | last |
 
 The glass is the previous editor's control set, exactly (2026-10-25): one **Frost** slider moves
 blur and grain together along `GlassControls`' curve (blur = R(4+32t^1.5), grain = R(2+6t),
 t = Frost/100; label "Frost · 20%"); BLUR and GRAIN are still the stored surface properties
-underneath, and nothing in the editor offers them apart. The glass rows are a strip of vertical
-sliders (`LegendSlider`, the old Look page's Custom row), each its name and value beside the track
-and the "set here" dot after it; only sizes (Height, Corners, Margin and the like) are horizontal
-sliders.
+underneath, and nothing in the editor offers them apart. Every value slider, glass and sizes alike
+(Height, Corners, Margin, Text size, Split gap, App icons, Icon size, Alignment), is a vertical
+slider in the card's strip (`LegendSlider`, the old Look page's Custom row), each its name and
+value beside the track ("Corners · 16 dp") and the "set here" dot after it. A strip puts as many
+columns on a line as hold a legend beside the narrowest track at the current font scale, and wraps
+the rest onto balanced lines. The Look's stop slider is the one horizontal slider.
 
 Labels are one or two words. Icons come from Material Symbols; glyphs this launcher alone needs
 (the Look stops, Tray / Beads / Strip) are drawn by Codex. Commit on Done stays (ADR 0003's
@@ -75,33 +78,42 @@ behaviour that is not appearance.
 1. Look slider ½ (Clear · Mist · Tint · Solid · Custom) · at the Custom stop the **All surfaces**
    strip ½: Frost · Opacity · Tint · Edge · Vibrancy · Depth · Text size (Edge and Depth only where
    the glass edge is drawn), the shared values every surface on the half follows · Wallpaper
-   (shown, Change: the only way to the picker) · Theme (System · Light · Dark; the app has no black
-   theme, so the wireframe's Black switch is not built)
+   (shown, Change: the only way to the picker) · Alignment (the wallpaper's own one-column strip,
+   at every stop) · Theme (System · Light · Dark; the app has no black theme, so the wireframe's
+   Black switch is not built)
 2. Icon pack · Monochrome · Wallpaper colours · Contrast (terminal) · Full screen · Minimal
-3. More: Alignment (wallpaper) · Tint colour · Terminal palette for tools
+3. Tint colour · Terminal palette for tools
 
-**Home.** 1. Icon size · Label size · Glass widgets (global switch; a widget's own long-press
-choice Default · Glass · Plain overrides it) 2. Two-line labels · Label shadow · Folders (density) ·
-Numerals (widgets) · Page dots 3. More: Folder limit · Wallpaper scroll · → Gestures · → Pages
+Every card below opens on its strip: every value slider it has, vertical, glass first.
 
-**Status bar** ½. 1. Frost · Opacity · Tint · Shown · Place (top/bottom) 2. Corners · Margin ·
-12-hour · Clock face 3. More: → Indicators and weather
+**Home.** 1. Strip: Frost · Opacity · Tint (the Home half's Base, which Home's widgets, status bar
+and dock wear while they follow it; whatever half the frame shows, they write Home) · Icon size;
+Label size · Glass widgets (global switch; a widget's own long-press choice Default · Glass ·
+Plain overrides it) 2. Two-line labels · Label shadow · Folders (density) · Numerals (widgets) ·
+Page dots 3. Folder limit · Wallpaper scroll · → Gestures · → Pages. Home's glass writes only the
+Base: a dock or status bar given its own Home value on its card keeps it. Reset Home puts the
+rows back as shipped and Home's glass back on the Look Home wore when the editor opened.
 
-**Terminal.** 1. Frost · Opacity · Tint · Text size 2. Corners · Margin · Contrast 3. More:
-Cursor trail · Effect · Edge colours · Split gap · → Font
+**Status bar** ½. 1. Strip: Frost · Opacity · Tint · Corners · Margin; Shown · Place (top/bottom)
+2. 12-hour · Clock face 3. → Indicators and weather
 
-**Dock** ½. 1. Opacity · Tint · Height · Shown · Place (edge) 2. Style (Docked · Floating) ·
-Design (Tray · Beads · Strip) · Corners · Margin 3. More: Search field ·
+**Terminal.** 1. Strip: Frost · Opacity · Tint · Text size · Corners · Margin · Split gap
+2. Contrast 3. Cursor trail · Effect · Edge colours · → Font
+
+**Dock** ½. 1. Strip: Frost · Opacity · Tint · Height · Corners · Margin · App icons; Shown · Place
+(edge) 2. Style (Docked · Floating) · Design (Tray · Beads · Strip) 3. Search field ·
 → Dock items (#156)
 
-**Keyboard** ½. 1. Frost · Opacity · Key opacity · Tint · Key corners · Key spacing · Height ·
-Shown 2. Theme (colours, typeface) · Corners · Margin 3. More: Type · → Size (floating, split) ·
+**Keyboard** ½. 1. Strip: Frost · Opacity · Key opacity · Tint · Key corners · Key spacing ·
+Height · Corners · Margin; Shown 2. Theme (colours, typeface) 3. Type · → Size (floating, split) ·
 → Layouts
 
 **Doors.** Every door opens the editor on its object: a corner tab on a terminal opens the
 Terminal card, on Home the Home card, on the display window the editor at rest; the doors that
-named the wallpaper (the terminal menu's Set wallpaper, Home's Wallpaper, appearance.set_wallpaper)
-open the Appearance card with its Wallpaper row in view. The picker is no door of its own.
+named the wallpaper (Home's Wallpaper, appearance.set_wallpaper) open the Appearance card with its
+Wallpaper row in view. The terminal long-press menu's Appearance opens the editor at rest, no card
+up, on the Workspace half (the page on screen when it is a Workspace page, else the terminal).
+The picker is no door of its own.
 
 The Drawer tile control leaves the editor with #156. "Icon size" in the dock card (which today
 writes dock height) is renamed Height, since that is what it does.
@@ -165,7 +177,8 @@ they run in parallel.
 4. Settings filing: XML trees, `SettingsTree`, strings, search index, docs/en.
 5. Set up Linux apps as a stepped guide.
 6. The editor: one card per object from `SurfaceEditorRows` plus the Layout session's controls,
-   pill card, half slide in the frame, Reset and Also-on, dots, three tiers, More. Entry points
+   pill card, half slide in the frame, Reset and Also-on, dots, three tiers (no More since
+   2026-10-25). Entry points
    open on an object. The Layout editor's canvas session stays the move/size engine underneath.
 7. Device checks on three emulators, before/after page, then a staging install on pong.
 
@@ -183,7 +196,7 @@ measurements and the questions they raised). Resolved as follows:
   **Appearance card**. Users see neither name.
 - **A card up hides the editor bar.** ✕, a tap on the frame, or Back puts the card down; Done is
   on the bar. The card is a bottom sheet with two detents: half (tier 1 visible, the frame at about
-  0.6) and full (the frame at about 0.44). The frame is a live preview, legibility at 0.44 is not
+  0.6) and full (the frame at about 0.44); every row is in the sheet, which scrolls. The frame is a live preview, legibility at 0.44 is not
   required.
 - **Move vs slide.** A plain horizontal swipe on the frame slides between halves (dots and the
   half's name under the frame). A surface moves by hold-and-drag, the Launcher3 idiom. A tap opens
@@ -217,7 +230,7 @@ The review is kept beside the wireframes (`REVIEW-codex-blind-2026-10-24.md`). A
 - **Scoped menu labels.** "Reset dock" (the card's object), "Copy to Home" / "Copy to Workspace"
   (a one-time copy, never a link). The ⋮ menu anchors so it never covers a slider's value.
 - **Every slider shows its value** (Opacity 72%, Height 56dp, Text size 100%) and announces it;
-  a strip slider shows it in its legend ("Frost · 20%").
+  every slider but the Look's is a strip slider and shows it in its legend ("Frost · 20%").
 - **Labels.** "Visible" (switch) and "Position" (segments) replace Shown and Place. The dot after
   a label means "set here"; its content description says so.
 - **Black**: dropped; there is no black app theme to switch on.
@@ -243,7 +256,14 @@ Decided and built the same morning:
   heuristic and must not come back; the stored BLUR and GRAIN properties remain underneath.
 - **Vertical sliders everywhere.** Glass values are the previous version's vertical legend sliders
   in every card; the Appearance card's Custom stop shows the "All surfaces" strip writing the
-  shared values. Horizontal sliders only for sizes, plus the Look stop slider.
+  shared values. Superseded the same day (see below): sizes are vertical too, and the Look stop
+  slider is the only horizontal one.
+- **One slider form, nothing hidden** (pong, 2026-10-25 afternoon). Every value slider in every
+  card is a vertical legend slider in the card's strip; More is gone and every row is shown.
+- **Home's glass has a control.** Home's widgets, status bar and dock looked opaque and only the
+  Appearance card's Look slider (with the frame on Home) could change them. The Home card opens on
+  Frost · Opacity · Tint writing the Home half's Base.
+- **The terminal menu's Appearance** opens the editor at rest on the Workspace half.
 - **One door.** The terminal's corner tab and every other door open the one editor on their object;
   the old in-app wallpaper page is gone as a destination and lives only behind Wallpaper › Change.
 - **Terminal effects wear a bezel.** 12dp sides, 16dp top and bottom, 10dp inner corners, the

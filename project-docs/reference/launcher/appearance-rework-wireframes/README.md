@@ -17,7 +17,11 @@ judge the layout before any code and a reviewer can critique the measurements.
 ## The PNGs
 
 Since 2026-10-25 the built cards' glass rows are **Frost · Opacity · Tint** (a strip of vertical
-sliders, one Frost for blur and grain); the Blur row these drawings show is not built.
+sliders, one Frost for blur and grain); the Blur row these drawings show is not built. Later the
+same day every value slider became a column of the card's strip (the horizontal slider rows these
+drawings show for Height, Corners, Margin and the like are not built; the Look stop slider is the
+one horizontal slider), the More row is gone (every row is shown and the sheet scrolls), and the
+Home card opens on its own Frost · Opacity · Tint strip.
 
 | File | Shows |
 |---|---|
