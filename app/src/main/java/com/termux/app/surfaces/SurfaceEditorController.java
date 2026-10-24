@@ -72,6 +72,7 @@ import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.logger.Logger;
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
@@ -113,6 +114,8 @@ import java.util.Locale;
  * Undo, one Done and one unsaved-changes question cover all of it.</p>
  */
 public final class SurfaceEditorController implements AppearanceSurfaceController.Editor {
+
+    private static final String LOG_TAG = "SurfaceEditor";
 
     /** What the editor needs from the activity: its views, its prefs, and its render pipeline. */
     public interface Host {
@@ -467,7 +470,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * Shows the editor over the launcher, with {@code card} up (none for null), on the half of
      * {@code place} (the page on screen for null). The frame grows from full size; the in-app
      * keyboard is raised once it has settled, and {@code onSettled} runs then. Already presented,
-     * it slides to {@code place}'s half and raises {@code card} (or puts the card down).
+     * it slides to {@code place}'s half and raises {@code card} (or puts the card down). Either
+     * way {@code card} is up when this returns, or a warning in the log says why it is not.
      */
     @Override
     public void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
@@ -481,7 +485,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mOpen) {
             if (place != null)
                 switchHalf(SeamDress.halfOf(place), true);
-            if (card != null) openCard(card, true);
+            if (card != null) raiseOrReport(card);
             else closeCard(true);
             if (onSettled != null)
                 onSettled.run();
@@ -558,6 +562,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         setOverlayVisible(true);
         registerLayoutListener(content);
         mFramed = false;
+        // The card goes up now, not in the frame pass below: that pass is a post, and a post can
+        // wait behind a pending traversal, so a card raised there is not up when this returns.
+        // The sheet waits below the screen for its detents and rises with the frame's first pose.
+        if (card != null)
+            raiseOrReport(card);
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
@@ -566,8 +575,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (!layoutFrame(true))
                 layoutFrameWhenReady(content, token, FRAME_RETRIES);
             positionTargets();
-            if (card != null)
-                openCard(card, true);
             long wait = ReducedMotion.isEnabled(mHost.context()) ? 0L
                 : AppearanceEditorFrame.ENTER_MS + 20L;
             content.postDelayed(() -> {
@@ -863,10 +870,31 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ------------------------------------------------------------------------------- the cards
 
+    /** Raises the card {@link #present} was asked for, or logs why it cannot stand there. */
+    private void raiseOrReport(@NonNull EditorCard card) {
+        String refusal = cardRefusal(card);
+        if (refusal == null)
+            openCard(card, true);
+        else
+            Logger.logWarn(LOG_TAG, "The " + card + " card was not raised: " + refusal);
+    }
+
+    /** Why {@code card} cannot go up now, or null when it can. */
+    @Nullable
+    private String cardRefusal(@NonNull EditorCard card) {
+        if (!mOpen)
+            return "the editor is not presented";
+        if (mSheet == null)
+            return "the editor has no card sheet";
+        if (!card.standsOn(mHalf))
+            return "it does not stand on the " + mHalf + " half";
+        return null;
+    }
+
     /** Raises {@code card}, on the half the frame shows. */
     private void openCard(@NonNull EditorCard card, boolean animate) {
         EditorCardSheet sheet = mSheet;
-        if (!mOpen || sheet == null || !card.standsOn(mHalf))
+        if (sheet == null || cardRefusal(card) != null)
             return;
         dismissClockDropdown();
         mCard = card;
@@ -1153,7 +1181,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * and the card's top edge keep their gap all the way.
      */
     private void applyPose(boolean animate) {
-        if (mFrame == null || !mFrameCtxValid || !mOpen)
+        // Before the first pose (a card raised while the window was being measured) the frame
+        // pass takes the pose itself: it grows the frame in, clipped, straight to the card.
+        if (mFrame == null || !mFrameCtxValid || !mOpen || mTargetScale < 0f)
             return;
         EditorFramePose.Pose pose = targetPose();
         moveFrame(pose.scale, pose.translationY, animate);
