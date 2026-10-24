@@ -1314,7 +1314,8 @@ public class PlaceLayoutStoreTest {
         }
         store.setSearchField(false);
         assertFalse(store.searchField());
-        assertEquals("the toggle leaves the design", DockStyle.WALL_STRIP, store.dockStyle());
+        assertEquals("the toggle leaves the design",
+            DockStyle.CHOICES.get(DockStyle.CHOICES.size() - 1), store.dockStyle());
 
         store.setSearchField(true);
         assertFalse("another layout's toggle is its own",
@@ -1343,7 +1344,8 @@ public class PlaceLayoutStoreTest {
         store.setDrawerTile(false);
         assertFalse(store.drawerTile());
         assertTrue("the tile leaves the field", store.searchField());
-        assertEquals("the toggle leaves the design", DockStyle.WALL_STRIP, store.dockStyle());
+        assertEquals("the toggle leaves the design",
+            DockStyle.CHOICES.get(DockStyle.CHOICES.size() - 1), store.dockStyle());
 
         store.setDrawerTile(true);
         assertFalse("another layout's toggle is its own",
