@@ -2301,6 +2301,18 @@ glass). Third-party widgets are unchanged: the launcher draws no card behind the
   keyboard), put the always-on keyboard away and back, rotate to landscape and back: the strip
   follows the dock's top each time. Same Done with Glass tray and a minimised Home float: its chip
   stands just above the dock. Nothing at rest redraws · emulator.
+- 2026-10-24 · commits "feat(settings): group each section's rows into one rounded tonal
+  card", "lead every settings row with a Material Symbols icon", "fill the segmented controls and
+  the section filter" · Settings root, Home, Keyboard, Terminal › Linux apps › Input, General, in
+  light, dark and black and with the launcher's scheme chrome on: each section's rows sit on one
+  rounded card a step off the page colour, 24dp outer corners, a faint hairline between rows and
+  none above the first; the search field and status cards stand alone; pressing the first or last
+  row of a card ripples inside the rounded corners. Every row leads with a 24dp icon, titles
+  aligned across the card; an off row dims its icon with its text. Segmented rows (Keyboard ›
+  On-screen keyboard, Look › App theme) are filled: the chosen segment on the primary container
+  with a check, the rest tonal, small gaps, no outline; General's section filter chips match
+  them. Repeat at font scale 1.3 (`settings put system font_scale 1.3`, then force-stop): no
+  clipped title or segment label (segments stack instead), rows grow · emulator.
 
 ## Developer
 - 2026-10-24 · #159 model · the dip a differing look now causes on every crossing (the same dip

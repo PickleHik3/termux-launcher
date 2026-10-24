@@ -11,7 +11,7 @@
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/tai_backend_segment"
-        style="?attr/materialButtonToggleGroupStyle"
+        style="@style/Widget.Termux.SegmentGroup"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:selectionRequired="true"

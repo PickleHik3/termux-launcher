@@ -54,8 +54,17 @@
     </style>
 
     <!-- A text segment of any MaterialButtonToggleGroup: the check shows on the chosen one. The
-         unchecked state keeps an empty slot of the same size, so choosing never moves the row. -->
+         unchecked state keeps an empty slot of the same size, so choosing never moves the row.
+         Filled: the chosen one on the primary container, the rest tonal, no outline, 20dp
+         corners. minWidth 0 lets a narrow segment take only its share; SegmentedPillPreference
+         stacks the segments when a label still does not fit. -->
     <style name="Widget.Termux.Button.Segment" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="strokeWidth">0dp</item>
+        <item name="backgroundTint">@color/settings_segment_container</item>
+        <item name="android:textColor">@color/settings_segment_content</item>
+        <item name="iconTint">@color/settings_segment_content</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Termux.Segment</item>
+        <item name="android:minWidth">0dp</item>
         <item name="icon">@drawable/segment_checked_icon</item>
         <item name="iconSize">18dp</item>
         <item name="iconGravity">textStart</item>
@@ -68,5 +77,28 @@
         <item name="android:paddingStart">12dp</item>
         <item name="android:paddingEnd">12dp</item>
         <item name="android:maxLines">1</item>
+    </style>
+
+    <style name="ShapeAppearance.Termux.Segment" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">20dp</item>
+    </style>
+
+    <!-- A row of filled segments: a 2dp gap keeps neighbouring tonal segments apart now that
+         they have no outline; inner corners stay small so the row reads as one control. -->
+    <style name="Widget.Termux.SegmentGroup" parent="Widget.Material3.MaterialButtonToggleGroup">
+        <item name="android:spacing">2dp</item>
+        <item name="innerCornerSize">8dp</item>
+    </style>
+
+    <!-- The pinned section filter's chips, dressed as filled segments: same colours, height and
+         corners, no outline and no check mark (the colour carries the selection). -->
+    <style name="Widget.Termux.SectionChip" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">@color/settings_segment_container</item>
+        <item name="android:textColor">@color/settings_segment_content</item>
+        <item name="chipStrokeWidth">0dp</item>
+        <item name="chipMinHeight">40dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Termux.Segment</item>
+        <item name="checkedIconVisible">false</item>
     </style>
 </resources>

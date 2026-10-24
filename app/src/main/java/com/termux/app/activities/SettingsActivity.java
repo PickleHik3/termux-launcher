@@ -705,6 +705,8 @@ public class SettingsActivity extends AppCompatActivity implements
                     // list divider creates the unwanted double line between sections.
                     preferenceFragment.setDivider(null);
                     preferenceFragment.setDividerHeight(0);
+                    // Each section's rows share one rounded tonal card instead.
+                    SettingsLayoutUtils.applyGroups(preferenceFragment);
                     // A page opened on a row (a search result, a link with a scroll key) lands on
                     // it and rings it once.
                     SettingsRowRing.ringIfAsked(preferenceFragment);
