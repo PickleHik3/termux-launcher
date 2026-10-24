@@ -2195,12 +2195,17 @@ public final class ClockFaceRenderer {
         if (boxedPeriod) {
             mPaint.setTypeface(periodFace);
             mPaint.setTextSize(sp(periodDp));
-            mRect.set(x, periodBaseline + mPaint.ascent() - lp(1.5f),
-                x + width, periodBaseline + mPaint.descent() + lp(1.5f));
+            // The stroke is centred on the rect, so the rect is inset by half of it: the box's
+            // outer edge is the column's edge. Edge to edge, half the stroke hung past the width
+            // the fit measured, and once a widget's Label role grew with the face that half grew
+            // too: the LCD at 2x1 painted 2 px past its box.
+            float stroke = lp(STROKE_FLOOR_DP);
+            mRect.set(x + stroke / 2f, periodBaseline + mPaint.ascent() - lp(1.5f),
+                x + width - stroke / 2f, periodBaseline + mPaint.descent() + lp(1.5f));
             mFillPaint.setShader(null);
             mFillPaint.setColor(mPrimaryLine);
             mFillPaint.setStyle(Paint.Style.STROKE);
-            mFillPaint.setStrokeWidth(lp(STROKE_FLOOR_DP));
+            mFillPaint.setStrokeWidth(stroke);
             canvas.drawRoundRect(mRect, lp(2.5f), lp(2.5f), mFillPaint);
             mFillPaint.setStyle(Paint.Style.FILL);
             drawLabel(canvas, period, x + (width - natural) / 2f, periodBaseline, periodDp,
