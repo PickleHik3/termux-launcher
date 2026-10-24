@@ -2789,8 +2789,14 @@ public final class TerminalView extends View {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
             mClient.logInfo(LOG_TAG, "onKeyDown(keyCode=" + keyCode + ", isSystem()=" + event.isSystem() + ", event=" + event + ")");
-        if (mEmulator == null)
+        if (mEmulator == null) {
+            // Nothing to type into, but Back still reaches the client, as its release does
+            // (onKeyUp): whatever the client puts over this view has to hear the press, or the
+            // release arrives alone and is taken for a Back nothing claimed.
+            if (keyCode == KeyEvent.KEYCODE_BACK)
+                return mClient.onKeyDown(keyCode, event, mTermSession) || super.onKeyDown(keyCode, event);
             return true;
+        }
         if (isCtrlSpacePassThrough(keyCode, event)) {
             return super.onKeyDown(keyCode, event);
         }
