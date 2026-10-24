@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The settings root, by the wall's halves (project-docs/active/settings-restructure-2026-10-19.md):
-     what you see on Home and on the Terminal, then what both share, then the app itself. Every
-     destination row's page and section are mirrored in SettingsTree. -->
+<!-- The settings root, by the wall's halves (project-docs/active/settings-restructure-2026-10-19.md,
+     refiled by project-docs/active/appearance-and-settings-rework-2026-10-24.md §4): what you see on
+     Home and on the Terminal, then what holds everywhere, then the app itself. Every destination
+     row's page and section are mirrored in SettingsTree. Appearance is a door, not a page: its row
+     opens the Appearance editor (RootPreferencesFragment). -->
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <com.termux.app.fragments.settings.SettingsSearchPreference
@@ -41,7 +43,7 @@
             app:icon="@drawable/ic_symbol_palette"
             app:title="@string/settings_section_look"
             app:summary="@string/settings_section_look_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
+            app:persistent="false" />
 
         <Preference
             app:key="keyboard_input"

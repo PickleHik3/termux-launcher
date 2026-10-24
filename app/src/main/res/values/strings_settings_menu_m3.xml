@@ -4,15 +4,15 @@
 <resources>
     <!-- The settings tree by the wall's halves (project-docs/active/settings-restructure-2026-10-19.md) -->
     <string name="settings_root_your_launcher_header">Your launcher</string>
-    <string name="settings_root_shared_header">Shared</string>
+    <string name="settings_root_shared_header">Everywhere</string>
     <string name="settings_root_system_header">System</string>
     <string name="settings_section_home">Home</string>
     <string name="settings_section_home_summary">Pages, widgets, gestures and where you start</string>
     <string name="settings_section_dock_drawer">Dock &amp; drawer</string>
     <string name="settings_section_dock_drawer_summary">Pinned apps, drawer, A–Z and app search</string>
     <string name="settings_section_terminal_summary">Windows, panes, status bar and Linux apps</string>
-    <string name="settings_section_look">Look</string>
-    <string name="settings_section_look_summary">Glass, theme, wallpaper and icons</string>
+    <string name="settings_section_look">Appearance</string>
+    <string name="settings_section_look_summary">Wallpaper, glass, theme, icons and layout</string>
     <string name="settings_section_keyboard_summary">Layouts, size, typing, voice and look</string>
     <string name="settings_section_notifications_summary">Access, dots, pinned alerts and history</string>
     <string name="settings_section_ai_summary">Models, voice and assistant</string>

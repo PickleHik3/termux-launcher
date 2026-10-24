@@ -18,7 +18,8 @@ import com.termux.app.wall.PaneWallPage;
 
 /**
  * The Settings rows that open an editor over the live launcher rather than a page of rows: the
- * Layout rows at the top of Home and of Terminal, Look's Appearance row and Keyboard's. The launcher
+ * root's Appearance row, the Appearance rows at the top of Home and of Terminal, and Keyboard's;
+ * a search hit on a row the editor holds (SettingsTree's Appearance door) opens it too. The launcher
  * comes forward growing out of the row that opened it (the window's scale-up from the row's
  * bounds: the container transform's equivalent across two activities), or at once under reduced
  * motion. Every one of these marks its Intent {@code EXTRA_APPEARANCE_FROM_SETTINGS}, so closing
@@ -34,6 +35,20 @@ public final class SettingsEditorDoors {
         Intent intent = new Intent(context, TermuxActivity.class);
         intent.putExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR, true);
         intent.putExtra(TermuxActivity.EXTRA_LAYOUT_EDITOR_PLACE, place.toolName());
+        intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return intent;
+    }
+
+    /**
+     * The Intent that opens the Appearance editor (wallpaper, glass, theme, icons and layout),
+     * marked as coming from Settings: the root's Appearance row and every search hit on a row the
+     * editor holds.
+     */
+    @NonNull
+    public static Intent appearanceIntent(@NonNull Context context) {
+        Intent intent = new Intent(context, TermuxActivity.class);
+        intent.putExtra(TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
         intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return intent;

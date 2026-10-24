@@ -80,6 +80,12 @@ public class RootPreferencesSearchIndexTest {
         SettingsActivity.RootPreferencesFragment root = launch();
         for (SettingsTree.Section section : SettingsTree.Section.values()) {
             Preference row = findAnywhere(root.getPreferenceScreen(), section.rootKey);
+            if (SettingsTree.sectionPage(section).door) {
+                // Appearance opens the editor itself: no page to push.
+                assertNull(section.name(), row.getFragment());
+                assertTrue(section.name(), row.getOnPreferenceClickListener() != null);
+                continue;
+            }
             assertEquals(section.name(), SettingsTree.sectionPage(section).className, row.getFragment());
         }
     }

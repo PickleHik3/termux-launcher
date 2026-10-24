@@ -40,7 +40,8 @@ public final class SettingsTree {
         HOME(R.string.settings_section_home, "home"),
         DOCK_DRAWER(R.string.settings_section_dock_drawer, "dock_drawer"),
         TERMINAL(R.string.settings_destination_terminal, "terminal"),
-        LOOK(R.string.settings_section_look, "look"),
+        /** A door, not a page: the root's row opens the Appearance editor. */
+        APPEARANCE(R.string.settings_section_look, "look"),
         KEYBOARD(R.string.settings_destination_keyboard_input, "keyboard_input"),
         NOTIFICATIONS(R.string.settings_destination_notifications, "notifications"),
         AI(R.string.settings_tai_service_title, "on_device_ai"),
@@ -70,15 +71,21 @@ public final class SettingsTree {
          * the row that opens it instead of a slide.
          */
         public final boolean editor;
+        /**
+         * Not shown as a page: a door into the Appearance editor over the live launcher. Its XML
+         * lists the rows the editor holds, so search still finds them; a hit opens the editor.
+         */
+        public final boolean door;
 
         Screen(@NonNull String className, @Nullable String parent, @StringRes int titleRes,
-               @XmlRes int xmlRes, @NonNull Section section, boolean editor) {
+               @XmlRes int xmlRes, @NonNull Section section, boolean editor, boolean door) {
             this.className = className;
             this.parent = parent;
             this.titleRes = titleRes;
             this.xmlRes = xmlRes;
             this.section = section;
             this.editor = editor;
+            this.door = door;
         }
 
         public boolean isSectionPage() {
@@ -91,19 +98,24 @@ public final class SettingsTree {
     private static final Map<String, String> ALIASES = new HashMap<>();
 
     private static void section(Section section, String className, int titleRes, int xmlRes) {
-        SCREENS.put(className, new Screen(className, null, titleRes, xmlRes, section, false));
+        SCREENS.put(className, new Screen(className, null, titleRes, xmlRes, section, false, false));
+    }
+
+    /** A section whose root row opens the Appearance editor; {@code xmlRes} is for search only. */
+    private static void door(Section section, String className, int titleRes, int xmlRes) {
+        SCREENS.put(className, new Screen(className, null, titleRes, xmlRes, section, false, true));
     }
 
     private static void page(String parent, String className, int titleRes, int xmlRes) {
         Screen up = SCREENS.get(parent);
         if (up == null) throw new IllegalStateException("parent first: " + parent);
-        SCREENS.put(className, new Screen(className, parent, titleRes, xmlRes, up.section, false));
+        SCREENS.put(className, new Screen(className, parent, titleRes, xmlRes, up.section, false, false));
     }
 
     private static void editor(String parent, String className, int titleRes) {
         Screen up = SCREENS.get(parent);
         if (up == null) throw new IllegalStateException("parent first: " + parent);
-        SCREENS.put(className, new Screen(className, parent, titleRes, 0, up.section, true));
+        SCREENS.put(className, new Screen(className, parent, titleRes, 0, up.section, true, false));
     }
 
     static {
@@ -148,9 +160,11 @@ public final class SettingsTree {
         page(linuxApps, PAGES + "X11DisplayTroubleshootingPreferencesFragment",
             R.string.settings_x11_sub_troubleshooting_title, R.xml.x11_display_troubleshooting_preferences);
 
-        // Shared
-        section(Section.LOOK, PAGES + "TermuxStylePreferencesFragment", R.string.settings_section_look,
-            R.xml.termux_style_preferences);
+        // Everywhere
+        // Appearance: the old Look page's name, now the door into the editor. Its rows moved into
+        // the editor's pill card and stay searchable through appearance_search_index.
+        door(Section.APPEARANCE, PAGES + "TermuxStylePreferencesFragment", R.string.settings_section_look,
+            R.xml.appearance_search_index);
 
         String keyboard = PAGES + "KeyboardPreferencesFragment";
         section(Section.KEYBOARD, keyboard, R.string.settings_destination_keyboard_input,

@@ -530,6 +530,16 @@ public class SettingsActivity extends AppCompatActivity implements
         List<SettingsTree.Screen> path = SettingsTree.path(screenClass);
         if (path.isEmpty()) return;
         hideKeyboard();
+        if (path.get(path.size() - 1).door) {
+            // A row the Appearance editor holds: the editor opens over the launcher.
+            // TODO(#159 editor): open on the card that holds `key` (spec §3): the pill card for
+            //  theme_mode, use_system_wallpaper, terminal_dynamic_colors_enabled,
+            //  terminal_contrast_level, widgets_on_glass (Home card), app_launcher_bw_icons,
+            //  app_launcher_icon_pack_package, app_launcher_pinned_icon_pack_package, fullscreen;
+            //  its More for wallpaper_render_zoom and theme_templates_enabled.
+            startActivity(com.termux.app.fragments.settings.termux.SettingsEditorDoors.appearanceIntent(this));
+            return;
+        }
         jumpTo(path, key);
     }
 
@@ -884,6 +894,13 @@ public class SettingsActivity extends AppCompatActivity implements
                 return;
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
             SettingsLayoutUtils.applyRootLayout(this);
+            // Appearance is the editor itself, over the live launcher, not a page of rows.
+            Preference appearance = findPreference(SettingsTree.Section.APPEARANCE.rootKey);
+            if (appearance != null) appearance.setOnPreferenceClickListener(row -> {
+                com.termux.app.fragments.settings.termux.SettingsEditorDoors.open(this, row,
+                    com.termux.app.fragments.settings.termux.SettingsEditorDoors.appearanceIntent(context));
+                return true;
+            });
             SettingsSearchPreference search = findPreference("settings_search");
             // The root searches everything: no section is ranked first.
             if (search != null) mSearch = SettingsSearchResults.attach(this, search, null);
