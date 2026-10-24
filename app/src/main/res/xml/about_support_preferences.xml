@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
-    <PreferenceCategory app:title="@string/settings_about_help_header">
+    <PreferenceCategory>
         <!-- From General: the in-app help, first of the ways to get help. -->
         <Preference app:key="app_launcher_help" app:persistent="false" app:title="@string/help_settings_title" app:summary="@string/help_settings_summary" />
         <Preference app:key="documentation" app:title="@string/settings_documentation_title" app:summary="@string/settings_documentation_summary" />

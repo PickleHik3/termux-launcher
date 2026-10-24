@@ -68,7 +68,7 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:key="keyboard_hardware" app:title="@string/settings_keyboard_sub_hardware_title">
+    <PreferenceCategory app:key="keyboard_hardware">
         <Preference
             app:key="keyboard_sub_hardware"
             app:persistent="false"

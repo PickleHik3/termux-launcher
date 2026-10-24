@@ -7,17 +7,17 @@
     <string name="settings_root_shared_header">Everywhere</string>
     <string name="settings_root_system_header">System</string>
     <string name="settings_section_home">Home</string>
-    <string name="settings_section_home_summary">Pages, widgets, gestures and where you start</string>
+    <string name="settings_section_home_summary">Pages, widgets and gestures</string>
     <string name="settings_section_dock_drawer">Apps &amp; dock</string>
-    <string name="settings_section_dock_drawer_summary">Dock, drawer, A–Z and app search</string>
-    <string name="settings_section_terminal_summary">Windows, panes, status bar and text</string>
+    <string name="settings_section_dock_drawer_summary">Drawer, dock items and search</string>
+    <string name="settings_section_terminal_summary">Windows, status bar and text</string>
     <string name="settings_section_look">Appearance</string>
-    <string name="settings_section_look_summary">Wallpaper, glass, theme, icons and layout</string>
-    <string name="settings_section_keyboard_summary">Layouts, size, typing, voice and look</string>
+    <string name="settings_section_look_summary">Wallpaper, glass, theme and icons</string>
+    <string name="settings_section_keyboard_summary">Layouts, size and voice</string>
     <string name="settings_section_notifications_summary">Dots, pinned alerts and history</string>
     <string name="settings_section_ai_summary">Models, voice and assistant</string>
     <string name="settings_section_general">General</string>
-    <string name="settings_section_general_summary">Motion, vibration, battery, backup and about</string>
+    <string name="settings_section_general_summary">Motion, vibration, backup and about</string>
 
     <string name="settings_search_in">Search %1$s</string>
     <string name="settings_search_results_header">Results</string>
@@ -46,7 +46,7 @@
     <string name="settings_terminal_sub_clipboard_title">Clipboard &amp; compatibility</string>
     <string name="settings_terminal_sub_clipboard_summary">Clipboard access and the system keyboard</string>
     <string name="settings_terminal_sub_linux_apps_title">Linux apps</string>
-    <string name="settings_terminal_sub_linux_apps_summary">Desktop apps, their windows and how they start</string>
+    <string name="settings_terminal_sub_linux_apps_summary">Set up, window and start-up</string>
 
     <string name="settings_keyboard_look_title">Look</string>
 
@@ -77,11 +77,11 @@
     <string name="settings_behavior_low_memory_summary">Smoothest and lightest. Switches to the Solid look and an opaque terminal, and turns off the trail, effects, parallax and glass motion. Turn off to get your look back.</string>
     <string name="settings_behavior_vibration_header">Vibration</string>
     <string name="settings_behavior_vibration_title">Allow vibration</string>
-    <string name="settings_behavior_vibration_summary">Master control. Turn off to silence launcher and keyboard vibration.</string>
+    <string name="settings_behavior_vibration_summary">Master control. Turn off to silence launcher and keyboard vibration</string>
     <string name="settings_behavior_launcher_vibration_title">Launcher vibration</string>
-    <string name="settings_behavior_launcher_vibration_summary">Dock and app-index feedback.</string>
+    <string name="settings_behavior_launcher_vibration_summary">Dock and app-index feedback</string>
     <string name="settings_behavior_keyboard_vibration_title">Keyboard vibration</string>
-    <string name="settings_behavior_keyboard_vibration_summary">Key press feedback.</string>
+    <string name="settings_behavior_keyboard_vibration_summary">Key press feedback</string>
     <string name="settings_behavior_home_header">Home behavior</string>
 
     <!-- Keyboard overview and subpages -->
@@ -90,7 +90,7 @@
     <string name="settings_keyboard_layout_keys_header">Layouts and keys</string>
     <string name="settings_keyboard_docs_credits_header">Documentation and credits</string>
     <string name="settings_keyboard_sub_layout_title">Layouts</string>
-    <string name="settings_keyboard_sub_layout_summary">Layouts, extra keys and documentation</string>
+    <string name="settings_keyboard_sub_layout_summary">Extra keys and documentation</string>
     <string name="settings_keyboard_sub_size_title">Size and position</string>
     <string name="settings_keyboard_sub_size_summary">Floating and split keyboard, in percent</string>
     <string name="settings_keyboard_sub_typing_title">Typing and feedback</string>

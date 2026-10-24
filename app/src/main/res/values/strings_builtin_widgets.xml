@@ -52,7 +52,7 @@
 
     <!-- Settings: the look shared by every built-in widget. -->
     <string name="settings_builtin_widget_style_title">Widget numerals</string>
-    <string name="settings_builtin_widget_style_summary">The face of the numbers in the launcher\'s own widgets.</string>
+    <string name="settings_builtin_widget_style_summary">The face of the numbers in the launcher\'s own widgets</string>
     <string name="settings_builtin_widget_style_tonal">Sans</string>
     <string name="settings_builtin_widget_style_pane">Mono</string>
     <string-array name="settings_builtin_widget_style_entries">

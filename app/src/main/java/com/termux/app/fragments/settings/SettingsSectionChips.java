@@ -282,7 +282,8 @@ public final class SettingsSectionChips {
 
         for (PreferenceCategory section : sections) {
             CharSequence title = section.getTitle();
-            if (title == null) title = allLabel;
+            // A section with no header (its only row names it) has nothing to jump to.
+            if (title == null || title.length() == 0) continue;
             group.addView(createChip(group, title, section.equals(selected),
                 () -> listener.onSectionSelected(section)));
         }
