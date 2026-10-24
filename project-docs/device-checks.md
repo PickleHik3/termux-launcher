@@ -13,6 +13,11 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-25 · commit "feat(clock): flip cards carry end pins at the split line" · a Flip Clock
+  widget at every size, 12h and 24h, light and dark theme, and the expanded status bar's Flip:
+  each card shows a small tab on its left and right rim at the split line, sized with the card, in
+  the rim's ink; no line or mark crosses a digit. With it, commit "keep the LCD period box inside
+  the column the fit measured": an LCD widget at 2×1, 12h, shows its whole period box · emulator.
 - 2026-10-25 · appearance fixes ("the terminal menu's Appearance opens the editor at rest", "every
   value slider is a strip column", "Home's card opens on Home's own glass") · (1) long-press a
   terminal › More › Appearance: the editor opens with no card, frame on the Workspace, never a
