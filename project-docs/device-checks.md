@@ -13,6 +13,13 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-24 · commit "fix(drawer): the search raises the built-in keyboard on every place" · with
+  Settings › Keyboard › On-screen keyboard = Built-in and the drawer's "Open keyboard
+  automatically" on, open the drawer on Home (keyboard down) and on the Workspace (keyboard up and
+  down): the built-in keyboard rises through the plane under the search and the phone's keyboard
+  never shows; typing filters; closing the drawer puts down a keyboard the drawer raised and keeps
+  one that was up before. With Android selected, and with "Use system keyboard" on, the phone's
+  keyboard shows instead · emulator.
 - 2026-10-24 · #159 editor (commit "feat(surfaces): the editor rests as the frame and the
   editor bar") · open Appearance from a corner tab on a window and on Home: the frame grows to about
   ×0.8 under a 16 dp top line, every surface wears a faint 1 dp outline, the half line reads

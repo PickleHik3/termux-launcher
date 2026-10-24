@@ -19105,13 +19105,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #handleAppDrawerCodePoint}.
      */
     private void requestAppDrawerSearchKeyboard() {
-        // Over a running display the focus is the display's, so the system keyboard below is
-        // refused as "not served" and the search would have no keyboard at all: raise the
-        // launcher's, which the drawer types through, in whatever frame the place keeps it.
+        // With the built-in keyboard selected the search raises it, on every place: the drawer
+        // types through it and reveals it through the plane. Only the Android keyboard gets the
+        // system ask below (over a running display that ask would not even be served).
         com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch route = mInAppKeyboard == null
             ? com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK
-            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(
-                isDisplayWindowShowing(), isEmbeddedDisplayRunning(), mInAppKeyboard.isEnabled(),
+            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(mInAppKeyboard.isEnabled(),
                 mInAppKeyboard.isTurnedOff(), mInAppKeyboard.yieldsToHardwareKeyboard());
         // A keyboard that stands aside for a physical one raises nothing; the keys type into the
         // search through the layer's own key route.
@@ -19140,6 +19139,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
             }
+            // Raised after the pull, the keyboard was not among the bands the drawer measured;
+            // it measures them again so the reveal can bring it up through the plane.
+            if (mAppDrawerController != null) mAppDrawerController.onBuiltInKeyboardRaised();
             return;
         }
         onSystemImeRequested();
