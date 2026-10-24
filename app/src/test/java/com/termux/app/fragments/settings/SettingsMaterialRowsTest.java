@@ -3,10 +3,13 @@ package com.termux.app.fragments.settings;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Looper;
 import android.view.View;
@@ -172,5 +175,45 @@ public class SettingsMaterialRowsTest {
         assertNotNull(holder);
         assertEquals(0, list.getLayoutManager().getTopDecorationHeight(holder.itemView));
         assertTrue(holder.itemView.getClipToOutline());
+    }
+
+    // ---- Leading icons ------------------------------------------------------------------------
+
+    private static void assertEveryRowHasAnIcon(PreferenceGroup group) {
+        for (int i = 0; i < group.getPreferenceCount(); i++) {
+            Preference preference = group.getPreference(i);
+            if (preference instanceof PreferenceGroup) {
+                assertEveryRowHasAnIcon((PreferenceGroup) preference);
+            } else {
+                assertNotNull(preference.getKey() + " leads with an icon", preference.getIcon());
+            }
+        }
+    }
+
+    @Test public void everyRowOnAPageLeadsWithAnIcon() {
+        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
+        assertEveryRowHasAnIcon(fragment.getPreferenceScreen());
+    }
+
+    @Test public void aRowKeepsTheIconItDeclares() {
+        Preference row = new Preference(RuntimeEnvironment.getApplication());
+        row.setKey("app_launcher_set_home");
+        ColorDrawable own = new ColorDrawable(Color.RED);
+        row.setIcon(own);
+        SettingsLayoutUtils.applyRowLayout(row);
+        assertSame(own, row.getIcon());
+
+        Preference plain = new Preference(RuntimeEnvironment.getApplication());
+        plain.setKey("app_launcher_set_home");
+        SettingsLayoutUtils.applyRowLayout(plain);
+        assertNotNull(plain.getIcon());
+        assertEquals(R.drawable.ic_ms_home, SettingsRowIcons.forPreference(plain));
+    }
+
+    @Test public void aRowWithNoKeyFallsBackToThePageItOpens() {
+        Preference row = new Preference(RuntimeEnvironment.getApplication());
+        row.setFragment("com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment");
+        assertEquals(R.drawable.ic_ms_bug_report, SettingsRowIcons.forPreference(row));
+        assertEquals(0, SettingsRowIcons.forPreference(new Preference(RuntimeEnvironment.getApplication())));
     }
 }

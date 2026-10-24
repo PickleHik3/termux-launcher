@@ -88,6 +88,12 @@ public final class SettingsLayoutUtils {
     private static void applyItemLayout(@NonNull Preference preference, boolean rootRows) {
         preference.setIconSpaceReserved(false);
 
+        // Every row leads with an icon; a row that declares its own keeps it.
+        if (preference.getIcon() == null) {
+            int icon = SettingsRowIcons.forPreference(preference);
+            if (icon != 0) preference.setIcon(icon);
+        }
+
         // Preferences that fully own their layout.
         if (preference instanceof SegmentedPillPreference
             || preference instanceof SliderPreference

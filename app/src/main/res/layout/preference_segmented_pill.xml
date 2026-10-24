@@ -9,19 +9,43 @@
     android:paddingEnd="@dimen/settings_gutter"
     android:paddingBottom="12dp">
 
-    <TextView
-        android:id="@android:id/title"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textAppearance="?attr/textAppearanceTitleMedium"
-        android:textColor="?attr/colorOnSurface" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <TextView
-        android:id="@android:id/summary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:textColor="?attr/colorOnSurfaceVariant" />
+        <!-- The row's leading icon (SettingsRowIcons); gone when the row has none. -->
+        <ImageView
+            android:id="@android:id/icon"
+            android:layout_width="@dimen/settings_row_icon"
+            android:layout_height="@dimen/settings_row_icon"
+            android:layout_marginEnd="@dimen/settings_gutter"
+            android:importantForAccessibility="no"
+            android:visibility="gone"
+            android:tint="@color/settings_row_summary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@android:id/title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="?attr/colorOnSurface" />
+
+            <TextView
+                android:id="@android:id/summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+    </LinearLayout>
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/segmented_pill_track"
