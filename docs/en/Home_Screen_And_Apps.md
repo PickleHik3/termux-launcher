@@ -18,7 +18,7 @@ Home wears the same chrome as the Workspace: the same status bar (with the same 
 same dock and the same look. Only the extra keys are the Workspace's alone; they fold away as you
 swipe to Home while the bar and dock stand still. Home has no borders. The dock floats over the
 widgets rather than taking room from them: on the bottom edge it rides up with the keyboard and settles back when
-the keyboard closes. Drop it **Under the keyboard** in the Layout editor to keep it below instead.
+the keyboard closes. Drop it **Under the keyboard** in Appearance to keep it below instead.
 The Workspace also has the extra keys, borders and corner tabs.
 
 One layout dresses Home and the Workspace. If you want Home laid out differently, open Appearance →

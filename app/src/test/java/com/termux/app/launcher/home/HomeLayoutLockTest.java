@@ -33,7 +33,7 @@ public class HomeLayoutLockTest {
 
     @Test
     public void lockedTheSheetKeepsWhatDoesNotMoveTheLayout() {
-        for (Item item : new Item[] {Item.TERMINAL, Item.LAYOUT, Item.WALLPAPER, Item.LOOK,
+        for (Item item : new Item[] {Item.TERMINAL, Item.WALLPAPER, Item.APPEARANCE,
                 Item.LAUNCHER_SETTINGS, Item.SET_DEFAULT_HOME, Item.HELP}) {
             assertTrue(item.name(), HomeLayoutLock.sheetOffers(true, item));
         }

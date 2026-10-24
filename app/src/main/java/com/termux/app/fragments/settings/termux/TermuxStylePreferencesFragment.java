@@ -84,7 +84,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         Preference appearanceSurface = findPreference("appearance_surface");
         if (appearanceSurface != null) appearanceSurface.setOnPreferenceClickListener(preference -> {
             // The launcher comes forward with the Appearance surface open; Back returns here.
-            SettingsEditorDoors.open(this, preference, SettingsEditorDoors.appearanceIntent(context));
+            SettingsEditorDoors.openEditor(this, preference, null);
             return true;
         });
         configureTerminalContrastPreference();
