@@ -232,3 +232,30 @@ The review is kept beside the wireframes (`REVIEW-codex-blind-2026-10-24.md`). A
 Not adopted: replacing the Look slider with a mode picker (the five-stop slider is a decided
 element; it snaps to stops and Custom is both a stop and a consequence), and the suggestion to
 make the editor's scope explicit with text (the frame, the ring and the card title carry it).
+
+## 9. The developer's review on pong (2026-10-25 morning)
+
+Decided and built the same morning:
+
+- **Glass controls are the previous editor's, exactly.** Frost (one slider; blur and grain follow it
+  through `GlassControls`), Opacity, Tint, and for all surfaces Edge, Vibrancy, Depth, Text size;
+  the keyboard adds Key opacity, Key corners, Key spacing. Separate Blur and Grain rows were an old
+  heuristic and must not come back; the stored BLUR and GRAIN properties remain underneath.
+- **Vertical sliders everywhere.** Glass values are the previous version's vertical legend sliders
+  in every card; the Appearance card's Custom stop shows the "All surfaces" strip writing the
+  shared values. Horizontal sliders only for sizes, plus the Look stop slider.
+- **One door.** The terminal's corner tab and every other door open the one editor on their object;
+  the old in-app wallpaper page is gone as a destination and lives only behind Wallpaper › Change.
+- **Terminal effects wear a bezel.** 12dp sides, 16dp top and bottom, 10dp inner corners, the
+  terminal's own glass (opaque at glass 0); the effect is clipped inside it and the grid shrinks to
+  fit. The effect never dresses Home's chrome; it switches at the landing of a crossing.
+- **A lone floating band is a whole card.** The refraction program's radius is held to half the
+  rect's shorter side (the notches and the seam were a rounded-rect distance field with r > h/2).
+- **Glass widgets.** The switch clears every widget's own On/Off back to Default so it always has a
+  visible effect; Bare is kept; the row says so in one line.
+- **Per half, strictly.** Moving to Custom restores the shown half only; binding and sliding never
+  write a stop to a half (pong had acquired Solid values on Home this way).
+- **Drawer.** Long-press is the drawer's own drag (folders, reorder) until the finger leaves through
+  the top of the list (250 ms hold or 24dp past it); then the drawer dismisses and Home's drag takes
+  the icon into the nearest free cell. The built-in keyboard, when selected, is what the drawer's
+  search raises; the keyboard slides down with the list's scroll and is dismissed past a threshold.
