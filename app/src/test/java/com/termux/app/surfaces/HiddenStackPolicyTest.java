@@ -75,6 +75,70 @@ public class HiddenStackPolicyTest {
         assertEquals(1050, HiddenStackPolicy.stackTopPx(50, 1000, 0, h, DENSITY));
     }
 
+    private static final int COLUMN_TOP = 120;
+    private static final int COLUMN_H = 1500;
+    private static final int LEFT = Math.round(HiddenStackPolicy.SIDE_DP * DENSITY);
+
+    private static HiddenStackPolicy.Rail rail(int count) {
+        int h = HiddenStackPolicy.railCardHeightPx(count, COLUMN_H, DENSITY);
+        return HiddenStackPolicy.rail(count, LEFT, COLUMN_TOP, COLUMN_H, h, DENSITY);
+    }
+
+    private static boolean strictlyInside(int[] inner, int[] outer) {
+        return inner[0] > outer[0] && inner[1] > outer[1] && inner[2] < outer[2]
+            && inner[3] < outer[3];
+    }
+
+    @Test
+    public void theRailsBorderHoldsEveryCardWithTheSameAirOnEverySide() {
+        int pad = Math.round(HiddenStackPolicy.ZONE_PAD_DP * DENSITY);
+        for (int count = 0; count <= 7; count++) {
+            HiddenStackPolicy.Rail rail = rail(count);
+            assertEquals(count, rail.cards.length);
+            for (int[] card : rail.cards)
+                assertTrue(count + " cards: a card inside the border",
+                    strictlyInside(card, rail.border));
+            assertTrue(count + " cards: the slot inside the border",
+                strictlyInside(rail.slot, rail.border));
+            int[] first = count == 0 ? rail.slot : rail.cards[0];
+            assertEquals("air on the left", pad, first[0] - rail.border[0]);
+            assertEquals("air on the right", pad, rail.border[2] - first[2]);
+            assertEquals("air above", pad, first[1] - rail.border[1]);
+            assertEquals("air below", pad, rail.border[3] - rail.slot[3]);
+        }
+    }
+
+    @Test
+    public void theEmptySlotComesAfterTheLastCardAndTheBorderHugsThem() {
+        int gap = Math.round(HiddenStackPolicy.GAP_DP * DENSITY);
+        int pad = Math.round(HiddenStackPolicy.ZONE_PAD_DP * DENSITY);
+        HiddenStackPolicy.Rail rail = rail(3);
+        int h = rail.slot[3] - rail.slot[1];
+        for (int[] card : rail.cards)
+            assertEquals("every card the slot's size", h, card[3] - card[1]);
+        assertEquals(rail.cards[2][3] + gap, rail.slot[1]);
+        // Resting on the column's bottom, the border's top hugs the first card, not the column.
+        assertEquals(COLUMN_TOP + COLUMN_H, rail.border[3]);
+        assertEquals(4 * h + 3 * gap + 2 * pad, rail.border[3] - rail.border[1]);
+        assertTrue(rail.border[1] > COLUMN_TOP);
+    }
+
+    @Test
+    public void theBorderStaysInTheBandBesideTheFrame() {
+        HiddenStackPolicy.Rail rail = rail(2);
+        assertTrue("clear of the window's edge", rail.border[0] > 0);
+        assertTrue("clear of the frame", rail.border[2] < HiddenStackPolicy.reservePx(DENSITY));
+    }
+
+    @Test
+    public void aRailTooLongForItsColumnStartsAtTheTopUnderTheBordersAir() {
+        int pad = Math.round(HiddenStackPolicy.ZONE_PAD_DP * DENSITY);
+        int h = HiddenStackPolicy.railCardHeightPx(7, 400, DENSITY);
+        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(7, LEFT, COLUMN_TOP, 400, h, DENSITY);
+        assertEquals(COLUMN_TOP, rail.border[1]);
+        assertEquals(COLUMN_TOP + pad, rail.cards[0][1]);
+    }
+
     @Test
     public void everyLabelStandsWholeInItsCardAtEveryFontScale() {
         int width = HiddenStackPolicy.cardWidthPx(DENSITY);

@@ -184,6 +184,28 @@ final class EditorFramePose {
     }
 
     /**
+     * The pose for the hidden items' rail (appearance-layout-editor SPEC §3.6a item 3), with the
+     * card's top edge at {@code cardTopPx}:
+     * <ul>
+     *   <li>something hidden: the rail stands, and the frame keeps the one offset {@link
+     *   #pose(Window, float, Reserve)} gives, lifted or not;</li>
+     *   <li>nothing hidden, nothing lifted: no rail, no reserve, the frame centred;</li>
+     *   <li>nothing hidden, an element lifted: the pose something hidden would give, so the
+     *   frame slides and shrinks clear of the rail's band in one move, fits the window, and does
+     *   not step again when the drop hides the element.</li>
+     * </ul>
+     */
+    @NonNull
+    static Pose railPose(@NonNull Window window, float cardTopPx, @NonNull Reserve reserve,
+                         int hiddenCount, boolean lifted) {
+        if (hiddenCount > 0)
+            return pose(window, cardTopPx, reserve);
+        if (!lifted)
+            return pose(window, cardTopPx, null);
+        return pose(window, cardTopPx, reserve);
+    }
+
+    /**
      * The room the hidden items' stack takes on the frame's left, in px of the content view: the
      * frame's left edge may not stand left of {@link #leftPx}, nor its right edge past the window
      * less {@link #rightMarginPx}.

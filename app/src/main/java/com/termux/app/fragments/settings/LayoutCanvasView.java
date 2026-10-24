@@ -271,9 +271,10 @@ public final class LayoutCanvasView extends View {
     private static final int TILE_ALPHA = 140;
     /** The dashed placeholder a lifted bar leaves where it would land. */
     private static final int PLACEHOLDER_ALPHA = 60;
+    /** The light tint of the slot under the finger. */
     private static final int SLOT_HOVER_ALPHA = 60;
-    /** The gaps of the hovered edge that the finger is not on; enough to read, not to compete. */
-    private static final int GAP_LINE_ALPHA = 110;
+    /** The one inset every drop capsule stands inside its slot by ({@link DropCapsulePolicy}). */
+    private static final float CAPSULE_INSET_DP = 1.5f;
     /** A destination guide's dashed outline: quiet while selected, stronger while lifting. */
     private static final float GUIDE_STROKE_DP = 1f;
     private static final float GUIDE_LIFT_STROKE_DP = 1.5f;
@@ -2468,6 +2469,13 @@ public final class LayoutCanvasView extends View {
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
         if (mLayout == null || mFrameRect.isEmpty()) return;
+        if (mLive != null) {
+            // The live frame shows through; only its pictures and the targets are drawn here.
+            drawLive(canvas);
+            drawSlots(canvas);
+            if (mLiftOverlayHost == null) drawGhost(canvas);
+            return;
+        }
         float radius = frameRadiusPx();
         mFillPaint.setColor(surface());
         canvas.drawRoundRect(mFrameRect, radius, radius, mFillPaint);
@@ -3169,55 +3177,430 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * Every destination the lifted bar is accepted on, outlined in the primary along its guide
-     * rect only ({@link #guideRect}: the part of the edge's zone no other element stands in), and
-     * — on the edge under the finger — the gaps inside it: the one being dropped into filled, the
-     * others a thin line, all clipped to that guide so nothing crosses another element. Nothing
-     * here animates; the picture changes when the finger moves to another gap and not otherwise.
+     * The lifted bar's targets (SPEC §3.6a items 5–7, {@link DropCapsulePolicy}): every slot it
+     * is accepted on a slim, fully rounded dotted marker on its gap line, and the slot under the
+     * finger the capsule it opens to, the held element's own size and corners there, solid with
+     * a light tint. No two markers meet, the rows stop where a side strip starts, and none
+     * crosses the phone's edge.
      */
     private void drawSlots(@NonNull Canvas canvas) {
-        if (mSlots.isEmpty()) return;
+        List<float[]> markers = markers();
+        if (markers.isEmpty()) return;
         int accent = accent();
-        float radius = slotRadiusPx();
-        MiniatureDragPolicy.Slot hoveredSlot = mHoverSlot;
-        Edge hovered = hoveredSlot == null ? null : hoveredSlot.edge;
         float stroke = dp(GUIDE_LIFT_STROKE_DP);
+        float[] capsule = hoveredCapsule();
+        if (capsule != null) {
+            mScratchRectB.set(capsule[0], capsule[1], capsule[2], capsule[3]);
+            Piece drop = hoveredDropShape();
+            roundPath(mShapePath, mScratchRectB, drop == null ? Corners.SQUARE : drop.corners);
+            mFillPaint.setColor(accent);
+            mFillPaint.setAlpha(SLOT_HOVER_ALPHA);
+            canvas.drawPath(mShapePath, mFillPaint);
+            mFillPaint.setAlpha(255);
+            mLinePaint.setColor(accent);
+            mLinePaint.setStrokeWidth(stroke);
+            canvas.drawPath(mShapePath, mLinePaint);
+        }
         mDashPaint.setPathEffect(mSlotDash);
         mDashPaint.setStrokeWidth(stroke);
         mDashPaint.setColor(accent);
-        // The bottom is two regions while the keyboard stands on it: the gaps over it, and the
-        // ones under it, outlined apart so the keyboard between them is not a target.
-        for (Edge edge : Edge.values()) {
-            for (boolean underKeyboard : new boolean[] {false, true}) {
-                if (!edgeRegion(edge, underKeyboard, mScratchRectA)) continue;
-                if (!guideRect(edge, mScratchRectA, mDraggedBar, mScratchRectA)) continue;
-                strokeGuide(canvas, mScratchRectA, radius, stroke, mDashPaint);
+        for (int i = 0; i < markers.size(); i++) {
+            float[] marker = markers.get(i);
+            // The hovered slot shows its capsule instead.
+            if (marker == null || (capsule != null && mSlots.get(i) == mHoverSlot)) continue;
+            mScratchRectB.set(marker[0], marker[1], marker[2], marker[3]);
+            float radius = Math.min(mScratchRectB.width(), mScratchRectB.height()) / 2f;
+            strokeCapsule(canvas, mScratchRectB, radius, stroke, mDashPaint);
+        }
+    }
+
+    /** A marker's line drawn inside its rect, so nothing of it lies past the marker. */
+    private void strokeCapsule(@NonNull Canvas canvas, @NonNull RectF capsule, float radius,
+                               float stroke, @NonNull Paint paint) {
+        mScratchRectC.set(capsule);
+        mScratchRectC.inset(stroke / 2f, stroke / 2f);
+        if (mScratchRectC.isEmpty()) return;
+        float r = Math.max(0f, radius - stroke / 2f);
+        canvas.drawRoundRect(mScratchRectC, r, r, paint);
+    }
+
+    /** The phone's rect as the policies take it. */
+    @NonNull
+    private float[] frameArray() {
+        return new float[] {mFrameRect.left, mFrameRect.top, mFrameRect.right, mFrameRect.bottom};
+    }
+
+    /** The slots the markers were last worked out for, and the markers, one per slot. */
+    private final List<MiniatureDragPolicy.Slot> mMarkerSlots = new ArrayList<>();
+    private List<float[]> mMarkers = new ArrayList<>();
+
+    /**
+     * The lifted bar's markers, one per slot of {@link #mSlots} in its order (null for the tray
+     * and for a slot with no room), worked out again only when the slots change.
+     */
+    @NonNull
+    @VisibleForTesting
+    List<float[]> markers() {
+        if (!mSlots.equals(mMarkerSlots)) {
+            mMarkerSlots.clear();
+            mMarkerSlots.addAll(mSlots);
+            mMarkers = DropCapsulePolicy.markers(mSlots, frameArray(), dp(MARKER_DP),
+                dp(CAPSULE_INSET_DP));
+        }
+        return mMarkers;
+    }
+
+    /** The hovered slot's capsule in view px, or null over no slot or over the tray. */
+    @Nullable
+    @VisibleForTesting
+    float[] hoveredCapsule() {
+        Piece drop = hoveredDropShape();
+        if (drop == null || mDraggedBar == null) return null;
+        return DropCapsulePolicy.hoveredCapsule(drop.box, mFrameRect.left, mFrameRect.top,
+            frameArray());
+    }
+
+    // ---- The live drag (SPEC §3.6a items 1 and 2) ------------------------------------------------
+
+    /**
+     * One element of the live frame as the editor captured it at the lift: its picture (null for
+     * a stand-in, a tinted rounded rect of the rect's size) and where it stood, in this view's px.
+     */
+    public static final class LiveShot {
+        @Nullable public final android.graphics.Bitmap bitmap;
+        @NonNull public final RectF rect;
+        public final float radius;
+
+        public LiveShot(@Nullable android.graphics.Bitmap bitmap, @NonNull RectF rect,
+                        float radius) {
+            this.bitmap = bitmap;
+            this.rect = new RectF(rect);
+            this.radius = radius;
+        }
+    }
+
+    /** What a live drag asks of the editor that captured the pictures. */
+    public interface LiveHost {
+        /** Each element's real rect in this view's px now, the drop laid out; absent ones stay. */
+        @NonNull Map<Block, RectF> realRects();
+
+        /** The pictures are gone: the real views show again. {@code dropped}: a drop landed. */
+        void onLiveFinished(boolean dropped);
+    }
+
+    /** How long the pictures take to move to a new arrangement, and to settle on the real one. */
+    private static final long SHOT_MS = 150L;
+    /** How far under the held picture its shadow falls. */
+    private static final float LIVE_SHADOW_DP = 3f;
+    private static final int LIVE_SHADOW_ALPHA = 60;
+    /** A marker's thickness across its gap line. */
+    private static final float MARKER_DP = 4f;
+
+    @Nullable private EnumMap<Block, LiveShot> mLive;
+    @Nullable private LiveHost mLiveHost;
+    /** Each picture's offset from where it was captured: now, and the move it is making. */
+    private final EnumMap<Block, float[]> mShotNow = new EnumMap<>(Block.class);
+    private final EnumMap<Block, float[]> mShotFrom = new EnumMap<>(Block.class);
+    private final EnumMap<Block, float[]> mShotTo = new EnumMap<>(Block.class);
+    @Nullable private android.animation.ValueAnimator mShotAnimator;
+    /** The slot the pictures were last arranged for (identity), so a move inside it does nothing. */
+    @Nullable private MiniatureDragPolicy.Slot mLiveSlot;
+    private boolean mLiveArranged;
+    /** The drop or the cancel is under way: the pictures settle and go, nothing retargets them. */
+    private boolean mLiveEnding;
+    private final Paint mShotPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+    private final Path mShotClip = new Path();
+
+    /**
+     * Draws the live frame's own pictures instead of the schematic until the lift ends: the view
+     * keeps its slots and hit tests and draws nothing of the model but the targets.
+     */
+    public void beginLive(@NonNull Map<Block, LiveShot> shots, @NonNull LiveHost host) {
+        cancelShotAnimator();
+        mLive = new EnumMap<>(Block.class);
+        mLive.putAll(shots);
+        mLiveHost = host;
+        mLiveEnding = false;
+        mLiveSlot = null;
+        mLiveArranged = false;
+        mShotNow.clear();
+        for (Block block : mLive.keySet()) mShotNow.put(block, new float[2]);
+        retargetLive();
+        invalidate();
+    }
+
+    /**
+     * The corner {@code block} wears in the model, in this view's px: its piece's largest; the
+     * keyboard's, its pieces'. What a picture of the real element is clipped to.
+     */
+    public float cornerRadiusOf(@NonNull Block block) {
+        float radius = 0f;
+        ChromeShape shape = mShape;
+        if (shape == null) return radius;
+        if (block == Block.KEYBOARD) {
+            for (Piece piece : mKeyboardPieces)
+                for (float r : piece.corners.toRadii()) radius = Math.max(radius, r);
+            return radius;
+        }
+        Element element = elementOf(block);
+        Piece piece = element == null ? null : shape.piece(PieceId.of(element));
+        if (piece != null)
+            for (float r : piece.corners.toRadii()) radius = Math.max(radius, r);
+        return radius;
+    }
+
+    /** Whether the live frame's pictures stand in for the schematic now. */
+    public boolean isLive() {
+        return mLive != null;
+    }
+
+    /** The pictures taken away at once, nothing told (the editor is going). */
+    public void endLive() {
+        cancelShotAnimator();
+        mLive = null;
+        mLiveHost = null;
+        mLiveEnding = false;
+        mShotNow.clear();
+        invalidate();
+    }
+
+    /**
+     * Whether the held element is drawn over the phone now, at its size at the hovered slot: a
+     * rail chip carried in is then hidden; elsewhere it stays a chip.
+     */
+    public boolean drawsHeldOverFrame() {
+        if (mDraggedBar == null) return false;
+        if (mLive != null && mLive.containsKey(mDraggedBar)) return true;
+        return mFromPopup && mDraggedBar != Block.KEYBOARD && hoveredDropShape() != null;
+    }
+
+    /** The pictures follow the hovered slot: each to where the drop there would put it. */
+    private void retargetLive() {
+        if (mLive == null || mLiveEnding) return;
+        MiniatureDragPolicy.Slot slot = mSpringingBack ? null : mHoverSlot;
+        if (mLiveArranged && slot == mLiveSlot) return;
+        mLiveArranged = true;
+        mLiveSlot = slot;
+        Block held = mDraggedBar;
+        Element element = held == null ? null : elementOf(held);
+        LiveDragPolicy.Reflow reflow = null;
+        if (element != null && slot != null && mInput != null && mLayout != null
+            && (slot.isTray() || slot.edge != null)) {
+            reflow = LiveDragPolicy.reflow(mInput, shapeLayout(), element,
+                slot.isTray() ? null : slot.edge, slot.index, slot.underKeyboard);
+        }
+        EnumMap<Block, float[]> to = new EnumMap<>(Block.class);
+        for (Block block : mLive.keySet()) {
+            if (block == held) continue;
+            float[] move = null;
+            if (reflow != null) {
+                Element other = elementOf(block);
+                move = block == Block.KEYBOARD ? reflow.keyboard
+                    : other == null ? null : reflow.elements.get(other);
+            }
+            to.put(block, move == null ? new float[2] : new float[] {move[0], move[1]});
+        }
+        animateShots(to, null);
+    }
+
+    /** Each picture in {@code to} moves there from where it is, then {@code onEnd} runs. */
+    private void animateShots(@NonNull Map<Block, float[]> to, @Nullable Runnable onEnd) {
+        cancelShotAnimator();
+        mShotFrom.clear();
+        mShotTo.clear();
+        for (Map.Entry<Block, float[]> entry : to.entrySet()) {
+            float[] now = mShotNow.get(entry.getKey());
+            if (now == null) {
+                now = new float[2];
+                mShotNow.put(entry.getKey(), now);
+            }
+            mShotFrom.put(entry.getKey(), now.clone());
+            mShotTo.put(entry.getKey(), entry.getValue().clone());
+        }
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(ReducedMotion.isEnabled(getContext()) ? 0L : SHOT_MS);
+        animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        animator.addUpdateListener(a -> {
+            float f = (Float) a.getAnimatedValue();
+            for (Map.Entry<Block, float[]> entry : mShotTo.entrySet()) {
+                float[] from = mShotFrom.get(entry.getKey());
+                float[] now = mShotNow.get(entry.getKey());
+                if (from == null || now == null) continue;
+                now[0] = from[0] + (entry.getValue()[0] - from[0]) * f;
+                now[1] = from[1] + (entry.getValue()[1] - from[1]) * f;
+            }
+            invalidate();
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override public void onAnimationCancel(android.animation.Animator a) {
+                mCancelled = true;
+            }
+
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                if (mShotAnimator == animator) mShotAnimator = null;
+                if (!mCancelled && onEnd != null) onEnd.run();
+            }
+        });
+        mShotAnimator = animator;
+        animator.start();
+    }
+
+    private void cancelShotAnimator() {
+        android.animation.ValueAnimator animator = mShotAnimator;
+        mShotAnimator = null;
+        if (animator != null) animator.cancel();
+    }
+
+    /**
+     * A drop landed while the pictures stand in: the held one goes from the finger to the
+     * capsule (a rail chip's stand-in appears there; one put away goes), the rest keep the
+     * hovered arrangement, and once the real views have laid out every picture settles on its
+     * real rect and the pictures go.
+     */
+    private void dropLive(@NonNull Block bar, @NonNull MiniatureDragPolicy.Slot slot) {
+        if (mLive == null) return;
+        mLiveEnding = true;
+        EnumMap<Block, float[]> to = new EnumMap<>(Block.class);
+        to.putAll(mShotTo);
+        for (Block block : mLive.keySet()) {
+            if (!to.containsKey(block)) to.put(block, current(block));
+        }
+        boolean putAway = slot.isTray() || (bar == Block.KEYBOARD && !mFromPopup);
+        Piece drop = hoveredDropShape();
+        LiveShot shot = mLive.get(bar);
+        if (putAway) {
+            mLive.remove(bar);
+            to.remove(bar);
+            mShotNow.remove(bar);
+        } else if (drop != null) {
+            RectF target = viewRect(drop.box);
+            if (shot == null) {
+                // Carried in from the rail: a stand-in of its size at its slot.
+                float[] radii = drop.corners.toRadii();
+                float radius = 0f;
+                for (float r : radii) radius = Math.max(radius, r);
+                mLive.put(bar, new LiveShot(null, target, radius));
+                mShotNow.put(bar, new float[2]);
+                to.put(bar, new float[2]);
+            } else {
+                mShotNow.put(bar, new float[] {mGhostX.value, mGhostY.value});
+                to.put(bar, new float[] {target.centerX() - shot.rect.centerX(),
+                    target.centerY() - shot.rect.centerY()});
             }
         }
-        if (hovered == null || hoveredSlot.isTray()) return;
-        if (!edgeRegion(hovered, hoveredSlot.underKeyboard, mScratchRectA)
-            || !guideRect(hovered, mScratchRectA, mDraggedBar, mScratchRectA)) return;
+        animateShots(to, this::settleLiveOnReal);
+    }
+
+    @NonNull
+    private float[] current(@NonNull Block block) {
+        float[] now = mShotNow.get(block);
+        return now == null ? new float[2] : now.clone();
+    }
+
+    /** Two frames for the drop to lay the real views out, then the pictures settle on them. */
+    private void settleLiveOnReal() {
+        postOnAnimation(() -> postOnAnimation(() -> {
+            EnumMap<Block, LiveShot> live = mLive;
+            LiveHost host = mLiveHost;
+            if (live == null || host == null) return;
+            Map<Block, RectF> real = host.realRects();
+            EnumMap<Block, float[]> to = new EnumMap<>(Block.class);
+            for (Map.Entry<Block, LiveShot> entry : live.entrySet()) {
+                RectF rect = real.get(entry.getKey());
+                RectF from = entry.getValue().rect;
+                to.put(entry.getKey(), rect == null ? current(entry.getKey())
+                    : new float[] {rect.centerX() - from.centerX(),
+                        rect.centerY() - from.centerY()});
+            }
+            animateShots(to, () -> finishLive(true));
+        }));
+    }
+
+    /** The lift ended without a drop: every picture goes back to where it was, then they go. */
+    private void returnLive() {
+        if (mLive == null || mLiveEnding) return;
+        mLiveEnding = true;
+        EnumMap<Block, float[]> to = new EnumMap<>(Block.class);
+        for (Block block : mLive.keySet()) to.put(block, new float[2]);
+        animateShots(to, () -> finishLive(false));
+    }
+
+    private void finishLive(boolean dropped) {
+        LiveHost host = mLiveHost;
+        mLive = null;
+        mLiveHost = null;
+        mLiveEnding = false;
+        mShotNow.clear();
+        invalidate();
+        if (host != null) host.onLiveFinished(dropped);
+    }
+
+    /** The pictures, each at its offset; the held one is the lift's to draw while it is held. */
+    private void drawLive(@NonNull Canvas canvas) {
+        EnumMap<Block, LiveShot> live = mLive;
+        if (live == null) return;
+        for (Map.Entry<Block, LiveShot> entry : live.entrySet()) {
+            if (entry.getKey() == mDraggedBar) continue;
+            float[] now = mShotNow.get(entry.getKey());
+            mGhostRect.set(entry.getValue().rect);
+            if (now != null) mGhostRect.offset(now[0], now[1]);
+            drawShot(canvas, entry.getValue(), mGhostRect);
+        }
+    }
+
+    /** One picture in {@code box}, clipped to its own corners; a stand-in is a tinted shape. */
+    private void drawShot(@NonNull Canvas canvas, @NonNull LiveShot shot, @NonNull RectF box) {
+        float radius = Math.min(shot.radius, Math.min(box.width(), box.height()) / 2f);
+        if (shot.bitmap == null || shot.bitmap.isRecycled()) {
+            mFillPaint.setColor(accentWash());
+            canvas.drawRoundRect(box, radius, radius, mFillPaint);
+            mLinePaint.setColor(accent());
+            mLinePaint.setStrokeWidth(dp(GUIDE_LIFT_STROKE_DP));
+            canvas.drawRoundRect(box, radius, radius, mLinePaint);
+            return;
+        }
         int saved = canvas.save();
-        canvas.clipRect(mScratchRectA);
-        for (MiniatureDragPolicy.Slot slot : mSlots) {
-            if (!slot.sameGroup(hoveredSlot)) continue;
-            boolean under = slot == mHoverSlot;
-            if (under) {
-                mScratchRectB.set(slot.left, slot.top, slot.right, slot.bottom);
-                mFillPaint.setColor(accent);
-                mFillPaint.setAlpha(SLOT_HOVER_ALPHA);
-                canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
-                mFillPaint.setAlpha(255);
-            }
-            mLinePaint.setColor(accent);
-            mLinePaint.setAlpha(under ? 255 : GAP_LINE_ALPHA);
-            mLinePaint.setStrokeWidth(dp(under ? 2f : 1.2f));
-            if (hovered.isOnSide())
-                canvas.drawLine(slot.line, slot.top, slot.line, slot.bottom, mLinePaint);
-            else canvas.drawLine(slot.left, slot.line, slot.right, slot.line, mLinePaint);
-        }
-        mLinePaint.setAlpha(255);
+        mShotClip.reset();
+        mShotClip.addRoundRect(box, radius, radius, Path.Direction.CW);
+        canvas.clipPath(mShotClip);
+        canvas.drawBitmap(shot.bitmap, null, box, mShotPaint);
         canvas.restoreToCount(saved);
+    }
+
+    /**
+     * The held element while the pictures stand in: its own picture under the finger, a little
+     * raised; carried in from the rail, a stand-in of its size at the hovered slot, and nothing
+     * (the chip) elsewhere.
+     */
+    private void drawLiveGhost(@NonNull Canvas canvas) {
+        Block bar = mDraggedBar;
+        EnumMap<Block, LiveShot> live = mLive;
+        if (bar == null || live == null) return;
+        LiveShot shot = live.get(bar);
+        if (shot != null) {
+            mGhostRect.set(shot.rect);
+            mGhostRect.offset(mGhostX.value, mGhostY.value);
+            scaleAboutCentre(mGhostRect, mGhostScale.value);
+            float radius = Math.min(shot.radius,
+                Math.min(mGhostRect.width(), mGhostRect.height()) / 2f);
+            mScratchRectC.set(mGhostRect);
+            mScratchRectC.offset(0f, dp(LIVE_SHADOW_DP));
+            mFillPaint.setColor(ColorUtils.setAlphaComponent(0xFF000000, LIVE_SHADOW_ALPHA));
+            canvas.drawRoundRect(mScratchRectC, radius, radius, mFillPaint);
+            drawShot(canvas, shot, mGhostRect);
+            return;
+        }
+        if (!drawsHeldOverFrame() || !computeGhost()) return;
+        mGhostRect.set(mGhost.box);
+        scaleAboutCentre(mGhostRect, mGhostScale.value);
+        roundPath(mShapePath, mGhostRect, mGhost.corners);
+        mFillPaint.setColor(accentWash());
+        canvas.drawPath(mShapePath, mFillPaint);
+        mLinePaint.setColor(accent());
+        mLinePaint.setStrokeWidth(dp(GUIDE_LIFT_STROKE_DP));
+        canvas.drawPath(mShapePath, mLinePaint);
     }
 
     /**
@@ -3306,8 +3689,9 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The guides drawn now, in view pixels: the lifted bar's accepted destinations while one is
-     * in the air, otherwise the selected bar's. For a test to read.
+     * The guides, in view pixels: the selected bar's, which are drawn; while a bar is in the air,
+     * the guides of its accepted destinations, which are drawn as capsules instead
+     * ({@link #capsules}). For a test to read.
      */
     @NonNull
     @VisibleForTesting
@@ -3331,10 +3715,6 @@ public final class LayoutCanvasView extends View {
      * One edge's gaps on one side of the keyboard as the single region they cover, or false while
      * that side offers none. Only the bottom has an under side.
      */
-    private boolean edgeRegion(@NonNull Edge edge, boolean underKeyboard, @NonNull RectF out) {
-        return edgeRegion(mSlots, edge, underKeyboard, out);
-    }
-
     private static boolean edgeRegion(@NonNull List<MiniatureDragPolicy.Slot> slots,
                                       @NonNull Edge edge, boolean underKeyboard,
                                       @NonNull RectF out) {
@@ -3512,8 +3892,8 @@ public final class LayoutCanvasView extends View {
         }
     }
 
-    @VisibleForTesting
-    boolean beginHiddenDrag(@NonNull Block block) {
+    /** A hidden element's chip is carried in: it is lifted, the copy starting at the tray. */
+    public boolean beginHiddenDrag(@NonNull Block block) {
         if (mLayout == null || mDraggedBar != null) return false;
         // The system reports no reliable start point: the copy starts at the trash.
         RectF trash = trashRect().isEmpty() ? mTrayRect : trashRect();
@@ -3530,14 +3910,12 @@ public final class LayoutCanvasView extends View {
     }
 
     /** The chip is over {@code (x, y)} in this view: the hover placeholder follows. */
-    @VisibleForTesting
-    void hoverHiddenDrag(float x, float y) {
+    public void hoverHiddenDrag(float x, float y) {
         if (mDraggedBar != null) moveDrag(x, y);
     }
 
     /** Dropped at {@code (x, y)}: restores through the drop listener over a target, else nothing. */
-    @VisibleForTesting
-    boolean dropHiddenDrag(float x, float y) {
+    public boolean dropHiddenDrag(float x, float y) {
         if (mDraggedBar == null) return false;
         moveDrag(x, y);
         if (mHoverSlot == null) {
@@ -3549,8 +3927,7 @@ public final class LayoutCanvasView extends View {
     }
 
     /** The drag ended, wherever; a drag that dropped nowhere leaves the element hidden. */
-    @VisibleForTesting
-    void endHiddenDrag() {
+    public void endHiddenDrag() {
         if (mDraggedBar != null) endDrag();
     }
 
@@ -3685,6 +4062,10 @@ public final class LayoutCanvasView extends View {
      */
     private void drawGhost(@NonNull Canvas canvas) {
         Block bar = mDraggedBar;
+        if (mLive != null) {
+            drawLiveGhost(canvas);
+            return;
+        }
         if (bar == null || mLiftOrigin.isEmpty() || mShape == null) return;
         LayoutCanvasArtwork.Palette p = palette();
         float k = Math.max(0.01f, mCanvasScale);
@@ -3894,6 +4275,8 @@ public final class LayoutCanvasView extends View {
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
         attachLiftOverlay();
         refreshDropShape();
+        mLiveArranged = false;
+        retargetLive();
         startMotion();
         invalidate();
         notifyTrayOffer();
@@ -3905,6 +4288,7 @@ public final class LayoutCanvasView extends View {
         mGhostY.reset(y - mDownY);
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
         refreshDropShape();
+        retargetLive();
         invalidate();
         notifyTrayOffer();
     }
@@ -3945,6 +4329,8 @@ public final class LayoutCanvasView extends View {
             return;
         }
         boolean fromPopup = mFromPopup;
+        // The pictures settle before endDrag forgets where the finger had the held one.
+        dropLive(bar, slot);
         endDrag();
         if (bar == Block.KEYBOARD) {
             // The keyboard's one target is the tray: dropped there, it is switched off. Out of the
@@ -3965,6 +4351,7 @@ public final class LayoutCanvasView extends View {
         mGhostY.target = 0f;
         mGhostScale.target = 1f;
         mGhostMorph.target = 0f;
+        retargetLive();
         startMotion();
         invalidate();
         notifyTrayOffer();
@@ -3989,6 +4376,8 @@ public final class LayoutCanvasView extends View {
         mLastFrameNanos = 0L;
         removeCallbacks(mMotionTick);
         detachLiftOverlay();
+        // A lift that ended without a drop puts the pictures back, then they go.
+        if (lifted) returnLive();
         if (lifted) {
             // The selection's destinations come back once nothing is in the air.
             computeSelectionTargets();

@@ -27,9 +27,10 @@ import java.util.Map;
 /**
  * The stack of Material cards on the editor frame's left, one per item the edited layout puts
  * away ({@link HiddenItem}): a tap shows the item again, and a card dragged into the frame shows
- * it where it was. While an element of the frame is lifted over the stack the column wears a
- * dashed drop zone, the place to put it away. Views only; sizes come from {@link
- * HiddenStackPolicy} and what a press means is {@link Listener}'s.
+ * it where it was. While an element of the frame is lifted the rail wears a dotted border round
+ * its cards and the empty slot after them, the place to put it away; solid and tinted with the
+ * finger over it. Views only; sizes come from {@link HiddenStackPolicy} and what a press means is
+ * {@link Listener}'s.
  *
  * <p>The view spans the content view and takes no touch of its own, so only a card is hit.</p>
  */
@@ -41,6 +42,20 @@ final class HiddenStackView extends FrameLayout {
 
         /** A card was dragged and let go at ({@code rawX}, {@code rawY}); whether that is in the frame. */
         void onDropped(@NonNull HiddenItem item, float rawX, float rawY);
+
+        /** A card began to be dragged. */
+        default void onDragStarted(@NonNull HiddenItem item) {}
+
+        /**
+         * The dragged card is at ({@code rawX}, {@code rawY}): true while the frame draws its
+         * element there instead (SPEC §3.6a item 2), and the card then hides.
+         */
+        default boolean onDragMoved(@NonNull HiddenItem item, float rawX, float rawY) {
+            return false;
+        }
+
+        /** The drag was taken away before it was let go. */
+        default void onDragCancelled(@NonNull HiddenItem item) {}
     }
 
     private static final float DRAG_ALPHA = 0.9f;
@@ -111,24 +126,23 @@ final class HiddenStackView extends FrameLayout {
     }
 
     /**
-     * Shows {@code items} (top to bottom) as cards {@code cardHeightPx} tall in a column from
-     * {@code topPx} down {@code zoneHeightPx}, the stack resting on its bottom, {@code leftPx}
-     * from the view's left; every label at {@code labelPx};
-     * the drop zone {@code zoneHeightPx} tall under the same column.
+     * Shows {@code items} (top to bottom) as the cards of {@code rail}, every label at
+     * {@code labelPx}; the drop zone stands on the rail's border, round the cards and the empty
+     * slot after them ({@link HiddenStackPolicy#rail}).
      */
-    void set(@NonNull List<HiddenItem> items, int leftPx, int topPx, int cardHeightPx,
-             float labelPx, int zoneHeightPx) {
+    void set(@NonNull List<HiddenItem> items, @NonNull HiddenStackPolicy.Rail rail,
+             float labelPx) {
         mCardWidthPx = HiddenStackPolicy.cardWidthPx(mDensity);
+        int cardHeightPx = rail.slot[3] - rail.slot[1];
         boolean restyle = cardHeightPx != mCardHeightPx || labelPx != mLabelPx;
         mCardHeightPx = cardHeightPx;
         mLabelPx = labelPx;
         mItems.clear();
         mItems.addAll(items);
-        int stackTopPx = HiddenStackPolicy.stackTopPx(topPx, zoneHeightPx, items.size(),
-            cardHeightPx, mDensity);
         for (HiddenItem item : HiddenItem.values()) {
             MaterialCardView card = mCards.get(item);
-            if (!items.contains(item)) {
+            int index = items.indexOf(item);
+            if (index < 0 || index >= rail.cards.length) {
                 if (card != null) card.setVisibility(GONE);
                 continue;
             }
@@ -139,34 +153,28 @@ final class HiddenStackView extends FrameLayout {
             }
             card.setVisibility(VISIBLE);
             if (restyle) styleLabel(card);
-            LayoutParams params = (LayoutParams) card.getLayoutParams();
-            int index = items.indexOf(item);
-            int top = HiddenStackPolicy.cardTopPx(stackTopPx, index, cardHeightPx, mDensity);
-            if (params.width != mCardWidthPx || params.height != cardHeightPx
-                || params.leftMargin != leftPx || params.topMargin != top) {
-                params.width = mCardWidthPx;
-                params.height = cardHeightPx;
-                params.leftMargin = leftPx;
-                params.topMargin = top;
-                params.gravity = Gravity.TOP | Gravity.START;
-                card.setLayoutParams(params);
-            }
+            place(card, rail.cards[index]);
             card.setTranslationX(0f);
             card.setTranslationY(0f);
         }
-        LayoutParams zone = (LayoutParams) mZone.getLayoutParams();
-        int zoneHeight = Math.max(1, zoneHeightPx);
-        int zoneTop = topPx;
-        if (zone.width != mCardWidthPx || zone.height != zoneHeight || zone.leftMargin != leftPx
-            || zone.topMargin != zoneTop) {
-            zone.width = mCardWidthPx;
-            zone.height = zoneHeight;
-            zone.leftMargin = leftPx;
-            zone.topMargin = zoneTop;
-            zone.gravity = Gravity.TOP | Gravity.START;
-            mZone.setLayoutParams(zone);
-        }
+        place(mZone, rail.border);
         styleZone();
+    }
+
+    /** Lays {@code view} on {@code rect}, {left, top, right, bottom} in this view's px. */
+    private static void place(@NonNull View view, @NonNull int[] rect) {
+        LayoutParams params = (LayoutParams) view.getLayoutParams();
+        int width = Math.max(1, rect[2] - rect[0]);
+        int height = Math.max(1, rect[3] - rect[1]);
+        if (params.width == width && params.height == height && params.leftMargin == rect[0]
+            && params.topMargin == rect[1] && params.gravity == (Gravity.TOP | Gravity.START))
+            return;
+        params.width = width;
+        params.height = height;
+        params.leftMargin = rect[0];
+        params.topMargin = rect[1];
+        params.gravity = Gravity.TOP | Gravity.START;
+        view.setLayoutParams(params);
     }
 
     /** The drop zone while an element of the frame is lifted: offered, and the finger over it. */
@@ -187,9 +195,14 @@ final class HiddenStackView extends FrameLayout {
             com.google.android.material.R.attr.colorOutline, 0);
         int primary = MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary, 0);
         GradientDrawable shape = new GradientDrawable();
-        shape.setCornerRadius(12f * mDensity);
-        shape.setStroke(Math.round(mDensity * 2f), mZoneHovered ? primary : outline,
-            4f * mDensity, 4f * mDensity);
+        // Concentric with the cards inside it.
+        shape.setCornerRadius((HiddenStackPolicy.CARD_CORNER_DP + HiddenStackPolicy.ZONE_PAD_DP)
+            * mDensity);
+        // Offered, dotted; with the finger over it, solid and lightly tinted.
+        if (mZoneHovered)
+            shape.setStroke(Math.round(mDensity * 2f), primary);
+        else
+            shape.setStroke(Math.round(mDensity * 2f), outline, 4f * mDensity, 4f * mDensity);
         shape.setColor(mZoneHovered ? (primary & 0x00FFFFFF) | 0x26000000 : 0);
         mZone.setBackground(shape);
         mZone.setVisibility(VISIBLE);
@@ -205,7 +218,7 @@ final class HiddenStackView extends FrameLayout {
     private MaterialCardView makeCard(@NonNull HiddenItem item) {
         Context context = getContext();
         MaterialCardView card = new MaterialCardView(context);
-        card.setRadius(12f * mDensity);
+        card.setRadius(HiddenStackPolicy.CARD_CORNER_DP * mDensity);
         card.setCardElevation(2f * mDensity);
         card.setStrokeWidth(0);
         card.setCardBackgroundColor(MaterialColors.getColor(this,
@@ -214,8 +227,8 @@ final class HiddenStackView extends FrameLayout {
         card.setFocusable(true);
         TextView label = new TextView(context);
         label.setText(item.labelRes);
-        label.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        label.setTextAlignment(TEXT_ALIGNMENT_VIEW_END);
+        label.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        label.setTextAlignment(TEXT_ALIGNMENT_VIEW_START);
         label.setIncludeFontPadding(false);
         label.setMaxLines(HiddenStackPolicy.MAX_LINES);
         label.setTextColor(MaterialColors.getColor(this,
@@ -259,10 +272,15 @@ final class HiddenStackView extends FrameLayout {
                         view.setAlpha(DRAG_ALPHA);
                         view.setElevation(8f * mDensity);
                         view.bringToFront();
+                        if (mListener != null) mListener.onDragStarted(mItem);
                     }
                     if (mDragging) {
                         view.setTranslationX(dx);
                         view.setTranslationY(dy);
+                        // A chip over the rail, the element itself once the frame draws it.
+                        boolean inFrame = mListener != null
+                            && mListener.onDragMoved(mItem, event.getRawX(), event.getRawY());
+                        view.setAlpha(inFrame ? 0f : DRAG_ALPHA);
                     }
                     return true;
                 }
@@ -285,6 +303,7 @@ final class HiddenStackView extends FrameLayout {
                 }
                 case MotionEvent.ACTION_CANCEL:
                     view.getParent().requestDisallowInterceptTouchEvent(false);
+                    if (mDragging && mListener != null) mListener.onDragCancelled(mItem);
                     mDragging = false;
                     view.setAlpha(1f);
                     view.setElevation(2f * mDensity);

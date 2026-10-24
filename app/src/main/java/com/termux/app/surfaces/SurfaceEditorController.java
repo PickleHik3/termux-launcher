@@ -790,6 +790,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             params.gravity = Gravity.TOP | Gravity.LEFT;
             frame.setLayoutParams(params);
         }
+        // Laid out at the pose now; any carry by translation is spent.
+        frame.setTranslationX(0f);
+        frame.setTranslationY(0f);
+        frame.setScaleX(1f);
+        frame.setScaleY(1f);
         frame.invalidateOutline();
         if (mCanvas != null)
             mCanvas.setFrameCornerRadiusPx(mFrameCornerPx + RING_PX);
@@ -1108,6 +1113,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         refreshPoseWindow();
         mFrameCtxValid = true;
         layoutSheet();
+        // The first pose already knows whether the rail stands (SPEC §3.6a item 3).
+        readHidden();
         if (mTargetScale < 0f) {
             // The first pose: the frame grows into place from full size.
             EditorFramePose.Pose pose = targetPose();
@@ -1182,11 +1189,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCardSheet sheet = mSheet;
         if (window == null)
             return new EditorFramePose.Pose(1f, 0f, 0f);
-        EditorFramePose.Reserve reserve = poseReserve();
-        if (mCard != null && sheet != null)
-            return EditorFramePose.pose(window, window.heightPx - sheet.heightAt(sheet.detent()),
-                reserve);
-        return EditorFramePose.pose(window, Float.MAX_VALUE, reserve);
+        float cardTop = mCard != null && sheet != null
+            ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
+        return EditorFramePose.railPose(window, cardTop, poseReserve(), mHidden.size(), mLifted);
+    }
+
+    /** An element of the frame is in the air: with nothing hidden, the frame stands off the rail. */
+    private boolean mLifted;
+    /** The slide to and from the rail's offset at a lift with nothing hidden (SPEC §3.6a). */
+    private static final long LIFT_SLIDE_MS = 200L;
+
+    /** The lift began or ended: the frame takes its rail pose, sliding across when it moves. */
+    private void setLifted(boolean lifted) {
+        if (mLifted == lifted)
+            return;
+        mLifted = lifted;
+        applyPose(true, LIFT_SLIDE_MS);
     }
 
     /** The band on the frame's left that the stack of hidden items keeps clear. */
@@ -1205,12 +1223,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * and the card's top edge keep their gap all the way.
      */
     private void applyPose(boolean animate) {
+        applyPose(animate, POSE_MS);
+    }
+
+    private void applyPose(boolean animate, long durationMs) {
         // Before the first pose (a card raised while the window was being measured) the frame
         // pass takes the pose itself: it grows the frame in, clipped, straight to the card.
         if (mFrame == null || !mFrameCtxValid || !mOpen || mTargetScale < 0f)
             return;
         EditorFramePose.Pose pose = targetPose();
-        moveFrame(pose.scale, pose.translationX, pose.translationY, animate);
+        moveFrame(pose.scale, pose.translationX, pose.translationY, animate, durationMs);
         placeBar();
     }
 
@@ -1246,7 +1268,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** Moves the frame to its new pose on the card's clock; the canvas and outlines follow at the end. */
-    private void moveFrame(float scale, float tx, float ty, boolean animate) {
+    private void moveFrame(float scale, float tx, float ty, boolean animate, long durationMs) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
             return;
@@ -1270,12 +1292,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         final float fromTx = root.getTranslationX();
         final float fromTy = root.getTranslationY();
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(POSE_MS);
+        animator.setDuration(durationMs);
         animator.setInterpolator(Motion.settle());
+        // While a drag's pictures stand on the canvas (the slide to the rail's pose and back),
+        // the canvas is carried over the frame with it, so its slots never leave the frame.
+        FrameLayout carried = mLayoutFrame;
+        final boolean carryCanvas = mLive != null || mLifted
+            || (carried != null && !carried.getMatrix().isIdentity());
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
-            frame.setPose(fromScale + (scale - fromScale) * f, fromTx + (tx - fromTx) * f,
-                fromTy + (ty - fromTy) * f);
+            float nowScale = fromScale + (scale - fromScale) * f;
+            float nowTx = fromTx + (tx - fromTx) * f;
+            float nowTy = fromTy + (ty - fromTy) * f;
+            frame.setPose(nowScale, nowTx, nowTy);
+            if (carryCanvas)
+                carryLayoutFrame(nowScale, nowTx, nowTy);
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             private boolean mCancelled;
@@ -1290,6 +1321,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (mCancelled || !mOpen)
                     return;
                 frame.setPose(scale, tx, ty);
+                // The drag's pictures stand in the canvas's px: it stays carried, and is laid
+                // out at the new pose once they are gone (finishLive).
+                if (mLive != null)
+                    return;
                 setTarget(scale, tx, ty);
             }
         });
@@ -1307,6 +1342,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             animator.cancel();
     }
 
+    /** The pose {@link #mFrameRectInContent} was worked out for. */
+    private float mFrameRectScale = 1f;
+    private float mFrameRectTx;
+    private float mFrameRectTy;
+    /** The container's origin in the canvas's px at that pose: with the scale, the live map. */
+    private float mRootInCanvasX;
+    private float mRootInCanvasY;
+
+    /**
+     * The canvas's host moved with the frame while the frame slides: its laid-out rect is the
+     * pose {@link #setFrameRect} last took, and the rest is a scale about the frame's own pivot
+     * (top centre, {@link AppearanceEditorFrame#setPose}) and a translation.
+     */
+    private void carryLayoutFrame(float scale, float tx, float ty) {
+        FrameLayout host = mLayoutFrame;
+        AppearanceEditorFrame frame = mFrame;
+        if (host == null || frame == null || mFrameRectScale <= 0f)
+            return;
+        float pivotX = mContainerLeftPx + frame.root().getWidth() / 2f + mFrameRectTx;
+        float pivotY = mContainerTopPx + mFrameRectTy;
+        float k = scale / mFrameRectScale;
+        host.setPivotX(pivotX - host.getLeft());
+        host.setPivotY(pivotY - host.getTop());
+        host.setScaleX(k);
+        host.setScaleY(k);
+        host.setTranslationX(tx - mFrameRectTx);
+        host.setTranslationY(ty - mFrameRectTy);
+        updateCanvasTray();
+    }
+
     /** The scaled container's rect in the content view: the canvas's host. */
     private void setFrameRect(float scale, float translationX, float translationY) {
         AppearanceEditorFrame frame = mFrame;
@@ -1318,6 +1383,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), (int) Math.floor(top),
             (int) Math.ceil(scaledLeft + root.getWidth() * scale),
             (int) Math.ceil(top + root.getHeight() * scale)};
+        mFrameRectScale = scale;
+        mFrameRectTx = translationX;
+        mFrameRectTy = translationY;
+        // Where the container's own (0, 0) stands in the canvas, at this pose.
+        mRootInCanvasX = scaledLeft - (mFrameRectInContent[0] - RING_PX);
+        mRootInCanvasY = top - (mFrameRectInContent[1] - RING_PX);
         mFrameCornerPx = AppearanceEditorFrame.visibleCornerRadiusPx(
             AppearanceEditorFrame.deviceCornerRadiusPx(root), mDisplayInsetLeftPx,
             mRevealTopPx) * scale;
@@ -1352,7 +1423,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mLabelForHeightPx = -1;
     private float mLabelForFontScale = -1f;
     private float mLabelPx;
-    /** The stack's column in the content view, {left, top, right, bottom}, also the drop target. */
+    /** The rail's border in the content view, {left, top, right, bottom}: the drop target. */
     @Nullable private int[] mStackColumn;
 
     private void attachStack(@NonNull ViewGroup content) {
@@ -1365,8 +1436,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 }
 
                 @Override public void onDropped(@NonNull HiddenItem item, float rawX, float rawY) {
-                    if (isOverFrame(rawX, rawY))
-                        showHidden(item, false);
+                    dropChip(item, rawX, rawY);
+                }
+
+                @Override public void onDragStarted(@NonNull HiddenItem item) {
+                    beginChipDrag(item);
+                }
+
+                @Override public boolean onDragMoved(@NonNull HiddenItem item, float rawX,
+                                                     float rawY) {
+                    return moveChipDrag(rawX, rawY);
+                }
+
+                @Override public void onDragCancelled(@NonNull HiddenItem item) {
+                    cancelChip();
                 }
             });
             mStack = stack;
@@ -1390,6 +1473,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The items the edited layout puts away, read again; the stack and the frame follow. */
     private void refreshStack() {
+        boolean wasEmpty = mHidden.isEmpty();
+        readHidden();
+        placeStack();
+        // The rail comes or goes with the first hidden item or the last: the frame's offset
+        // follows, but never under live snapshots, which wait for it (see finishLive).
+        if (wasEmpty != mHidden.isEmpty() && mLive == null)
+            applyPose(true);
+    }
+
+    /** What the edited layout puts away, read into {@link #mHidden}. */
+    private void readHidden() {
         LayoutEditorController layout = mHost.layoutEditor();
         mHidden.clear();
         if (mOpen && layout != null) {
@@ -1401,7 +1495,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (!layout.searchField()) mHidden.add(HiddenItem.SEARCH_FIELD);
             }
         }
-        placeStack();
     }
 
     /** Lays the cards out for the window and the card up now. */
@@ -1417,7 +1510,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
         int available = Math.max(0,
             Math.round(EditorFramePose.stackBottomPx(window, cardTop)) - top);
-        int cardHeight = HiddenStackPolicy.cardHeightPx(mHidden.size(), available, density);
+        // Room for one more card than there are: the empty slot a lifted element drops into.
+        int cardHeight = HiddenStackPolicy.railCardHeightPx(mHidden.size(), available, density);
         float fontScale = getResources().getConfiguration().fontScale;
         if (cardHeight != mLabelForHeightPx || fontScale != mLabelForFontScale) {
             mLabelPx = HiddenStackView.fittedLabelPx(mHost.context(), cardHeight);
@@ -1425,13 +1519,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mLabelForFontScale = fontScale;
         }
         int left = mContainerLeftPx + dp(HiddenStackPolicy.SIDE_DP);
-        mStackColumn = new int[] {left, top, left + HiddenStackPolicy.cardWidthPx(density),
-            top + available};
+        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(mHidden.size(), left, top, available,
+            cardHeight, density);
+        // The drop target is the border the finger sees, no more.
+        mStackColumn = rail.border.clone();
         String signature = mHidden + "/" + left + "/" + top + "/" + cardHeight + "/" + mLabelPx
             + "/" + available;
         if (!signature.equals(mStackSignature)) {
             mStackSignature = signature;
-            stack.set(mHidden, left, top, cardHeight, mLabelPx, available);
+            stack.set(mHidden, rail, mLabelPx);
         }
         updateCanvasTray();
     }
@@ -1445,8 +1541,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         float dx = frame[0] - RING_PX;
         float dy = frame[1] - RING_PX;
-        canvas.setExternalTrayRect(new RectF(column[0] - dx, column[1] - dy, column[2] - dx,
-            column[3] - dy));
+        RectF tray = new RectF(column[0] - dx, column[1] - dy, column[2] - dx, column[3] - dy);
+        // Undo the host's carry (scale about its pivot, then translation), if any.
+        FrameLayout host = mLayoutFrame;
+        if (host != null) {
+            android.graphics.Matrix inverse = new android.graphics.Matrix();
+            if (host.getMatrix().invert(inverse))
+                inverse.mapRect(tray);
+        }
+        canvas.setExternalTrayRect(tray);
     }
 
     /** Whether a raw screen point is over the frame. */
@@ -1529,7 +1632,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntering = false;
         frame.root().animate().cancel();
         mFollowingSheet = true;
-        EditorFramePose.Pose pose = EditorFramePose.pose(window, cardTopPx, poseReserve());
+        EditorFramePose.Pose pose = EditorFramePose.railPose(window, cardTopPx, poseReserve(),
+            mHidden.size(), mLifted);
         frame.setPose(pose.scale, pose.translationX, pose.translationY);
     }
 
@@ -3344,6 +3448,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             group.setOnTouchListener((view, event) -> {
                 if (!mOpen)
                     return false;
+                if (mLiftPending) {
+                    // The frame is being copied for the lift: the finger is kept for it.
+                    int action = event.getActionMasked();
+                    if (action == MotionEvent.ACTION_MOVE) {
+                        mPendingRawX = event.getRawX();
+                        mPendingRawY = event.getRawY();
+                        mPendingMoved = true;
+                    } else if (action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL) {
+                        view.getParent().requestDisallowInterceptTouchEvent(false);
+                        cancelPendingLift();
+                    }
+                    return true;
+                }
                 if (mForwarding) {
                     forwardToCanvas(event);
                     return true;
@@ -3415,40 +3533,323 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             view.removeCallbacks(hold);
     }
 
-    /** The hold landed: the canvas stands over the frame and takes the finger from here. */
+    /**
+     * The hold landed: the canvas stands over the frame and takes the finger from here. The card
+     * that is up stays up, so the frame keeps its pose from the hold through the drop: putting the
+     * card down here moved the frame to its rest pose, larger and further across, under a finger
+     * already on an element.
+     */
     private void startDrag() {
         LayoutCanvasView canvas = mCanvas;
         if (!mOpen || canvas == null || mLayoutFrame == null)
             return;
-        closeCard(true);
         mCanvasForDrag = !mCanvasShown;
+        // In the orientation on screen the drag is live: the frame is copied first, as it is
+        // drawn now, and the lift starts once the pictures stand in for it.
+        // Pending from here: the copy may come back at once (liftHeld then clears it).
+        mLiftPending = true;
+        mPendingMoved = false;
+        if (mCanvasForDrag && beginLiveCapture(this::liftHeld))
+            return;
+        liftHeld();
+    }
+
+    /** The hold's finger handed to the canvas, whose lift starts under it. */
+    private void liftHeld() {
+        mLiftPending = false;
+        LayoutCanvasView canvas = mCanvas;
+        if (!mOpen || canvas == null)
+            return;
         showCanvas(true, false);
         mForwarding = true;
         MotionEvent down = MotionEvent.obtain(mDownTime, SystemClock.uptimeMillis(),
             MotionEvent.ACTION_DOWN, mDownRawX, mDownRawY, 0);
         forwardToCanvas(down);
         down.recycle();
+        if (!canvas.isLifting()) {
+            // Nothing liftable under the finger: the pictures go at once.
+            if (canvas.isLive()) {
+                canvas.endLive();
+                finishLive();
+            }
+            return;
+        }
+        if (mForwarding && mPendingMoved) {
+            MotionEvent move = MotionEvent.obtain(mDownTime, SystemClock.uptimeMillis(),
+                MotionEvent.ACTION_MOVE, mPendingRawX, mPendingRawY, 0);
+            forwardToCanvas(move);
+            move.recycle();
+        }
+        setLifted(true);
+    }
+
+    // ---- the live drag (SPEC §3.6a items 1 and 2) -------------------------------------------
+
+    /** The pictures that stand in for the frame's elements during a drag, or null. */
+    @Nullable private LiveDragCapture mLive;
+    /** A hold landed and the frame is being copied: the finger waits for the lift. */
+    private boolean mLiftPending;
+    private boolean mPendingMoved;
+    private float mPendingRawX;
+    private float mPendingRawY;
+    /** A rail card carried through the canvas, once its lift has started; null otherwise. */
+    @Nullable private LayoutCanvasView.Block mChipDrag;
+
+    /** The container's px in the canvas's, at the pose the canvas was laid out for. */
+    @NonNull
+    private LiveDragCapture.FrameMap liveMap() {
+        return new LiveDragCapture.FrameMap(mFrameRectScale, mRootInCanvasX, mRootInCanvasY);
+    }
+
+    /**
+     * Copies the frame and, once the copy is in, lets the canvas draw the elements' pictures
+     * over a transparent host, makes the real views transparent and runs {@code then}. False
+     * where a live drag cannot start (the frame is moving, or not laid out): the caller goes on
+     * without one.
+     */
+    private boolean beginLiveCapture(@NonNull Runnable then) {
+        LayoutCanvasView canvas = mCanvas;
+        AppearanceEditorFrame frame = mFrame;
+        ViewGroup content = mHost.findView(android.R.id.content);
+        int[] rect = mFrameRectInContent;
+        if (canvas == null || frame == null || content == null || rect == null || mLive != null
+            || !poseHolds() || mFrameAnimator != null)
+            return false;
+        LiveDragCapture capture = new LiveDragCapture(mHost::findView, frame.root());
+        mLive = capture;
+        int[] at = new int[2];
+        content.getLocationInWindow(at);
+        android.graphics.Rect inWindow = new android.graphics.Rect(at[0] + rect[0],
+            at[1] + rect[1], at[0] + rect[2], at[1] + rect[3]);
+        capture.capture(mHost.context(), inWindow, RING_PX, liveMap(), canvas::cornerRadiusOf,
+            shots -> {
+                if (mLive != capture || !mOpen)
+                    return;
+                canvas.beginLive(shots, new LayoutCanvasView.LiveHost() {
+                    @NonNull @Override
+                    public java.util.Map<LayoutCanvasView.Block, android.graphics.RectF>
+                        realRects() {
+                        return capture.canvasRects(liveMap());
+                    }
+
+                    @Override public void onLiveFinished(boolean dropped) {
+                        if (mLive == capture)
+                            finishLive();
+                    }
+                });
+                setCanvasBackdrop(false);
+                capture.hideReal();
+                then.run();
+            });
+        return true;
+    }
+
+    /** The canvas's host shows its own ground (the schematic's), or none over the live frame. */
+    private void setCanvasBackdrop(boolean shown) {
+        FrameLayout host = mLayoutFrame;
+        if (host == null || host.getBackground() == null)
+            return;
+        if (shown)
+            setModelProgress(mModelProgress);
+        else
+            host.getBackground().mutate().setAlpha(0);
+    }
+
+    /**
+     * The pictures are gone: the real views show, the canvas goes once nothing holds it, and the
+     * frame takes the pose it waited for (a drop may have hidden the first element or shown the
+     * last), sliding at one scale.
+     */
+    private void finishLive() {
+        LiveDragCapture capture = mLive;
+        mLive = null;
+        mLiftPending = false;
+        if (capture != null) {
+            capture.cancel();
+            capture.showReal();
+        }
+        setCanvasBackdrop(true);
+        if (mCanvasForDrag && !mForwarding && mChipDrag == null) {
+            mCanvasForDrag = false;
+            showCanvas(false, false);
+        }
+        mLifted = false;
+        applyPose(true, LIFT_SLIDE_MS);
+        // No slide back (the pose holds): the carried canvas is laid out at the pose now.
+        if (mFrameAnimator == null)
+            setTarget(mTargetScale, mTargetTx, mTargetTy);
+        positionTargets();
+    }
+
+    /** The editor is going: pictures, copies and lifts dropped at once. */
+    private void abandonLive() {
+        LayoutCanvasView canvas = mCanvas;
+        if (canvas != null && canvas.isLive())
+            canvas.endLive();
+        LiveDragCapture capture = mLive;
+        mLive = null;
+        if (capture != null) {
+            capture.cancel();
+            capture.showReal();
+        }
+        setCanvasBackdrop(true);
+        mLiftPending = false;
+        mChipDrag = null;
+        mLifted = false;
+    }
+
+    /** A hold still being copied was let go: no lift. */
+    private void cancelPendingLift() {
+        mLiftPending = false;
+        LiveDragCapture capture = mLive;
+        mLive = null;
+        if (capture != null)
+            capture.cancel();
+        mCanvasForDrag = false;
+    }
+
+    /** The canvas's block a rail card stands for; null where the card is not carried through it. */
+    @Nullable
+    static LayoutCanvasView.Block blockOf(@NonNull HiddenItem item) {
+        switch (item) {
+            case STATUS_BAR: return LayoutCanvasView.Block.STATUS_BAR;
+            case PINNED_APPS: return LayoutCanvasView.Block.APPS_ROW;
+            case AZ_INDEX: return LayoutCanvasView.Block.ALPHABETS_ROW;
+            case EXTRA_KEYS: return LayoutCanvasView.Block.EXTRA_KEYS;
+            // The keyboard comes back raised by showHidden, and the Search field has no slot:
+            // both stay cards and come back where they were.
+            case KEYBOARD:
+            case SEARCH_FIELD:
+            default: return null;
+        }
+    }
+
+    /** A rail card began to be dragged: in the orientation on screen, the frame is copied. */
+    private void beginChipDrag(@NonNull HiddenItem item) {
+        LayoutCanvasView.Block block = blockOf(item);
+        if (block == null || !mOpen || mCanvas == null || mLayoutFrame == null || mCanvasShown
+            || mForwarding || mLiftPending)
+            return;
+        mCanvasForDrag = true;
+        mPendingMoved = false;
+        if (!beginLiveCapture(() -> liftChip(block))) {
+            mCanvasForDrag = false;
+        }
+    }
+
+    /** The copy is in: the card's element is lifted in the canvas, from the rail. */
+    private void liftChip(@NonNull LayoutCanvasView.Block block) {
+        LayoutCanvasView canvas = mCanvas;
+        if (canvas == null || !mOpen)
+            return;
+        showCanvas(true, false);
+        if (!canvas.beginHiddenDrag(block)) {
+            canvas.endLive();
+            mCanvasForDrag = false;
+            finishLive();
+            return;
+        }
+        mChipDrag = block;
+        if (mPendingMoved)
+            moveChipDrag(mPendingRawX, mPendingRawY);
+    }
+
+    /** The card is at a raw point: the canvas's hover follows; true while it draws the element. */
+    private boolean moveChipDrag(float rawX, float rawY) {
+        mPendingRawX = rawX;
+        mPendingRawY = rawY;
+        mPendingMoved = true;
+        LayoutCanvasView canvas = mCanvas;
+        if (mChipDrag == null || canvas == null)
+            return false;
+        float[] point = canvasPoint(canvas, rawX, rawY);
+        canvas.hoverHiddenDrag(point[0], point[1]);
+        return canvas.drawsHeldOverFrame();
+    }
+
+    /**
+     * The card let go: carried through the canvas, a drop over a slot puts its element there
+     * (and anywhere else the pictures go back); still being copied, or never carried, it is
+     * the card's own drop as before.
+     */
+    private void dropChip(@NonNull HiddenItem item, float rawX, float rawY) {
+        LayoutCanvasView canvas = mCanvas;
+        LayoutCanvasView.Block block = mChipDrag;
+        mChipDrag = null;
+        if (block == null || canvas == null) {
+            if (mLive != null && (canvas == null || !canvas.isLive()))
+                cancelPendingLift();
+            if (isOverFrame(rawX, rawY))
+                showHidden(item, false);
+            return;
+        }
+        float[] point = canvasPoint(canvas, rawX, rawY);
+        canvas.dropHiddenDrag(point[0], point[1]);
+        if (!canvas.isLive() && mCanvasForDrag) {
+            mCanvasForDrag = false;
+            showCanvas(false, true);
+        }
+    }
+
+    /** The card's drag was taken away: the lift ends with it. */
+    private void cancelChip() {
+        LayoutCanvasView canvas = mCanvas;
+        LayoutCanvasView.Block block = mChipDrag;
+        mChipDrag = null;
+        if (block != null && canvas != null) {
+            canvas.endHiddenDrag();
+            return;
+        }
+        if (mLive != null && (canvas == null || !canvas.isLive()))
+            cancelPendingLift();
     }
 
     /** One touch, in the canvas's own coordinates, to the canvas. */
+    /** A raw screen point in the canvas's own px, through the host's carry (scale, translation). */
+    @NonNull
+    private float[] canvasPoint(@NonNull LayoutCanvasView canvas, float rawX, float rawY) {
+        FrameLayout host = mLayoutFrame;
+        View parent = host == null ? null : (View) host.getParent();
+        if (host == null || parent == null || canvas.getParent() != host) {
+            int[] at = new int[2];
+            canvas.getLocationOnScreen(at);
+            return new float[] {rawX - at[0], rawY - at[1]};
+        }
+        int[] at = new int[2];
+        parent.getLocationOnScreen(at);
+        float[] point = {rawX - at[0] - host.getLeft(), rawY - at[1] - host.getTop()};
+        android.graphics.Matrix inverse = new android.graphics.Matrix();
+        if (host.getMatrix().invert(inverse))
+            inverse.mapPoints(point);
+        point[0] -= canvas.getLeft();
+        point[1] -= canvas.getTop();
+        return point;
+    }
+
     private void forwardToCanvas(@NonNull MotionEvent event) {
         LayoutCanvasView canvas = mCanvas;
         if (canvas == null) {
             mForwarding = false;
             return;
         }
-        int[] at = new int[2];
-        canvas.getLocationOnScreen(at);
+        float[] point = canvasPoint(canvas, event.getRawX(), event.getRawY());
         MotionEvent local = MotionEvent.obtain(event);
-        local.setLocation(event.getRawX() - at[0], event.getRawY() - at[1]);
+        local.setLocation(point[0], point[1]);
         canvas.dispatchTouchEvent(local);
         local.recycle();
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
             mForwarding = false;
+            // Live, the pictures settle first; finishLive puts the canvas away after them.
+            if (canvas.isLive())
+                return;
             if (mCanvasForDrag) {
                 mCanvasForDrag = false;
                 showCanvas(false, true);
+            }
+            if (mLifted) {
+                mLifted = false;
+                applyPose(true, LIFT_SLIDE_MS);
             }
             positionTargets();
         }
@@ -4335,6 +4736,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mTargetScale = -1f;
         mFollowingSheet = false;
         mEntering = false;
+        abandonLive();
         mCanvasForDrag = false;
         showCanvas(false, false);
         setOverlayVisible(false);
