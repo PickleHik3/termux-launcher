@@ -89,6 +89,9 @@ REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
 
 # vulkan-wrapper-android is in none of Termux's package sources, so it comes as a pinned prebuilt
 # download that must match its checksum. Returns 0 once it is installed.
+# Credit: the wrapper driver is xMeM's (Mesa, MIT core licence; the package installs its
+# license.rst), this build was packaged by lfdevs and is published by sabamdarif/termux-desktop.
+# None of termux-desktop's scripts are used here. See THIRD_PARTY_NOTICES.md.
 VKW_BASE=https://github.com/sabamdarif/termux-desktop/releases/download/vulkan-wrapper-android_25.0.0-3
 install_vulkan_wrapper() {
   local arch file sum
