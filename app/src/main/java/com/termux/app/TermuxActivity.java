@@ -18182,6 +18182,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             requestAppDrawerSearchKeyboard();
         }
 
+        @Override public void dismissSearchSystemKeyboard() {
+            // Scrolled away, as launchers do: the field keeps its focus and its query, so a tap on
+            // the search brings the keyboard straight back.
+            if (getWindow() == null) return;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .hide(Type.ime());
+        }
+
         @Override public void beginTextFieldSearch(@NonNull EditText field) {
             // The toolbar text input's seam, less the relayout: the built-in keyboard yields its
             // window flags but stays put under the plane, then the field takes focus and the IME.

@@ -13,6 +13,13 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-24 · commit "feat(drawer): the search keyboard slides away as the list scrolls" · open
+  the drawer with the built-in keyboard revealed under the search (a pill tap), then scroll the
+  vertical list down: nothing moves for the first ~24 dp, then the keyboard slides down with the
+  finger until it is gone and the list grows to the full height without jumping; scrolling back up
+  does not bring it back, a pill tap does. A scroll stopped with the keyboard less than halfway down
+  springs it back up. With the Android keyboard (and with "Use system keyboard") the phone's
+  keyboard goes at the threshold and the pill brings it back · emulator.
 - 2026-10-24 · commit "fix(drawer): the search raises the built-in keyboard on every place" · with
   Settings › Keyboard › On-screen keyboard = Built-in and the drawer's "Open keyboard
   automatically" on, open the drawer on Home (keyboard down) and on the Workspace (keyboard up and

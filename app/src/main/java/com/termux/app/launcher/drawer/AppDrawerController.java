@@ -146,6 +146,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         void restoreSystemKeyboard();
 
         /**
+         * The list was scrolled with the system keyboard up for the search: it goes, and is not
+         * brought back on close (a pill tap asks for it again).
+         */
+        default void dismissSearchSystemKeyboard() {}
+
+        /**
          * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
          * the system keyboard is shown for it. The built-in keyboard, if enabled, yields without
          * moving — the plane covers it and the accessory stack must not relayout under an open plane.
@@ -893,6 +899,83 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return pin < host.getHeight() ? Math.max(0f, pin) : 0f;
     }
 
+    // ------------------------------------------------------------------ keyboard away on scroll
+
+    /** How far down the list the current scroll has gone, for the keyboard; 0 at rest. */
+    private float mKeyboardScrollPx;
+    /** True while the scroll, not the spring, is holding the built-in keyboard part-way down. */
+    private boolean mKeyboardScrollHolding;
+    /** The system keyboard was sent away by the current scroll; once per scroll. */
+    private boolean mSystemImeScrolledAway;
+
+    /**
+     * One step of the finger's scroll down the list. Past the threshold the built-in keyboard is
+     * held down by the distance scrolled (the reveal written straight from the scroll, no spring,
+     * no layout) until it is gone; the system keyboard, which cannot be moved, goes at the
+     * threshold. The content's insets are left alone until the end, then laid out once.
+     */
+    private void onKeyboardScrollStep(int dy) {
+        AppDrawerContentView content = mContent;
+        if (!mOpen || content == null) return;
+        if (mImePinTopPx > 0f) {
+            mKeyboardScrollPx = AppDrawerKeyboardScrollHide.accumulate(mKeyboardScrollPx, dy);
+            if (mSystemImeScrolledAway || !AppDrawerKeyboardScrollHide.reachesThreshold(
+                    mKeyboardScrollPx, dp(AppDrawerKeyboardScrollHide.THRESHOLD_DP))) return;
+            mSystemImeScrolledAway = true;
+            content.dismissSearchKeyboardByScroll();
+            mHost.dismissSearchSystemKeyboard();
+            return;
+        }
+        AppDrawerAccessoryChoreography.Band keyboard = mKeyboardBand;
+        // Only a keyboard the reveal has up: one still rising, or one already going, is left be.
+        if (keyboard == null || !hasRevealableKeyboard()
+            || (!mKeyboardScrollHolding && mReveal.target < 1f)) return;
+        mKeyboardScrollPx = AppDrawerKeyboardScrollHide.accumulate(mKeyboardScrollPx, dy);
+        float hidden = AppDrawerKeyboardScrollHide.hiddenFraction(mKeyboardScrollPx,
+            dp(AppDrawerKeyboardScrollHide.THRESHOLD_DP), keyboard.heightPx);
+        if (hidden <= 0f) return;
+        mKeyboardScrollHolding = true;
+        float k = 1f - hidden;
+        mReveal.value = k;
+        mReveal.vel = 0f;
+        // Target held at the value: nothing chases it while the finger drives it.
+        mReveal.target = k;
+        if (hidden >= 1f) {
+            finishKeyboardScrollAway();
+            return;
+        }
+        applyFrame(mProgress.value);
+    }
+
+    /** The scroll came to rest: a keyboard held part-way finishes going, or springs back up. */
+    private void onKeyboardScrollIdle() {
+        mKeyboardScrollPx = 0f;
+        mSystemImeScrolledAway = false;
+        if (!mKeyboardScrollHolding) return;
+        mKeyboardScrollHolding = false;
+        if (AppDrawerKeyboardScrollHide.dismissesAtRest(1f - mReveal.value)) {
+            finishKeyboardScrollAway();
+        } else {
+            mReveal.target = 1f;
+            kick();
+        }
+    }
+
+    /**
+     * The keyboard is away: the content drops its reveal target, and the content is laid out
+     * once for the full height, its top where it was so the list does not jump.
+     */
+    private void finishKeyboardScrollAway() {
+        mKeyboardScrollHolding = false;
+        AppDrawerContentView content = mContent;
+        if (content != null) content.dismissSearchKeyboardByScroll();
+        retargetReveal();
+        mReveal.target = 0f;
+        applyContentInsets();
+        applyFrame(mProgress.value);
+        kick();
+    }
+
     /**
      * Retargets the search-keyboard reveal. Driven by the content — a first keystroke, a query
      * emptied, a pill tap — and by the system keyboard's inset; never polled.
@@ -995,6 +1078,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
         content.setSearchKeyboardRequestListener(this::onSearchKeyboardRequested);
+        content.setKeyboardScrollListener(new AppDrawerContentView.KeyboardScrollListener() {
+            @Override public void onListScrolledDown(int dy) { onKeyboardScrollStep(dy); }
+            @Override public void onListScrollIdle() { onKeyboardScrollIdle(); }
+        });
         // A drawer that is not open is not a surface: interactivity is turned on by prepareOverlay
         // and off again on close, and never follows p.
         content.setInteractive(false);
@@ -1830,6 +1917,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mSearch.reset();
             }
             mReveal.reset(0f);
+            mKeyboardScrollPx = 0f;
+            mKeyboardScrollHolding = false;
+            mSystemImeScrolledAway = false;
             endTextFieldSearchIfBegun();
             mImePinTopPx = 0f;
             mContentRect = null;
