@@ -25,6 +25,8 @@ final class HiddenStackPolicy {
     static final int SIDE_DP = 8;
     /** The card's inner padding on every side. */
     static final int PAD_DP = 4;
+    /** A card's corner; the zone's border, {@link #ZONE_PAD_DP} outside, rounds concentric with it. */
+    static final int CARD_CORNER_DP = 12;
     /** A label's size at font scale 1, before it is made to fit. */
     static final float LABEL_SP = 12f;
     static final int MAX_LINES = 2;
@@ -75,6 +77,71 @@ final class HiddenStackPolicy {
     /** The top of card {@code index}, counted from the stack's top. */
     static int cardTopPx(int stackTopPx, int index, int cardHeightPx, float density) {
         return stackTopPx + index * (cardHeightPx + Math.round(GAP_DP * density));
+    }
+
+    /**
+     * The air between the drop zone's border and what it holds, the same on every side. The
+     * border stands this far outside the cards' column, in the {@link #SIDE_DP} either side of it,
+     * so the cards never move or shrink when it shows.
+     */
+    static final int ZONE_PAD_DP = 4;
+
+    /**
+     * The rail as one piece, in px of the content view, {left, top, right, bottom} each: the
+     * cards one after another, the empty drop slot after the last, and the zone's border round
+     * them all with {@link #ZONE_PAD_DP} of air on every side. Cards, slot and border come from
+     * the one computation, so the border always holds the cards.
+     */
+    static final class Rail {
+        @NonNull final int[][] cards;
+        @NonNull final int[] slot;
+        @NonNull final int[] border;
+
+        Rail(@NonNull int[][] cards, @NonNull int[] slot, @NonNull int[] border) {
+            this.cards = cards;
+            this.slot = slot;
+            this.border = border;
+        }
+    }
+
+    /**
+     * The card height for {@code count} cards and the drop slot in a column {@code columnPx}
+     * tall: {@link #cardHeightPx} for one more card than there are, in the column less the
+     * zone's air above and below.
+     */
+    static int railCardHeightPx(int count, int columnPx, float density) {
+        int pad = Math.round(ZONE_PAD_DP * density);
+        return cardHeightPx(Math.max(0, count) + 1, Math.max(0, columnPx - 2 * pad), density);
+    }
+
+    /**
+     * The rail for {@code count} cards {@code cardHeightPx} tall in the column from
+     * {@code columnTopPx} down {@code columnHeightPx}, the cards {@code leftPx} from the content
+     * view's left. The cards and the slot after them rest on the column's bottom less the zone's
+     * air; the border hugs them (it never runs past the slot to the column's bottom), and a rail
+     * too long for the column starts at its top and runs on past its bottom, as the stack did.
+     */
+    @NonNull
+    static Rail rail(int count, int leftPx, int columnTopPx, int columnHeightPx, int cardHeightPx,
+                     float density) {
+        int n = Math.max(0, count);
+        int pad = Math.round(ZONE_PAD_DP * density);
+        int gap = Math.round(GAP_DP * density);
+        int width = cardWidthPx(density);
+        int items = n + 1;
+        int used = items * cardHeightPx + (items - 1) * gap;
+        int contentBottom = columnTopPx + columnHeightPx - pad;
+        int contentTop = Math.max(columnTopPx + pad, contentBottom - used);
+        int[][] cards = new int[n][];
+        for (int i = 0; i < n; i++) {
+            int top = contentTop + i * (cardHeightPx + gap);
+            cards[i] = new int[] {leftPx, top, leftPx + width, top + cardHeightPx};
+        }
+        int slotTop = contentTop + n * (cardHeightPx + gap);
+        int[] slot = {leftPx, slotTop, leftPx + width, slotTop + cardHeightPx};
+        int[] border = {leftPx - pad, contentTop - pad, leftPx + width + pad,
+            slot[3] + pad};
+        return new Rail(cards, slot, border);
     }
 
     /**

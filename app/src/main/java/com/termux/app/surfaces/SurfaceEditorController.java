@@ -1352,7 +1352,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mLabelForHeightPx = -1;
     private float mLabelForFontScale = -1f;
     private float mLabelPx;
-    /** The stack's column in the content view, {left, top, right, bottom}, also the drop target. */
+    /** The rail's border in the content view, {left, top, right, bottom}: the drop target. */
     @Nullable private int[] mStackColumn;
 
     private void attachStack(@NonNull ViewGroup content) {
@@ -1417,7 +1417,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
         int available = Math.max(0,
             Math.round(EditorFramePose.stackBottomPx(window, cardTop)) - top);
-        int cardHeight = HiddenStackPolicy.cardHeightPx(mHidden.size(), available, density);
+        // Room for one more card than there are: the empty slot a lifted element drops into.
+        int cardHeight = HiddenStackPolicy.railCardHeightPx(mHidden.size(), available, density);
         float fontScale = getResources().getConfiguration().fontScale;
         if (cardHeight != mLabelForHeightPx || fontScale != mLabelForFontScale) {
             mLabelPx = HiddenStackView.fittedLabelPx(mHost.context(), cardHeight);
@@ -1425,13 +1426,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mLabelForFontScale = fontScale;
         }
         int left = mContainerLeftPx + dp(HiddenStackPolicy.SIDE_DP);
-        mStackColumn = new int[] {left, top, left + HiddenStackPolicy.cardWidthPx(density),
-            top + available};
+        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(mHidden.size(), left, top, available,
+            cardHeight, density);
+        // The drop target is the border the finger sees, no more.
+        mStackColumn = rail.border.clone();
         String signature = mHidden + "/" + left + "/" + top + "/" + cardHeight + "/" + mLabelPx
             + "/" + available;
         if (!signature.equals(mStackSignature)) {
             mStackSignature = signature;
-            stack.set(mHidden, left, top, cardHeight, mLabelPx, available);
+            stack.set(mHidden, rail, mLabelPx);
         }
         updateCanvasTray();
     }
