@@ -258,12 +258,12 @@ stop_virgl()   { [ -n "$VIRGL_PID" ] && kill "$VIRGL_PID" 2>/dev/null; VIRGL_PID
 
 # Whether process PID is a termux-x11 server for display :N, read off its command line: the
 # server names itself "termux-x11 <package> <its arguments>", and until it has started it is the
-# termux-x11 script with the same arguments. A process of another user, or one that is gone,
-# is not.
+# termux-x11 script with the same arguments; should the name not have been set, it is the bare
+# app_process running the loader. A process of another user, or one that is gone, is not.
 is_x11_server() {
   local args
   args=$(tr '\0' ' ' 2>/dev/null <"/proc/$1/cmdline") || return 1
-  case " $args" in *termux-x11*) ;; *) return 1 ;; esac
+  case " $args" in *termux-x11*|*app_process*) ;; *) return 1 ;; esac
   case " $args " in *" :$2 "*|*" :$2."*) return 0 ;; esac
   return 1
 }
