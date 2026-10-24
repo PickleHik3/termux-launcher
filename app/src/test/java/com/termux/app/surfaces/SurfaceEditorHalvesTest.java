@@ -102,12 +102,18 @@ public class SurfaceEditorHalvesTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         model(editor).onValue(Row.VISIBLE, 0, false);
         assertFalse(layout.isShown(Element.APPS));
-        boolean ghost = ReflectionHelpers.callInstanceMethod(editor, "isGhost",
-            ClassParameter.from(EditorCard.class, EditorCard.DOCK));
-        assertTrue("a hidden dock keeps a ghost", ghost);
+        assertTrue("a hidden dock joins the hidden-items stack",
+            hiddenStack(editor).contains(HiddenItem.PINNED_APPS));
 
         model(editor).onValue(Row.VISIBLE, 1, false);
         assertTrue(layout.isShown(Element.APPS));
+        assertFalse("a shown dock leaves the stack",
+            hiddenStack(editor).contains(HiddenItem.PINNED_APPS));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<HiddenItem> hiddenStack(SurfaceEditorController editor) {
+        return (List<HiddenItem>) ReflectionHelpers.getField(editor, "mHidden");
     }
 
     // ------------------------------------------------------------------------------- the drive
