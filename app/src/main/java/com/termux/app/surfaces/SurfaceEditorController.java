@@ -2053,14 +2053,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean shown(@NonNull Row row) {
-            // All surfaces is the Custom stop's, as the Look page's Custom row was.
-            if (mCard == EditorCard.APPEARANCE && row.kind == EditorRows.Kind.STRIP)
+            // All surfaces is the Custom stop's, as the Look page's Custom row was; the
+            // wallpaper's Alignment stands at every stop.
+            if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row))
                 return AppearanceLooks.isCustomStop(lookStop(mHalf));
             return true;
         }
 
         @Nullable @Override public CharSequence stripHeading(@NonNull Row first) {
-            return mCard == EditorCard.APPEARANCE
+            return mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(first)
                 ? getString(R.string.appearance_strip_all_surfaces) : null;
         }
     }

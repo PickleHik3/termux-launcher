@@ -40,8 +40,6 @@
     <string name="appearance_card_appearance">Appearance</string>
     <string name="appearance_card_close">Close</string>
     <string name="appearance_card_menu">More options</string>
-    <string name="appearance_card_more">More</string>
-    <string name="appearance_card_more_open">Fewer</string>
 
     <!-- The card menu: back on the Look, or the same look on the other half. -->
     <string name="appearance_reset_home">Reset Home</string>
