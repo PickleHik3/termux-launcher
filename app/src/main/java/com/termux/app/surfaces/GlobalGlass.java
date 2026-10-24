@@ -1,17 +1,19 @@
 package com.termux.app.surfaces;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
- * The Look editor's global glass (layout editor v2, DECISIONS items 13 and 14): Blur, Opacity,
- * Grain and Tint written as the shared base values. Writing one re-attaches every surface to the base,
- * terminal included, so the number is what every surface wears afterwards; an element's own
- * Blur, Grain or Opacity on the Custom row detaches it again for fine-tuning.
+ * The shared glass (layout editor v2, DECISIONS items 13 and 14; the Appearance card's All
+ * surfaces strip): Blur, Opacity, Grain and Tint written as the base values, Frost writing blur
+ * and grain together. Writing one re-attaches every surface to the base, so the number is what
+ * every surface wears afterwards; a surface's own value on its card detaches it again.
  *
  * <p>No views and no {@code Context}: the rule is held by a test against real preferences.</p>
  */
@@ -27,6 +29,16 @@ final class GlobalGlass {
      */
     static int write(@NonNull TermuxAppSharedPreferences prefs, @NonNull SurfaceProperty property,
                      int value) {
+        return write(prefs, property, null, value);
+    }
+
+    /**
+     * {@link #write(TermuxAppSharedPreferences, SurfaceProperty, int)} for one half (ADR 0013): the
+     * half's base, and only the surfaces standing on that half put back on it. The terminal stands
+     * on the Workspace alone, so Home's shared glass leaves it as it is. A null half writes both.
+     */
+    static int write(@NonNull TermuxAppSharedPreferences prefs, @NonNull SurfaceProperty property,
+                     @Nullable WallHalf half, int value) {
         int clamped;
         switch (property) {
             case BLUR:
@@ -44,14 +56,19 @@ final class GlobalGlass {
             default:
                 throw new IllegalArgumentException("not a glass property: " + property);
         }
-        for (SurfaceSlot slot : SurfaceSlot.values())
-            prefs.setSurfaceInheriting(slot, property, true);
+        boolean workspace = half != WallHalf.HOME;
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            if (slot == SurfaceSlot.CANVAS && !workspace)
+                continue;
+            prefs.setSurfaceInheriting(slot, property, half, true);
+        }
         // The keyboard's blur is the one cell whose raw key holds "follow" as -1 outside the
-        // link (the rule Blur has always written); a stale number there must not come back.
-        if (property == SurfaceProperty.BLUR)
+        // link (the rule Blur has always written); a stale number there must not come back. A
+        // one-half write leaves it: the other half may still read its own number there.
+        if (property == SurfaceProperty.BLUR && half == null)
             prefs.setInAppKeyboardBlurRadiusRaw(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
-        prefs.setSurfaceBaseValue(property, clamped);
-        if (property == SurfaceProperty.OPACITY) {
+        prefs.setSurfaceBaseValue(property, half, clamped);
+        if (property == SurfaceProperty.OPACITY && workspace) {
             // The terminal follows the base now; the setter also keeps the copy the wallpaper
             // mode restores from in step, so turning the wallpaper off and on keeps this number.
             prefs.setTerminalBackgroundOpacity(clamped);

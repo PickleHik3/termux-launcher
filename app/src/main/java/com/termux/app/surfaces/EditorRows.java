@@ -62,10 +62,13 @@ public final class EditorRows {
         POSITION(Kind.SEGMENTS, R.string.appearance_row_position, R.drawable.ic_editor_position),
         STYLE(Kind.SEGMENTS, R.string.appearance_row_style, R.drawable.ic_style_floating),
         DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_symbol_dock_glass_tray),
-        BLUR(Kind.SLIDER, R.string.appearance_row_blur, R.drawable.ic_editor_blur),
+        /**
+         * Frost: blur and grain together along {@link GlassControls}' curve, the one glass slider
+         * the cards have (BLUR and GRAIN are still the stored properties underneath).
+         */
+        FROST(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         CORNERS(Kind.SLIDER, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
         MARGIN(Kind.SLIDER, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
-        GRAIN(Kind.SLIDER, R.string.appearance_row_grain, R.drawable.ic_editor_grain),
         DEPTH(Kind.SLIDER, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         SEARCH_FIELD(Kind.SWITCH, R.string.appearance_row_search_field, R.drawable.ic_symbol_search),
         APP_ICONS(Kind.SLIDER, R.string.appearance_row_app_icons, R.drawable.ic_symbol_apps),
@@ -127,14 +130,17 @@ public final class EditorRows {
             this.iconRes = iconRes;
         }
 
-        /** The surface property the row tunes on a surface's card, or null for any other row. */
+        /**
+         * The surface property the row tunes on a surface's card (and, on the Appearance card,
+         * the shared value), or null for any other row. Frost answers BLUR, the property that
+         * decides where it is held; it writes GRAIN beside it.
+         */
         @Nullable
         public SurfaceProperty property() {
             switch (this) {
                 case OPACITY: return SurfaceProperty.OPACITY;
                 case TINT: return SurfaceProperty.TINT;
-                case BLUR: return SurfaceProperty.BLUR;
-                case GRAIN: return SurfaceProperty.GRAIN;
+                case FROST: return SurfaceProperty.BLUR;
                 default: return null;
             }
         }
@@ -191,40 +197,42 @@ public final class EditorRows {
                     Row.LINK_GESTURES, Row.LINK_PAGES);
                 break;
             case STATUS:
-                add(out, 1, Row.OPACITY, Row.TINT, Row.VISIBLE, Row.POSITION);
-                add(out, 2, Row.BLUR, Row.CORNERS, Row.MARGIN, Row.CLOCK_12H, Row.CLOCK_FACE);
-                add(out, 3, Row.GRAIN);
-                if (offers.glassEdge) add(out, 3, Row.DEPTH);
+                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.VISIBLE, Row.POSITION);
+                add(out, 2, Row.CORNERS, Row.MARGIN, Row.CLOCK_12H, Row.CLOCK_FACE);
                 add(out, 3, Row.LINK_INDICATORS);
                 break;
             case TERMINAL:
-                add(out, 1, Row.OPACITY, Row.TINT, Row.TEXT_SIZE);
-                add(out, 2, Row.BLUR, Row.CORNERS, Row.MARGIN, Row.CONTRAST);
-                add(out, 3, Row.GRAIN, Row.CURSOR_TRAIL);
+                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE);
+                add(out, 2, Row.CORNERS, Row.MARGIN, Row.CONTRAST);
+                add(out, 3, Row.CURSOR_TRAIL);
                 if (offers.terminalEffect) add(out, 3, Row.EFFECT);
                 add(out, 3, Row.EDGE_COLOURS, Row.SPLIT_GAP, Row.LINK_FONT);
                 break;
             case DOCK:
-                add(out, 1, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.VISIBLE, Row.POSITION);
-                add(out, 2, Row.STYLE, Row.DESIGN, Row.BLUR, Row.CORNERS, Row.MARGIN);
-                add(out, 3, Row.GRAIN);
-                if (offers.glassEdge) add(out, 3, Row.DEPTH);
+                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.VISIBLE,
+                    Row.POSITION);
+                add(out, 2, Row.STYLE, Row.DESIGN, Row.CORNERS, Row.MARGIN);
                 add(out, 3, Row.SEARCH_FIELD, Row.APP_ICONS, Row.LINK_DOCK_ITEMS);
                 break;
             case KEYBOARD:
-                add(out, 1, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.VISIBLE);
-                add(out, 2, Row.KEYBOARD_THEME, Row.BLUR, Row.CORNERS, Row.MARGIN);
-                add(out, 3, Row.GRAIN, Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING,
-                    Row.FORM, Row.LINK_KEYBOARD_SIZE, Row.LINK_LAYOUTS);
+                // Key opacity stands beside Opacity, the pair the opacity link moves together.
+                add(out, 1, Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT, Row.KEY_CORNERS,
+                    Row.KEY_SPACING, Row.HEIGHT, Row.VISIBLE);
+                add(out, 2, Row.KEYBOARD_THEME, Row.CORNERS, Row.MARGIN);
+                add(out, 3, Row.FORM, Row.LINK_KEYBOARD_SIZE, Row.LINK_LAYOUTS);
                 break;
             case APPEARANCE:
             default:
-                add(out, 1, Row.LOOK, Row.WALLPAPER, Row.THEME);
-                add(out, 2, Row.ICON_PACK, Row.MONOCHROME, Row.TEXT_SIZE, Row.WALLPAPER_COLOURS,
-                    Row.CONTRAST, Row.FULL_SCREEN, Row.MINIMAL);
-                add(out, 3, Row.ALIGNMENT, Row.VIBRANCY, Row.TINT_HUE);
-                if (offers.glassEdge) add(out, 3, Row.DEPTH, Row.GLASS_EDGE);
-                add(out, 3, Row.TOOL_COLOURS);
+                // All surfaces: the shared glass, the glass edge where it is drawn, and the
+                // shared text size, in the order the Look page's Custom row had them.
+                add(out, 1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT);
+                if (offers.glassEdge) add(out, 1, Row.GLASS_EDGE);
+                add(out, 1, Row.VIBRANCY);
+                if (offers.glassEdge) add(out, 1, Row.DEPTH);
+                add(out, 1, Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME);
+                add(out, 2, Row.ICON_PACK, Row.MONOCHROME, Row.WALLPAPER_COLOURS, Row.CONTRAST,
+                    Row.FULL_SCREEN, Row.MINIMAL);
+                add(out, 3, Row.ALIGNMENT, Row.TINT_HUE, Row.TOOL_COLOURS);
                 break;
         }
         return Collections.unmodifiableList(out);
@@ -249,7 +257,8 @@ public final class EditorRows {
     /**
      * The half a row of {@code card} writes while the frame shows {@code frameHalf}, or null
      * where it writes one value for the wall (ADR 0013 §4): the per-half glass numbers of the
-     * dock, the status bar and the keyboard, and the Look slider, follow the frame; the terminal's
+     * dock, the status bar and the keyboard, the Look slider and the shared glass the
+     * Appearance card's Frost, Opacity and Tint write, follow the frame; the terminal's
      * numbers (it stands on the Workspace alone), corners, margins, heights, places, the Dock's
      * style and design, and every app-wide choice do not.
      */
@@ -257,7 +266,7 @@ public final class EditorRows {
     public static WallHalf halfFor(@NonNull EditorCard card, @NonNull Row row,
                                    @NonNull WallHalf frameHalf) {
         if (card == EditorCard.APPEARANCE)
-            return row == Row.LOOK ? frameHalf : null;
+            return row == Row.LOOK || row.property() != null ? frameHalf : null;
         SurfaceProperty property = row.property();
         if (card.slot == null || property == null)
             return null;

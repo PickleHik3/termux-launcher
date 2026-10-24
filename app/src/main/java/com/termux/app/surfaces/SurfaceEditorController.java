@@ -1681,20 +1681,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (prefs == null || card == null)
                 return 0;
             switch (row) {
+                case FROST: return frostValue(prefs, card);
                 case OPACITY:
-                case TINT:
-                case BLUR:
-                case GRAIN: {
+                case TINT: {
                     SurfaceProperty property = row.property();
-                    if (card.slot == null || property == null)
+                    if (property == null)
                         return 0;
-                    int stored = prefs.getSurfaceValue(card.slot, property, readHalf(row));
-                    switch (row) {
-                        case OPACITY: return AppearanceLooks.opacityPercent(stored);
-                        case TINT: return AppearanceLooks.tintPercent(stored);
-                        case BLUR: return AppearanceLooks.blurDp(stored);
-                        default: return AppearanceLooks.grainPercent(stored);
-                    }
+                    // The Appearance card's are the shared glass of the half the frame shows.
+                    int stored = card.slot == null
+                        ? prefs.getSurfaceBaseValue(property, readHalf(row))
+                        : prefs.getSurfaceValue(card.slot, property, readHalf(row));
+                    return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
+                        : AppearanceLooks.tintPercent(stored);
                 }
                 case HEIGHT:
                     if (card == EditorCard.KEYBOARD)
@@ -1825,10 +1823,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public int to(@NonNull Row row) {
             switch (row) {
+                case FROST: return Control.GLASS.max;
                 case OPACITY: return AppearanceLooks.OPACITY_MAX;
                 case TINT: return AppearanceLooks.TINT_MAX;
-                case BLUR: return AppearanceLooks.BLUR_MAX_DP;
-                case GRAIN: return AppearanceLooks.GRAIN_MAX;
                 case HEIGHT:
                     if (mCard == EditorCard.KEYBOARD)
                         return Math.round(TermuxPreferenceConstants.TERMUX_APP
@@ -1863,9 +1860,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @NonNull @Override public String readout(@NonNull Row row, int value) {
             switch (row) {
+                case FROST:
                 case OPACITY:
                 case TINT:
-                case GRAIN:
                 case DEPTH:
                 case TEXT_SIZE:
                 case ICON_SIZE:
@@ -1877,7 +1874,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return mCard == EditorCard.KEYBOARD
                         ? getString(R.string.appearance_readout_percent, value)
                         : getString(R.string.appearance_readout_dp, value);
-                case BLUR:
                 case CORNERS:
                 case MARGIN:
                 case SPLIT_GAP:
@@ -1904,8 +1900,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 || !EditorRows.marksOwnValue(card, row))
                 return false;
             SurfaceProperty property = row.property();
-            return property != null
-                && !prefs.isSurfaceInheriting(card.slot, property, readHalf(row));
+            if (property == null)
+                return false;
+            WallHalf half = readHalf(row);
+            // Frost is the surface's own while either of the pair it writes is.
+            if (row == Row.FROST)
+                return !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.BLUR, half)
+                    || !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.GRAIN, half);
+            return !prefs.isSurfaceInheriting(card.slot, property, half);
         }
 
         @Override public boolean enabled(@NonNull Row row) {
@@ -2069,13 +2071,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || card == null)
             return;
         switch (row) {
+            case FROST:
+                // Each radius re-blurs the frames: a drag holds that for its release.
+                holdFrameBakesForDrag();
+                writeFrost(card, value);
+                break;
             case OPACITY:
             case TINT:
-            case BLUR:
-            case GRAIN:
                 // Each value re-bakes the blurred frames: a drag holds that for its release.
                 holdFrameBakesForDrag();
-                if (!writeLinkedOpacity(row, value, dragging))
+                if (card.slot == null)
+                    writeShared(row, value);
+                else if (!writeLinkedOpacity(row, value, dragging))
                     writeSurface(card, row, value);
                 break;
             case HEIGHT:
@@ -2372,13 +2379,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int scopes = SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD;
         switch (property) {
-            case BLUR:
-                written = AppearanceLooks.blurDp(value);
-                scopes |= SurfaceEditorProperties.PREVIEW_BLUR;
-                break;
-            case GRAIN:
-                written = AppearanceLooks.grainPercent(value);
-                break;
             case TINT:
                 written = AppearanceLooks.tintPercent(value);
                 break;
@@ -2390,6 +2390,73 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY)
             prefs.setTerminalBackgroundOpacity(written);
         requestPreview(scopes);
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && !mSliderDragActive) {
+            sheet.restate(row);
+            sheet.restate(Row.LOOK);
+        }
+    }
+
+    /**
+     * Where Frost stands on {@code card}: the shared glass of the frame's half on the Appearance
+     * card, else the surface's own pair. The position it was left at reads back while the pair is
+     * still that position's ({@link GlassControls#readBack}).
+     */
+    private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
+        WallHalf half = readHalf(Row.FROST);
+        if (card.slot == null)
+            return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+        return GlassControls.readBack(prefs.getSurfaceGlassPosition(card.slot),
+            prefs.getSurfaceValue(card.slot, SurfaceProperty.BLUR, half),
+            prefs.getSurfaceValue(card.slot, SurfaceProperty.GRAIN, half));
+    }
+
+    /**
+     * Frost: blur and grain together along {@link GlassControls}' curve, and the position it was
+     * left at. On the Appearance card it is the shared glass of the frame's half, every surface on
+     * that half put back on it ({@link GlobalGlass}); on a surface's card, that surface's own
+     * pair on the half, as the previous editor's Frost wrote it for a tapped element.
+     */
+    private void writeFrost(@NonNull EditorCard card, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int glass = Control.GLASS.clamp(value);
+        int blur = GlassControls.blurForGlass(glass);
+        int grain = GlassControls.grainForGlass(glass);
+        WallHalf half = writeHalf(Row.FROST);
+        prefs.setSurfaceGlassPosition(card.slot, glass);
+        if (card.slot == null) {
+            GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
+            GlobalGlass.write(prefs, SurfaceProperty.GRAIN, half, grain);
+        } else {
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.BLUR, half, blur);
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.GRAIN, half, grain);
+        }
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+        restateGlassRow(Row.FROST);
+    }
+
+    /**
+     * The Appearance card's Opacity or Tint: the shared value of the frame's half, every surface
+     * on that half put back on it ({@link GlobalGlass}).
+     */
+    private void writeShared(@NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        SurfaceProperty property = row.property();
+        if (prefs == null || property == null)
+            return;
+        GlobalGlass.write(prefs, property, writeHalf(row), value);
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
+        restateGlassRow(row);
+    }
+
+    /** A glass row and the Look slider read again, unless a drag holds restatement. */
+    private void restateGlassRow(@NonNull Row row) {
         EditorCardSheet sheet = mSheet;
         if (sheet != null && !mSliderDragActive) {
             sheet.restate(row);

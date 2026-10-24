@@ -61,10 +61,10 @@
     <string name="appearance_row_position">Position</string>
     <string name="appearance_row_style">Style</string>
     <string name="appearance_row_design">Design</string>
-    <string name="appearance_row_blur">Blur</string>
+    <!-- Clear to frosted: how much the glass blurs what is behind it, and its grain with it. -->
+    <string name="appearance_row_frost">Frost</string>
     <string name="appearance_row_corners">Corners</string>
     <string name="appearance_row_margin">Margin</string>
-    <string name="appearance_row_grain">Grain</string>
     <string name="appearance_row_depth">Depth</string>
     <string name="appearance_row_search_field">Search field</string>
     <string name="appearance_row_app_icons">App count</string>
@@ -110,7 +110,8 @@
     <string name="appearance_row_alignment">Alignment</string>
     <string name="appearance_row_vibrancy">Vibrancy</string>
     <string name="appearance_row_tint_hue">Tint colour</string>
-    <string name="appearance_row_glass_edge">Glass edge</string>
+    <!-- The coloured light along the glass's edge, from none to bold. -->
+    <string name="appearance_row_glass_edge">Edge</string>
     <string name="appearance_row_tool_colours">Tool colours</string>
     <!-- The dot after a row's label, as accessibility reads it. -->
     <string name="appearance_row_own_value">Set here</string>
