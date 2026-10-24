@@ -111,8 +111,9 @@ final class HiddenStackView extends FrameLayout {
     }
 
     /**
-     * Shows {@code items} (top to bottom) as cards {@code cardHeightPx} tall, the column
-     * starting at {@code topPx} with the stack resting on its bottom, the stack {@code leftPx} from the view's left; every label at {@code labelPx};
+     * Shows {@code items} (top to bottom) as cards {@code cardHeightPx} tall in a column from
+     * {@code topPx} down {@code zoneHeightPx}, the stack resting on its bottom, {@code leftPx}
+     * from the view's left; every label at {@code labelPx};
      * the drop zone {@code zoneHeightPx} tall under the same column.
      */
     void set(@NonNull List<HiddenItem> items, int leftPx, int topPx, int cardHeightPx,
