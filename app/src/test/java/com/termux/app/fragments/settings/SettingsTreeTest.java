@@ -93,6 +93,8 @@ public class SettingsTreeTest {
         {"LauncherPreferencesFragment", "app_launcher_builtin_widget_style"},
         {"LauncherPreferencesFragment", "app_launcher_set_home"},
         {"LauncherPreferencesFragment", "app_launcher_help"},
+        {"GeneralPreferencesFragment", "app_launcher_help"},
+        {"TerminalTextPreferencesFragment", "fullscreen"},
         {"LauncherPreferencesFragment", "app_haptics_enabled"},
         {"LauncherPreferencesFragment", "app_launcher_most_used_page"},
         {"LauncherDockPreferencesFragment", "app_launcher_default_buttons"},

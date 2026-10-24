@@ -77,6 +77,12 @@ public class SettingsFragmentAliasesTest {
     @Test
     public void keyboardGainsItsLook() {
         PreferenceScreen keyboard = screen(launch(KeyboardPreferencesFragment.class));
+        // The hardware keyboard has its own group; the extra keys group holds extra keys only.
+        androidx.preference.PreferenceGroup hardware = keyboard.findPreference("keyboard_hardware");
+        assertNotNull(hardware.findPreference("keyboard_sub_hardware"));
+        androidx.preference.PreferenceGroup extraKeys = keyboard.findPreference("keyboard_terminal_hardware");
+        assertEquals(2, extraKeys.getPreferenceCount());
+        assertNull(extraKeys.findPreference("keyboard_sub_hardware"));
         assertNotNull(keyboard.findPreference("keyboard_input_method"));
         assertEquals(KeyboardLayoutPreferencesFragment.class.getName(),
             keyboard.findPreference("keyboard_sub_layout").getFragment());
@@ -139,10 +145,13 @@ public class SettingsFragmentAliasesTest {
         PreferenceScreen general = screen(launch(GeneralPreferencesFragment.class));
         for (String key : new String[] {"app_haptics_enabled", "app_launcher_row_haptics",
             "in_app_keyboard_haptics_enabled", "performance_link", "backup_restore",
-            "services_permissions", "advanced_diagnostics", "about_support", "app_launcher_help",
+            "services_permissions", "advanced_diagnostics", "about_support",
             "app_launcher_set_home", "show_in_recents_when_not_default"}) {
             assertNotNull(key, general.findPreference(key));
         }
+        assertNull("Help folded into About & help", general.findPreference("app_launcher_help"));
+        assertNotNull(screen(launch(com.termux.app.fragments.settings.AboutSupportPreferencesFragment.class))
+            .findPreference("app_launcher_help"));
     }
 
     @Test

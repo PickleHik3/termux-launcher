@@ -73,7 +73,7 @@ public class TerminalPreferencesFragmentTest {
             assertTrue(key, windows.findPreference(key) instanceof SwitchPreferenceCompat);
         }
         PreferenceScreen text = launch(TerminalTextPreferencesFragment.class).getPreferenceScreen();
-        assertTrue(text.findPreference("fullscreen") instanceof SwitchPreferenceCompat);
+        assertNull("Full screen is the Appearance editor's", text.findPreference("fullscreen"));
         assertTrue(text.findPreference("terminal_padding_fill") instanceof SwitchPreferenceCompat);
         assertTrue(text.findPreference("terminal_cursor_trail_style") != null);
         PreferenceScreen clipboard = launch(TerminalClipboardPreferencesFragment.class).getPreferenceScreen();

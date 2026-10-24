@@ -39,6 +39,11 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         url("discord", TermuxConstants.TERMUX_LAUNCHER_DISCORD_URL);
         url("report_issue", "https://github.com/PickleHik3/termux-launcher/issues");
         url("source_code", "https://github.com/PickleHik3/termux-launcher");
+        // Help: an ordinary screen on top of this one, so Back comes back to Settings.
+        click("app_launcher_help", preference -> {
+            startActivity(com.termux.app.help.HelpActivity.intent(context, null, null, null));
+            return true;
+        });
         configureAbout(context);
         configureWhatsNew(context);
         configureTourReplay(context);

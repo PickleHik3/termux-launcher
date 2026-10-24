@@ -53,5 +53,11 @@
         app:persistent="false"
         app:title="@string/settings_pinned_icon_pack_title"
         app:summary="@string/termux_app_launcher_pinned_icon_pack_summary" />
+    <!-- From Terminal › Text & display. -->
+    <Preference
+        app:key="fullscreen"
+        app:persistent="false"
+        app:title="@string/settings_full_screen_title"
+        app:summary="@string/termux_fullscreen_summary" />
 
 </PreferenceScreen>

@@ -303,8 +303,14 @@ public final class SettingsTree {
     @NonNull
     public static String redirect(@NonNull String className, @Nullable String scrollToKey) {
         String page = scrollToKey == null ? null : pageForMovedRow(className, scrollToKey);
-        return page != null ? PAGES + page : canonical(className);
+        if (page == null) return canonical(className);
+        // A page outside the termux package is named in full.
+        return page.startsWith(SETTINGS) ? page : PAGES + page;
     }
+
+    private static final String ABOUT = SETTINGS + "AboutSupportPreferencesFragment";
+    /** The Appearance door: a row the editor holds lands here, and the editor opens. */
+    private static final String APPEARANCE = "TermuxStylePreferencesFragment";
 
     @Nullable
     private static String pageForMovedRow(@NonNull String className, @NonNull String key) {
@@ -331,6 +337,7 @@ public final class SettingsTree {
                 return null;
             case "GeneralPreferencesFragment":
             case "AppBehaviorPreferencesFragment":
+                if (key.equals("app_launcher_help")) return ABOUT;
                 return key.equals("lazy_mode") || key.equals("low_memory_preset")
                     ? "PerformancePreferencesFragment" : null;
             case "LauncherPreferencesFragment":
@@ -343,9 +350,9 @@ public final class SettingsTree {
                     || key.equals("app_launcher_builtin_widget_style") || key.equals("app_launcher_drawer_enabled")
                     || key.equals("app_launcher_sub_lock"))
                     return "HomePreferencesFragment";
+                if (key.equals("app_launcher_help")) return ABOUT;
                 if (key.equals("app_haptics_enabled") || key.equals("app_launcher_row_haptics")
-                    || key.equals("show_in_recents_when_not_default") || key.equals("app_launcher_set_home")
-                    || key.equals("app_launcher_help"))
+                    || key.equals("show_in_recents_when_not_default") || key.equals("app_launcher_set_home"))
                     return "GeneralPreferencesFragment";
                 if (key.equals("app_launcher_notifications_link")) return "NotificationsPreferencesFragment";
                 return null;
@@ -368,7 +375,9 @@ public final class SettingsTree {
                         return "TerminalWindowsPreferencesFragment";
                     case "terminal_body_swipe":
                         return "HomePreferencesFragment";
-                    case "fullscreen": case "terminal_padding_fill": case "terminal_cursor_trail_style":
+                    case "fullscreen":
+                        return APPEARANCE;
+                    case "terminal_padding_fill": case "terminal_cursor_trail_style":
                     case "terminal_retro_effect": case "terminal_fonts":
                         return "TerminalTextPreferencesFragment";
                     case "terminal_osc52_clipboard_read_enabled": case "terminal_clipboard_cleanup":
@@ -385,6 +394,8 @@ public final class SettingsTree {
                     default:
                         return null;
                 }
+            case "TerminalTextPreferencesFragment":
+                return key.equals("fullscreen") ? APPEARANCE : null;
             case "TerminalWindowsPreferencesFragment":
                 return key.equals("terminal_body_swipe") ? "HomePreferencesFragment" : null;
             case "NotificationsPreferencesFragment":

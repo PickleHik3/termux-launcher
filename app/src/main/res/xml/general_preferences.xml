@@ -78,11 +78,6 @@
             app:title="@string/settings_destination_about_support"
             app:summary="@string/settings_destination_about_support_summary"
             app:fragment="com.termux.app.fragments.settings.AboutSupportPreferencesFragment" />
-        <Preference
-            app:key="app_launcher_help"
-            app:persistent="false"
-            app:title="@string/help_settings_title"
-            app:summary="@string/help_settings_summary" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="general_home_app" app:title="@string/settings_general_home_app_header">

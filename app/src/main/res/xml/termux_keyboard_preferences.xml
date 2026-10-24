@@ -66,6 +66,9 @@
             app:title="@string/settings_extra_keys_all_caps_title"
             app:summary="@string/settings_extra_keys_all_caps_summary"
             android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="keyboard_hardware" app:title="@string/settings_keyboard_sub_hardware_title">
         <Preference
             app:key="keyboard_sub_hardware"
             app:persistent="false"
