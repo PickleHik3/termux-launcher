@@ -13,6 +13,12 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-25 · drawer keyboard (commits "lay the stack out for a keyboard raised under the open
+  drawer", "reveal the built-in keyboard the open raised") · Built-in keyboard + Open keyboard
+  automatically: the keyboard shows all four rows right above the nav inset and the list's last row
+  clears it; on close the plane lands on the dock above the keyboard, then the keyboard goes down
+  with the dock, no hop; same on the Workspace where the pass resizes the terminal once; Floating
+  and Docked, no visible jump from the one pass under the plane · emulator.
 - 2026-10-24 · "fix(terminal): a pane under a terminal effect wears a bezel" · turn on CRT, CRT
   amber and TFT: every pane wears a frame (12 dp at the sides, 16 dp top and bottom, 10 dp inner
   corners) of its own glass with a hairline round the screen. Scanlines and bend stay inside the
