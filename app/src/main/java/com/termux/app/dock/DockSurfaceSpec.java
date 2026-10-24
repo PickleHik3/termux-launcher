@@ -19,8 +19,11 @@ import com.termux.app.chrome.GlassRefraction;
  * icons, the dashes floating just above the slab, and the shared glass work every later style
  * builds on. {@link #LENS_BEADS} keeps the tray's geometry but draws no slab: each icon sits on
  * a round bead of glass ({@link LensBeadGeometry}). {@link #WALL_STRIP} is the tray made
- * the expanded dock: a first row for the Workspace over the apps row, both on one tall slab. A
- * later style is one more constant here, and {@link #forStyle} picks it.</p>
+ * the expanded dock: a first row for the Workspace over the apps row, both on one tall slab.
+ * {@link #PEEK_GLASS} keeps the tray's row but cuts the slab to a card whose top edge runs
+ * through the icons' centres and whose bottom runs on past the screen's edge
+ * ({@link PeekGlassGeometry}), the icons' reflections fading down it. A later style is one more
+ * constant here, and {@link #forStyle} picks it.</p>
  *
  * <p>The Search field is no spec: it is a toggle the layout holds beside the design (#96), and
  * the slab carries it under the apps row with any design, as much of it as {@link
@@ -35,7 +38,7 @@ public final class DockSurfaceSpec {
      * layout pass that names no surface gets; no Dock design draws it.
      */
     @NonNull public static final DockSurfaceSpec PLAIN =
-        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false);
+        new DockSurfaceSpec("plain", false, 0f, 0f, false, false, false, false);
 
     /**
      * Home's Glass tray. Its glass numbers are the program's own constants, so the spec says only
@@ -43,7 +46,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec GLASS_TRAY =
         new DockSurfaceSpec("glass_tray", true, GlassRefraction.SOFT_RIM_DP, 1f, true, false,
-            false);
+            false, false);
 
     /**
      * Home's Lens beads: the tray's row geometry (dashes above, equal air) with no slab; each icon
@@ -53,7 +56,7 @@ public final class DockSurfaceSpec {
      */
     @NonNull public static final DockSurfaceSpec LENS_BEADS =
         new DockSurfaceSpec("lens_beads", true, GlassRefraction.BEAD_SOFT_RIM_DP, 1f, true, true,
-            false);
+            false, false);
 
     /**
      * Home's Wall strip, the expanded dock: the tray's glass (dashes above, equal air, soft rim,
@@ -61,7 +64,20 @@ public final class DockSurfaceSpec {
      * clock and the terminals as tiles, {@link DockLayout#wallStripBandPx}) over the apps row.
      */
     @NonNull public static final DockSurfaceSpec WALL_STRIP =
-        new DockSurfaceSpec("wall_strip", true, GlassRefraction.SOFT_RIM_DP, 1f, true, false, true);
+        new DockSurfaceSpec("wall_strip", true, GlassRefraction.SOFT_RIM_DP, 1f, true, false, true,
+            false);
+
+    /**
+     * Home's Peek glass: the tray's row geometry (dashes above, equal air), the slab cut to a card
+     * that rises from the screen's bottom edge with its top edge through the icons' centres
+     * ({@link PeekGlassGeometry}), the tray's soft rim on its top and sides. The card's lower
+     * edge is never seen (it runs on under the gesture pill), so it wears no shelf and casts no
+     * shadow. Where the card cannot be drawn (Floating, another band or the keyboard on the
+     * dock's glass, the Search field under the row) the dock draws the tray's slab.
+     */
+    @NonNull public static final DockSurfaceSpec PEEK_GLASS =
+        new DockSurfaceSpec("peek_glass", true, GlassRefraction.SOFT_RIM_DP, 0f, false, false,
+            false, true);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -88,10 +104,15 @@ public final class DockSurfaceSpec {
      * of it is laid out is {@link DockLayoutPolicy.DockInputs#wallStripReveal}.
      */
     public final boolean wallStrip;
+    /**
+     * The slab is cut to the Peek glass card: its top edge through the icons' centres, inset from
+     * the screen's sides, running on past the bottom edge ({@link PeekGlassGeometry}).
+     */
+    public final boolean peek;
 
     private DockSurfaceSpec(@NonNull String name, boolean dashesAboveSlab, float softRimDp,
                             float shelf, boolean contactShadow, boolean beads,
-                            boolean wallStrip) {
+                            boolean wallStrip, boolean peek) {
         this.name = name;
         this.dashesAboveSlab = dashesAboveSlab;
         this.softRimDp = softRimDp;
@@ -99,6 +120,7 @@ public final class DockSurfaceSpec {
         this.contactShadow = contactShadow;
         this.beads = beads;
         this.wallStrip = wallStrip;
+        this.peek = peek;
     }
 
     /**
@@ -112,6 +134,8 @@ public final class DockSurfaceSpec {
                 return LENS_BEADS;
             case WALL_STRIP:
                 return WALL_STRIP;
+            case PEEK_GLASS:
+                return PEEK_GLASS;
             case GLASS_TRAY:
             default:
                 return GLASS_TRAY;

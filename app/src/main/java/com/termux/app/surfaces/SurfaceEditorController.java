@@ -1969,9 +1969,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The Dock designs' names and glyphs, in {@link DockStyle#CHOICES} order. */
     private static final int[] DESIGN_LABELS = {R.string.layout_editor_dock_style_glass_tray,
-        R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip};
+        R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
+        R.string.layout_editor_dock_style_peek_glass};
     private static final int[] DESIGN_ICONS = {R.drawable.ic_symbol_dock_glass_tray,
-        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip};
+        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
+        R.drawable.ic_symbol_dock_peek_glass};
 
     /** The keyboard's forms, as the Type segments name them. */
     private static final PlaceLayout.KeyboardForm[] FORMS = {PlaceLayout.KeyboardForm.DOCKED,

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The dock's own strings: its designs and their knobs. -->
+<resources>
+    <!-- The Peek glass design's chip in the Dock card's Design row (working name; the design is
+         DockStyle.PEEK_GLASS, stored as peek_glass whatever it is called here). -->
+    <string name="layout_editor_dock_style_peek_glass">Peek</string>
+    <!-- The Dock card's Reflection slider: how strongly the icons' reflections show on the Peek
+         glass card, 0 is off. -->
+    <string name="appearance_row_reflection">Reflection</string>
+    <!-- Under the Reflection slider while another design than Peek glass is picked. -->
+    <string name="appearance_row_reflection_peek_only">Peek glass only</string>
+</resources>
