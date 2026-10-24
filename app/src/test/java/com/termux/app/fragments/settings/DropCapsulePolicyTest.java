@@ -6,26 +6,38 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.place.ChromeShape.Piece;
+import com.termux.app.place.ChromeShapeModel;
+import com.termux.app.place.Element;
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayout.KeyboardMode;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
 
 /**
- * The lifted element's drop capsules as arithmetic: one per slot, no two meeting, the rows
- * starting after a side strip wherever one shows, none past the phone, the tray left to the rail.
+ * The lifted element's drop targets as arithmetic (SPEC §3.6a items 5–7): a slim marker per
+ * slot, no two meeting, none past the phone, the rows starting after a side strip wherever one
+ * shows, the tray left to the rail; and the hovered slot's capsule the held element's own size
+ * there, a row's thickness on a row and a column's on a side.
  */
 public class DropCapsulePolicyTest {
 
     private static final float[] FRAME = {0f, 0f, 400f, 800f};
+    private static final float T = 4f;
     private static final float INSET = 2f;
+    private static final float E = 0.001f;
 
-    private static MiniatureDragPolicy.Slot slot(Edge edge, int index, float left, float top,
-                                                 float right, float bottom) {
-        return new MiniatureDragPolicy.Slot(edge, index, 0f, left, top, right, bottom);
+    private static MiniatureDragPolicy.Slot slot(Edge edge, int index, float line, float left,
+                                                 float top, float right, float bottom) {
+        return new MiniatureDragPolicy.Slot(edge, index, line, left, top, right, bottom);
     }
 
     private static MiniatureDragPolicy.Slot tray() {
@@ -33,129 +45,101 @@ public class DropCapsulePolicyTest {
     }
 
     /**
-     * The slots a canvas offers a bar that may stand anywhere: two gaps at the top, two at the
-     * bottom, one each side, the side strips reaching into the rows' corners, and the tray.
+     * The slots a canvas offers a bar that may stand anywhere: two gaps at the top (one on the
+     * phone's edge), two at the bottom, one each side, the side strips reaching into the rows'
+     * corners, and the tray.
      */
     private static List<MiniatureDragPolicy.Slot> everyEdge() {
         return Arrays.asList(
-            slot(Edge.TOP, 0, 40f, 0f, 360f, 20f),
-            slot(Edge.TOP, 1, 40f, 20f, 360f, 90f),
-            slot(Edge.BOTTOM, 0, 40f, 760f, 360f, 800f),
-            slot(Edge.BOTTOM, 1, 40f, 690f, 360f, 760f),
-            slot(Edge.LEFT, 0, 0f, 60f, 70f, 740f),
-            slot(Edge.RIGHT, 0, 330f, 60f, 400f, 740f),
+            slot(Edge.TOP, 0, 0f, 40f, 0f, 360f, 20f),
+            slot(Edge.TOP, 1, 40f, 40f, 20f, 360f, 90f),
+            slot(Edge.BOTTOM, 0, 800f, 40f, 760f, 360f, 800f),
+            slot(Edge.BOTTOM, 1, 720f, 40f, 690f, 360f, 760f),
+            slot(Edge.LEFT, 0, 30f, 0f, 60f, 70f, 740f),
+            slot(Edge.RIGHT, 0, 370f, 330f, 60f, 400f, 740f),
             tray());
     }
 
-    private static void assertClean(List<float[]> capsules) {
-        for (int i = 0; i < capsules.size(); i++) {
-            float[] a = capsules.get(i);
+    private static void assertClean(List<float[]> markers, float[] frame) {
+        for (int i = 0; i < markers.size(); i++) {
+            float[] a = markers.get(i);
             if (a == null) continue;
-            assertTrue("capsule " + i + " has room", a[2] > a[0] && a[3] > a[1]);
-            assertTrue("capsule " + i + " inside the frame",
-                a[0] >= FRAME[0] + INSET - 0.001f && a[1] >= FRAME[1] + INSET - 0.001f
-                    && a[2] <= FRAME[2] - INSET + 0.001f && a[3] <= FRAME[3] - INSET + 0.001f);
-            for (int j = i + 1; j < capsules.size(); j++) {
-                float[] b = capsules.get(j);
+            assertTrue("marker " + i + " has room", a[2] > a[0] && a[3] > a[1]);
+            assertTrue("marker " + i + " inside the frame",
+                a[0] >= frame[0] + INSET - E && a[1] >= frame[1] + INSET - E
+                    && a[2] <= frame[2] - INSET + E && a[3] <= frame[3] - INSET + E);
+            for (int j = i + 1; j < markers.size(); j++) {
+                float[] b = markers.get(j);
                 if (b == null) continue;
-                assertFalse("capsules " + i + " and " + j + " meet",
+                assertFalse("markers " + i + " and " + j + " meet",
                     DropCapsulePolicy.overlaps(a, b));
-                // Not even touching: one inset each side keeps them apart.
-                float gapX = Math.max(b[0] - a[2], a[0] - b[2]);
-                float gapY = Math.max(b[1] - a[3], a[1] - b[3]);
-                assertTrue("capsules " + i + " and " + j + " stand apart",
-                    Math.max(gapX, gapY) >= 2 * INSET - 0.001f);
             }
         }
     }
 
-    @Test
-    public void everySlotHasItsOwnCapsuleAndNoTwoMeet() {
-        List<MiniatureDragPolicy.Slot> slots = everyEdge();
-        List<float[]> capsules = DropCapsulePolicy.capsules(slots, FRAME, INSET);
-        assertEquals(slots.size(), capsules.size());
-        for (int i = 0; i < slots.size() - 1; i++)
-            assertNotNull("slot " + i + " is outlined", capsules.get(i));
-        assertNull("the tray is the rail's to draw", capsules.get(slots.size() - 1));
-        assertClean(capsules);
+    private static float thickness(float[] marker, Edge edge) {
+        return edge.isOnSide() ? marker[2] - marker[0] : marker[3] - marker[1];
     }
 
     @Test
-    public void rowsStartAfterTheSideStripsWhereTheyShow() {
+    public void everySlotHasASlimMarkerAndNoTwoMeet() {
         List<MiniatureDragPolicy.Slot> slots = everyEdge();
-        List<float[]> capsules = DropCapsulePolicy.capsules(slots, FRAME, INSET);
-        for (int i = 0; i < 4; i++) {
-            float[] row = capsules.get(i);
-            assertEquals("row " + i + " starts after the left strip", 70f + INSET, row[0], 0.001f);
-            assertEquals("row " + i + " ends before the right strip", 330f - INSET, row[2],
-                0.001f);
+        List<float[]> markers = DropCapsulePolicy.markers(slots, FRAME, T, INSET);
+        assertEquals(slots.size(), markers.size());
+        for (int i = 0; i < slots.size() - 1; i++) {
+            float[] marker = markers.get(i);
+            assertNotNull("slot " + i + " is marked", marker);
+            assertEquals("slot " + i + "'s marker is slim", T,
+                thickness(marker, slots.get(i).edge), E);
         }
-        // The strips themselves keep their whole height.
-        assertEquals(60f + INSET, capsules.get(4)[1], 0.001f);
-        assertEquals(740f - INSET, capsules.get(4)[3], 0.001f);
+        assertNull("the tray is the rail's to draw", markers.get(slots.size() - 1));
+        assertClean(markers, FRAME);
     }
 
     @Test
-    public void withNoSideStripTheRowsKeepTheirLength() {
-        List<MiniatureDragPolicy.Slot> slots = Arrays.asList(
-            slot(Edge.TOP, 0, 40f, 0f, 360f, 30f),
-            slot(Edge.BOTTOM, 0, 40f, 740f, 360f, 800f));
-        List<float[]> capsules = DropCapsulePolicy.capsules(slots, FRAME, INSET);
-        assertEquals(40f + INSET, capsules.get(0)[0], 0.001f);
-        assertEquals(360f - INSET, capsules.get(0)[2], 0.001f);
-        assertClean(capsules);
+    public void aMarkerStandsOnItsGapLineOrJustInsideTheFrame() {
+        List<float[]> markers = DropCapsulePolicy.markers(everyEdge(), FRAME, T, INSET);
+        // Between two bands: centred on the line.
+        assertEquals(40f - T / 2f, markers.get(1)[1], E);
+        assertEquals(40f + T / 2f, markers.get(1)[3], E);
+        // On the phone's own edge: moved in whole, not cut.
+        assertEquals(INSET, markers.get(0)[1], E);
+        assertEquals(800f - INSET, markers.get(2)[3], E);
     }
 
     @Test
-    public void aStripOnOneSideShortensTheRowsOnThatSideAlone() {
-        List<MiniatureDragPolicy.Slot> slots = Arrays.asList(
-            slot(Edge.TOP, 0, 40f, 0f, 360f, 30f),
-            slot(Edge.RIGHT, 0, 330f, 60f, 400f, 740f));
-        List<float[]> capsules = DropCapsulePolicy.capsules(slots, FRAME, INSET);
-        assertEquals(40f + INSET, capsules.get(0)[0], 0.001f);
-        assertEquals(330f - INSET, capsules.get(0)[2], 0.001f);
-        assertClean(capsules);
+    public void rowMarkersStartAfterTheSideStripsWhereTheyShow() {
+        List<float[]> markers = DropCapsulePolicy.markers(everyEdge(), FRAME, T, INSET);
+        for (int i = 0; i < 4; i++) {
+            float[] row = markers.get(i);
+            assertTrue("row " + i + " starts after the left strip", row[0] >= 70f + INSET - E);
+            assertTrue("row " + i + " ends before the right strip", row[2] <= 330f - INSET + E);
+        }
+        // The strips run their slot's length.
+        assertEquals(60f + INSET, markers.get(4)[1], E);
+        assertEquals(740f - INSET, markers.get(4)[3], E);
     }
 
     @Test
-    public void overlappingGapsOnOneEdgeAreCutApartHalfway() {
-        // Two thin bands leave two gaps whose regions overlap by 4px.
+    public void withNoSideStripTheRowsRunTheirSlotsLength() {
         List<MiniatureDragPolicy.Slot> slots = Arrays.asList(
-            slot(Edge.TOP, 0, 40f, 0f, 360f, 24f),
-            slot(Edge.TOP, 1, 40f, 20f, 360f, 60f));
-        List<float[]> capsules = DropCapsulePolicy.capsules(slots, FRAME, INSET);
-        assertEquals(22f - INSET, capsules.get(0)[3], 0.001f);
-        assertEquals(22f + INSET, capsules.get(1)[1], 0.001f);
-        assertClean(capsules);
+            slot(Edge.TOP, 0, 10f, 40f, 0f, 360f, 30f),
+            slot(Edge.BOTTOM, 0, 780f, 40f, 740f, 360f, 800f));
+        List<float[]> markers = DropCapsulePolicy.markers(slots, FRAME, T, INSET);
+        assertEquals(40f + INSET, markers.get(0)[0], E);
+        assertEquals(360f - INSET, markers.get(0)[2], E);
+        assertClean(markers, FRAME);
     }
 
     @Test
-    public void theTopAndTheBottomMeetingOnAShortPhoneAreCutApart() {
-        float[] shortFrame = {0f, 0f, 800f, 300f};
+    public void gapsOnOneLineAsAThinBandLeavesThemStillNeverMeet() {
         List<MiniatureDragPolicy.Slot> slots = Arrays.asList(
-            slot(Edge.TOP, 0, 0f, 0f, 800f, 180f),
-            slot(Edge.BOTTOM, 0, 0f, 140f, 800f, 300f));
-        List<float[]> capsules = DropCapsulePolicy.capsules(slots, shortFrame, INSET);
-        assertEquals(160f - INSET, capsules.get(0)[3], 0.001f);
-        assertEquals(160f + INSET, capsules.get(1)[1], 0.001f);
-        assertFalse(DropCapsulePolicy.overlaps(capsules.get(0), capsules.get(1)));
-    }
-
-    @Test
-    public void aSlotReachingPastThePhoneIsKeptInsideIt() {
-        List<MiniatureDragPolicy.Slot> slots = Arrays.asList(
-            slot(Edge.LEFT, 0, -20f, -10f, 60f, 820f));
-        float[] capsule = DropCapsulePolicy.capsules(slots, FRAME, INSET).get(0);
-        assertEquals(INSET, capsule[0], 0.001f);
-        assertEquals(INSET, capsule[1], 0.001f);
-        assertEquals(800f - INSET, capsule[3], 0.001f);
-    }
-
-    @Test
-    public void aSlotWithNoRoomLeftHasNoCapsule() {
-        List<MiniatureDragPolicy.Slot> slots = Arrays.asList(
-            slot(Edge.TOP, 0, 40f, 0f, 360f, 3f));
-        assertNull(DropCapsulePolicy.capsules(slots, FRAME, INSET).get(0));
+            slot(Edge.TOP, 0, 20f, 40f, 10f, 360f, 20f),
+            slot(Edge.TOP, 1, 20f, 40f, 20f, 360f, 40f));
+        List<float[]> markers = DropCapsulePolicy.markers(slots, FRAME, T, INSET);
+        assertNotNull(markers.get(0));
+        assertNotNull(markers.get(1));
+        assertClean(markers, FRAME);
     }
 
     @Test
@@ -163,12 +147,65 @@ public class DropCapsulePolicyTest {
         List<MiniatureDragPolicy.Slot> slots = new ArrayList<>();
         // Gaps whose regions overlap their neighbours, as thin bands leave them.
         for (int i = 0; i < 5; i++) {
-            slots.add(slot(Edge.TOP, i, 30f, i * 18f, 370f, i * 18f + 30f));
-            slots.add(slot(Edge.BOTTOM, i, 30f, 800f - i * 18f - 30f, 370f, 800f - i * 18f));
-            slots.add(slot(Edge.LEFT, i, i * 14f, 80f, i * 14f + 25f, 720f));
-            slots.add(slot(Edge.RIGHT, i, 400f - i * 14f - 25f, 80f, 400f - i * 14f, 720f));
+            slots.add(slot(Edge.TOP, i, i * 18f + 1f, 30f, i * 18f, 370f, i * 18f + 30f));
+            slots.add(slot(Edge.BOTTOM, i, 799f - i * 18f, 30f, 800f - i * 18f - 30f, 370f,
+                800f - i * 18f));
+            slots.add(slot(Edge.LEFT, i, i * 14f + 2f, i * 14f, 80f, i * 14f + 25f, 720f));
+            slots.add(slot(Edge.RIGHT, i, 398f - i * 14f, 400f - i * 14f - 25f, 80f,
+                400f - i * 14f, 720f));
         }
-        List<float[]> capsules = DropCapsulePolicy.capsules(slots, FRAME, INSET);
-        assertClean(capsules);
+        assertClean(DropCapsulePolicy.markers(slots, FRAME, T, INSET), FRAME);
+    }
+
+    // ---------------------------------------------------------------- the hovered capsule
+
+    private static final ChromeShapeModel.Thickness THICKNESS =
+        ChromeShapeModel.Thickness.of(40f, 50f, 60f, 70f, 30f, 24f, 50f, 45f, 200f);
+
+    /** Status on top, apps at the bottom, the A–Z index hidden; no extra keys, no keyboard. */
+    private static PlaceLayout azHidden() {
+        EnumMap<Element, com.termux.app.place.Slot> slots = new EnumMap<>(Element.class);
+        slots.put(Element.STATUS, com.termux.app.place.Slot.on(Edge.TOP, Element.STATUS));
+        slots.put(Element.APPS, com.termux.app.place.Slot.on(Edge.BOTTOM, Element.APPS));
+        slots.put(Element.AZ, com.termux.app.place.Slot.hiddenFrom(Edge.TOP, 1));
+        slots.put(Element.EXTRA_KEYS, com.termux.app.place.Slot.hiddenFrom(Edge.BOTTOM, 0));
+        return new PlaceLayout(slots, KeyboardMode.RESIZE, KeyboardForm.DOCKED, false, 4, 6);
+    }
+
+    private static ChromeShapeModel.Input input(LayoutStyle style) {
+        return ChromeShapeModel.input(azHidden(), style, 400f, 800f, THICKNESS)
+            .corners(12f).margin(8f).screenRadius(28f).paneGapCap(24f).build();
+    }
+
+    @Test
+    public void theHoveredCapsuleIsTheHeldElementsOwnSizeAtThatSlot() {
+        float[] frame = {10f, 20f, 410f, 820f};
+        for (LayoutStyle style : LayoutStyle.values()) {
+            Piece row = ChromeShapeModel.shapeIfDropped(input(style), Element.AZ, Edge.TOP, 1,
+                false);
+            float[] capsule = DropCapsulePolicy.hoveredCapsule(row.box, 10f, 20f, frame);
+            assertNotNull(capsule);
+            assertEquals(row.box.left + 10f, capsule[0], E);
+            assertEquals(row.box.top + 20f, capsule[1], E);
+            assertEquals(row.box.width(), capsule[2] - capsule[0], E);
+            assertEquals(style + ": a row's thickness on a row", 30f, capsule[3] - capsule[1], E);
+
+            Piece column = ChromeShapeModel.shapeIfDropped(input(style), Element.AZ, Edge.LEFT,
+                0, false);
+            float[] side = DropCapsulePolicy.hoveredCapsule(column.box, 10f, 20f, frame);
+            assertNotNull(side);
+            assertEquals(style + ": a column's thickness on a side", 24f, side[2] - side[0], E);
+            assertEquals(column.box.height(), side[3] - side[1], E);
+        }
+    }
+
+    @Test
+    public void aCapsuleIsKeptInsideTheFrame() {
+        com.termux.app.place.ChromeShape.Box past =
+            new com.termux.app.place.ChromeShape.Box(-10f, -5f, 120f, 30f);
+        float[] capsule = DropCapsulePolicy.hoveredCapsule(past, 0f, 0f, FRAME);
+        assertNotNull(capsule);
+        assertEquals(0f, capsule[0], E);
+        assertEquals(0f, capsule[1], E);
     }
 }
