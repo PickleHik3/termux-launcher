@@ -271,9 +271,10 @@ public final class LayoutCanvasView extends View {
     private static final int TILE_ALPHA = 140;
     /** The dashed placeholder a lifted bar leaves where it would land. */
     private static final int PLACEHOLDER_ALPHA = 60;
+    /** The light tint of the slot under the finger. */
     private static final int SLOT_HOVER_ALPHA = 60;
-    /** The gaps of the hovered edge that the finger is not on; enough to read, not to compete. */
-    private static final int GAP_LINE_ALPHA = 110;
+    /** The one inset every drop capsule stands inside its slot by ({@link DropCapsulePolicy}). */
+    private static final float CAPSULE_INSET_DP = 1.5f;
     /** A destination guide's dashed outline: quiet while selected, stronger while lifting. */
     private static final float GUIDE_STROKE_DP = 1f;
     private static final float GUIDE_LIFT_STROKE_DP = 1.5f;
@@ -3169,55 +3170,67 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * Every destination the lifted bar is accepted on, outlined in the primary along its guide
-     * rect only ({@link #guideRect}: the part of the edge's zone no other element stands in), and
-     * — on the edge under the finger — the gaps inside it: the one being dropped into filled, the
-     * others a thin line, all clipped to that guide so nothing crosses another element. Nothing
-     * here animates; the picture changes when the finger moves to another gap and not otherwise.
+     * Every slot the lifted bar is accepted on, as its own capsule ({@link DropCapsulePolicy}):
+     * dotted in the primary, and the one under the finger solid with a light tint of it. No two
+     * capsules meet, the rows stop where a side strip starts, and none runs past the phone.
+     * Nothing here animates; the picture changes when the finger moves to another slot.
      */
     private void drawSlots(@NonNull Canvas canvas) {
-        if (mSlots.isEmpty()) return;
+        List<float[]> capsules = capsules();
+        if (capsules.isEmpty()) return;
         int accent = accent();
-        float radius = slotRadiusPx();
-        MiniatureDragPolicy.Slot hoveredSlot = mHoverSlot;
-        Edge hovered = hoveredSlot == null ? null : hoveredSlot.edge;
         float stroke = dp(GUIDE_LIFT_STROKE_DP);
         mDashPaint.setPathEffect(mSlotDash);
         mDashPaint.setStrokeWidth(stroke);
         mDashPaint.setColor(accent);
-        // The bottom is two regions while the keyboard stands on it: the gaps over it, and the
-        // ones under it, outlined apart so the keyboard between them is not a target.
-        for (Edge edge : Edge.values()) {
-            for (boolean underKeyboard : new boolean[] {false, true}) {
-                if (!edgeRegion(edge, underKeyboard, mScratchRectA)) continue;
-                if (!guideRect(edge, mScratchRectA, mDraggedBar, mScratchRectA)) continue;
-                strokeGuide(canvas, mScratchRectA, radius, stroke, mDashPaint);
-            }
-        }
-        if (hovered == null || hoveredSlot.isTray()) return;
-        if (!edgeRegion(hovered, hoveredSlot.underKeyboard, mScratchRectA)
-            || !guideRect(hovered, mScratchRectA, mDraggedBar, mScratchRectA)) return;
-        int saved = canvas.save();
-        canvas.clipRect(mScratchRectA);
-        for (MiniatureDragPolicy.Slot slot : mSlots) {
-            if (!slot.sameGroup(hoveredSlot)) continue;
-            boolean under = slot == mHoverSlot;
-            if (under) {
-                mScratchRectB.set(slot.left, slot.top, slot.right, slot.bottom);
+        for (int i = 0; i < capsules.size(); i++) {
+            float[] capsule = capsules.get(i);
+            if (capsule == null) continue;
+            mScratchRectB.set(capsule[0], capsule[1], capsule[2], capsule[3]);
+            float radius = Math.min(slotRadiusPx(),
+                Math.min(mScratchRectB.width(), mScratchRectB.height()) / 2f);
+            if (mSlots.get(i) == mHoverSlot) {
                 mFillPaint.setColor(accent);
                 mFillPaint.setAlpha(SLOT_HOVER_ALPHA);
                 canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
                 mFillPaint.setAlpha(255);
+                mLinePaint.setColor(accent);
+                mLinePaint.setStrokeWidth(stroke);
+                strokeCapsule(canvas, mScratchRectB, radius, stroke, mLinePaint);
+            } else {
+                strokeCapsule(canvas, mScratchRectB, radius, stroke, mDashPaint);
             }
-            mLinePaint.setColor(accent);
-            mLinePaint.setAlpha(under ? 255 : GAP_LINE_ALPHA);
-            mLinePaint.setStrokeWidth(dp(under ? 2f : 1.2f));
-            if (hovered.isOnSide())
-                canvas.drawLine(slot.line, slot.top, slot.line, slot.bottom, mLinePaint);
-            else canvas.drawLine(slot.left, slot.line, slot.right, slot.line, mLinePaint);
         }
-        mLinePaint.setAlpha(255);
-        canvas.restoreToCount(saved);
+    }
+
+    /** A capsule's line drawn inside its rect, so nothing of it lies past the capsule. */
+    private void strokeCapsule(@NonNull Canvas canvas, @NonNull RectF capsule, float radius,
+                               float stroke, @NonNull Paint paint) {
+        mScratchRectC.set(capsule);
+        mScratchRectC.inset(stroke / 2f, stroke / 2f);
+        if (mScratchRectC.isEmpty()) return;
+        float r = Math.max(0f, radius - stroke / 2f);
+        canvas.drawRoundRect(mScratchRectC, r, r, paint);
+    }
+
+    /** The slots the capsules were last worked out for, and the capsules, one per slot. */
+    private final List<MiniatureDragPolicy.Slot> mCapsuleSlots = new ArrayList<>();
+    private List<float[]> mCapsules = new ArrayList<>();
+
+    /**
+     * The lifted bar's capsules, one per slot of {@link #mSlots} in its order (null for the tray
+     * and for a slot with no room), worked out again only when the slots change.
+     */
+    @NonNull
+    @VisibleForTesting
+    List<float[]> capsules() {
+        if (!mSlots.equals(mCapsuleSlots)) {
+            mCapsuleSlots.clear();
+            mCapsuleSlots.addAll(mSlots);
+            mCapsules = DropCapsulePolicy.capsules(mSlots, new float[] {mFrameRect.left,
+                mFrameRect.top, mFrameRect.right, mFrameRect.bottom}, dp(CAPSULE_INSET_DP));
+        }
+        return mCapsules;
     }
 
     /**
@@ -3306,8 +3319,9 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The guides drawn now, in view pixels: the lifted bar's accepted destinations while one is
-     * in the air, otherwise the selected bar's. For a test to read.
+     * The guides, in view pixels: the selected bar's, which are drawn; while a bar is in the air,
+     * the guides of its accepted destinations, which are drawn as capsules instead
+     * ({@link #capsules}). For a test to read.
      */
     @NonNull
     @VisibleForTesting
@@ -3331,10 +3345,6 @@ public final class LayoutCanvasView extends View {
      * One edge's gaps on one side of the keyboard as the single region they cover, or false while
      * that side offers none. Only the bottom has an under side.
      */
-    private boolean edgeRegion(@NonNull Edge edge, boolean underKeyboard, @NonNull RectF out) {
-        return edgeRegion(mSlots, edge, underKeyboard, out);
-    }
-
     private static boolean edgeRegion(@NonNull List<MiniatureDragPolicy.Slot> slots,
                                       @NonNull Edge edge, boolean underKeyboard,
                                       @NonNull RectF out) {
