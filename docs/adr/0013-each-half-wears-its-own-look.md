@@ -13,13 +13,15 @@ darkened with it. A home screen and a working screen have different jobs: Home w
 wallpaper, the Workspace wants contrast behind text. One value cannot serve both.
 
 We decided that look values are held per half of the wall. The Look slider, and the opacity,
-tint, blur, grain, corner radius and margin of the dock, status bar and keyboard, may each differ
-between Home and the Workspace. The terminal is only on the Workspace and Home's own look only on
+tint, blur and grain of the dock, status bar and keyboard, may each differ between Home and the
+Workspace. Corner radius and margin are shapes (0007, 0011) and stay shared. The terminal is only on the Workspace and Home's own look only on
 Home, so they need no half.
 
 1. **One chrome, two dresses.** The dock, status bar and keyboard stay one element each (0009).
    Their look is part of the Dress, and the Dress already morphs with the wall's offset over a
-   crossing (0012 §3), so a differing opacity or tint crosses the same way as a differing icon size.
+   crossing (0012 §3), so a differing opacity or tint crosses the same way as a differing icon size:
+   glass is rebuilt as drawables, so the stack changes look while it dips rather than easing per
+   frame, and the status bar changes at the landing.
 2. **Equal until touched.** Every install, new or upgraded, starts with both halves equal: the old
    single value becomes the value of both. A user who never edits on one half never sees a
    difference.
