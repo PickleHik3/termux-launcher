@@ -105,6 +105,34 @@ public class SettingsSectionChipsTest {
     }
 
     @Test
+    public void revealScrollsJustEnoughToShowAChipWithItsGutter() {
+        // A 400px row scrolled to 0, chips in content coordinates, a 40px gutter.
+        assertEquals("a chip already in view does not move the row",
+            0, SettingsSectionChips.revealScrollX(0, 400, 100, 200, 40));
+        assertEquals("the last chip lands one gutter in from the end",
+            240, SettingsSectionChips.revealScrollX(0, 400, 500, 600, 40));
+        assertEquals("a chip off the start comes back one gutter in",
+            60, SettingsSectionChips.revealScrollX(300, 400, 100, 200, 40));
+        assertEquals(0, SettingsSectionChips.revealScrollX(300, 400, 20, 80, 40));
+    }
+
+    @Test
+    public void theChipRowEndsOneGutterPastItsLastChip() {
+        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
+        ChipGroup group = chipGroup(fragment);
+        View row = fragment.getSectionChipsRow();
+        // Narrow enough that the chips run past the edge and the row scrolls.
+        row.measure(View.MeasureSpec.makeMeasureSpec(200, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        row.layout(0, 0, 200, row.getMeasuredHeight());
+        assertTrue("the chips overflow the row", group.getWidth() > 200);
+        View last = group.getChildAt(group.getChildCount() - 1);
+        int gutter = row.getResources().getDimensionPixelSize(R.dimen.settings_gutter);
+        assertEquals("scrolled to the end, the last chip keeps a gutter after it",
+            last.getRight() + gutter, group.getWidth());
+    }
+
+    @Test
     public void chipsAreAbsentOnAShortSectionPage() {
         KeyboardHardwarePreferencesFragment fragment = launch(KeyboardHardwarePreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();

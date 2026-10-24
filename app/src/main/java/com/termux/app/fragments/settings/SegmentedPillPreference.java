@@ -2,7 +2,7 @@ package com.termux.app.fragments.settings;
 
 import android.content.Context;
 import android.content.res.TypedArray;
-import android.text.Layout;
+import android.text.StaticLayout;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,6 +12,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
@@ -51,8 +52,8 @@ public final class SegmentedPillPreference extends Preference {
     private CharSequence[] mLabelText = {null, null};
     private static final int MAX_SEGMENTS = 4;
     private String mValue = VALUE_DEFAULT;
-    /** True once a label did not fit on two lines side by side: the segments then stack full-width
-     *  so no label is cut or shrunk. Reset when the segment set changes. */
+    /** True once a label did not fit side by side ({@link #labelsDoNotFit}): the segments then
+     *  stack full-width so no label is cut or shrunk. Reset when the segment set changes. */
     private boolean mStacked;
 
     public SegmentedPillPreference(@NonNull Context context, AttributeSet attrs) {
@@ -186,11 +187,12 @@ public final class SegmentedPillPreference extends Preference {
         }
         group.setContentDescription(getTitle());
         applyStacking(group, buttons, mStacked);
-        if (!mStacked) group.post(() -> stackIfLabelsDoNotFit(group, buttons));
         int selected = selectedIndex();
         if (selected < 0) group.clearChecked();
         else group.check(buttons[selected].getId());
         updateCheckedIcons(buttons, selected);
+        // Fit is judged against the laid-out segment width, so it waits for the next layout.
+        group.post(() -> fitAfterLayout(group, buttons));
 
         MaterialButtonToggleGroup.OnButtonCheckedListener listener = (g, checkedId, isChecked) -> {
             if (!isChecked) return;
@@ -229,28 +231,61 @@ public final class SegmentedPillPreference extends Preference {
         }
     }
 
-    /** Whether a label that went through layout was cut off or wrapped too much to read well. */
+    /**
+     * Whether some label cannot sit in its segment side by side: wider than the segment's content
+     * width on one line (three or four segments), or more than two lines (two segments). The
+     * width a label gets is the segment less its own padding only; the check mark gives way
+     * ({@link #checkFits}) rather than pushing a label onto a second line. Segments not laid out
+     * yet are skipped.
+     */
     @VisibleForTesting
     static boolean labelsDoNotFit(@NonNull MaterialButton[] buttons, int segmentCount) {
         for (int i = 0; i < buttons.length && i < segmentCount; i++) {
-            Layout layout = buttons[i].getLayout();
-            if (layout == null) continue;
-            int lines = layout.getLineCount();
-            if (lines > 2) return true;
-            if (lines > 1 && segmentCount > 2) return true;
-            for (int line = 0; line < lines; line++) {
-                if (layout.getEllipsisCount(line) > 0) return true;
+            MaterialButton button = buttons[i];
+            int available = contentWidth(button);
+            if (available <= 0) continue;
+            CharSequence label = button.getText();
+            if (label == null || label.length() == 0) continue;
+            if (segmentCount > 2) {
+                if (button.getPaint().measureText(label, 0, label.length()) > available) return true;
+                continue;
             }
+            StaticLayout layout = StaticLayout.Builder
+                .obtain(label, 0, label.length(), button.getPaint(), available)
+                .build();
+            if (layout.getLineCount() > 2) return true;
         }
         return false;
     }
 
-    private void stackIfLabelsDoNotFit(@NonNull MaterialButtonToggleGroup group,
-                                       @NonNull MaterialButton[] buttons) {
-        if (mStacked || group.getWidth() == 0) return;
-        if (!labelsDoNotFit(buttons, mValues.length)) return;
-        mStacked = true;
-        applyStacking(group, buttons, true);
+    /** Whether the check mark and its padding fit beside the label on one line. */
+    @VisibleForTesting
+    static boolean checkFits(@NonNull MaterialButton button) {
+        int available = contentWidth(button);
+        if (available <= 0) return true;
+        CharSequence label = button.getText();
+        float text = label == null ? 0f : button.getPaint().measureText(label, 0, label.length());
+        return text + button.getIconSize() + button.getIconPadding() <= available;
+    }
+
+    /** The width a label gets: the segment less its own padding (no icon slot). 0 before layout. */
+    private static int contentWidth(@NonNull MaterialButton button) {
+        int width = button.getWidth();
+        if (width <= 0) return 0;
+        return width - button.getPaddingLeft() - button.getPaddingRight();
+    }
+
+    private void fitAfterLayout(@NonNull MaterialButtonToggleGroup group,
+                                @NonNull MaterialButton[] buttons) {
+        if (group.getWidth() == 0) return;
+        if (!mStacked && labelsDoNotFit(buttons, mValues.length)) {
+            mStacked = true;
+            applyStacking(group, buttons, true);
+            // The stacked segments are full width; the check is placed after that layout.
+            group.post(() -> updateCheckedIcons(buttons, selectedIndex()));
+            return;
+        }
+        updateCheckedIcons(buttons, selectedIndex());
     }
 
     private MaterialButton[] findButtons(@NonNull PreferenceViewHolder holder) {
@@ -271,8 +306,21 @@ public final class SegmentedPillPreference extends Preference {
         return -1;
     }
 
-    /** The check on the selected segment comes from Widget.Termux.Button.Segment's icon selector. */
+    /**
+     * Only the selected segment carries the check, and only when it fits beside the label; the
+     * others carry no icon at all, so their labels get the whole segment and sit centred. (The
+     * style's placeholder slot would take 22dp from every label.) Compares before setting, since
+     * a new icon relays the button out.
+     */
     private void updateCheckedIcons(@NonNull MaterialButton[] buttons, int selected) {
+        for (int i = 0; i < buttons.length && i < mValues.length; i++) {
+            MaterialButton button = buttons[i];
+            boolean wanted = i == selected && checkFits(button);
+            if (wanted == (button.getIcon() != null)) continue;
+            button.setIcon(wanted
+                ? AppCompatResources.getDrawable(button.getContext(), R.drawable.ic_symbol_check)
+                : null);
+        }
     }
 
     /** The lit segment, or -1 for {@link #VALUE_NONE}, where none of them is. */

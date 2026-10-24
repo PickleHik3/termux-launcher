@@ -90,6 +90,23 @@ public final class SettingsBackStackState {
     }
 
     /**
+     * The entries a reopen rebuilds: {@link #entriesForCurrentTree}, cut before the first editor
+     * (SettingsTree's {@code editor} screens, the Set up Linux apps guide among them). An editor is
+     * a task, not a place: a reopen lands on the page that opened it, never back inside it.
+     */
+    @NonNull
+    List<Entry> entriesToRestore() {
+        List<Entry> out = new ArrayList<>();
+        for (Entry entry : entriesForCurrentTree()) {
+            com.termux.app.fragments.settings.SettingsTree.Screen screen =
+                com.termux.app.fragments.settings.SettingsTree.find(entry.className);
+            if (screen != null && screen.editor) break;
+            out.add(entry);
+        }
+        return out;
+    }
+
+    /**
      * @return true when {@code nowEpochMs} is within {@link #RETAIN_WINDOW_MS} of the moment this
      * stack was saved. A negative gap (the saved timestamp is in the future, e.g. the device clock
      * was moved back) is treated as not fresh rather than trusted blindly.

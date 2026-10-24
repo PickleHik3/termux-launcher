@@ -2,14 +2,12 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_x11_group_touch">
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="touchMode"
-            app:title="@string/settings_x11_touch_mode_title"
-            android:defaultValue="1"
-            app:entries="@array/x11_touch_mode_entries"
-            app:entryValues="@array/x11_touch_mode_values" />
-    </PreferenceCategory>
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="touchMode"
+        app:title="@string/settings_x11_touch_mode_title"
+        android:defaultValue="1"
+        app:entries="@array/x11_touch_mode_entries"
+        app:entryValues="@array/x11_touch_mode_values" />
 
     <PreferenceCategory app:title="@string/settings_x11_group_keyboard">
         <SwitchPreferenceCompat

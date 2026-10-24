@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings;
 
 import android.view.View;
+import android.widget.HorizontalScrollView;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -280,13 +281,47 @@ public final class SettingsSectionChips {
         group.addView(createChip(group, allLabel, selected == null,
             () -> listener.onSectionSelected(null)));
 
+        Chip checked = null;
         for (PreferenceCategory section : sections) {
             CharSequence title = section.getTitle();
             // A section with no header (its only row names it) has nothing to jump to.
             if (title == null || title.length() == 0) continue;
-            group.addView(createChip(group, title, section.equals(selected),
-                () -> listener.onSectionSelected(section)));
+            Chip chip = createChip(group, title, section.equals(selected),
+                () -> listener.onSectionSelected(section));
+            if (chip.isChecked()) checked = chip;
+            group.addView(chip);
         }
+        // The rebuilt row keeps the picked chip whole on screen, the last one included, once it
+        // has been laid out.
+        if (checked != null && chipsRow instanceof HorizontalScrollView) {
+            HorizontalScrollView scroller = (HorizontalScrollView) chipsRow;
+            Chip reveal = checked;
+            scroller.post(() -> revealChip(scroller, group, reveal));
+        }
+    }
+
+    private static void revealChip(@NonNull HorizontalScrollView scroller, @NonNull ChipGroup group,
+                                   @NonNull Chip chip) {
+        if (chip.getParent() != group || chip.getWidth() == 0 || scroller.getWidth() == 0) return;
+        int target = revealScrollX(scroller.getScrollX(), scroller.getWidth(),
+            group.getLeft() + chip.getLeft(), group.getLeft() + chip.getRight(),
+            group.getPaddingEnd());
+        if (target != scroller.getScrollX()) scroller.scrollTo(target, 0);
+    }
+
+    /**
+     * The scroll offset that shows a chip spanning {@code [chipLeft, chipRight)} (row content
+     * coordinates) whole with {@code margin} beside it, moving as little as possible; the current
+     * offset when it already is. The row's own end padding is that margin, so the last chip
+     * lands one gutter in from the edge.
+     */
+    @VisibleForTesting
+    static int revealScrollX(int scrollX, int viewportWidth, int chipLeft, int chipRight, int margin) {
+        if (chipRight + margin > scrollX + viewportWidth) {
+            return Math.max(0, chipRight + margin - viewportWidth);
+        }
+        if (chipLeft - margin < scrollX) return Math.max(0, chipLeft - margin);
+        return scrollX;
     }
 
     private static Chip createChip(@NonNull ChipGroup group, @NonNull CharSequence label,

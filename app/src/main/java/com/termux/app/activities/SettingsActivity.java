@@ -398,8 +398,9 @@ public class SettingsActivity extends AppCompatActivity implements
                 .commit();
         }
 
-        // A stack saved before the restructure names pages that moved: replay it in today's tree.
-        for (SettingsBackStackState.Entry entry : saved.entriesForCurrentTree()) {
+        // A stack saved before the restructure names pages that moved: replay it in today's tree,
+        // stopping short of an editor (a reopen lands on the page that opened it).
+        for (SettingsBackStackState.Entry entry : saved.entriesToRestore()) {
             Class<?> fragmentClass;
             try {
                 fragmentClass = getClassLoader().loadClass(entry.className);

@@ -132,4 +132,29 @@ public class SettingsBackStackMigrationTest {
         assertEquals("saved against today's tree: replayed as it was", 3, parsed.entriesForCurrentTree().size());
         assertEquals(PAGES + "TaiPreferencesFragment", parsed.entriesForCurrentTree().get(0).className);
     }
+
+    @Test
+    public void aReopenNeverLandsInsideAnEditorButOnThePageThatOpenedIt() throws Exception {
+        // Linux apps, then the Set up Linux apps guide (an editor), saved against today's tree.
+        JSONArray entries = new JSONArray();
+        for (String name : new String[]{PAGES + "X11DisplayPreferencesFragment",
+            PAGES + "GuiAppsSetupGuideFragment", PAGES + "GraphicsAccelerationFragment"}) {
+            JSONObject entry = new JSONObject();
+            entry.put("class_name", name);
+            entry.put("title_res_id", 0);
+            entries.put(entry);
+        }
+        JSONObject root = new JSONObject();
+        root.put("stopped_at_epoch_ms", System.currentTimeMillis() - 1000);
+        root.put("tree_version", SettingsBackStackState.TREE_VERSION);
+        root.put("entries", entries);
+        RuntimeEnvironment.getApplication().getSharedPreferences(
+                TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION, Context.MODE_PRIVATE)
+            .edit().putString(SettingsActivity.PREFS_KEY_BACK_STACK_STATE, root.toString()).commit();
+
+        SettingsActivity activity = reopen();
+        assertEquals(PAGES + "X11DisplayPreferencesFragment", shown(activity));
+        assertEquals("one Back leaves Linux apps for the root",
+            1, activity.getSupportFragmentManager().getBackStackEntryCount());
+    }
 }
