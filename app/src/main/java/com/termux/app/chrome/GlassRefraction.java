@@ -899,11 +899,25 @@ public final class GlassRefraction {
         "    if (beads && inside < -1.0) {\n" +
         "        return half4(0.0);\n" +
         "    }\n" +
-        // The normal eases round the corner on an arc wider than the drawn one (1.5x, held under the
-        // half size), so the bend never snaps where two edges meet.
+        // The light's normal eases round the corner on an arc wider than the drawn one (1.5x,
+        // held under the half size), so the gathered light never snaps where two edges meet.
         "    float2 n = rectNormal(p, b, min(cr * 1.5, min(b.x, b.y)));\n" +
+        // Whether the slab moves (its lag) or tips (its tilt); both 0 at rest. Asked here, before
+        // the bend's normal, because a live band reaches deeper (see the live block below).
+        "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
+        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n" +
+        // Every band below is held at half the surface's short side, so a band shorter than its
+        // look's Edge width (a lone one-row strip) still bends to nothing on its centre line:
+        // the two halves' pulls point opposite ways there, and a pull left at the line tears the
+        // picture into a seam. The bend's normal eases round each corner on an arc at least as
+        // deep as the deepest band (bendNormalRadiusPx in Java), so wherever a pixel is still
+        // pulled the pull turns smoothly; snapped round a small corner, it mitred into a crease
+        // that ran in from each corner and met its twin at the centre line as a chevron.
+        "    float hs = min(b.x, b.y);\n" +
+        "    float reach = max(uBand, uSoftRim) * (1.0 + kShelfThick * uShelf) * (live ? 1.0 + kLagBand : 1.0);\n" +
+        "    float2 nb = rectNormal(p, b, min(max(cr * 1.5, reach), hs));\n" +
         // t runs 0 at the rim to 1 at the band's inner edge, and stays 1 across the face.
-        "    float t = clamp(inside / uBand, 0.0, 1.0);\n" +
+        "    float t = clamp(inside / min(uBand, hs), 0.0, 1.0);\n" +
         // The eased pull's width, and how far in from the outline this pixel is across it: 0 at
         // the outline, 1 from that width in.
         "    float rimW = max(kMinRimPx, kRimDp * uDensity);\n" +
@@ -923,7 +937,7 @@ public final class GlassRefraction {
         "    float softB = 0.0;\n" +
         "    float softS = 0.0;\n" +
         "    if (uSoftRim > 0.0) {\n" +
-        "        float lower = uShelf > 0.0 ? max(n.y, 0.0) * uShelf : 0.0;\n" +
+        "        float lower = uShelf > 0.0 ? max(nb.y, 0.0) * uShelf : 0.0;\n" +
         "        softB = max(uBand, uSoftRim) * (1.0 + kShelfThick * lower);\n" +
         // A bead's band is tight: its own width, or half the look's band when that is wider,
         // never past kBeadBandShare of the bead's radius, so the face keeps its middle. Its
@@ -932,6 +946,7 @@ public final class GlassRefraction {
         "        if (beads) {\n" +
         "            softB = min(max(uSoftRim, 0.5 * uBand), kBeadBandShare * cr) * (1.0 + kShelfThick * lower);\n" +
         "        }\n" +
+        "        softB = min(softB, hs);\n" +
         "        softS = min(uStrength * (1.0 + kShelfThick * lower), kSoftPull * softB);\n" +
         "        t = clamp(inside / softB, 0.0, 1.0);\n" +
         "        pull = softProfile(t) * min(softS, min(b.x, b.y)) * edge;\n" +
@@ -946,8 +961,6 @@ public final class GlassRefraction {
         // edge's normal, summed with the lag's lean and held to a whole one. tiltLean keeps the
         // tilt's part alone, for the gathered light below. Flat, uTilt is 0 and the lean is the
         // lag's, expression for expression. liveLean and tiltLean in Java.
-        "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
-        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n" +
         "    float2 bendV = float2(0.0, 0.0);\n" +
         "    float tiltLean = 0.0;\n" +
         "    float liveK = 0.0;\n" +
@@ -963,23 +976,23 @@ public final class GlassRefraction {
         // lag, a twentieth of a degree of tilt) moves it by a few thousandths at most. At 0 the light below
         // is the rest look's, expression for expression. glintWeight in Java.
         "        glintW = smoothstep(0.0, 1.0, liveK);\n" +
-        "        float lean = kLagLean * dot(n, uLag) / (kLagMaxDp * uDensity);\n" +
+        "        float lean = kLagLean * dot(nb, uLag) / (kLagMaxDp * uDensity);\n" +
         "        if (tilted) {\n" +
-        "            tiltLean = clamp(-kTiltLean * dot(n, uTilt), -1.0, 1.0);\n" +
+        "            tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n" +
         "            lean = lean + tiltLean;\n" +
         "        }\n" +
         "        lean = clamp(lean, -1.0, 1.0);\n" +
-        "        float tl = clamp(inside / (uBand * (1.0 + kLagBand * lean)), 0.0, 1.0);\n" +
+        "        float tl = clamp(inside / min(uBand * (1.0 + kLagBand * lean), hs), 0.0, 1.0);\n" +
         "        float bent = edgeProfile(tl) * min(uStrength * (1.0 + kLagBend * lean), min(b.x, b.y)) * edge;\n" +
         "        if (softB > 0.0) {\n" +
-        "            float sl = softB * (1.0 + kLagBand * lean);\n" +
+        "            float sl = min(softB * (1.0 + kLagBand * lean), hs);\n" +
         "            tl = clamp(inside / sl, 0.0, 1.0);\n" +
         "            bent = softProfile(tl) * min(min(softS * (1.0 + kLagBend * lean), kSoftPull * sl), min(b.x, b.y)) * edge;\n" +
         "        }\n" +
-        "        bendV = n * max(bent - pull, 0.0);\n" +
+        "        bendV = nb * max(bent - pull, 0.0);\n" +
         "        pull = bent;\n" +
         "    }\n" +
-        "    float2 sampleCoord = fragCoord - n * pull;\n" +
+        "    float2 sampleCoord = fragCoord - nb * pull;\n" +
         // The tilted slab's face (tiltOffset). It moves the whole face's picture alike, so it
         // takes no colour split of its own: split there, every edge in the wallpaper would wear a
         // fringe, and the face would read three samples instead of one. The rim's extra bend
@@ -1008,7 +1021,7 @@ public final class GlassRefraction {
         "            float k = mix(1.0, kFull, uLensActive);\n" +
         "            float fade = smoothstep(0.0, max(uLensFeather, 1.0), ld) * uLensActive;\n" +
         "            float2 lensCoord = uLensCenter + lp * k;\n" +
-        "            float2 lensBent = lensCoord - n * pull;\n" +
+        "            float2 lensBent = lensCoord - nb * pull;\n" +
         "            sampleCoord = mix(sampleCoord, lensBent, fade);\n" +
         "            lensGlow = fade * (1.0 - rr);\n" +
         "        }\n" +
@@ -1040,11 +1053,11 @@ public final class GlassRefraction {
         // Living glass parts the colours where it bends further than at rest, in step with that
         // extra bend and along it (the rim's inward), so the colour follows the glass. sn is the
         // split's way: the normal at rest.
-        "    float2 sn = n;\n" +
+        "    float2 sn = nb;\n" +
         "    if (live) {\n" +
-        "        float2 sv = n * split + bendV * max(uDisp, kLiveDisp);\n" +
+        "        float2 sv = nb * split + bendV * max(uDisp, kLiveDisp);\n" +
         "        split = length(sv);\n" +
-        "        sn = split > 0.0 ? sv / split : n;\n" +
+        "        sn = split > 0.0 ? sv / split : nb;\n" +
         "    }\n" +
         // The same split laid on the gathered light, which is sharp at the outline however frosted
         // the picture is: at the corners only, red's light as it stands a little further in and
@@ -1282,11 +1295,109 @@ public final class GlassRefraction {
     /**
      * The program's pull, in px, for a pixel {@code insidePx} in from the rim of a surface whose
      * half short side is {@code halfShortPx}: the profile across the band times the strength held
-     * at that half side, eased to nothing across the outermost {@code rimWidthPx}.
+     * at that half side, eased to nothing across the outermost {@code rimWidthPx}. The band is
+     * held at the half short side too ({@link #heldBandPx}), so the pull is gone by the centre
+     * line however short the surface.
      */
     static float pullPx(float insidePx, float bandPx, float strengthPx, float halfShortPx, float rimWidthPx) {
-        float t = Math.max(0f, Math.min(1f, insidePx / bandPx));
+        float t = Math.max(0f, Math.min(1f, insidePx / heldBandPx(bandPx, halfShortPx)));
         return edgeProfile(t) * Math.min(strengthPx, halfShortPx) * smoothstep(0f, rimWidthPx, insidePx);
+    }
+
+    /**
+     * How far in a band reaches on a surface whose half short side is {@code halfShortPx}: its
+     * own width, held at that half side (the program's {@code min(uBand, hs)} and its soft and
+     * live bands alike). The two halves of a surface pull opposite ways across its centre line,
+     * so a band reaching past it leaves a pull there and tears the picture into a seam: a lone
+     * one-row band under a look whose Edge width, or the dock's 24 dp soft rim, is deeper than
+     * half the row. Never under a pixel.
+     */
+    static float heldBandPx(float bandPx, float halfShortPx) {
+        return Math.max(1f, Math.min(bandPx, Math.max(0f, halfShortPx)));
+    }
+
+    /**
+     * The deepest band the program can draw on a surface, before the half-side hold: the look's
+     * band or the soft rim, whichever is wider, grown by a whole shelf and, while the slab is
+     * live, by a whole lean ({@link #LAG_BAND}). The program's {@code reach}.
+     */
+    static float bendReachPx(float bandPx, float softRimPx, float shelf, boolean live) {
+        return Math.max(bandPx, Math.max(0f, softRimPx)) * (1f + SHELF_THICKEN * Math.max(0f, shelf))
+            * (live ? 1f + LAG_BAND : 1f);
+    }
+
+    /**
+     * The radius the bend's normal eases round a corner on: half again the drawn corner, or the
+     * deepest band ({@code reachPx}) where that is more, held at the half short side. The normal
+     * only snaps from one edge's to the other's on the rect inside this radius, and every pixel
+     * there is at least this far in, past every band, so it is never pulled where the normal
+     * snaps. Eased only round the drawn corner, a 3 dp Corners under a 24 dp band snapped across
+     * a 45 degree line from each corner while the pull was still strong: a crease that, on a
+     * one-row band, met its twin at the centre line as a chevron. The program's
+     * {@code min(max(cr * 1.5, reach), hs)}; the gathered light keeps its own, round the drawn
+     * corner.
+     */
+    static float bendNormalRadiusPx(float cornerRadiusPx, float reachPx, float halfShortPx) {
+        return Math.min(Math.max(1.5f * Math.max(0f, cornerRadiusPx), reachPx),
+            Math.max(0f, halfShortPx));
+    }
+
+    /**
+     * The program's {@code sdRoundRect}, negated: how far {@code (px, py)} (from the centre) is
+     * inside a rounded rect of half size {@code (bx, by)} and corner {@code r}; negative outside.
+     */
+    static float insidePx(float px, float py, float bx, float by, float r) {
+        float qx = Math.abs(px) - bx + r;
+        float qy = Math.abs(py) - by + r;
+        float outside = (float) Math.hypot(Math.max(qx, 0f), Math.max(qy, 0f));
+        return -(Math.min(Math.max(qx, qy), 0f) + outside - r);
+    }
+
+    /**
+     * The program's {@code rectNormal} into {@code out}: round the corner arc of radius {@code r},
+     * straight out along an edge, and on the inner rect, where no arc reaches, the axis of the
+     * nearer edge.
+     */
+    static void rectNormal(@NonNull float[] out, float px, float py, float bx, float by, float r) {
+        float qx = Math.abs(px) - bx + r;
+        float qy = Math.abs(py) - by + r;
+        float ox = Math.max(qx, 0f), oy = Math.max(qy, 0f);
+        float len = (float) Math.hypot(ox, oy);
+        float sx = px < 0f ? -1f : 1f, sy = py < 0f ? -1f : 1f;
+        if (len > 0.001f) {
+            out[0] = sx * ox / len;
+            out[1] = sy * oy / len;
+            return;
+        }
+        float useX = qx >= qy ? 1f : 0f;
+        out[0] = sx * useX;
+        out[1] = sy * (1f - useX);
+    }
+
+    /**
+     * Where a resting pixel at {@code (px, py)} (from the centre) of a surface of half size
+     * {@code (bx, by)} and corner {@code cr} samples from, as an offset into {@code out}: the pull
+     * along the bend's normal, the program's {@code -nb * pull}. {@code softRimPx} and
+     * {@code shelf} are the dock surface's ({@link Program#setDockSurface}); 0 and 0 is the
+     * narrow ring every other surface wears.
+     */
+    static void restBendOffset(@NonNull float[] out, float px, float py, float bx, float by,
+                               float cr, float bandPx, float strengthPx, float softRimPx,
+                               float shelf, float rimWidthPx) {
+        float hs = Math.min(bx, by);
+        float inside = insidePx(px, py, bx, by, cr);
+        float[] n = new float[2];
+        rectNormal(n, px, py, bx, by,
+            bendNormalRadiusPx(cr, bendReachPx(bandPx, softRimPx, shelf, false), hs));
+        float pull;
+        if (softRimPx > 0f) {
+            float lower = shelf > 0f ? Math.max(n[1], 0f) * shelf : 0f;
+            pull = softPullPx(inside, bandPx, softRimPx, strengthPx, hs, rimWidthPx, lower);
+        } else {
+            pull = pullPx(inside, bandPx, strengthPx, hs, rimWidthPx);
+        }
+        out[0] = -n[0] * pull;
+        out[1] = -n[1] * pull;
     }
 
     /** The program's {@code cornerWeight}, for a pixel at {@code (px, py)} from the centre of a surface of half size {@code (bx, by)}. */
@@ -1921,7 +2032,8 @@ public final class GlassRefraction {
      */
     static float softPullPx(float insidePx, float bandPx, float softRimPx, float strengthPx,
                             float halfShortPx, float rimWidthPx, float lower) {
-        float band = Math.max(bandPx, softRimPx) * (1f + SHELF_THICKEN * lower);
+        float band = heldBandPx(Math.max(bandPx, softRimPx) * (1f + SHELF_THICKEN * lower),
+            halfShortPx);
         float strength = Math.min(strengthPx * (1f + SHELF_THICKEN * lower),
             SOFT_RIM_MAX_PULL_SHARE * band);
         float t = Math.max(0f, Math.min(1f, insidePx / band));
