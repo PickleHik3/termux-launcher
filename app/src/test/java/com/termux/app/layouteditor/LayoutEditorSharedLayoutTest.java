@@ -139,6 +139,9 @@ public class LayoutEditorSharedLayoutTest {
         assertTrue(plan.shownLayout().slot(Element.EXTRA_KEYS).hidden);
         plan.showHome(false);
         assertFalse(plan.shownLayout().slot(Element.EXTRA_KEYS).hidden);
-        assertEquals(1, plan.entries().size());
+        // Home's variant is snapshotted too (a first hide may give Home its own layout, which
+        // Discard must undo), but showing Home alone never turns that layout on.
+        assertEquals(2, plan.entries().size());
+        assertFalse(places.hasHomeLayout());
     }
 }
