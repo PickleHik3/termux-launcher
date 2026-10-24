@@ -147,6 +147,28 @@ public class EditorFramePoseTest {
     }
 
     @Test
+    public void aGhostClearsTheSurfacesStillStandingOnItsEdge() {
+        // The dock put away while its A-Z row stands: its target reaches over the apps' band.
+        int[] azRow = {20, 1700, 980, 1780};
+        int[] dockBand = EditorFramePose.ghostRect(PlaceLayout.Edge.BOTTOM, 0, 1000, 2000,
+            100, 20);
+        int[] dockTarget = EditorFramePose.ghostBeside(azRow, dockBand, 2000);
+        // The keyboard switched off on the same edge: its ghost goes past the dock's target,
+        // the usual gap above it, so a tap on either reaches its own card.
+        int depth = EditorFramePose.depthFrom(PlaceLayout.Edge.BOTTOM, dockTarget, 1000, 2000);
+        assertEquals(400, depth);
+        int[] keyboard = EditorFramePose.shiftInward(dockBand, PlaceLayout.Edge.BOTTOM, depth);
+        assertArrayEquals(new int[] {20, 1480, 980, 1580}, keyboard);
+        assertTrue("no overlap", keyboard[3] <= dockTarget[1]);
+
+        int[] topBar = {20, 0, 980, 150};
+        assertEquals(150, EditorFramePose.depthFrom(PlaceLayout.Edge.TOP, topBar, 1000, 2000));
+        assertArrayEquals(new int[] {20, 170, 980, 270}, EditorFramePose.shiftInward(
+            EditorFramePose.ghostRect(PlaceLayout.Edge.TOP, 0, 1000, 2000, 100, 20),
+            PlaceLayout.Edge.TOP, 150));
+    }
+
+    @Test
     public void ghostsStandOnTheirEdgeAndStackInwards() {
         int band = 100;
         int margin = 20;

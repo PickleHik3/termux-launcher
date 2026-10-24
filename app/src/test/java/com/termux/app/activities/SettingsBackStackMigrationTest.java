@@ -157,4 +157,49 @@ public class SettingsBackStackMigrationTest {
         assertEquals("one Back leaves Linux apps for the root",
             1, activity.getSupportFragmentManager().getBackStackEntryCount());
     }
+
+    @Test
+    public void aGuideOpenedStraightFromTheRootReopensOnLinuxAppsNotTheRoot() throws Exception {
+        // The guide pushed with nothing under it (its row on the root chain), then a page in it.
+        JSONArray entries = new JSONArray();
+        for (String name : new String[]{PAGES + "GuiAppsSetupGuideFragment",
+            PAGES + "GraphicsAccelerationFragment"}) {
+            JSONObject entry = new JSONObject();
+            entry.put("class_name", name);
+            entry.put("title_res_id", 0);
+            entries.put(entry);
+        }
+        JSONObject root = new JSONObject();
+        root.put("stopped_at_epoch_ms", System.currentTimeMillis() - 1000);
+        root.put("tree_version", SettingsBackStackState.TREE_VERSION);
+        root.put("entries", entries);
+        SettingsBackStackState parsed = SettingsBackStackState.parse(root.toString());
+        List<SettingsBackStackState.Entry> kept = parsed.entriesToRestore();
+        assertEquals("the guide and what was above it go; the page under it stays",
+            1, kept.size());
+        assertEquals(PAGES + "X11DisplayPreferencesFragment", kept.get(0).className);
+
+        RuntimeEnvironment.getApplication().getSharedPreferences(
+                TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION, Context.MODE_PRIVATE)
+            .edit().putString(SettingsActivity.PREFS_KEY_BACK_STACK_STATE, root.toString()).commit();
+
+        SettingsActivity activity = reopen();
+        assertEquals(PAGES + "X11DisplayPreferencesFragment", shown(activity));
+        assertEquals(1, activity.getSupportFragmentManager().getBackStackEntryCount());
+    }
+
+    @Test
+    public void anEditorOpenedFromAnEditorReopensOnThePageUnderBoth() {
+        // The Keyboard layout editor saved alone: its parent, the Layouts list, is an editor too.
+        List<SettingsBackStackState.Entry> saved = Arrays.asList(
+            new SettingsBackStackState.Entry(PAGES + "KeyboardLayoutEditorFragment", 0, null, null, null));
+        List<SettingsBackStackState.Entry> kept =
+            new SettingsBackStackState(saved, System.currentTimeMillis()).entriesToRestore();
+        assertTrue(kept.size() > 0);
+        for (SettingsBackStackState.Entry entry : kept) {
+            com.termux.app.fragments.settings.SettingsTree.Screen screen =
+                com.termux.app.fragments.settings.SettingsTree.find(entry.className);
+            assertTrue(entry.className + " is a page", screen != null && !screen.editor);
+        }
+    }
 }

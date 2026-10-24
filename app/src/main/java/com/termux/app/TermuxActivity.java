@@ -1054,20 +1054,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState mOverviewRestore;
 
     /**
-     * The Appearance surface as it stood when an activity went down for a configuration relaunch
-     * (new wallpaper colours, the theme, the font scale), which Android does whether or not the
-     * surface is open. The process outlives the relaunch, so it is handed to the next activity in
-     * memory; the saved state names which handover is its own ({@link #ARG_APPEARANCE_RELAUNCH}).
-     * Small: a few snapshots of preference values.
+     * The Appearance surface handed across a configuration relaunch (new wallpaper colours, the
+     * theme, the font scale), which Android does whether or not the surface is open.
      */
-    @Nullable private static com.termux.app.surfaces.AppearanceSurfaceController.Relaunch sAppearanceRelaunch;
-    private static int sAppearanceRelaunchId;
-    private static int sAppearanceRelaunchSeq;
-    /** The handover this activity last made, so its own later save may withdraw only that one. */
-    private int mAppearanceRelaunchId;
-    /** A handover this activity took on creation, opened once it is resumed. */
-    @Nullable private com.termux.app.surfaces.AppearanceSurfaceController.Relaunch mPendingAppearanceRelaunch;
-    private boolean mPendingAppearanceFromSettings;
+    private final com.termux.app.surfaces.AppearanceRelaunchHandover mAppearanceHandover =
+        new com.termux.app.surfaces.AppearanceRelaunchHandover();
 
     /**
      * Layout mode of the one editor: where a place's elements sit rather than how its surfaces
@@ -1541,8 +1532,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
     private static final String ARG_PANE_LAYOUT = "pane_layout";
-    private static final String ARG_APPEARANCE_RELAUNCH = "appearance_relaunch";
-    private static final String ARG_APPEARANCE_FROM_SETTINGS = "appearance_from_settings";
     private static final String PANE_STATE_SESSIONS = "sessions";
     private static final String PANE_STATE_WINDOWS = "windows";
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
@@ -1895,7 +1884,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPendingDisplaySlot = savedInstanceState.getInt(ARG_DISPLAY_SLOT,
                 com.termux.app.wall.DisplaySlot.NONE);
             mPendingDisplayFront = savedInstanceState.getBoolean(ARG_DISPLAY_FRONT, false);
-            takeAppearanceRelaunch(savedInstanceState);
+            mAppearanceHandover.take(savedInstanceState);
         } else {
             // No instance state while the process lives on: the layout the last activity left.
             mPendingPaneLayoutState = sProcessPaneLayout;
@@ -10235,56 +10224,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * screen off) reuses the state saved at the stop.
      */
     private void saveAppearanceRelaunch(@NonNull Bundle out) {
-        com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried = mAppearance.carry();
-        boolean fromSettings = mAppearanceFromSettings;
-        if (carried == null && mPendingAppearanceRelaunch != null) {
-            // Relaunched again before the handover it took could reopen (a theme change: the
-            // recreate, then the night mode the new window pins): it passes the handover on.
-            carried = mPendingAppearanceRelaunch;
-            fromSettings = mPendingAppearanceFromSettings;
-        }
-        if (carried == null) {
-            if (mAppearanceRelaunchId != 0 && mAppearanceRelaunchId == sAppearanceRelaunchId) {
-                sAppearanceRelaunch = null;
-                sAppearanceRelaunchId = 0;
-            }
-            mAppearanceRelaunchId = 0;
-            return;
-        }
-        int id = ++sAppearanceRelaunchSeq;
-        sAppearanceRelaunch = carried;
-        sAppearanceRelaunchId = id;
-        mAppearanceRelaunchId = id;
-        out.putInt(ARG_APPEARANCE_RELAUNCH, id);
-        out.putBoolean(ARG_APPEARANCE_FROM_SETTINGS, fromSettings);
-    }
-
-    /** Takes the handover the saved state names, when this process still holds it. */
-    private void takeAppearanceRelaunch(@NonNull Bundle saved) {
-        int id = saved.getInt(ARG_APPEARANCE_RELAUNCH, 0);
-        if (id == 0 || id != sAppearanceRelaunchId)
-            return;
-        mPendingAppearanceRelaunch = sAppearanceRelaunch;
-        mPendingAppearanceFromSettings = saved.getBoolean(ARG_APPEARANCE_FROM_SETTINGS, false);
-        sAppearanceRelaunch = null;
-        sAppearanceRelaunchId = 0;
+        mAppearanceHandover.save(mAppearance.carry(), mAppearanceFromSettings, out);
     }
 
     /**
      * The surface a relaunch interrupted opens again where it stood, its editor session
      * continued, once the wall is built: on the first resume, since a stopped window is never
-     * laid out for the editor's frame.
+     * laid out for the editor's frame. The handover stays this activity's until the open runs,
+     * so a relaunch that comes first passes it on.
      */
     private void reopenAppearanceAfterRelaunch() {
         final com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried =
-            mPendingAppearanceRelaunch;
+            mAppearanceHandover.pending();
         if (carried == null)
             return;
-        mPendingAppearanceRelaunch = null;
-        final boolean fromSettings = mPendingAppearanceFromSettings;
+        final boolean fromSettings = mAppearanceHandover.pendingFromSettings();
         View root = findViewById(R.id.activity_termux_root_view);
         Runnable open = () -> {
-            if (isFinishing() || isDestroyed() || mAppearance.isOpen())
+            if (isFinishing() || isDestroyed() || mAppearance.isOpen()
+                || !mAppearanceHandover.claim(carried))
                 return;
             if (mAppearance.reopen(carried))
                 mAppearanceFromSettings = fromSettings;
@@ -10723,9 +10681,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.onReloadProperties();
     }
 
+    /**
+     * The theme this window wears: the stored {@code night-mode}, or the one the Appearance
+     * editor is previewing until its Done.
+     */
+    @NonNull
+    private String effectiveNightMode() {
+        return com.termux.app.surfaces.ThemePreview.effective(mProperties.getNightMode());
+    }
+
     private void setActivityThemeAndWindow() {
         // Update NightMode.APP_NIGHT_MODE
-        TermuxThemeUtils.setAppNightMode(mProperties.getNightMode());
+        TermuxThemeUtils.setAppNightMode(effectiveNightMode());
         // Set activity night mode. If NightMode.SYSTEM is set, then android will automatically
         // trigger recreation of activity when uiMode/dark mode configuration is changed so that
         // day or night theme takes affect.
@@ -13389,6 +13356,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void applyHomeSettings() {
             TermuxActivity.this.applyHomeSettings();
+        }
+
+        @Override public void previewTheme(@NonNull String mode) {
+            TermuxThemeUtils.setAppNightMode(mode);
+            // On this activity, not by a recreate: AppCompat relaunches it only when the day or
+            // night it shows changes, and hands the mode to the next one, which then pins the
+            // same mode in its onCreate instead of relaunching a second time.
+            AppCompatActivityUtils.setNightMode(TermuxActivity.this, mode, true);
+        }
+
+        @Override public void commitTheme(@NonNull String mode) {
+            // The window wears it already: stored as Settings' row stores it, then an in-place
+            // restyle (shells' theme, the scheme) rather than another relaunch.
+            com.termux.app.settings.TermuxPropertiesFile.write(
+                com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_NIGHT_MODE,
+                mode);
+            requestTermuxActivityStylingOnNextResume(TermuxActivity.this, false);
         }
 
         @Override public void redressChrome() {
@@ -32261,7 +32245,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mExtraKeysView.reload(mTermuxTerminalExtraKeys.getExtraKeysInfo(), mTerminalToolbarDefaultHeight);
             }
             // Update NightMode.APP_NIGHT_MODE
-            TermuxThemeUtils.setAppNightMode(mProperties.getNightMode());
+            TermuxThemeUtils.setAppNightMode(effectiveNightMode());
         }
         setMargins();
         updateAppLauncherBarHeight();
