@@ -1180,7 +1180,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             builtins.services().host().onSystemImeRequested();
             BuiltinWidgetConfigSheet.show(pane.getContext(), title, builtins.configFields(builtin),
                 builtins.settingsOf(builtin), config -> {
-                    if (widgets.updateBuiltinConfig(appWidgetId, config)) render();
+                    boolean stored = widgets.updateBuiltinConfig(appWidgetId, config);
+                    if (stored) render();
+                    return stored;
                 }, () -> builtins.services().host().onSystemImeReleased(), kind);
             return;
         }

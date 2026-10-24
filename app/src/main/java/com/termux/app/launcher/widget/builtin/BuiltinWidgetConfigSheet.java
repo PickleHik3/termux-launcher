@@ -35,29 +35,36 @@ import java.util.Map;
  * is kept. Material by construction, so it follows the scheme like every other dialog.
  */
 public final class BuiltinWidgetConfigSheet {
-    public interface Listener { void onSaved(@NonNull Bundle config); }
+    /** Saves a draft: true once it is stored, false when it could not be (the sheet stays). */
+    public interface Listener { boolean onSaved(@NonNull Bundle config); }
+
+    /** The Save button carries this tag, for tests. */
+    static final String SAVE_TAG = "builtin_widget_save";
+    /** The Glass help button carries this tag, for tests. */
+    static final String GLASS_HELP_TAG = "builtin_widget_glass_help";
+    /** The Additional clocks heading row carries this tag, for tests. */
+    static final String ZONES_HEAD_TAG = "builtin_widget_zones_head";
 
     private BuiltinWidgetConfigSheet() { }
 
-    public static void show(@NonNull Context context, @NonNull CharSequence title,
-                            @NonNull List<BuiltinWidgetView.ConfigField> fields,
-                            @NonNull Bundle current, @NonNull Listener listener) {
-        show(context, title, fields, current, listener, null);
+    @NonNull public static androidx.appcompat.app.AlertDialog show(@NonNull Context context,
+            @NonNull CharSequence title, @NonNull List<BuiltinWidgetView.ConfigField> fields,
+            @NonNull Bundle current, @NonNull Listener listener) {
+        return show(context, title, fields, current, listener, null);
     }
 
     /** As {@link #show(Context, CharSequence, List, Bundle, Listener)}, with a dismiss callback. */
-    public static void show(@NonNull Context context, @NonNull CharSequence title,
-                            @NonNull List<BuiltinWidgetView.ConfigField> fields,
-                            @NonNull Bundle current, @NonNull Listener listener,
-                            @Nullable Runnable onDismiss) {
-        show(context, title, fields, current, listener, onDismiss, null);
+    @NonNull public static androidx.appcompat.app.AlertDialog show(@NonNull Context context,
+            @NonNull CharSequence title, @NonNull List<BuiltinWidgetView.ConfigField> fields,
+            @NonNull Bundle current, @NonNull Listener listener, @Nullable Runnable onDismiss) {
+        return show(context, title, fields, current, listener, onDismiss, null);
     }
 
     /** As above, for {@code kind}: which Glass choices the widget offers. */
-    public static void show(@NonNull Context context, @NonNull CharSequence title,
-                            @NonNull List<BuiltinWidgetView.ConfigField> fields,
-                            @NonNull Bundle current, @NonNull Listener listener,
-                            @Nullable Runnable onDismiss, @Nullable BuiltinWidgetKind kind) {
+    @NonNull public static androidx.appcompat.app.AlertDialog show(@NonNull Context context,
+            @NonNull CharSequence title, @NonNull List<BuiltinWidgetView.ConfigField> fields,
+            @NonNull Bundle current, @NonNull Listener listener,
+            @Nullable Runnable onDismiss, @Nullable BuiltinWidgetKind kind) {
         float density = context.getResources().getDisplayMetrics().density;
         int pad = Math.round(24 * density);
         LinearLayout column = new LinearLayout(context);
@@ -69,6 +76,7 @@ public final class BuiltinWidgetConfigSheet {
         Map<String, String> chosen = new LinkedHashMap<>();
         List<Runnable> visibility = new ArrayList<>();
         Runnable syncVisibility = () -> { for (Runnable sync : visibility) sync.run(); };
+        boolean previousSwitch = false;
         for (BuiltinWidgetView.ConfigField field : fields) {
             final View row;
             switch (field.type) {
@@ -87,7 +95,10 @@ public final class BuiltinWidgetConfigSheet {
             }
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            params.topMargin = Math.round(12 * density);
+            // 16dp between sections; switches that follow one another are one section.
+            boolean isSwitch = field.type == BuiltinWidgetView.ConfigField.Type.SWITCH;
+            params.topMargin = previousSwitch && isSwitch ? 0 : Math.round(16 * density);
+            previousSwitch = isSwitch;
             column.addView(row, params);
             if (field.shownWhenKey != null) {
                 visibility.add(() -> row.setVisibility(field.shownFor(chosen)
@@ -100,21 +111,93 @@ public final class BuiltinWidgetConfigSheet {
             fields.isEmpty(), density, BuiltinWidgetGlass.choices(kind));
         ScrollView scroll = new ScrollView(context);
         scroll.addView(column);
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(title)
-            .setView(scroll)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.builtin_widget_settings_save, (dialog, which) -> {
-                Map<String, String> texts = new LinkedHashMap<>();
-                for (TextInputEditText input : inputs) {
-                    CharSequence text = input.getText();
-                    texts.put(String.valueOf(input.getTag()), text == null ? "" : text.toString().trim());
-                }
-                listener.onSaved(BuiltinWidgetHost.configOf(
-                    savedValues(fields, current, glassPicked.get(), chosen, texts)));
-            })
-            .setOnDismissListener(dialog -> { if (onDismiss != null) onDismiss.run(); })
-            .show();
+
+        // Header, the scrolling content, then Save outside the scroll so it is always in reach.
+        LinearLayout root = new LinearLayout(context);
+        root.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout header = new LinearLayout(context);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        header.setPaddingRelative(pad, Math.round(8 * density), Math.round(12 * density), 0);
+        TextView heading = new TextView(context);
+        heading.setText(title);
+        heading.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_TitleLarge);
+        heading.setTextColor(MaterialColors.getColor(heading,
+            com.google.android.material.R.attr.colorOnSurface));
+        header.addView(heading, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        android.widget.ImageButton close = iconButton(context, R.drawable.ic_symbol_close,
+            context.getString(R.string.builtin_widget_settings_close), density);
+        header.addView(close, new LinearLayout.LayoutParams(Math.round(48 * density),
+            Math.round(48 * density)));
+        root.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            0, 1f));
+        TextView failed = new TextView(context);
+        failed.setText(R.string.builtin_widget_settings_save_failed);
+        failed.setTextAppearance(com.google.android.material.R.style
+            .TextAppearance_Material3_BodySmall);
+        failed.setTextColor(MaterialColors.getColor(failed,
+            androidx.appcompat.R.attr.colorError));
+        failed.setVisibility(View.GONE);
+        LinearLayout.LayoutParams failedParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        failedParams.setMargins(pad, Math.round(8 * density), pad, 0);
+        root.addView(failed, failedParams);
+        MaterialButton save = new MaterialButton(context);
+        save.setTag(SAVE_TAG);
+        save.setText(R.string.builtin_widget_settings_save);
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        saveParams.setMargins(pad, Math.round(12 * density), pad, Math.round(16 * density));
+        root.addView(save, saveParams);
+
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
+            .setView(root)
+            .setOnDismissListener(d -> { if (onDismiss != null) onDismiss.run(); })
+            .create();
+        close.setOnClickListener(v -> dialog.dismiss());
+        save.setOnClickListener(v -> {
+            save.setEnabled(false);
+            Map<String, String> texts = new LinkedHashMap<>();
+            for (TextInputEditText input : inputs) {
+                CharSequence text = input.getText();
+                texts.put(String.valueOf(input.getTag()), text == null ? "" : text.toString().trim());
+            }
+            boolean stored = listener.onSaved(BuiltinWidgetHost.configOf(
+                savedValues(fields, current, glassPicked.get(), chosen, texts)));
+            if (stored) {
+                dialog.dismiss();
+            } else {
+                // Keep the draft: the sheet stays as it is, ready for another try.
+                failed.setVisibility(View.VISIBLE);
+                save.setEnabled(true);
+            }
+        });
+        dialog.show();
+        return dialog;
+    }
+
+    /** A 48dp icon button with a content description, tinted like secondary text. */
+    @NonNull private static android.widget.ImageButton iconButton(@NonNull Context context,
+            @androidx.annotation.DrawableRes int icon, @NonNull CharSequence description,
+            float density) {
+        android.widget.ImageButton button = new android.widget.ImageButton(context);
+        button.setImageResource(icon);
+        button.setContentDescription(description);
+        button.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        if (context.getTheme().resolveAttribute(
+                android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
+            button.setBackgroundResource(ripple.resourceId);
+        } else {
+            button.setBackground(null);
+        }
+        button.setImageTintList(android.content.res.ColorStateList.valueOf(MaterialColors.getColor(
+            button, com.google.android.material.R.attr.colorOnSurfaceVariant)));
+        return button;
     }
 
     /**
@@ -165,11 +248,28 @@ public final class BuiltinWidgetConfigSheet {
         // four choices on the label's line left Bare a sliver with no label on a narrow phone.
         LinearLayout glass = new LinearLayout(context);
         glass.setOrientation(LinearLayout.VERTICAL);
+        // The heading, and an (i) that opens what the choices mean; the explanation is not
+        // always on screen.
+        LinearLayout glassHead = new LinearLayout(context);
+        glassHead.setOrientation(LinearLayout.HORIZONTAL);
+        glassHead.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView glassLabel = new TextView(context);
         glassLabel.setText(R.string.builtin_widget_glass);
         glassLabel.setTextAppearance(com.google.android.material.R.style
             .TextAppearance_Material3_BodyLarge);
-        glass.addView(glassLabel, new LinearLayout.LayoutParams(
+        glassHead.addView(glassLabel, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        android.widget.ImageButton help = iconButton(context, R.drawable.ic_ms_info,
+            context.getString(R.string.builtin_widget_glass_help), density);
+        help.setTag(GLASS_HELP_TAG);
+        help.setOnClickListener(v -> new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.builtin_widget_glass)
+            .setMessage(R.string.builtin_widget_glass_summary)
+            .setPositiveButton(android.R.string.ok, null)
+            .show());
+        glassHead.addView(help, new LinearLayout.LayoutParams(Math.round(48 * density),
+            Math.round(48 * density)));
+        glass.addView(glassHead, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         MaterialButtonToggleGroup glassChoice = new MaterialButtonToggleGroup(context);
         glassChoice.setTag(GLASS_CHOICE_TAG);
@@ -199,20 +299,12 @@ public final class BuiltinWidgetConfigSheet {
         if (glassChoice.getCheckedButtonId() == View.NO_ID) glassChoice.check(glassIds[0]);
         LinearLayout.LayoutParams choiceParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        choiceParams.topMargin = Math.round(4 * density);
+        choiceParams.topMargin = 0;
         glass.addView(glassChoice, choiceParams);
         LinearLayout.LayoutParams glassParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        glassParams.topMargin = Math.round((noFields ? 4 : 16) * density);
+        glassParams.topMargin = Math.round(16 * density);
         column.addView(glass, glassParams);
-        TextView glassSummary = new TextView(context);
-        glassSummary.setText(R.string.builtin_widget_glass_summary);
-        glassSummary.setTextAppearance(com.google.android.material.R.style
-            .TextAppearance_Material3_BodySmall);
-        glassSummary.setTextColor(MaterialColors.getColor(glassLabel,
-            com.google.android.material.R.attr.colorOnSurfaceVariant));
-        column.addView(glassSummary, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return () -> {
             for (int i = 0; i < glassValues.length; i++)
                 if (glassChoice.getCheckedButtonId() == glassIds[i]) return glassValues[i];
@@ -258,8 +350,9 @@ public final class BuiltinWidgetConfigSheet {
     }
 
     /**
-     * The Clock's "Time zones" row: the label, what is set, and a chevron; a tap opens two fields
-     * for a city or a time zone ("Tokyo", "Asia/Kolkata"), and an empty one is none.
+     * The Clock's "Additional clocks" section: the heading, how many are set, and a chevron; a
+     * tap opens two fields for a city or a time zone ("Tokyo", "Asia/Kolkata") whose helper text
+     * shows the city it resolves to, and an empty one is none. Collapsed on open.
      */
     @NonNull private static View zonesRow(@NonNull Context context,
                                           @NonNull BuiltinWidgetView.ConfigField field,
@@ -269,12 +362,12 @@ public final class BuiltinWidgetConfigSheet {
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
         LinearLayout head = new LinearLayout(context);
+        head.setTag(ZONES_HEAD_TAG);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(android.view.Gravity.CENTER_VERTICAL);
         head.setMinimumHeight(Math.round(48 * density));
         head.setClickable(true);
         head.setFocusable(true);
-        head.setContentDescription(field.label);
         TextView label = new TextView(context);
         label.setText(field.label);
         label.setTextAppearance(com.google.android.material.R.style
@@ -284,28 +377,35 @@ public final class BuiltinWidgetConfigSheet {
         TextView summary = new TextView(context);
         summary.setTextAppearance(com.google.android.material.R.style
             .TextAppearance_Material3_BodyMedium);
-        summary.setTextColor(MaterialColors.getColor(label,
-            com.google.android.material.R.attr.colorOnSurfaceVariant));
+        int muted = MaterialColors.getColor(label,
+            com.google.android.material.R.attr.colorOnSurfaceVariant);
+        summary.setTextColor(muted);
         head.addView(summary, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        TextView chevron = new TextView(context);
-        chevron.setText("\u203A");
-        chevron.setTextSize(24);
-        chevron.setPadding(Math.round(8 * density), 0, 0, 0);
-        head.addView(chevron, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        android.widget.ImageView chevron = new android.widget.ImageView(context);
+        chevron.setImageResource(R.drawable.ic_editor_expand_more);
+        chevron.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(
+            Math.round(24 * density), Math.round(24 * density));
+        chevronParams.setMarginStart(Math.round(8 * density));
+        head.addView(chevron, chevronParams);
         column.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout fieldsBox = new LinearLayout(context);
         fieldsBox.setOrientation(LinearLayout.VERTICAL);
         fieldsBox.setVisibility(View.GONE);
         List<TextInputEditText> mine = new ArrayList<>();
+        List<TextInputLayout> boxes = new ArrayList<>();
         String[] keys = {field.key, field.secondKey == null ? field.key : field.secondKey};
         int[] hints = {R.string.bw_clocks_zone1_label, R.string.bw_clocks_zone2_label};
         for (int i = 0; i < 2; i++) {
-            View box = textBox(context, new BuiltinWidgetView.ConfigField(keys[i],
-                context.getString(hints[i]), BuiltinWidgetView.ConfigField.Type.TEXT, ""),
-                current, mine);
+            TextInputLayout box = (TextInputLayout) textBox(context,
+                new BuiltinWidgetView.ConfigField(keys[i], context.getString(hints[i]),
+                    BuiltinWidgetView.ConfigField.Type.TEXT, ""), current, mine);
+            box.setEndIconMode(TextInputLayout.END_ICON_CLEAR_TEXT);
+            box.setPlaceholderText(context.getString(R.string.bw_clock_zone_placeholder));
+            boxes.add(box);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.topMargin = Math.round(8 * density);
@@ -314,23 +414,42 @@ public final class BuiltinWidgetConfigSheet {
         inputs.addAll(mine);
         column.addView(fieldsBox);
         Runnable refresh = () -> {
-            List<String> cities = new ArrayList<>();
-            for (TextInputEditText input : mine) {
+            int set = 0;
+            for (int i = 0; i < mine.size(); i++) {
                 java.time.ZoneId zone = ClockWidgetFormats.resolveZone(
-                    String.valueOf(input.getText()));
-                if (zone != null) cities.add(ClockWidgetFormats.cityName(zone.getId()));
+                    String.valueOf(mine.get(i).getText()));
+                if (zone != null) set++;
+                boxes.get(i).setHelperText(zone == null ? null
+                    : ClockWidgetFormats.cityName(zone.getId()));
             }
-            summary.setText(cities.isEmpty() ? context.getString(R.string.bw_clock_zones_none)
-                : android.text.TextUtils.join(", ", cities));
+            summary.setText(zonesSummary(context, set));
         };
         refresh.run();
+        for (TextInputEditText input : mine) {
+            input.addTextChangedListener(new android.text.TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+                @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+                @Override public void afterTextChanged(android.text.Editable e) { refresh.run(); }
+            });
+        }
         head.setOnClickListener(v -> {
             boolean open = fieldsBox.getVisibility() != View.VISIBLE;
             fieldsBox.setVisibility(open ? View.VISIBLE : View.GONE);
-            chevron.setRotation(open ? 90f : 0f);
-            if (!open) refresh.run();
+            float to = open ? 180f : 0f;
+            if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                chevron.animate().rotation(to).setDuration(150).start();
+            } else {
+                chevron.setRotation(to);
+            }
         });
         return column;
+    }
+
+    /** What the Additional clocks heading says is set: "None", else "n configured". */
+    @NonNull static String zonesSummary(@NonNull Context context, int configured) {
+        if (configured <= 0) return context.getString(R.string.bw_clock_zones_none);
+        return context.getResources().getQuantityString(R.plurals.bw_clock_zones_configured,
+            configured, configured);
     }
 
     /** The value a choice or switch starts at: the stored one when it is one it offers. */
@@ -370,6 +489,10 @@ public final class BuiltinWidgetConfigSheet {
         picked.put(field.key, start);
         toggle.setChecked(BuiltinWidgetView.ConfigField.ON.equals(start));
         toggle.setContentDescription(field.label);
+        // The whole row is the target, not only the thumb.
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> toggle.toggle());
         toggle.setOnCheckedChangeListener((button, checked) -> {
             picked.put(field.key, checked ? BuiltinWidgetView.ConfigField.ON
                 : BuiltinWidgetView.ConfigField.OFF);
@@ -445,11 +568,16 @@ public final class BuiltinWidgetConfigSheet {
                 android.graphics.drawable.GradientDrawable rim =
                     new android.graphics.drawable.GradientDrawable();
                 rim.setCornerRadius(12 * density);
-                rim.setColor(android.graphics.Color.TRANSPARENT);
+                rim.setColor(selected ? androidx.core.graphics.ColorUtils.setAlphaComponent(
+                    primary, 36) : android.graphics.Color.TRANSPARENT);
                 rim.setStroke(Math.round((selected ? 2 : 1) * density),
                     selected ? primary : outline);
                 frames.get(i).setBackground(rim);
                 frames.get(i).setSelected(selected);
+                View tile = (View) frames.get(i).getParent();
+                tile.setSelected(selected);
+                androidx.core.view.ViewCompat.setStateDescription(tile, selected
+                    ? tile.getContext().getString(R.string.builtin_widget_option_selected) : null);
             }
         };
         for (BuiltinWidgetView.ConfigField.Option option : field.options) {
