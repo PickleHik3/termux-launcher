@@ -34,6 +34,31 @@ under twenty items; past that, the oldest are re-judged first.
   and down · emulator.
 - 2026-10-24 · same commit · a Home glass widget wears Home's Look (Base) and not the
   Workspace's once the two differ · emulator.
+- 2026-10-24 · #159 Settings filing (commit "feat(settings): Appearance opens the editor from the
+  root; Shared becomes Everywhere" and the six after it) · the Settings root reads Your launcher
+  (Home, Apps & dock, Terminal, Linux apps) · Everywhere (Appearance, Keyboard, Notifications,
+  On-device AI) · System (General); tapping Appearance opens the Appearance editor over the
+  launcher (no page), Done comes back to Settings; the same on the sw600dp two-pane list (a tablet
+  AVD or `wm size 1600x2560`) · emulator, staging build.
+- 2026-10-24 · same round · Settings search: "icon pack", "app theme", "widgets on glass" and
+  "full screen" each list a hit under Appearance, and tapping it opens the editor; "linux apps"
+  lands on the Linux apps section; "vibration" lands on General only · emulator.
+- 2026-10-24 · same round · Home › Gestures shows the five Home gestures, then Double-tap to lock
+  (opens its method page), Swipe down for app drawer and Swipe on the terminal to switch windows;
+  flipping each switch there sticks across a reopen and takes effect on the launcher (drawer swipe
+  off: swiping down on the apps row no longer opens the drawer; terminal swipe off: a sideways
+  swipe on a window's text no longer changes place) · emulator.
+- 2026-10-24 · same round · Apps & dock › Linux apps in the drawer opens Linux apps, Back returns
+  to Apps & dock; the Drawer layout page's first row reads Grid; Linux apps › Fixes opens the old
+  Troubleshooting rows · emulator.
+- 2026-10-24 · same round · General › Diagnostics shows Log level and, with Termux:API installed,
+  Termux:API log level (changing it is kept by Termux:API); without Termux:API that row is absent;
+  Permissions & services › Termux:API › Diagnostics lands on that row · emulator (install
+  Termux:API for the second half).
+- 2026-10-24 · same round · About & help starts with Help, which opens the in-app help, Back
+  returns to About & help; General has no Help row; Keyboard shows Hardware keyboard in its own
+  group; Terminal › Text & display has no Full screen; Notifications has no Notification access
+  row · emulator, also at font scale 1.3.
 - 2026-10-23 · #142 phase 2 (commit "feat(place): the crossing morphs the dock's row and holds
   every reader") · the audit's slide clips re-shot, frames recorded: Home → window and window →
   Home, Docked and Floating, each of Tray, Beads and Strip → the pinned icons change size and

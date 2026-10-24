@@ -140,9 +140,8 @@ each set separately for portrait and landscape:
   internal storage; **Use system default** goes back. With a custom font the space bar's icons
   keep the bundled symbols font.
 
-The Keyboard theme page is also in **Settings → Keyboard → Look**, beside
-**Surface style**; **Look and feel settings** in the palette opens the same page. See
-[Look and themes](Look_And_Themes.md).
+The Keyboard theme page is also in **Settings → Keyboard**, beside **Appearance**, which opens the
+Appearance editor. See [Look and themes](Look_And_Themes.md).
 
 ## Typing and feedback
 
@@ -150,10 +149,11 @@ The Keyboard theme page is also in **Settings → Keyboard → Look**, beside
 
 - **Adaptive touch accuracy** ("Adjust key detection to your typing."), off by default, and
   **Reset learned taps**.
-- **Vibration** links to **Settings → General**, where **Allow vibration**, **Keyboard
-  vibration** and **Launcher vibration** live.
 - **Key sound** uses the system touch-sound volume.
 - **Key preview** ("Show the pressed key above your finger."), on by default.
+
+Keyboard vibration is in **Settings → General → Vibration**, beside **Allow vibration** and
+**Launcher vibration**.
 
 ## Hardware keyboards
 

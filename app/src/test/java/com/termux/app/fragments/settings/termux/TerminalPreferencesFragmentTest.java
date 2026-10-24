@@ -53,13 +53,12 @@ public class TerminalPreferencesFragmentTest {
         TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         String[] rows = {"terminal_layout_editor", "terminal_sub_windows", "status_bar",
-            "terminal_sub_text", "terminal_sub_clipboard", "display"};
+            "terminal_sub_text", "terminal_sub_clipboard"};
         assertEquals(rows.length, screen.getPreferenceCount());
         for (int i = 0; i < rows.length; i++) assertEquals(rows[i], screen.getPreference(i).getKey());
         assertEquals(StatusBarPreferencesFragment.class.getName(),
             screen.findPreference("status_bar").getFragment());
-        assertEquals(X11DisplayPreferencesFragment.class.getName(),
-            screen.findPreference("display").getFragment());
+        assertNull("Linux apps is a root section again", screen.findPreference("display"));
         assertEquals("the font moved in from Appearance", TermuxFontsPreferencesFragment.class.getName(),
             launch(TerminalTextPreferencesFragment.class).findPreference("terminal_fonts").getFragment());
         assertNull("the rows live on the subpages now", screen.findPreference("split_pane_controls"));
@@ -74,7 +73,7 @@ public class TerminalPreferencesFragmentTest {
             assertTrue(key, windows.findPreference(key) instanceof SwitchPreferenceCompat);
         }
         PreferenceScreen text = launch(TerminalTextPreferencesFragment.class).getPreferenceScreen();
-        assertTrue(text.findPreference("fullscreen") instanceof SwitchPreferenceCompat);
+        assertNull("Full screen is the Appearance editor's", text.findPreference("fullscreen"));
         assertTrue(text.findPreference("terminal_padding_fill") instanceof SwitchPreferenceCompat);
         assertTrue(text.findPreference("terminal_cursor_trail_style") != null);
         PreferenceScreen clipboard = launch(TerminalClipboardPreferencesFragment.class).getPreferenceScreen();

@@ -40,7 +40,9 @@ public final class SettingsTree {
         HOME(R.string.settings_section_home, "home"),
         DOCK_DRAWER(R.string.settings_section_dock_drawer, "dock_drawer"),
         TERMINAL(R.string.settings_destination_terminal, "terminal"),
-        LOOK(R.string.settings_section_look, "look"),
+        LINUX_APPS(R.string.settings_terminal_sub_linux_apps_title, "linux_apps"),
+        /** A door, not a page: the root's row opens the Appearance editor. */
+        APPEARANCE(R.string.settings_section_look, "look"),
         KEYBOARD(R.string.settings_destination_keyboard_input, "keyboard_input"),
         NOTIFICATIONS(R.string.settings_destination_notifications, "notifications"),
         AI(R.string.settings_tai_service_title, "on_device_ai"),
@@ -70,15 +72,21 @@ public final class SettingsTree {
          * the row that opens it instead of a slide.
          */
         public final boolean editor;
+        /**
+         * Not shown as a page: a door into the Appearance editor over the live launcher. Its XML
+         * lists the rows the editor holds, so search still finds them; a hit opens the editor.
+         */
+        public final boolean door;
 
         Screen(@NonNull String className, @Nullable String parent, @StringRes int titleRes,
-               @XmlRes int xmlRes, @NonNull Section section, boolean editor) {
+               @XmlRes int xmlRes, @NonNull Section section, boolean editor, boolean door) {
             this.className = className;
             this.parent = parent;
             this.titleRes = titleRes;
             this.xmlRes = xmlRes;
             this.section = section;
             this.editor = editor;
+            this.door = door;
         }
 
         public boolean isSectionPage() {
@@ -91,25 +99,33 @@ public final class SettingsTree {
     private static final Map<String, String> ALIASES = new HashMap<>();
 
     private static void section(Section section, String className, int titleRes, int xmlRes) {
-        SCREENS.put(className, new Screen(className, null, titleRes, xmlRes, section, false));
+        SCREENS.put(className, new Screen(className, null, titleRes, xmlRes, section, false, false));
+    }
+
+    /** A section whose root row opens the Appearance editor; {@code xmlRes} is for search only. */
+    private static void door(Section section, String className, int titleRes, int xmlRes) {
+        SCREENS.put(className, new Screen(className, null, titleRes, xmlRes, section, false, true));
     }
 
     private static void page(String parent, String className, int titleRes, int xmlRes) {
         Screen up = SCREENS.get(parent);
         if (up == null) throw new IllegalStateException("parent first: " + parent);
-        SCREENS.put(className, new Screen(className, parent, titleRes, xmlRes, up.section, false));
+        SCREENS.put(className, new Screen(className, parent, titleRes, xmlRes, up.section, false, false));
     }
 
     private static void editor(String parent, String className, int titleRes) {
         Screen up = SCREENS.get(parent);
         if (up == null) throw new IllegalStateException("parent first: " + parent);
-        SCREENS.put(className, new Screen(className, parent, titleRes, 0, up.section, true));
+        SCREENS.put(className, new Screen(className, parent, titleRes, 0, up.section, true, false));
     }
 
     static {
         // Your launcher
-        section(Section.HOME, PAGES + "HomePreferencesFragment", R.string.settings_section_home,
-            R.xml.home_preferences);
+        String home = PAGES + "HomePreferencesFragment";
+        section(Section.HOME, home, R.string.settings_section_home, R.xml.home_preferences);
+        // Home › Gestures links the lock's page: it holds the method picker.
+        page(home, PAGES + "LauncherLockPreferencesFragment", R.string.settings_apps_sub_lock_title,
+            R.xml.launcher_lock_preferences);
 
         String dock = PAGES + "LauncherPreferencesFragment";
         section(Section.DOCK_DRAWER, dock, R.string.settings_section_dock_drawer, R.xml.launcher_preferences);
@@ -117,8 +133,6 @@ public final class SettingsTree {
             R.xml.app_drawer_preferences);
         page(dock, PAGES + "LauncherSearchPreferencesFragment", R.string.settings_apps_sub_search_title,
             R.xml.launcher_search_preferences);
-        page(dock, PAGES + "LauncherLockPreferencesFragment", R.string.settings_apps_sub_lock_title,
-            R.xml.launcher_lock_preferences);
 
         String terminal = PAGES + "TerminalPreferencesFragment";
         section(Section.TERMINAL, terminal, R.string.settings_destination_terminal, R.xml.terminal_preferences);
@@ -132,8 +146,11 @@ public final class SettingsTree {
             R.xml.termux_fonts_preferences);
         page(terminal, PAGES + "TerminalClipboardPreferencesFragment",
             R.string.settings_terminal_sub_clipboard_title, R.xml.terminal_clipboard_preferences);
+
+        // Linux apps sits beside Terminal again (spec §4; the word Display stays retired).
         String linuxApps = PAGES + "X11DisplayPreferencesFragment";
-        page(terminal, linuxApps, R.string.settings_terminal_sub_linux_apps_title, R.xml.x11_display_preferences);
+        section(Section.LINUX_APPS, linuxApps, R.string.settings_terminal_sub_linux_apps_title,
+            R.xml.x11_display_preferences);
         page(linuxApps, PAGES + "GuiAppsSetupPreferencesFragment", R.string.settings_gui_apps_title,
             R.xml.gui_apps_setup_preferences);
         page(PAGES + "GuiAppsSetupPreferencesFragment", PAGES + "GraphicsAccelerationFragment",
@@ -148,9 +165,11 @@ public final class SettingsTree {
         page(linuxApps, PAGES + "X11DisplayTroubleshootingPreferencesFragment",
             R.string.settings_x11_sub_troubleshooting_title, R.xml.x11_display_troubleshooting_preferences);
 
-        // Shared
-        section(Section.LOOK, PAGES + "TermuxStylePreferencesFragment", R.string.settings_section_look,
-            R.xml.termux_style_preferences);
+        // Everywhere
+        // Appearance: the old Look page's name, now the door into the editor. Its rows moved into
+        // the editor's pill card and stay searchable through appearance_search_index.
+        door(Section.APPEARANCE, PAGES + "TermuxStylePreferencesFragment", R.string.settings_section_look,
+            R.xml.appearance_search_index);
 
         String keyboard = PAGES + "KeyboardPreferencesFragment";
         section(Section.KEYBOARD, keyboard, R.string.settings_destination_keyboard_input,
@@ -220,6 +239,10 @@ public final class SettingsTree {
         ALIASES.put(PAGES + "LauncherDockPreferencesFragment", dock);
         ALIASES.put(PAGES + "X11DisplayLinuxAppsPreferencesFragment", linuxApps);
         ALIASES.put(PAGES + "TerminalStatusPreferencesFragment", terminal);
+        // The two Debugging pages folded into Diagnostics.
+        ALIASES.put(PAGES + "DebuggingPreferencesFragment", PAGES + "AdvancedDiagnosticsPreferencesFragment");
+        ALIASES.put(SETTINGS + "termux_api.DebuggingPreferencesFragment",
+            PAGES + "AdvancedDiagnosticsPreferencesFragment");
     }
 
     /** Every screen, sections first within each section, in root order. */
@@ -280,8 +303,14 @@ public final class SettingsTree {
     @NonNull
     public static String redirect(@NonNull String className, @Nullable String scrollToKey) {
         String page = scrollToKey == null ? null : pageForMovedRow(className, scrollToKey);
-        return page != null ? PAGES + page : canonical(className);
+        if (page == null) return canonical(className);
+        // A page outside the termux package is named in full.
+        return page.startsWith(SETTINGS) ? page : PAGES + page;
     }
+
+    private static final String ABOUT = SETTINGS + "AboutSupportPreferencesFragment";
+    /** The Appearance door: a row the editor holds lands here, and the editor opens. */
+    private static final String APPEARANCE = "TermuxStylePreferencesFragment";
 
     @Nullable
     private static String pageForMovedRow(@NonNull String className, @NonNull String key) {
@@ -308,6 +337,7 @@ public final class SettingsTree {
                 return null;
             case "GeneralPreferencesFragment":
             case "AppBehaviorPreferencesFragment":
+                if (key.equals("app_launcher_help")) return ABOUT;
                 return key.equals("lazy_mode") || key.equals("low_memory_preset")
                     ? "PerformancePreferencesFragment" : null;
             case "LauncherPreferencesFragment":
@@ -317,11 +347,12 @@ public final class SettingsTree {
                 if (key.equals("app_launcher_az_lock_method") || key.equals("app_launcher_az_double_tap_lock"))
                     return "LauncherLockPreferencesFragment";
                 if (key.equals("app_launcher_home_palette_gesture") || key.equals("app_launcher_widget_pane_enabled")
-                    || key.equals("app_launcher_builtin_widget_style"))
+                    || key.equals("app_launcher_builtin_widget_style") || key.equals("app_launcher_drawer_enabled")
+                    || key.equals("app_launcher_sub_lock"))
                     return "HomePreferencesFragment";
+                if (key.equals("app_launcher_help")) return ABOUT;
                 if (key.equals("app_haptics_enabled") || key.equals("app_launcher_row_haptics")
-                    || key.equals("show_in_recents_when_not_default") || key.equals("app_launcher_set_home")
-                    || key.equals("app_launcher_help"))
+                    || key.equals("show_in_recents_when_not_default") || key.equals("app_launcher_set_home"))
                     return "GeneralPreferencesFragment";
                 if (key.equals("app_launcher_notifications_link")) return "NotificationsPreferencesFragment";
                 return null;
@@ -342,7 +373,11 @@ public final class SettingsTree {
                     case "split_pane_controls": case "show_key_hints": case "pane_dwindle_default":
                     case "pane_focus_grows": case "pane_agent_api":
                         return "TerminalWindowsPreferencesFragment";
-                    case "fullscreen": case "terminal_padding_fill": case "terminal_cursor_trail_style":
+                    case "terminal_body_swipe":
+                        return "HomePreferencesFragment";
+                    case "fullscreen":
+                        return APPEARANCE;
+                    case "terminal_padding_fill": case "terminal_cursor_trail_style":
                     case "terminal_retro_effect": case "terminal_fonts":
                         return "TerminalTextPreferencesFragment";
                     case "terminal_osc52_clipboard_read_enabled": case "terminal_clipboard_cleanup":
@@ -359,6 +394,13 @@ public final class SettingsTree {
                     default:
                         return null;
                 }
+            case "TerminalTextPreferencesFragment":
+                return key.equals("fullscreen") ? APPEARANCE : null;
+            case "TerminalWindowsPreferencesFragment":
+                return key.equals("terminal_body_swipe") ? "HomePreferencesFragment" : null;
+            case "NotificationsPreferencesFragment":
+                return key.equals("app_launcher_notification_access")
+                    ? "ServicesPermissionsPreferencesFragment" : null;
             case "StatusBarPreferencesFragment":
                 return key.equals("status_bar_notifications_link") ? "NotificationsPreferencesFragment" : null;
             case "X11DisplayPreferencesFragment":

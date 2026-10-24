@@ -42,6 +42,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * The old Look page. Settings no longer lists it: its rows belong to the Appearance editor's pill
+ * card (project-docs/active/appearance-and-settings-rework-2026-10-24.md §3), the root's Appearance
+ * row opens the editor, and SettingsTree keeps this class name as the Appearance door, so an old
+ * link or a search hit still resolves. The page stays for the links that still name it (the
+ * command palette's Look and feel settings, Termux:Styling's fallback, an older saved stack) and
+ * for its controllers (icon packs, theme templates, wallpaper alignment), until the pill card
+ * takes them over.
+ */
 @Keep
 public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
 
@@ -75,11 +84,7 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         Preference appearanceSurface = findPreference("appearance_surface");
         if (appearanceSurface != null) appearanceSurface.setOnPreferenceClickListener(preference -> {
             // The launcher comes forward with the Appearance surface open; Back returns here.
-            Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
-            intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            SettingsEditorDoors.open(this, preference, intent);
+            SettingsEditorDoors.open(this, preference, SettingsEditorDoors.appearanceIntent(context));
             return true;
         });
         configureTerminalContrastPreference();
@@ -372,9 +377,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
-    /** Lazy mode and Fancier Glass are stored by the terminal I/O store, whoever asks this one. */
+    /**
+     * Lazy mode, Fancier Glass and the terminal swipe (on Home › Gestures) are stored by the
+     * terminal I/O store, whoever asks this one.
+     */
     private static boolean isTerminalIoToggle(String key) {
-        return "lazy_mode".equals(key) || "fancier_glass".equals(key);
+        return "lazy_mode".equals(key) || "fancier_glass".equals(key) || "terminal_body_swipe".equals(key);
     }
 
     @Override

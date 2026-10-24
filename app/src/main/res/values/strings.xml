@@ -2359,7 +2359,7 @@
     <string name="tool_app_key_inspector">Key inspector</string>
     <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
     <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
-    <string name="tool_appearance_surface_editor">Surface editor</string>
+    <string name="tool_appearance_surface_editor">Appearance</string>
     <string name="tool_app_open_settings">Open settings</string>
     <string name="tool_app_open_look_and_feel">Look and feel settings</string>
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
@@ -3144,8 +3144,8 @@
     <string name="help_topic_appearance_back">Undo returns to how it was; Done keeps it.</string>
     <string name="help_topic_appearance_aliases">appearance, look, clear, mist, tint, solid, custom, glass, blur, colours, colors, editor</string>
     <string name="help_topic_themes_title">Colours, fonts and wallpaper</string>
-    <string name="help_topic_themes_summary">Colour mode, fonts and icons are in Settings; the wallpaper is picked from the corner tab.</string>
-    <string name="help_topic_themes_action">Open Settings, under Look, for colours, fonts and icons; hold a corner and tap Appearance to pick a wallpaper.</string>
+    <string name="help_topic_themes_summary">Theme, wallpaper and icons are in Appearance; fonts are in Settings, under Terminal.</string>
+    <string name="help_topic_themes_action">Open Appearance in Settings for colours, wallpaper and icons; fonts are under Terminal. Or hold a corner and tap Appearance.</string>
     <string name="help_topic_themes_aliases">theme, wallpaper, font, colour scheme, color scheme, material you, icons</string>
 
     <!-- Help centre: Linux display. -->
@@ -3203,7 +3203,7 @@
     <string name="help_topic_gui_apps_action">Install one in a terminal, then start it: it appears in the display window.</string>
     <string name="help_topic_gui_apps_step1">Add the repository once with pkg install x11-repo.</string>
     <string name="help_topic_gui_apps_step2">Install an app from it with pkg install, and start the Display.</string>
-    <string name="help_topic_gui_apps_step3">Set up Linux apps, in Settings › Terminal › Linux apps, installs a few to start with.</string>
+    <string name="help_topic_gui_apps_step3">Set up Linux apps, in Settings › Linux apps, installs a few to start with.</string>
     <string name="help_topic_gui_apps_aliases">gui, x11, x11-repo, termux-x11, desktop app, linux app, install app, graphical</string>
 
     <!-- Help centre: Something missing? Each one names a symptom in the user's words. -->
@@ -3229,11 +3229,11 @@
     <string name="help_fix_stats_aliases">cpu missing, memory missing, weather missing, status widget</string>
     <string name="help_fix_display_title">The display will not start</string>
     <string name="help_fix_display_summary">The display needs its packages installed and its server running.</string>
-    <string name="help_fix_display_action">Tap Set up in the display window, or open Settings, under Display, and follow what it lists.</string>
+    <string name="help_fix_display_action">Tap Set up in the display window, or open Settings, under Linux apps, and follow what it lists.</string>
     <string name="help_fix_display_aliases">display will not start, x11 fails, black screen, no display</string>
     <string name="help_fix_support_title">Still stuck?</string>
     <string name="help_fix_support_summary">The full documentation and the support page go further than help does.</string>
-    <string name="help_fix_support_action">Open Settings, under About and support, for diagnostics and where to ask.</string>
+    <string name="help_fix_support_action">Open Settings, under General, for Diagnostics and for About &amp; help, where to ask.</string>
     <string name="help_fix_support_aliases">support, bug, report, diagnostics, logs, contact</string>
 
     <!-- Help centre: glossary. -->

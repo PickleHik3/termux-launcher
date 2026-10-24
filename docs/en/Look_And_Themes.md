@@ -5,7 +5,7 @@ and screen effects. Home, Terminal and Display share one look, so a change appli
 
 ## Appearance
 
-Open **Appearance** from **Settings → Look → Wallpaper, look and layout**, from
+Open **Appearance** from **Settings → Appearance**, from
 **Appearance** on a corner tab, or from the terminal's long-press menu. It has four tabs in a pill at the top: **Wallpaper | Look | Layout |
 Icon pack**. It opens on Wallpaper, or on the tab you last used if you were there in the last half
 hour.
@@ -91,11 +91,10 @@ the pinned apps.
 
 ## Appearance settings
 
-**Settings → Look** is a settings page; the command palette's **Look and feel settings** opens
-it too, and Settings search finds every row on it. Its first row, **Wallpaper, look and layout**,
-opens the Appearance editor above. Below that it holds:
+Settings has no Look page any more: **Settings → Appearance** opens the Appearance editor above,
+and the settings below belong to the editor. Settings search still finds each of them by name and
+opens the editor; the command palette's **Look and feel settings** shows them as a list.
 
-- **Terminal fonts**: see [Terminal fonts](Terminal_Fonts.md).
 - **App theme**: **System**, **Light** or **Dark**.
 - **Wallpaper colors**: "Match the launcher and terminal to the wallpaper." On by default. It
   overrides manual terminal colours; turn it off, or apply a Termux:Styling scheme, to use your own.
@@ -107,12 +106,16 @@ opens the Appearance editor above. Below that it holds:
   programs it is in light mode. It reads "Available when wallpaper colors are on" otherwise.
 - **Tools that follow the terminal colours** (below).
 - **Wallpaper**: show the system wallpaper behind launcher surfaces.
-- **Wallpaper parallax**: the wallpaper pans a little as the row slides, from Home page 1 across
-  the windows to the last page. Needs a wallpaper set through the launcher's picker; off in
-  landscape and with animations off.
 - **Wallpaper alignment**: lines up the wallpaper behind the surfaces with the one on your screen.
+- **Widgets on glass**: widgets sit on the launcher's glass.
 - **Monochrome icons**, **Icon pack** and **Pinned-app icon pack**.
-- **Keyboard look**: **Surface style** (opens Appearance) and **Keyboard theme**.
+- **Full screen**: see [Layout and full screen](Layout_And_Full_Screen.md#full-screen).
+
+Elsewhere in Settings: **Terminal fonts** under **Terminal → Text & display** (see
+[Terminal fonts](Terminal_Fonts.md)); **Wallpaper scrolls with pages** under **Home → Pages** (the
+wallpaper pans a little as the row slides; it needs a wallpaper set through the launcher's picker
+and is off in landscape and with animations off); and **Appearance** and **Keyboard theme** under
+**Keyboard**.
 
 ## Tools that follow the terminal colours
 

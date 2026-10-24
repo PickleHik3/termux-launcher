@@ -3,7 +3,8 @@
 The launcher can show your Android notifications in four ways: dots on pinned apps, pinned cards in
 the status bar, two widgets, and a history your shell can search. All of them are set up under
 **Settings → Notifications** ("Dots, pinned alerts and history"), which is also linked from
-**Settings → Terminal → Status bar** and **Settings → Dock & drawer**.
+**Settings → Terminal → Status bar**. Notification access itself is under **Settings → General →
+Permissions & services**.
 
 ## Notification access
 

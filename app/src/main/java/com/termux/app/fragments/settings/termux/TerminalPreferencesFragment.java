@@ -13,8 +13,8 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 
 /**
- * Terminal: the section for the Terminal half. The overview is this class itself, a Layout row and
- * one row per part (windows and panes, status bar, text and display, clipboard, Linux apps); each
+ * Terminal: the section for the Terminal half. The overview is this class itself, an Appearance
+ * row and one row per part (windows and panes, status bar, text and display, clipboard); each
  * focused subpage is a thin subclass naming its own XML and title, sharing this store, so every
  * row writes the key it always did whichever page holds it. Every lookup here is null-tolerant.
  */
@@ -40,9 +40,6 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(preferencesXml(), rootKey);
         androidx.preference.Preference retro = findPreference("terminal_retro_effect");
         if (retro != null) retro.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
-        // A build made without the X server has no display to set up.
-        androidx.preference.Preference display = findPreference("display");
-        if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
         androidx.preference.Preference layout = findPreference("terminal_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
             SettingsEditorDoors.openLayoutEditor(this, row, com.termux.app.wall.PaneWallPage.TERMINAL);

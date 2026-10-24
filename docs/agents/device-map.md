@@ -63,7 +63,7 @@ ad -s emu runas com.termux 'launcherctl pane list'
 | Place | How to get there | Useful ids / text |
 |---|---|---|
 | Settings | `ad shell am start -n com.termux/.app.activities.SettingsActivity` | `settings_search_input` finds any setting by name; rows by `title` text (Appearance, Apps, …) |
-| Appearance editor | reliable: `ad shell am start -n com.termux/.app.activities.SettingsActivity` → Appearance → "Wallpaper, look and layout"; Done returns to Settings, Back twice to the terminal. Shortcut: long-press the top-left corner of the pane (`long 40 262 900` on the emulator at 420 dpi), then tap Appearance within about a second (`ad find Appearance`); it only opens Appearance when the pane shows no resize handles | pages `appearance_page_mode_wallpaper`, `_look`, `_icon_pack` (Layout has no id: it is the grid icon in the top pill, about 655,218); styles `appearance_editor_style_docked`, `_floating`; Done `appearance_page_done`. Tap by id: the tab row shifts per page. Changes apply only on Done. Look page: tap a Look by its label (Clear, Mist, Tint, Solid, Custom). Sliders (Blur, Depth, …) are vertical and fill from the bottom; a drag must start inside the slider (y about 1980–2295): `ad swipe 745 2270 745 1850 800` takes the fourth slider (Tint) to 100% with six columns, `2000 → 2310` to 0. With the glass edge drawn, Depth is a seventh, last column and the others narrow: find the column's x first. Tapping a status pill in the preview swaps the sheet to Status bar controls; Back with changes asks Keep editing / Discard / Save |
+| Appearance editor | reliable: `ad shell am start -n com.termux/.app.activities.SettingsActivity` → Appearance (the root row opens the editor); Done returns to Settings, Back twice to the terminal. Shortcut: long-press the top-left corner of the pane (`long 40 262 900` on the emulator at 420 dpi), then tap Appearance within about a second (`ad find Appearance`); it only opens Appearance when the pane shows no resize handles | pages `appearance_page_mode_wallpaper`, `_look`, `_icon_pack` (Layout has no id: it is the grid icon in the top pill, about 655,218); styles `appearance_editor_style_docked`, `_floating`; Done `appearance_page_done`. Tap by id: the tab row shifts per page. Changes apply only on Done. Look page: tap a Look by its label (Clear, Mist, Tint, Solid, Custom). Sliders (Blur, Depth, …) are vertical and fill from the bottom; a drag must start inside the slider (y about 1980–2295): `ad swipe 745 2270 745 1850 800` takes the fourth slider (Tint) to 100% with six columns, `2000 → 2310` to 0. With the glass edge drawn, Depth is a seventh, last column and the others narrow: find the column's x first. Tapping a status pill in the preview swaps the sheet to Status bar controls; Back with changes asks Keep editing / Discard / Save |
 | Icon size, Icons per page | Appearance editor → Layout page | value shows only on screen (not in the accessibility tree); read it from a `zoom` crop |
 | Command palette | tap the terminal so the keyboard is up, then swipe up on its space bar: `ad swipe 540 2250 540 2000 250` | type to filter, `ad key DPAD_DOWN` moves the selection; chip strip kbd, pick, split, font; app chips need usage history; a theme change closes it |
 | Icon pack | Appearance editor → `appearance_page_mode_icon_pack` (tap a tile by its label, `ad tap Arcticons`; coordinates miss); a pinned override: long-press a dock icon › Change dock icon › a pack › an icon; (the editor reopens on its last page) | tiles `icon_pack_tile_label` (tap the tile art if the label does not take); "Pinned app icons only" is `icon_pack_pinned_only`, on by default. MBE Style (`me.iacn.mbestyle_27.apk`, F-Droid) installs as a PNG pack |
@@ -111,8 +111,10 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - Crossing the wall: swipe left goes Home → window, right goes window → Home. A held mid-slide
   frame is `input motionevent DOWN`, MOVE steps, then UP; a start at x ≤ 100 or ≥ 1000 does not
   take.
-- Settings pages are Home / Dock & drawer / Terminal / Look / Keyboard. The Layout editor is Look →
-  "Wallpaper, look and layout"; its home icon (about 645,1728) edits Home's layout, "Home's own"
+- Settings root (10-24): Your launcher (Home / Apps & dock / Terminal / Linux apps), Everywhere
+  (Appearance / Keyboard / Notifications / On-device AI), System (General). The root's Appearance
+  row opens the Appearance editor directly (no page); Home › Appearance and Terminal › Appearance
+  open the Layout editor on that place. In the Layout editor its home icon (about 645,1728) edits Home's layout, "Home's own"
   (654,1875); a tap on the preview dock (540,1485) opens Tray / Beads / Strip / Search / Drawer;
   Done (993,220), then `ad launch com.termux` (the Settings task stays in front).
 
@@ -252,7 +254,7 @@ a Linux app.
   `pane wait` caps at 300000 ms. Each `ad runas` call is a new shell: keep a pane id in a file.
 - Clipboard: `ad shell cmd clipboard` has no get-primary-clip; read it with
   `launcherctl clipboard paste` under runas.
-- Graphics acceleration is the last row of Settings → Terminal → Linux apps → Set up Linux apps;
+- Graphics acceleration is the last row of Settings → Linux apps → Set up Linux apps;
   swipe up. Its page's Run benchmark opens a terminal session and closes Settings; the toast
   shows on the launcher after: `ad frames 6 <dir> -- tap "Run benchmark"` and read the last frames.
 - The launcher rewrites `termux-x11*` scripts in the prefix only when `X11CliInstaller.VERSION`

@@ -20,7 +20,7 @@ browser (none is built for it), and the window manager is `pkg install openbox`.
 
 ## Set it up in one go
 
-**Settings → Terminal → Linux apps → Set up Linux apps** ("Select apps and copy the install
+**Settings → Linux apps → Set up Linux apps** ("Select apps and copy the install
 command.") builds the command that does this. Choose the **Source** (**Termux X11 repo**, or
 **proot distro**), tick the **Starter Apps** you want, then tap **Copy the command**: it goes on the
 clipboard, a notice tells you it is there, and Settings closes so the terminal is in front. Paste
@@ -76,7 +76,7 @@ start.
 ## Hiding the ones you do not want
 
 A distro installs menu entries for helpers and viewers you may never open by hand.
-**Settings → Terminal → Linux apps → Hidden Linux apps** lists the Linux apps it found; untick one
+**Settings → Linux apps → Hidden Linux apps** lists the Linux apps it found; untick one
 and it leaves the drawer. It is one app at a time, not a whole distro, and it holds across
 restarts. Your Android apps are not in this list.
 

@@ -32,7 +32,7 @@ down at the touch slop; anything steeper stays the terminal's scroll. The termin
 while it is selecting text, a program is tracking the mouse or asked for touch reports, or mouse
 mode is on; taps, the long press, vertical scrolls and pinches are always the terminal's. Any pane
 of a split pages the row, never between panes. Not on the display window's picture. On by default:
-Settings › Terminal › Windows & panes › Swipe on the terminal to switch windows (the Home float's
+Settings › Home › Gestures › Swipe on the terminal to switch windows (the Home float's
 is always on). One rule, `TerminalBodySwipe`.
 _Avoid_: terminal swipe, text swipe, rule B
 
@@ -379,7 +379,7 @@ _Avoid_: animation, custom shader (users cannot load their own)
 
 **Fancier Glass**:
 The extra glass: refraction at glass edges on every glass surface and the
-tilting page motions. It has no switch any more (it left Settings › Look with the Looks): it is on
+tilting page motions. It has no switch any more (it left the old Settings › Look page with the Looks): it is on
 wherever the device supports it — Android 13 and later, with a managed wallpaper — and each Look
 sets how deep the bend is. Lazy mode, battery saver and reduced motion override it. See ADR 0005
 and `project-docs/active/fancier-glass/SPEC.md`.
