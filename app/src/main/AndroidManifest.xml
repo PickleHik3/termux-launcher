@@ -316,6 +316,12 @@
             android:name=".app.terminal.ShellNotifications$DismissReceiver"
             android:exported="false" />
 
+        <!-- The Linux media notification's buttons. Not exported: only that notification's own
+             pending intents reach it. -->
+        <receiver
+            android:name=".app.sound.MediaControlReceiver"
+            android:exported="false" />
+
         <!-- A display server started by `termux-x11` announces itself here. Not exported and
              signature-permission guarded: a foreign app cannot hand the home screen a Binder. -->
         <receiver

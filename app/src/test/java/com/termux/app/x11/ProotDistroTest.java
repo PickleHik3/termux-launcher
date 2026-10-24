@@ -269,6 +269,32 @@ public class ProotDistroTest {
 
     // --- the line that runs an app ---------------------------------------------------------
 
+    /**
+     * The launcher's session bus crosses into a distro only when the shell running the login was
+     * handed one: an empty address would stop a distro app from starting a bus of its own.
+     */
+    @Test public void theLaunchersBusIsForwardedOnlyWhenTheShellHasOne() throws Exception {
+        org.junit.Assume.assumeTrue("needs sh", new File("/bin/sh").canExecute());
+        String words = "set -- " + ProotDistro.FORWARDED_BUS + "; echo \"$#|$*\"";
+
+        assertEquals("0|", runSh(words, null));
+        assertEquals("2|-e DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/.X11-unix/termux-launcher-bus",
+            runSh(words, "unix:path=/tmp/.X11-unix/termux-launcher-bus"));
+    }
+
+    private static String runSh(String script, String bus) throws Exception {
+        ProcessBuilder builder = new ProcessBuilder("/bin/sh", "-c", script);
+        builder.environment().remove(com.termux.app.sound.LauncherSound.DISTRO_BUS_VARIABLE);
+        if (bus != null) {
+            builder.environment().put(com.termux.app.sound.LauncherSound.DISTRO_BUS_VARIABLE, bus);
+        }
+        Process process = builder.start();
+        String out = new String(process.getInputStream().readAllBytes(),
+            java.nio.charset.StandardCharsets.UTF_8).trim();
+        process.waitFor();
+        return out;
+    }
+
     @Test public void theLoginLineSharesX11AndCarriesTheDisplayIn() throws IOException {
         File containers = temp.newFolder("containers");
         File rootfs = rootfs(containers, "debian");
@@ -279,7 +305,7 @@ public class ProotDistroTest {
         assertNotNull(debian);
         assertEquals("proot-distro login debian -u amal --shared-x11"
                 + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
-                + " -e PULSE_SERVER=tcp:127.0.0.1:4713 -- /bin/sh -c 'gimp'",
+                + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS} -- /bin/sh -c 'gimp'",
             ProotDistro.loginCommand(debian, "gimp"));
         // Nothing of the host's environment crosses, so what a prefix app gets exported is
         // passed in by hand instead.

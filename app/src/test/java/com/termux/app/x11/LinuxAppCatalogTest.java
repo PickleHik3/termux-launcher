@@ -324,7 +324,8 @@ public class LinuxAppCatalogTest {
 
         assertEquals("greet --title 'My App'", app.exec);
         assertEquals("proot-distro login debian -u amal --shared-x11"
-            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1 -e PULSE_SERVER=tcp:127.0.0.1:4713"
+            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+            + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
             + " -- /bin/sh -c 'greet --title '\\''My App'\\'''", app.command());
         // What a later phase appends goes to the app, inside the wrapper.
         assertTrue(app.commandWith("--no-sandbox")
@@ -347,7 +348,8 @@ public class LinuxAppCatalogTest {
         assertTrue(app.terminal);
         assertEquals("distro:debian:htop", app.id);
         assertEquals("proot-distro login debian -u amal --shared-x11"
-            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1 -e PULSE_SERVER=tcp:127.0.0.1:4713"
+            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+            + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
             + " -- /bin/sh -c 'htop'", app.command());
     }
 

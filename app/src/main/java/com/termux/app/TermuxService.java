@@ -577,7 +577,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         executionCommand.setShellCommandShellEnvironment = true;
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
-        AppShell newTermuxTask = AppShell.execute(this, executionCommand, this, new TermuxShellEnvironment(), null, false);
+        // The launcher's sound server and bus, for a task that plays sound (a Linux app above all).
+        AppShell newTermuxTask = AppShell.execute(this, executionCommand, this, new TermuxShellEnvironment(),
+            com.termux.app.sound.LauncherSound.get(this).environmentForNewShell(), false);
         if (newTermuxTask == null) {
             Logger.logError(LOG_TAG, "Failed to execute new TermuxTask command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error
@@ -691,7 +693,11 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // If the execution command was started for a plugin, only then will the stdout be set
         // Otherwise if command was manually started by the user like by adding a new terminal session,
         // then no need to set stdout
-        TermuxSession newTermuxSession = TermuxSession.execute(this, executionCommand, getTermuxTerminalSessionClient(), this, new TermuxShellEnvironment(), null, executionCommand.isPluginExecutionCommand);
+        // A session is a first need for sound: the launcher's server starts on its own worker,
+        // and the shell gets the server's address now, which never changes.
+        com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(this);
+        TermuxSession newTermuxSession = TermuxSession.execute(this, executionCommand, getTermuxTerminalSessionClient(), this, new TermuxShellEnvironment(), sound.environmentForNewShell(), executionCommand.isPluginExecutionCommand);
+        sound.onNeed();
         if (newTermuxSession == null) {
             Logger.logError(LOG_TAG, "Failed to execute new TermuxSession command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error

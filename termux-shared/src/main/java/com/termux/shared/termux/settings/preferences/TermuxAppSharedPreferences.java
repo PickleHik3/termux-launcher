@@ -1334,6 +1334,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_DRAWER_APPS, value, false);
     }
 
+    public boolean isLauncherSoundEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_SOUND, TERMUX_APP.DEFAULT_LAUNCHER_SOUND);
+    }
+
+    public void setLauncherSoundEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_SOUND, value, false);
+    }
+
+    public boolean isLauncherMediaControlsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS, TERMUX_APP.DEFAULT_LAUNCHER_MEDIA_CONTROLS);
+    }
+
+    public void setLauncherMediaControlsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS, value, false);
+    }
+
     /** Trimmed; empty means no window manager. */
     @NonNull
     public String getX11WindowManager() {
