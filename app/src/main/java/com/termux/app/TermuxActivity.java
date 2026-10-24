@@ -25704,8 +25704,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetPaneController.setLayoutLocked(
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
         mWidgetPaneController.setFolderStyle(
-            com.termux.app.launcher.home.HomeSettings.folderDensity(this),
-            com.termux.app.launcher.home.HomeSettings.folderCapacity(this));
+            com.termux.app.launcher.home.HomeSettings.folderDensity(this));
         mWidgetPaneController.setExtraGestures(
             com.termux.app.launcher.home.HomeGestures.watched(
                 com.termux.app.launcher.home.HomeSettings.gestureAction(this,

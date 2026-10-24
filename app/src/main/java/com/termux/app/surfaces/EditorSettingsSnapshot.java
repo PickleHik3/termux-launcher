@@ -29,7 +29,6 @@ final class EditorSettingsSnapshot {
         HomeSettings.KEY_ICON_SCALE,
         HomeSettings.KEY_LABEL_SIZE,
         HomeSettings.KEY_FOLDER_DENSITY,
-        HomeSettings.KEY_FOLDER_CAPACITY,
         HomeSettings.KEY_PAGE_INDICATOR);
 
     /** Choices kept as switches. */

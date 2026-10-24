@@ -1016,7 +1016,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 SurfaceProperty.GRAIN, SurfaceProperty.OPACITY, SurfaceProperty.TINT);
         Context context = mHost.context();
         for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
-            HomeSettings.KEY_FOLDER_DENSITY, HomeSettings.KEY_FOLDER_CAPACITY,
+            HomeSettings.KEY_FOLDER_DENSITY,
             HomeSettings.KEY_PAGE_INDICATOR})
             AppearanceSettingsStore.putString(context, key, null);
         AppearanceSettingsStore.putBoolean(context, HomeSettings.KEY_LABEL_TWO_LINES,
@@ -1701,7 +1701,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Home's stored list values, in segment order. */
     private static final String[] LABEL_SIZES = {"small", "default", "large"};
     private static final String[] FOLDER_DENSITIES = {"compact", "default", "comfortable"};
-    private static final String[] FOLDER_LIMITS = {"9", "12", "16", "20"};
     private static final String[] NUMERALS = {"sans", "mono"};
     private static final String[] THEMES = {TermuxPropertyConstants.IVALUE_NIGHT_MODE_SYSTEM,
         TermuxPropertyConstants.IVALUE_NIGHT_MODE_FALSE,
@@ -1818,9 +1817,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case PAGE_DOTS:
                     return "off".equals(AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
-                case FOLDER_LIMIT:
-                    return indexOf(FOLDER_LIMITS, AppearanceSettingsStore.getString(context,
-                        HomeSettings.KEY_FOLDER_CAPACITY, null), 2);
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
@@ -2041,7 +2037,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         R.string.appearance_folders_default, R.string.appearance_folders_roomy);
                 case NUMERALS:
                     return strings(R.string.appearance_numerals_sans, R.string.appearance_numerals_mono);
-                case FOLDER_LIMIT: return FOLDER_LIMITS.clone();
                 case FORM:
                     return strings(R.string.appearance_form_docked, R.string.appearance_form_floating,
                         R.string.appearance_form_split);
@@ -2250,9 +2245,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case PAGE_DOTS:
                 writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
-                break;
-            case FOLDER_LIMIT:
-                writeHomeString(HomeSettings.KEY_FOLDER_CAPACITY, FOLDER_LIMITS[clamp(value, 0, 3)]);
                 break;
             case WALLPAPER_SCROLL:
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);

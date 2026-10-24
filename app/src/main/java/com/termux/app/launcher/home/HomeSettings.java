@@ -44,8 +44,6 @@ public final class HomeSettings {
 
     /** Settings › Home › Folders: a {@code HomeFolderDensity} value. */
     public static final String KEY_FOLDER_DENSITY = "app_launcher_home_folder_density";
-    /** The most apps a Home folder takes, one of {@code HomeFolderPolicy.CAPACITIES}. */
-    public static final String KEY_FOLDER_CAPACITY = "app_launcher_home_folder_capacity";
 
     /** Whether {@code key} is one of these rows. */
     public static boolean owns(@Nullable String key) {
@@ -53,7 +51,7 @@ public final class HomeSettings {
         if (com.termux.app.launcher.drawer.DrawerSettings.owns(key)) return true;
         if (com.termux.app.launcher.notifications.NotificationBadgeStyle.KEY.equals(key)) return true;
         if (KEY_PAGE_INDICATOR.equals(key) || KEY_LAYOUT_LOCKED.equals(key)
-            || KEY_FOLDER_DENSITY.equals(key) || KEY_FOLDER_CAPACITY.equals(key)) return true;
+            || KEY_FOLDER_DENSITY.equals(key)) return true;
         if (KEY_PAGE_TRANSITION.equals(key) || KEY_ICON_SCALE.equals(key) || KEY_LABEL_SIZE.equals(key)
             || KEY_LABEL_TWO_LINES.equals(key) || KEY_LABEL_SHADOW.equals(key)) return true;
         for (HomeGestures.Gesture gesture : HomeGestures.Gesture.values()) {
@@ -92,11 +90,6 @@ public final class HomeSettings {
         return com.termux.app.launcher.notifications.NotificationBadgeStyle.fromValue(
             getString(context, com.termux.app.launcher.notifications.NotificationBadgeStyle.KEY,
                 null));
-    }
-
-    public static int folderCapacity(@NonNull Context context) {
-        return com.termux.app.launcher.widget.HomeFolderPolicy.parseCapacity(
-            getString(context, KEY_FOLDER_CAPACITY, null));
     }
 
     public static boolean isLayoutLocked(@NonNull Context context) {
