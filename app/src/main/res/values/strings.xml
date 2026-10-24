@@ -652,8 +652,8 @@
     <string name="settings_most_used_page_title">Most-used apps page</string>
     <string name="settings_most_used_page_summary">Adds a page ranked by launcher usage</string>
     <string name="settings_app_drawer_header">App drawer</string>
-    <string name="settings_app_drawer_enabled_title">Swipe down for app drawer</string>
-    <string name="settings_app_drawer_enabled_summary">Swipe down on the apps row to open the full-screen app drawer</string>
+    <string name="settings_quick_reply_swipe_title">Swipe up on app icons for quick reply</string>
+    <string name="settings_quick_reply_swipe_summary">Swipe up on an app icon with a notification dot to reply from the dock</string>
     <string name="settings_app_drawer_view_type_title">Drawer layout</string>
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
     <string name="settings_app_drawer_view_type_horizontal">Pages</string>

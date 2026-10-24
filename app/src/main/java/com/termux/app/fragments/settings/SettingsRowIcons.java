@@ -143,7 +143,8 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_density_medium, "app_launcher_home_folder_density");
         key(R.drawable.ic_ms_folder_open, "app_launcher_home_folder_capacity");
         key(R.drawable.ic_ms_swipe_up, "app_launcher_home_palette_gesture");
-        key(R.drawable.ic_ms_swipe_down, "app_launcher_home_gesture_swipe_down", "app_launcher_drawer_enabled");
+        key(R.drawable.ic_ms_swipe_down, "app_launcher_home_gesture_swipe_down");
+        key(R.drawable.ic_ms_swipe_up_alt, "app_launcher_quick_reply_swipe");
         key(R.drawable.ic_ms_touch_double, "app_launcher_home_gesture_double_tap");
         key(R.drawable.ic_ms_swipe_up_alt, "app_launcher_home_gesture_two_finger_up");
         key(R.drawable.ic_ms_swipe_down_alt, "app_launcher_home_gesture_two_finger_down");

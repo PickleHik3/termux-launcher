@@ -367,13 +367,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value));
     }
 
-    public boolean isAppLauncherDrawerEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ENABLED);
+    public boolean isAppLauncherQuickReplySwipeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_QUICK_REPLY_SWIPE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_QUICK_REPLY_SWIPE);
     }
 
-    public void setAppLauncherDrawerEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED, value, false);
+    public void setAppLauncherQuickReplySwipeEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_QUICK_REPLY_SWIPE, value, false);
     }
 
     public String getAppLauncherDrawerViewType() {

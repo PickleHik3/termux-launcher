@@ -22,7 +22,8 @@ Home. Then **Icons and labels**, **Folders**, **Gestures**, **Home widgets** and
 
 **Gestures** holds every gesture in one place: the five on a Home page's free area (swipe up,
 swipe down, double-tap, two-finger swipe up and down), then **Double-tap to lock** (its page picks
-the lock method), **Swipe down for app drawer** and **Swipe on the terminal to switch windows**.
+the lock method), **Swipe up on app icons for quick reply** (on by default; off, a swipe up on an icon with a
+notification dot behaves like on any other icon) and **Swipe on the terminal to switch windows**.
 
 **Start in** is **Home** (the default) or **Terminal**: where the launcher opens after a restart;
 **Terminal** opens the Workspace with one fresh shell window. See

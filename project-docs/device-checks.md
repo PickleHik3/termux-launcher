@@ -20,6 +20,15 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-24 · commit "feat(gestures): the drawer swipe is always on; quick reply gets its own
+  switch" · Home › Gestures no longer lists Swipe down for app drawer; a gesture's choices always
+  include Open drawer; swiping down on the apps row/dock opens the drawer (also after updating from
+  a profile that had it off) · emulator.
+- 2026-10-24 · same commit · Home › Gestures has "Swipe up on app icons for quick reply", on by
+  default: on, swiping up on a dock icon with a notification dot opens the reply card as before;
+  off, the same swipe does nothing special (no card; bottom-dock icon behaves like an unbadged one,
+  and on a rail the sideways drawer pull works from the badged icon); flip it back on and the card
+  returns without a restart · emulator.
 - 2026-10-22 · #133 review fixes (commit "fix(stack): a half's rest is measured in its own
   Style…") · Home Floating with a status bar along the bottom, the window Docked with it along
   the top: swipe Home → window with the window's pane not shown before → the pane meets the dock
@@ -218,9 +227,9 @@ dropped; what follows is what still owes a look.
   "full screen" each list a hit under Appearance, and tapping it opens the editor; "linux apps"
   lands on the Linux apps section; "vibration" lands on General only · emulator.
 - 2026-10-24 · same round · Home › Gestures shows the five Home gestures, then Double-tap to lock
-  (opens its method page), Swipe down for app drawer and Swipe on the terminal to switch windows;
-  flipping each switch there sticks across a reopen and takes effect on the launcher (drawer swipe
-  off: swiping down on the apps row no longer opens the drawer; terminal swipe off: a sideways
+  (opens its method page), Swipe up on app icons for quick reply and Swipe on the terminal to switch
+  windows; flipping each switch there sticks across a reopen and takes effect on the launcher
+  (terminal swipe off: a sideways
   swipe on a window's text no longer changes place) · emulator.
 - 2026-10-24 · same round · Apps & dock › Linux apps in the drawer opens Linux apps, Back returns
   to Apps & dock; the Drawer layout page's first row reads Grid; Linux apps › Fixes opens the old

@@ -99,9 +99,9 @@
             app:summary="@string/settings_apps_sub_lock_summary"
             app:fragment="com.termux.app.fragments.settings.termux.LauncherLockPreferencesFragment" />
         <SwitchPreferenceCompat
-            app:key="app_launcher_drawer_enabled"
-            app:title="@string/settings_app_drawer_enabled_title"
-            app:summary="@string/settings_app_drawer_enabled_summary"
+            app:key="app_launcher_quick_reply_swipe"
+            app:title="@string/settings_quick_reply_swipe_title"
+            app:summary="@string/settings_quick_reply_swipe_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="terminal_body_swipe"

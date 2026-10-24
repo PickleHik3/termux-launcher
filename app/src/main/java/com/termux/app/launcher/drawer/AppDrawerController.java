@@ -1144,7 +1144,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The plane existing means a pull has already built everything this would have built.
         if (mWarmed || mPlane != null || mContent != null || mEngaged || mOpen) return false;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        if (preferences == null || !preferences.isAppLauncherDrawerEnabled()) return false;
+        if (preferences == null) return false;
         // The grid borrows its icons, tint and launch ladder from the dock; before that exists
         // there is nothing to warm.
         if (mHost.suggestionBar() == null) return false;

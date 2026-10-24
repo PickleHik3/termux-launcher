@@ -92,7 +92,6 @@ public class AppDrawerWarmUpTest {
         SharedPreferences raw = activity.getSharedPreferences("drawer-warm-up", Context.MODE_PRIVATE);
         raw.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(activity, raw, null);
-        preferences.setAppLauncherDrawerEnabled(true);
 
         host = new FakeAppDrawerHost(activity, preferences);
         host.viewRoot = root;
@@ -152,15 +151,6 @@ public class AppDrawerWarmUpTest {
         AppDrawerPlaneView plane = ReflectionHelpers.getField(controller, "mPlane");
         assertNotNull(plane);
         assertEquals(1, plane.getContentHost().getChildCount());
-    }
-
-    @Test public void aDisabledDrawerIsNeverBuilt() {
-        preferences.setAppLauncherDrawerEnabled(false);
-
-        assertFalse(controller.warmUp());
-
-        assertNull("a switched-off drawer inflates nothing", contentOf(controller));
-        assertNull(ReflectionHelpers.getField(controller, "mPlane"));
     }
 
     @Test public void theWarmUpRunsOnlyOnce() {

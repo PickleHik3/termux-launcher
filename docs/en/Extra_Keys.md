@@ -54,8 +54,7 @@ later.
 
 Launcher actions not on the shipped row can be added this way too. For example, **App drawer**
 ("Open the app drawer.", with an apps-grid icon) is in the launcher group of the action search. It
-opens the app drawer from the apps row's current edge, and does nothing while **Settings → Home →
-Gestures → Swipe down for app drawer** is off. Do not confuse it with `app.open_drawer` (**Open sessions**),
+opens the app drawer from the apps row's current edge. Do not confuse it with `app.open_drawer` (**Open sessions**),
 which opens the sessions drawer.
 
 Next to the editor row, **Uppercase key labels** ("Show ESC, TAB and other labels in capitals.")

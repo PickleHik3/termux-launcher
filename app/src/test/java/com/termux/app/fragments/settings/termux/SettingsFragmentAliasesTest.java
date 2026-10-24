@@ -132,7 +132,7 @@ public class SettingsFragmentAliasesTest {
         }
         // Gestures gathers every gesture, the lock's page linked from its row.
         androidx.preference.PreferenceGroup gestures = home.findPreference("home_gestures");
-        for (String key : new String[] {"app_launcher_sub_lock", "app_launcher_drawer_enabled",
+        for (String key : new String[] {"app_launcher_sub_lock", "app_launcher_quick_reply_swipe",
             "terminal_body_swipe"}) {
             assertNotNull(key, gestures.findPreference(key));
         }

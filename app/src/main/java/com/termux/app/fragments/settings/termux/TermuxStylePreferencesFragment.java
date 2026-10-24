@@ -442,12 +442,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherNotificationDotsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_most_used_page":
-                mPreferences.setAppLauncherMostUsedPageEnabled(value);
+            case "app_launcher_quick_reply_swipe":
+                mPreferences.setAppLauncherQuickReplySwipeEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_drawer_enabled":
-                mPreferences.setAppLauncherDrawerEnabled(value);
+            case "app_launcher_most_used_page":
+                mPreferences.setAppLauncherMostUsedPageEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_drawer_search_on_open":
@@ -505,10 +505,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherDisplayAppNamesEnabled();
             case "app_launcher_notification_dots":
                 return mPreferences.isAppLauncherNotificationDotsEnabled();
+            case "app_launcher_quick_reply_swipe":
+                return mPreferences.isAppLauncherQuickReplySwipeEnabled();
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
-            case "app_launcher_drawer_enabled":
-                return mPreferences.isAppLauncherDrawerEnabled();
             case "app_launcher_drawer_search_on_open":
                 return mPreferences.isAppLauncherDrawerSearchOnOpenEnabled();
             case "app_launcher_drawer_search_android_keyboard":

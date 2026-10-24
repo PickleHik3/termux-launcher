@@ -37,15 +37,6 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
             return true;
         });
         HomeGesturesRows.bind(this);
-        Preference drawer = findPreference("app_launcher_drawer_enabled");
-        // The gestures offer Open drawer only while the drawer swipe is on: re-read once written.
-        if (drawer != null) drawer.setOnPreferenceChangeListener((row, value) -> {
-            android.view.View view = getView();
-            if (view != null) view.post(() -> {
-                if (isAdded()) HomeGesturesRows.bind(this);
-            });
-            return true;
-        });
         Preference lock = findPreference(HomeSettings.KEY_LAYOUT_LOCKED);
         if (lock != null) lock.setOnPreferenceChangeListener((row, value) -> {
             showEditPagesRow(Boolean.TRUE.equals(value));
