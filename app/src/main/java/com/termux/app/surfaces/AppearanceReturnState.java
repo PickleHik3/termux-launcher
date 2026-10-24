@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.activities.SettingsBackStackState;
-import com.termux.app.surfaces.AppearanceSurfaceController.PageId;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -32,8 +31,8 @@ public final class AppearanceReturnState {
     private static final String JSON_WALLPAPER_SLOT = "wallpaper_slot";
     private static final String JSON_LEFT_AT = "left_at_epoch_ms";
 
-    /** The page the person was on. */
-    @NonNull public final PageId page;
+    /** Whether the wallpaper picker stood over the editor (the Wallpaper row's Change). */
+    public final boolean wallpaper;
     /** The card that was up ({@link EditorCard#key}), or null for none. */
     @Nullable public final String card;
     /** The wallpaper card the picker had centred, or null where it never showed. */
@@ -41,9 +40,9 @@ public final class AppearanceReturnState {
     /** When the person left, wall-clock milliseconds; 0 for unknown, which is never fresh. */
     public final long leftAtEpochMs;
 
-    private AppearanceReturnState(@NonNull PageId page, @Nullable String card,
+    private AppearanceReturnState(boolean wallpaper, @Nullable String card,
                                   @Nullable String wallpaperSlot, long leftAtEpochMs) {
-        this.page = page;
+        this.wallpaper = wallpaper;
         this.card = blankToNull(card);
         this.wallpaperSlot = blankToNull(wallpaperSlot);
         this.leftAtEpochMs = leftAtEpochMs;
@@ -51,12 +50,13 @@ public final class AppearanceReturnState {
 
     /** What the surface and the editor fill in as the person leaves. */
     public static final class Builder {
-        @NonNull private final PageId mPage;
+        private final boolean mWallpaper;
         @Nullable private String mCard;
         @Nullable private String mWallpaperSlot;
 
-        public Builder(@NonNull PageId page) {
-            mPage = page;
+        /** {@code wallpaper}: the picker stood over the editor. */
+        public Builder(boolean wallpaper) {
+            mWallpaper = wallpaper;
         }
 
         /** The card that is up, or null. */
@@ -75,7 +75,7 @@ public final class AppearanceReturnState {
 
         @NonNull
         public AppearanceReturnState build(long leftAtEpochMs) {
-            return new AppearanceReturnState(mPage, mCard, mWallpaperSlot, leftAtEpochMs);
+            return new AppearanceReturnState(mWallpaper, mCard, mWallpaperSlot, leftAtEpochMs);
         }
     }
 
@@ -100,7 +100,8 @@ public final class AppearanceReturnState {
     public String serialize() {
         JSONObject root = new JSONObject();
         try {
-            root.put(JSON_PAGE, page.name());
+            // The name the state has always been written under: the editor, or the picker.
+            root.put(JSON_PAGE, wallpaper ? "WALLPAPER" : "EDITOR");
             root.put(JSON_LEFT_AT, leftAtEpochMs);
             if (card != null) root.put(JSON_CARD, card);
             if (wallpaperSlot != null) root.put(JSON_WALLPAPER_SLOT, wallpaperSlot);
@@ -120,10 +121,10 @@ public final class AppearanceReturnState {
             return null;
         try {
             JSONObject root = new JSONObject(raw);
-            PageId page = pageNamed(root.optString(JSON_PAGE, ""));
-            if (page == null)
+            Boolean wallpaper = pickerNamed(root.optString(JSON_PAGE, ""));
+            if (wallpaper == null)
                 return null;
-            return new AppearanceReturnState(page,
+            return new AppearanceReturnState(wallpaper,
                 root.has(JSON_CARD) ? root.optString(JSON_CARD, null) : null,
                 root.has(JSON_WALLPAPER_SLOT) ? root.optString(JSON_WALLPAPER_SLOT, null) : null,
                 root.optLong(JSON_LEFT_AT, 0L));
@@ -132,18 +133,21 @@ public final class AppearanceReturnState {
         }
     }
 
-    /** A page by name, the merged pages' old names included; null for none this build knows. */
+    /**
+     * Whether a page name stood for the picker over the editor, the merged pages' old names read
+     * as the editor; null for a name this build does not know.
+     */
     @Nullable
-    static PageId pageNamed(@NonNull String name) {
+    static Boolean pickerNamed(@NonNull String name) {
         switch (name) {
             case "EDITOR":
             case "LOOK":
             case "LAYOUT":
             case "ICONS":
             case "OVERVIEW":
-                return PageId.EDITOR;
+                return Boolean.FALSE;
             case "WALLPAPER":
-                return PageId.WALLPAPER;
+                return Boolean.TRUE;
             default:
                 return null;
         }

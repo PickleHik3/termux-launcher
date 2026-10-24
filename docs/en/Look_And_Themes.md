@@ -41,14 +41,18 @@ those changes appear when you turn the phone.
 - **Look**: a slider with five stops, **Clear**, **Mist**, **Tint**, **Solid** and **Custom**, for
   the half the frame shows. Clear is the most see-through and Solid the least. Custom brings back the
   look you made yourself.
+- **All surfaces**, at the Custom stop: a row of upright sliders for what every surface shares.
+  **Frost** (clear to frosted: how much the glass blurs what is behind it, with a fine grain that
+  grows with it), **Opacity**, **Tint**, **Edge** and **Depth** where the glass edge is drawn (see
+  [Glass](#glass)), **Vibrancy** and **Text size**. Moving one puts every surface on the half back on
+  it; a surface's own card can set its own again.
 - **Wallpaper**: shown behind the launcher or not, and **Change**, which opens the wallpaper picker
-  over the editor (below).
+  over the editor (below). This is the only way to the picker.
 - **Theme**: **System**, **Light** or **Dark**.
-- **Icon pack**, **Monochrome**, **Text size**, **Wallpaper colours**, **Contrast**, **Full screen**
-  and **Minimal**.
+- **Icon pack**, **Monochrome**, **Wallpaper colours**, **Contrast**, **Full screen** and
+  **Minimal**.
 - Under **More**: **Alignment** (lines the wallpaper behind the surfaces up with the one on your
-  screen), **Vibrancy**, **Tint colour**, **Depth** and **Glass edge** where the glass edge is drawn
-  (see [Glass](#glass)), and **Tool colours** (see
+  screen), **Tint colour**, and **Tool colours** (see
   [Tools that follow the terminal colours](#tools-that-follow-the-terminal-colours)).
 
 **Text size** makes the terminal text, the keyboard's letters and the labels on the status bar, the
@@ -57,26 +61,32 @@ a terminal pane, and Home's label size still applies.
 
 ## The surfaces' cards
 
+Every card with glass opens on a row of upright sliders, each with its name and value beside it
+("Frost · 20%"): **Frost**, **Opacity** and **Tint**, the surface's own glass. A dot after a
+slider's name means the value is set here, on this surface; **Reset** in the card's ⋮ menu puts it
+back on the Look. Sizes (**Height**, **Corners**, **Margin**) are sliders across the card.
+
 - **Home**: **Icon size**, **Label size** and **Glass widgets**; **Two-line labels**,
   **Label shadow**, **Folders**, **Numerals** and **Page dots**; under More, **Folder limit**,
   **Wallpaper scroll**, **Own layout** (Home laid out unlike the Workspace) and links to Home's
-  gestures and pages. A widget's own choice from its long press still wins over Glass widgets.
-- **Status bar**: **Opacity**, **Tint**, **Visible** and **Position**; **Blur**, **Corners**,
+  gestures and pages. Moving **Glass widgets** applies it to every widget; a widget can still choose
+  its own look from its settings afterwards.
+- **Status bar**: **Frost**, **Opacity**, **Tint**, **Visible** and **Position**; **Corners**,
   **Margin**, **12-hour clock** and **Clock face** (see [Status bar](Status_Bar.md#clock)); under
-  More, **Grain**, **Depth** and a link to its indicators.
-- **Terminal**: **Opacity**, **Tint** and **Text size**; **Blur**, **Corners**, **Margin** and
-  **Contrast**; under More, **Grain**, **Cursor trail**, **Effect**, **Edge colours**, **Split gap**
-  and a link to its font.
-- **Dock**: **Opacity**, **Tint**, **Height**, **Visible** and **Position**; **Style** (Docked or
-  Floating), **Design** (Tray, Beads or Strip), **Blur**, **Corners** and **Margin**; under More,
-  **Grain**, **Depth**, **Search field**, **App count** and a link to its items.
-- **Keyboard**: **Opacity**, **Tint**, **Height** and **Visible**; **Keyboard theme** (its colours
-  and font, see [Keyboard](Keyboard.md)), **Blur**, **Corners** and **Margin**; under More,
-  **Grain**, **Key opacity**, **Key corners**, **Key spacing**, **Type** (Docked, Floating or Split)
-  and links to its size and layouts.
+  More, a link to its indicators.
+- **Terminal**: **Frost**, **Opacity**, **Tint** and **Text size**; **Corners**, **Margin** and
+  **Contrast**; under More, **Cursor trail**, **Effect**, **Edge colours**, **Split gap** and a link
+  to its font.
+- **Dock**: **Frost**, **Opacity**, **Tint**, **Height**, **Visible** and **Position**; **Style**
+  (Docked or Floating), **Design** (Tray, Beads or Strip), **Corners** and **Margin**; under More,
+  **Search field**, **App count** and a link to its items.
+- **Keyboard**: **Frost**, **Opacity**, **Key opacity**, **Tint**, **Key corners**, **Key
+  spacing**, **Height** and **Visible**; **Keyboard theme** (its colours and font, see
+  [Keyboard](Keyboard.md)), **Corners** and **Margin**; under More, **Type** (Docked, Floating or
+  Split) and links to its size and layouts.
 
-The glass of the dock, the status bar and the keyboard (opacity, tint, blur and grain) and the Look
-are held per half. Corners, margin, heights, places, Style and Design are one for both halves, so
+The glass of the dock, the status bar and the keyboard (frost, opacity and tint) and the Look are
+held per half. Corners, margin, heights, places, Style and Design are one for both halves, so
 nothing moves when you swipe.
 
 ## Wallpaper

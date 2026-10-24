@@ -184,8 +184,6 @@ public final class WidgetPaneFrame extends PaneContentFrame
         default void openSurfaceEditor() {}
         /** The grid: open the Layout editor on this place, as every corner tab does. */
         default void openLayoutEditor() {}
-        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
-        default void openWallpaperPicker() {}
         /** Whether the launcher is in minimal mode, which the tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** The minimal-mode glyph: turn minimal mode on or off, as every corner tab does. */
@@ -212,7 +210,8 @@ public final class WidgetPaneFrame extends PaneContentFrame
     private static final int ACTION_DISCARD = 7;
     /** The plus: another widgets page, which the pane turns to. */
     private static final int ACTION_ADD_PAGE = 8;
-    private static final int ACTION_WALLPAPER = 9;
+    /** "Appearance": the Appearance editor on Home's card, as every corner tab opens it. */
+    private static final int ACTION_APPEARANCE = 9;
     /** Minimal mode on or off; the glyph shows which. The same button every place's tab has. */
     private static final int ACTION_MINIMAL = 10;
 
@@ -378,7 +377,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
             PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark,
                 PaneControlsView.TINT_PRIMARY,
                 getContext().getString(R.string.pane_controls_add_page)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
+            PaneControlsView.Action.glyph(ACTION_APPEARANCE, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
             // No minimal button: minimal mode is the Workspace's, and a Home page never enters it.
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
@@ -472,7 +471,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
         }
         if (mHost == null) return;
         if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-        else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
+        else if (id == ACTION_APPEARANCE) { dismissControls(); mHost.openSurfaceEditor(); }
         else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
         // An empty page has no widget to edit, but its grid can still be sized for what comes.
         else if (id == ACTION_EDIT && !mHost.editWidgets()) openGridSizePopup();

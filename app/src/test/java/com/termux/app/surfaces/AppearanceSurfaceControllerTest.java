@@ -57,19 +57,19 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void aDoorOpensTheEditorOnItsObject() {
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.DOCK, null);
+        surface.open(EditorCard.DOCK, null);
         settle();
         assertTrue(surface.isOpen());
         assertTrue(editor.presented);
         assertEquals(EditorCard.DOCK, editor.card);
-        assertEquals(AppearanceSurfaceController.PageId.EDITOR, surface.shownPage());
+        assertFalse(surface.isWallpaperShown());
     }
 
     @Test
     public void aSecondDoorRaisesItsCardInTheSameSession() {
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.DOCK, null);
+        surface.open(EditorCard.DOCK, null);
         settle();
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.KEYBOARD, null);
+        surface.open(EditorCard.KEYBOARD, null);
         settle();
         assertEquals(EditorCard.KEYBOARD, editor.card);
         assertEquals("one session", 1, editor.sessions);
@@ -77,32 +77,43 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void thePickerStandsOverTheEditorAndBackPutsItDown() {
-        surface.open(AppearanceSurfaceController.PageId.WALLPAPER, null, null);
+        surface.open(EditorCard.APPEARANCE, null);
+        settle();
+        editor.listener.onOpenWallpaper();
         settle();
         assertTrue(editor.presented);
-        assertEquals(AppearanceSurfaceController.PageId.WALLPAPER, surface.shownPage());
+        assertTrue(surface.isWallpaperShown());
         assertNotNull(surface.overview());
 
         assertTrue(surface.onBack());
         settle();
 
         assertTrue("still open", surface.isOpen());
-        assertEquals(AppearanceSurfaceController.PageId.EDITOR, surface.shownPage());
+        assertFalse(surface.isWallpaperShown());
         assertEquals("the editor's session is untouched", 0, editor.leaves);
     }
 
     @Test
     public void theAppearanceCardsWallpaperRowRaisesThePicker() {
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.APPEARANCE, null);
+        surface.open(EditorCard.APPEARANCE, null);
         settle();
         editor.listener.onOpenWallpaper();
         settle();
-        assertEquals(AppearanceSurfaceController.PageId.WALLPAPER, surface.shownPage());
+        assertTrue(surface.isWallpaperShown());
+    }
+
+    @Test
+    public void thePhotoPicksReturnBringsThePickerBackOverTheAppearanceCard() {
+        surface.resumeWallpaper();
+        settle();
+        assertTrue(editor.presented);
+        assertEquals(EditorCard.APPEARANCE, editor.card);
+        assertTrue(surface.isWallpaperShown());
     }
 
     @Test
     public void backPutsTheCardDownBeforeItLeaves() {
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.DOCK, null);
+        surface.open(EditorCard.DOCK, null);
         settle();
         assertTrue(surface.onBack());
         assertNull("the card went down", editor.card);
@@ -117,7 +128,9 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void doneKeepsTheSessionAndAppliesThePickersChoiceThenCloses() {
-        surface.open(AppearanceSurfaceController.PageId.WALLPAPER, null, null);
+        surface.open(EditorCard.APPEARANCE, null);
+        settle();
+        editor.listener.onOpenWallpaper();
         settle();
         host.page.pending = true;
         editor.done();
@@ -129,9 +142,14 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void leavingWithAChoicePendingAsksOnce() {
-        surface.open(AppearanceSurfaceController.PageId.WALLPAPER, null, null);
+        surface.open(EditorCard.APPEARANCE, null);
+        settle();
+        editor.listener.onOpenWallpaper();
         settle();
         host.page.pending = true;
+        // The picker goes down, then the Appearance card, then the editor asks.
+        surface.onBack();
+        settle();
         surface.onBack();
         settle();
         surface.onBack();
@@ -141,20 +159,20 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void aDoorNamingNothingReopensTheCardLeftUp() {
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.STATUS, null);
+        surface.open(EditorCard.STATUS, null);
         settle();
         surface.requestExit();
         settle();
         assertFalse(surface.isOpen());
 
-        surface.open(AppearanceSurfaceController.PageId.EDITOR);
+        surface.open();
         settle();
         assertEquals(EditorCard.STATUS, editor.card);
     }
 
     @Test
     public void aRelaunchHandsTheSessionAndTheCardOn() {
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.KEYBOARD, null);
+        surface.open(EditorCard.KEYBOARD, null);
         settle();
         AppearanceSurfaceController.Relaunch carried = surface.carry();
         assertNotNull(carried);
@@ -171,7 +189,7 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void aRelaunchWaitsForASlowWindowRatherThanDropTheSession() {
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.APPEARANCE, null);
+        surface.open(EditorCard.APPEARANCE, null);
         settle();
         AppearanceSurfaceController.Relaunch carried = surface.carry();
         assertNotNull(carried);
@@ -192,7 +210,7 @@ public class AppearanceSurfaceControllerTest {
     @Test
     public void aDoorThatFindsNoWindowClosesAtOnce() {
         editor.frameFailures = 1;
-        surface.open(AppearanceSurfaceController.PageId.EDITOR, EditorCard.DOCK, null);
+        surface.open(EditorCard.DOCK, null);
         settle();
         assertFalse(editor.presented);
         assertFalse(surface.isOpen());

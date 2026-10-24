@@ -111,8 +111,8 @@ public class GlassDragPreviewTest {
     }
 
     @Test
-    public void aBlurDragTicksLightAndTheReleasePaysTheFullPassOnce() {
-        drag(Row.BLUR, 5);
+    public void aFrostDragTicksLightAndTheReleasePaysTheFullPassOnce() {
+        drag(Row.FROST, 5);
 
         assertTrue(lightGlassPasses >= 1);
         // Each tick is one pass at most.

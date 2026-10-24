@@ -197,6 +197,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         /** Home's rows were written: the live Home takes them now. */
         default void applyHomeSettings() {}
         /**
+         * The "Glass widgets" switch moved: every built-in widget's own glass choice goes back to
+         * following it. Returns what each cleared widget held, by id, for Undo.
+         */
+        @NonNull
+        default java.util.Map<Integer, String> clearWidgetGlassChoices() {
+            return java.util.Collections.emptyMap();
+        }
+        /** Undo of {@link #clearWidgetGlassChoices}: the widgets get their own choices back. */
+        default void restoreWidgetGlassChoices(@NonNull java.util.Map<Integer, String> choices) {}
+        /**
          * The window wears {@code mode} (a {@code night-mode} value) without storing it; the
          * activity relaunches into it when the day or night it shows changes.
          */
@@ -283,6 +293,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private String mEntryCustom;
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
+    /**
+     * The widgets' own glass choices the "Glass widgets" switch cleared this visit, by id, as
+     * each first stood: what Undo gives back.
+     */
+    @NonNull private final java.util.Map<Integer, String> mClearedWidgetGlass =
+        new java.util.LinkedHashMap<>();
+    /**
+     * The halves the Look slider was put on Custom this visit while their values still match a
+     * Look: Custom then writes nothing (the Look on screen is its seed), so without this the
+     * slider would read the Look again and the All surfaces strip would never show.
+     */
+    @NonNull private final java.util.EnumSet<WallHalf> mHeldCustom =
+        java.util.EnumSet.noneOf(WallHalf.class);
     /** The last Depth position the user set this session ({@link GlassEdgeControls}). */
     private int mDepthSet = GlassEdgeControls.NONE;
     /** The half the frame shows: where a card writes. */
@@ -484,6 +507,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mSettingsNow = mEntrySettings.signature();
         mEntryMinimal = mHost.isMinimalMode();
         mSessionCustom.clear();
+        mHeldCustom.clear();
+        mClearedWidgetGlass.clear();
         forgetGlassEdgePositions();
         CarriedSession carried = mCarriedNext;
         mCarriedNext = null;
@@ -1681,20 +1706,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (prefs == null || card == null)
                 return 0;
             switch (row) {
+                case FROST: return frostValue(prefs, card);
                 case OPACITY:
-                case TINT:
-                case BLUR:
-                case GRAIN: {
+                case TINT: {
                     SurfaceProperty property = row.property();
-                    if (card.slot == null || property == null)
+                    if (property == null)
                         return 0;
-                    int stored = prefs.getSurfaceValue(card.slot, property, readHalf(row));
-                    switch (row) {
-                        case OPACITY: return AppearanceLooks.opacityPercent(stored);
-                        case TINT: return AppearanceLooks.tintPercent(stored);
-                        case BLUR: return AppearanceLooks.blurDp(stored);
-                        default: return AppearanceLooks.grainPercent(stored);
-                    }
+                    // The Appearance card's are the shared glass of the half the frame shows.
+                    int stored = card.slot == null
+                        ? prefs.getSurfaceBaseValue(property, readHalf(row))
+                        : prefs.getSurfaceValue(card.slot, property, readHalf(row));
+                    return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
+                        : AppearanceLooks.tintPercent(stored);
                 }
                 case HEIGHT:
                     if (card == EditorCard.KEYBOARD)
@@ -1777,7 +1800,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         if (FORMS[i] == layout.keyboardForm()) return i;
                     return 0;
                 }
-                case LOOK: return matchingStop(mHalf);
+                case LOOK: return lookStop(mHalf);
                 case WALLPAPER:
                     return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
                         ? 1 : 0;
@@ -1825,10 +1848,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public int to(@NonNull Row row) {
             switch (row) {
+                case FROST: return Control.GLASS.max;
                 case OPACITY: return AppearanceLooks.OPACITY_MAX;
                 case TINT: return AppearanceLooks.TINT_MAX;
-                case BLUR: return AppearanceLooks.BLUR_MAX_DP;
-                case GRAIN: return AppearanceLooks.GRAIN_MAX;
                 case HEIGHT:
                     if (mCard == EditorCard.KEYBOARD)
                         return Math.round(TermuxPreferenceConstants.TERMUX_APP
@@ -1863,9 +1885,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @NonNull @Override public String readout(@NonNull Row row, int value) {
             switch (row) {
+                case FROST:
                 case OPACITY:
                 case TINT:
-                case GRAIN:
                 case DEPTH:
                 case TEXT_SIZE:
                 case ICON_SIZE:
@@ -1877,7 +1899,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return mCard == EditorCard.KEYBOARD
                         ? getString(R.string.appearance_readout_percent, value)
                         : getString(R.string.appearance_readout_dp, value);
-                case BLUR:
                 case CORNERS:
                 case MARGIN:
                 case SPLIT_GAP:
@@ -1904,8 +1925,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 || !EditorRows.marksOwnValue(card, row))
                 return false;
             SurfaceProperty property = row.property();
-            return property != null
-                && !prefs.isSurfaceInheriting(card.slot, property, readHalf(row));
+            if (property == null)
+                return false;
+            WallHalf half = readHalf(row);
+            // Frost is the surface's own while either of the pair it writes is.
+            if (row == Row.FROST)
+                return !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.BLUR, half)
+                    || !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.GRAIN, half);
+            return !prefs.isSurfaceInheriting(card.slot, property, half);
         }
 
         @Override public boolean enabled(@NonNull Row row) {
@@ -1936,6 +1963,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         R.array.appearance_editor_tint_hue_values, prefs.getSurfaceGlassTintHue());
                 case CLOCK_FACE:
                     return getString(clockStyleLabel(prefs.getTopPaneClockStyle()));
+                case GLASS_WIDGETS:
+                    return getString(R.string.appearance_glass_widgets_note);
                 case VISIBLE: {
                     LayoutEditorController layout = mHost.layoutEditor();
                     if (layout != null && layout.showsOtherOrientation())
@@ -2022,6 +2051,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onAction(@NonNull Row row, @NonNull View anchor) {
             onRowAction(row, anchor);
         }
+
+        @Override public boolean shown(@NonNull Row row) {
+            // All surfaces is the Custom stop's, as the Look page's Custom row was.
+            if (mCard == EditorCard.APPEARANCE && row.kind == EditorRows.Kind.STRIP)
+                return AppearanceLooks.isCustomStop(lookStop(mHalf));
+            return true;
+        }
+
+        @Nullable @Override public CharSequence stripHeading(@NonNull Row first) {
+            return mCard == EditorCard.APPEARANCE
+                ? getString(R.string.appearance_strip_all_surfaces) : null;
+        }
     }
 
     /** Home's icon size, a percent of the dock's 48dp, as Settings › Home offers it. */
@@ -2069,13 +2110,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || card == null)
             return;
         switch (row) {
+            case FROST:
+                // Each radius re-blurs the frames: a drag holds that for its release.
+                holdFrameBakesForDrag();
+                writeFrost(card, value);
+                break;
             case OPACITY:
             case TINT:
-            case BLUR:
-            case GRAIN:
                 // Each value re-bakes the blurred frames: a drag holds that for its release.
                 holdFrameBakesForDrag();
-                if (!writeLinkedOpacity(row, value, dragging))
+                if (card.slot == null)
+                    writeShared(row, value);
+                else if (!writeLinkedOpacity(row, value, dragging))
                     writeSurface(card, row, value);
                 break;
             case HEIGHT:
@@ -2140,6 +2186,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case GLASS_WIDGETS:
                 AppearanceSettingsStore.putBoolean(context, "widgets_on_glass", value != 0);
+                // A widget's own On or Off overrode the switch, so on a phone whose widgets
+                // predate it (they stored "on") it did nothing: the switch now applies to every
+                // widget, and each can still choose its own look afterwards.
+                for (java.util.Map.Entry<Integer, String> entry
+                        : mHost.clearWidgetGlassChoices().entrySet())
+                    mClearedWidgetGlass.putIfAbsent(entry.getKey(), entry.getValue());
                 settingsWritten();
                 break;
             case TWO_LINE:
@@ -2372,13 +2424,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int scopes = SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD;
         switch (property) {
-            case BLUR:
-                written = AppearanceLooks.blurDp(value);
-                scopes |= SurfaceEditorProperties.PREVIEW_BLUR;
-                break;
-            case GRAIN:
-                written = AppearanceLooks.grainPercent(value);
-                break;
             case TINT:
                 written = AppearanceLooks.tintPercent(value);
                 break;
@@ -2390,6 +2435,73 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY)
             prefs.setTerminalBackgroundOpacity(written);
         requestPreview(scopes);
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && !mSliderDragActive) {
+            sheet.restate(row);
+            sheet.restate(Row.LOOK);
+        }
+    }
+
+    /**
+     * Where Frost stands on {@code card}: the shared glass of the frame's half on the Appearance
+     * card, else the surface's own pair. The position it was left at reads back while the pair is
+     * still that position's ({@link GlassControls#readBack}).
+     */
+    private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
+        WallHalf half = readHalf(Row.FROST);
+        if (card.slot == null)
+            return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+        return GlassControls.readBack(prefs.getSurfaceGlassPosition(card.slot),
+            prefs.getSurfaceValue(card.slot, SurfaceProperty.BLUR, half),
+            prefs.getSurfaceValue(card.slot, SurfaceProperty.GRAIN, half));
+    }
+
+    /**
+     * Frost: blur and grain together along {@link GlassControls}' curve, and the position it was
+     * left at. On the Appearance card it is the shared glass of the frame's half, every surface on
+     * that half put back on it ({@link GlobalGlass}); on a surface's card, that surface's own
+     * pair on the half, as the previous editor's Frost wrote it for a tapped element.
+     */
+    private void writeFrost(@NonNull EditorCard card, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int glass = Control.GLASS.clamp(value);
+        int blur = GlassControls.blurForGlass(glass);
+        int grain = GlassControls.grainForGlass(glass);
+        WallHalf half = writeHalf(Row.FROST);
+        prefs.setSurfaceGlassPosition(card.slot, glass);
+        if (card.slot == null) {
+            GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
+            GlobalGlass.write(prefs, SurfaceProperty.GRAIN, half, grain);
+        } else {
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.BLUR, half, blur);
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.GRAIN, half, grain);
+        }
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+        restateGlassRow(Row.FROST);
+    }
+
+    /**
+     * The Appearance card's Opacity or Tint: the shared value of the frame's half, every surface
+     * on that half put back on it ({@link GlobalGlass}).
+     */
+    private void writeShared(@NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        SurfaceProperty property = row.property();
+        if (prefs == null || property == null)
+            return;
+        GlobalGlass.write(prefs, property, writeHalf(row), value);
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
+        restateGlassRow(row);
+    }
+
+    /** A glass row and the Look slider read again, unless a drag holds restatement. */
+    private void restateGlassRow(@NonNull Row row) {
         EditorCardSheet sheet = mSheet;
         if (sheet != null && !mSliderDragActive) {
             sheet.restate(row);
@@ -2417,6 +2529,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ---- the Look slider ---------------------------------------------------------------------
 
+    /** Where the Look slider stands for a half: Custom where it was put there, else the match. */
+    private int lookStop(@NonNull WallHalf half) {
+        return mHeldCustom.contains(half) ? AppearanceLooks.CUSTOM_STOP : matchingStop(half);
+    }
+
     /** The stop a half wears: the Look it matches, or Custom. */
     private int matchingStop(@NonNull WallHalf half) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -2441,8 +2558,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         settleLookDrag();
         TermuxAppSharedPreferences prefs = prefs();
+        boolean custom = AppearanceLooks.isCustomStop(stop);
+        // Leaving Custom for the Look the values still match writes nothing, but the slider
+        // and the All surfaces strip follow the stop.
+        boolean held = custom ? mHeldCustom.add(mHalf) : mHeldCustom.remove(mHalf);
         if (prefs != null && moveToStop(prefs, stop))
             syncAfterBulkWrite();
+        else if (held && mSheet != null)
+            mSheet.restate();
     }
 
     /**
@@ -2466,12 +2589,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             forgetGlassEdgePositions();
             return true;
         }
-        mSessionCustom.enter(into);
+        mSessionCustom.enter(into, mHalf);
         return true;
     }
 
     static final class SessionCustom {
         @Nullable private AppearanceSnapshot mKept;
+        /** {@link #mKept} half by half: what the Custom stop on one half puts back on it alone. */
+        @Nullable private java.util.Map<WallHalf, SurfacePresets.Preset> mKeptHalves;
         /**
          * What Custom stood at when the slider (or a tap at a Look) moved there, while nothing was
          * kept: the Look on screen, or the saved Custom just applied. Custom left exactly as it was
@@ -2488,9 +2613,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void leave(@NonNull TermuxAppSharedPreferences live) {
             AppearanceSnapshot now = AppearanceSnapshot.capture(live);
             mKept = now.signature().equals(mSeedSignature) ? null : now;
+            mKeptHalves = null;
             mSeedSignature = null;
-            if (mKept != null)
+            if (mKept != null) {
+                mKeptHalves = new java.util.EnumMap<>(WallHalf.class);
+                for (WallHalf half : WallHalf.values())
+                    mKeptHalves.put(half, SurfacePresets.customOf(live, half));
                 SurfacePresets.saveCustom(live);
+            }
         }
 
         /**
@@ -2506,6 +2636,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             SurfacePresets.Preset saved = SurfacePresets.custom(into);
             if (saved != null)
                 SurfacePresets.applyCustom(into, saved);
+            mSeedSignature = AppearanceSnapshot.signatureOf(into);
+        }
+
+        /**
+         * The slider returns to Custom on {@code half}, the half the frame shows: that half's kept
+         * values come back, else its part of the saved Custom, else nothing is written. The other
+         * half is never written: a saved Custom that names Home's own look once brought it back
+         * on Home from the Workspace's slider (pong, 2026-10-25: Home stood on Solid's numbers
+         * nobody chose there).
+         */
+        void enter(@NonNull TermuxAppSharedPreferences into, @NonNull WallHalf half) {
+            java.util.Map<WallHalf, SurfacePresets.Preset> kept = mKeptHalves;
+            if (mKept != null && kept != null && kept.get(half) != null) {
+                SurfacePresets.applyCustom(into, kept.get(half), half);
+                return;
+            }
+            SurfacePresets.Preset saved = SurfacePresets.custom(into);
+            if (saved != null)
+                SurfacePresets.applyCustom(into, saved, half);
             mSeedSignature = AppearanceSnapshot.signatureOf(into);
         }
 
@@ -2527,6 +2676,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         void clear() {
             mKept = null;
+            mKeptHalves = null;
             mSeedSignature = null;
         }
 
@@ -2540,6 +2690,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         void copyFrom(@NonNull SessionCustom other) {
             mKept = other.mKept;
+            mKeptHalves = other.mKeptHalves;
             mSeedSignature = other.mSeedSignature;
         }
     }
@@ -3940,6 +4091,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mHost.isMinimalMode() != mEntryMinimal)
             mHost.setMinimalMode(mEntryMinimal);
         mSessionCustom.clear();
+        mHeldCustom.clear();
+        if (!mClearedWidgetGlass.isEmpty()) {
+            mHost.restoreWidgetGlassChoices(new java.util.LinkedHashMap<>(mClearedWidgetGlass));
+            mClearedWidgetGlass.clear();
+        }
         forgetGlassEdgePositions();
         syncAfterBulkWrite();
     }

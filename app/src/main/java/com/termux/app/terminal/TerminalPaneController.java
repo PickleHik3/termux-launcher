@@ -211,12 +211,10 @@ public class TerminalPaneController {
         default void showHelpOverlay() {}
         /** Those controls are going away again, however the user asked for that. */
         default void onPaneControlsDismissed() {}
-        /** The pane corner's old Appearance door; no tab carries it now, the picker leads there. */
+        /** The lone pane's corner asked for "Appearance": the editor on the terminal's card. */
         default void openSurfaceEditor() {}
         /** The pane corner's old Layout door; no tab carries it now, the picker leads there. */
         default void openLayoutEditor() {}
-        /** The lone pane's corner asked for "Appearance": the in-app wallpaper picker. */
-        default void openWallpaperPicker() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
@@ -5747,8 +5745,8 @@ public class TerminalPaneController {
         private static final int ACTION_SETTINGS = 6;
         /** Turn automatic tiling on or off. */
         private static final int ACTION_AUTO_TILING = 7;
-        /** Open the wallpaper picker, the one door to wallpaper, Look and Layout. */
-        private static final int ACTION_WALLPAPER = 8;
+        /** Open the Appearance editor on the terminal's card. */
+        private static final int ACTION_APPEARANCE = 8;
         /** Minimal mode on or off for the terminal place; the glyph shows which. */
         private static final int ACTION_MINIMAL = 9;
 
@@ -5849,8 +5847,8 @@ public class TerminalPaneController {
 
         /**
          * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
-         * maximise or close, so it offers the one "Appearance" door instead — the wallpaper
-         * picker, which leads on to the Look and Layout editors, as every place on the wall does —
+         * maximise or close, so it offers the one "Appearance" door instead — the Appearance
+         * editor on the terminal's card, as every place on the wall opens it on its own object —
          * with minimal mode, the tiling switch, settings and help. In a split it is the three things a pane can do to itself
          * and nothing else ({@link #splitTabActions}); the editors are reached from a lone pane's
          * corner, the other places and the terminal long-press menu, not from here.
@@ -5859,7 +5857,7 @@ public class TerminalPaneController {
             List<PaneControlsView.Action> actions = new ArrayList<>(5);
             android.content.Context context = mHostView.getContext();
             if (isLonePane()) {
-                actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
+                actions.add(PaneControlsView.Action.glyph(ACTION_APPEARANCE,
                     CornerTabGlyphs.APPEARANCE,
                     context.getString(R.string.pane_controls_wallpaper_style)));
                 actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark,
@@ -6210,9 +6208,9 @@ public class TerminalPaneController {
             } else if (action == ACTION_SETTINGS) {
                 dismissControls();
                 mHost.openSettings();
-            } else if (action == ACTION_WALLPAPER) {
+            } else if (action == ACTION_APPEARANCE) {
                 dismissControls();
-                mHost.openWallpaperPicker();
+                mHost.openSurfaceEditor();
             }
         }
 

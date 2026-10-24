@@ -68,7 +68,6 @@ public class WidgetPaneFrameTapTest {
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
-        @Override public void openWallpaperPicker() { log.add("wallpaper"); }
         boolean minimal;
         @Override public boolean isMinimalMode() { return minimal; }
         @Override public void toggleMinimalMode() { minimal = !minimal; log.add("minimal"); }
@@ -384,7 +383,7 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         tap(page, wallpaperX(activity), tabCentreY(activity));
 
-        assertEquals(Arrays.asList("edit", "wallpaper"), calls.log);
+        assertEquals(Arrays.asList("edit", "appearance"), calls.log);
     }
 
     /**
@@ -455,7 +454,7 @@ public class WidgetPaneFrameTapTest {
         RectF bounds = new RectF();
         page.controlsTab().tabBounds(bounds);
         tap(page, wallpaperX(activity), bounds.centerY());
-        assertEquals(Collections.singletonList("wallpaper"), calls.log);
+        assertEquals(Collections.singletonList("appearance"), calls.log);
         assertFalse(page.isControlsTabShown());
     }
 
