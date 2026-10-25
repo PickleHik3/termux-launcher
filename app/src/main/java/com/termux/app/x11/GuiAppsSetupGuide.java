@@ -31,14 +31,19 @@ public final class GuiAppsSetupGuide {
 
     private GuiAppsSetupGuide() {}
 
+    /** Whether fcitx5 is in the prefix, which the guide's command installs. Tests replace it. */
+    public static final java.util.function.BooleanSupplier FCITX5_ON_DISK =
+        () -> new java.io.File(X11CliInstaller.FCITX5_PATH).exists();
+    public static java.util.function.BooleanSupplier fcitx5Installed = FCITX5_ON_DISK;
+
     /**
-     * Whether the guide has run, which is what fcitx5-backed features need. An edition with no
-     * guide (nix) has nothing to wait for, so it counts as set up.
+     * Whether Linux apps are set up as far as fcitx5-backed features care: fcitx5 is installed,
+     * not merely the guide's command copied. An edition with no guide (nix) has nothing to wait
+     * for, so it counts as set up.
      */
     public static boolean isSetUp(@NonNull Context context) {
         TourEdition edition = TourEdition.of(context.getPackageName());
-        return GuiAppsSetup.routesFor(edition).isEmpty()
-            || preferences(context).getBoolean(KEY_COPIED, false);
+        return GuiAppsSetup.routesFor(edition).isEmpty() || fcitx5Installed.getAsBoolean();
     }
 
     /** One screen of the guide. */
