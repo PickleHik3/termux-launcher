@@ -3,6 +3,7 @@ package com.termux.app.launcher.widget.builtin;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.View;
 
@@ -35,6 +36,12 @@ final class CalendarMonthGridView extends View {
     private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint.FontMetrics metrics = new Paint.FontMetrics();
     private final RectF rect = new RectF();
+    /** Start-aligned twin of {@link #dayPaint}, to read the digits' ink bounds from. */
+    private final Paint inkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Rect ink = new Rect();
+    /** A two-digit number's ink, so today's disc is one size on every day of the month. */
+    private final Rect sizing = new Rect();
+    private final float[] disc = new float[3];
 
     @Nullable private CalendarLayoutPlanner.Grid grid;
     @NonNull private final String[] names = new String[7];
@@ -77,6 +84,9 @@ final class CalendarMonthGridView extends View {
         lead = CalendarWidgetFormats.leadingBlanks(month, first);
         CalendarWidgetSupport.dressNumerals(dayPaint, style, grid.digitRole,
             grid.digitSizeDp * density);
+        inkPaint.setTypeface(dayPaint.getTypeface());
+        inkPaint.setFontFeatureSettings(dayPaint.getFontFeatureSettings());
+        inkPaint.setTextSize(dayPaint.getTextSize());
         if (grid.letterRole != null) {
             letterPaint.setTypeface(style.sansMedium);
             letterPaint.setTextSize(grid.letterSizeDp * density);
@@ -102,10 +112,9 @@ final class CalendarMonthGridView extends View {
             if (day < 1 || day > days) continue;
             boolean isToday = day == todayDay;
             if (isToday) {
-                set(rect, grid.selectedDisc(i), rtl, width);
-                float radius = Math.min(rect.width(), rect.height()) / 2f;
+                fitDisc(grid, i, DAY_LABELS[day], rtl, width);
                 fillPaint.setColor(style.primary);
-                canvas.drawRoundRect(rect, radius, radius, fillPaint);
+                canvas.drawCircle(disc[0], disc[1], disc[2], fillPaint);
             }
             dayPaint.setColor(isToday ? style.onPrimary
                 : weekendColumns[col] ? style.onSurfaceVariant : style.onSurface);
@@ -117,6 +126,30 @@ final class CalendarMonthGridView extends View {
                 canvas.drawCircle(rect.centerX(), rect.centerY(), rect.width() / 2f, fillPaint);
             }
         }
+    }
+
+    /** The widest two-digit date in most fonts; the disc is sized to hold it. */
+    private static final String DISC_SIZING_SAMPLE = "28";
+
+    /** Fills {@link #disc} for the number in cell {@code index}: its drawn ink, held in the cell. */
+    private void fitDisc(@NonNull CalendarLayoutPlanner.Grid grid, int index,
+                         @NonNull String text, boolean rtl, float width) {
+        set(rect, grid.digits.get(index), rtl, width);
+        inkPaint.getFontMetrics(metrics);
+        float baseline = rect.top + (rect.height() - (metrics.descent - metrics.ascent)) / 2f
+            - metrics.ascent;
+        inkPaint.getTextBounds(text, 0, text.length(), ink);
+        inkPaint.getTextBounds(DISC_SIZING_SAMPLE, 0, DISC_SIZING_SAMPLE.length(), sizing);
+        float advance = inkPaint.measureText(text);
+        // Drawn centre-aligned on the box's centre, so the text starts half an advance back.
+        float inkCx = rect.centerX() - advance / 2f + (ink.left + ink.right) / 2f;
+        float inkCy = baseline + (ink.top + ink.bottom) / 2f;
+        Box cell = grid.cells.get(index);
+        float pitch = (grid.cells.size() > 7 ? grid.cells.get(7).top - cell.top
+            : cell.height + CalendarLayoutPlanner.CELL_GAP_DP) * density;
+        set(rect, cell, rtl, width);
+        CalendarTodayDisc.fit(inkCx, inkCy, sizing.width(), sizing.height(), rect.left, rect.width(),
+            pitch, CalendarLayoutPlanner.CELL_GAP_DP * density, disc);
     }
 
     /** {@code text} centred in {@code box}, the box mirrored for a right-to-left layout. */

@@ -20,6 +20,10 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(calendar): centre today's circle on its number" · Calendar widget month
+  grid, today a two-digit date in the first (Sunday) column, then in the last column: the circle is
+  centred on the digits and holds both with a margin; at font scale 1.3 and in the narrowest span
+  it shrinks to its cell and touches no neighbour · pong.
 - 2026-10-25 · commit "feat(sound): one launcher-run sound server and media controls for
   every shell and distro" · in `proot-distro login debian`: the distro's
   `/etc/pulse/client.conf.d/termux-launcher.conf` names tcp:127.0.0.1:4713 and the cookie copy,
