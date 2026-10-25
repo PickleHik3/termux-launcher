@@ -37,6 +37,8 @@ final class EditorBar {
         void onUndo();
         void onDone();
         void onPalette();
+        /** The theme hint went for good: the palette or the bubble was tapped. */
+        void onThemeHintSeen();
     }
 
     /** The bar's height and its items' visual height inside their 48dp targets. */
@@ -48,6 +50,9 @@ final class EditorBar {
     /** The half line's dots: 6dp, the shown half's dot 16 × 6; its height is the pose's. */
     private static final int DOT_DP = 6;
     private static final int ACTIVE_DOT_DP = 16;
+    /** The theme hint stands this far above the bar, and keeps this far from the screen's sides. */
+    private static final int HINT_GAP_DP = 6;
+    private static final int HINT_SIDE_DP = 16;
 
     @NonNull private final Context mContext;
     @NonNull private final LinearLayout mBar;
@@ -55,6 +60,8 @@ final class EditorBar {
     @NonNull private final MaterialButton mUndo;
     @NonNull private final MaterialButton mDone;
     @NonNull private final MaterialButton mPalette;
+    @NonNull private final TextView mHint;
+    private boolean mHintWanted;
     @NonNull private final LinearLayout mHalfRow;
     @NonNull private final View mHomeDot;
     @NonNull private final View mWorkspaceDot;
@@ -101,8 +108,36 @@ final class EditorBar {
         addItem(mDone, ViewGroup.LayoutParams.WRAP_CONTENT);
 
         mPalette = iconButton(R.drawable.ic_symbol_palette, R.string.appearance_card_appearance);
-        mPalette.setOnClickListener(v -> { if (mListener != null) mListener.onPalette(); });
+        mPalette.setOnClickListener(v -> {
+            dismissThemeHint();
+            if (mListener != null) mListener.onPalette();
+        });
         addItem(mPalette, dp(48));
+
+        mHint = new TextView(context);
+        EditorViews.textAppearance(mHint, com.google.android.material.R.attr.textAppearanceLabelLarge);
+        mHint.setTextColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSecondaryContainer, 0));
+        mHint.setText(R.string.appearance_theme_hint);
+        mHint.setSingleLine(true);
+        mHint.setEllipsize(TextUtils.TruncateAt.END);
+        mHint.setGravity(Gravity.CENTER);
+        mHint.setPadding(dp(14), dp(8), dp(14), dp(8));
+        mHint.setMaxWidth(context.getResources().getDisplayMetrics().widthPixels
+            - 2 * dp(HINT_SIDE_DP));
+        GradientDrawable bubble = new GradientDrawable();
+        bubble.setCornerRadius(dp(16));
+        bubble.setColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSecondaryContainer, 0));
+        mHint.setBackground(bubble);
+        mHint.setElevation(dp(4));
+        mHint.setVisibility(View.GONE);
+        mHint.setOnClickListener(v -> {
+            dismissThemeHint();
+            if (mListener != null) mListener.onPalette();
+        });
+        mBar.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> alignHint());
+        mHint.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> alignHint());
 
         mHalfRow = new LinearLayout(context);
         mHalfRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -155,6 +190,11 @@ final class EditorBar {
             content.addView(mBar, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(BAR_DP),
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+            FrameLayout.LayoutParams hint = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            hint.bottomMargin = dp(BAR_DP + HINT_GAP_DP);
+            content.addView(mHint, hint);
         }
     }
 
@@ -171,7 +211,7 @@ final class EditorBar {
     }
 
     void detach() {
-        for (View view : new View[] {mHalfRow, mBar}) {
+        for (View view : new View[] {mHalfRow, mBar, mHint}) {
             if (view.getParent() instanceof ViewGroup)
                 ((ViewGroup) view.getParent()).removeView(view);
         }
@@ -226,11 +266,15 @@ final class EditorBar {
      */
     void place(float barLiftPx, float halfLiftPx) {
         mBar.setTranslationY(-barLiftPx);
+        mHint.setTranslationY(-barLiftPx);
         mHalfRow.setTranslationY(-halfLiftPx);
     }
 
     /** The bar shown (at rest) or hidden (a card is up). */
     void setBarShown(boolean shown, boolean animate) {
+        mHint.animate().cancel();
+        mHint.setAlpha(1f);
+        mHint.setVisibility(shown && mHintWanted ? View.VISIBLE : View.GONE);
         mBar.animate().cancel();
         float to = shown ? 1f : 0f;
         if (shown && mBar.getVisibility() != View.VISIBLE) {
@@ -251,6 +295,45 @@ final class EditorBar {
         int visibility = shown ? View.VISIBLE : View.GONE;
         if (mHalfRow.getVisibility() != visibility) mHalfRow.setVisibility(visibility);
         if (!shown && mBar.getVisibility() != View.GONE) mBar.setVisibility(View.GONE);
+        if (!shown && mHint.getVisibility() != View.GONE) mHint.setVisibility(View.GONE);
+    }
+
+    /**
+     * Whether the theme hint is owed: a bubble over the palette glyph, shown with the bar until
+     * the first tap on either. It is not a setting, so nothing about it is dirty.
+     */
+    void setThemeHintWanted(boolean wanted) {
+        mHintWanted = wanted;
+        if (!wanted) mHint.setVisibility(View.GONE);
+        else if (mBar.getVisibility() == View.VISIBLE) mHint.setVisibility(View.VISIBLE);
+    }
+
+    boolean isThemeHintShown() {
+        return mHint.getVisibility() == View.VISIBLE;
+    }
+
+    @NonNull
+    View themeHint() {
+        return mHint;
+    }
+
+    private void dismissThemeHint() {
+        if (!mHintWanted) return;
+        setThemeHintWanted(false);
+        if (mListener != null) mListener.onThemeHintSeen();
+    }
+
+    /** Centres the bubble over the palette glyph, kept inside the screen's sides. */
+    private void alignHint() {
+        if (mHint.getVisibility() != View.VISIBLE || !(mHint.getParent() instanceof View)) return;
+        View content = (View) mHint.getParent();
+        if (mPalette.getWidth() == 0 || mHint.getWidth() == 0 || content.getWidth() == 0) return;
+        float palette = mBar.getLeft() + mPalette.getLeft() + mPalette.getWidth() / 2f;
+        float shift = palette - content.getWidth() / 2f;
+        float side = dp(HINT_SIDE_DP);
+        float room = content.getWidth() / 2f - side - mHint.getWidth() / 2f;
+        shift = Math.max(-room, Math.min(room, shift));
+        if (mHint.getTranslationX() != shift) mHint.setTranslationX(shift);
     }
 
     private void paintDot(@NonNull View dot, @NonNull GradientDrawable shape, boolean active,

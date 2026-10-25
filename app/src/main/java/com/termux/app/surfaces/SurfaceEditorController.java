@@ -560,6 +560,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mBar.setListener(new BarListener());
         }
         mBar.attach(content);
+        TermuxAppSharedPreferences hintPrefs = prefs();
+        mBar.setThemeHintWanted(hintPrefs != null && !hintPrefs.isAppearanceThemeHintSeen());
         mBar.setShown(true);
         mBar.setBarShown(true, false);
         mBar.setHalf(mHalf);
@@ -883,6 +885,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void onPalette() {
             openCard(EditorCard.APPEARANCE, true);
+        }
+
+        @Override public void onThemeHintSeen() {
+            TermuxAppSharedPreferences prefs = prefs();
+            if (prefs != null) prefs.setAppearanceThemeHintSeen(true);
         }
     }
 
