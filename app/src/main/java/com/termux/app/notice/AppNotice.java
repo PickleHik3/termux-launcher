@@ -144,8 +144,14 @@ public final class AppNotice {
      */
     public static void undoable(@Nullable Context context, @Nullable CharSequence title,
                                 @Nullable CharSequence hint, @NonNull Runnable undo) {
-        raise(context, AppNoticeItem.Kind.SUCCESS, title, hint, "↺",
-            AppNoticeHostView.HOLD_UNDO_MS, undo, false, hint);
+        undoable(context, title, hint, undo, AppNoticeHostView.HOLD_UNDO_MS);
+    }
+
+    /** {@link #undoable(Context, CharSequence, CharSequence, Runnable)}, on offer for {@code holdMs}. */
+    public static void undoable(@Nullable Context context, @Nullable CharSequence title,
+                                @Nullable CharSequence hint, @NonNull Runnable undo,
+                                long holdMs) {
+        raise(context, AppNoticeItem.Kind.SUCCESS, title, hint, "↺", holdMs, undo, false, hint);
     }
 
     /**

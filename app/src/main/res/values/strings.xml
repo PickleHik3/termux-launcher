@@ -19,6 +19,12 @@
     <!-- An app icon on a Home page: the drawer's long-press row, and the toast after either way in. -->
     <string name="home_add_to_home">Add to home</string>
     <string name="home_app_added">Added to Home page %1$d</string>
+    <!-- The targets at the top of the screen while a Home icon or folder is dragged, and the
+         notice after a drop on Remove, whose tap puts the item back. -->
+    <string name="home_drop_remove">Remove</string>
+    <string name="home_item_removed">Removed from Home</string>
+    <string name="home_item_removed_undo_hint">Tap to undo</string>
+    <string name="home_item_restore_failed">Couldn’t put it back</string>
     <!-- A folder on a Home page: the name it takes when its first app has no label, and the row a
          long press on one of its apps offers. -->
     <string name="home_folder_default_name">Folder</string>

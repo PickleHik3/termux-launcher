@@ -27969,6 +27969,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void dismissHomeAppMenu() {
                     if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
                 }
+                // The drop targets sit in the status bar while it runs along the top of the screen.
+                private final int[] statusAt = new int[2];
+                @Override public boolean homeDropTargetBand(@NonNull android.graphics.Rect out) {
+                    View bar = findViewById(R.id.terminal_window_bar_host);
+                    if (bar == null || !bar.isShown() || bar.getHeight() <= 0) return false;
+                    bar.getLocationOnScreen(statusAt);
+                    View root = bar.getRootView();
+                    if (statusAt[1] + bar.getHeight() / 2 > root.getHeight() / 2) return false;
+                    out.set(statusAt[0], statusAt[1], statusAt[0] + bar.getWidth(),
+                        statusAt[1] + bar.getHeight());
+                    return true;
+                }
+                @Override @Nullable public TerminalDress.Source homeDropTargetDress() {
+                    return terminalDressSource();
+                }
                 @Override public void beginHomeFolderRename(@NonNull String name,
                         @NonNull FolderRenameTitleView title,
                         @NonNull com.termux.app.launcher.widget.WidgetPaneController.HomeFolderRenameTarget target) {
