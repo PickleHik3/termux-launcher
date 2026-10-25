@@ -197,4 +197,41 @@ public class WallParallaxTest {
         // And back the other way, arriving from the left.
         assertEquals(5f, WallParallax.innerPosition(2, -1f, 5), EPS);
     }
+
+    // ---- Edit pages' hold: the wallpaper settles once when it lets go ---------------------
+
+    @Test
+    public void aHoldSettlesOverTheDistanceTheWallWouldHaveSlid() {
+        // Five pages: 540 px of spare over 4 steps is 135 px a page, so 270 px is two pages.
+        assertEquals(2f * WIDTH, WallParallax.settleTravelPx(270f, 5, SPARE, WIDTH), EPS);
+        assertEquals(-1f * WIDTH, WallParallax.settleTravelPx(-135f, 5, SPARE, WIDTH), EPS);
+    }
+
+    @Test
+    public void nothingSettlesWhereNothingPans() {
+        assertEquals(0f, WallParallax.settleTravelPx(270f, 5, 0, WIDTH), EPS);
+        assertEquals(0f, WallParallax.settleTravelPx(270f, 1, SPARE, WIDTH), EPS);
+        assertEquals(0f, WallParallax.settleTravelPx(270f, 5, SPARE, 0), EPS);
+    }
+
+    @Test
+    public void aSettleRunsFromTheHeldOffsetToTheLiveOne() {
+        // Held at 405, the page in view asks for 135: the gap is 270.
+        assertEquals(405f, WallParallax.settlingOffsetPx(135f, 270f, 1f, SPARE), EPS);
+        assertEquals(270f, WallParallax.settlingOffsetPx(135f, 270f, 0.5f, SPARE), EPS);
+        assertEquals(135f, WallParallax.settlingOffsetPx(135f, 270f, 0f, SPARE), EPS);
+    }
+
+    @Test
+    public void aSettleFollowsTheWallWhenItMovesMidway() {
+        // The wall moved on to 270 while half the gap was left: the wallpaper rides on from there.
+        assertEquals(405f, WallParallax.settlingOffsetPx(270f, 270f, 0.5f, SPARE), EPS);
+    }
+
+    @Test
+    public void aSettleStaysInsideThePicture() {
+        assertEquals(SPARE, WallParallax.settlingOffsetPx(500f, 270f, 1f, SPARE), EPS);
+        assertEquals(0f, WallParallax.settlingOffsetPx(10f, -270f, 1f, SPARE), EPS);
+        assertEquals(0f, WallParallax.settlingOffsetPx(135f, 270f, 1f, 0), EPS);
+    }
 }

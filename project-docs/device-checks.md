@@ -20,6 +20,12 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(wall): hold the wallpaper still while Edit pages is open" · with a
+  managed wallpaper and Wallpaper parallax on, Home with three pages and two windows: open Edit
+  pages and scroll from the first card to the last; the wallpaper behind the cards does not move
+  at all, and the live card's glass (dock, status bar, pane slabs) stays aligned with it. Close on
+  a far card: the wallpaper glides once to that page's place, like a page swipe, with no jump; a
+  swipe started during that glide carries on smoothly · pong or emulator (portrait).
 - 2026-10-25 · commit "fix(calendar): centre today's circle on its number" · Calendar widget month
   grid, today a two-digit date in the first (Sunday) column, then in the last column: the circle is
   centred on the digits and holds both with a margin; at font scale 1.3 and in the narrowest span

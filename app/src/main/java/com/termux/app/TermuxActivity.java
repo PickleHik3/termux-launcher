@@ -1380,6 +1380,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * nothing pans.
      */
     private int mWallpaperParallaxSparePx;
+    /**
+     * Edit pages holds the wallpaper still while it is up: the wall jumps from card to card under
+     * the overview, and the wallpaper following each jump stuttered behind the cards. See
+     * {@link #holdWallpaperParallax} and {@link #releaseWallpaperParallax}.
+     */
+    private boolean mWallpaperParallaxHeld;
+    /** The settle after a hold lets go, on a page's spring; null while none runs. */
+    @Nullable private android.animation.ValueAnimator mWallpaperParallaxSettle;
+    /** The gap between the held and the live offset at the release, in px. */
+    private float mWallpaperParallaxSettleGapPx;
+    /** The share of {@link #mWallpaperParallaxSettleGapPx} still to go: 1 at the release, 0 landed. */
+    private float mWallpaperParallaxSettleRemaining;
     /** Scratch for the managed picture's pixel size; never allocated per ask. */
     @NonNull private final int[] mManagedWallpaperSize = new int[2];
     /**
@@ -4286,11 +4298,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *                     a second time here
      */
     private void syncWallpaperParallax(boolean pagesReaimed) {
-        float offsetPx = 0f;
+        // Held by Edit pages: every surface keeps sampling the one offset until it lets go.
+        if (mWallpaperParallaxHeld) return;
         int sparePx = mWallpaperParallaxSparePx;
-        if (sparePx > 0 && mPaneWallController != null) {
-            offsetPx = com.termux.app.wall.WallParallax.offsetPx(
-                mPaneWallController.rowPosition(), mPaneWallController.rowCount(), sparePx);
+        float offsetPx = liveWallpaperParallaxPx(sparePx);
+        if (mWallpaperParallaxSettle != null) {
+            offsetPx = com.termux.app.wall.WallParallax.settlingOffsetPx(offsetPx,
+                mWallpaperParallaxSettleGapPx, mWallpaperParallaxSettleRemaining, sparePx);
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
@@ -4319,6 +4333,71 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The under-pill strip lives in the decor, built after the views above are looked up.
         View strip = mDecorNavBarBlurBackdrop;
         if (strip != null && strip.getVisibility() == View.VISIBLE) strip.invalidate();
+    }
+
+    /** The offset the wall's live position asks for; 0 while nothing pans. */
+    private float liveWallpaperParallaxPx(int sparePx) {
+        if (sparePx <= 0 || mPaneWallController == null) return 0f;
+        return com.termux.app.wall.WallParallax.offsetPx(
+            mPaneWallController.rowPosition(), mPaneWallController.rowCount(), sparePx);
+    }
+
+    /**
+     * Holds the wallpaper where it stands: Edit pages moves the wall under its cards at once, card
+     * by card, and the wallpaper stays still behind them instead of jumping with each. One number
+     * is held, so the backdrop and every glass surface that samples the frame stay aligned with
+     * each other. A settle still running stops where it is.
+     */
+    private void holdWallpaperParallax() {
+        android.animation.ValueAnimator settle = mWallpaperParallaxSettle;
+        mWallpaperParallaxSettle = null;
+        if (settle != null) settle.cancel();
+        mWallpaperParallaxHeld = true;
+    }
+
+    /**
+     * Lets the hold go: the wallpaper settles once from where it was held to the page now in view,
+     * on a page's spring over the distance the wall would have slid for it
+     * ({@link com.termux.app.wall.WallParallax#settleTravelPx}), so it moves as a page change moves
+     * it. Reduce motion, or nothing to travel, lands it at once.
+     */
+    private void releaseWallpaperParallax() {
+        if (!mWallpaperParallaxHeld) return;
+        mWallpaperParallaxHeld = false;
+        int sparePx = mWallpaperParallaxSparePx;
+        float gapPx = mWallpaperParallax.offsetPx() - liveWallpaperParallaxPx(sparePx);
+        View decor = getWindow() == null ? null : getWindow().getDecorView();
+        float travelPx = com.termux.app.wall.WallParallax.settleTravelPx(gapPx,
+            mPaneWallController == null ? 0 : mPaneWallController.rowCount(), sparePx,
+            decor == null ? 0 : decor.getWidth());
+        if (isReducedMotionEnabled()
+            || Math.abs(travelPx) <= com.termux.app.wall.SettleSpring.PAGE_REST_PX) {
+            syncWallpaperParallax();
+            return;
+        }
+        com.termux.app.wall.SettleSpring spring = com.termux.app.wall.SettleSpring.page(travelPx,
+            0f, com.termux.app.AnimationSpeed.springTime(this));
+        long durationMs = spring.durationMs(com.termux.app.wall.SettleSpring.PAGE_REST_PX);
+        android.animation.ValueAnimator settle = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        settle.setDuration(durationMs);
+        settle.setInterpolator(new android.view.animation.LinearInterpolator());
+        settle.addUpdateListener(animation -> {
+            if (mWallpaperParallaxSettle != animation) return;
+            float seconds = animation.getAnimatedFraction() * durationMs / 1000f;
+            mWallpaperParallaxSettleRemaining = spring.displacementAt(seconds) / travelPx;
+            syncWallpaperParallax();
+        });
+        settle.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (mWallpaperParallaxSettle != animation) return;
+                mWallpaperParallaxSettle = null;
+                syncWallpaperParallax();
+            }
+        });
+        mWallpaperParallaxSettleGapPx = gapPx;
+        mWallpaperParallaxSettleRemaining = 1f;
+        mWallpaperParallaxSettle = settle;
+        settle.start();
     }
 
     /**
@@ -10474,6 +10553,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Dropped, not resumed: the panes go with the window.
         mReturnHold.cancel();
         Choreographer.getInstance().removeFrameCallback(mReturnHoldFrame);
+        // Stops a wallpaper settle still running, so its animator lets this activity go.
+        holdWallpaperParallax();
         mReturnHoldFramePosted = false;
         if (mTermuxActivityRootView != null) mTermuxActivityRootView.setBottomMarginWriter(null);
         if (mPaneController != null) mPaneController.setGeometryScheduler(null);
@@ -26259,6 +26340,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onClosed(boolean byBack) {
                     mPageOverview = null;
+                    releaseWallpaperParallax();
                     // Back from Settings' row returns to the page the row is on, Settings › Home.
                     if (fromSettings && byBack) startActivity(
                         com.termux.app.activities.SettingsActivity.createFragmentIntent(
@@ -26267,6 +26349,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             R.string.settings_section_home));
                 }
             });
+        holdWallpaperParallax();
         mPageOverview.open(content);
     }
 
