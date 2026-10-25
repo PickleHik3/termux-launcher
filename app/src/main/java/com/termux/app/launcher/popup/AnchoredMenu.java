@@ -23,8 +23,10 @@ import android.view.animation.PathInterpolator;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
 
 import com.github.mmin18.widget.RealtimeBlurView;
+import com.termux.R;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.material.M3;
@@ -163,6 +165,12 @@ public final class AnchoredMenu {
         });
         window = popup;
         rows = card.rows;
+        // The window cannot take focus (the terminal and its keyboard keep it), so it is never the
+        // active window; naming the pane is what makes a screen reader announce it and move in.
+        ViewCompat.setImportantForAccessibility(content,
+            ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        ViewCompat.setAccessibilityPaneTitle(content,
+            host.getResources().getString(R.string.app_menu_a11y_pane));
         popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, placement.x, placement.y);
         animateAppMenuOpen(content, placement.pivotX, placement.pivotY);
         return popup;
