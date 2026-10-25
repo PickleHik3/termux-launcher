@@ -178,7 +178,7 @@ public class X11GpuBenchmarkContractTest {
             + "pacman() { echo \"pacman $*\" >> \"$TMPDIR/calls\"; }\n"
             + "apt-get() { echo \"apt-get $*\" >> \"$TMPDIR/calls\"; }\n"
             + m.group() + function("wrapper_file") + function("drop_wrapper_download")
-            + function("install_wrapper");
+            + function("repack_wrapper") + function("install_wrapper");
     }
 
     @Test
@@ -219,6 +219,28 @@ public class X11GpuBenchmarkContractTest {
         assertEquals("refused\nnothing-installed\ndownload-deleted\n", output);
     }
 
+    /**
+     * The published pacman file lists "./.PKGINFO" and a version with no release, which pacman
+     * refuses as "missing package metadata": repacked, the metadata comes first under its own
+     * name and the version carries the release.
+     */
+    @Test
+    public void thePacmanFileIsRepackedSoPacmanCanReadIt() throws Exception {
+        String output = run(wrapperPrelude("pacman", "aarch64", "")
+            + "src=$TMPDIR/src; mkdir -p \"$src/data/usr/lib\"; echo so > \"$src/data/usr/lib/libvulkan_wrapper.so\"\n"
+            + "printf 'pkgname = vulkan-wrapper-android\\npkgver = 25.0.0\\narch = aarch64\\n' > \"$src/.PKGINFO\"\n"
+            + "echo b > \"$src/.BUILDINFO\"; echo m > \"$src/.MTREE\"\n"
+            + "(cd \"$src\" && tar -cJf \"$TMPDIR/published.pkg.tar.xz\" .)\n"
+            + "WRAPPER_DIR=$(mktemp -d \"$TMPDIR/vulkan-wrapper.XXXXXX\")\n"
+            + "out=$(repack_wrapper \"$TMPDIR/published.pkg.tar.xz\") || echo failed\n"
+            + "echo \"${out#$WRAPPER_DIR/}\"\n"
+            + "tar -tf \"$out\" | head -4\n"
+            + "tar -xOf \"$out\" .PKGINFO | grep pkgver\n");
+        assertEquals("vulkan-wrapper-android-25.0.0-3.pkg.tar\n"
+            + ".PKGINFO\n.BUILDINFO\n.MTREE\ndata/\n"
+            + "pkgver = 25.0.0-3\n", output);
+    }
+
     @Test
     public void thePinnedFileIsInstalledFromDiskAndTheDownloadDeleted() throws Exception {
         Assume.assumeTrue("needs sha256sum", hasSha256sum());
@@ -230,10 +252,11 @@ public class X11GpuBenchmarkContractTest {
             + "ls -d \"$TMPDIR\"/vulkan-wrapper.* 2>/dev/null || echo download-deleted\n";
         String url = "https://github.com/sabamdarif/termux-desktop/releases/download/vulkan-wrapper-android_25.0.0-3/";
         assertEquals("installed\n"
-                + "pacman -U --noconfirm <tmp>/vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz\n"
+                + "pacman -U --noconfirm <tmp>/vulkan-wrapper-android-25.0.0-3.pkg.tar\n"
                 + url + "vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz\n"
                 + "download-deleted\n",
-            run(wrapperPrelude("pacman", "aarch64", "the wrapper") + body));
+            run(wrapperPrelude("pacman", "aarch64", "the wrapper")
+                + "repack_wrapper() { echo \"$WRAPPER_DIR/$WRAPPER_PKG-$WRAPPER_VERSION.pkg.tar\"; }\n" + body));
         assertEquals("installed\n"
                 + "apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
                 + " <tmp>/vulkan-wrapper-android_25.0.0-3_aarch64.deb\n"

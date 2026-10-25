@@ -217,11 +217,24 @@ drop_wrapper_download() {
   true
 }
 
+# The pinned pacman file is not one pacman reads as it is: its entries start with "./", so pacman
+# finds no metadata in it, and its version has no release number. Once the checksum has matched,
+# it is packed again the way makepkg packs, with the release added and nothing else changed.
+# Prints the new file's path.
+repack_wrapper() {
+  local dir=$WRAPPER_DIR/pkg out=$WRAPPER_DIR/$WRAPPER_PKG-$WRAPPER_VERSION.pkg.tar
+  mkdir "$dir" && tar -xf "$1" -C "$dir" || return 1
+  [ -f "$dir/.PKGINFO" ] || return 1
+  sed -i "s/^pkgver = ${WRAPPER_VERSION%-*}\$/pkgver = $WRAPPER_VERSION/" "$dir/.PKGINFO"
+  (cd "$dir" && tar -cf "$out" .PKGINFO .BUILDINFO .MTREE data) || return 1
+  echo "$out"
+}
+
 # Downloads the wrapper into a folder of its own under TMPDIR, checks it, installs it with the
 # package manager (which brings its dependencies from the official repositories) and deletes the
 # download again, whatever happened.
 install_wrapper() {
-  local name file sum rc
+  local name file sum rc repacked
   if ! name=$(wrapper_file); then
     detail "The Vulkan wrapper has no build for this phone's processor."
     return 1
@@ -243,7 +256,8 @@ install_wrapper() {
     drop_wrapper_download
     return 1
   fi
-  if [ $PM = pacman ]; then pacman -U --noconfirm "$file"
+  if [ $PM = pacman ]; then
+    repacked=$(repack_wrapper "$file") && pacman -U --noconfirm "$repacked"
   else apt-get install "${APT_OPTS[@]}" "$file"; fi
   rc=$?
   drop_wrapper_download
