@@ -3,8 +3,11 @@ package com.termux.app.activities;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -94,6 +97,12 @@ public class SettingsActivity extends AppCompatActivity implements
     /** Set in {@link #onStop}; read by {@link #onNewIntent} to judge whether the stack is stale. */
     private long mLastStoppedAtEpochMs = 0;
 
+    /** The sheet over Home the pages stand in; see {@link SettingsSheet}. */
+    private SettingsSheet mSheet;
+
+    /** Whether the toolbar shows the close mark (true) or the arrow; null before the first look. */
+    @Nullable private Boolean mNavigationClosesShown;
+
     public static Intent createFragmentIntent(@NonNull Context context, @NonNull Class<? extends Fragment> fragmentClass, int titleResId) {
         Intent intent = new Intent(context, SettingsActivity.class);
         intent.putExtra(EXTRA_INITIAL_FRAGMENT, fragmentClass.getName());
@@ -144,14 +153,22 @@ public class SettingsActivity extends AppCompatActivity implements
     protected void onCreate(Bundle savedInstanceState) {
         TermuxThemeUtils.setAppNightMode(this);
         AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
-        setTheme(R.style.Theme_TermuxApp_DayNight_NoActionBar);
+        // The manifest's theme too: the window is see-through, over the live Home.
+        setTheme(R.style.Theme_TermuxApp_SettingsSheet);
         TermuxThemeManager.applyThemeOverlays(this);
         super.onCreate(savedInstanceState);
+        suppressWindowMotion();
         registerSettingsStyleCallbacks();
-        setContentView(R.layout.activity_settings);
+        // The pages stand in a sheet over Home: activity_settings, unchanged, is its body.
+        setContentView(R.layout.activity_settings_sheet);
+        getLayoutInflater().inflate(R.layout.activity_settings,
+            (ViewGroup) findViewById(R.id.settings_sheet_body), true);
         applySettingsSystemBars();
         View list = findViewById(R.id.settings_list);
         mTwoPane = list != null && list.getVisibility() == View.VISIBLE;
+        mSheet = new SettingsSheet(findViewById(R.id.settings_sheet_root), mTwoPane,
+            SettingsMotion.isInstant(this), savedInstanceState, this::finishUnderSheet);
+        mSheet.open(savedInstanceState == null);
         if (savedInstanceState == null) {
             // QA deep-link entry path:
             // adb shell am start -n com.termux/.app.activities.SettingsActivity --ez open_tai_settings true
@@ -181,6 +198,7 @@ public class SettingsActivity extends AppCompatActivity implements
         }
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
+        mSheet.setHeader(findViewById(com.termux.shared.R.id.toolbar));
         // Keeps the toolbar title in step with Back, including a Back that the platform's own
         // OnBackPressedDispatcher integration pops without this class hearing about it directly.
         getSupportFragmentManager().addOnBackStackChangedListener(this::onBackStackChanged);
@@ -189,6 +207,65 @@ public class SettingsActivity extends AppCompatActivity implements
         } else {
             updateTitleForCurrentStack();
         }
+        updateNavigationIcon();
+    }
+
+    /**
+     * Settings over Home moves itself: the sheet rises and falls, so the window neither slides in
+     * nor out (the theme's window animations are empty too, for systems that read only those).
+     */
+    @SuppressWarnings("deprecation")
+    private void suppressWindowMotion() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0);
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0);
+        } else {
+            overridePendingTransition(0, 0);
+        }
+    }
+
+    /** The sheet has gone: the window goes with no motion of its own. */
+    @SuppressWarnings("deprecation")
+    private void finishUnderSheet() {
+        finish();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) overridePendingTransition(0, 0);
+    }
+
+    @androidx.annotation.VisibleForTesting
+    SettingsSheet sheet() {
+        return mSheet;
+    }
+
+    /** Closes Settings: the sheet slides away first, then the window goes. */
+    private void closeSheet() {
+        if (mSheet != null) {
+            mSheet.close();
+        } else {
+            finish();
+        }
+    }
+
+    /**
+     * Where Back closes Settings (the root, or with two panes a section's page alone) the toolbar
+     * shows a close mark instead of the arrow.
+     */
+    private void updateNavigationIcon() {
+        androidx.appcompat.app.ActionBar bar = getSupportActionBar();
+        if (bar == null) return;
+        boolean closes = mTwoPane ? isSectionPageAlone()
+            : getSupportFragmentManager().getBackStackEntryCount() == 0;
+        if (mNavigationClosesShown != null && mNavigationClosesShown == closes) return;
+        mNavigationClosesShown = closes;
+        bar.setHomeAsUpIndicator(closes ? R.drawable.ic_symbol_close : 0);
+        bar.setHomeActionContentDescription(closes ? R.string.settings_sheet_close : 0);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        // The sheet is dragged only from its header; where this finger lands decides.
+        if (mSheet != null && ev.getActionMasked() == MotionEvent.ACTION_DOWN)
+            mSheet.onTouchDown(ev.getX(), ev.getY());
+        return super.dispatchTouchEvent(ev);
     }
 
     @Override
@@ -210,6 +287,7 @@ public class SettingsActivity extends AppCompatActivity implements
         outState.putString(STATE_KEY_PUSHED_SCREENS,
             new SettingsBackStackState(new ArrayList<>(mPushedScreens), 0).serialize());
         outState.putBoolean(STATE_KEY_TWO_PANE, mTwoPane);
+        if (mSheet != null) mSheet.saveState(outState);
     }
 
     /**
@@ -296,6 +374,8 @@ public class SettingsActivity extends AppCompatActivity implements
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        // Opened again while the sheet was going away: it comes back up instead.
+        if (mSheet != null) mSheet.reopen();
         if (intent.getBooleanExtra(EXTRA_OPEN_TAI_SETTINGS, false)) {
             intent.putExtra(EXTRA_INITIAL_FRAGMENT,
                 "com.termux.app.fragments.settings.termux.TaiPreferencesFragment");
@@ -443,6 +523,7 @@ public class SettingsActivity extends AppCompatActivity implements
             mPushedScreens.remove(mPushedScreens.size() - 1);
         }
         updateTitleForCurrentStack();
+        updateNavigationIcon();
         invalidateOptionsMenu();
     }
 
@@ -721,15 +802,29 @@ public class SettingsActivity extends AppCompatActivity implements
             }, true);
     }
 
+    /**
+     * Edge to edge over Home, the sheet taking the insets ({@link SettingsSheet}). The status bar
+     * stands over Home, so it stays clear and its icons keep the theme's look, which is Home's
+     * too; the navigation bar stands on the sheet, so its icons follow the sheet's surface.
+     */
     private void applySettingsSystemBars() {
         Window window = getWindow();
-        int surface = ThemeUtils.getSystemAttrColor(this, com.termux.shared.R.attr.termuxColorSurfaceBase, android.graphics.Color.BLACK);
-        window.setStatusBarColor(surface);
-        window.setNavigationBarColor(surface);
+        WindowCompat.setDecorFitsSystemWindows(window, false);
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.setNavigationBarContrastEnforced(false);
+        int surface = ThemeUtils.getSystemAttrColor(this, com.termux.shared.R.attr.termuxColorSurfaceBase, Color.BLACK);
         boolean lightSurface = ColorUtils.calculateLuminance(surface) > 0.5;
         WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(window, window.getDecorView());
-        bars.setAppearanceLightStatusBars(lightSurface);
         bars.setAppearanceLightNavigationBars(lightSurface);
+        // Home in full screen hides the system bars; Settings over it hides them too, or they
+        // come back while it is open and Home lays out again for insets it then loses.
+        com.termux.shared.termux.settings.properties.TermuxAppSharedProperties properties =
+            com.termux.shared.termux.settings.properties.TermuxAppSharedProperties.getProperties();
+        if (properties != null && properties.isUsingFullScreen()) {
+            bars.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            bars.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+        }
     }
 
     /**
@@ -797,7 +892,8 @@ public class SettingsActivity extends AppCompatActivity implements
     }
 
     /**
-     * Back with nothing to pop finishes Settings itself. From Android 12 a Back at the root of a
+     * Back with nothing to pop closes Settings itself: the sheet slides away, then the window
+     * finishes ({@link SettingsSheet#close}). From Android 12 a Back at the root of a
      * task is handed to the system, which finishes only after it calls back; this activity is the
      * root of its own task (singleTask, own affinity), and on some systems that call never comes,
      * so Back and Up did nothing on the first screen. A screen pushed on top, or a fragment's own
@@ -809,14 +905,14 @@ public class SettingsActivity extends AppCompatActivity implements
         // With two panes a section's page is the detail's first screen, the list beside it: Back
         // there leaves Settings rather than emptying the detail.
         if (mTwoPane && isSectionPageAlone()) {
-            finish();
+            closeSheet();
             return;
         }
         if (getOnBackPressedDispatcher().hasEnabledCallbacks()) {
             super.onBackPressed();
             return;
         }
-        finish();
+        closeSheet();
     }
 
     /** The screen leaving and the one coming back move with no transition. */

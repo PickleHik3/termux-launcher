@@ -198,7 +198,8 @@
             android:label="@string/title_activity_termux_settings"
             android:launchMode="singleTask"
             android:taskAffinity="${TERMUX_PACKAGE_NAME}.settings"
-            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar" />
+            android:theme="@style/Theme.TermuxApp.SettingsSheet"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name="com.canhub.cropper.CropImageActivity"

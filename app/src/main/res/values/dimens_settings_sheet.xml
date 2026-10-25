@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings' sheet over Home (SettingsSheet). -->
+<resources>
+    <!-- The sheet's top corners: Material's extra-large shape, the bottom-sheet corner. -->
+    <dimen name="settings_sheet_corner_radius">28dp</dimen>
+    <!-- The strip above the toolbar that holds the handle; the toolbar drags the sheet too. -->
+    <dimen name="settings_sheet_handle_strip">20dp</dimen>
+    <dimen name="settings_sheet_handle_width">32dp</dimen>
+    <dimen name="settings_sheet_handle_height">4dp</dimen>
+    <!-- Lifts the sheet off the live Home behind it, which no scrim dims. -->
+    <dimen name="settings_sheet_elevation">6dp</dimen>
+</resources>

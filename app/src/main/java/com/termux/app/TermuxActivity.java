@@ -2296,6 +2296,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (mWidgetHostController != null) mWidgetHostController.onStart();
         applyHomeSettings();
+        homeSettingsStore().registerOnSharedPreferenceChangeListener(mHomeSettingsListener);
         if (mWidgetPaneController != null) mWidgetPaneController.onStart();
 
         mTerminalFrameMetricsMonitor.start(getWindow());
@@ -10576,6 +10577,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             android.util.Log.d(TerminalView.GEOMETRY_LOG_TAG, "return hold begin reason=stop");
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
+        homeSettingsStore().unregisterOnSharedPreferenceChangeListener(mHomeSettingsListener);
         mIsVisible = false;
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mX11Display != null) mX11Display.detachView();
@@ -26371,9 +26373,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Settings › Home's rows written while Home is on screen: Settings opens as a sheet over the
+     * live Home, which is paused, not stopped, so the change is shown behind the sheet as it lands
+     * rather than at the next start. Registered from start to stop.
+     */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener mHomeSettingsListener =
+        (store, key) -> {
+            if (com.termux.app.launcher.home.HomeSettings.owns(key)) applyHomeSettings();
+        };
+
+    @NonNull
+    private android.content.SharedPreferences homeSettingsStore() {
+        return getApplicationContext().getSharedPreferences(
+            TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION, Context.MODE_PRIVATE);
+    }
+
+    /**
      * Settings › Home's rows that shape the Home pages ({@link
      * com.termux.app.launcher.home.HomeSettings}), pushed into the pane as the launcher comes to
-     * the front: Settings is another activity, so a change there is always followed by this.
+     * the front and, while it is on screen, as each row is written ({@link #mHomeSettingsListener}).
      */
     private void applyHomeSettings() {
         // The dock's badge look is Settings › Notifications', pushed here for the same reason.
