@@ -891,3 +891,22 @@ Agent (Settings, Keyboard, Terminal extra keys; the page editor, five sheets and
   fixed navy.
 - Font scale 1.3: row titles, chips, tiles and the confirm button stay on one line or wrap without
   clipping; 48 dp caps keep their labels readable (autosized).
+
+## Power-user round, wave 1 (2026-10-25)
+
+Seen on emu (debug, 5ce4ce853): the drawer hides Home, the contrast floor on the welcome sheet, the
+widget picker ends above the dock, the theme hint shows once and clears the half's name, physical
+keys type into the drawer search (Backspace, Esc), the App menu's rows are in a windows dump, and
+A–Z icons arrive within a second. Still owed:
+
+Agent
+- 2026-10-25 · 0f30818a4 · TalkBack on: the command palette's field, rows, call chips and keycaps are reachable and double-tap runs them; "App menu" is announced on a dock long-press · emu.
+- 2026-10-25 · 5ce4ce853 · Physical keys with the command palette open, and in the "Android keyboard" drawer field (Up/Down keep focus, Enter launches the first result) · emu, `input keyevent`.
+- 2026-10-25 · 507f95561 · Widget picker with the in-app keyboard up, in Floating dock style and at font scale 1.3: last group visible above the dock, drag-to-dismiss works · emu.
+- 2026-10-25 · 4957e1b52 · Drawer opened by dock tile and by A–Z with the keyboard up: Home fades and returns at full opacity, no flash on a quick open-and-cancel · emu.
+- 2026-10-25 · 2d1caf678 · Theme hint in light theme, Material You scheme and font scale 1.3: one line, legible, inside the screen · emu.
+
+Developer
+- 2026-10-25 · b6b33bc7c · Contrast floor on pong: a Powerline/starship prompt on a transparent pane has no colour seams at the arrows; typing, scroll and heavy-output frame times match the baselines in docs/agents/performance.md · pong.
+- 2026-10-25 · 4957e1b52 · A floating terminal on Home fades with the drawer and comes back without a flash · pong.
+- 2026-10-25 · — · First tap on an A–Z letter whose apps aren't pinned: how long the grey loading tiles show (decides whether to pre-render) · pong.
