@@ -160,6 +160,8 @@ public final class X11GpuBenchmarkRun {
             TermuxConstants.TERMUX_HOME_DIR_PATH, launch.arguments, launch.environment,
             TRANSCRIPT_ROWS, new SessionClient());
         created.mSessionName = app.getString(R.string.settings_x11_gpu_run_label);
+        // The panel's step line says how the run ended; it takes no Enter.
+        created.mShowsExitLine = false;
         session = created;
         state = State.RUNNING;
         step = null;
