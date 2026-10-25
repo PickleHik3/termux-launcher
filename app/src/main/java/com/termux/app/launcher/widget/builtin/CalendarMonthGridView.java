@@ -39,6 +39,8 @@ final class CalendarMonthGridView extends View {
     /** Start-aligned twin of {@link #dayPaint}, to read the digits' ink bounds from. */
     private final Paint inkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Rect ink = new Rect();
+    /** A two-digit number's ink, so today's disc is one size on every day of the month. */
+    private final Rect sizing = new Rect();
     private final float[] disc = new float[3];
 
     @Nullable private CalendarLayoutPlanner.Grid grid;
@@ -126,6 +128,9 @@ final class CalendarMonthGridView extends View {
         }
     }
 
+    /** The widest two-digit date in most fonts; the disc is sized to hold it. */
+    private static final String DISC_SIZING_SAMPLE = "28";
+
     /** Fills {@link #disc} for the number in cell {@code index}: its drawn ink, held in the cell. */
     private void fitDisc(@NonNull CalendarLayoutPlanner.Grid grid, int index,
                          @NonNull String text, boolean rtl, float width) {
@@ -134,6 +139,7 @@ final class CalendarMonthGridView extends View {
         float baseline = rect.top + (rect.height() - (metrics.descent - metrics.ascent)) / 2f
             - metrics.ascent;
         inkPaint.getTextBounds(text, 0, text.length(), ink);
+        inkPaint.getTextBounds(DISC_SIZING_SAMPLE, 0, DISC_SIZING_SAMPLE.length(), sizing);
         float advance = inkPaint.measureText(text);
         // Drawn centre-aligned on the box's centre, so the text starts half an advance back.
         float inkCx = rect.centerX() - advance / 2f + (ink.left + ink.right) / 2f;
@@ -142,7 +148,7 @@ final class CalendarMonthGridView extends View {
         float pitch = (grid.cells.size() > 7 ? grid.cells.get(7).top - cell.top
             : cell.height + CalendarLayoutPlanner.CELL_GAP_DP) * density;
         set(rect, cell, rtl, width);
-        CalendarTodayDisc.fit(inkCx, inkCy, ink.width(), ink.height(), rect.left, rect.width(),
+        CalendarTodayDisc.fit(inkCx, inkCy, sizing.width(), sizing.height(), rect.left, rect.width(),
             pitch, CalendarLayoutPlanner.CELL_GAP_DP * density, disc);
     }
 
