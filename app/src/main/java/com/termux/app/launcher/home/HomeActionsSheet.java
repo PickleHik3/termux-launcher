@@ -305,6 +305,17 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             toggle.setClickable(false);
             toggle.setFocusable(false);
             row.setOnClickListener(view -> toggleLock(!locked));
+            // The switch itself is not focusable, so the row says it is one, and whether it is on.
+            ViewCompat.setAccessibilityDelegate(row, new androidx.core.view.AccessibilityDelegateCompat() {
+                @Override
+                public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                        @NonNull androidx.core.view.accessibility.AccessibilityNodeInfoCompat info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.setClassName("android.widget.Switch");
+                    info.setCheckable(true);
+                    info.setChecked(locked);
+                }
+            });
             return row;
         }
         row.setOnClickListener(view -> select(item));
