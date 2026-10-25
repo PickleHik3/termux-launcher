@@ -132,7 +132,10 @@ final class EditorCardSheet {
     private static final int STRIP_GAP_DP = 12;
     private static final int SWITCH_ROW_MIN_DP = 56;
     private static final int SEGMENT_GAP_DP = 2;
-    private static final int SEGMENT_HEIGHT_DP = 40;
+    private static final int SEGMENT_HEIGHT_DP = 48;
+    private static final int SEGMENT_PAD_DP = 8;
+    /** The room between a label and the control beside it, its own-value dot's too. */
+    private static final int ROW_GAP_DP = 28;
     private static final int MENU_WIDTH_DP = 200;
     private static final long MOVE_MS = 240L;
 
@@ -900,11 +903,11 @@ final class EditorCardSheet {
     private RowViews segmentsRow(@NonNull Row row) {
         String[] choices = mModel.choices(row);
         int width = availableWidthPx();
-        // The buttons first, so their own paint and padding decide where they fit.
+        // The buttons first, so their own paint decides where they fit.
         List<MaterialButton> buttons = new ArrayList<>(choices.length);
         LayoutInflater inflater = LayoutInflater.from(mContext);
         float widest = 0f;
-        float total = 0f;
+        float textSum = 0f;
         for (String choice : choices) {
             MaterialButton button = (MaterialButton) inflater.inflate(R.layout.segment_button,
                 null, false);
@@ -913,38 +916,29 @@ final class EditorCardSheet {
             // reserved room would stand every unchosen word off its centre.
             button.setIcon(null);
             button.setText(choice);
+            // Little side padding, so the words and the control fit beside the label; the height
+            // keeps the 48dp touch target (the style's own insets draw the pill slimmer).
+            button.setPaddingRelative(dp(SEGMENT_PAD_DP), button.getPaddingTop(),
+                dp(SEGMENT_PAD_DP), button.getPaddingBottom());
             button.setMinWidth(0);
             button.setMinimumWidth(0);
             button.setMinHeight(dp(SEGMENT_HEIGHT_DP));
             button.setEllipsize(TextUtils.TruncateAt.END);
-            float need = needPx(button);
-            widest = Math.max(widest, need);
-            total += need;
+            float text = button.getPaint().measureText(choice);
+            textSum += text;
+            widest = Math.max(widest, text + 2 * dp(SEGMENT_PAD_DP));
             buttons.add(button);
         }
-        boolean inline = choices.length == 2
-            && labelPx(row) + dp(16) + total + dp(SEGMENT_GAP_DP) <= width;
-        if (!inline && choices.length == 3) {
-            // Three short words stand beside their label like Numerals' two when a smaller text
-            // size lets them: shrunk in steps, never below SEGMENT_MIN_TEXT_SCALE, never cut.
-            float label = labelPx(row);
-            float base = buttons.get(0).getTextSize();
-            for (float scale = 1f; scale >= SEGMENT_MIN_TEXT_SCALE - 0.001f && !inline;
-                 scale -= 0.05f) {
-                float sum = 0f;
-                for (MaterialButton button : buttons) {
-                    button.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, base * scale);
-                    sum += needPx(button);
-                }
-                if (label + dp(16) + sum + dp(SEGMENT_GAP_DP) * 2 <= width) {
-                    inline = true;
-                    total = sum;
-                }
-            }
-            if (!inline) {
-                for (MaterialButton button : buttons)
-                    button.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, base);
-            }
+        // One line when the label and the segments fit (EditorRowFit); the words shrink in steps,
+        // never below SEGMENT_MIN_TEXT_SCALE and never cut, before the row stacks.
+        float scale = choices.length < 2 ? 0f : EditorRowFit.segmentsScale(width, labelPx(row),
+            dp(ROW_GAP_DP), textSum, choices.length, dp(SEGMENT_PAD_DP), dp(SEGMENT_GAP_DP),
+            SEGMENT_MIN_TEXT_SCALE, 0.05f);
+        boolean inline = scale > 0f;
+        if (inline && scale < 1f) {
+            for (MaterialButton button : buttons)
+                button.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,
+                    button.getTextSize() * scale);
         }
         int share = choices.length == 0 ? width
             : (width - dp(SEGMENT_GAP_DP) * (choices.length - 1)) / choices.length;
@@ -954,7 +948,8 @@ final class EditorCardSheet {
         root.setGravity(inline ? Gravity.CENTER_VERTICAL : Gravity.NO_GRAVITY);
         root.setMinimumHeight(dp(SWITCH_ROW_MIN_DP));
         int edge = inline ? dp(EDGE_DP) : 0;
-        root.setPadding(edge, dp(8), edge, dp(8));
+        int pad = inline ? dp(4) : dp(8);
+        root.setPadding(edge, pad, edge, pad);
         RowViews views = new RowViews(row, root);
         if (inline) {
             root.addView(iconView(row.iconRes));
@@ -1555,13 +1550,6 @@ final class EditorCardSheet {
 
     /** The smallest share of its text size a three-segment row shrinks to to stand inline. */
     static final float SEGMENT_MIN_TEXT_SCALE = 0.75f;
-
-    /** The width a segment needs for its word whole: its text, its padding and its check. */
-    private float needPx(@NonNull MaterialButton button) {
-        return button.getPaint().measureText(String.valueOf(button.getText()))
-            + button.getPaddingLeft() + button.getPaddingRight() + button.getIconSize()
-            + button.getIconPadding() + dp(4);
-    }
 
     /** The width a row's label needs, in the label's own text appearance. */
     private float labelPx(@NonNull Row row) {

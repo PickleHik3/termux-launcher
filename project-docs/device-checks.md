@@ -20,6 +20,11 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(appearance): segment rows stand label and control on one line" · on pong
+  (411 dp, font scale 1.0) open the Home card: Label size and Folders each show the label with
+  Small / Medium / Large (Compact / Default / Roomy) on the same line, segments touch-sized 48 dp,
+  nothing cut; Numerals, Theme, Contrast and Form likewise. At font scale 1.3 a row that cannot fit
+  stacks instead of clipping.
 - 2026-10-25 · commit "feat(appearance): hidden-items cards wrap their own text" · hide all six
   items in the Appearance editor: one-word cards (Keyboard) are one line tall, two-word cards two
   lines, the gap between cards stays equal, one label size throughout; tap a card shows it, drag

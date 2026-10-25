@@ -186,6 +186,66 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
+        for (EditorCard card : EditorCard.values()) {
+            Fixture fixture = new Fixture(card, 1f);
+            fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+            fixture.layOut();
+            for (com.google.android.material.button.MaterialButtonToggleGroup group
+                    : toggleGroups(fixture.sheet.rows())) {
+                assertEquals(card + ": a segment row stands label and control on one line",
+                    LinearLayout.HORIZONTAL, ((LinearLayout) group.getParent()).getOrientation());
+                for (MaterialButton button : buttons(group))
+                    assertTrue("the touch target is 48dp", button.getHeight() >= fixture.dp(48) - 1);
+            }
+        }
+    }
+
+    @Test
+    public void aSegmentRowNeverClipsAtLargeTextAndStacksOnlyWhenItMust() {
+        Fixture fixture = new Fixture(EditorCard.HOME, 1.3f);
+        fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+        fixture.layOut();
+        for (com.google.android.material.button.MaterialButtonToggleGroup group
+                : toggleGroups(fixture.sheet.rows())) {
+            ViewGroup row = (ViewGroup) group.getParent();
+            int[] at = new int[2];
+            group.getLocationInWindow(at);
+            int[] parentAt = new int[2];
+            fixture.parent.getLocationInWindow(parentAt);
+            assertTrue("the control ends inside the 16dp margin",
+                at[0] - parentAt[0] + group.getWidth() <= fixture.parent.getWidth() - fixture.dp(16) + 1);
+            assertTrue("the row holds its control", row.getHeight() >= group.getHeight());
+        }
+    }
+
+    @Test
+    public void rendersOfTheCardsAtDefaultAndLargeText() throws java.io.IOException {
+        for (float scale : new float[] {1f, 1.3f}) {
+            for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.DOCK,
+                    EditorCard.APPEARANCE}) {
+                Fixture fixture = new Fixture(card, scale);
+                fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+                fixture.layOut();
+                android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
+                    fixture.parent.getWidth(), fixture.parent.getHeight(),
+                    android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+                canvas.drawColor(0xFF202124);
+                fixture.parent.draw(canvas);
+                java.io.File dir = new java.io.File("build/reports/editor-rows");
+                assertTrue(dir.isDirectory() || dir.mkdirs());
+                java.io.File png = new java.io.File(dir, card.name().toLowerCase(java.util.Locale.ROOT)
+                    + "-font-" + scale + ".png");
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(png)) {
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+                }
+                System.out.println("editor-rows render: " + png.getAbsolutePath());
+            }
+        }
+    }
+
+    @Test
     public void everyGlassStripsLegendsStandWholeInTheirColumnsAtAnyTextSize() {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
             for (EditorCard card : EditorCard.values()) {
