@@ -67,7 +67,6 @@ final class HiddenStackView extends FrameLayout {
     private final float mDensity;
     private final int mSlop;
     private int mCardWidthPx;
-    private int mCardHeightPx;
     private float mLabelPx;
     private boolean mZoneOffered;
     private boolean mZoneHovered;
@@ -115,27 +114,25 @@ final class HiddenStackView extends FrameLayout {
         return labels;
     }
 
-    /** The label size every card wears at {@code cardHeightPx}: sp at the user's font scale, fitted. */
-    static float fittedLabelPx(@NonNull Context context, int cardHeightPx) {
+    /** The label size every card can wear before the stack's height asks for less: sp at the user's font scale, fitted to the width. */
+    static float fittedLabelPx(@NonNull Context context, @NonNull HiddenStackPolicy.Measure measure) {
         float density = context.getResources().getDisplayMetrics().density;
         float ref = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
             HiddenStackPolicy.LABEL_SP, context.getResources().getDisplayMetrics());
-        int pad = Math.round(HiddenStackPolicy.PAD_DP * density) + 1;
-        return HiddenStackPolicy.labelSizePx(allLabels(context), measure(context),
-            HiddenStackPolicy.cardWidthPx(density), cardHeightPx, pad, ref);
+        return HiddenStackPolicy.labelSizePx(allLabels(context), measure,
+            HiddenStackPolicy.cardWidthPx(density), density, ref);
     }
 
     /**
-     * Shows {@code items} (top to bottom) as the cards of {@code rail}, every label at
+     * Shows {@code items} (top to bottom) as the cards of {@code rail}, each as tall as its own
+     * rect, every label at
      * {@code labelPx}; the drop zone stands on the rail's border, round the cards and the empty
      * slot after them ({@link HiddenStackPolicy#rail}).
      */
     void set(@NonNull List<HiddenItem> items, @NonNull HiddenStackPolicy.Rail rail,
              float labelPx) {
         mCardWidthPx = HiddenStackPolicy.cardWidthPx(mDensity);
-        int cardHeightPx = rail.slot[3] - rail.slot[1];
-        boolean restyle = cardHeightPx != mCardHeightPx || labelPx != mLabelPx;
-        mCardHeightPx = cardHeightPx;
+        boolean restyle = labelPx != mLabelPx;
         mLabelPx = labelPx;
         mItems.clear();
         mItems.addAll(items);
@@ -149,7 +146,8 @@ final class HiddenStackView extends FrameLayout {
             if (card == null) {
                 card = makeCard(item);
                 mCards.put(item, card);
-                addView(card, new LayoutParams(mCardWidthPx, cardHeightPx));
+                addView(card, new LayoutParams(mCardWidthPx,
+                    rail.cards[index][3] - rail.cards[index][1]));
             }
             card.setVisibility(VISIBLE);
             if (restyle) styleLabel(card);
@@ -234,7 +232,7 @@ final class HiddenStackView extends FrameLayout {
         label.setTextColor(MaterialColors.getColor(this,
             com.google.android.material.R.attr.colorOnSurface, 0));
         label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        int pad = Math.round(HiddenStackPolicy.PAD_DP * mDensity);
+        int pad = HiddenStackPolicy.insetPx(mDensity);
         label.setPadding(pad, pad, pad, pad);
         card.addView(label, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
