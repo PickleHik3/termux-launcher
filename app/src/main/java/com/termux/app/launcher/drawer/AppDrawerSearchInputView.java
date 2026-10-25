@@ -39,6 +39,11 @@ public final class AppDrawerSearchInputView extends AppCompatEditText {
 
         /** A hardware Esc. */
         void onDismissAction();
+
+        /** A hardware arrow key; true when it moved the results' highlight rather than the caret. */
+        default boolean onArrowKey(int keyCode) {
+            return false;
+        }
     }
 
     @Nullable private Listener mListener;
@@ -94,11 +99,16 @@ public final class AppDrawerSearchInputView extends AppCompatEditText {
             if (listener != null) listener.onDismissAction();
             return true;
         }
-        // Up and Down have no list to move through here (the drawer's results are not a focus
-        // order), and left to the field they would walk the focus out of it. Enter runs the first
-        // result, whichever way the keyboard reports it.
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
-            return true;
+        // The arrows walk the results' highlight (Left and Right only in a grid, otherwise they stay
+        // the caret's). Up and Down are never left to the field, where they would walk the focus out
+        // of it. Enter opens the highlighted result, whichever way the keyboard reports it.
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+            || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            Listener listener = mListener;
+            boolean spent = listener != null && listener.onArrowKey(keyCode);
+            if (spent || keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
+        }
         if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
             if (event.getRepeatCount() == 0) {
                 Listener listener = mListener;
