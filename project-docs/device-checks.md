@@ -17,6 +17,10 @@ under twenty items; past that, the oldest are re-judged first.
   · An armeabi-v7a or x86 emulator image with the universal or split APK: open the launcher and
   Settings; there is no Display entry or Display page, no Linux apps, and no crash (libXlorie.so
   is shipped for arm64-v8a and x86_64 only). On arm64-v8a the Display page still opens.
+- 2026-10-25 · commit "fix(x11): bump the installer so the new benchmark script is written" · On a
+  pacman Termux, `x11-gpu-setup.sh` runs in pacman mode ("Package manager: pacman"), installs the
+  Vulkan wrapper (repacked, `pacman -U` accepts it), and the virgl run reports a virgl renderer,
+  not Zink · pong over adb, with the developer's go-ahead.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
