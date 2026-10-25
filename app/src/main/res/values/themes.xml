@@ -35,6 +35,18 @@
         <item name="android:windowAnimationStyle">@style/Animation.Termux.SettingsSheet</item>
     </style>
 
+    <!-- The confirm card for an app asking to pin a shortcut or widget: a small card over a dimmed
+         window, with Home still visible behind it. -->
+    <style name="Theme.TermuxApp.PinCard" parent="Theme.TermuxApp.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
+    </style>
+
     <style name="Animation.Termux.SettingsSheet" parent="">
         <item name="android:activityOpenEnterAnimation">@null</item>
         <item name="android:activityOpenExitAnimation">@null</item>

@@ -76,6 +76,7 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
 
     @Override @Nullable public View viewFor(@NonNull LauncherWidgetRecord record) {
         if (record.isFolder()) return folderViewFor(record);
+        if (record.isShortcut()) return shortcutViewFor(record);
         AppRef ref = record.appRef();
         if (ref == null) return null;
         watch();
@@ -90,6 +91,31 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
         bound.put(record.appWidgetId, record);
         bind(view, record, ref);
         return view;
+    }
+
+    /** A shortcut's icon: a pinned one asks the platform, a legacy one decodes what it was given. */
+    @NonNull private View shortcutViewFor(@NonNull LauncherWidgetRecord record) {
+        folders.remove(record.appWidgetId);
+        HomeAppIconView view = views.get(record.appWidgetId);
+        if (view == null) {
+            view = new HomeAppIconView(context);
+            view.setStyle(style);
+            views.put(record.appWidgetId, view);
+        }
+        bound.put(record.appWidgetId, record);
+        bindShortcut(view, record);
+        return view;
+    }
+
+    private void bindShortcut(@NonNull HomeAppIconView view, @NonNull LauncherWidgetRecord record) {
+        final int id = record.appWidgetId;
+        final HomeShortcuts.Resolved resolved = HomeShortcuts.resolve(context, record);
+        view.bind(resolved.icon != null ? resolved.icon : defaultIcon(), resolved.label,
+            resolved.unavailable);
+        view.setOnClickListener(v -> {
+            if (resolved.unavailable) listener.onUnavailableAppTapped(id);
+            else HomeShortcuts.launch(v.getContext(), record);
+        });
     }
 
     /** How the icons and folders are drawn now. */
@@ -204,6 +230,7 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
             LauncherWidgetRecord record = bound.get(held.getKey());
             AppRef ref = record == null ? null : record.appRef();
             if (ref != null) bind(held.getValue(), record, ref);
+            else if (record != null && record.isShortcut()) bindShortcut(held.getValue(), record);
         }
         for (Map.Entry<Integer, HomeFolderView> held : folders.entrySet()) {
             LauncherWidgetRecord record = bound.get(held.getKey());
@@ -289,6 +316,7 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
             catch (RuntimeException ignored) { }
         }
         packageWatch = null;
+        HomeShortcuts.clearCache();
         views.clear();
         folders.clear();
         bound.clear();

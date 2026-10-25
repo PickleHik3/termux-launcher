@@ -2298,6 +2298,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyHomeSettings();
         homeSettingsStore().registerOnSharedPreferenceChangeListener(mHomeSettingsListener);
         if (mWidgetPaneController != null) mWidgetPaneController.onStart();
+        // Pin requests (Add to home screen, Add widget) are placed on Home while it is started.
+        if (mWidgetPaneController != null) {
+            com.termux.app.launcher.pin.HomePinHandoff.attach(mWidgetPaneController.pinTarget());
+        }
 
         mTerminalFrameMetricsMonitor.start(getWindow());
 
@@ -10539,6 +10543,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TouchDownHint.detach(this);
         if (mScene != null) mScene.detach();
         mHomePress.onStop();
+        if (mWidgetPaneController != null) {
+            com.termux.app.launcher.pin.HomePinHandoff.detach(mWidgetPaneController.pinTarget());
+        }
         Logger.logDebug(LOG_TAG, "onStop");
         // The Appearance surface survives a stop (the overlay registry's STOP keeps it, as it kept
         // the editor); only a HOME press closes it.

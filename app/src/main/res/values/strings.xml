@@ -19,6 +19,18 @@
     <!-- An app icon on a Home page: the drawer's long-press row, and the toast after either way in. -->
     <string name="home_add_to_home">Add to home</string>
     <string name="home_app_added">Added to Home page %1$d</string>
+    <!-- The card an app's "Add to home screen" or "Add widget" opens: what is being added, then
+         the one sentence that says what happens. -->
+    <string name="home_pin_title">Add to Home</string>
+    <string name="home_pin_add">Add to Home</string>
+    <string name="home_pin_size">%1$d × %2$d</string>
+    <string name="home_pin_locked">Home layout is locked.</string>
+    <string name="home_pin_unlock">Unlock and add</string>
+    <string name="home_pin_too_big">This widget is larger than Home.</string>
+    <string name="home_pin_added">Added to Home</string>
+    <string name="home_pin_added_new_page">Added to a new page</string>
+    <string name="home_pin_failed">Couldn’t add that to Home.</string>
+    <string name="home_pin_widget_added">Widget added</string>
     <!-- A folder on a Home page: the name it takes when its first app has no label, and the row a
          long press on one of its apps offers. -->
     <string name="home_folder_default_name">Folder</string>

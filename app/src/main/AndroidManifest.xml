@@ -191,6 +191,25 @@
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar"
             tools:targetApi="o" />
 
+        <!-- The confirm card for an app asking to pin a shortcut or a widget (Chrome's "Add to home
+             screen", an app's "Add widget"). Exported because the system must reach it; it answers
+             only these two actions, and only a request the platform vouches for. -->
+        <activity
+            android:name=".app.launcher.pin.HomePinRequestActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="${TERMUX_PACKAGE_NAME}.pin"
+            android:theme="@style/Theme.TermuxApp.PinCard">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".app.activities.SettingsActivity"
             android:excludeFromRecents="true"

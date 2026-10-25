@@ -159,7 +159,7 @@ public final class WidgetGridView extends ViewGroup {
                 }
             });
             View content = null;
-            if (record.isApp() || record.isFolder()) {
+            if (record.isApp() || record.isFolder() || record.isShortcut()) {
                 // An app icon or a folder: the launcher's own view, like a built-in, asked for on
                 // every render so an icon pack or an uninstall reaches the one on screen.
                 content = appIconFactory == null ? null : appIconFactory.viewFor(record);
