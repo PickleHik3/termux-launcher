@@ -26,6 +26,8 @@ public final class AppDrawerHorizontalPageAdapter
         AppDrawerAppCellView.ALLOW_CLICKS;
     @Nullable private AppDrawerDragController mDragController;
     private boolean mPickupEnabled;
+    /** The item index the arrow keys are on, or -1. */
+    private int mHighlightedPosition = AppDrawerSearchSelection.NONE;
 
     public AppDrawerHorizontalPageAdapter(@Nullable SuggestionBarView dock) {
         mDock = dock;
@@ -57,6 +59,28 @@ public final class AppDrawerHorizontalPageAdapter
     @Nullable
     public AppDrawerHorizontalGridMetrics getMetrics() {
         return mMetrics;
+    }
+
+    /** Sets the highlight ahead of a list submission, which is the sole rebind and so draws it. */
+    public void presetHighlight(int position) {
+        mHighlightedPosition = position;
+    }
+
+    /** Moves the highlight, rebinding only the page(s) holding the old and new items. */
+    public void moveHighlight(int position) {
+        int old = mHighlightedPosition;
+        if (old == position) return;
+        mHighlightedPosition = position;
+        int oldPage = pageOf(old);
+        int newPage = pageOf(position);
+        if (oldPage >= 0) notifyItemChanged(oldPage);
+        if (newPage >= 0 && newPage != oldPage) notifyItemChanged(newPage);
+    }
+
+    /** The page an item index sits on, or -1 for none or out of range. */
+    public int pageOf(int position) {
+        if (position < 0 || position >= mItems.size()) return -1;
+        return position / Math.max(1, itemsPerPage());
     }
 
     public void submit(@NonNull List<LauncherAppEntry> entries) {
@@ -192,6 +216,7 @@ public final class AppDrawerHorizontalPageAdapter
                     mPickupEnabled ? mDragController : null);
                 if (mPickupEnabled && mDragController != null) mDragController.bindTarget(cell, item);
                 cell.setScrubAppearance('\0', '\0', 0f);
+                cell.setKeyboardHighlight(entryIndex == mHighlightedPosition);
             } else {
                 cell.unbind();
                 cell.setClickable(false);
@@ -234,6 +259,18 @@ public final class AppDrawerHorizontalPageAdapter
         if (!(holder instanceof PageHolder)) return null;
         PageHolder page = (PageHolder) holder;
         return page.cells.isEmpty() || mItems.isEmpty() ? null : page.cells.get(0).icon;
+    }
+
+    /** The icon of the cell showing item {@code position}, or null when its page is not bound. */
+    @Nullable
+    public View iconAt(@NonNull RecyclerView pager, int position) {
+        int page = pageOf(position);
+        if (page < 0) return null;
+        RecyclerView.ViewHolder holder = pager.findViewHolderForAdapterPosition(page);
+        if (!(holder instanceof PageHolder)) return null;
+        PageHolder pageHolder = (PageHolder) holder;
+        int cell = position % Math.max(1, itemsPerPage());
+        return cell < pageHolder.cells.size() ? pageHolder.cells.get(cell).icon : null;
     }
 
     public static final class PageHolder extends RecyclerView.ViewHolder {
