@@ -72,12 +72,24 @@ public final class DockSurfaceSpec {
      * that rises from the screen's bottom edge with its top edge through the icons' centres
      * ({@link PeekGlassGeometry}), the tray's soft rim on its top and sides. The card's lower
      * edge is never seen (it runs on under the gesture pill), so it wears no shelf and casts no
-     * shadow. Where the card cannot be drawn (Floating, another band or the keyboard on the
-     * dock's glass, the Search field under the row) the dock draws the tray's slab.
+     * shadow. Floating, the card is the Floating card cut down and its lower edge shows: it is
+     * drawn with {@link #PEEK_GLASS_FLOATING} ({@link #forCard}). Where the card cannot be drawn
+     * (another band or the keyboard on the dock's glass, the Search field under the row) the dock
+     * draws the tray's slab.
      */
     @NonNull public static final DockSurfaceSpec PEEK_GLASS =
         new DockSurfaceSpec("peek_glass", true, GlassRefraction.SOFT_RIM_DP, 0f, false, false,
             false, true);
+
+    /**
+     * Peek glass's card on the Floating dock ({@link PeekGlassGeometry#computeFloating}): the
+     * Peek card in every other way, but it floats as the tray's slab does, its lower edge on
+     * screen, so it wears the tray's shelf and casts its contact shadow. No Dock design names it;
+     * the dock's slab draws with it while a Floating Peek card stands.
+     */
+    @NonNull public static final DockSurfaceSpec PEEK_GLASS_FLOATING =
+        new DockSurfaceSpec("peek_glass_floating", true, GlassRefraction.SOFT_RIM_DP, 1f, true,
+            false, false, true);
 
     /** A name for logs and tests. */
     @NonNull public final String name;
@@ -140,6 +152,19 @@ public final class DockSurfaceSpec {
             default:
                 return GLASS_TRAY;
         }
+    }
+
+    /**
+     * The spec the dock's slab draws with under this design, for the Peek card standing now
+     * ({@code card}, null while none does): a Peek design with no card is the tray's slab, shelf
+     * and shadow included; one whose card floats is {@link #PEEK_GLASS_FLOATING}. Every other
+     * design is itself.
+     */
+    @NonNull
+    public DockSurfaceSpec forCard(@Nullable PeekGlassGeometry.Card card) {
+        if (!peek) return this;
+        if (card == null) return GLASS_TRAY;
+        return card.floating ? PEEK_GLASS_FLOATING : this;
     }
 
     /**

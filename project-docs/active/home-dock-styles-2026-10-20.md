@@ -117,8 +117,9 @@ strip under the pill is the card's foot, inset as the card is.
   still reads as the Glass tray, so an existing install that never picked keeps the tray; an
   unknown or unbuilt id still falls back to the tray.
 - **Glass.** The global Look (Base), as every dock: the host's frost, tint and glass program,
-  cut to the card (the host's outline; the program's rect is the card's, its bottom a seam). Below
-  Android 13 the rim under the glass follows the card's top and sides.
+  cut to the card (the host's outline; the program's rect is the card's, its bottom a seam
+  Docked). Below Android 13 the rim under the glass follows the card's top and sides (all round
+  Floating).
 - **Geometry** (`dock/PeekGlassGeometry`, unit-tested): side inset `round(0.03 × width)`; the apps
   row's side inset under Peek glass Docked is that plus 4 dp, so the end icons stand on the card;
   the card's top is the icons' centre line; the reflection hangs from the icons' lower edges over
@@ -132,10 +133,20 @@ strip under the pill is the card's foot, inset as the card is.
   rebuilt 160 ms after the row last changed and put away while a swipe carries the icons.
 - **Reflection knob.** One Reflection slider on the Dock card, shown only under Peek glass:
   0 (off) to 100, default 50 (`dock_peek_reflection`).
-- **Where it is the tray.** Floating, the keyboard up, the system keyboard lifting the dock, the
-  Search field under the row, another band on the dock's glass (A–Z row, extra keys), a joined
-  Docked frame standing in for the dock's sheet: the dock draws the Glass tray's slab, shelf and
-  shadow included, and no reflection.
+- **Floating** (developer, 2026-10-25: Peek works in Floating too). The dock is already a card
+  of its own, so the Peek card is that card cut down (`PeekGlassGeometry.computeFloating`): its
+  sides and lower edge are the Floating card's (the glass host's bounds), its top the icons'
+  centre line, all four corners the Floating card's radius held to half the cut card's height
+  and width. Every edge keeps the rim (program rect with no seams; below Android 13 the rim
+  under the glass runs all round). It floats as the tray does, so it wears the tray's shelf and
+  contact shadow (`DockSurfaceSpec.PEEK_GLASS_FLOATING`). There is no foot: the strip under the
+  pill is not shown under Floating, and the reflection stops at the card's own lower edge, its
+  fade compressed into what room the card has. The row keeps Floating's own inset; it is not
+  narrowed by the Docked 3% + 4 dp.
+- **Where it is the tray.** The keyboard up, the system keyboard lifting the dock, the Search
+  field under the row, another band on the dock's glass (A–Z row, extra keys), a joined Docked
+  frame standing in for the dock's sheet: the dock draws the Glass tray's slab, shelf and shadow
+  included, and no reflection; in either Style.
 - **Not reflected.** The long-press app menu: a window of its own, which only a capture of that
   window on every frame could reach.
 

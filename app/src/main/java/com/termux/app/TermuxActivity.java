@@ -5343,10 +5343,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // lower corners stand past the screen's edge (PeekGlassGeometry), the host's outline clips
     // everything in it to the card, the glass program's rim follows the card, and the strip under
     // the gesture pill is the card's foot, inset as the card is. The icons' reflections fade down
-    // the card (PeekGlassReflection). The card is worked out again only when the row or the host
-    // lays out, before the frame that shows the new layout draws; at rest nothing runs. Where the
-    // card cannot stand (Floating, another band or the keyboard on the dock's glass, the Search
-    // field under the row, the dock lifted over the system keyboard) the dock is the tray's slab.
+    // the card (PeekGlassReflection). Floating, the host is already the Floating card: the Peek
+    // card is that card with its top dropped to the icons' centres (PeekGlassGeometry
+    // #computeFloating), every edge and corner on screen and rimmed, the tray's shelf and shadow
+    // under it, and no foot under the pill. The card is worked out again only when the row or the
+    // host lays out, before the frame that shows the new layout draws; at rest nothing runs. Where
+    // the card cannot stand (another band or the keyboard on the dock's glass, the Search field
+    // under the row, the dock lifted over the system keyboard) the dock is the tray's slab.
 
     /** The card as last cut, in the host's coordinates; null while the dock is a slab. */
     @Nullable private com.termux.app.dock.PeekGlassGeometry.Card mPeekCard;
@@ -5420,25 +5423,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The slab's own spec for the glass program and the shelf: the dock's design's, except that
-     * Peek glass with no card standing draws exactly the tray (its shelf and shadow included).
+     * Peek glass with no card standing draws exactly the tray (its shelf and shadow included),
+     * and a Floating Peek card wears the tray's shelf and shadow
+     * ({@link com.termux.app.dock.DockSurfaceSpec#forCard}).
      */
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSlabSpec() {
-        com.termux.app.dock.DockSurfaceSpec spec = shownDockSurfaceSpec();
-        return spec.peek && mPeekCard == null ? com.termux.app.dock.DockSurfaceSpec.GLASS_TRAY : spec;
+        return shownDockSurfaceSpec().forCard(mPeekCard);
     }
 
     /**
      * Whether the dock can stand as the Peek glass card now: the design is Peek glass, Docked
-     * (the card rises from the screen's edge; Floating sets cards apart from it), the dock shown
-     * with the apps row alone on its glass along the bottom (LensBeadGeometry.rowWearsBeads, the
-     * beads' own rule: no other band, no joined frame, no keyboard sharing the glass), no
+     * (the card rises from the screen's edge) or Floating (the Floating card cut down), the dock
+     * shown with the apps row alone on its glass along the bottom (LensBeadGeometry.rowWearsBeads,
+     * the beads' own rule: no other band, no joined frame, no keyboard sharing the glass), no
      * keyboard up under it, the dock not lifted over the system keyboard, and no Search field
      * under the row.
      */
     private boolean peekCardWanted() {
         if (mPreferences == null || !shownDockSurfaceSpec().peek) return false;
-        if (arrangement().floating() || !mDockRows.surfaceShown()) return false;
+        if (!mDockRows.surfaceShown()) return false;
         if (isInAppKeyboardShown() || mImeLiftPx > 0 || mAppliedPromptFieldBandPx > 0) return false;
         return com.termux.app.dock.LensBeadGeometry.rowWearsBeads(arrangement().layout(),
             stackStandsDownOnFrame(), false);
@@ -5473,6 +5477,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boxes[i * 4 + 2] = mPeekIconBoxes[i * 4 + 2] + dx;
             boxes[i * 4 + 3] = mPeekIconBoxes[i * 4 + 3] + dy;
         }
+        if (arrangement().floating()) {
+            // The host is the Floating card, its corners as applyDockSurfaceShape cuts them: the
+            // Peek card is that card cut down to the icons' centres.
+            return com.termux.app.dock.PeekGlassGeometry.computeFloating(boxes, count,
+                host.getWidth(), host.getHeight(),
+                resolveDockCapsuleCornerRadiusPx(host.getHeight()));
+        }
         // The strip under the pill continues the card to the screen's bottom edge.
         float screenBottom = decor.getHeight() - hostInDecor[1];
         return com.termux.app.dock.PeekGlassGeometry.compute(boxes, count, hostInDecor[0],
@@ -5482,45 +5493,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The glass program's rect for the card, in the backdrop's coordinates, and its radius
-     * (left, top, right, bottom, radius); null while the dock is a slab. Its bottom is a seam
-     * (the card runs on off the screen), its top and sides keep the rim.
+     * (left, top, right, bottom, radius); null while the dock is a slab. Docked its bottom is a
+     * seam (the card runs on off the screen) and its top and sides keep the rim; Floating every
+     * edge keeps it.
      */
     @Nullable
     private float[] peekGlassRect() {
         com.termux.app.dock.PeekGlassGeometry.Card card = mPeekCard;
-        // A card cut before the keyboard came up must not shape the glass program a moment longer.
-        if (card == null || !peekCardWanted()) return null;
+        // A card cut before the keyboard came up, or for the other Style, must not shape the
+        // glass program a moment longer.
+        if (card == null || !peekCardWanted() || card.floating != arrangement().floating())
+            return null;
         float reach = com.termux.app.chrome.GlassRefraction.seamReachPx(
             com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
             getResources().getDisplayMetrics().density, card.radiusPx);
         float[] rect = new float[4];
         com.termux.app.chrome.GlassRefraction.rimRect(rect, mGlassOriginLeft + card.left,
             mGlassOriginTop + card.top, mGlassOriginLeft + card.right,
-            mGlassOriginTop + card.bottom, reach, com.termux.app.chrome.ChromeEdgeRule.BOTTOM);
+            mGlassOriginTop + card.bottom, reach, card.floating
+                ? com.termux.app.chrome.ChromeEdgeRule.NONE
+                : com.termux.app.chrome.ChromeEdgeRule.BOTTOM);
         return new float[] {rect[0], rect[1], rect[2], rect[3], card.radiusPx};
     }
 
     /**
-     * The rim under the glass along the card's top and sides, where the program does not draw
-     * the glass's edge (below Android 13): the rim moved onto the card, its bottom edge left
-     * open (the card runs on under the pill), drawn inside the host.
+     * The rim under the glass along the card's edges, where the program does not draw the
+     * glass's edge (below Android 13): the rim moved onto the card, drawn inside the host. Docked
+     * its bottom edge is left open (the card runs on under the pill); Floating the card's whole
+     * outline is rimmed, as the Floating card's always is.
      */
     @Nullable
     private Drawable peekRimDrawable(@NonNull com.termux.app.dock.PeekGlassGeometry.Card card,
                                      int hostWidth, int hostHeight) {
         if (hostWidth <= 0 || hostHeight <= 0) return null;
-        Drawable rim = mChrome.glass().rimUnderGlass(card.radiusPx,
-            com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.TOP
-                | com.termux.app.chrome.ChromeEdgeRule.RIGHT);
+        Drawable rim = card.floating
+            ? mChrome.glass().rimUnderGlass(card.radiusPx)
+            : mChrome.glass().rimUnderGlass(card.radiusPx,
+                com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.TOP
+                    | com.termux.app.chrome.ChromeEdgeRule.RIGHT);
         if (rim == null) return null;
         // Never a plain InsetDrawable: its insets would become the host's padding and lay every
         // layer in the host out inside the card's box, long after the card is gone.
         return com.termux.app.dock.PeekRimDrawable.forCard(rim, card, hostWidth);
     }
 
-    /** The strip under the pill's inset from each side: the card's, while the card stands. */
+    /**
+     * The strip under the pill's inset from each side: the card's, while a Docked card stands.
+     * A Floating card has no foot: it floats with its own lower edge, and the strip is not its.
+     */
     private int peekStripSideInsetPx() {
-        if (mPeekCard == null || getWindow() == null) return 0;
+        if (mPeekCard == null || mPeekCard.floating || getWindow() == null) return 0;
         View decor = getWindow().getDecorView();
         return decor == null ? 0
             : com.termux.app.dock.PeekGlassGeometry.sideInsetPx(decor.getWidth());
@@ -5652,7 +5674,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPeekWatchedStrip = strip;
             if (strip != null) strip.addOnLayoutChangeListener(mPeekLayoutListener);
         }
-        if (strip != null && strip.getVisibility() == View.VISIBLE && strip.getHeight() > 0) {
+        // A Floating card has no foot: its reflection stops at its own lower edge.
+        if (!card.floating && strip != null && strip.getVisibility() == View.VISIBLE
+            && strip.getHeight() > 0) {
             int[] stripAt = new int[2];
             int[] hostOnScreen = new int[2];
             strip.getLocationOnScreen(stripAt);

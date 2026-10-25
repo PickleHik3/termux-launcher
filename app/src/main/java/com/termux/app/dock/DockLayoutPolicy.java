@@ -612,8 +612,9 @@ public final class DockLayoutPolicy {
         int contentInsetPx = capsule ? out.capsuleContentInsetPx : out.horizontalInsetPx;
         out.appsRowEdgeInsetPx = appsRowSideInsetPx(contentInsetPx,
             in.surface.beads && !in.appsRowOnEdge, density);
-        // Peek glass narrows the row to the card (Docked; Floating keeps the tray's slab), so the
-        // end icons' lower halves and their reflections stand on it.
+        // Peek glass narrows the row to the card Docked, so the end icons' lower halves and their
+        // reflections stand on it. Floating the card's sides are the Floating card's own
+        // (PeekGlassGeometry.computeFloating), and the row keeps the inset it has inside that card.
         if (in.surface.peek && !capsule && !in.appsRowOnEdge && in.rowWidthPx > 0) {
             out.peekRowSideInsetPx = PeekGlassGeometry.rowSideInsetPx(in.rowWidthPx, density);
             out.appsRowEdgeInsetPx = Math.max(out.appsRowEdgeInsetPx, out.peekRowSideInsetPx);

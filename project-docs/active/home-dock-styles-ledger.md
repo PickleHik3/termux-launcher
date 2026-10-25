@@ -73,6 +73,14 @@ its reason so it can be reversed.
   edge, and Floating sets every card apart from it with a gap, so a card ending above the gap would
   show a thin sliver under the icons. The same for a dock not alone on its glass (as Lens beads),
   the keyboard up, the system keyboard lifting the dock and the Search field under the row.
+  **Superseded for Floating** (the developer, later on 10-25: Peek must work in Floating too);
+  the other fallbacks stand.
+- 2026-10-25 · Peek glass under Floating, decisions taken without the developer: the card is the
+  Floating card cut down to the icons' centres, its corners the Floating card's radius held to
+  half the cut card (so usually smaller than the uncut card's: a 36 dp tall card takes 18 dp); it
+  wears the tray's shelf and contact shadow, because the reason the Docked card drops them (its
+  lower edge never shows) does not hold for a card that floats. `DockSurfaceSpec.forCard` is the
+  one line to change if the developer wants the flat Docked look there instead.
 - 2026-10-25 · Peek glass narrows the apps row (Docked) by the card's inset plus 4 dp also where
   it falls back to the tray, since the inset is the layout's and the fallbacks are the chrome's;
   the icons are a little smaller there. The reflection's band reuses the air under the icons and
