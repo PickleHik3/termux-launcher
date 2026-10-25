@@ -416,16 +416,23 @@ public final class LauncherAzGestureFxView extends View {
                                  @Nullable List<Drawable> icons,
                                  @Nullable List<FocusOutlineRenderer.Visual> visuals) {
         boolean show = strip != null && !strip.isEmpty() && icons != null && !icons.isEmpty();
-        floatingStrip = show ? strip : null;
-        floatingStripIcons.clear();
-        floatingStripVisuals.clear();
         if (show) {
+            floatingStrip = strip;
+            floatingStripIcons.clear();
+            floatingStripVisuals.clear();
             floatingStripIcons.addAll(icons);
             if (visuals != null) {
                 floatingStripVisuals.addAll(visuals);
             }
         } else {
             floatingStripFocusedSlot = -1;
+            // The strip keeps its content while it fades out; the fade's end (or, with nothing
+            // showing, now) lets it go.
+            if (floatingStripProgress <= 0.01f) {
+                floatingStripIcons.clear();
+                floatingStripVisuals.clear();
+                floatingStrip = null;
+            }
         }
         animateFloatingStripTo(show ? 1f : 0f);
         syncBreathing();
