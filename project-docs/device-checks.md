@@ -20,6 +20,13 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(graphics): skip the Vulkan wrapper on phones whose graphics driver is
+  older than Vulkan 1.3" · pong (Vulkan 1.1): the Phone's Vulkan card says "Needs a newer graphics
+  driver than this phone has" before and after a run; Run benchmark's sizes no longer count the
+  wrapper, the run never downloads it (step 2 lists it as not tried) · pong.
+- 2026-10-25 · commit "fix(x11): the virgl profiles draw through virgl, not Zink" · after a rerun
+  the virgl card's renderer reads "virgl (Adreno …)", and a Linux app started on the virgl profile
+  shows virgl in its GL renderer · pong (renderer already seen in the 12:55 run's results).
 - 2026-10-25 · commit "fix(wall): the display window's borders stop at its edge" · display
   window in front with a Linux app maximised (a scrollable list at its foot, a menu bar at its
   top, a scrollbar at its right edge): a vertical swipe a row up from the bottom edge under the
@@ -572,6 +579,10 @@ dropped; what follows is what still owes a look.
   pong.
 
 ## Developer
+- 2026-10-25 · commit "fix(graphics): the benchmark bar stands apart from the cards, and its
+  output fits" · during a run the floating bar reads as a layer above the cards (tint, outline,
+  shadow) in light, dark, black and the Material You scheme; the terminal's lines mostly fit
+  without wrapping and the text stays readable; rotate mid-run and the text resizes · pong.
 - 2026-10-25 · commit "feat(settings): run the graphics benchmark on its page, in a read-only
   terminal" · the run panel and the confirmation read well in light, dark and black themes and at
   font scale 1.3 (the terminal box keeps the terminal's own colours); rotate during a run · pong.
@@ -787,11 +798,6 @@ Developer:
 - 2026-10-24 · same · display off, Run benchmark to the end, then once more stopped with Ctrl-C
   during step 5: afterwards no `termux-x11` process (`ps -ef | grep termux-x11`) and no new socket
   in `$PREFIX/tmp/.X11-unix` · pong.
-- 2026-10-24 · commit "fix(x11): the GPU benchmark installs the Vulkan wrapper from its pinned
-  download" · Run benchmark: step 3 downloads vulkan-wrapper-android, installs it, step 5 tests
-  vulkan-wrapper with a score or outcome; if it lost, step 8 removes it (`pacman -Q
-  vulkan-wrapper-android` finds nothing) and no `vulkan-wrapper.*` folder is left in
-  `$PREFIX/tmp`; if it won, it stays · pong.
 - 2026-10-24 · commit "feat(settings): a Graphics acceleration row on Linux apps" · Settings →
   Linux apps: a Graphics acceleration row with an icon right under Set up Linux apps; tap it: the
   page opens, Back returns to Linux apps; search "graphics" finds the page under Linux apps; the
