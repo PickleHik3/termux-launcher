@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-25 · commit "fix(x11): bump the installer so the new benchmark script is written" · On a
+  pacman Termux, `x11-gpu-setup.sh` runs in pacman mode ("Package manager: pacman"), installs the
+  Vulkan wrapper (repacked, `pacman -U` accepts it), and the virgl run reports a virgl renderer,
+  not Zink · pong over adb, with the developer's go-ahead.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
