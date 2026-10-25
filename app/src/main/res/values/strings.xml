@@ -282,7 +282,6 @@
         <item quantity="one">%d row</item>
         <item quantity="other">%d rows</item>
     </plurals>
-    <string name="settings_extra_keys_empty_page">No rows yet. Add a row, then add keys to it.</string>
     <string name="settings_extra_keys_save_changes">Save changes</string>
     <string name="settings_extra_keys_undo">Undo</string>
     <string name="settings_extra_keys_key_removed">Key removed</string>

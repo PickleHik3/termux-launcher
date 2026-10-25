@@ -9,6 +9,9 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,6 +25,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.core.view.MenuProvider;
 import androidx.core.widget.NestedScrollView;
 import androidx.core.widget.TextViewCompat;
 import androidx.fragment.app.Fragment;
@@ -100,7 +104,6 @@ public class ExtraKeysEditorFragment extends Fragment
     private MaterialButton pageAddButton;
     private ImageView pageMenuButton;
     private TextView countLabel;
-    private TextView emptyLabel;
     private RowAdapter adapter;
     private ItemTouchHelper touchHelper;
     private View saveBar;
@@ -152,14 +155,6 @@ public class ExtraKeysEditorFragment extends Fragment
         content.addView(list, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        emptyLabel = new TextView(context);
-        emptyLabel.setText(R.string.settings_extra_keys_empty_page);
-        emptyLabel.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
-        emptyLabel.setTextColor(colorSubtle);
-        emptyLabel.setPadding(dp(4), dp(8), dp(4), dp(4));
-        content.addView(emptyLabel);
-
         content.addView(addRowButton(context));
 
         saveBar = saveBar(context);
@@ -168,6 +163,7 @@ public class ExtraKeysEditorFragment extends Fragment
 
         requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(),
             backCallback);
+        requireActivity().addMenuProvider(new ResetMenu(), getViewLifecycleOwner());
         refreshAll();
         return column;
     }
@@ -215,11 +211,12 @@ public class ExtraKeysEditorFragment extends Fragment
 
     private void refreshRows() {
         ExtraKeysLayoutModel page = draft.page(currentPage);
+        // An empty page shows one empty row, so its + is the way in. Empty rows are never saved.
+        if (page.rowCount() == 0) page.addRow();
         adapter.notifyDataSetChanged();
         int rows = page.rowCount();
         countLabel.setText(getResources().getQuantityString(
             R.plurals.settings_extra_keys_row_count, rows, rows));
-        emptyLabel.setVisibility(rows == 0 ? View.VISIBLE : View.GONE);
     }
 
     private void save() {
@@ -277,15 +274,6 @@ public class ExtraKeysEditorFragment extends Fragment
 
     private View pagesBar(@NonNull Context context) {
         LinearLayout block = column(context);
-
-        LinearLayout top = row(context);
-        top.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        MaterialButton resetButton = new MaterialButton(context, null,
-            androidx.appcompat.R.attr.borderlessButtonStyle);
-        resetButton.setText(R.string.settings_extra_keys_reset);
-        resetButton.setOnClickListener(this::showResetMenu);
-        top.addView(resetButton);
-        block.addView(top);
 
         LinearLayout line = row(context);
         pageChips = new ChipGroup(context);
@@ -378,6 +366,25 @@ public class ExtraKeysEditorFragment extends Fragment
     }
 
     // ---------------------------------------------------------------- reset
+
+    /** Reset in the app bar; its presets drop down from the action itself. */
+    private final class ResetMenu implements MenuProvider {
+        private final int itemId = View.generateViewId();
+
+        @Override
+        public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
+            menu.add(Menu.NONE, itemId, Menu.NONE, R.string.settings_extra_keys_reset)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS | MenuItem.SHOW_AS_ACTION_WITH_TEXT);
+        }
+
+        @Override
+        public boolean onMenuItemSelected(@NonNull MenuItem item) {
+            if (item.getItemId() != itemId) return false;
+            View anchor = requireActivity().findViewById(itemId);
+            showResetMenu(anchor != null ? anchor : root);
+            return true;
+        }
+    }
 
     /** Presets for the page in view, under Reset. */
     private void showResetMenu(@NonNull View anchor) {
@@ -642,7 +649,7 @@ public class ExtraKeysEditorFragment extends Fragment
 
             LinearLayout header = row(context);
             handle = new ImageView(context);
-            handle.setImageResource(R.drawable.ic_drag_indicator_24);
+            handle.setImageResource(R.drawable.ic_drag_grip_24);
             handle.setColorFilter(colorSubtle);
             handle.setContentDescription(getString(R.string.settings_extra_keys_drag_handle));
             handle.setPadding(dp(12), dp(12), dp(12), dp(12));

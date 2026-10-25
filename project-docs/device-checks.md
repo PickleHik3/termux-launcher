@@ -743,7 +743,7 @@ fix, then leaves this file.
 ## Extra keys editor, streamlined (#164)
 Agent (Settings, Keyboard, Terminal extra keys; the page editor, five sheets and the renders are in
 `app/build/extra-keys-editor-renders` after `ExtraKeysEditorRenderTest`):
-- Page 2 from nothing: tap the + beside the page chips, Add row, the row's dashed +, type a value
+- Page 2 from nothing: tap the + beside the page chips, then the empty row's dashed +, type a value
   in the search field, take "Send ... as text", Add to row. The key is a cap on Page 2. Save
   changes, open the terminal: swiping the toolbar shows page 2 with that key.
 - Each sheet opens and closes cleanly: Edit key (tap a cap), Choose a key (a row's +; category chips,
@@ -753,7 +753,7 @@ Agent (Settings, Keyboard, Terminal extra keys; the page editor, five sheets and
   pick a colour, Move key left and right (dimmed at the row's ends), Remove key then Undo.
 - Delete row and Remove page each show Undo and bring everything back. Move row up/down, Move page
   left/right swap as labelled; Remove page on Page 1 with two pages leaves the old Page 2 as Page 1.
-- Reset lists the presets of the page in view; one on a non-empty page asks before replacing.
+- Reset (app bar) drops its presets down from the action, for the page in view; one on a non-empty page asks before replacing.
 - Cancel with edits asks, then leaves with nothing written; Back does the same. Save changes is
   dimmed until something differs, and a Save then Back asks nothing.
 - Light, dark, black and Material You: caps, cards, sheets and the dashed + all read; nothing keeps a
