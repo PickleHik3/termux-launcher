@@ -115,16 +115,43 @@ public class GraphicsAccelerationFragmentTest {
     }
 
     @Test
-    public void anOlderScriptWithoutTheProfilesOptionIsNotStarted() throws Exception {
+    public void anOlderScriptWithoutThePageOptionsIsNotStarted() throws Exception {
         java.io.File dir = java.nio.file.Files.createTempDirectory("gpu-setup").toFile();
         java.io.File script = new java.io.File(dir, "termux-x11-gpu-setup");
         java.nio.file.Files.write(script.toPath(), "case \"$arg\" in\n  --keep) KEEP=1 ;;\nesac\n"
             .getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        assertFalse(GraphicsAccelerationFragment.knowsProfiles(script));
+        assertFalse(GraphicsAccelerationFragment.knowsPageOptions(script));
         java.nio.file.Files.write(script.toPath(), "    --profiles=*) PROFILES=${arg#--profiles=} ;;\n"
             .getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        assertTrue(GraphicsAccelerationFragment.knowsProfiles(script));
-        assertFalse("no script at all", GraphicsAccelerationFragment.knowsProfiles(new java.io.File(dir, "none")));
+        assertFalse("a script without --estimate is outdated too",
+            GraphicsAccelerationFragment.knowsPageOptions(script));
+        java.nio.file.Files.write(script.toPath(), ("    --estimate) ESTIMATE=1 ;;\n"
+            + "    --profiles=*) PROFILES=${arg#--profiles=} ;;\n")
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertTrue(GraphicsAccelerationFragment.knowsPageOptions(script));
+        assertFalse("no script at all", GraphicsAccelerationFragment.knowsPageOptions(new java.io.File(dir, "none")));
+    }
+
+    @Test
+    public void theConfirmationSaysTheSizesOrWhyNot() {
+        String working = GraphicsAccelerationFragment.confirmMessage(context, null);
+        assertTrue(working.startsWith(context.getString(R.string.settings_x11_gpu_confirm_working)));
+        assertTrue(working.endsWith(context.getString(R.string.settings_x11_gpu_confirm_note)));
+
+        String known = GraphicsAccelerationFragment.confirmMessage(context, com.termux.app.x11.X11GpuBenchmarkEstimate.parse(
+            "download_bytes=120000000\ninstall_bytes=450000000\nremovable_bytes=300000000\n"));
+        assertEquals(5, known.split("\n").length);
+        assertTrue(known.startsWith("Downloads about "));
+        assertFalse(known.contains(context.getString(R.string.settings_x11_gpu_confirm_unknown)));
+
+        String unknown = GraphicsAccelerationFragment.confirmMessage(context,
+            com.termux.app.x11.X11GpuBenchmarkEstimate.NONE);
+        assertTrue(unknown.startsWith(context.getString(R.string.settings_x11_gpu_confirm_unknown)));
+        assertFalse(unknown.contains("Downloads"));
+
+        String partial = GraphicsAccelerationFragment.confirmMessage(context,
+            com.termux.app.x11.X11GpuBenchmarkEstimate.parse("download_bytes=1000\n"));
+        assertTrue(partial.contains(context.getString(R.string.settings_x11_gpu_confirm_partial)));
     }
 
     @Test
