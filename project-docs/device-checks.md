@@ -739,3 +739,24 @@ fix, then leaves this file.
 - With the card standing (keyboard down): frost, tint and rim match the card exactly, and the
   icons' reflections show on the card above the strip (the host's reflection view had been laid
   out 95 px down by the same padding, a likely cause of 48bf23b83's "the card shows none").
+
+## Extra keys editor, streamlined (#164)
+Agent (Settings, Keyboard, Terminal extra keys; the page editor, five sheets and the renders are in
+`app/build/extra-keys-editor-renders` after `ExtraKeysEditorRenderTest`):
+- Page 2 from nothing: tap the + beside the page chips, then the empty row's dashed +, type a value
+  in the search field, take "Send ... as text", Add to row. The key is a cap on Page 2. Save
+  changes, open the terminal: swiping the toolbar shows page 2 with that key.
+- Each sheet opens and closes cleanly: Edit key (tap a cap), Choose a key (a row's +; category chips,
+  search, tiles, confirm names the key), Row options (row's ⋮), Page options (page ⋮). Done and the
+  close mark only put a sheet down.
+- Edit key: change On tap through the picker, set and clear On swipe up, retype the Display label,
+  pick a colour, Move key left and right (dimmed at the row's ends), Remove key then Undo.
+- Delete row and Remove page each show Undo and bring everything back. Move row up/down, Move page
+  left/right swap as labelled; Remove page on Page 1 with two pages leaves the old Page 2 as Page 1.
+- Reset (app bar) drops its presets down from the action, for the page in view; one on a non-empty page asks before replacing.
+- Cancel with edits asks, then leaves with nothing written; Back does the same. Save changes is
+  dimmed until something differs, and a Save then Back asks nothing.
+- Light, dark, black and Material You: caps, cards, sheets and the dashed + all read; nothing keeps a
+  fixed navy.
+- Font scale 1.3: row titles, chips, tiles and the confirm button stay on one line or wrap without
+  clipping; 48 dp caps keep their labels readable (autosized).
