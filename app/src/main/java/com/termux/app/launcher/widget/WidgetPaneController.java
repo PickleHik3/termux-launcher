@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.DragEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -117,6 +118,17 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         default void confirmWidgetRemoval(int appWidgetId, @NonNull Runnable remove) {
             remove.run();
         }
+        /**
+         * A hold on a Home app icon: the App menu for {@code entry}, anchored on {@code anchor},
+         * the same card the dock and the drawer open. False when there is none to show, and the
+         * hold lifts the icon at once instead.
+         */
+        default boolean showHomeAppMenu(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
+                                        @NonNull View anchor) {
+            return false;
+        }
+        /** The finger holding the menu travelled on and lifted the icon: the menu closes. */
+        default void dismissHomeAppMenu() { }
     }
 
     /** Where a Home folder's rename lands; the activity's rename intake commits through it. */
@@ -184,14 +196,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.picker().setSearchFocusListener(this::relayEditorFocus);
         pane.grid().setListener(new WidgetGridView.Listener() {
             @Override public void onWidgetLongPressed(int appWidgetId, float rawX, float rawY) {
-                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
-                enterEditMode(appWidgetId, rawX, rawY);
+                onItemLongPressed(appWidgetId, rawX, rawY);
             }
             @Override public void onWidgetEditDragMove(int appWidgetId, float rawX, float rawY) {
-                if (edit != null && edit.appWidgetId == appWidgetId) moveDrag(rawX, rawY);
+                if (hold != null && hold.appWidgetId == appWidgetId) {
+                    holdMoved(rawX, rawY);
+                } else if (edit != null && edit.appWidgetId == appWidgetId) {
+                    moveDrag(rawX, rawY);
+                }
             }
             @Override public void onWidgetEditDragEnd(int appWidgetId, boolean canceled) {
-                if (edit != null && edit.appWidgetId == appWidgetId) endMoveDrag(canceled);
+                if (hold != null && hold.appWidgetId == appWidgetId) {
+                    // Let go without travelling: the App menu stays open, as it opened.
+                    hold = null;
+                } else if (edit != null && edit.appWidgetId == appWidgetId) {
+                    endMoveDrag(canceled);
+                }
             }
             @Override public void onEmptySpaceLongPressed(float rawX, float rawY) {
                 host.onHomeLongPressed(rawX, rawY);
@@ -374,6 +394,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** The built-in widgets' services, for the activity to reach a widget's sources. */
     @NonNull public BuiltinWidgetHost builtins() { return builtins; }
     public void onStop() {
+        hold = null;
         dismissFolderPopup();
         abortCarry(true);
         abortAppDrop(true);
@@ -505,6 +526,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return pane.onBackPressed();
     }
     public void destroy() {
+        hold = null;
         if (folderPopup != null) folderPopup.dismissImmediate();
         builtins.destroy();
         appIcons.destroy();
@@ -1214,13 +1236,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     private void exitEditMode() {
+        exitEditMode(true);
+    }
+
+    /**
+     * Closes the session. {@code releaseDragLayer} false keeps the picture a drop is about to
+     * settle into its cell: an icon's lift ends with its drop, and the settle still has to play.
+     */
+    private void exitEditMode(boolean releaseDragLayer) {
         pane.removeCallbacks(edgeFlip);
         clearMergeTarget();
         if (edit != null && edit.lifted) returnDraggedCell(edit.appWidgetId);
-        pane.releaseWidgetDragLayer();
+        if (releaseDragLayer) pane.releaseWidgetDragLayer();
         clearDisplacementPreview(false);
         edit = null;
         editSnapshot = null;
+        iconLiftSession = false;
         pane.hideWidgetEditOverlay();
         syncEditSession();
     }
@@ -1267,7 +1298,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /** Tell the host when, and only when, that has changed. */
     private void syncEditSession() {
-        boolean active = pane.widgetEditActive();
+        // An icon lifted off Home rides the session's drag without being an edit: the page's tab
+        // keeps its resting face for the moment the icon is in the air.
+        boolean active = pane.widgetEditActive() && !iconLiftSession;
         if (active == editSessionAnnounced) return;
         editSessionAnnounced = active;
         host.onWidgetEditSessionChanged(active);
@@ -1603,6 +1636,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             overlay.setDragging(false);
             overlay.setGhostBounds(null);
         }
+        // An icon lifted off Home was never an edit: its session ends with the drop.
+        if (iconLiftSession) exitEditMode(false);
         if (lifted) {
             LauncherWidgetRecord landed = widgets.repository().get(appWidgetId);
             pane.widgetDragLayer().drop(landed == null ? null : paneBounds(landed.cell),
@@ -1694,8 +1729,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         overlay.setGhostBounds(null);
         edit = null;
         render();
-        if (settled != null) beginEditSession(settled.appWidgetId);
-        if (edit == null) exitEditMode();
+        if (iconLiftSession) {
+            // A lifted icon's merge is the end of it: no session carries on with the folder.
+            exitEditMode(false);
+        } else {
+            if (settled != null) beginEditSession(settled.appWidgetId);
+            if (edit == null) exitEditMode();
+        }
         if (lifted) {
             pane.widgetDragLayer().drop(settled == null ? null : paneBounds(settled.cell),
                 !host.reducedMotion());
@@ -1718,6 +1758,127 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             batch.add(neighbour.withCell(entry.getValue()));
         }
         return widgets.repository().putRecords(batch);
+    }
+
+    // ---- An icon lifted off Home ------------------------------------------------------------
+
+    /** A finger holding a Home app icon whose App menu is open, until it lifts the icon or lets go. */
+    private static final class IconHold {
+        final int appWidgetId;
+        final float downRawX, downRawY;
+        /** A locked layout has said so once in this hold; it does not say it again per move. */
+        boolean refused;
+
+        IconHold(int appWidgetId, float downRawX, float downRawY) {
+            this.appWidgetId = appWidgetId;
+            this.downRawX = downRawX;
+            this.downRawY = downRawY;
+        }
+    }
+
+    @Nullable private IconHold hold;
+    /** The edit session open now was opened by lifting an icon, and closes with its drop. */
+    private boolean iconLiftSession;
+
+    /**
+     * A long press on anything on the page ({@link HomeIconLift#onLongPress}): an app icon opens
+     * its App menu and waits to see whether the finger lifts it; a folder, or an app that is gone,
+     * lifts at once; a widget opens edit mode as it always has.
+     */
+    private void onItemLongPressed(int appWidgetId, float rawX, float rawY) {
+        LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
+        boolean iconLike = record != null && (record.isApp() || record.isFolder());
+        com.termux.app.launcher.model.LauncherAppEntry entry = record != null && record.isApp()
+            ? appIcons.menuEntryFor(record) : null;
+        switch (HomeIconLift.onLongPress(pane.widgetEditActive(), entry != null, iconLike,
+                layoutLocked)) {
+            case MENU:
+                if (beginIconHold(appWidgetId, entry, rawX, rawY)) return;
+                // No menu to show after all: the hold lifts the icon, as a folder's does.
+                if (refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
+                liftIcon(appWidgetId, rawX, rawY, rawX, rawY);
+                return;
+            case LIFT:
+                liftIcon(appWidgetId, rawX, rawY, rawX, rawY);
+                return;
+            case REFUSE:
+                refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT);
+                return;
+            case EDIT:
+            default:
+                enterEditMode(appWidgetId, rawX, rawY);
+        }
+    }
+
+    /** Opens the App menu over the held icon and starts watching the finger; false with no menu. */
+    private boolean beginIconHold(int appWidgetId,
+                                  @NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
+                                  float rawX, float rawY) {
+        dismissFolderPopup();
+        WidgetCellView cell = pane.grid().cellForId(appWidgetId);
+        View anchor = appIcons.viewOf(appWidgetId);
+        if (anchor == null || !anchor.isAttachedToWindow()) anchor = cell;
+        if (anchor == null || !host.showHomeAppMenu(entry, anchor)) return false;
+        hold = new IconHold(appWidgetId, rawX, rawY);
+        keepFinger(cell);
+        return true;
+    }
+
+    /**
+     * The finger holding the menu moved: past the lift distance it closes the menu and carries the
+     * icon, unless the layout is locked, which says so once and leaves the menu up.
+     */
+    private void holdMoved(float rawX, float rawY) {
+        IconHold held = hold;
+        if (held == null) return;
+        int distance = HomeIconLift.liftDistancePx(
+            ViewConfiguration.get(pane.getContext()).getScaledTouchSlop());
+        boolean past = HomeIconLift.pastLiftDistance(rawX - held.downRawX, rawY - held.downRawY,
+            distance);
+        switch (HomeIconLift.onHoldMove(past, layoutLocked, held.refused)) {
+            case LIFT:
+                hold = null;
+                host.dismissHomeAppMenu();
+                liftIcon(held.appWidgetId, held.downRawX, held.downRawY, rawX, rawY);
+                break;
+            case REFUSE:
+                held.refused = true;
+                refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT);
+                break;
+            case STAY:
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Lifts the icon {@code appWidgetId} under the finger: the move drag edit mode uses (the ghost,
+     * the neighbours stepping aside, the turn at the page's edge, a rest on another icon making a
+     * folder), without the edit chrome staying once it is dropped. The drag is measured from where
+     * the finger went down, so the icon is where the finger is, not a lift distance behind it.
+     */
+    private void liftIcon(int appWidgetId, float fromRawX, float fromRawY, float rawX, float rawY) {
+        dismissFolderPopup();
+        clearDisplacementPreview(false);
+        iconLiftSession = true;
+        if (!beginEditSession(appWidgetId)) {
+            iconLiftSession = false;
+            return;
+        }
+        beginMoveDrag(fromRawX, fromRawY);
+        if (edit == null) return;
+        pane.widgetEditOverlay().setDragging(true);
+        keepFinger(pane.grid().cellForId(appWidgetId));
+        if (fromRawX != rawX || fromRawY != rawY) moveDrag(rawX, rawY);
+    }
+
+    /**
+     * The page's own swipes (paging, the palette gesture) and everything above the page leave this
+     * finger alone until it lifts: it is deciding between the menu and a drag, or dragging.
+     */
+    private static void keepFinger(@Nullable View cell) {
+        android.view.ViewParent parent = cell == null ? null : cell.getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
     }
 
 

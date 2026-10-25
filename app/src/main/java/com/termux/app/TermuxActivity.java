@@ -27958,6 +27958,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 public com.termux.app.launcher.popup.AnchoredMenuTheme homeMenuTheme() {
                     return mSuggestionBarView == null ? null : mSuggestionBarView.menuTheme();
                 }
+                // A hold on a Home icon opens the dock's App menu; the finger travelling on closes it.
+                @Override public boolean showHomeAppMenu(
+                        @NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
+                        @NonNull View anchor) {
+                    if (mSuggestionBarView == null) return false;
+                    mSuggestionBarView.showDrawerAppContextPopup(anchor, entry, null);
+                    return true;
+                }
+                @Override public void dismissHomeAppMenu() {
+                    if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
+                }
                 @Override public void beginHomeFolderRename(@NonNull String name,
                         @NonNull FolderRenameTitleView title,
                         @NonNull com.termux.app.launcher.widget.WidgetPaneController.HomeFolderRenameTarget target) {
