@@ -729,3 +729,13 @@ fix, then leaves this file.
 - Docked, Peek glass dock: raise the in-app keyboard. The extra keys bar sits on glass again and the
   keyboard glass spans the full width with its normal corners; hide the keyboard, the card returns.
 - Same with the Search field open and with the system IME lifting the dock.
+
+## Peek glass host never padded by the card's rim (pong)
+- Peek glass dock, Docked, where the rim is drawn under the glass (below Android 13, or the glass
+  program not drawing the edge): raise the in-app keyboard. The extra keys bar sits on glass and
+  the keyboard glass reaches both screen sides (`dumpsys activity` shows `extrakeys_background` at
+  0,0 inside `accessory_surface_host`, not 32,95). Hide it: the card returns; raise it again:
+  still full width.
+- With the card standing (keyboard down): frost, tint and rim match the card exactly, and the
+  icons' reflections show on the card above the strip (the host's reflection view had been laid
+  out 95 px down by the same padding, a likely cause of 48bf23b83's "the card shows none").
