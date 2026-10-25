@@ -2842,7 +2842,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetCellRect cell = state.cell;
         boolean placed = outcome == HomeAppDropPolicy.Outcome.PLACE && cell != null
             && state.turn.page >= 0 && state.turn.page < widgets.repository().pageCount()
-            && widgets.addAppAt(state.drop.app, state.drop.label, state.turn.page, cell) != null;
+            && putDown(state.drop, state.turn.page, cell);
         WidgetDragLayerView layer = pane.widgetDragLayer();
         layer.setGhost(null, true);
         layer.drop(placed ? paneBounds(cell) : null, appDropIconPx(), !host.reducedMotion());
@@ -2851,6 +2851,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             pane.showNotice(pane.getContext().getString(R.string.widget_no_room_on_page));
         }
         return placed;
+    }
+
+    /**
+     * Stores what an app drag carried at {@code cell} of {@code page}: the app's icon, or, for a
+     * shortcut dragged out of the App menu, a pinned shortcut (the record a pin request makes),
+     * kept pinned for this launcher so it stays when the app stops offering it.
+     */
+    private boolean putDown(@NonNull HomeAppDrop drop, int page, @NonNull WidgetCellRect cell) {
+        HomeAppDrop.Shortcut shortcut = drop.shortcut();
+        if (shortcut == null) return widgets.addAppAt(drop.app, drop.label, page, cell) != null;
+        LauncherWidgetRecord placed = widgets.addShortcutAt(shortcut.packageName,
+            shortcut.profileSerial, shortcut.id, drop.label, page, cell);
+        if (placed == null) return false;
+        HomeShortcuts.keepPinned(pane.getContext(), placed);
+        return true;
     }
 
     /** Lets go of an app drag the pane can no longer finish; nothing is put down. */

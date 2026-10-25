@@ -47,7 +47,7 @@ public class HomeDockMoveTest {
     private static final AppRef CLOCK = new AppRef("com.clock", "com.clock.Main");
     private static final AppRef MAPS = new AppRef("com.maps", "com.maps.Main");
 
-    private static WidgetCellRect cell(int column, int row) {
+    static WidgetCellRect cell(int column, int row) {
         return new WidgetCellRect(column, row, column + 1, row + 1);
     }
 
@@ -158,12 +158,12 @@ public class HomeDockMoveTest {
         assertTrue("Home can take the next one", fixture.controller.canTakeAppDrop());
     }
 
-    private static void idle() {
+    static void idle() {
         shadowOf(Looper.getMainLooper()).idle();
     }
 
     /** A dock that is under the finger whenever asked, and takes or refuses what is let go. */
-    private static final class FakeDock implements DockDrop {
+    static final class FakeDock implements DockDrop {
         final boolean takes;
         boolean under = true;
         boolean hovering;
@@ -189,7 +189,7 @@ public class HomeDockMoveTest {
     }
 
     /** Home of three pages, the last one shown: Chrome at (0, 0) beside a Clock icon. */
-    private static final class Fixture {
+    static final class Fixture {
         final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         final LauncherWidgetRepository repository = WidgetTestFixtures.repository();
         final LauncherWidgetHostController widgets;

@@ -59,6 +59,23 @@ public final class HomeAppDrop {
         default void cancel() { }
     }
 
+    /**
+     * An app shortcut, instead of the app itself: what Home stores as a pinned shortcut
+     * ({@link LauncherWidgetRecord.Kind#SHORTCUT}) and keeps pinned for this launcher.
+     */
+    public static final class Shortcut {
+        @NonNull public final String packageName;
+        @NonNull public final String id;
+        /** The profile's serial number, as Home stores it. */
+        public final long profileSerial;
+
+        public Shortcut(@NonNull String packageName, @NonNull String id, long profileSerial) {
+            this.packageName = packageName;
+            this.id = id;
+            this.profileSerial = profileSerial;
+        }
+    }
+
     @NonNull public final AppRef app;
     @NonNull public final String label;
     /** The icon as the drawer shows it; drawn, never kept past the drag. */
@@ -71,6 +88,7 @@ public final class HomeAppDrop {
     @Nullable private Follower follower;
     /** Whoever carries the icon draws it too; Home only outlines the cell it would take. */
     private boolean carriedOutside;
+    @Nullable private Shortcut shortcut;
 
     public HomeAppDrop(@NonNull AppRef app, @NonNull String label, @NonNull Drawable icon,
                        int liftPx) {
@@ -93,6 +111,17 @@ public final class HomeAppDrop {
 
     public boolean isCarriedOutside() {
         return carriedOutside;
+    }
+
+    /** Makes this the drop of {@code shortcut} of {@link #app}: Home pins the shortcut, not the app. */
+    @NonNull
+    public HomeAppDrop asShortcut(@NonNull Shortcut shortcut) {
+        this.shortcut = shortcut;
+        return this;
+    }
+
+    @Nullable public Shortcut shortcut() {
+        return shortcut;
     }
 
     /** Home took the drag over and follows it through {@code follower}; null once it ended. */

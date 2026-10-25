@@ -558,6 +558,24 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     }
 
     /**
+     * Puts the shortcut {@code shortcutId} of {@code owner} on Home at {@code cell} of {@code page}
+     * ({@link LauncherWidgetRepository#addShortcutAt}), with its label kept as a pinned shortcut's
+     * is. The record as placed, or null when nothing changed.
+     */
+    @Nullable
+    public LauncherWidgetRecord addShortcutAt(@NonNull String owner, long profileSerial,
+                                              @NonNull String shortcutId, @NonNull String label,
+                                              int page, @NonNull WidgetCellRect cell) {
+        Bundle options = new Bundle();
+        options.putString(LauncherWidgetRecord.APP_LABEL, label);
+        options.putString(LauncherWidgetRecord.SHORTCUT_ID, shortcutId);
+        LauncherWidgetRecord placed = repository.addShortcutAt(owner, profileSerial, page, cell,
+            options);
+        if (placed != null) notifyChanged(AddResult.IGNORED);
+        return placed;
+    }
+
+    /**
      * Takes an app out of a folder onto Home as an icon, the page in front first
      * ({@link LauncherWidgetRepository#removeFromFolder}). The icon as placed, or null when
      * nothing changed.

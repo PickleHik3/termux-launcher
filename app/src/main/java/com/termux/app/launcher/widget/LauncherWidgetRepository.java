@@ -173,6 +173,25 @@ public final class LauncherWidgetRepository {
     }
 
     /**
+     * Puts a shortcut on Home at {@code cell} of {@code page}, as {@link #addAppAt} puts an app: the
+     * cell a drag chose, so no other page or cell is tried. One commit. Returns the record as
+     * stored, or null when the page is not there, the cell is taken or off the grid, or the write
+     * failed, with nothing changed.
+     */
+    @Nullable
+    public synchronized LauncherWidgetRecord addShortcutAt(@NonNull String owner,
+                                                           long profileSerial, int page,
+                                                           @NonNull WidgetCellRect cell,
+                                                           @Nullable Bundle options) {
+        if (page < 0 || page >= pageCount) return null;
+        LauncherWidgetRecord record = LauncherWidgetRecord.shortcut(allocateBuiltinId(), owner,
+            profileSerial, cell, page, options);
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.put(record.appWidgetId, record);
+        return commitValidated(next, pending, grid, pageCount, revision + 1) ? record : null;
+    }
+
+    /**
      * Puts an app icon on Home at {@code cell} of {@code page}: the cell a drag chose, so no other
      * page or cell is tried. One commit. Returns the icon as stored, or null when the page is not
      * there, the cell is taken or off the grid, or the write failed, with nothing changed.

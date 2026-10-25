@@ -6427,11 +6427,154 @@ public final class SuggestionBarView extends GridLayout
 
         AppMenuCard card = AppMenuCard.build(getContext(), menuRows, groups);
         for (int i = 0; i < shortcutSources.size(); i++) {
-            shortcutSources.get(i)[0] = card.rows.get(shortcutRowIndex[i]).rowView;
+            View row = card.rows.get(shortcutRowIndex[i]).rowView;
+            shortcutSources.get(i)[0] = row;
+            bindShortcutDrag(row, shortcuts.get(i), entry);
         }
         if (moreRowIndex >= 0) shortcutsMainRowView = card.rows.get(moreRowIndex).rowView;
         pendingMenuRows.addAll(card.rows);
         appContextMenu.showAppMenu(card, context.anchor, null);
+    }
+
+    /**
+     * An app shortcut's row in the App menu, from the dock, the drawer or Home: held, then dragged
+     * on past a short distance, it lifts the shortcut out (Launcher3's deep shortcut drag). The
+     * card goes from sight, Home comes to the front and outlines the cell under the finger, and
+     * letting go there pins the shortcut on Home in that cell; let go anywhere else, nothing
+     * happens. A hold that does not travel leaves the menu as it is, and a tap still runs the
+     * shortcut. Without a Home to take it the row has no hold.
+     */
+    private void bindShortcutDrag(@NonNull View row, @NonNull ShortcutInfo info,
+                                  @NonNull LauncherAppEntry entry) {
+        float[] down = new float[2];
+        boolean[] held = new boolean[1];
+        com.termux.app.launcher.widget.IconCarry[] carrying =
+            new com.termux.app.launcher.widget.IconCarry[1];
+        PopupWindow[] released = new PopupWindow[1];
+        row.setOnLongClickListener(v -> {
+            LiftHost lifts = liftHost;
+            if (lifts == null || lifts.homeAppDropTarget() == null) return false;
+            held[0] = true;
+            Haptics.tick(SuggestionBarView.this, android.view.HapticFeedbackConstants.LONG_PRESS);
+            ViewParent parent = row.getParent();
+            if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+            return true;
+        });
+        row.setOnTouchListener((v, event) -> {
+            float rawX = event.getRawX();
+            float rawY = event.getRawY();
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    down[0] = rawX;
+                    down[1] = rawY;
+                    held[0] = false;
+                    return false;
+                case MotionEvent.ACTION_MOVE: {
+                    com.termux.app.launcher.widget.IconCarry carry = carrying[0];
+                    if (carry != null) {
+                        carry.move(rawX, rawY);
+                        return true;
+                    }
+                    if (!held[0]) return false;
+                    int lift = com.termux.app.launcher.widget.HomeIconLift.liftDistancePx(
+                        ViewConfiguration.get(getContext()).getScaledTouchSlop());
+                    if (!com.termux.app.launcher.widget.HomeIconLift.pastLiftDistance(
+                            rawX - down[0], rawY - down[1], lift)) return true;
+                    held[0] = false;
+                    // The card's window holds this finger's stream: it leaves sight now and goes
+                    // once the finger lifts, so nothing that closes menus meanwhile cuts the drag.
+                    PopupWindow popup = appContextMenu.releaseForDrag();
+                    carry = beginShortcutCarry(info, entry, rawX, rawY);
+                    if (carry == null) {
+                        dismissReleasedMenu(popup);
+                        return true;
+                    }
+                    released[0] = popup;
+                    carrying[0] = carry;
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    held[0] = false;
+                    com.termux.app.launcher.widget.IconCarry carry = carrying[0];
+                    carrying[0] = null;
+                    if (carry == null) return false;
+                    carry.end(rawX, rawY, event.getActionMasked() == MotionEvent.ACTION_CANCEL);
+                    PopupWindow popup = released[0];
+                    released[0] = null;
+                    dismissReleasedMenu(popup);
+                    return true;
+                }
+                default:
+                    return carrying[0] != null;
+            }
+        });
+    }
+
+    /**
+     * Lifts the shortcut {@code info} of {@code entry} under the finger, on its way to Home as a
+     * pinned shortcut; null when there is no Home or nothing to draw.
+     */
+    @Nullable
+    private com.termux.app.launcher.widget.IconCarry beginShortcutCarry(
+            @NonNull ShortcutInfo info, @NonNull LauncherAppEntry entry, float rawX, float rawY) {
+        LiftHost lifts = liftHost;
+        if (lifts == null) return null;
+        int size = Math.max(1, iconSizePx());
+        Drawable icon = shortcutIcon(info);
+        if (icon == null) icon = getRenderedIcon(entry, size);
+        if (icon == null) return null;
+        CharSequence shortLabel = info.getShortLabel();
+        String label = shortLabel == null || shortLabel.length() == 0 ? info.getId()
+            : shortLabel.toString();
+        long serial = 0L;
+        try {
+            android.os.UserManager users = getContext().getSystemService(
+                android.os.UserManager.class);
+            if (users != null) serial = users.getSerialNumberForUser(info.getUserHandle());
+        } catch (RuntimeException ignored) {
+            serial = 0L;
+        }
+        com.termux.app.launcher.widget.HomeAppDrop drop =
+            new com.termux.app.launcher.widget.HomeAppDrop(entry.appRef, label, icon, size)
+                .asShortcut(new com.termux.app.launcher.widget.HomeAppDrop.Shortcut(
+                    info.getPackage(), info.getId(), serial));
+        com.termux.app.launcher.widget.IconCarry carry = new com.termux.app.launcher.widget.IconCarry(
+            this, com.termux.app.launcher.widget.LiftDropPolicy.Item.SHORTCUT, drop,
+            com.termux.app.launcher.widget.LiftDropPolicy.targetsFor(
+                com.termux.app.launcher.widget.LiftDropPolicy.Item.SHORTCUT, false),
+            new com.termux.app.launcher.widget.IconCarry.Host() {
+                @Override @Nullable
+                public com.termux.app.launcher.widget.HomeAppDrop.Target home() {
+                    return lifts.homeAppDropTarget();
+                }
+                @Override public boolean reducedMotion() { return lifts.reducedMotion(); }
+            });
+        return carry.begin(icon, size, -size / 2f, -size / 2f, rawX, rawY) ? carry : null;
+    }
+
+    /** The shortcut's own artwork, as the platform draws it; null when it has none to give. */
+    @Nullable
+    private Drawable shortcutIcon(@NonNull ShortcutInfo info) {
+        try {
+            LauncherApps apps = (LauncherApps) getContext().getSystemService(
+                Context.LAUNCHER_APPS_SERVICE);
+            return apps == null ? null : apps.getShortcutIconDrawable(info,
+                getResources().getDisplayMetrics().densityDpi);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** The App menu whose window a shortcut drag held on to goes, and the menu's state with it. */
+    private void dismissReleasedMenu(@Nullable PopupWindow popup) {
+        dismissAppContextPopup();
+        if (popup == null) return;
+        try {
+            popup.dismiss();
+        } catch (RuntimeException ignored) {
+            // Already gone with its window.
+        }
     }
 
     /** One App menu action row: its label, glyph and what it runs for the icon in {@code context}. */
