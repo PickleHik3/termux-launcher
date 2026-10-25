@@ -12646,6 +12646,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
+        // Landing on a letter starts rendering its matches now, so they are ready by release.
+        if (phase == AzScrubRowView.GesturePhase.UP) {
+            mSuggestionBarView.endAzWarm();
+        } else if (decision.mode == AzScrubGesture.Mode.AZ_TRACKING) {
+            if (phase == AzScrubRowView.GesturePhase.DOWN) mSuggestionBarView.endAzWarm();
+            mSuggestionBarView.warmAzLetter(letter, standalone);
+        }
+
         cancelAzOverflowRefresh();
         if (decision.track != null) {
             mAzScrubRowView.setInteractionMode(decision.track == AzScrubGesture.Track.WAVE

@@ -110,6 +110,7 @@ import com.termux.app.launcher.popup.MenuRowWidths;
 import com.termux.app.launcher.popup.MenuSpec;
 import com.termux.app.launcher.icon.ArtworkFootprint;
 import com.termux.app.launcher.icon.AsyncIconBinder;
+import com.termux.app.launcher.paging.AzWarmPlan;
 import com.termux.app.launcher.icon.DockIconCache;
 import com.termux.app.launcher.icon.RenderedIconDrawable;
 import com.termux.app.launcher.data.IconPack;
@@ -2498,6 +2499,34 @@ public final class SuggestionBarView extends GridLayout
         }
         // The matches are the row's content now, so they are what the ticks count.
         publishPageIndicator();
+    }
+
+    /** The letter whose first page this touch last warmed; null between touches. */
+    @Nullable private Character azWarmedLetter;
+
+    /**
+     * Renders the first page of {@code letter}'s matches on the icon thread, so the row binds from
+     * the cache when the finger lets go. One letter at a time: a newer warm supersedes what the
+     * older one has not reached ({@link AsyncIconBinder#prefetch}), and a finger resting on one
+     * letter ranks it once. Goes through the budgeted {@link DockIconCache}; nothing extra is kept.
+     */
+    public void warmAzLetter(char letter, boolean standalone) {
+        char normalized = Character.toUpperCase(letter);
+        if (letter == AzScrubRowView.PINNED_APPS_SYMBOL) return;
+        if (azWarmedLetter != null && !AzWarmPlan.shouldWarm(normalized, azWarmedLetter)) return;
+        azWarmedLetter = normalized;
+        if (appDataProvider == null) {
+            appDataProvider = LauncherAppDataProvider.getInstance(getContext());
+        }
+        if (!appDataProvider.hasLoadedApps()) return;
+        int slots = standalone && azStripSlots > 1 ? azStripSlots : Math.max(1, maxButtonCount);
+        List<LauncherAppEntry> page = AzWarmPlan.firstPage(rankedAzCandidates(normalized), slots);
+        if (!page.isEmpty()) prefetchRenderedIcons(page, iconSizePx());
+    }
+
+    /** The touch is over; the next one may warm the same letter again. */
+    public void endAzWarm() {
+        azWarmedLetter = null;
     }
 
     public void persistAzPreview(char letter, int selectionIndex) {
