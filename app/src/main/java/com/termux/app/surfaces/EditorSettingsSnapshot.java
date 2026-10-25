@@ -14,7 +14,7 @@ import java.util.Objects;
 
 /**
  * The app-wide choices the Appearance card and the Home card write (theme, wallpaper colours, the
- * wallpaper shown, its alignment, icons, widgets on glass, full screen, Home's rows), captured
+ * wallpaper shown, icons, widgets on glass, full screen, Home's rows), captured
  * through the same store Settings writes them with, so the editor's Undo and Discard put each
  * back exactly as Settings would, with the same live reload. {@link AppearanceSnapshot} holds the
  * look itself; this holds what sits beside it.
@@ -40,11 +40,7 @@ final class EditorSettingsSnapshot {
         "wallpaper_parallax",
         HomeSettings.KEY_LABEL_TWO_LINES,
         HomeSettings.KEY_LABEL_SHADOW,
-        AppearanceSettingsStore.KEY_FULLSCREEN,
-        AppearanceSettingsStore.KEY_PADDING_FILL);
-
-    /** Choices kept as numbers. */
-    static final List<String> INT_KEYS = Arrays.asList("wallpaper_render_zoom");
+        AppearanceSettingsStore.KEY_FULLSCREEN);
 
     /** Where the values are read and written; Settings' own store in the app, a map in a test. */
     interface Store {
@@ -52,8 +48,6 @@ final class EditorSettingsSnapshot {
         void putString(@NonNull String key, @Nullable String value);
         boolean getBoolean(@NonNull String key);
         void putBoolean(@NonNull String key, boolean value);
-        int getInt(@NonNull String key);
-        void putInt(@NonNull String key, int value);
     }
 
     /** Settings' own store, which applies every write as its rows do. */
@@ -75,14 +69,6 @@ final class EditorSettingsSnapshot {
             @Override public void putBoolean(@NonNull String key, boolean value) {
                 AppearanceSettingsStore.putBoolean(context, key, value);
             }
-
-            @Override public int getInt(@NonNull String key) {
-                return AppearanceSettingsStore.getInt(context, key, 100);
-            }
-
-            @Override public void putInt(@NonNull String key, int value) {
-                AppearanceSettingsStore.putInt(context, key, value);
-            }
         };
     }
 
@@ -99,7 +85,6 @@ final class EditorSettingsSnapshot {
 
     @NonNull private final String[] mStrings;
     @NonNull private final boolean[] mBooleans;
-    @NonNull private final int[] mInts;
 
     private EditorSettingsSnapshot(@NonNull Store store) {
         mStrings = new String[STRING_KEYS.size()];
@@ -108,9 +93,6 @@ final class EditorSettingsSnapshot {
         mBooleans = new boolean[BOOLEAN_KEYS.size()];
         for (int i = 0; i < mBooleans.length; i++)
             mBooleans[i] = store.getBoolean(BOOLEAN_KEYS.get(i));
-        mInts = new int[INT_KEYS.size()];
-        for (int i = 0; i < mInts.length; i++)
-            mInts[i] = store.getInt(INT_KEYS.get(i));
     }
 
     @NonNull
@@ -140,21 +122,13 @@ final class EditorSettingsSnapshot {
                 written.add(key);
             }
         }
-        for (int i = 0; i < mInts.length; i++) {
-            String key = INT_KEYS.get(i);
-            if (store.getInt(key) != mInts[i]) {
-                store.putInt(key, mInts[i]);
-                written.add(key);
-            }
-        }
         return written;
     }
 
     /** One string for the dirty test: equal strings, nothing changed. */
     @NonNull
     String signature() {
-        return Arrays.toString(mStrings) + '|' + Arrays.toString(mBooleans) + '|'
-            + Arrays.toString(mInts);
+        return Arrays.toString(mStrings) + '|' + Arrays.toString(mBooleans);
     }
 
     @NonNull

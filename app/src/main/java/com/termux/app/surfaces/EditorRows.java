@@ -20,7 +20,7 @@ import java.util.List;
  * control's position teaches how often it is touched. Tiers only order the rows: every row of a
  * card is always shown, and the sheet scrolls. Every value slider of a card is a column of its
  * glass strip ({@link Kind#STRIP}), all of them in one run, first in the card; the Appearance
- * card's Look is the one horizontal slider, and its Alignment stands with the Wallpaper.
+ * card's Look is the one horizontal slider.
  *
  * <p>It also answers where a row writes ({@link #halfFor}): the glass numbers of the dock, the
  * status bar and the keyboard, and the Look slider, land on the half the frame shows; everything
@@ -89,7 +89,6 @@ public final class EditorRows {
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
-        EDGE_COLOURS(Kind.SWITCH, R.string.appearance_row_edge_colours, R.drawable.ic_editor_margin),
         SPLIT_GAP(Kind.STRIP, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
         ICON_SIZE(Kind.STRIP, R.string.appearance_row_icon_size, R.drawable.ic_symbol_grid_view),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
@@ -118,7 +117,6 @@ public final class EditorRows {
             R.drawable.ic_symbol_palette),
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
         MINIMAL(Kind.SWITCH, R.string.appearance_row_minimal, R.drawable.ic_corner_minimal_enter),
-        ALIGNMENT(Kind.STRIP, R.string.appearance_row_alignment, R.drawable.ic_symbol_wallpaper),
         VIBRANCY(Kind.STRIP, R.string.appearance_row_vibrancy, R.drawable.ic_symbol_palette),
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
         GLASS_EDGE(Kind.STRIP, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
@@ -223,7 +221,7 @@ public final class EditorRows {
                 add(out, 2, Row.CONTRAST);
                 add(out, 3, Row.CURSOR_TRAIL);
                 if (offers.terminalEffect) add(out, 3, Row.EFFECT);
-                add(out, 3, Row.EDGE_COLOURS, Row.LINK_FONT);
+                add(out, 3, Row.LINK_FONT);
                 break;
             case DOCK:
                 add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
@@ -241,14 +239,12 @@ public final class EditorRows {
             case APPEARANCE:
             default:
                 // All surfaces: the shared glass, the glass edge where it is drawn, and the
-                // shared text size, in the order the Look page's Custom row had them. The
-                // wallpaper's Alignment is the wallpaper's, not all surfaces': its own strip,
-                // under the Wallpaper row.
+                // shared text size, in the order the Look page's Custom row had them.
                 add(out, 1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT);
                 if (offers.glassEdge) add(out, 1, Row.GLASS_EDGE);
                 add(out, 1, Row.VIBRANCY);
                 if (offers.glassEdge) add(out, 1, Row.DEPTH);
-                add(out, 1, Row.TEXT_SIZE, Row.WALLPAPER, Row.ALIGNMENT, Row.THEME);
+                add(out, 1, Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME);
                 add(out, 2, Row.ICON_PACK, Row.MONOCHROME, Row.WALLPAPER_COLOURS, Row.CONTRAST,
                     Row.FULL_SCREEN, Row.MINIMAL);
                 add(out, 3, Row.TINT_HUE, Row.TOOL_COLOURS);
@@ -276,10 +272,9 @@ public final class EditorRows {
     /**
      * Whether {@code row} is one of the Appearance card's All surfaces columns, the strip that
      * stands only at the Custom stop: the shared glass, the glass edge and the shared text size.
-     * The wallpaper's Alignment is a strip row too, but stands at every stop.
      */
     public static boolean isAllSurfaces(@NonNull Row row) {
-        return row.kind == Kind.STRIP && row != Row.ALIGNMENT;
+        return row.kind == Kind.STRIP;
     }
 
     /**

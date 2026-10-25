@@ -185,13 +185,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     /**
      * Whether a pane paints the empty band around its text grid with the background colour of the
-     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). Pure preference, unlike
-     * the cursor trail: nothing about the device's power state should turn this back off.
+     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). It follows the Wallpaper
+     * colors switch and nothing else, unlike the cursor trail: nothing about the device's power
+     * state should turn this back off.
      */
     public void applyPaddingFillPolicy(TerminalView view) {
         if (view == null)
             return;
-        view.setPaddingFillEnabled(mHost.preferences().isTerminalPaddingFillEnabled());
+        view.setPaddingFillEnabled(mHost.preferences().isTerminalDynamicColorsEnabled());
     }
 
     /**

@@ -587,20 +587,14 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_WALLPAPER_BACKDROP_DIM = 0;
 
         /**
-         * Extra magnification (percent) applied to the wallpaper copy the glass surfaces blur, so
-         * it lands where the system draws the wallpaper behind the app. 100 means no compensation.
-         *
-         * <p>It is a setting rather than a constant because the magnification a ROM applies at
-         * composite time turned out to depend on the wallpaper: a stored 1328x2654 wallpaper needed
-         * 103 on Nothing OS, a 1400x3100 one about 108. The shipped defaults are the measured
-         * per-manufacturer starting points, resolved by
-         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}.
+         * Magnification (percent) of the wallpaper copy the glass surfaces blur while the system
+         * draws the wallpaper, so it lands where the ROM composites it. Not a setting: the ROM's
+         * measured zoom, resolved by
+         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}. Nothing OS
+         * measured 103 for one wallpaper and about 108 for another; 103 is the closer common case.
          */
-        public static final String KEY_WALLPAPER_RENDER_ZOOM = "wallpaper_render_zoom";
         public static final int DEFAULT_WALLPAPER_RENDER_ZOOM = 100;
         public static final int DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS = 103;
-        public static final int MIN_WALLPAPER_RENDER_ZOOM = 90;
-        public static final int MAX_WALLPAPER_RENDER_ZOOM = 120;
 
         /**
          * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
@@ -673,14 +667,6 @@ public final class TermuxPreferenceConstants {
         /** Animate the terminal cursor between its old and new cell instead of jumping. */
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
-
-        /**
-         * Paint the empty band between a pane's text grid and its rounded border with the
-         * background colour of the nearest edge cell (Ghostty's {@code window-padding-color =
-         * extend}), so a full-screen app that paints its own background reaches the pane's border.
-         */
-        public static final String KEY_TERMINAL_PADDING_FILL = "terminal_padding_fill";
-        public static final boolean DEFAULT_TERMINAL_PADDING_FILL = true;
 
         /** Cursor trail style id (default, motion_blur, railgun, torpedo, pixiedust, comet). */
         public static final String KEY_TERMINAL_CURSOR_TRAIL_STYLE = "terminal_cursor_trail_style";

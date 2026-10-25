@@ -22,12 +22,10 @@ public final class AppearanceSettingsStore {
 
     /** The full-screen key, stored in {@code termux.properties} by the terminal's data store. */
     public static final String KEY_FULLSCREEN = TermuxPropertyConstants.KEY_USE_FULLSCREEN;
-    /** The terminal's padding fill: the edge colours round the text grid. */
-    public static final String KEY_PADDING_FILL = "terminal_padding_fill";
 
     /** Whether a key is one the terminal's data store owns rather than the style store. */
     private static boolean terminalKey(@NonNull String key) {
-        return KEY_FULLSCREEN.equals(key) || KEY_PADDING_FILL.equals(key);
+        return KEY_FULLSCREEN.equals(key);
     }
 
     public static boolean getBoolean(@NonNull Context context, @NonNull String key, boolean def) {
@@ -53,14 +51,6 @@ public final class AppearanceSettingsStore {
     public static void putString(@NonNull Context context, @NonNull String key,
                                  @Nullable String value) {
         TermuxStylePreferencesDataStore.getInstance(context).putString(key, value);
-    }
-
-    public static int getInt(@NonNull Context context, @NonNull String key, int def) {
-        return TermuxStylePreferencesDataStore.getInstance(context).getInt(key, def);
-    }
-
-    public static void putInt(@NonNull Context context, @NonNull String key, int value) {
-        TermuxStylePreferencesDataStore.getInstance(context).putInt(key, value);
     }
 
     @Nullable

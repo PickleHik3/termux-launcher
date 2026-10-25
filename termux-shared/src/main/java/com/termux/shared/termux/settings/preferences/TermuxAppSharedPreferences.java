@@ -647,25 +647,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             : TERMUX_APP.DEFAULT_WALLPAPER_RENDER_ZOOM;
     }
 
-    public static int clampWallpaperRenderZoom(int value) {
-        return DataUtils.clamp(value, TERMUX_APP.MIN_WALLPAPER_RENDER_ZOOM,
-            TERMUX_APP.MAX_WALLPAPER_RENDER_ZOOM);
-    }
-
-    /**
-     * Magnification of the wallpaper copy behind the glass surfaces, as a percent of its unzoomed
-     * size; see {@link TERMUX_APP#KEY_WALLPAPER_RENDER_ZOOM} for why the user owns it.
-     */
-    public int getWallpaperRenderZoom() {
-        return clampWallpaperRenderZoom(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM, defaultWallpaperRenderZoom(Build.MANUFACTURER)));
-    }
-
-    public void setWallpaperRenderZoom(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM,
-            clampWallpaperRenderZoom(value), false);
-    }
-
     /** Gap between tiled terminal panes, in dp. */
     public int getTerminalPaneGap() {
         return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
@@ -1014,15 +995,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setTerminalCursorTrailEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, value, false);
-    }
-
-    public boolean isTerminalPaddingFillEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_TERMINAL_PADDING_FILL, TERMUX_APP.DEFAULT_TERMINAL_PADDING_FILL);
-    }
-
-    public void setTerminalPaddingFillEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PADDING_FILL, value, false);
     }
 
     public String getTerminalCursorTrailStyle() {

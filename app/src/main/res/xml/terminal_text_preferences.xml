@@ -13,11 +13,6 @@
             app:fragment="com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment" />
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_terminal_display_header">
-        <SwitchPreferenceCompat
-            app:key="terminal_padding_fill"
-            app:title="@string/settings_terminal_padding_fill_title"
-            app:summary="@string/settings_terminal_padding_fill_summary"
-            android:defaultValue="true" />
         <ListPreference
             app:key="terminal_cursor_trail_style"
             app:title="@string/settings_terminal_cursor_trail_style_title"

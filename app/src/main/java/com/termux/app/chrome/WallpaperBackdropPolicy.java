@@ -80,14 +80,9 @@ public final class WallpaperBackdropPolicy {
      *
      * <p>Self-drawn shares one frame between the backdrop and the glass, so a zoom would move the
      * glass off our own backdrop rather than onto the wallpaper: it is pinned at 1.0. Passthrough
-     * is still matching a picture drawn by someone else, and takes the user's number.</p>
+     * is still matching a picture drawn by someone else, and takes the ROM's measured zoom.</p>
      */
     public static int renderZoomPercent(@NonNull Mode mode, int preferencePercent) {
         return mode == Mode.SELF_DRAWN ? 100 : preferencePercent;
-    }
-
-    /** Whether the Wallpaper alignment slider does anything in this mode. */
-    public static boolean alignmentSliderApplies(@NonNull Mode mode) {
-        return mode == Mode.PASSTHROUGH;
     }
 }

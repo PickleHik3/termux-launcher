@@ -97,7 +97,6 @@ public class SettingsSearchIndexTest {
             {"wallpaper colors", "terminal_dynamic_colors_enabled"},
             {"terminal contrast", "terminal_contrast_level"},
             {"tools that follow", "theme_templates_enabled"},
-            {"wallpaper alignment", "wallpaper_render_zoom"},
             {"widgets on glass", "widgets_on_glass"},
             {"monochrome icons", "app_launcher_bw_icons"},
             {"icon pack", "app_launcher_icon_pack_package"},

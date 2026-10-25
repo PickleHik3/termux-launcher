@@ -101,8 +101,7 @@ The page border stays drawn in minimal mode, so you can still swipe along it to 
 - **Full screen** on the Appearance card (also **Settings → Terminal → Text & display → Full
   screen**) hides Android's status and navigation bars. It is off by default.
 - Hiding the launcher's own status bar gives its band to the content too.
-- **Edge colours** under More on the Terminal card (also **Settings → Terminal → Text & display →
-  Extend edge colors**, on by default) fills the padding around a pane with the colours at its
+- With **Wallpaper colors** on (Appearance), the padding around a pane takes the colours at its
   edge, so a full-screen program reaches the screen's edge.
 
 ## Border gestures

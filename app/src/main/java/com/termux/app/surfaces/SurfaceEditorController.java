@@ -2081,9 +2081,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
                         / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
                 case CONTRAST: return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
-                case EDGE_COLOURS:
-                    return AppearanceSettingsStore.getBoolean(context,
-                        AppearanceSettingsStore.KEY_PADDING_FILL, false) ? 1 : 0;
                 case SPLIT_GAP: return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
                 case ICON_SIZE:
                     return parseInt(AppearanceSettingsStore.getString(context,
@@ -2141,7 +2138,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return AppearanceSettingsStore.getBoolean(context,
                         AppearanceSettingsStore.KEY_FULLSCREEN, false) ? 1 : 0;
                 case MINIMAL: return mHost.isMinimalMode() ? 1 : 0;
-                case ALIGNMENT: return AppearanceSettingsStore.getInt(context, "wallpaper_render_zoom", 100);
                 case VIBRANCY:
                     return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
                         ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
@@ -2165,7 +2161,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case ICON_SIZE: return HOME_ICON_MIN;
                 case KEY_OPACITY: return Control.KEY_OPACITY.min;
                 case LOOK: return 0;
-                case ALIGNMENT: return TermuxPreferenceConstants.TERMUX_APP.MIN_WALLPAPER_RENDER_ZOOM;
                 case VIBRANCY: return Control.VIBRANCY.min;
                 case GLASS_EDGE: return Control.EDGE.min;
                 default: return 0;
@@ -2195,7 +2190,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case KEY_CORNERS: return AppearanceLooks.KEY_CORNERS_MAX_DP;
                 case KEY_SPACING: return AppearanceLooks.KEY_SPACING_MAX_TENTHS;
                 case LOOK: return AppearanceLooks.CUSTOM_STOP;
-                case ALIGNMENT: return TermuxPreferenceConstants.TERMUX_APP.MAX_WALLPAPER_RENDER_ZOOM;
                 case VIBRANCY: return Control.VIBRANCY.max;
                 case GLASS_EDGE: return Control.EDGE.max;
                 default: return 1;
@@ -2220,7 +2214,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case TEXT_SIZE:
                 case ICON_SIZE:
                 case KEY_OPACITY:
-                case ALIGNMENT:
                 case GLASS_EDGE:
                 case REFLECTION:
                     return getString(R.string.appearance_readout_percent, value);
@@ -2364,8 +2357,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean shown(@NonNull Row row) {
-            // All surfaces is the Custom stop's, as the Look page's Custom row was; the
-            // wallpaper's Alignment stands at every stop.
+            // All surfaces is the Custom stop's, as the Look page's Custom row was.
             if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row))
                 return AppearanceLooks.isCustomStop(lookStop(mHalf));
             // Reflection is Peek glass's own knob: it stands only while that is the design.
@@ -2489,11 +2481,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case APP_ICONS: writeAppIcons(value); break;
             case TEXT_SIZE: writeTextSize(value); break;
             case CONTRAST: writeLegibility(value); break;
-            case EDGE_COLOURS:
-                AppearanceSettingsStore.putBoolean(context, AppearanceSettingsStore.KEY_PADDING_FILL,
-                    value != 0);
-                settingsWritten();
-                break;
             case SPLIT_GAP: writeSplitGap(value); break;
             case ICON_SIZE:
                 writeHomeString(HomeSettings.KEY_ICON_SCALE, String.valueOf(value));
@@ -2577,12 +2564,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case MINIMAL:
                 mHost.setMinimalMode(value != 0);
                 syncDirty();
-                break;
-            case ALIGNMENT:
-                if (!dragging) {
-                    AppearanceSettingsStore.putInt(context, "wallpaper_render_zoom", value);
-                    settingsWritten();
-                }
                 break;
             case VIBRANCY: writeVibrancy(value); break;
             case GLASS_EDGE: writeGlassEdge(value); break;

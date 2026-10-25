@@ -93,10 +93,10 @@ public class EditorRowsTest {
     @Test
     public void theAppearanceCardOpensOnTheLookAllSurfacesTheWallpaperAndTheTheme() {
         assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.GLASS_EDGE,
-            Row.VIBRANCY, Row.DEPTH, Row.TEXT_SIZE, Row.WALLPAPER, Row.ALIGNMENT, Row.THEME),
+            Row.VIBRANCY, Row.DEPTH, Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.VIBRANCY,
-            Row.TEXT_SIZE, Row.WALLPAPER, Row.ALIGNMENT, Row.THEME),
+            Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         List<Row> two = EditorRows.tier(EditorCard.APPEARANCE, ALL, 2);
         assertTrue(two.containsAll(Arrays.asList(Row.ICON_PACK, Row.MONOCHROME,
@@ -129,7 +129,7 @@ public class EditorRowsTest {
     public void everyValueSliderIsAStripColumnAndTheLookIsTheOneHorizontalSlider() {
         for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
             Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP, Row.ICON_SIZE, Row.APP_ICONS,
-            Row.ALIGNMENT, Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
+            Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
             Row.VIBRANCY, Row.GLASS_EDGE})
             assertEquals(row + " is vertical", Kind.STRIP, row.kind);
         for (Row row : Row.values()) {
@@ -139,7 +139,7 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void aCardsSlidersStandInOneStripTheAlignmentWithTheWallpaper() {
+    public void aCardsSlidersStandInOneStrip() {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
             int runs = 0;
@@ -150,20 +150,15 @@ public class EditorRowsTest {
                     runs++;
                 inRun = strip;
             }
-            int expected = card == EditorCard.APPEARANCE ? 2 : 1;
-            assertEquals(card + "'s sliders stand together", expected, runs);
+            assertEquals(card + "'s sliders stand together", 1, runs);
         }
-        List<Row> appearance = rowsOf(EditorCard.APPEARANCE, ALL);
-        assertEquals("the Alignment stands under the Wallpaper",
-            appearance.indexOf(Row.WALLPAPER) + 1, appearance.indexOf(Row.ALIGNMENT));
     }
 
     @Test
-    public void allSurfacesIsTheGlassAndTheTextSizeNotTheAlignment() {
+    public void allSurfacesIsTheGlassAndTheTextSize() {
         for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.GLASS_EDGE, Row.VIBRANCY,
             Row.DEPTH, Row.TEXT_SIZE})
             assertTrue(row.name(), EditorRows.isAllSurfaces(row));
-        assertFalse(EditorRows.isAllSurfaces(Row.ALIGNMENT));
         assertFalse(EditorRows.isAllSurfaces(Row.LOOK));
         assertFalse(EditorRows.isAllSurfaces(Row.WALLPAPER));
     }

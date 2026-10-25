@@ -39,7 +39,7 @@ apps in the drawer**, which opens the Linux apps section. See
 ### Terminal
 
 "Windows, panes, status bar and text". **Appearance** opens the Appearance editor on the
-Terminal, then the **Windows & panes**, **Status bar**, **Text & display** (font, edge colours,
+Terminal, then the **Windows & panes**, **Status bar**, **Text & display** (font,
 cursor trail, terminal effect) and **Clipboard & compatibility** pages. See
 [Panes, windows and sessions](Panes_Windows_And_Sessions.md), [Status bar](Status_Bar.md),
 [Terminal fonts](Terminal_Fonts.md) and [Touch, links and clipboard](Touch_Links_And_Clipboard.md).

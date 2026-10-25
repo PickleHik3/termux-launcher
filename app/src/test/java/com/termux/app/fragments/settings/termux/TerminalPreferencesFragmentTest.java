@@ -74,7 +74,7 @@ public class TerminalPreferencesFragmentTest {
         }
         PreferenceScreen text = launch(TerminalTextPreferencesFragment.class).getPreferenceScreen();
         assertNull("Full screen is the Appearance editor's", text.findPreference("fullscreen"));
-        assertTrue(text.findPreference("terminal_padding_fill") instanceof SwitchPreferenceCompat);
+        assertNull("Edge colours follow Wallpaper colors", text.findPreference("terminal_padding_fill"));
         assertTrue(text.findPreference("terminal_cursor_trail_style") != null);
         PreferenceScreen clipboard = launch(TerminalClipboardPreferencesFragment.class).getPreferenceScreen();
         assertTrue(clipboard.findPreference("terminal_margin_adjustment") instanceof SwitchPreferenceCompat);

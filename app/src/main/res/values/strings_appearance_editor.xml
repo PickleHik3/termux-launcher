@@ -71,7 +71,6 @@
     <string name="appearance_row_contrast">Contrast</string>
     <string name="appearance_row_cursor_trail">Cursor trail</string>
     <string name="appearance_row_effect">Effect</string>
-    <string name="appearance_row_edge_colours">Edge colours</string>
     <string name="appearance_row_split_gap">Split gap</string>
     <string name="appearance_row_font">Font</string>
     <string name="appearance_row_icon_size">Icon size</string>
@@ -105,7 +104,6 @@
     <string name="appearance_row_wallpaper_colours">Wallpaper colours</string>
     <string name="appearance_row_full_screen">Full screen</string>
     <string name="appearance_row_minimal">Minimal</string>
-    <string name="appearance_row_alignment">Alignment</string>
     <string name="appearance_row_vibrancy">Vibrancy</string>
     <string name="appearance_row_tint_hue">Tint colour</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->

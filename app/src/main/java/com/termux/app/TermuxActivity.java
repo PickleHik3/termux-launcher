@@ -4575,7 +4575,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // about the screen centre on stock — and 1 is the minimum, 1.0. The value here used
             // to be 0, which asked for the very zoom the frost math does not model. Measured on
             // Nothing OS (2026-09-09): the ROM renders ~1.08x either way, so there the
-            // Wallpaper alignment setting still carries the difference. setWallpaperZoomOut is
+            // measured per-ROM zoom (defaultWallpaperRenderZoom) carries the difference. setWallpaperZoomOut is
             // hidden API; launchers reach it by reflection, and when a ROM blocks the call
             // nothing changes from today's behavior.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -9031,7 +9031,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * display center, as a factor. ROMs that honor {@code setWallpaperZoomOut(0)} render at 1.0 and
      * need no compensation; Nothing OS applies its own regardless of what the launcher asks for —
      * and by an amount that depends on the wallpaper, which is why this is the user's Wallpaper
-     * alignment setting and not a constant. A stored 1328x2654 wallpaper measured 1.03, a
+     * measured per ROM and not a constant. A stored 1328x2654 wallpaper measured 1.03, a
      * 1400x3100 one about 1.084, on the same panel and the same ROM.
      *
      * <p>Only the composite zoom belongs here. Whatever scaling is baked into the stored bitmap is
@@ -9057,10 +9057,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * would only slide the glass off our own backdrop.
      */
     private int effectiveWallpaperRenderZoomPercent() {
-        int percent = mPreferences != null
-            ? mPreferences.getWallpaperRenderZoom()
-            : TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER);
-        return WallpaperBackdropPolicy.renderZoomPercent(wallpaperBackdropMode(), percent);
+        // No control any more: the ROM's measured composite zoom is the only number there is.
+        return WallpaperBackdropPolicy.renderZoomPercent(wallpaperBackdropMode(),
+            TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER));
     }
 
     /**

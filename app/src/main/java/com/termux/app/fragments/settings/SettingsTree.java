@@ -379,7 +379,7 @@ public final class SettingsTree {
                         return "HomePreferencesFragment";
                     case "fullscreen":
                         return APPEARANCE;
-                    case "terminal_padding_fill": case "terminal_cursor_trail_style":
+                    case "terminal_cursor_trail_style":
                     case "terminal_retro_effect": case "terminal_fonts":
                         return "TerminalTextPreferencesFragment";
                     case "terminal_osc52_clipboard_read_enabled": case "terminal_clipboard_cleanup":

@@ -75,7 +75,7 @@ back on the Look. Sizes (**Height**, **Corners**, **Margin**) are sliders across
   **Margin**, **12-hour clock** and **Clock face** (see [Status bar](Status_Bar.md#clock)); under
   More, a link to its indicators.
 - **Terminal**: **Frost**, **Opacity**, **Tint** and **Text size**; **Corners**, **Margin** and
-  **Contrast**; under More, **Cursor trail**, **Effect**, **Edge colours**, **Split gap** and a link
+  **Contrast**; under More, **Cursor trail**, **Effect**, **Split gap** and a link
   to its font.
 - **Dock**: **Frost**, **Opacity**, **Tint**, **Height**, **Visible** and **Position**; **Style**
   (Docked or Floating), **Design** (Tray, Beads or Strip), **Corners** and **Margin**; under More,
@@ -152,7 +152,6 @@ above; the rows below it write the same settings as the Appearance card. Below t
 - **Wallpaper parallax**: the wallpaper pans a little as the row slides, from Home page 1 across
   the windows to the last page. Needs a wallpaper set through the launcher's picker; off in
   landscape and with animations off.
-- **Wallpaper alignment**: lines up the wallpaper behind the surfaces with the one on your screen.
 - **Monochrome icons**, **Icon pack** and **Pinned-app icon pack**.
 - **Keyboard look**: **Appearance** (opens the Keyboard card) and **Keyboard theme**.
 

@@ -27,6 +27,17 @@ dropped; what follows is what still owes a look.
   highlights the border and drops into the slot after the last card; repeat at font scale 1.3,
   in Home and Workspace halves, dark and light; with the card sheet up the stack shrinks its
   text, never overlaps the sheet · emulator or pong.
+- 2026-10-25 · commit "refactor(settings): edge colours follow Wallpaper colors" · Settings ->
+  Terminal -> Text & display has no "Extend edge colors" row and the editor's Terminal card has no
+  Edge colours row. With Wallpaper colors on, run a full-screen TUI with its own background
+  (e.g. htop): the pane padding takes the edge colours; switch Wallpaper colors off (Settings or the
+  editor's Appearance card): after the restyle the padding is plain again, in one pane and in
+  split panes. A phone that had turned Extend edge colors off now follows the switch instead.
+- 2026-10-25 · commit "refactor(settings): remove the Wallpaper alignment control" · on a build
+  that still holds a stored non-100 alignment (or on Nothing OS), open Settings -> Appearance and
+  the Appearance editor: no Wallpaper alignment slider or row in either, search "alignment" finds
+  nothing, and the glass behind the surfaces still lines up with the wallpaper (self-drawn and
+  system-drawn wallpapers both).
 - 2026-10-25 · commit "fix(x11): GPU setup follows Termux's own package manager, refreshes once,
   never asks; add --estimate" · a full run on pong (pacman Termux with dpkg installed) prints
   "Package manager: pacman", syncs the databases once, installs the Vulkan wrapper's

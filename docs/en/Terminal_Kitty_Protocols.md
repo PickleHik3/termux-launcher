@@ -169,7 +169,7 @@ in `kitty.conf` picks a style and overrides the Settings choice; any other shade
 Motion blur, Railgun and Torpedo are this app's own takes on the kitty shaders they are named
 after; Pixie dust follows kitty's particles.
 
-## Terminal effect and edge colours
+## Terminal effect
 
 **Settings → Terminal → Text & display → Terminal effect** gives the whole home screen a **CRT**,
 **CRT (green)**, **CRT (amber)** or **TFT grid** look; **None** is the default. It is also on the
@@ -177,9 +177,6 @@ terminal's **Custom** row in **Appearance → Look**, and needs Android 13 or ne
 covers every terminal pane and the status bar, dock, bars and keyboard around them, with the
 scanlines fixed to the screen. Only the panes curve like a tube; the bars stay flat so every key is
 where you touch it.
-
-**Extend edge colors** in the same section ("Match pane padding to nearby terminal colors."), on
-by default, fills a pane's padding with the terminal colours next to it.
 
 ## Kitty graphics Tier 2
 
