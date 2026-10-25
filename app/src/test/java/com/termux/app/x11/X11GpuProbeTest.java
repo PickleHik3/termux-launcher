@@ -196,6 +196,24 @@ public class X11GpuProbeTest {
         assertFalse(X11GpuProbe.knownFreeze(in));
     }
 
+    @Test public void theWrapperIsSkippedOnlyWhenTheVulkanDriverIsKnownOlderThan13() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "adreno";
+        in.vulkanVendor = "adreno";
+        in.kgsl = true;
+        in.vulkanApiVersion = 0x401000;
+        X11GpuProbe.Result old = X11GpuProbe.evaluate(in);
+        assertNotNull(old.find(X11GpuProbe.Profile.VULKAN_WRAPPER));
+        assertTrue(old.toTable().contains("\nSKIP['vulkan-wrapper']="));
+        assertFalse(old.toTable().contains("SKIP['turnip-zink']"));
+        assertFalse(old.toTable().contains("SKIP['virgl']"));
+
+        in.vulkanApiVersion = 0x403000;
+        assertFalse(X11GpuProbe.evaluate(in).toTable().contains("SKIP["));
+        in.vulkanApiVersion = 0;
+        assertFalse(X11GpuProbe.evaluate(in).toTable().contains("SKIP["));
+    }
+
     /** The benchmark script's table is this class's ranking, quoted for bash. */
     @Test public void theTableListsTheRankingAndSkipsVirglOnAKnownFreezeGpu() {
         X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();

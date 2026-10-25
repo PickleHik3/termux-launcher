@@ -520,7 +520,10 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
             String installed = row.profile.installed || profile == X11GpuProbe.Profile.SOFTWARE
                 ? getString(R.string.settings_x11_gpu_installed)
                 : getString(R.string.settings_x11_gpu_needs, String.join(", ", row.profile.packages));
-            statusText = installed + " · " + scoreText(context, row.score);
+            // A profile the benchmark never tries here says why, before and after any run.
+            statusText = row.profile.notTriedReason != null && !row.freeze
+                ? context.getString(R.string.settings_x11_gpu_driver_too_old)
+                : installed + " · " + scoreText(context, row.score);
             // Mechanism names stay on this one line: the profile's id and what drew the test.
             detailsText = row.score == null || row.score.renderer.isEmpty() ? profile.id
                 : profile.id + " · " + row.score.renderer;
