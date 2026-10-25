@@ -5,50 +5,35 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import dalvik.system.BaseDexClassLoader;
 
 public class X11ServerSupportTest {
 
-    private static Set<String> set(String... abis) {
-        return new HashSet<>(Arrays.asList(abis));
+    /** A loader that answers findLibrary the way the app's PathClassLoader does on a device. */
+    private static final class Loader extends BaseDexClassLoader {
+        private final String mPath;
+
+        Loader(String path) {
+            super("", null, null, null);
+            mPath = path;
+        }
+
+        @Override public String findLibrary(String name) {
+            return X11ServerSupport.LIB.equals(name) ? mPath : null;
+        }
     }
 
-    private static final Set<String> UNIVERSAL_LIBS =
-        set("arm64-v8a", "x86_64", "armeabi-v7a", "x86");
-    private static final Set<String> UNIVERSAL_SERVER = set("arm64-v8a", "x86_64");
-
-    @Test public void arm64PhoneHasTheServer() {
-        assertTrue(X11ServerSupport.decide(new String[] {"arm64-v8a", "armeabi-v7a", "armeabi"},
-            UNIVERSAL_LIBS, UNIVERSAL_SERVER));
+    @Test public void aLoaderThatFindsTheServerMeansAvailable() {
+        assertTrue(X11ServerSupport.canLoad(
+            new Loader("/data/app/x/base.apk!/lib/arm64-v8a/libXlorie.so")));
     }
 
-    @Test public void thirtyTwoBitPhoneDoesNot() {
-        assertFalse(X11ServerSupport.decide(new String[] {"armeabi-v7a", "armeabi"},
-            UNIVERSAL_LIBS, UNIVERSAL_SERVER));
+    @Test public void aLoaderWithoutItForThisAbiMeansNot() {
+        assertFalse(X11ServerSupport.canLoad(new Loader(null)));
     }
 
-    @Test public void x86PhoneDoesNot() {
-        assertFalse(X11ServerSupport.decide(new String[] {"x86", "armeabi-v7a"},
-            UNIVERSAL_LIBS, UNIVERSAL_SERVER));
-    }
-
-    @Test public void splitApkForAThirtyTwoBitPhoneDoesNot() {
-        assertFalse(X11ServerSupport.decide(new String[] {"armeabi-v7a"},
-            set("armeabi-v7a"), Collections.<String>emptySet()));
-    }
-
-    @Test public void firstAbiWithLibrariesDecides() {
-        // A 64-bit phone whose APK has only 32-bit libraries installs as 32-bit: no server.
-        assertFalse(X11ServerSupport.decide(new String[] {"arm64-v8a", "armeabi-v7a"},
-            set("armeabi-v7a"), Collections.<String>emptySet()));
-    }
-
-    @Test public void noLibrariesOrNoAbisMeansNo() {
-        assertFalse(X11ServerSupport.decide(new String[] {"arm64-v8a"},
-            Collections.<String>emptySet(), Collections.<String>emptySet()));
-        assertFalse(X11ServerSupport.decide(null, UNIVERSAL_LIBS, UNIVERSAL_SERVER));
+    @Test public void aLoaderThatCannotAnswerMeansNot() {
+        assertFalse(X11ServerSupport.canLoad(getClass().getClassLoader()));
+        assertFalse(X11ServerSupport.canLoad(null));
     }
 }
