@@ -242,12 +242,48 @@ public final class LauncherSound {
                 if (!server.isWanted()) return;
                 status = Status.RUNNING;
                 refreshDistros();
+            } else if (isHung()) {
+                Logger.logWarn(LOG_TAG, "pulseaudio stopped answering; starting it again");
+                killHungServer();
             }
             ensureBus();
             ensureMedia();
         } catch (IOException | RuntimeException e) {
             Logger.logErrorExtended(LOG_TAG, "Sound did not start: " + e.getMessage());
         }
+    }
+
+    /**
+     * Whether the running server has stopped answering. Its output thread has been seen stuck
+     * for good while the process lived on, which no exit would ever report; a need is the moment
+     * to look, not a timer. Only a timeout counts: a server still starting refuses at once.
+     */
+    private boolean isHung() {
+        if (!canExecute(SoundPaths.PACTL)) return false;
+        String answer = runCommand(SoundFiles.argv(SoundPaths.PACTL, "info"));
+        return answer == null || answer.contains("Timeout");
+    }
+
+    /**
+     * SIGKILL, by the pid the server wrote, once its command line shows it is the launcher's: a
+     * stuck server never acts on the SIGTERM {@link Process#destroy} sends. Its exit then reaches
+     * the supervisor, which restarts it like any other.
+     */
+    private static void killHungServer() {
+        byte[] raw = readBytes(new File(SoundPaths.PID_FILE), 32);
+        if (raw == null) return;
+        int pid;
+        try {
+            pid = Integer.parseInt(new String(raw, StandardCharsets.UTF_8).trim());
+        } catch (NumberFormatException e) {
+            return;
+        }
+        byte[] cmdline = readBytes(new File("/proc/" + pid + "/cmdline"), 8192);
+        if (cmdline == null || StepAside.classify(StepAside.parseCmdline(cmdline, cmdline.length),
+                SoundPaths.STARTUP_FILE) != StepAside.Server.OURS) {
+            return;
+        }
+        android.os.Process.sendSignal(pid, SIGKILL);
     }
 
     /**

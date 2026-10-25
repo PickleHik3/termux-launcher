@@ -31,6 +31,8 @@ final class SoundPaths {
     static final String RUNTIME_DIR = TMP + "/termux-launcher-pulse";
     /** The server's socket for everything in the prefix. */
     static final String SOCKET = RUNTIME_DIR + "/native";
+    /** The running server's pid, written by the server itself ({@code --use-pid-file=yes}). */
+    static final String PID_FILE = RUNTIME_DIR + "/pid";
     /** What every prefix client is handed as {@code PULSE_SERVER}. */
     static final String PULSE_SERVER = "unix:" + SOCKET;
     /** PulseAudio's own port, on loopback, for the proot distros (decision 5). */
