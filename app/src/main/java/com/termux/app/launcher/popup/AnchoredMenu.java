@@ -332,6 +332,28 @@ public final class AnchoredMenu {
         });
     }
 
+    /**
+     * Hands the open panel's window to a drag that started on one of its rows (Launcher3 defers the
+     * popup's removal the same way): the panel goes from sight at once, and this slot forgets it,
+     * so menus that close or open meanwhile leave it alone. The window holds the dragging finger's
+     * stream, so it stays until the caller dismisses it, once the finger has lifted. Null with no
+     * panel open.
+     */
+    @Nullable
+    public PopupWindow releaseForDrag() {
+        PopupWindow popup = window;
+        if (popup == null) return null;
+        window = null;
+        rows = Collections.emptyList();
+        if (appMenuOpen != null) {
+            appMenuOpen.cancel();
+            appMenuOpen = null;
+        }
+        View content = popup.getContentView();
+        if (content != null) content.setAlpha(0f);
+        return popup;
+    }
+
     /** Dismisses {@code popup}; the exit is the theme's popup transition. Shared with detached owners. */
     public void dismissAnimated(@NonNull PopupWindow popup, @Nullable Runnable onDone) {
         try {

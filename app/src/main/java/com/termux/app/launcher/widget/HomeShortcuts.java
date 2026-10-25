@@ -84,6 +84,43 @@ public final class HomeShortcuts {
         }
     }
 
+    /**
+     * Keeps the shortcut behind {@code record} pinned for this launcher, as Launcher3 does for a
+     * deep shortcut dragged out of its menu: a dynamic or manifest shortcut the app later drops
+     * stays then, as one a pin request made does. {@code LauncherApps.pinShortcuts} replaces the
+     * whole set this launcher has pinned for the package, so the set is read first and the id
+     * added to it. False when it could not be pinned (no shortcut host permission: this launcher
+     * is not the default home); the icon still works while the app offers the shortcut.
+     */
+    public static boolean keepPinned(@NonNull Context context,
+                                     @NonNull LauncherWidgetRecord record) {
+        String id = record.shortcutId();
+        if (id == null) return false;
+        String owner = record.provider.getPackageName();
+        try {
+            LauncherApps apps = context.getSystemService(LauncherApps.class);
+            if (apps == null || !apps.hasShortcutHostPermission()) return false;
+            UserHandle user = userOf(context, record);
+            LauncherApps.ShortcutQuery query = new LauncherApps.ShortcutQuery()
+                .setPackage(owner)
+                .setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED);
+            List<ShortcutInfo> pinned = apps.getShortcuts(query, user);
+            List<String> ids = new java.util.ArrayList<>();
+            if (pinned != null) {
+                for (ShortcutInfo info : pinned) {
+                    if (info.isPinned()) ids.add(info.getId());
+                }
+            }
+            if (ids.contains(id)) return true;
+            ids.add(id);
+            apps.pinShortcuts(owner, ids, user);
+            return true;
+        } catch (RuntimeException e) {
+            Log.w(TAG, "shortcut was not pinned", e);
+            return false;
+        }
+    }
+
     @Nullable
     private static Drawable cached(@NonNull Context context, @NonNull LauncherWidgetRecord record,
                                    @Nullable ShortcutInfo info) {

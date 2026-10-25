@@ -40,6 +40,11 @@ public final class WidgetDragLayerView extends View {
      */
     @Nullable private Drawable icon;
     private int iconPx;
+    /**
+     * Nothing is carried here: the picture travels above the window ({@link LiftOverlay}), and this
+     * layer only outlines the cell it would land in.
+     */
+    private boolean ghostOnly;
     private final Rect iconBoundsScratch = new Rect();
     private final Rect bounds = new Rect();
     private final Rect settleFrom = new Rect();
@@ -111,6 +116,19 @@ public final class WidgetDragLayerView extends View {
     }
 
     /**
+     * Shows only the cell an icon carried above the window would land in ({@link #setGhost}); the
+     * icon itself is not drawn here, since this layer is clipped to the page.
+     */
+    public void carryGhostOnly() {
+        cancelSettle();
+        picture = null;
+        icon = null;
+        ghostOnly = true;
+        setVisibility(VISIBLE);
+        invalidate();
+    }
+
+    /**
      * The cell the carried widget would land on, or null while there is none. {@code valid} false
      * is the page saying it has no room: the target turns red and the drop will be refused.
      */
@@ -128,7 +146,7 @@ public final class WidgetDragLayerView extends View {
     public boolean ghostBlocked() { return ghost != null && !ghostValid; }
 
     /** Whether a widget is in the air. */
-    public boolean isLifted() { return picture != null || icon != null; }
+    public boolean isLifted() { return picture != null || icon != null || ghostOnly; }
 
     /** Where the picture is now, in this view's coordinates. */
     @NonNull public Rect pictureBounds() { return new Rect(bounds); }
@@ -155,6 +173,11 @@ public final class WidgetDragLayerView extends View {
      */
     public void drop(@Nullable Rect home, int homeIconPx, boolean animate) {
         if (!isLifted()) return;
+        if (ghostOnly) {
+            // Nothing of the icon is drawn here to settle: the carrier lets its own picture go.
+            release();
+            return;
+        }
         int fromIconPx = iconPx;
         int toIconPx = icon != null && homeIconPx > 0 ? homeIconPx : iconPx;
         if (home == null || !animate || (bounds.equals(home) && fromIconPx == toIconPx)) {
@@ -193,6 +216,7 @@ public final class WidgetDragLayerView extends View {
         settle = null;
         picture = null;
         icon = null;
+        ghostOnly = false;
         ghost = null;
         ghostValid = true;
         setVisibility(GONE);
@@ -236,6 +260,7 @@ public final class WidgetDragLayerView extends View {
         cancelSettle();
         picture = null;
         icon = null;
+        ghostOnly = false;
         ghost = null;
         super.onDetachedFromWindow();
     }

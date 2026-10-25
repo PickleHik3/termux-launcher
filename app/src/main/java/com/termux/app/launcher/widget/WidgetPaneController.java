@@ -144,6 +144,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         @Nullable default com.termux.app.notice.TerminalDress.Source homeDropTargetDress() {
             return null;
         }
+        /**
+         * The dock's pinned row, where a Home app icon can be put down; null where there is none.
+         * An icon put there moves: it leaves Home.
+         */
+        @Nullable default com.termux.app.dock.DockDrop dockDrop() { return null; }
     }
 
     /** Where a Home folder's rename lands; the activity's rename intake commits through it. */
@@ -1170,6 +1175,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          */
         boolean targetsShown;
         int dropTarget = -1;
+        /** The dragged app icon is over the dock, which has opened a gap for it. */
+        boolean overDock;
         EditState(int appWidgetId, int minColumnSpan, int minRowSpan,
                   int maxColumnSpan, int maxRowSpan,
                   boolean horizontalResizable, boolean verticalResizable) {
@@ -1217,10 +1224,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      */
     @NonNull private Map<Integer, WidgetCellRect> previewDisplaced = Collections.emptyMap();
 
-    /** How long a dragged widget rests in an edge band before the page turns under it. */
-    private static final long EDGE_FLIP_DELAY_MS = 350L;
+    /**
+     * How long a dragged widget rests in an edge band before the page turns under it. The dock's
+     * row turns its pages under a carried icon after the same rest ({@code DockDropPolicy}).
+     */
+    public static final long EDGE_FLIP_DELAY_MS = 350L;
     /** How wide that band is, measured in from the pane's leading and trailing edges. */
-    private static final int EDGE_BAND_DP = 24;
+    public static final int EDGE_BAND_DP = 24;
 
     private final Runnable edgeFlip = this::flipDragPage;
     /** The hover over a merge target has lasted long enough: say so with the ghost. */
@@ -1425,6 +1435,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.removeCallbacks(edgeFlip);
         clearMergeTarget();
         hideDropTargets();
+        leaveDock();
         if (edit != null && edit.lifted) returnDraggedCell(edit.appWidgetId);
         if (releaseDragLayer) pane.releaseWidgetDragLayer();
         clearDisplacementPreview(false);
@@ -1532,9 +1543,37 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             cell.setTranslationZ(dp(8));
         }
         placeCarried(rawX, rawY);
-        if (overDropTarget(record, rawX, rawY)) return;
+        if (overDropTarget(record, rawX, rawY)) {
+            leaveDock();
+            return;
+        }
+        if (overDock(record, rawX, rawY)) return;
         watchPageEdge(edit.turn, rawX);
         updateDragCandidate(record);
+    }
+
+    /**
+     * Whether the dragged app icon is over the dock, which takes it ({@link LiftDropPolicy}): the
+     * dock opens a gap at the finger and turns its pages at its ends, and the page offers nothing
+     * meanwhile, as over a drop target.
+     */
+    private boolean overDock(@NonNull LauncherWidgetRecord record, float rawX, float rawY) {
+        com.termux.app.dock.DockDrop dock = record.isApp()
+            && LiftDropPolicy.accepts(LiftDropPolicy.Item.HOME_APP, LiftDropPolicy.Place.DOCK)
+            ? host.dockDrop() : null;
+        boolean over = dock != null && dock.hoverApp(rawX, rawY);
+        if (over == edit.overDock) return over;
+        edit.overDock = over;
+        if (over) stopPageOffers();
+        return over;
+    }
+
+    /** The dragged icon left the dock (for a drop target): its gap closes. */
+    private void leaveDock() {
+        if (edit == null || !edit.overDock) return;
+        edit.overDock = false;
+        com.termux.app.dock.DockDrop dock = host.dockDrop();
+        if (dock != null) dock.leave();
     }
 
     /**
@@ -1677,7 +1716,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         Rect carried = paneBounds(record.cell);
         carried.offset(Math.round(cell.getTranslationX()), Math.round(cell.getTranslationY()));
         if (!pane.widgetDragLayer().lift(cell, carried)) return false;
-        if (carriedPicture != null) {
+        if (liftOverlay != null && liftOverlay.isCarrying()) {
             // The overlay already carries the icon over the page's edge: one picture, not two.
             pane.widgetDragLayer().setAlpha(0f);
             dragLayerHidden = true;
@@ -1764,6 +1803,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (!canceled && targets != null && over >= 0 && over < targets.size()) {
             dropOnTarget(targets.get(over));
             return;
+        }
+        if (edit.overDock) {
+            edit.overDock = false;
+            com.termux.app.dock.DockDrop dock = host.dockDrop();
+            if (!canceled && dock != null) {
+                dropOnDock(dock);
+                return;
+            }
+            if (dock != null) dock.leave();
         }
         pane.removeCallbacks(edgeFlip);
         edit.turn.edgeDirection = 0;
@@ -1976,20 +2024,17 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private boolean iconLiftSession;
     private boolean destroyed;
 
-    /** The targets' pills, drawn in the window's overlay while an icon is dragged. */
-    @Nullable private HomeDropTargetsDrawable dropTargetsDrawable;
-    /** The view whose overlay holds the pills while they are up. */
-    @Nullable private View dropTargetsHost;
+    /**
+     * The targets' pills and the dragged icon's picture, drawn in the window's overlay while an
+     * icon is dragged; made on the first drag.
+     */
+    @Nullable private LiftOverlay liftOverlay;
     /** Where the targets are, on screen, and which they are; null while none are up. */
     @Nullable private HomeDropTargets.Layout dropLayout;
     @Nullable private List<HomeDropTargets.Target> dropKinds;
     private final Rect dropBand = new Rect();
-    private final int[] windowLocation = new int[2];
-    /** The dragged icon's picture in the overlay while the targets are up, and the cell it hides. */
-    @Nullable private android.graphics.drawable.BitmapDrawable carriedPicture;
+    /** The cell the overlay's picture of the dragged icon stands in for, hidden meanwhile. */
     @Nullable private View carriedCell;
-    /** Where the picture's corner stands from the finger, on screen. */
-    private float carriedDx, carriedDy;
     private final int[] carriedLocation = new int[2];
     /** The drag layer was faded out for the picture: a page turn lifted the icon into it. */
     private boolean dragLayerHidden;
@@ -2116,10 +2161,19 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         int over = HomeDropTargets.hit(layout, rawX, rawY);
         if (over == edit.dropTarget) return over >= 0;
         edit.dropTarget = over;
-        if (dropTargetsDrawable != null) dropTargetsDrawable.setHighlighted(over);
+        if (liftOverlay != null) liftOverlay.highlight(over);
         if (over < 0) return false;
         Haptics.tick(pane, HapticFeedbackConstants.CLOCK_TICK);
         // Onto a target: what the page was offering goes, once, until the finger comes back.
+        stopPageOffers();
+        return true;
+    }
+
+    /**
+     * The finger is over somewhere the page does not take the icon from (a drop target, the
+     * dock): the page's edge turn, merge ring, ghost and neighbour preview go, until it comes back.
+     */
+    private void stopPageOffers() {
         pane.removeCallbacks(edgeFlip);
         edit.turn.edgeDirection = 0;
         clearMergeTarget();
@@ -2128,7 +2182,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         overlay.setGhostBounds(null);
         overlay.clearRefusal();
         previewDisplacement(Collections.emptyMap());
-        return true;
     }
 
     /**
@@ -2137,52 +2190,20 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * and placed once here; the drag only hit-tests them.
      */
     private void showDropTargets(@NonNull LauncherWidgetRecord record, float rawX, float rawY) {
-        View root = pane.getRootView();
-        if (root == null || !pane.isAttachedToWindow() || root.getWidth() <= 0) return;
-        android.content.Context context = pane.getContext();
-        float density = pane.getResources().getDisplayMetrics().density;
-        List<HomeDropTargets.Target> kinds = HomeDropTargets.targetsFor(record.isFolder(),
-            canUninstall(record));
-        List<String> labels = new ArrayList<>(kinds.size());
-        for (HomeDropTargets.Target kind : kinds) {
-            labels.add(context.getString(kind == HomeDropTargets.Target.UNINSTALL
-                ? R.string.app_menu_uninstall : R.string.home_drop_remove));
+        LiftOverlay overlay = liftOverlay;
+        if (overlay == null) {
+            overlay = new LiftOverlay(pane);
+            liftOverlay = overlay;
         }
-        root.getLocationOnScreen(windowLocation);
-        HomeDropTargets.Box band;
-        if (host.homeDropTargetBand(dropBand) && !dropBand.isEmpty()) {
-            band = new HomeDropTargets.Box(dropBand.left, dropBand.top, dropBand.right,
-                dropBand.bottom);
-        } else {
-            androidx.core.view.WindowInsetsCompat insets =
-                androidx.core.view.ViewCompat.getRootWindowInsets(root);
-            int insetTop = insets == null ? 0
-                : insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
-            band = HomeDropTargets.fallbackBand(windowLocation[0], windowLocation[1],
-                root.getWidth(), insetTop, density);
-        }
-        HomeDropTargetsDrawable drawable = dropTargetsDrawable;
-        if (drawable == null) {
-            drawable = new HomeDropTargetsDrawable(context);
-            dropTargetsDrawable = drawable;
-        }
-        drawable.setLook(com.termux.app.notice.TerminalDress.resolve(context,
-                host.homeDropTargetDress()),
-            com.termux.app.material.M3.error(context),
-            com.termux.app.material.M3.color(context,
-                com.google.android.material.R.attr.colorOnError,
-                com.google.android.material.R.color.m3_sys_color_dark_on_error));
-        int[] widths = drawable.setTargets(context, kinds, labels);
-        HomeDropTargets.Layout layout = HomeDropTargets.layout(band, widths,
-            dp(HomeDropTargets.PILL_HEIGHT_DP), dp(HomeDropTargets.GAP_DP));
-        drawable.place(layout.pills, windowLocation[0], windowLocation[1]);
-        drawable.setBounds(0, 0, root.getWidth(), root.getHeight());
-        root.getOverlay().add(drawable);
-        dropTargetsHost = root;
-        drawable.fadeIn(!host.reducedMotion());
+        List<HomeDropTargets.Target> kinds = LiftDropPolicy.targetsFor(record.isFolder()
+            ? LiftDropPolicy.Item.HOME_FOLDER : LiftDropPolicy.Item.HOME_APP, canUninstall(record));
+        Rect band = host.homeDropTargetBand(dropBand) && !dropBand.isEmpty() ? dropBand : null;
+        HomeDropTargets.Layout layout = overlay.showTargets(kinds, band,
+            host.homeDropTargetDress(), !host.reducedMotion());
+        if (layout == null) return;
         dropLayout = layout;
         dropKinds = kinds;
-        carryInOverlay(root, rawX, rawY);
+        carryInOverlay(overlay, rawX, rawY);
     }
 
     /**
@@ -2191,7 +2212,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * cells (and the status bar is drawn over the page), so the icon in the grid is hidden for as
      * long as the picture stands in for it. One cell's pixels, let go with the targets.
      */
-    private void carryInOverlay(@NonNull View root, float rawX, float rawY) {
+    private void carryInOverlay(@NonNull LiftOverlay overlay, float rawX, float rawY) {
         if (edit == null || edit.lifted) return;
         WidgetCellView cell = pane.grid().cellForId(edit.appWidgetId);
         if (cell == null || cell.getWidth() <= 0 || cell.getHeight() <= 0) return;
@@ -2204,47 +2225,29 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         cell.draw(new android.graphics.Canvas(bitmap));
         cell.getLocationOnScreen(carriedLocation);
-        carriedDx = carriedLocation[0] - rawX;
-        carriedDy = carriedLocation[1] - rawY;
         android.graphics.drawable.BitmapDrawable picture =
             new android.graphics.drawable.BitmapDrawable(pane.getResources(), bitmap);
-        carriedPicture = picture;
+        if (!overlay.carry(picture, bitmap.getWidth(), bitmap.getHeight(),
+                carriedLocation[0] - rawX, carriedLocation[1] - rawY, rawX, rawY)) return;
         carriedCell = cell;
-        placeCarried(rawX, rawY);
-        root.getOverlay().add(picture);
         cell.setAlpha(0f);
     }
 
     /** Puts the overlay's picture of the dragged icon under the finger. */
     private void placeCarried(float rawX, float rawY) {
-        android.graphics.drawable.BitmapDrawable picture = carriedPicture;
-        if (picture == null) return;
-        int left = Math.round(rawX + carriedDx) - windowLocation[0];
-        int top = Math.round(rawY + carriedDy) - windowLocation[1];
-        android.graphics.Bitmap bitmap = picture.getBitmap();
-        picture.setBounds(left, top, left + bitmap.getWidth(), top + bitmap.getHeight());
-        picture.invalidateSelf();
+        if (liftOverlay != null) liftOverlay.moveTo(rawX, rawY);
     }
 
-    /** Takes the targets down, if they are up. */
+    /** Takes the targets down, if they are up, and lets the picture of the icon go. */
     private void hideDropTargets() {
         if (edit != null) edit.dropTarget = -1;
         dropLayout = null;
         dropKinds = null;
-        HomeDropTargetsDrawable drawable = dropTargetsDrawable;
-        View holder = dropTargetsHost;
-        dropTargetsHost = null;
-        android.graphics.drawable.BitmapDrawable picture = carriedPicture;
-        carriedPicture = null;
-        if (picture != null && holder != null) holder.getOverlay().remove(picture);
+        if (liftOverlay != null) liftOverlay.release();
         if (carriedCell != null) carriedCell.setAlpha(1f);
         carriedCell = null;
         if (dragLayerHidden) pane.widgetDragLayer().setAlpha(1f);
         dragLayerHidden = false;
-        if (drawable == null || holder == null) return;
-        drawable.cancelFade();
-        drawable.setHighlighted(-1);
-        holder.getOverlay().remove(drawable);
     }
 
     /**
@@ -2252,30 +2255,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * installed, not part of the system image, and not this launcher.
      */
     private boolean canUninstall(@NonNull LauncherWidgetRecord record) {
-        com.termux.app.launcher.model.AppRef ref = record.appRef();
-        if (!record.isApp() || ref == null) return false;
-        boolean ownProfile = !ref.clonedProfile
-            && (ref.userId < 0 || ref.userId == android.os.Process.myUid() / PER_USER_RANGE);
-        boolean androidPackage = ownProfile && !com.termux.app.x11.X11Apps.isLinuxApp(ref)
-            && !com.termux.app.launcher.LauncherEntries.isEntry(ref);
-        boolean installed = false, system = false;
-        if (androidPackage) {
-            try {
-                android.content.pm.ApplicationInfo info = pane.getContext().getPackageManager()
-                    .getApplicationInfo(ref.packageName, 0);
-                installed = true;
-                system = (info.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0;
-            } catch (android.content.pm.PackageManager.NameNotFoundException
-                     | RuntimeException ignored) {
-                installed = false;
-            }
-        }
-        return HomeDropTargets.canUninstall(androidPackage, installed, system,
-            ref.packageName.equals(pane.getContext().getPackageName()));
+        return record.isApp() && LiftOverlay.canUninstall(pane.getContext(), record.appRef());
     }
-
-    /** Android's uids per user: the user a uid belongs to is the uid divided by this. */
-    private static final int PER_USER_RANGE = 100000;
 
     /**
      * The drag let go over a target. Uninstall: the icon goes back where it came from, as a
@@ -2291,6 +2272,32 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (record != null) requestUninstall(record);
             return;
         }
+        leaveHome(appWidgetId, true);
+    }
+
+    /**
+     * The dragged app icon was let go over the dock. Taken, it moves there (Launcher3's way: an
+     * icon is moved, not copied, so no Undo follows); refused, it goes back to its cell, as a
+     * cancelled drag does, and the dock has said why.
+     */
+    private void dropOnDock(@NonNull com.termux.app.dock.DockDrop dock) {
+        int appWidgetId = edit.appWidgetId;
+        LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
+        com.termux.app.launcher.model.AppRef app = record == null ? null : record.appRef();
+        boolean taken = app != null && dock.dropApp(app, edit.lastRawX, edit.lastRawY);
+        dock.leave();
+        if (!taken) {
+            endMoveDrag(true);
+            return;
+        }
+        leaveHome(appWidgetId, false);
+    }
+
+    /**
+     * Ends the drag with the icon leaving Home from where it is in the air (nothing flies back to
+     * its cell first): dropped on Remove, with an Undo, or moved to the dock, without one.
+     */
+    private void leaveHome(int appWidgetId, boolean offerUndo) {
         boolean created = edit.turn.createdPage >= 0;
         edit.turn.createdPage = -1;
         WidgetCellView cell = pane.grid().cellForId(appWidgetId);
@@ -2313,7 +2320,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 clampCurrentPage();
                 render();
             }
-            removeWithUndo(appWidgetId, cell);
+            takeOffHome(appWidgetId, cell, offerUndo);
         });
     }
 
@@ -2324,11 +2331,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private void removeFromHomeByMenu(int appWidgetId) {
         if (destroyed || refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
         if (edit != null && edit.appWidgetId == appWidgetId) exitEditMode();
-        removeWithUndo(appWidgetId, null);
+        takeOffHome(appWidgetId, null, true);
     }
 
-    /** Takes the item off Home and offers it back for {@link HomeItemUndo#HOLD_MS}. */
-    private void removeWithUndo(int appWidgetId, @Nullable WidgetCellView hidden) {
+    /**
+     * Takes the item off Home, and with {@code offerUndo} offers it back for
+     * {@link HomeItemUndo#HOLD_MS}.
+     */
+    private void takeOffHome(int appWidgetId, @Nullable WidgetCellView hidden, boolean offerUndo) {
         if (destroyed) return;
         LauncherWidgetRepository repository = widgets.repository();
         LauncherWidgetRecord record = repository.get(appWidgetId);
@@ -2347,6 +2357,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             currentPage = viewing - 1;
             render();
         }
+        if (!offerUndo) return;
         HomeItemUndo.Snapshot snapshot = new HomeItemUndo.Snapshot(record, pageRemoved);
         android.content.Context context = pane.getContext();
         com.termux.app.notice.AppNotice.undoable(context,
@@ -2654,8 +2665,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         dismissFolderPopup();
         AppDropState state = new AppDropState(drop, currentPage, rawX, rawY);
         appDrop = state;
-        int liftPx = drop.liftPx > 0 ? drop.liftPx : appDropIconPx();
-        pane.widgetDragLayer().liftIcon(drop.icon, liftPx, appDropBounds(rawX, rawY));
+        if (drop.isCarriedOutside()) {
+            // Its carrier draws the icon above the window; the page, which clips its layer, only
+            // outlines the cell it would take.
+            pane.widgetDragLayer().carryGhostOnly();
+        } else {
+            int liftPx = drop.liftPx > 0 ? drop.liftPx : appDropIconPx();
+            pane.widgetDragLayer().liftIcon(drop.icon, liftPx, appDropBounds(rawX, rawY));
+        }
         drop.follow(new HomeAppDrop.Follower() {
             @Override public void moveTo(float x, float y) {
                 if (appDrop == state) appDropTo(state, x, y);
@@ -2663,6 +2680,17 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
             @Override public boolean releaseAt(float x, float y) {
                 return appDrop == state && endAppDrop(x, y, false);
+            }
+
+            @Override public void leave() {
+                if (appDrop != state) return;
+                pane.removeCallbacks(edgeFlip);
+                state.turn.edgeDirection = 0;
+                clearAppDropTarget(state);
+            }
+
+            @Override public void cancel() {
+                if (appDrop == state) endAppDrop(state.lastRawX, state.lastRawY, true);
             }
         });
         appDropTo(state, rawX, rawY);
@@ -2814,7 +2842,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetCellRect cell = state.cell;
         boolean placed = outcome == HomeAppDropPolicy.Outcome.PLACE && cell != null
             && state.turn.page >= 0 && state.turn.page < widgets.repository().pageCount()
-            && widgets.addAppAt(state.drop.app, state.drop.label, state.turn.page, cell) != null;
+            && putDown(state.drop, state.turn.page, cell);
         WidgetDragLayerView layer = pane.widgetDragLayer();
         layer.setGhost(null, true);
         layer.drop(placed ? paneBounds(cell) : null, appDropIconPx(), !host.reducedMotion());
@@ -2823,6 +2851,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             pane.showNotice(pane.getContext().getString(R.string.widget_no_room_on_page));
         }
         return placed;
+    }
+
+    /**
+     * Stores what an app drag carried at {@code cell} of {@code page}: the app's icon, or, for a
+     * shortcut dragged out of the App menu, a pinned shortcut (the record a pin request makes),
+     * kept pinned for this launcher so it stays when the app stops offering it.
+     */
+    private boolean putDown(@NonNull HomeAppDrop drop, int page, @NonNull WidgetCellRect cell) {
+        HomeAppDrop.Shortcut shortcut = drop.shortcut();
+        if (shortcut == null) return widgets.addAppAt(drop.app, drop.label, page, cell) != null;
+        LauncherWidgetRecord placed = widgets.addShortcutAt(shortcut.packageName,
+            shortcut.profileSerial, shortcut.id, drop.label, page, cell);
+        if (placed == null) return false;
+        HomeShortcuts.keepPinned(pane.getContext(), placed);
+        return true;
     }
 
     /** Lets go of an app drag the pane can no longer finish; nothing is put down. */

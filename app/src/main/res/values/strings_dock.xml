@@ -7,4 +7,8 @@
     <!-- The Dock card's Reflection slider: how strongly the icons' reflections show on the Peek
          glass card, 0 is off. -->
     <string name="appearance_row_reflection">Reflection</string>
+    <!-- An app icon dragged onto the dock that the dock already holds: nothing changes. -->
+    <string name="dock_already_has_app">Already in the dock</string>
+    <!-- An app icon dragged out of the dock onto Remove; the notice's tap puts it back. -->
+    <string name="dock_item_removed">Removed from the dock</string>
 </resources>

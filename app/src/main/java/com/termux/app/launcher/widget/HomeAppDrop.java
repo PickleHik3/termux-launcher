@@ -18,6 +18,10 @@ import com.termux.app.launcher.model.AppRef;
  * draws it, turns pages under it and puts it down, through the same drag layer, edge bands and snap
  * ghost a widget carried out of the picker uses. Nothing about the app travels in the public clip
  * data.
+ *
+ * <p>An icon lifted out of the dock is handed over the same way, by its touch stream rather than
+ * a platform drag ({@link IconCarry}): the carrier calls the {@link Follower} itself, and draws
+ * the icon above the window while Home outlines the cell ({@link #carriedOutside}).
  */
 public final class HomeAppDrop {
 
@@ -44,6 +48,32 @@ public final class HomeAppDrop {
 
         /** The finger let go there. Whether the icon was put down. */
         boolean releaseAt(float rawX, float rawY);
+
+        /**
+         * The finger went somewhere Home does not take the icon from (the dock, a drop target):
+         * the page stops offering a cell until the finger comes back.
+         */
+        default void leave() { }
+
+        /** The drag ended elsewhere, or was given up: nothing is put down. */
+        default void cancel() { }
+    }
+
+    /**
+     * An app shortcut, instead of the app itself: what Home stores as a pinned shortcut
+     * ({@link LauncherWidgetRecord.Kind#SHORTCUT}) and keeps pinned for this launcher.
+     */
+    public static final class Shortcut {
+        @NonNull public final String packageName;
+        @NonNull public final String id;
+        /** The profile's serial number, as Home stores it. */
+        public final long profileSerial;
+
+        public Shortcut(@NonNull String packageName, @NonNull String id, long profileSerial) {
+            this.packageName = packageName;
+            this.id = id;
+            this.profileSerial = profileSerial;
+        }
     }
 
     @NonNull public final AppRef app;
@@ -56,6 +86,9 @@ public final class HomeAppDrop {
      */
     public final int liftPx;
     @Nullable private Follower follower;
+    /** Whoever carries the icon draws it too; Home only outlines the cell it would take. */
+    private boolean carriedOutside;
+    @Nullable private Shortcut shortcut;
 
     public HomeAppDrop(@NonNull AppRef app, @NonNull String label, @NonNull Drawable icon,
                        int liftPx) {
@@ -63,6 +96,32 @@ public final class HomeAppDrop {
         this.label = label;
         this.icon = icon;
         this.liftPx = Math.max(0, liftPx);
+    }
+
+    /**
+     * Marks an icon whose picture its carrier draws above the window (a dock icon or an App menu
+     * shortcut, carried by {@link IconCarry}), so Home's drag layer, which the page clips, draws
+     * only the cell it would land in.
+     */
+    @NonNull
+    public HomeAppDrop carriedOutside() {
+        carriedOutside = true;
+        return this;
+    }
+
+    public boolean isCarriedOutside() {
+        return carriedOutside;
+    }
+
+    /** Makes this the drop of {@code shortcut} of {@link #app}: Home pins the shortcut, not the app. */
+    @NonNull
+    public HomeAppDrop asShortcut(@NonNull Shortcut shortcut) {
+        this.shortcut = shortcut;
+        return this;
+    }
+
+    @Nullable public Shortcut shortcut() {
+        return shortcut;
     }
 
     /** Home took the drag over and follows it through {@code follower}; null once it ended. */
