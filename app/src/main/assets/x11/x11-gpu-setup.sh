@@ -35,6 +35,16 @@
 #   --profiles=FILE  read the ways to try from FILE (the launcher's page writes one) instead of
 #                 asking the launcher with launcherctl
 #   --install-wrapper  only install the Vulkan wrapper (vulkan-wrapper-android), then stop
+#   --estimate    change nothing; work out how much a run would download and need, and print
+#                 four lines on stdout (progress goes to stderr), sizes in bytes:
+#                   download_bytes=N   to download: the upgrade plus the new packages
+#                   install_bytes=N    extra disk space while the run is going
+#                   removable_bytes=N  at most what is given back at the end (the winner is not
+#                                      known in advance, so it is "up to")
+#                   upgrade_count=N    packages the upgrade would touch
+#                 Exits 0, or non-zero with a one-line reason on stderr when it cannot tell (no
+#                 network, say). Reads --profiles like a normal run. The Debian container (step 7)
+#                 is not counted: its sizes would need a second package database behind proot.
 #
 # Which ways fit the phone, and what each needs, is the launcher's list (launcherctl x11 gpu
 # --table), not this script's. Nothing here changes the launcher's settings: with the choice on
@@ -43,7 +53,7 @@
 
 set -uo pipefail
 
-KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_FROM=7; PROFILES=""; INSTALL_WRAPPER=0
+KEEP=0; SKIP_PROOT=0; YES=0; DISPLAY_FROM=7; PROFILES=""; INSTALL_WRAPPER=0; ESTIMATE=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
@@ -52,11 +62,16 @@ for arg in "$@"; do
     --display=*) DISPLAY_FROM=${arg#--display=}; DISPLAY_FROM=${DISPLAY_FROM#:} ;;
     --profiles=*) PROFILES=${arg#--profiles=} ;;
     --install-wrapper) INSTALL_WRAPPER=1 ;;
+    --estimate) ESTIMATE=1 ;;
     -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)"; exit 2 ;;
   esac
 done
 case $DISPLAY_FROM in ''|*[!0-9]*) echo "--display wants a number, such as --display=7"; exit 2 ;; esac
+if [ $ESTIMATE = 1 ] && [ $INSTALL_WRAPPER = 1 ]; then echo "--estimate and --install-wrapper do not go together"; exit 2; fi
+# An estimate prints its four lines and nothing else on stdout: fd 3 keeps the real stdout for
+# them, and everything else the script says goes to stderr.
+if [ $ESTIMATE = 1 ]; then exec 3>&1 1>&2; fi
 
 PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 # X programs in Termux look for the display's socket in the prefix's tmp, whatever TMPDIR a shell
@@ -86,21 +101,45 @@ detail() { printf '   %s\n' "$*"; }
 result() { printf '   -> %s\n' "$*"; }
 
 # A fresh log per benchmark run; installing only the wrapper adds to the last run's.
-[ $INSTALL_WRAPPER = 1 ] || : > "$LOG"
+[ $INSTALL_WRAPPER = 1 ] || [ $ESTIMATE = 1 ] || : > "$LOG"
 
 # ---------------------------------------------------------------------------------------------
 # Termux comes with either apt (the default) or pacman. Both are driven the same way here, and
 # neither ever gets to ask a question.
-if command -v pacman >/dev/null && [ -f "$PREFIX/etc/pacman.conf" ] && ! command -v dpkg >/dev/null; then PM=pacman; else PM=apt; fi
+#
+# Which one is decided by what Termux itself says it uses, not by which tools happen to be
+# installed: a pacman Termux can have the dpkg package too, with an empty dpkg database.
+# TERMUX_APP_PACKAGE_MANAGER (apt or pacman) is set inside the app's own shells,
+# TERMUX_MAIN_PACKAGE_FORMAT (debian or pacman) in a login over ssh; failing both, the package
+# database that actually holds packages decides.
+detect_pm() {
+  case ${TERMUX_APP_PACKAGE_MANAGER:-} in apt) echo apt; return ;; pacman) echo pacman; return ;; esac
+  case ${TERMUX_MAIN_PACKAGE_FORMAT:-} in debian) echo apt; return ;; pacman) echo pacman; return ;; esac
+  if command -v pacman >/dev/null && [ -n "$(ls -A "$PREFIX/var/lib/pacman/local" 2>/dev/null)" ]; then echo pacman; return; fi
+  if command -v apt-get >/dev/null && [ -s "$PREFIX/var/lib/dpkg/status" ]; then echo apt; return; fi
+  if command -v pacman >/dev/null && [ -f "$PREFIX/etc/pacman.conf" ] && ! command -v dpkg >/dev/null; then echo pacman; else echo apt; fi
+}
+PM=$(detect_pm)
+# apt never asks: no debconf dialogs, and a configuration file the user edited is kept without
+# the dpkg question about it. Packages go straight through apt-get, not "pkg", whose wrapper
+# would pick a mirror and refresh the lists again on every call.
+export DEBIAN_FRONTEND=noninteractive
+APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 installed_before() {
   if [ $PM = pacman ]; then pacman -Qq "$1" >/dev/null 2>&1
   else dpkg -s "$1" 2>/dev/null | grep -q '^Status: install ok installed'; fi
 }
 # A full upgrade before anything is added: installing onto stale libraries (or pacman's -Sy
-# without -u) leaves packages built against versions the phone does not have.
-pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else pkg update -y && pkg upgrade -y; fi; }
-pm_refresh() { if [ $PM = pacman ]; then pacman -Sy --noconfirm; else apt-get update; fi; }
-pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else pkg install -y "$@"; fi; }
+# without -u) leaves packages built against versions the phone does not have. This is the one
+# refresh of the package lists; installs after it never refresh again (apt: x11-repo's own list
+# is the exception, see pm_refresh).
+pm_upgrade() {
+  if [ $PM = pacman ]; then pacman -Syu --noconfirm
+  else apt-get update && apt-get "${APT_OPTS[@]}" full-upgrade; fi
+}
+# apt only: the lists of a repository that was added as a package arrive with another update.
+pm_refresh() { if [ $PM = pacman ]; then true; else apt-get update; fi; }
+pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else apt-get install "${APT_OPTS[@]}" "$@"; fi; }
 # With apt the X11 packages live in a repository that is itself a package; pacman has it built in.
 REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
 
@@ -205,7 +244,7 @@ install_wrapper() {
     return 1
   fi
   if [ $PM = pacman ]; then pacman -U --noconfirm "$file"
-  else apt-get install -y "$file"; fi
+  else apt-get install "${APT_OPTS[@]}" "$file"; fi
   rc=$?
   drop_wrapper_download
   return $rc
@@ -242,6 +281,134 @@ install_pkgs() {
     WE_INSTALLED+=("$WRAPPER_PKG")
   fi
   return 0
+}
+
+# ---------------------------------------------------------------------------------------------
+# --estimate: the sizes a run would need, worked out without changing anything on the phone.
+# The package set is the run's own: ALL_PKGS minus what is installed, plus the upgrade. Dry runs
+# only: apt-get -s / --print-uris, and for pacman a package database synced into a temporary
+# folder (as checkupdates does), so the real databases are not touched. Not counted: the Debian
+# container, and the dependencies of the Vulkan wrapper (they are ordinary repository packages
+# that the drivers usually need already).
+#
+# The Vulkan wrapper is no repository package, so its size is a constant, measured on the pinned
+# files above on 2026-10-25: download = the file's length in bytes; installed = the .deb's
+# Installed-Size field (KiB * 1024), and for the pacman files the summed sizes of the archive's
+# entries (tar -tv).
+declare -A WRAPPER_DL_BYTES=(
+  [${WRAPPER_PKG}_$WRAPPER_VERSION-aarch64.pkg.tar.xz]=383832
+  [${WRAPPER_PKG}_$WRAPPER_VERSION-arm.pkg.tar.xz]=344704
+  [${WRAPPER_PKG}_${WRAPPER_VERSION}_aarch64.deb]=383300
+  [${WRAPPER_PKG}_${WRAPPER_VERSION}_arm.deb]=344364
+)
+declare -A WRAPPER_INST_BYTES=(
+  [${WRAPPER_PKG}_$WRAPPER_VERSION-aarch64.pkg.tar.xz]=1658932
+  [${WRAPPER_PKG}_$WRAPPER_VERSION-arm.pkg.tar.xz]=1216248
+  [${WRAPPER_PKG}_${WRAPPER_VERSION}_aarch64.deb]=1712128
+  [${WRAPPER_PKG}_${WRAPPER_VERSION}_arm.deb]=1269760
+)
+EST_TMP=""; EST_DB=""; EST_X=()
+est_cleanup() { [ -n "$EST_TMP" ] && rm -rf "$EST_TMP"; true; }
+est_fail() { echo "x11-gpu-setup: $*" >&2; exit 1; }
+
+# apt, x11-repo not installed yet: its package lists arrive only once it is. For the estimate,
+# fetch that one package (a download, not an install), unpack it in the temporary folder and let
+# apt read a copy of its sources, keys and lists from there. Sets EST_X, the options that point
+# apt at the copies.
+est_apt_x11() {
+  local d=$EST_TMP/x11
+  mkdir -p "$d/dl" "$d/x" "$d/sources.list.d" "$d/trusted.gpg.d" "$d/lists"
+  ( cd "$d/dl" && apt-get download x11-repo ) || return 1
+  dpkg-deb -x "$d"/dl/x11-repo_*.deb "$d/x" || return 1
+  cp -a "$PREFIX/etc/apt/sources.list.d/." "$d/sources.list.d/" 2>/dev/null
+  cp -a "$PREFIX/etc/apt/trusted.gpg.d/." "$d/trusted.gpg.d/" 2>/dev/null
+  find "$d/x" -path '*/etc/apt/sources.list.d/*' -type f -exec cp {} "$d/sources.list.d/" \;
+  find "$d/x" -path '*/etc/apt/trusted.gpg.d/*' -type f -exec cp {} "$d/trusted.gpg.d/" \;
+  cp -a "$PREFIX/var/lib/apt/lists/." "$d/lists/" 2>/dev/null
+  EST_X=(-o "Dir::Etc::SourceParts=$d/sources.list.d" -o "Dir::Etc::TrustedParts=$d/trusted.gpg.d" -o "Dir::State::Lists=$d/lists")
+  apt-get "${EST_X[@]}" update
+}
+
+# pacman -Si/-Qi ARGS -> "name bytes" (Installed Size, first block per name).
+est_pacman_inst() {
+  LC_ALL=C pacman "$@" 2>/dev/null | awk -F' *: *' '
+    $1 == "Name" { name = $2; seen = (name in done); done[name] = 1 }
+    $1 == "Installed Size" && !seen {
+      split($2, v, " "); m = 1
+      if (v[2] ~ /^KiB/) m = 1024; else if (v[2] ~ /^MiB/) m = 1048576; else if (v[2] ~ /^GiB/) m = 1073741824
+      printf "%s %d\n", name, v[1] * m + 0.5 }'
+}
+
+# Prints the four lines on fd 3 (the real stdout) and exits.
+estimate() {
+  local p name kind rc cand=() fresh=() avail=() a_names=() b_names=() wrap=0 file d
+  local -A is_a=() kinds=() size_new=() size_old=()
+  local dl=0 inst=0 rem=0 upg=0 keep=" x11-repo xkeyboard-config "
+  trap est_cleanup EXIT
+  EST_TMP=$(mktemp -d "$TMPDIR/x11-gpu-estimate.XXXXXX") || est_fail "could not make a temporary folder"
+  for p in $ALL_PKGS; do installed_before "$p" || fresh+=("$p"); done
+  for p in "${fresh[@]}"; do if [ "$p" = "$WRAPPER_PKG" ]; then wrap=1; else cand+=("$p"); fi; done
+
+  if [ $PM = apt ]; then
+    detail "Refreshing the package lists (nothing is installed)."
+    apt-get update || est_fail "could not refresh the package lists (is there a network connection?)"
+    if ! installed_before x11-repo; then
+      est_apt_x11 || est_fail "could not read the X11 repository's package list"
+    fi
+    for p in "${cand[@]}"; do apt-cache "${EST_X[@]}" show --no-all-versions "$p" >/dev/null 2>&1 && avail+=("$p"); done
+    apt-get "${EST_X[@]}" -s full-upgrade >"$EST_TMP/a.out" 2>/dev/null || est_fail "apt could not plan the upgrade"
+    while read -r name kind; do a_names+=("$name"); is_a[$name]=1; done < <(awk '$1 == "Inst" { sub(/:.*/, "", $2); print $2, "x" }' "$EST_TMP/a.out")
+    upg=${#a_names[@]}
+    if [ $((${#avail[@]} + ${#a_names[@]})) -gt 0 ]; then
+      apt-get "${EST_X[@]}" -s install "${avail[@]}" "${a_names[@]}" >"$EST_TMP/b.out" 2>/dev/null || est_fail "apt could not plan the installation"
+      while read -r name kind; do b_names+=("$name"); kinds[$name]=$kind; done < <(awk '$1 == "Inst" { sub(/:.*/, "", $2); print $2, ($3 ~ /^\[/ ? "U" : "N") }' "$EST_TMP/b.out")
+      d=$(apt-get "${EST_X[@]}" -y --print-uris install "${avail[@]}" "${a_names[@]}" 2>/dev/null | awk '$1 ~ /^'"'"'/ { s += $3 } END { printf "%d", s }') || est_fail "apt could not list the downloads"
+      dl=$((dl + d))
+      while read -r name d; do size_new[$name]=$((d * 1024)); done < <(apt-cache "${EST_X[@]}" show --no-all-versions "${b_names[@]}" 2>/dev/null |
+        awk '$1 == "Package:" { n = $2 } $1 == "Installed-Size:" { print n, $2 }')
+      # shellcheck disable=SC2016
+      while read -r name d; do size_old[$name]=$((d * 1024)); done < <(dpkg-query -W -f '${Package} ${Installed-Size}\n' "${b_names[@]}" 2>/dev/null)
+    fi
+  else
+    local dbp
+    dbp=$(pacman-conf DBPath 2>/dev/null); dbp=${dbp:-$PREFIX/var/lib/pacman/}
+    EST_DB=$EST_TMP/db
+    mkdir -p "$EST_DB" && ln -s "${dbp%/}/local" "$EST_DB/local" || est_fail "could not set up a temporary package database"
+    detail "Syncing a temporary copy of the package databases (the real ones are not touched)."
+    pacman -Sy --dbpath "$EST_DB" --logfile /dev/null || est_fail "could not sync the package databases (is there a network connection?)"
+    for p in "${cand[@]}"; do pacman -Si --dbpath "$EST_DB" "$p" >/dev/null 2>&1 && avail+=("$p"); done
+    while read -r name; do a_names+=("$name"); is_a[$name]=1; done < <(pacman -Sup --dbpath "$EST_DB" --print-format '%n' 2>/dev/null)
+    upg=${#a_names[@]}
+    pacman -Sup --needed --dbpath "$EST_DB" --print-format '%n %s' "${avail[@]}" >"$EST_TMP/b.out" 2>/dev/null || est_fail "pacman could not plan the installation"
+    while read -r name d; do
+      [ -n "$name" ] || continue
+      b_names+=("$name"); dl=$((dl + ${d:-0}))
+      if installed_before "$name"; then kinds[$name]=U; else kinds[$name]=N; fi
+    done <"$EST_TMP/b.out"
+    if [ ${#b_names[@]} -gt 0 ]; then
+      while read -r name d; do size_new[$name]=$d; done < <(est_pacman_inst -Si --dbpath "$EST_DB" "${b_names[@]}")
+      while read -r name d; do size_old[$name]=$d; done < <(est_pacman_inst -Qi --dbpath "$EST_DB" "${b_names[@]}")
+    fi
+  fi
+
+  # An upgraded package costs its growth; a new one its whole installed size. Only new packages
+  # that the upgrade did not bring in itself, and that the run does not keep, are given back.
+  for name in "${b_names[@]}"; do
+    if [ "${kinds[$name]}" = U ]; then
+      d=$(( ${size_new[$name]:-0} - ${size_old[$name]:-0} ))
+      [ $d -gt 0 ] && inst=$((inst + d))
+    else
+      inst=$((inst + ${size_new[$name]:-0}))
+      if [ -z "${is_a[$name]:-}" ] && [ "${keep#* $name }" = "$keep" ]; then rem=$((rem + ${size_new[$name]:-0})); fi
+    fi
+  done
+  if [ $wrap = 1 ] && file=$(wrapper_file); then
+    dl=$((dl + ${WRAPPER_DL_BYTES[$file]:-0}))
+    inst=$((inst + ${WRAPPER_INST_BYTES[$file]:-0}))
+    rem=$((rem + ${WRAPPER_INST_BYTES[$file]:-0}))
+  fi
+  printf 'download_bytes=%s\ninstall_bytes=%s\nremovable_bytes=%s\nupgrade_count=%s\n' "$dl" "$inst" "$rem" "$upg" >&3
+  exit 0
 }
 
 # Only the wrapper, for someone who picked it on the launcher's page without a benchmark run.
@@ -374,9 +541,9 @@ take_out() {
   # A held lock (another install running) or a half-done install makes this fail cleanly with
   # the package manager's own message; nothing is removed then, and the line below says what to.
   # shellcheck disable=SC2086
-  if [ -n "$where" ]; then "$where" apt-get purge -y $remove
+  if [ -n "$where" ]; then "$where" env DEBIAN_FRONTEND=noninteractive apt-get purge "${APT_OPTS[@]}" $remove
   elif [ $PM = pacman ]; then pacman -R --noconfirm $remove
-  else apt-get remove -y $remove; fi || {
+  else apt-get remove "${APT_OPTS[@]}" $remove; fi || {
     detail "Some packages could not be removed (see the output above). If another install was"
     detail "running or was cut off, finish it first (apt: dpkg --configure -a), then: $hand $remove"
     return 1
@@ -421,6 +588,7 @@ cleanup_prefix() {
 # then: the shell runs this only after the foreground command is gone, and apt and pacman
 # release their locks when they stop on a signal.
 cleanup() {
+  [ $ESTIMATE = 1 ] && return 0   # an estimate starts and installs nothing, and stops nothing
   [ $CLEANED = 1 ] && return 0; CLEANED=1
   trap '' INT TERM HUP
   stop_virgl; stop_display; drop_wrapper_download
@@ -478,6 +646,7 @@ for c in "${CANDIDATES[@]}"; do [ -n "${SKIP[$c]:-}" ] || ALL_PKGS="$ALL_PKGS ${
 # shellcheck disable=SC2086
 ALL_PKGS=$(printf '%s\n' $ALL_PKGS | awk '!seen[$0]++' | tr '\n' ' ')
 detail "Packages needed for the tests: $ALL_PKGS"
+[ $ESTIMATE = 1 ] && estimate
 if [ $KEEP = 0 ]; then
   detail "The test program and the drivers that lose will be removed again at the end."
   detail "(xkeyboard-config${REPO_PKG:+ and $REPO_PKG} stay: the display itself needs them.)"
@@ -673,7 +842,7 @@ else
     # The container's own list, so only what this install adds is purged again.
     PROOT_BEFORE=$(installed_now pd)
     [ -z "$PROOT_BEFORE" ] && detail "Could not list Debian's packages, so the test program will stay there."
-    pd sh -c "apt-get update && apt-get install -y $PROOT_TEST_PKGS" ||
+    pd sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install ${APT_OPTS[*]} $PROOT_TEST_PKGS" ||
       detail "Could not install it (see the output above); skipping the container."
   fi
   if pd sh -c 'command -v glmark2-es2' >/dev/null 2>&1; then
