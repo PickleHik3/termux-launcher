@@ -5396,7 +5396,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private float[] peekGlassRect() {
         com.termux.app.dock.PeekGlassGeometry.Card card = mPeekCard;
-        if (card == null) return null;
+        // A card cut before the keyboard came up must not shape the glass program a moment longer.
+        if (card == null || !peekCardWanted()) return null;
         float reach = com.termux.app.chrome.GlassRefraction.seamReachPx(
             com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
             getResources().getDisplayMetrics().density, card.radiusPx);
@@ -9480,6 +9481,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeyboardGeometry.completePendingOpenReveal(state);
         mKeyboardGeometry.completePendingCloseGeometry(state);
         updateAzOverflowAffordance();
+        // The keyboard going up or down, or the dock lifting, does not always lay the dock host out
+        // again, yet it decides whether the Peek card may stand: read it again before the next draw.
+        if (mPeekWatchedHost != null) schedulePeekRefresh();
     }
 
     /**

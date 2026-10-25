@@ -708,3 +708,8 @@ fix, then leaves this file.
     segments look clipped; dragging an app onto a 14-app folder swapped cells instead of merging
     (possibly injected-drag technique); overlapping floats show each other's text through the glass
     (by design?).
+
+## Peek glass with the keyboard up (pong)
+- Docked, Peek glass dock: raise the in-app keyboard. The extra keys bar sits on glass again and the
+  keyboard glass spans the full width with its normal corners; hide the keyboard, the card returns.
+- Same with the Search field open and with the system IME lifting the dock.
