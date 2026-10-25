@@ -41,6 +41,15 @@ dropped; what follows is what still owes a look.
   Docked: the Docked Peek card exactly as before (foot under the pill, soft-rimmed sides). Look at
   the card's lower corners on a press (the touch edge glow is drawn at the uncut card's radius) ·
   emulator or pong.
+- 2026-10-25 · commit "fix(appearance): a card's slider strip stands on one line when its columns fit" · on pong
+  (411 dp, font scale 1.0) the Dock card shows its 8 sliders, and the Keyboard card its 9, in one
+  row with every legend readable and each slider draggable; at font scale 1.3 the Keyboard card
+  may wrap to two rows, nothing clipped.
+- 2026-10-25 · commit "fix(appearance): segment rows stand label and control on one line" · on pong
+  (411 dp, font scale 1.0) open the Home card: Label size and Folders each show the label with
+  Small / Medium / Large (Compact / Default / Roomy) on the same line, segments touch-sized 48 dp,
+  nothing cut; Numerals, Theme, Contrast and Form likewise. At font scale 1.3 a row that cannot fit
+  stacks instead of clipping.
 - 2026-10-25 · commit "feat(appearance): hidden-items cards wrap their own text" · hide all six
   items in the Appearance editor: one-word cards (Keyboard) are one line tall, two-word cards two
   lines, the gap between cards stays equal, one label size throughout; tap a card shows it, drag
