@@ -3,6 +3,8 @@ package com.termux.app.fragments.settings.termux;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
@@ -90,8 +92,13 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     private static final int TYPE_NOTE = 4;
     private static final int TYPE_APPS = 5;
 
-    /** The run panel's terminal text, before the font scale. */
-    private static final float TERMINAL_TEXT_SP = 11f;
+    /**
+     * The run panel's terminal text: as large as fits {@link #TERMINAL_COLUMNS} across the panel,
+     * between these two sizes, so the script's lines rarely wrap.
+     */
+    private static final float TERMINAL_TEXT_MAX_SP = 11f;
+    private static final float TERMINAL_TEXT_MIN_SP = 7.5f;
+    private static final int TERMINAL_COLUMNS = 64;
     /** The run panel's terminal height, and the most of a short (landscape) screen it takes. */
     private static final int TERMINAL_HEIGHT_DP = 220;
     private static final float TERMINAL_HEIGHT_SCREEN_SHARE = 0.35f;
@@ -584,8 +591,16 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     private View createBar(@NonNull Context context) {
         TaiBenchViews.Card card = TaiBenchViews.card(context);
         card.outer.setPadding(TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 6), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 12));
-        card.shell.setElevation(TaiBenchViews.dp(context, 6));
+        // The bar floats over the list, so it wears a tint the cards never do, an outline and a
+        // deeper shadow: it reads as the layer on top in light and dark alike.
+        card.shell.setCardBackgroundColor(TaiBenchViews.color(context,
+            com.google.android.material.R.attr.colorSecondaryContainer));
+        card.shell.setStrokeColor(TaiBenchViews.color(context, com.google.android.material.R.attr.colorOutline));
+        card.shell.setStrokeWidth(TaiBenchViews.dp(context, 1));
+        card.shell.setElevation(TaiBenchViews.dp(context, 12));
+        int onBar = TaiBenchViews.color(context, com.google.android.material.R.attr.colorOnSecondaryContainer);
         TextView line = TaiBenchViews.mono(context, getString(R.string.settings_x11_gpu_run_summary));
+        line.setTextColor(onBar);
         line.setId(R.id.x11_gpu_text);
         card.core.addView(line);
         TextView run = TaiBenchViews.goButton(context, getString(R.string.settings_x11_gpu_run_action));
@@ -598,6 +613,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         card.core.addView(run, TaiBenchViews.block(context, 10));
         TaiBenchViews.setEnabled(run, false);
         runPanel = createRunPanel(context);
+        runPanel.status.setTextColor(onBar);
         card.core.addView(runPanel.root);
         return card.outer;
     }
@@ -619,6 +635,10 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         ground.setCornerRadius(TaiBenchViews.dp(context, TERMINAL_CORNER_DP));
         screen.setBackground(ground);
         screen.setClipToOutline(true);
+        // The text size follows the panel's width; set from layout, so it is posted.
+        screen.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (right - left != oldRight - oldLeft) v.post(() -> fitTerminalText(v));
+        });
         int height = Math.min(TaiBenchViews.dp(context, TERMINAL_HEIGHT_DP),
             Math.round(context.getResources().getDisplayMetrics().heightPixels * TERMINAL_HEIGHT_SCREEN_SHARE));
         LinearLayout.LayoutParams screenParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
@@ -696,8 +716,8 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         Context context = panel.screen.getContext();
         view = new TerminalView(context, null);
         view.setTerminalViewClient(new ReadOnlyTerminalClient());
-        view.setTextSize(Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
-            TERMINAL_TEXT_SP, context.getResources().getDisplayMetrics())));
+        view.setTextSize(terminalTextSize(context, panel.screen.getWidth()
+            - panel.screen.getPaddingLeft() - panel.screen.getPaddingRight()));
         view.setCursorSuppressed(true);
         // Nothing is typed into the run: no focus, so no keyboard and no keys reach it.
         view.setFocusable(false);
@@ -711,6 +731,32 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         view.setBackgroundColor(ground);
         panel.screen.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         terminal = view;
+    }
+
+    private void fitTerminalText(@NonNull View screen) {
+        TerminalView view = terminal;
+        if (view == null || view.getParent() != screen) return;
+        int width = screen.getWidth() - screen.getPaddingLeft() - screen.getPaddingRight();
+        view.setTextSize(terminalTextSize(screen.getContext(), width));
+    }
+
+    /**
+     * The text size, in pixels, at which {@link #TERMINAL_COLUMNS} monospace cells fit {@code width}
+     * pixels, kept between the two text sizes. Before the panel has a width, the largest.
+     */
+    private static int terminalTextSize(@NonNull Context context, int width) {
+        float max = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, TERMINAL_TEXT_MAX_SP,
+            context.getResources().getDisplayMetrics());
+        float min = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, TERMINAL_TEXT_MIN_SP,
+            context.getResources().getDisplayMetrics());
+        if (width <= 0) return Math.round(max);
+        Paint paint = new Paint();
+        paint.setTypeface(Typeface.MONOSPACE);
+        paint.setTextSize(100f);
+        // The renderer's cell is the width of "X" (TerminalRenderer), which scales with the size.
+        float cellPerPixelOfSize = paint.measureText("X") / 100f;
+        float fits = (float) Math.floor(width / (TERMINAL_COLUMNS * cellPerPixelOfSize));
+        return Math.round(Math.max(min, Math.min(max, fits)));
     }
 
     private static int terminalBackground(@NonNull TerminalSession session) {
