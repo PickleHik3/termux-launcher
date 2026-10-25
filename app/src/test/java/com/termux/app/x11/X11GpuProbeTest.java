@@ -161,7 +161,7 @@ public class X11GpuProbeTest {
     @Test public void virglKeepsMesaOffZink() {
         X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
         in.eglVendor = "somevendor";
-        assertTrue(X11GpuProbe.evaluate(in).find(X11GpuProbe.Profile.VIRGL).env.contains("LIBGL_KOPPER_DISABLE=1"));
+        assertTrue(X11GpuProbe.evaluate(in).ranked.get(0).env.contains("LIBGL_KOPPER_DISABLE=1"));
     }
 
     @Test public void theJsonCarriesEveryProfileAndTheEnvText() throws Exception {
