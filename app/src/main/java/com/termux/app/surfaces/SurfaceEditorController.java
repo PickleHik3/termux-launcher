@@ -85,6 +85,7 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -1422,7 +1423,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private final List<HiddenItem> mHidden = new ArrayList<>();
     /** What the stack was last laid out for, so a pass that changes nothing touches nothing. */
     @Nullable private String mStackSignature;
-    private int mLabelForHeightPx = -1;
+    @Nullable private HiddenStackPolicy.Measure mStackMeasure;
+    private float mLabelBasePx;
     private float mLabelForFontScale = -1f;
     private float mLabelPx;
     /** The rail's border in the content view, {left, top, right, bottom}: the drop target. */
@@ -1512,20 +1514,30 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
         int available = Math.max(0,
             Math.round(EditorFramePose.stackBottomPx(window, cardTop)) - top);
-        // Room for one more card than there are: the empty slot a lifted element drops into.
-        int cardHeight = HiddenStackPolicy.railCardHeightPx(mHidden.size(), available, density);
+        // Each card is as tall as its own wrapped label; the one label size shrinks only when
+        // the cards, the empty slot a lifted element drops into and the gaps would not fit.
         float fontScale = getResources().getConfiguration().fontScale;
-        if (cardHeight != mLabelForHeightPx || fontScale != mLabelForFontScale) {
-            mLabelPx = HiddenStackView.fittedLabelPx(mHost.context(), cardHeight);
-            mLabelForHeightPx = cardHeight;
+        if (mStackMeasure == null) mStackMeasure = HiddenStackView.measure(mHost.context());
+        if (fontScale != mLabelForFontScale) {
+            mLabelBasePx = HiddenStackView.fittedLabelPx(mHost.context(), mStackMeasure);
             mLabelForFontScale = fontScale;
         }
+        List<String> labels = new ArrayList<>();
+        for (HiddenItem item : mHidden)
+            labels.add(mHost.context().getString(item.labelRes));
+        int cardWidth = HiddenStackPolicy.cardWidthPx(density);
+        mLabelPx = HiddenStackPolicy.stackLabelPx(labels, mStackMeasure, mLabelBasePx, cardWidth,
+            available, density);
+        int[] heights = HiddenStackPolicy.cardHeightsPx(labels, mStackMeasure, mLabelPx,
+            cardWidth, density);
+        int slot = HiddenStackPolicy.slotHeightPx(mStackMeasure, mLabelPx, density);
         int left = mContainerLeftPx + dp(HiddenStackPolicy.SIDE_DP);
-        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(mHidden.size(), left, top, available,
-            cardHeight, density);
+        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(heights, slot, left, top, available,
+            density);
         // The drop target is the border the finger sees, no more.
         mStackColumn = rail.border.clone();
-        String signature = mHidden + "/" + left + "/" + top + "/" + cardHeight + "/" + mLabelPx
+        String signature = mHidden + "/" + left + "/" + top + "/" + Arrays.toString(heights) + "/"
+            + mLabelPx
             + "/" + available;
         if (!signature.equals(mStackSignature)) {
             mStackSignature = signature;

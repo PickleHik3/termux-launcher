@@ -7,9 +7,9 @@ import java.util.List;
 
 /**
  * The geometry of the stack of hidden-item cards beside the editor's frame, as pure arithmetic in
- * pixels: the card's size (the same for every card, shorter only when many cards must fit above
- * the half line), where each stands, the band the frame leaves clear for them, and the one label
- * size at which every possible label stands whole inside a card, wrapped at spaces on at most
+ * pixels: each card's own height (its label's wrapped lines plus the padding, so cards differ),
+ * where each stands, the band the frame leaves clear for them, and the one label size at which
+ * every possible label stands whole in the card's width, wrapped at spaces on at most
  * {@link #MAX_LINES} lines, never cut.
  */
 final class HiddenStackPolicy {
@@ -17,9 +17,10 @@ final class HiddenStackPolicy {
     private HiddenStackPolicy() {}
 
     static final int CARD_W_DP = 72;
-    static final int CARD_H_DP = 44;
-    /** The shortest a card shrinks to when the stack would not otherwise fit. */
-    static final int MIN_CARD_H_DP = 30;
+    /** The least the label shrinks to, as a share of its fitted size, when the stack is too tall. */
+    static final float MIN_LABEL_SHRINK = 0.75f;
+    /** Room left round the text inside the padding, so a glyph never meets the card's edge. */
+    static final int TEXT_SLACK_PX = 1;
     static final int GAP_DP = 8;
     /** The stack's distance from the window's left edge, and the frame's from the stack. */
     static final int SIDE_DP = 8;
@@ -48,38 +49,6 @@ final class HiddenStackPolicy {
     }
 
     /**
-     * One card's height for {@code count} cards in {@code availablePx} of height: {@link
-     * #CARD_H_DP}, or less down to {@link #MIN_CARD_H_DP} when that many would not fit. Never
-     * less than the minimum: a stack too long for the window runs under the card sheet.
-     */
-    static int cardHeightPx(int count, int availablePx, float density) {
-        int max = Math.round(CARD_H_DP * density);
-        int min = Math.round(MIN_CARD_H_DP * density);
-        int n = Math.max(1, count);
-        int gap = Math.round(GAP_DP * density);
-        int fit = (availablePx - gap * (n - 1)) / n;
-        return Math.max(min, Math.min(max, fit));
-    }
-
-    /**
-     * Where the first card's top stands so the last card's bottom rests on the bottom of the
-     * column ({@code columnTopPx} down {@code columnHeightPx}) holding {@code count} cards; never
-     * above the column's top, so a stack too long for it still starts there.
-     */
-    static int stackTopPx(int columnTopPx, int columnHeightPx, int count, int cardHeightPx,
-                          float density) {
-        int n = Math.max(0, count);
-        int gap = Math.round(GAP_DP * density);
-        int used = n == 0 ? 0 : n * cardHeightPx + (n - 1) * gap;
-        return columnTopPx + Math.max(0, columnHeightPx - used);
-    }
-
-    /** The top of card {@code index}, counted from the stack's top. */
-    static int cardTopPx(int stackTopPx, int index, int cardHeightPx, float density) {
-        return stackTopPx + index * (cardHeightPx + Math.round(GAP_DP * density));
-    }
-
-    /**
      * The air between the drop zone's border and what it holds, the same on every side. The
      * border stands this far outside the cards' column, in the {@link #SIDE_DP} either side of it,
      * so the cards never move or shrink when it shows.
@@ -104,64 +73,115 @@ final class HiddenStackPolicy {
         }
     }
 
-    /**
-     * The card height for {@code count} cards and the drop slot in a column {@code columnPx}
-     * tall: {@link #cardHeightPx} for one more card than there are, in the column less the
-     * zone's air above and below.
-     */
-    static int railCardHeightPx(int count, int columnPx, float density) {
-        int pad = Math.round(ZONE_PAD_DP * density);
-        return cardHeightPx(Math.max(0, count) + 1, Math.max(0, columnPx - 2 * pad), density);
+    /** The padding inside a card plus its slack, each side: what the label's box is inset by. */
+    static int insetPx(float density) {
+        return Math.round(PAD_DP * density) + TEXT_SLACK_PX;
+    }
+
+    /** The text height of {@code lines} lines at {@code sizePx}, whole pixels. */
+    private static int textHeightPx(int lines, @NonNull Measure measure, float sizePx) {
+        return lines * (int) Math.ceil(measure.lineHeight(sizePx));
     }
 
     /**
-     * The rail for {@code count} cards {@code cardHeightPx} tall in the column from
-     * {@code columnTopPx} down {@code columnHeightPx}, the cards {@code leftPx} from the content
-     * view's left. The cards and the slot after them rest on the column's bottom less the zone's
-     * air; the border hugs them (it never runs past the slot to the column's bottom), and a rail
-     * too long for the column starts at its top and runs on past its bottom, as the stack did.
+     * One card's height for {@code label} at {@code sizePx}: its own wrapped lines (at most
+     * {@link #MAX_LINES}) and the padding, nothing more, so a one-line label's card is shorter
+     * than a two-line one's.
+     */
+    static int cardHeightPx(@NonNull String label, @NonNull Measure measure, float sizePx,
+                            int cardWidthPx, float density) {
+        float width = Math.max(1, cardWidthPx - 2 * insetPx(density));
+        int lines = Math.max(1, Math.min(MAX_LINES, linesFor(label, measure, sizePx, width)));
+        return textHeightPx(lines, measure, sizePx) + 2 * insetPx(density);
+    }
+
+    /** The empty drop slot's height: a card of one line. */
+    static int slotHeightPx(@NonNull Measure measure, float sizePx, float density) {
+        return textHeightPx(1, measure, sizePx) + 2 * insetPx(density);
+    }
+
+    /** The cards' heights for {@code labels}, in order. */
+    @NonNull
+    static int[] cardHeightsPx(@NonNull List<String> labels, @NonNull Measure measure,
+                               float sizePx, int cardWidthPx, float density) {
+        int[] heights = new int[labels.size()];
+        for (int i = 0; i < heights.length; i++)
+            heights[i] = cardHeightPx(labels.get(i), measure, sizePx, cardWidthPx, density);
+        return heights;
+    }
+
+    /** The rail's content height: every card, the slot, the gaps between them. */
+    private static int usedPx(@NonNull int[] heights, int slotPx, float density) {
+        int gap = Math.round(GAP_DP * density);
+        int used = slotPx;
+        for (int h : heights)
+            used += h + gap;
+        return used;
+    }
+
+    /**
+     * The one label size for the hidden {@code labels}: {@code basePx} (what every possible
+     * label fits at), stepped down by half a pixel, to no less than {@link #MIN_LABEL_SHRINK} of
+     * it, until the cards, the slot and the zone's air fit {@code availablePx}. A column too
+     * short even then runs on past its bottom at the smallest size.
+     */
+    static float stackLabelPx(@NonNull List<String> labels, @NonNull Measure measure,
+                              float basePx, int cardWidthPx, int availablePx, float density) {
+        float floor = basePx * MIN_LABEL_SHRINK;
+        int air = 2 * Math.round(ZONE_PAD_DP * density);
+        float size = basePx;
+        while (size > floor) {
+            int[] heights = cardHeightsPx(labels, measure, size, cardWidthPx, density);
+            if (usedPx(heights, slotHeightPx(measure, size, density), density) + air
+                <= availablePx)
+                return size;
+            size -= 0.5f;
+        }
+        return floor;
+    }
+
+    /**
+     * The rail for cards of {@code heights} (top to bottom) and the slot {@code slotPx} tall,
+     * in the column from {@code columnTopPx} down {@code columnHeightPx}, the cards
+     * {@code leftPx} from the content view's left. The cards and the slot after them rest on
+     * the column's bottom less the zone's air; the border hugs them (it never runs past the
+     * slot to the column's bottom), and a rail too long for the column starts at its top and
+     * runs on past its bottom.
      */
     @NonNull
-    static Rail rail(int count, int leftPx, int columnTopPx, int columnHeightPx, int cardHeightPx,
-                     float density) {
-        int n = Math.max(0, count);
+    static Rail rail(@NonNull int[] heights, int slotPx, int leftPx, int columnTopPx,
+                     int columnHeightPx, float density) {
+        int n = heights.length;
         int pad = Math.round(ZONE_PAD_DP * density);
         int gap = Math.round(GAP_DP * density);
         int width = cardWidthPx(density);
-        int items = n + 1;
-        int used = items * cardHeightPx + (items - 1) * gap;
+        int used = usedPx(heights, slotPx, density);
         int contentBottom = columnTopPx + columnHeightPx - pad;
         int contentTop = Math.max(columnTopPx + pad, contentBottom - used);
         int[][] cards = new int[n][];
+        int top = contentTop;
         for (int i = 0; i < n; i++) {
-            int top = contentTop + i * (cardHeightPx + gap);
-            cards[i] = new int[] {leftPx, top, leftPx + width, top + cardHeightPx};
+            cards[i] = new int[] {leftPx, top, leftPx + width, top + heights[i]};
+            top += heights[i] + gap;
         }
-        int slotTop = contentTop + n * (cardHeightPx + gap);
-        int[] slot = {leftPx, slotTop, leftPx + width, slotTop + cardHeightPx};
-        int[] border = {leftPx - pad, contentTop - pad, leftPx + width + pad,
-            slot[3] + pad};
+        int[] slot = {leftPx, top, leftPx + width, top + slotPx};
+        int[] border = {leftPx - pad, contentTop - pad, leftPx + width + pad, slot[3] + pad};
         return new Rail(cards, slot, border);
     }
 
     /**
-     * The largest label size, at most {@code refPx}, at which every label fits a card
-     * {@code cardWidthPx} by {@code cardHeightPx} less {@code padPx} each side: each word within
-     * the width, and the words wrapped greedily into no more lines than the height holds (and
-     * {@link #MAX_LINES}). Stepped down by half a pixel to one pixel, so there is always an
-     * answer. One size for all the labels keeps the cards alike.
+     * The largest label size, at most {@code refPx}, at which every label fits the card's width:
+     * each word within it, and the words wrapped greedily into no more than {@link #MAX_LINES}
+     * lines. Stepped down by half a pixel to one pixel, so there is always an answer. One size
+     * for all the labels keeps the cards alike.
      */
     static float labelSizePx(@NonNull List<String> labels, @NonNull Measure measure,
-                             int cardWidthPx, int cardHeightPx, int padPx, float refPx) {
-        float width = Math.max(1, cardWidthPx - 2 * padPx);
-        float height = Math.max(1, cardHeightPx - 2 * padPx);
+                             int cardWidthPx, float density, float refPx) {
+        float width = Math.max(1, cardWidthPx - 2 * insetPx(density));
         for (float size = refPx; size > 1f; size -= 0.5f) {
-            int lines = Math.min(MAX_LINES, (int) Math.floor(height / measure.lineHeight(size)));
-            if (lines < 1)
-                continue;
             boolean fits = true;
             for (String label : labels) {
-                if (linesFor(label, measure, size, width) > lines) {
+                if (linesFor(label, measure, size, width) > MAX_LINES) {
                     fits = false;
                     break;
                 }

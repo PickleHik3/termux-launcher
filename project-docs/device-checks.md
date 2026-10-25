@@ -20,6 +20,13 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "feat(appearance): hidden-items cards wrap their own text" · hide all six
+  items in the Appearance editor: one-word cards (Keyboard) are one line tall, two-word cards two
+  lines, the gap between cards stays equal, one label size throughout; tap a card shows it, drag
+  a card into the frame shows it where it lands, dragging a frame element over the rail
+  highlights the border and drops into the slot after the last card; repeat at font scale 1.3,
+  in Home and Workspace halves, dark and light; with the card sheet up the stack shrinks its
+  text, never overlaps the sheet · emulator or pong.
 - 2026-10-25 · commit "fix(x11): GPU setup follows Termux's own package manager, refreshes once,
   never asks; add --estimate" · a full run on pong (pacman Termux with dpkg installed) prints
   "Package manager: pacman", syncs the databases once, installs the Vulkan wrapper's

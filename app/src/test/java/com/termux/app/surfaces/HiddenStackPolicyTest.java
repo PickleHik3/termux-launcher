@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * The stack of hidden items beside the frame as arithmetic, on pong's numbers (411 dp wide at
- * 2.625): every card alike, every label whole in its card at font scale 1, 1.3 and 2, and the
+ * 2.625): each card as tall as its own label, every label whole in the card's width at font scale 1, 1.3 and 2, and the
  * frame moved and scaled clear of the stack.
  */
 public class HiddenStackPolicyTest {
@@ -38,50 +38,71 @@ public class HiddenStackPolicyTest {
         return HiddenStackPolicy.LABEL_SP * fontScale * DENSITY;
     }
 
-    @Test
-    public void everyCardIsTheSameSizeAndShrinksOnlyWhenTheStackWouldNotFit() {
-        int full = Math.round(HiddenStackPolicy.CARD_H_DP * DENSITY);
-        int min = Math.round(HiddenStackPolicy.MIN_CARD_H_DP * DENSITY);
-        assertEquals(full, HiddenStackPolicy.cardHeightPx(1, 2000, DENSITY));
-        assertEquals(full, HiddenStackPolicy.cardHeightPx(7, 2000, DENSITY));
-        int tight = HiddenStackPolicy.cardHeightPx(7, 7 * min + 6 * Math.round(8 * DENSITY),
-            DENSITY);
-        assertEquals(min, tight);
-        // No room at all: the minimum, never zero.
-        assertEquals(min, HiddenStackPolicy.cardHeightPx(7, 0, DENSITY));
-        int mid = HiddenStackPolicy.cardHeightPx(7, 1200, DENSITY);
-        assertTrue(mid >= min && mid <= full);
-        assertTrue(7 * mid + 6 * Math.round(8 * DENSITY) <= 1200 || mid == min);
-    }
-
-    @Test
-    public void cardsStandOneAfterAnotherFromTheTop() {
-        int h = 100;
-        int gap = Math.round(HiddenStackPolicy.GAP_DP * DENSITY);
-        assertEquals(50, HiddenStackPolicy.cardTopPx(50, 0, h, DENSITY));
-        assertEquals(50 + h + gap, HiddenStackPolicy.cardTopPx(50, 1, h, DENSITY));
-        assertEquals(50 + 3 * (h + gap), HiddenStackPolicy.cardTopPx(50, 3, h, DENSITY));
-    }
-
-    @Test
-    public void stackRestsOnTheColumnBottom() {
-        int h = 100;
-        int gap = Math.round(HiddenStackPolicy.GAP_DP * DENSITY);
-        int top = HiddenStackPolicy.stackTopPx(50, 1000, 3, h, DENSITY);
-        assertEquals(50 + 1000 - (3 * h + 2 * gap), top);
-        int last = HiddenStackPolicy.cardTopPx(top, 2, h, DENSITY);
-        assertEquals(50 + 1000, last + h);
-        assertEquals(50, HiddenStackPolicy.stackTopPx(50, 100, 5, h, DENSITY));
-        assertEquals(1050, HiddenStackPolicy.stackTopPx(50, 1000, 0, h, DENSITY));
-    }
-
+    private static final int CARD_W = HiddenStackPolicy.cardWidthPx(DENSITY);
     private static final int COLUMN_TOP = 120;
     private static final int COLUMN_H = 1500;
     private static final int LEFT = Math.round(HiddenStackPolicy.SIDE_DP * DENSITY);
+    /** One word and two words: a one-line card and a two-line card at the reference size. */
+    private static final List<String> MIXED = Arrays.asList("Keyboard", "Pinned apps",
+        "A–Z index", "Status bar");
+
+    private static float labelPx(float fontScale) {
+        return HiddenStackPolicy.labelSizePx(LABELS, MEASURE, CARD_W, DENSITY, refPx(fontScale));
+    }
+
+    private static HiddenStackPolicy.Rail rail(List<String> labels, float sizePx) {
+        int[] heights = HiddenStackPolicy.cardHeightsPx(labels, MEASURE, sizePx, CARD_W, DENSITY);
+        return HiddenStackPolicy.rail(heights,
+            HiddenStackPolicy.slotHeightPx(MEASURE, sizePx, DENSITY), LEFT, COLUMN_TOP, COLUMN_H,
+            DENSITY);
+    }
+
+    @Test
+    public void eachCardIsAsTallAsItsOwnLinesAndThePadding() {
+        float size = labelPx(1f);
+        int inset = HiddenStackPolicy.insetPx(DENSITY);
+        int line = (int) Math.ceil(MEASURE.lineHeight(size));
+        int one = HiddenStackPolicy.cardHeightPx("Keyboard", MEASURE, size, CARD_W, DENSITY);
+        int two = HiddenStackPolicy.cardHeightPx("Pinned apps", MEASURE, size, CARD_W, DENSITY);
+        assertEquals(line + 2 * inset, one);
+        assertEquals(2 * line + 2 * inset, two);
+        assertEquals(one, HiddenStackPolicy.slotHeightPx(MEASURE, size, DENSITY));
+    }
+
+    @Test
+    public void cardsOfOneAndTwoLinesDifferAndKeepTheSameGap() {
+        float size = labelPx(1f);
+        int gap = Math.round(HiddenStackPolicy.GAP_DP * DENSITY);
+        HiddenStackPolicy.Rail rail = rail(MIXED, size);
+        int[] first = rail.cards[0];
+        int[] second = rail.cards[1];
+        assertTrue("a one-line card is shorter than a two-line one",
+            first[3] - first[1] < second[3] - second[1]);
+        for (int i = 1; i < rail.cards.length; i++)
+            assertEquals(rail.cards[i - 1][3] + gap, rail.cards[i][1]);
+        assertEquals(rail.cards[rail.cards.length - 1][3] + gap, rail.slot[1]);
+    }
+
+    @Test
+    public void theSizeShrinksOnlyWhenTheStackWouldNotFitAndNeverBelowItsFloor() {
+        float base = labelPx(1f);
+        assertEquals(base, HiddenStackPolicy.stackLabelPx(MIXED, MEASURE, base, CARD_W, 2000,
+            DENSITY), 0f);
+        float tight = HiddenStackPolicy.stackLabelPx(MIXED, MEASURE, base, CARD_W, 450, DENSITY);
+        assertTrue(tight < base);
+        int[] heights = HiddenStackPolicy.cardHeightsPx(MIXED, MEASURE, tight, CARD_W, DENSITY);
+        int gap = Math.round(HiddenStackPolicy.GAP_DP * DENSITY);
+        int air = 2 * Math.round(HiddenStackPolicy.ZONE_PAD_DP * DENSITY);
+        int used = HiddenStackPolicy.slotHeightPx(MEASURE, tight, DENSITY) + air;
+        for (int h : heights) used += h + gap;
+        assertTrue(used <= 450);
+        // No room at all: the floor, and the rail runs on past the column.
+        assertEquals(base * HiddenStackPolicy.MIN_LABEL_SHRINK,
+            HiddenStackPolicy.stackLabelPx(MIXED, MEASURE, base, CARD_W, 0, DENSITY), 0f);
+    }
 
     private static HiddenStackPolicy.Rail rail(int count) {
-        int h = HiddenStackPolicy.railCardHeightPx(count, COLUMN_H, DENSITY);
-        return HiddenStackPolicy.rail(count, LEFT, COLUMN_TOP, COLUMN_H, h, DENSITY);
+        return rail(MIXED.subList(0, Math.min(count, MIXED.size())), labelPx(1f));
     }
 
     private static boolean strictlyInside(int[] inner, int[] outer) {
@@ -92,7 +113,7 @@ public class HiddenStackPolicyTest {
     @Test
     public void theRailsBorderHoldsEveryCardWithTheSameAirOnEverySide() {
         int pad = Math.round(HiddenStackPolicy.ZONE_PAD_DP * DENSITY);
-        for (int count = 0; count <= 7; count++) {
+        for (int count = 0; count <= MIXED.size(); count++) {
             HiddenStackPolicy.Rail rail = rail(count);
             assertEquals(count, rail.cards.length);
             for (int[] card : rail.cards)
@@ -113,13 +134,13 @@ public class HiddenStackPolicyTest {
         int gap = Math.round(HiddenStackPolicy.GAP_DP * DENSITY);
         int pad = Math.round(HiddenStackPolicy.ZONE_PAD_DP * DENSITY);
         HiddenStackPolicy.Rail rail = rail(3);
-        int h = rail.slot[3] - rail.slot[1];
+        int total = rail.slot[3] - rail.slot[1];
         for (int[] card : rail.cards)
-            assertEquals("every card the slot's size", h, card[3] - card[1]);
+            total += card[3] - card[1];
         assertEquals(rail.cards[2][3] + gap, rail.slot[1]);
         // Resting on the column's bottom, the border's top hugs the first card, not the column.
         assertEquals(COLUMN_TOP + COLUMN_H, rail.border[3]);
-        assertEquals(4 * h + 3 * gap + 2 * pad, rail.border[3] - rail.border[1]);
+        assertEquals(total + 3 * gap + 2 * pad, rail.border[3] - rail.border[1]);
         assertTrue(rail.border[1] > COLUMN_TOP);
     }
 
@@ -133,54 +154,44 @@ public class HiddenStackPolicyTest {
     @Test
     public void aRailTooLongForItsColumnStartsAtTheTopUnderTheBordersAir() {
         int pad = Math.round(HiddenStackPolicy.ZONE_PAD_DP * DENSITY);
-        int h = HiddenStackPolicy.railCardHeightPx(7, 400, DENSITY);
-        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(7, LEFT, COLUMN_TOP, 400, h, DENSITY);
+        float size = labelPx(1f);
+        int[] heights = HiddenStackPolicy.cardHeightsPx(MIXED, MEASURE, size, CARD_W, DENSITY);
+        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(heights,
+            HiddenStackPolicy.slotHeightPx(MEASURE, size, DENSITY), LEFT, COLUMN_TOP, 100,
+            DENSITY);
         assertEquals(COLUMN_TOP, rail.border[1]);
         assertEquals(COLUMN_TOP + pad, rail.cards[0][1]);
     }
 
     @Test
-    public void everyLabelStandsWholeInItsCardAtEveryFontScale() {
-        int width = HiddenStackPolicy.cardWidthPx(DENSITY);
-        int pad = Math.round(HiddenStackPolicy.PAD_DP * DENSITY) + 1;
+    public void everyLabelStandsWholeInTheCardsWidthAtEveryFontScale() {
+        float innerW = CARD_W - 2 * HiddenStackPolicy.insetPx(DENSITY);
         for (float scale : new float[] {1f, 1.3f, 2f}) {
-            for (int cardH : new int[] {Math.round(HiddenStackPolicy.CARD_H_DP * DENSITY),
-                Math.round(HiddenStackPolicy.MIN_CARD_H_DP * DENSITY)}) {
-                float size = HiddenStackPolicy.labelSizePx(LABELS, MEASURE, width, cardH, pad,
-                    refPx(scale));
-                assertTrue(size <= refPx(scale));
-                float innerW = width - 2 * pad;
-                float innerH = cardH - 2 * pad;
-                int lines = Math.min(HiddenStackPolicy.MAX_LINES,
-                    (int) Math.floor(innerH / MEASURE.lineHeight(size)));
-                assertTrue("a line of text fits the card's height at " + scale, lines >= 1);
-                for (String label : LABELS) {
-                    assertTrue(label + " fits at " + scale + " in " + cardH + "px",
-                        HiddenStackPolicy.linesFor(label, MEASURE, size, innerW) <= lines);
-                    for (String word : label.split(" "))
-                        assertTrue(word + " is not wider than the card",
-                            MEASURE.width(word, size) <= innerW);
-                }
+            float size = labelPx(scale);
+            assertTrue(size <= refPx(scale));
+            for (String label : LABELS) {
+                assertTrue(label + " fits at " + scale,
+                    HiddenStackPolicy.linesFor(label, MEASURE, size, innerW)
+                        <= HiddenStackPolicy.MAX_LINES);
+                for (String word : label.split(" "))
+                    assertTrue(word + " is not wider than the card",
+                        MEASURE.width(word, size) <= innerW);
             }
         }
     }
 
     @Test
     public void aLabelThatAlreadyFitsKeepsItsReferenceSize() {
-        float size = HiddenStackPolicy.labelSizePx(Arrays.asList("Keys"), MEASURE,
-            HiddenStackPolicy.cardWidthPx(DENSITY),
-            Math.round(HiddenStackPolicy.CARD_H_DP * DENSITY), 12, refPx(1f));
-        assertEquals(refPx(1f), size, 0.001f);
+        assertEquals(refPx(1f), HiddenStackPolicy.labelSizePx(Arrays.asList("Keys"), MEASURE,
+            CARD_W, DENSITY, refPx(1f)), 0.001f);
     }
 
     @Test
     public void aLongWordShrinksTheSizeRatherThanBeingCut() {
-        List<String> labels = Arrays.asList("Extraordinarily");
-        int width = HiddenStackPolicy.cardWidthPx(DENSITY);
-        int pad = Math.round(HiddenStackPolicy.PAD_DP * DENSITY) + 1;
-        float size = HiddenStackPolicy.labelSizePx(labels, MEASURE, width,
-            Math.round(HiddenStackPolicy.CARD_H_DP * DENSITY), pad, refPx(2f));
-        assertTrue(MEASURE.width("Extraordinarily", size) <= width - 2 * pad);
+        float size = HiddenStackPolicy.labelSizePx(Arrays.asList("Extraordinarily"), MEASURE,
+            CARD_W, DENSITY, refPx(2f));
+        assertTrue(MEASURE.width("Extraordinarily", size)
+            <= CARD_W - 2 * HiddenStackPolicy.insetPx(DENSITY));
         assertTrue(size < refPx(2f));
     }
 
