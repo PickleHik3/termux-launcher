@@ -20,6 +20,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.shape.CornerFamily;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
@@ -29,6 +30,7 @@ import com.termux.app.launcher.home.HomeActionsSheetPolicy.Item;
 import com.termux.app.material.M3;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Home's long-press sheet: a Material 3 modal bottom sheet that slides up from the bottom of the
@@ -61,6 +63,9 @@ public final class HomeActionsSheet extends CoordinatorLayout {
          * ({@link HomeActionsSheetPolicy#navBandCover}); back to 0 once the sheet is put away.
          */
         default void onNavBandCovered(float covered) { }
+
+        /** The Lock layout switch was flipped; the sheet stays up and redraws its rows. */
+        default void onLayoutLockChanged(boolean locked) { }
     }
 
     /** The card's top corners: the M3 extra-large corner. */
@@ -71,6 +76,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @NonNull private final Listener listener;
     @NonNull private final View scrim;
     @NonNull private final LinearLayout card;
+    @NonNull private final TextView lockedNote;
     @NonNull private final View pageGroup;
     @NonNull private final LinearLayout pageRows;
     @NonNull private final View launcherGroup;
@@ -82,6 +88,9 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     /** The last cover told to the listener, so a settle that changes nothing tells it nothing. */
     private float reportedCover;
     private boolean open;
+    /** The rows for a layout that is locked (true) or not, so the switch can redraw in place. */
+    @NonNull private Function<Boolean, List<Item>> source = locked -> java.util.Collections.emptyList();
+    private boolean locked;
 
     public HomeActionsSheet(@NonNull Context context, @NonNull Listener listener) {
         super(context);
@@ -89,6 +98,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         LayoutInflater.from(context).inflate(R.layout.home_actions_sheet, this, true);
         scrim = findViewById(R.id.home_actions_scrim);
         card = findViewById(R.id.home_actions_card);
+        lockedNote = findViewById(R.id.home_actions_locked_note);
         pageGroup = findViewById(R.id.home_actions_group_page);
         pageRows = findViewById(R.id.home_actions_group_page_rows);
         launcherGroup = findViewById(R.id.home_actions_group_launcher);
@@ -170,8 +180,17 @@ public final class HomeActionsSheet extends CoordinatorLayout {
 
     /** Fill the groups with {@code items} and slide the sheet up. */
     public void open(@NonNull List<Item> items) {
-        fill(pageGroup, pageRows, HomeActionsSheetPolicy.inGroup(items, Group.PAGE));
-        fill(launcherGroup, launcherRows, HomeActionsSheetPolicy.inGroup(items, Group.LAUNCHER));
+        open(isLocked -> items, false);
+    }
+
+    /**
+     * Fill the groups from {@code rowsFor} (the rows for a locked or an unlocked layout) and slide
+     * the sheet up. Flipping the Lock layout switch asks it again, with the card still open.
+     */
+    public void open(@NonNull Function<Boolean, List<Item>> rowsFor, boolean layoutLocked) {
+        source = rowsFor;
+        locked = layoutLocked;
+        refill();
         boolean wasOpen = open;
         open = true;
         setVisibility(VISIBLE);
@@ -188,6 +207,21 @@ public final class HomeActionsSheet extends CoordinatorLayout {
                 return true;
             }
         });
+    }
+
+    private void refill() {
+        List<Item> items = source.apply(locked);
+        fill(pageGroup, pageRows, HomeActionsSheetPolicy.inGroup(items, Group.PAGE));
+        fill(launcherGroup, launcherRows, HomeActionsSheetPolicy.inGroup(items, Group.LAUNCHER));
+        boolean note = locked && items.contains(Item.LOCK_LAYOUT);
+        if (note != (lockedNote.getVisibility() == VISIBLE)) lockedNote.setVisibility(note ? VISIBLE : GONE);
+    }
+
+    private void toggleLock(boolean nowLocked) {
+        if (!open || nowLocked == locked) return;
+        locked = nowLocked;
+        refill();
+        listener.onLayoutLockChanged(nowLocked);
     }
 
     /** Slide the sheet away. */
@@ -262,6 +296,17 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         label.setText(labelFor(item));
         row.setContentDescription(label.getText());
         row.setTag(item);
+        if (item == Item.LOCK_LAYOUT) {
+            // A switch row: the whole row flips it and the card stays up.
+            MaterialSwitch toggle = row.findViewById(R.id.home_actions_row_switch);
+            label.setMaxLines(1);
+            toggle.setVisibility(VISIBLE);
+            toggle.setChecked(locked);
+            toggle.setClickable(false);
+            toggle.setFocusable(false);
+            row.setOnClickListener(view -> toggleLock(!locked));
+            return row;
+        }
         row.setOnClickListener(view -> select(item));
         return row;
     }
@@ -289,7 +334,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             case EDIT_PAGES: return R.string.home_actions_edit_pages;
             case REMOVE_PAGE: return R.string.home_actions_remove_page;
             case LOCK_LAYOUT: return R.string.home_actions_lock_layout;
-            case UNLOCK_LAYOUT: return R.string.home_actions_unlock_layout;
             case WALLPAPER: return R.string.home_actions_wallpaper;
             case APPEARANCE: return R.string.home_actions_appearance;
             case LAUNCHER_SETTINGS: return R.string.home_actions_launcher_settings;
@@ -310,7 +354,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             case EDIT_PAGES: return R.drawable.ic_layout_home;
             case REMOVE_PAGE: return R.drawable.ic_symbol_delete;
             case LOCK_LAYOUT: return R.drawable.ic_symbol_lock;
-            case UNLOCK_LAYOUT: return R.drawable.ic_symbol_lock_open;
             case WALLPAPER: return R.drawable.ic_symbol_wallpaper;
             case APPEARANCE: return R.drawable.ic_symbol_palette;
             case LAUNCHER_SETTINGS: return R.drawable.ic_settings;

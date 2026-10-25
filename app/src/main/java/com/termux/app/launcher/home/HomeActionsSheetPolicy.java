@@ -34,10 +34,11 @@ public final class HomeActionsSheetPolicy {
         EDIT_PAGES(Group.PAGE),
         /** Takes the page on screen away; only an empty page, and never the last one. */
         REMOVE_PAGE(Group.PAGE),
-        /** Lock Home layout: nothing on the pages moves by hand until it is unlocked. */
+        /**
+         * Lock layout, a switch row: nothing on the pages moves by hand until it is off. It stands
+         * in both states, so the way back is always where the way in was.
+         */
         LOCK_LAYOUT(Group.PAGE),
-        /** The way back from a locked layout, offered right under Terminal while it is locked. */
-        UNLOCK_LAYOUT(Group.PAGE),
         WALLPAPER(Group.LAUNCHER),
         /** The Appearance editor, on Home's card. */
         APPEARANCE(Group.LAUNCHER),
@@ -79,7 +80,7 @@ public final class HomeActionsSheetPolicy {
      * @param pageEmpty     the Home page on screen holds no widget
      * @param pageCount     how many Home pages there are; Remove page needs more than one
      * @param locked        Lock Home layout is on: the rows that change the pages give way to
-     *                      Unlock ({@link HomeLayoutLock#sheetOffers})
+     *                      the Lock layout switch ({@link HomeLayoutLock#sheetOffers})
      */
     @NonNull
     public static List<Item> itemsFor(boolean isDefaultHome, boolean hasPages,
@@ -88,7 +89,6 @@ public final class HomeActionsSheetPolicy {
         items.add(Item.TERMINAL);
         if (hasPages) {
             ArrayList<Item> page = new ArrayList<>();
-            page.add(Item.UNLOCK_LAYOUT);
             page.add(Item.ADD_WIDGET);
             page.add(Item.ADD_APP);
             page.add(Item.ADD_PAGE);

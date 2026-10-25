@@ -26,9 +26,7 @@ public class HomeLayoutLockTest {
     @Test
     public void theSheetAlwaysHasAWayInAndAWayOut() {
         assertTrue(HomeLayoutLock.sheetOffers(false, Item.LOCK_LAYOUT));
-        assertFalse(HomeLayoutLock.sheetOffers(false, Item.UNLOCK_LAYOUT));
-        assertTrue(HomeLayoutLock.sheetOffers(true, Item.UNLOCK_LAYOUT));
-        assertFalse(HomeLayoutLock.sheetOffers(true, Item.LOCK_LAYOUT));
+        assertTrue(HomeLayoutLock.sheetOffers(true, Item.LOCK_LAYOUT));
     }
 
     @Test

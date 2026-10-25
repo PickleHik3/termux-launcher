@@ -72,13 +72,11 @@ public class HomeActionsSheetPolicyTest {
             HomeActionsSheetPolicy.itemsFor(true, false, false, 0, true));
     }
 
-    @Test public void aLockedLayoutOffersUnlockInsteadOfTheRowsThatChangeIt() {
-        assertEquals(Arrays.asList(TERMINAL, UNLOCK_LAYOUT, WALLPAPER, APPEARANCE,
+    @Test public void aLockedLayoutKeepsTheSwitchAndHidesTheRowsThatChangeIt() {
+        assertEquals(Arrays.asList(TERMINAL, LOCK_LAYOUT, WALLPAPER, APPEARANCE,
                 LAUNCHER_SETTINGS, HELP),
             HomeActionsSheetPolicy.itemsFor(true, true, true, 3, true));
-        List<Item> unlocked = items(true, true, true, 3);
-        assertFalse(unlocked.contains(UNLOCK_LAYOUT));
-        assertTrue(unlocked.contains(LOCK_LAYOUT));
+        assertTrue(items(true, true, true, 3).contains(LOCK_LAYOUT));
     }
 
     @Test public void thePageGroupComesBeforeTheLauncherGroup() {

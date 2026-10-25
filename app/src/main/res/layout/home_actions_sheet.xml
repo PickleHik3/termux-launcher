@@ -46,6 +46,17 @@
             android:textAppearance="?attr/textAppearanceTitleLarge"
             android:textColor="?attr/colorPrimary" />
 
+        <TextView
+            android:id="@+id/home_actions_locked_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:text="@string/home_actions_locked_note"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/home_actions_group_page"
             android:layout_width="match_parent"

@@ -29,4 +29,12 @@
         android:maxLines="2"
         android:textAppearance="?attr/textAppearanceBodyLarge"
         android:textColor="?attr/colorOnSurface" />
+
+    <!-- Only the Lock layout row shows it; the row itself takes the tap. -->
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/home_actions_row_switch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="8dp"
+        android:visibility="gone" />
 </LinearLayout>
