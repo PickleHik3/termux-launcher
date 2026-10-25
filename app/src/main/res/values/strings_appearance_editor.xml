@@ -39,6 +39,7 @@
     <string name="appearance_card_keyboard">Keyboard</string>
     <!-- A card in the stack beside the frame, for something the layout puts away; %1$s is its name. -->
     <string name="appearance_hidden_card_description">%1$s, hidden. Tap to show, or drag it onto the frame.</string>
+    <string name="appearance_theme_hint">Theme, colours and glass</string>
     <string name="appearance_card_appearance">Appearance</string>
     <string name="appearance_card_close">Close</string>
     <string name="appearance_card_menu">More options</string>

@@ -4263,6 +4263,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE, stage, true);
     }
 
+    /** Whether the Appearance editor's theme hint has been dismissed for good. */
+    public boolean isAppearanceThemeHintSeen() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, TERMUX_APP.DEFAULT_APPEARANCE_THEME_HINT_SEEN);
+    }
+
+    public void setAppearanceThemeHintSeen(boolean seen) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, seen, true);
+    }
+
     /** Whether a card was skipped in the run the user is on. */
     public boolean getFirstBootTourSkipped() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

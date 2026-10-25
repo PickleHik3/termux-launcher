@@ -1929,6 +1929,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_FIRST_BOOT_TOUR_STEP_STAGE = "first_boot_tour_step_stage";
         public static final int DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE = 0;
 
+        /** Whether the Appearance editor's "theme, colours and glass" hint has been dismissed. */
+        public static final String KEY_APPEARANCE_THEME_HINT_SEEN = "first_run_appearance_theme_hint_seen";
+        public static final boolean DEFAULT_APPEARANCE_THEME_HINT_SEEN = false;
+
         /** Whether the user skipped past a card in the run they are on. */
         public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";
         public static final boolean DEFAULT_FIRST_BOOT_TOUR_SKIPPED = false;
