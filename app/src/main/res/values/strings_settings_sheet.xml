@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings' sheet over Home (SettingsSheet): its close and expand controls. -->
+<resources>
+    <string name="settings_sheet_close">Close settings</string>
+    <string name="settings_sheet_expand">Show settings full height</string>
+</resources>

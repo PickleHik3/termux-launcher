@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings as a sheet over the live Home (SettingsSheet). The window is see-through: above the
+     sheet Home stays drawn, and a tap there closes Settings. The pages themselves are
+     activity_settings (phone or sw600dp), inflated into settings_sheet_body unchanged.
+     multipleScrollingChildrenSupported: the behaviour judges "is the list scrolled?" by the list
+     under the finger, not the first one it found, so a drag on the header always moves the sheet,
+     whatever page (or two panes) the body shows. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/settings_sheet_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:id="@+id/settings_sheet_coordinator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <View
+            android:id="@+id/settings_sheet_scrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:contentDescription="@string/settings_sheet_close"
+            android:focusable="true" />
+
+        <LinearLayout
+            android:id="@+id/settings_sheet"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center_horizontal|top"
+            android:background="?attr/termuxColorSurfaceBase"
+            android:elevation="@dimen/settings_sheet_elevation"
+            android:orientation="vertical"
+            app:behavior_fitToContents="true"
+            app:behavior_hideable="true"
+            app:behavior_multipleScrollingChildrenSupported="true"
+            app:behavior_skipCollapsed="false"
+            app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+            <FrameLayout
+                android:id="@+id/settings_sheet_handle"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/settings_sheet_handle_strip"
+                android:contentDescription="@string/settings_sheet_expand">
+
+                <View
+                    android:layout_width="@dimen/settings_sheet_handle_width"
+                    android:layout_height="@dimen/settings_sheet_handle_height"
+                    android:layout_gravity="center"
+                    android:alpha="0.4"
+                    android:background="@drawable/settings_sheet_handle"
+                    android:importantForAccessibility="no" />
+
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/settings_sheet_body"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+        </LinearLayout>
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+</FrameLayout>
