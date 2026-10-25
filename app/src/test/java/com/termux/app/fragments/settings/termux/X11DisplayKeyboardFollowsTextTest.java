@@ -67,8 +67,21 @@ public class X11DisplayKeyboardFollowsTextTest {
     }
 
     @Test
+    public void beforeLinuxAppsAreSetUp_theRowIsGreyedAndKeepsItsValue() {
+        Application app = RuntimeEnvironment.getApplication();
+        Preference row = launch().getPreferenceScreen().findPreference(KEY);
+        assertNotNull(row);
+        assertFalse(row.isEnabled());
+        assertEquals(app.getString(R.string.settings_x11_keyboard_follows_text_needs_setup),
+            row.getSummary());
+        assertTrue(TermuxAppSharedPreferences.build(app, true).isX11KeyboardFollowsTextEnabled());
+    }
+
+    @Test
     public void inEveryTouchMode_theRowIsLiveAndSaysWhatItDoes() {
         Application app = RuntimeEnvironment.getApplication();
+        com.termux.app.x11.GuiAppsSetupGuide.preferences(app).edit()
+            .putBoolean(com.termux.app.x11.GuiAppsSetupGuide.KEY_COPIED, true).commit();
         for (String mode : new String[]{"1", "2", "3"}) {
             setTouchMode(mode);
             Preference row = launch().getPreferenceScreen().findPreference(KEY);

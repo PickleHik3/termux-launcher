@@ -429,8 +429,9 @@
     <string name="settings_x11_touch_mode_direct">Every touch goes straight to the app.</string>
     <string name="settings_x11_android_keyboard_title">Use Android keyboard</string>
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
-    <string name="settings_x11_keyboard_follows_text_title">Keyboard pops up</string>
-    <string name="settings_x11_keyboard_follows_text_summary">Opens when you tap a text field and closes when you tap elsewhere.</string>
+    <string name="settings_x11_keyboard_follows_text_title">Auto Keyboard</string>
+    <string name="settings_x11_keyboard_follows_text_summary">Automatic Keyboard show &amp; hide when you tap text input field</string>
+    <string name="settings_x11_keyboard_follows_text_needs_setup">Set up Linux apps first</string>
     <string name="settings_x11_keyboard_over_display_title">Keyboard over the window</string>
     <string name="settings_x11_keyboard_over_display_overlay">Covers the app</string>
     <string name="settings_x11_keyboard_over_display_resize">Shrinks the app</string>

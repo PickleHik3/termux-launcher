@@ -31,6 +31,16 @@ public final class GuiAppsSetupGuide {
 
     private GuiAppsSetupGuide() {}
 
+    /**
+     * Whether the guide has run, which is what fcitx5-backed features need. An edition with no
+     * guide (nix) has nothing to wait for, so it counts as set up.
+     */
+    public static boolean isSetUp(@NonNull Context context) {
+        TourEdition edition = TourEdition.of(context.getPackageName());
+        return GuiAppsSetup.routesFor(edition).isEmpty()
+            || preferences(context).getBoolean(KEY_COPIED, false);
+    }
+
     /** One screen of the guide. */
     public enum Step { SOURCE, DISTRO, STARTERS, COMMAND, GRAPHICS }
 
