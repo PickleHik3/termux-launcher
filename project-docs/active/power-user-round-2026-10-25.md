@@ -40,6 +40,19 @@ All work lands on `v2-redesign`. Waves: 1 = items 1–7 (parallel where files ar
 7. **Accessibility.** Palette results and the dock's long-press menus get accessibility nodes
    (virtual views where they are drawn). The in-app keyboard is out of scope.
 
+### Follow-ups decided after wave 1 (2026-10-25)
+
+- **The user's contrast level wins.** The floor follows the existing Terminal contrast setting
+  (Softer = 3:1, default 4.5:1); dim keeps a proportionally lower floor.
+- **Dim blends toward the backdrop.** Faint text is the colour mixed a third of the way toward what it
+  stands on, instead of xterm's darken-by-a-third; identical on black, quieter on light backgrounds.
+- **A–Z icons warm on touch-down.** A letter's first page of matches starts rendering when the finger
+  lands on it, through the existing budgeted dock icon cache. Item 3 was not a bug: Codex's screenshot
+  caught the normal 180 ms arrival.
+- **Arrow keys walk the drawer's search results** with a visible highlight; Enter opens it.
+- Item 4's cause, found on the emulator: the active pane's `TerminalView` held focus with no session,
+  and `TerminalView.onKeyDown` swallows every key while `mEmulator` is null (fixed in 5ce4ce853).
+
 ## Wave 2: settings from the home screen
 
 8. **Settings as a bottom sheet.** Launcher settings opens as a bottom sheet over the live home,
