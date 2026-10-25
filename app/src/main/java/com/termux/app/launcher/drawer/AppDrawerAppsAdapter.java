@@ -97,10 +97,6 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     public void setPickupEnabled(boolean enabled) { mPickupEnabled = enabled; }
 
     /**
-     * Replaces the visible list. Called with the full catalogue, sorted by label, for an empty query
-     * and with the ranked results otherwise.
-     */
-    /**
      * Sets the highlight ahead of a list submission, which is the sole rebind and so draws it.
      */
     public void presetHighlight(int position) {
@@ -116,6 +112,10 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         if (position >= 0 && position < mItems.size()) notifyItemChanged(position, HIGHLIGHT_PAYLOAD);
     }
 
+    /**
+     * Replaces the visible list. Called with the full catalogue, sorted by label, for an empty query
+     * and with the ranked results otherwise.
+     */
     public void submit(@NonNull List<LauncherAppEntry> entries) {
         submit(entries, null);
     }
