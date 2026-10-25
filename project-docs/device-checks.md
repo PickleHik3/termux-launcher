@@ -910,3 +910,20 @@ Developer
 - 2026-10-25 · b6b33bc7c · Contrast floor on pong: a Powerline/starship prompt on a transparent pane has no colour seams at the arrows; typing, scroll and heavy-output frame times match the baselines in docs/agents/performance.md · pong.
 - 2026-10-25 · 4957e1b52 · A floating terminal on Home fades with the drawer and comes back without a flash · pong.
 - 2026-10-25 · — · First tap on an A–Z letter whose apps aren't pinned: how long the grey loading tiles show (decides whether to pre-render) · pong.
+
+## Power-user round, wave 2 and follow-ups (2026-10-25)
+
+Seen on emu (debug, d10b3e471): Launcher settings opens as a sheet over the live Home, Back steps
+up and closes from the root, dragging the handle takes it to full height, a tap above closes it,
+Settings › Home › Icon size changes Home behind the sheet; the Lock layout switch spans its line,
+hides the add/edit rows and the card stays up. Still owed:
+
+Agent
+- 2026-10-25 · 05ec8c647 · Settings sheet: the search field raises the sheet with the keyboard; landscape opens full height; light, dark and black themes; HOME pressed with the sheet open; `am force-stop` with it open · emu.
+- 2026-10-25 · 05ec8c647 · Settings opened from the palette, notices and the drawer also come up as the sheet over Home · emu.
+- 2026-10-25 · 595582a52 · Drawer search with a keyboard: the first result is ringed, arrows walk it in the vertical grid, categories and horizontal pages, Enter opens it, a touch clears it · emu, `input keyevent`.
+- 2026-10-25 · bcc0cb94c · `printf '\e[2mfaint\e[0m normal'` on a light theme: faint reads quieter; Terminal contrast Softer/Default/Harder visibly change body text with wallpaper colours on · emu.
+
+Developer
+- 2026-10-25 · 05ec8c647 · The Surface: settings as a centred two-pane sheet at 840dp · surface.
+- 2026-10-25 · b27f2b2df · First tap on an unpinned A–Z letter: icons already there on release; repeated scrubs leave no memory growth · pong.
