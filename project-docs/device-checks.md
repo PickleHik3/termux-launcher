@@ -942,3 +942,18 @@ Agent
 
 Developer
 - 2026-10-25 · 5b5b34d01 · Five seconds for Undo: long enough in real use? · pong.
+
+## Power-user round, Home ↔ dock and shortcuts (2026-10-25)
+
+Seen on emu (debug, 6b6fc51b8): a dock app dragged to a free Home cell lands there and leaves the dock;
+a Home icon dragged into the dock inserts between two pins and leaves Home; Chrome's "New tab" shortcut
+dragged out of the App menu lands on Home and opens Chrome. Still owed:
+
+Agent
+- 2026-10-25 · 6b6fc51b8 · Home icon onto a full dock page: the last pin moves to the next dock page; holding at the dock's edge turns its page · emu.
+- 2026-10-25 · 6b6fc51b8 · Home icon released over the middle of a dock icon makes a dock folder; a dock app onto Remove unpins it and Undo pins it back · emu.
+- 2026-10-25 · 6b6fc51b8 · Both drags with the keyboard up, and in Docked and Floating dock styles · emu.
+- 2026-10-25 · 6b6fc51b8 · A pinned shortcut survives its app updating (`pinShortcuts`) · emu.
+
+Developer
+- 2026-10-25 · 6b6fc51b8 · Drag feel on pong: the hold, the sideways pickup from the dock, no jank in the carried picture · pong.

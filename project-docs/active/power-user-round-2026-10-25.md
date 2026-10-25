@@ -89,3 +89,19 @@ All work lands on `v2-redesign`. Waves: 1 = items 1–7 (parallel where files ar
 Workers compile and run the test classes they write. After each wave: install on `emu`, re-run the
 Codex power-user session, and add what still needs a phone to `project-docs/device-checks.md`. Pong
 only when the developer asks.
+
+## Status and what is still open (2026-10-25)
+
+Waves 1–3 are merged on `v2-redesign` and seen on the emulator (owed checks in
+`project-docs/device-checks.md`). Not built or found while verifying, for the next round:
+
+- **Pin card drag-to-place (item 10's long-press part).** The card runs in its own task over the asking
+  app, so Home is not behind it; it needs a cross-window system drag (Launcher3's PinItemDragListener).
+  "Add to Home" covers the need meanwhile.
+- **Pinned shortcuts carry no app badge** (Launcher3 badges them with the app's icon).
+- **The carried icon keeps its label** while dragged, which crosses the dock's search field.
+- **Settings sheet top band:** the handle strip and the toolbar are two tones.
+- **Drawer search pill has no accessibility label** carrying the query; **empty dock slots** read as
+  unlabeled buttons.
+- **Widget picker copy** says "hold to place" while a tap adds the widget.
+- **Appearance opens with the Home card raised**, so the theme hint only shows after the card is put down.
