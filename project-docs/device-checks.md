@@ -20,6 +20,12 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(statusbar): the strip behind the system bar keeps the pane's look
+  after a trip to the Workspace" · Home and the Workspace with different status-bar looks
+  (Opacity or Tint on one half only), wallpaper mode, Docked: swipe Home → Workspace → Home, and
+  Home → part way → back: the strip behind the system status bar and the status pane below it read
+  as one sheet of glass each time, in Home's look; the Workspace still shows its own · pong or
+  emulator, keyboard down and up.
 - 2026-10-25 · commit "feat(sound): one launcher-run sound server and media controls for
   every shell and distro" · in `proot-distro login debian`: the distro's
   `/etc/pulse/client.conf.d/termux-launcher.conf` names tcp:127.0.0.1:4713 and the cookie copy,

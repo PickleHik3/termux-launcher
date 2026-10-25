@@ -130,7 +130,10 @@ public final class SeamDress {
      * @param stackPage  the page whose half the stack wears ({@link #stackPage}); the committed
      *                   page at rest
      * @param seamTravel whether the wall is sliding across the seam: a frame of the gesture has
-     *                   reached the other half
+     *                   reached the other half and the wall has not landed yet
+     *                   ({@link SeamCrossing#sliding}). A landed crossing is at rest, so the
+     *                   page's commit dresses the status bar in its own half's look, the one
+     *                   every later pass reads
      */
     public static boolean wearsHome(@NonNull Surface surface, @NonNull PaneWallPage committed,
                                     @NonNull PaneWallPage stackPage, boolean seamTravel) {

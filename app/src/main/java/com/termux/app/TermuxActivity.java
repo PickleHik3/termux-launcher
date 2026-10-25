@@ -6294,7 +6294,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // On the one shared layout Home wears the Workspace's shape: there is no other to wear.
         return homeHoldsOwnLayout()
             && com.termux.app.place.SeamDress.wearsHome(surface, mLastWallPage, stackDressPage(),
-                mCrossing.seam().other() != null);
+                mCrossing.seam().sliding());
     }
 
     /**
@@ -6305,7 +6305,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private TermuxAppSharedPreferences.WallHalf lookHalf(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         return com.termux.app.place.SeamDress.lookHalf(surface, mLastWallPage, stackDressPage(),
-            mCrossing.seam().other() != null);
+            mCrossing.seam().sliding());
     }
 
     /** The half whose look the stack (dock, extra keys, keyboard) wears now. */
@@ -6385,6 +6385,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applySuggestionBarSurfaceStyling();
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
+     * Whether the status bar wears anything different on Home than on the Workspace: the shape
+     * (Style, Corners, Margin) or the look values (ADR 0013).
+     */
+    private boolean statusDressDiffersAcrossHalves() {
+        if (mPreferences == null) return false;
+        return !dressOf(com.termux.app.wall.PaneWallPage.WIDGETS).shape().equals(
+                dressOf(com.termux.app.wall.PaneWallPage.TERMINAL).shape())
+            || !com.termux.app.place.HalfLook.read(mPreferences, TermuxAppSharedPreferences.WallHalf.HOME)
+                .statusEquals(com.termux.app.place.HalfLook.read(mPreferences,
+                    TermuxAppSharedPreferences.WallHalf.WORKSPACE));
     }
 
     /**
@@ -23597,6 +23610,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean leavingKeyboardUp = committedKeyboardVisible();
             moved = mChromeTravelMoved;
             com.termux.app.wall.PaneWallPage left = mLastWallPage;
+            // The half whose look the status bar wore through the slide: the Workspace's while
+            // the wall slid across the seam (SeamDress), its own half's otherwise.
+            TermuxAppSharedPreferences.WallHalf statusHalfTravelled = statusLookHalf();
             mChromeTravelMoved = false;
             // The material blend, if one ran, has landed on the arriving place's material; the
             // pass below paints that material plainly, and the blend's layers go with it.
@@ -23622,9 +23638,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // the committed one (landed on the other half, commitWallPage arranges it by that
             // half's layout, which stands the same rows; back where it started, the pass below
             // puts the committed rows back, already off screen); and the bar is dressed for its
-            // own page again. The stack keeps the dress it travelled in, and the status bar the
-            // Workspace's, through the page's commit below, which dresses everything for the page
-            // it lands on: landed, that is the dress the stack already wears (SeamCrossing.end).
+            // own page again. The stack keeps the dress it travelled in through the page's commit
+            // below, which dresses everything for the page it lands on: landed, that is the dress
+            // the stack already wears (SeamCrossing.end). The status bar is at rest from here
+            // (SeamCrossing.sliding), so the commit dresses it, its glass and the strip behind the
+            // system status bar together, in the landed half's look.
             com.termux.app.place.SeamCrossing.Landing seamLanding = crossingLanding.seam();
             // Melting beads land as the page did: their own size on the beaded half, the slab
             // on the other.
@@ -23654,6 +23672,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                     | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             mCrossing.end();
+            // A slide that came back to Home committed nothing, so no commit dressed the status
+            // bar back out of the Workspace's look it slid in. Its glass and the strip behind the
+            // system status bar are glazed again here, together, in Home's, or the strip alone
+            // takes Home's at the next insets pass and parts from the pane below it.
+            if (page == left && statusLookHalf() != statusHalfTravelled
+                && statusDressDiffersAcrossHalves())
+                refreshTerminalWindowBar();
             // A slide that came back past the swap without a frame there to undo it (the drawer
             // or reduced motion took the last frames) leaves the stack dressed for the half it did
             // not land on: it is dressed back now, in the frame that puts the stack back on screen.
