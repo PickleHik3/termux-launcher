@@ -103,7 +103,7 @@ final class SupervisedProcess {
                 return;
             } catch (IOException | RuntimeException e) {
                 Logger.logWarn(LOG_TAG, "Could not start " + name + ": " + e.getMessage());
-                if (!cap.onExit(System.currentTimeMillis())) {
+                if (!cap.onExit(android.os.SystemClock.elapsedRealtime())) {
                     giveUp();
                     return;
                 }
@@ -149,7 +149,7 @@ final class SupervisedProcess {
                 wanted = false;
                 return;
             }
-            if (next == AfterExit.RESTART && !cap.onExit(System.currentTimeMillis())) {
+            if (next == AfterExit.RESTART && !cap.onExit(android.os.SystemClock.elapsedRealtime())) {
                 giveUp();
                 return;
             }
