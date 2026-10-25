@@ -20,6 +20,19 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(x11): GPU setup follows Termux's own package manager, refreshes once,
+  never asks; add --estimate" · a full run on pong (pacman Termux with dpkg installed) prints
+  "Package manager: pacman", syncs the databases once, installs the Vulkan wrapper's
+  .pkg.tar.xz, asks nothing after the page's confirmation, and removes glmark2 and the losing
+  drivers at the end (`pacman -Q glmark2` → not found) · pong.
+- 2026-10-25 · commit "feat(settings): run the graphics benchmark on its page, in a read-only
+  terminal" · Run benchmark: the dialog says "Working out the sizes…", then three sizes, Run
+  enabled; Run shows the panel with "Step N of 8 · …" and live output, no session/pane/tab
+  appears in the session manager; Stop during step 3 shows the script putting packages back and
+  ends "stopped" with nothing half-removed; leave mid-run: the notification counts steps and
+  tapping it reopens the page on the live output (no second Settings on top); return after it
+  finished: Close, then the results list shows the new scores; no "press Enter" line at the end ·
+  pong.
 - 2026-10-25 · commit "feat(settings): grey Auto Keyboard until Linux apps are set up" · Settings,
   Linux apps, Input: before running Set up Linux apps, "Auto Keyboard" is greyed with "Set up Linux
   apps first"; once the guide's command has installed fcitx5 and you come back it is live and reads
@@ -499,6 +512,9 @@ dropped; what follows is what still owes a look.
   pong.
 
 ## Developer
+- 2026-10-25 · commit "feat(settings): run the graphics benchmark on its page, in a read-only
+  terminal" · the run panel and the confirmation read well in light, dark and black themes and at
+  font scale 1.3 (the terminal box keeps the terminal's own colours); rotate during a run · pong.
 - 2026-10-25 · commit "feat(settings): Sound and Media controls switches on the Linux apps page" · the
   Audio section's two switches and its status line read right and do not clip at font scale 1.3
   and in dark/light/scheme themes; Media controls greys out with Sound off · pong.
