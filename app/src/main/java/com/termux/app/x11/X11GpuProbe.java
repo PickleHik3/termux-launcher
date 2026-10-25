@@ -356,8 +356,10 @@ public final class X11GpuProbe {
     }
 
     private static Recommendation virgl(Inputs in, boolean angle) {
+        // Without LIBGL_KOPPER_DISABLE, Mesa draws through Zink on any Vulkan driver it finds and
+        // never reads GALLIUM_DRIVER: on an Adreno with Turnip installed, "virgl" was Turnip.
         List<String> env = Arrays.asList("GALLIUM_DRIVER=virpipe", "MESA_GL_VERSION_OVERRIDE=4.3COMPAT",
-            "MESA_GLES_VERSION_OVERRIDE=3.2", "MESA_NO_ERROR=1", "LIBGL_DRI3_DISABLE=1");
+            "MESA_GLES_VERSION_OVERRIDE=3.2", "MESA_NO_ERROR=1", "LIBGL_DRI3_DISABLE=1", "LIBGL_KOPPER_DISABLE=1");
         if (angle) {
             return new Recommendation(Profile.VIRGL_ANGLE,
                 "this GPU's own OpenGL driver is unreliable for Linux apps; virgl through ANGLE is the safe path",
