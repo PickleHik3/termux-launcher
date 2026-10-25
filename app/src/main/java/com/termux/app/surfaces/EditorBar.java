@@ -50,7 +50,10 @@ final class EditorBar {
     /** The half line's dots: 6dp, the shown half's dot 16 × 6; its height is the pose's. */
     private static final int DOT_DP = 6;
     private static final int ACTIVE_DOT_DP = 16;
-    /** The theme hint stands this far above the bar, and keeps this far from the screen's sides. */
+    /**
+     * The theme hint stands this far above the half line (so it never covers the half's name), and
+     * keeps this far from the screen's sides.
+     */
     private static final int HINT_GAP_DP = 6;
     private static final int HINT_SIDE_DP = 16;
 
@@ -62,6 +65,8 @@ final class EditorBar {
     @NonNull private final MaterialButton mPalette;
     @NonNull private final TextView mHint;
     private boolean mHintWanted;
+    /** The half line's height as last set; the hint stands above it. */
+    private int mHalfRowPx;
     @NonNull private final LinearLayout mHalfRow;
     @NonNull private final View mHomeDot;
     @NonNull private final View mWorkspaceDot;
@@ -193,7 +198,7 @@ final class EditorBar {
             FrameLayout.LayoutParams hint = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            hint.bottomMargin = dp(BAR_DP + HINT_GAP_DP);
+            hint.bottomMargin = dp(HINT_GAP_DP);
             content.addView(mHint, hint);
         }
     }
@@ -203,6 +208,7 @@ final class EditorBar {
      * set only when it changes, so the line and the room left for it always agree.
      */
     void setHalfRowHeight(int px) {
+        mHalfRowPx = px;
         ViewGroup.LayoutParams params = mHalfRow.getLayoutParams();
         if (params != null && params.height != px) {
             params.height = px;
@@ -266,8 +272,9 @@ final class EditorBar {
      */
     void place(float barLiftPx, float halfLiftPx) {
         mBar.setTranslationY(-barLiftPx);
-        mHint.setTranslationY(-barLiftPx);
         mHalfRow.setTranslationY(-halfLiftPx);
+        int halfRowPx = mHalfRowPx > 0 ? mHalfRowPx : mHalfRow.getHeight();
+        mHint.setTranslationY(-(Math.max(barLiftPx + dp(BAR_DP), halfLiftPx + halfRowPx)));
     }
 
     /** The bar shown (at rest) or hidden (a card is up). */
