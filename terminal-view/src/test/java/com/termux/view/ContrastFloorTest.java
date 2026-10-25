@@ -122,7 +122,7 @@ public class ContrastFloorTest {
             memo.setBackdrop(backdrop);
             for (int color : sweep()) {
                 double rawNormal = ContrastFloor.contrast(color, backdrop);
-                double rawDim = ContrastFloor.contrast(ContrastFloor.dim(color), backdrop);
+                double rawDim = ContrastFloor.contrast(ContrastFloor.dim(color, backdrop), backdrop);
                 if (rawDim > rawNormal) continue;
                 assertTrue(hex(color) + " on " + hex(backdrop),
                     ContrastFloor.contrast(memo.dimText(color), backdrop)
@@ -138,7 +138,7 @@ public class ContrastFloorTest {
         for (int color : sweep()) {
             assertEquals(ContrastFloor.atLeast(color, 0xFF000000, ContrastFloor.TEXT),
                 memo.text(color));
-            assertEquals(ContrastFloor.atLeast(ContrastFloor.dim(color), 0xFF000000,
+            assertEquals(ContrastFloor.atLeast(ContrastFloor.dim(color, 0xFF000000), 0xFF000000,
                 ContrastFloor.DIM_TEXT), memo.dimText(color));
         }
         int grey = 0xFF606060;
@@ -146,6 +146,60 @@ public class ContrastFloorTest {
         memo.setBackdrop(0xFFFFFFFF);
         assertNotEquals(onBlack, memo.text(grey));
         assertEquals(ContrastFloor.atLeast(grey, 0xFFFFFFFF, ContrastFloor.TEXT), memo.text(grey));
+    }
+
+    @Test
+    public void dimOnBlackIsTwoThirdsOfEachChannelAsBefore() {
+        for (int color : sweep()) {
+            int expected = 0xFF000000 | (((color >> 16) & 0xFF) * 2 / 3 << 16)
+                | (((color >> 8) & 0xFF) * 2 / 3 << 8) | ((color & 0xFF) * 2 / 3);
+            assertEquals(hex(color), expected, ContrastFloor.dim(color, 0xFF000000));
+        }
+    }
+
+    @Test
+    public void dimReadsQuieterThanNormalOnDarkAndLightBackdrops() {
+        for (int backdrop : concat(DARK_BACKDROPS, PALE_BACKDROPS)) {
+            // Greys: a saturated colour can swap luminance with its mix (magenta toward pale
+            // green), which is hue, not loudness.
+            for (int color : sweep()) {
+                if (((color >> 16) & 0xFF) != ((color >> 8) & 0xFF)
+                    || ((color >> 8) & 0xFF) != (color & 0xFF)) continue;
+                if (ContrastFloor.contrast(color, backdrop) < 1.2d) continue;
+                assertTrue(hex(color) + " on " + hex(backdrop),
+                    ContrastFloor.contrast(ContrastFloor.dim(color, backdrop), backdrop)
+                        < ContrastFloor.contrast(color, backdrop));
+            }
+        }
+    }
+
+    @Test
+    public void dimFloorIsTheSameShareOfTheTextFloorAtEveryLevel() {
+        assertEquals(ContrastFloor.DIM_TEXT, ContrastFloor.dimFloorFor(ContrastFloor.TEXT), 1e-9);
+        assertEquals(2d, ContrastFloor.dimFloorFor(3d), 1e-9);
+        assertEquals(7d * 2 / 3, ContrastFloor.dimFloorFor(7d), 1e-9);
+    }
+
+    @Test
+    public void memoHoldsTheLevelsFloorAndForgetsWhenItChanges() {
+        int backdrop = 0xFF202830;
+        int grey = 0xFF50585F;
+        ContrastFloor.Memo memo = new ContrastFloor.Memo();
+        memo.setBackdrop(backdrop);
+        assertEquals(ContrastFloor.atLeast(grey, backdrop, 4.5d), memo.text(grey));
+        int atDefault = memo.text(grey);
+        int dimAtDefault = memo.dimText(grey);
+        memo.setTextFloor(3d);
+        assertEquals(ContrastFloor.atLeast(grey, backdrop, 3d), memo.text(grey));
+        assertEquals(ContrastFloor.atLeast(ContrastFloor.dim(grey, backdrop), backdrop, 2d),
+            memo.dimText(grey));
+        assertNotEquals(atDefault, memo.text(grey));
+        memo.setTextFloor(7d);
+        assertEquals(ContrastFloor.atLeast(grey, backdrop, 7d), memo.text(grey));
+        assertTrue(ContrastFloor.contrast(memo.text(grey), backdrop) >= 7d);
+        memo.setTextFloor(ContrastFloor.TEXT);
+        assertEquals(atDefault, memo.text(grey));
+        assertEquals(dimAtDefault, memo.dimText(grey));
     }
 
     @Test

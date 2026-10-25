@@ -16,7 +16,7 @@ import java.util.Arrays;
  */
 public final class ContrastFloor {
 
-    /** WCAG AA for body text. */
+    /** WCAG AA for body text: the default level's floor; the user's level can move it. */
     public static final double TEXT = 4.5d;
     /** Faint text: WCAG's large-text floor, so it still recedes behind {@link #TEXT}. */
     public static final double DIM_TEXT = 3.0d;
@@ -54,13 +54,24 @@ public final class ContrastFloor {
     }
 
     /**
-     * Faint text the way xterm and libvte derive it: two thirds of each channel, opaque. Darker,
-     * which recedes on a dark backdrop; on a light one it reads darker, not fainter.
+     * The faint text floor that goes with a normal text floor of {@code textFloor}: the same share
+     * of it as {@link #DIM_TEXT} is of {@link #TEXT}, so faint ink stays below normal ink at every
+     * level the user can pick.
      */
-    public static int dim(int color) {
-        final int red = (0xFF & (color >> 16)) * 2 / 3;
-        final int green = (0xFF & (color >> 8)) * 2 / 3;
-        final int blue = (0xFF & color) * 2 / 3;
+    public static double dimFloorFor(double textFloor) {
+        return textFloor * (DIM_TEXT / TEXT);
+    }
+
+    /**
+     * Faint text: {@code color} mixed one third of the way toward {@code under}, the colour it
+     * stands on, opaque. On black that is the xterm and libvte rule (two thirds of each channel);
+     * on a light backdrop it fades toward the light instead of darkening, so faint text is always
+     * the quieter of the two.
+     */
+    public static int dim(int color, int under) {
+        final int red = (2 * (0xFF & (color >> 16)) + (0xFF & (under >> 16))) / 3;
+        final int green = (2 * (0xFF & (color >> 8)) + (0xFF & (under >> 8))) / 3;
+        final int blue = (2 * (0xFF & color) + (0xFF & under)) / 3;
         return 0xFF000000 | (red << 16) | (green << 8) | blue;
     }
 
@@ -142,6 +153,19 @@ public final class ContrastFloor {
         private final int[] mValues = new int[SLOTS];
         private int mBackdrop;
         private boolean mHasBackdrop;
+        private double mTextFloor = TEXT;
+        private double mDimFloor = DIM_TEXT;
+
+        /**
+         * The floor normal text is held to, {@link #TEXT} until told otherwise; faint text gets
+         * {@link #dimFloorFor} of it. A different floor forgets every answer.
+         */
+        public void setTextFloor(double floor) {
+            if (floor == mTextFloor) return;
+            mTextFloor = floor;
+            mDimFloor = dimFloorFor(floor);
+            Arrays.fill(mKeys, 0L);
+        }
 
         /** The opaque colour text stands on; a different one forgets every answer. */
         public void setBackdrop(int backdrop) {
@@ -156,12 +180,12 @@ public final class ContrastFloor {
             return mBackdrop;
         }
 
-        /** {@code color} as normal text: held to {@link #TEXT}. */
+        /** {@code color} as normal text: held to the text floor ({@link #TEXT} by default). */
         public int text(int color) {
             return lookup(color, false);
         }
 
-        /** {@code color} as faint text: {@link #dim} of it, held to {@link #DIM_TEXT}. */
+        /** {@code color} as faint text: {@link #dim} of it toward the backdrop, held to the dim floor. */
         public int dimText(int color) {
             return lookup(color, true);
         }
@@ -172,8 +196,8 @@ public final class ContrastFloor {
             if (dim) hash ^= 0x5BD1E995;
             final int slot = (hash ^ (hash >>> 15)) & (SLOTS - 1);
             if (mKeys[slot] == key) return mValues[slot];
-            final int answer = dim ? atLeast(ContrastFloor.dim(color), mBackdrop, DIM_TEXT)
-                : atLeast(color, mBackdrop, TEXT);
+            final int answer = dim ? atLeast(ContrastFloor.dim(color, mBackdrop), mBackdrop, mDimFloor)
+                : atLeast(color, mBackdrop, mTextFloor);
             mKeys[slot] = key;
             mValues[slot] = answer;
             return answer;

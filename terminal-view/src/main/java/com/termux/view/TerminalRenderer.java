@@ -371,6 +371,8 @@ public final class TerminalRenderer {
     private int mContrastBackdrop;
     /** Normal and faint ink held to {@link ContrastFloor} on the current backdrop, per colour. */
     private final ContrastFloor.Memo mContrastMemo = new ContrastFloor.Memo();
+    /** The floor normal text is held to; the memo and faint text's share follow it. */
+    private double mContrastFloor = ContrastFloor.TEXT;
 
     /** The URL cells of the visible rows, refreshed each frame from the screen text. */
     private final UrlUnderlines mUrlUnderlines = new UrlUnderlines();
@@ -917,6 +919,32 @@ public final class TerminalRenderer {
     }
 
     /**
+     * The contrast normal text is held to, from the user's Terminal contrast level; faint text is
+     * held proportionally lower. Zero or less means {@link ContrastFloor#TEXT}. Set on change
+     * only, never per frame: a change re-records every row.
+     */
+    public void setContrastFloor(double floor) {
+        final double text = floor > 0d ? floor : ContrastFloor.TEXT;
+        if (mContrastFloor == text) return;
+        mContrastFloor = text;
+        mContrastMemo.setTextFloor(text);
+        mRowCache.invalidate();
+    }
+
+    public double getContrastFloor() {
+        return mContrastFloor;
+    }
+
+    /**
+     * The colour faint ink on a cell whose resolved background is {@code backColor} stands on: the
+     * cell's own where the program chose one, else the backdrop the floor is measured against.
+     */
+    private int dimGround(int backColor, int defaultBackColor) {
+        if (backColor != defaultBackColor) return backColor;
+        return mContrastBackdrop != 0 ? mContrastBackdrop : defaultBackColor;
+    }
+
+    /**
      * The ink a glyph is drawn in: {@code foreColor} — made faint for {@code dim} — held to its
      * contrast floor where it stands on the default background {@code defaultBackColor}. Text in
      * the default background's own colour was hidden on purpose and stays so; text on a cell
@@ -925,7 +953,7 @@ public final class TerminalRenderer {
     int legibleInk(int foreColor, int backColor, int defaultBackColor, boolean dim) {
         if (backColor != defaultBackColor
             || (foreColor | 0xFF000000) == (defaultBackColor | 0xFF000000)) {
-            return dim ? ContrastFloor.dim(foreColor) : foreColor;
+            return dim ? ContrastFloor.dim(foreColor, backColor) : foreColor;
         }
         mContrastMemo.setBackdrop(mContrastBackdrop != 0 ? mContrastBackdrop : defaultBackColor);
         return dim ? mContrastMemo.dimText(foreColor) : mContrastMemo.text(foreColor);
@@ -2462,7 +2490,8 @@ public final class TerminalRenderer {
             }
         }
         if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
-            final int asked = dim ? dimColor(foreColor) : foreColor;
+            final int asked = dim ? ContrastFloor.dim(foreColor,
+                dimGround(backColor, palette[TextStyle.COLOR_INDEX_BACKGROUND])) : foreColor;
             if (foregroundOverride != 0) {
                 foreColor = asked;
             } else {
@@ -2572,23 +2601,17 @@ public final class TerminalRenderer {
     }
 
     /**
-     * Dim color handling used by libvte which in turn took it from xterm
-     * (https://bug735245.bugzilla-attachments.gnome.org/attachment.cgi?id=284267).
-     */
-    private static int dimColor(int color) {
-        return ContrastFloor.dim(color);
-    }
-
-    /**
      * The final ink colour of one cell, so that a synthesized glyph inverts under a block cursor or
      * inside a selection exactly as the text around it does.
      */
-    private static int resolveInkColor(long textStyle, int[] palette, boolean boldWithBright,
-                                       boolean reverseVideo) {
-        final int foreColor = (int) (resolveRunColors(textStyle, palette, boldWithBright,
-            reverseVideo) >>> 32);
+    private int resolveInkColor(long textStyle, int[] palette, boolean boldWithBright,
+                                boolean reverseVideo) {
+        final long colors = resolveRunColors(textStyle, palette, boldWithBright, reverseVideo);
+        final int foreColor = (int) (colors >>> 32);
         return (TextStyle.decodeEffect(textStyle) & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0
-            ? dimColor(foreColor) : foreColor;
+            ? ContrastFloor.dim(foreColor,
+                dimGround((int) colors, palette[TextStyle.COLOR_INDEX_BACKGROUND]))
+            : foreColor;
     }
 
     /**
@@ -2999,7 +3022,9 @@ public final class TerminalRenderer {
                     int ink = (int) (resolveRunColors(style, palette, boldWithBright,
                         reverseVideo || invertText) >>> 32);
                     if (textOverride != 0) ink = textOverride;
-                    if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0) ink = dimColor(ink);
+                    if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0)
+                        ink = ContrastFloor.dim(ink, dimGround(overlayBackground,
+                            palette[TextStyle.COLOR_INDEX_BACKGROUND]));
                     drawSynthesizedCell(canvas, codePoint, startColumn, width, y, horizontalOffset,
                         ink);
                 }
