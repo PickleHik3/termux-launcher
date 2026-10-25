@@ -651,7 +651,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         // The launch itself is the dock's ladder, transitions and usage recording included; the
         // drawer is put away by the lifecycle path the launch triggers.
-        if (content != null) content.launchFirstResult();
+        if (content != null) content.launchHighlightedResult();
     }
 
     @Override

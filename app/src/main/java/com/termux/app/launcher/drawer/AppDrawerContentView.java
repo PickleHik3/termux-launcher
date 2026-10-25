@@ -309,7 +309,12 @@ public final class AppDrawerContentView extends FrameLayout
             }
 
             @Override public void onSearchAction() {
-                launchFirstResult();
+                launchHighlightedResult();
+            }
+
+            @Override public boolean onArrowKey(int keyCode) {
+                AppDrawerSearchController search = mSearch;
+                return search != null && mTextFieldSearch && search.handleHighlightKey(keyCode);
             }
 
             @Override public void onDismissAction() {
@@ -1193,27 +1198,31 @@ public final class AppDrawerContentView extends FrameLayout
         return mSearchRevealRequested || hasQuery() ? 1f : 0f;
     }
 
-    /** Launches the first ranked result, as Enter on any of the three intake channels does. */
-    public boolean launchFirstResult() {
+    /**
+     * Launches the highlighted result, or the first when nothing is highlighted: what Enter does on
+     * any of the three intake channels.
+     */
+    public boolean launchHighlightedResult() {
         AppDrawerSearchController search = mSearch;
         SuggestionBarView dock = mDock;
-        LauncherAppEntry first = search == null ? null : search.firstResult();
-        if (dock == null || first == null) return false;
-        return dock.launchEntryFromDrawer(firstCellView(), first);
+        LauncherAppEntry target = search == null ? null : search.commitTarget();
+        if (dock == null || target == null) return false;
+        int index = search.highlightedIndex();
+        return dock.launchEntryFromDrawer(cellViewAt(Math.max(0, index)), target);
     }
 
     @Nullable
-    private View firstCellView() {
+    private View cellViewAt(int position) {
         switch (mViewType) {
             case HORIZONTAL:
-                return mHorizontalAdapter.pageZeroIcon(mHorizontalPager);
+                return mHorizontalAdapter.iconAt(mHorizontalPager, position);
             case CATEGORIES:
                 if (!hasQuery()) return null;
                 break;
             case VERTICAL:
                 break;
         }
-        RecyclerView.ViewHolder holder = mGrid.findViewHolderForAdapterPosition(0);
+        RecyclerView.ViewHolder holder = mGrid.findViewHolderForAdapterPosition(position);
         if (holder instanceof AppDrawerAppsAdapter.Cell) {
             return ((AppDrawerAppsAdapter.Cell) holder).icon;
         }
@@ -1228,8 +1237,40 @@ public final class AppDrawerContentView extends FrameLayout
         applyResults(results, queryChanged);
     }
 
+    @Override
+    public void onSearchHighlightChanged(int oldIndex, int newIndex) {
+        if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mHorizontalAdapter.moveHighlight(newIndex);
+            int page = mHorizontalAdapter.pageOf(newIndex);
+            if (page >= 0 && page != mHorizontalPager.getSelectedPage()) {
+                mHorizontalPager.setSelectedPage(page, true);
+                updatePageIndicator();
+            }
+        } else {
+            mAdapter.moveHighlight(newIndex);
+            if (newIndex >= 0) mGrid.scrollToPosition(newIndex);
+        }
+    }
+
+    @Override
+    public int searchColumns() {
+        switch (mViewType) {
+            case HORIZONTAL:
+                AppDrawerHorizontalGridMetrics metrics = mHorizontalAdapter.getMetrics();
+                return metrics == null ? 1 : Math.max(1, metrics.columns);
+            case VERTICAL:
+                return mCategorySearchPresentation ? 1 : mVerticalColumns;
+            case CATEGORIES:
+            default:
+                return 1;
+        }
+    }
+
     private void applyResults(@NonNull List<LauncherAppEntry> results, boolean queryChanged) {
         AppDrawerSearchController search = mSearch;
+        int highlight = search == null ? AppDrawerSearchSelection.NONE : search.highlightedIndex();
+        mAdapter.presetHighlight(highlight);
+        mHorizontalAdapter.presetHighlight(highlight);
         mPill.setQuery(search == null ? "" : search.query(), search == null ? 0 : search.caret());
         if (mTextFieldSearch) {
             mInput.mirror(search == null ? "" : search.query(), search == null ? 0 : search.caret());
@@ -1298,7 +1339,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (!mInteractive || search == null) return;
         if (AppDrawerOnlyMatchPolicy.shouldAutoOpen(mOpenOnlyMatch, search.query(),
             search.results().size())) {
-            launchFirstResult();
+            launchHighlightedResult();
         }
     }
 
@@ -1756,6 +1797,12 @@ public final class AppDrawerContentView extends FrameLayout
         // scroll from inside this dispatch, and that end has to know it is a cancellation rather
         // than a release, or a stream taken away by another window would report as a decision.
         if (action == MotionEvent.ACTION_CANCEL) mStreamCancelled = true;
+        // The highlight is a keyboard affordance: a touch on the results puts it away (the pill is
+        // the one place a finger lands while typing).
+        if (action == MotionEvent.ACTION_DOWN && mSearch != null
+            && mSearch.highlightedIndex() >= 0 && ev.getY() > mPill.getBottom()) {
+            mSearch.clearHighlight();
+        }
         boolean handled = super.dispatchTouchEvent(ev);
         if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
             mStreamCancelled = false;
