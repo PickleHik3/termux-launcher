@@ -133,7 +133,8 @@ public final class DockLayout {
      * The side inset the dock's apps row takes under Peek glass (Docked, the row on the dock):
      * the card's inset from the screen's side and the clearance inside it
      * ({@link PeekGlassGeometry#rowSideInsetPx}), so the end icons stand on the card. Zero for
-     * every other surface, and under Floating, where the dock draws the tray's slab.
+     * every other surface, and under Floating, where the card's sides are the Floating card's
+     * own and the row keeps its Floating inset.
      */
     public final int peekRowSideInsetPx;
 

@@ -20,6 +20,19 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "feat(peek): Peek glass works on the Floating dock" · Peek glass, Style
+  Floating, keyboard down, Search field off: the dock is a floating card whose top edge runs
+  through the icons' middles (their upper halves over the wallpaper), its sides and lower edge
+  where the Floating card's were, all four corners rounded and rimmed alike, the shelf and soft
+  shadow under its lower edge; the icons' reflections fade down it and are gone by its lower
+  edge, clipped by its rounded corners, never below the card; nothing under the gesture pill.
+  Fancier glass on (Android 13+: live, a press on an icon shows in its reflection) and off (still
+  bitmaps, back 160 ms after a swipe); Reflection knob 0 hides them; Corners 0 gives a square card;
+  Home and Workspace halves; light, dark and the Material You scheme. Then keyboard up and Search
+  field on: the full Floating tray slab, no reflection; back down/off: the card again. Switch to
+  Docked: the Docked Peek card exactly as before (foot under the pill, soft-rimmed sides). Look at
+  the card's lower corners on a press (the touch edge glow is drawn at the uncut card's radius) ·
+  emulator or pong.
 - 2026-10-25 · commit "feat(appearance): hidden-items cards wrap their own text" · hide all six
   items in the Appearance editor: one-word cards (Keyboard) are one line tall, two-word cards two
   lines, the gap between cards stays equal, one label size throughout; tap a card shows it, drag
