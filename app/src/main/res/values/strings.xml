@@ -112,8 +112,6 @@
     <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active</string>
     <string name="settings_terminal_cursor_trail_style_title">Cursor trail</string>
     <string name="settings_terminal_retro_effect_title">Terminal effect</string>
-    <string name="settings_terminal_padding_fill_title">Extend edge colors</string>
-    <string name="settings_terminal_padding_fill_summary">Match pane padding to nearby terminal colors.</string>
     <string name="settings_clipboard_header">Clipboard</string>
     <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
     <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>

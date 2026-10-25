@@ -89,7 +89,6 @@ public final class EditorRows {
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
-        EDGE_COLOURS(Kind.SWITCH, R.string.appearance_row_edge_colours, R.drawable.ic_editor_margin),
         SPLIT_GAP(Kind.STRIP, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
         ICON_SIZE(Kind.STRIP, R.string.appearance_row_icon_size, R.drawable.ic_symbol_grid_view),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
@@ -222,7 +221,7 @@ public final class EditorRows {
                 add(out, 2, Row.CONTRAST);
                 add(out, 3, Row.CURSOR_TRAIL);
                 if (offers.terminalEffect) add(out, 3, Row.EFFECT);
-                add(out, 3, Row.EDGE_COLOURS, Row.LINK_FONT);
+                add(out, 3, Row.LINK_FONT);
                 break;
             case DOCK:
                 add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,

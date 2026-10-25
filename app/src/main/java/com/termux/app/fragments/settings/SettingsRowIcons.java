@@ -219,7 +219,6 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_text_fields, "terminal_sub_text");
         key(R.drawable.ic_ms_font_download, "terminal_fonts", "fonts_use_font_ttf");
         key(R.drawable.ic_ms_fullscreen, "fullscreen");
-        key(R.drawable.ic_ms_format_color_fill, "terminal_padding_fill");
         key(R.drawable.ic_ms_vertical_split, "split_pane_controls");
         key(R.drawable.ic_ms_keyboard_command_key, "show_key_hints", "in_app_keyboard_extra_keys",
             "edit_extra_keys_row");

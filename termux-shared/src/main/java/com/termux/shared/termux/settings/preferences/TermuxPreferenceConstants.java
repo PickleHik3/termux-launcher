@@ -658,14 +658,6 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
 
-        /**
-         * Paint the empty band between a pane's text grid and its rounded border with the
-         * background colour of the nearest edge cell (Ghostty's {@code window-padding-color =
-         * extend}), so a full-screen app that paints its own background reaches the pane's border.
-         */
-        public static final String KEY_TERMINAL_PADDING_FILL = "terminal_padding_fill";
-        public static final boolean DEFAULT_TERMINAL_PADDING_FILL = true;
-
         /** Cursor trail style id (default, motion_blur, railgun, torpedo, pixiedust, comet). */
         public static final String KEY_TERMINAL_CURSOR_TRAIL_STYLE = "terminal_cursor_trail_style";
         public static final String DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE = "default";

@@ -75,7 +75,7 @@ back on the Look. Sizes (**Height**, **Corners**, **Margin**) are sliders across
   **Margin**, **12-hour clock** and **Clock face** (see [Status bar](Status_Bar.md#clock)); under
   More, a link to its indicators.
 - **Terminal**: **Frost**, **Opacity**, **Tint** and **Text size**; **Corners**, **Margin** and
-  **Contrast**; under More, **Cursor trail**, **Effect**, **Edge colours**, **Split gap** and a link
+  **Contrast**; under More, **Cursor trail**, **Effect**, **Split gap** and a link
   to its font.
 - **Dock**: **Frost**, **Opacity**, **Tint**, **Height**, **Visible** and **Position**; **Style**
   (Docked or Floating), **Design** (Tray, Beads or Strip), **Corners** and **Margin**; under More,

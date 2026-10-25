@@ -40,8 +40,7 @@ final class EditorSettingsSnapshot {
         "wallpaper_parallax",
         HomeSettings.KEY_LABEL_TWO_LINES,
         HomeSettings.KEY_LABEL_SHADOW,
-        AppearanceSettingsStore.KEY_FULLSCREEN,
-        AppearanceSettingsStore.KEY_PADDING_FILL);
+        AppearanceSettingsStore.KEY_FULLSCREEN);
 
     /** Where the values are read and written; Settings' own store in the app, a map in a test. */
     interface Store {

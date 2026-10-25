@@ -20,6 +20,12 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "refactor(settings): edge colours follow Wallpaper colors" · Settings ->
+  Terminal -> Text & display has no "Extend edge colors" row and the editor's Terminal card has no
+  Edge colours row. With Wallpaper colors on, run a full-screen TUI with its own background
+  (e.g. htop): the pane padding takes the edge colours; switch Wallpaper colors off (Settings or the
+  editor's Appearance card): after the restyle the padding is plain again, in one pane and in
+  split panes. A phone that had turned Extend edge colors off now follows the switch instead.
 - 2026-10-25 · commit "refactor(settings): remove the Wallpaper alignment control" · on a build
   that still holds a stored non-100 alignment (or on Nothing OS), open Settings -> Appearance and
   the Appearance editor: no Wallpaper alignment slider or row in either, search "alignment" finds

@@ -2069,9 +2069,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
                         / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
                 case CONTRAST: return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
-                case EDGE_COLOURS:
-                    return AppearanceSettingsStore.getBoolean(context,
-                        AppearanceSettingsStore.KEY_PADDING_FILL, false) ? 1 : 0;
                 case SPLIT_GAP: return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
                 case ICON_SIZE:
                     return parseInt(AppearanceSettingsStore.getString(context,
@@ -2472,11 +2469,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case APP_ICONS: writeAppIcons(value); break;
             case TEXT_SIZE: writeTextSize(value); break;
             case CONTRAST: writeLegibility(value); break;
-            case EDGE_COLOURS:
-                AppearanceSettingsStore.putBoolean(context, AppearanceSettingsStore.KEY_PADDING_FILL,
-                    value != 0);
-                settingsWritten();
-                break;
             case SPLIT_GAP: writeSplitGap(value); break;
             case ICON_SIZE:
                 writeHomeString(HomeSettings.KEY_ICON_SCALE, String.valueOf(value));
