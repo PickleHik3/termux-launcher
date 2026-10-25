@@ -115,10 +115,22 @@ public final class HomeActionsSheetPolicy {
     }
 
     /**
-     * How many two-column lines {@code count} rows take: the last line holds one row when the
-     * count is odd.
+     * The group's rows as lines of two, in order; the last pair holds one row when the count is
+     * odd. The Lock layout switch takes a line of its own at the end, since a label and a switch
+     * do not fit half a line at large font sizes.
      */
-    public static int lineCount(int count) {
-        return count <= 0 ? 0 : (count + 1) / 2;
+    @NonNull
+    public static List<List<Item>> lines(@NonNull List<Item> items) {
+        ArrayList<List<Item>> out = new ArrayList<>();
+        ArrayList<Item> paired = new ArrayList<>();
+        boolean lock = false;
+        for (Item item : items) {
+            if (item == Item.LOCK_LAYOUT) lock = true;
+            else paired.add(item);
+        }
+        for (int i = 0; i < paired.size(); i += 2)
+            out.add(new ArrayList<>(paired.subList(i, Math.min(i + 2, paired.size()))));
+        if (lock) out.add(Collections.singletonList(Item.LOCK_LAYOUT));
+        return out;
     }
 }

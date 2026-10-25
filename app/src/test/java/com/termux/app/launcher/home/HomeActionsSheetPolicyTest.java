@@ -97,11 +97,13 @@ public class HomeActionsSheetPolicyTest {
         for (Item item : Item.values()) assertTrue(item.group != null);
     }
 
-    @Test public void twoColumnsTakeHalfTheLinesRoundedUp() {
-        assertEquals(0, HomeActionsSheetPolicy.lineCount(0));
-        assertEquals(1, HomeActionsSheetPolicy.lineCount(1));
-        assertEquals(1, HomeActionsSheetPolicy.lineCount(2));
-        assertEquals(3, HomeActionsSheetPolicy.lineCount(5));
-        assertEquals(2, HomeActionsSheetPolicy.lineCount(4));
+    @Test public void rowsPairUpAndTheLockSwitchTakesTheLastLineAlone() {
+        assertEquals(0, HomeActionsSheetPolicy.lines(java.util.Collections.emptyList()).size());
+        java.util.List<java.util.List<Item>> lines = HomeActionsSheetPolicy.lines(java.util.Arrays.asList(
+            Item.TERMINAL, Item.ADD_WIDGET, Item.LOCK_LAYOUT, Item.ADD_PAGE));
+        assertEquals(3, lines.size());
+        assertEquals(java.util.Arrays.asList(Item.TERMINAL, Item.ADD_WIDGET), lines.get(0));
+        assertEquals(java.util.Collections.singletonList(Item.ADD_PAGE), lines.get(1));
+        assertEquals(java.util.Collections.singletonList(Item.LOCK_LAYOUT), lines.get(2));
     }
 }

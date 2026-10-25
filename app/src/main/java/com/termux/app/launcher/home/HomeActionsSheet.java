@@ -198,8 +198,15 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
-        // Expanding before the card has been laid out with these rows would jump rather than
-        // slide, so the settle starts on the first frame after layout.
+        settleExpandedAfterLayout();
+    }
+
+    /**
+     * Expanding before the card has been laid out with its rows would jump rather than slide, or,
+     * when the rows change under an open card, leave it at the old height's offset; so the settle
+     * starts on the first frame after layout.
+     */
+    private void settleExpandedAfterLayout() {
         getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override public boolean onPreDraw() {
                 getViewTreeObserver().removeOnPreDrawListener(this);
@@ -221,6 +228,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         if (!open || nowLocked == locked) return;
         locked = nowLocked;
         refill();
+        settleExpandedAfterLayout();
         listener.onLayoutLockChanged(nowLocked);
     }
 
@@ -264,14 +272,14 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         rows.removeAllViews();
         group.setVisibility(items.isEmpty() ? GONE : VISIBLE);
         LayoutInflater inflater = LayoutInflater.from(getContext());
-        int lines = HomeActionsSheetPolicy.lineCount(items.size());
-        for (int line = 0; line < lines; line++) {
+        for (List<Item> line : HomeActionsSheetPolicy.lines(items)) {
             LinearLayout lineView = new LinearLayout(getContext());
             lineView.setOrientation(LinearLayout.HORIZONTAL);
-            for (int column = 0; column < 2; column++) {
-                int index = line * 2 + column;
-                if (index < items.size()) {
-                    lineView.addView(row(inflater, lineView, items.get(index)));
+            // A line of one is either the switch, which spans it, or an odd row beside a spacer.
+            boolean spans = line.size() == 1 && line.get(0) == Item.LOCK_LAYOUT;
+            for (int column = 0; column < (spans ? 1 : 2); column++) {
+                if (column < line.size()) {
+                    lineView.addView(row(inflater, lineView, line.get(column)));
                 } else {
                     lineView.addView(new View(getContext()),
                         new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
