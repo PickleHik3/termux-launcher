@@ -406,6 +406,7 @@ public final class WidgetPaneView extends FrameLayout {
         LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
         dotsParams.bottomMargin = wanted + Math.round(DOTS_BOTTOM_MARGIN_DP * density);
         dots.setLayoutParams(dotsParams);
+        picker.setDockReservePx(wanted);
     }
 
     public int dockReservePx() {
