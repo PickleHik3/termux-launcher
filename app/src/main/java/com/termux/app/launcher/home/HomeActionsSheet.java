@@ -41,12 +41,26 @@ import java.util.List;
  * rather than through a dialog. It wears the app's Material surface, never glass, so it follows the
  * app's light or dark theme. A tap on the dim, a swipe down or Back puts it away; a row puts it away
  * and tells the {@link Listener} which action was chosen.
+ *
+ * <p>The card runs down under the navigation bar and pads its rows above it, as the Appearance
+ * editor's sheet and the drawer plane do. The activity hands it the window's insets ({@link
+ * #applyInsets}): the shell's root fits the system windows and consumes them, so a dispatch never
+ * reaches an overlay standing after it in the content frame. The under-pill strip a Docked dock
+ * continues into is the decor's topmost child and would paint over the card's foot, so the sheet
+ * reports how much of the band under the bar it covers ({@link Listener#onNavBandCovered}) and the
+ * activity fades the strip out by as much.
  */
 public final class HomeActionsSheet extends CoordinatorLayout {
 
     /** Told which row was tapped; the sheet is already on its way down. */
     public interface Listener {
         void onHomeAction(@NonNull Item item);
+
+        /**
+         * How much of the band under the navigation bar the card now covers, 0 to 1
+         * ({@link HomeActionsSheetPolicy#navBandCover}); back to 0 once the sheet is put away.
+         */
+        default void onNavBandCovered(float covered) { }
     }
 
     /** The card's top corners: the M3 extra-large corner. */
@@ -63,6 +77,10 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @NonNull private final LinearLayout launcherRows;
     @NonNull private final BottomSheetBehavior<LinearLayout> behavior;
     private final int cardPadLeft, cardPadRight, cardPadBottom;
+    /** The navigation bar's height under the card, from the last {@link #applyInsets}. */
+    private int navInsetPx;
+    /** The last cover told to the listener, so a settle that changes nothing tells it nothing. */
+    private float reportedCover;
     private boolean open;
 
     public HomeActionsSheet(@NonNull Context context, @NonNull Listener listener) {
@@ -108,21 +126,41 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         behavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
             @Override public void onStateChanged(@NonNull View bottomSheet, int newState) {
                 if (newState == BottomSheetBehavior.STATE_HIDDEN) finishClosing();
+                else if (newState == BottomSheetBehavior.STATE_EXPANDED) reportCover();
             }
             @Override public void onSlide(@NonNull View bottomSheet, float slideOffset) {
                 scrim.setAlpha(Math.max(0f, Math.min(1f, 1f + slideOffset)));
+                reportCover();
             }
         });
-
-        // The card reaches the screen's bottom edge; its rows stay clear of the system bars.
-        ViewCompat.setOnApplyWindowInsetsListener(this, (view, insets) -> {
-            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
-                | WindowInsetsCompat.Type.displayCutout());
-            card.setPadding(cardPadLeft + bars.left, card.getPaddingTop(),
-                cardPadRight + bars.right, cardPadBottom + bars.bottom);
-            return insets;
-        });
         setVisibility(GONE);
+    }
+
+    /**
+     * The window's insets: the card reaches the screen's bottom edge and its rows stay clear of
+     * the system bars. Called by the activity on every inset dispatch and read off the window
+     * again on {@link #open}.
+     */
+    public void applyInsets(@NonNull WindowInsetsCompat insets) {
+        Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+            | WindowInsetsCompat.Type.displayCutout());
+        navInsetPx = Math.max(0, bars.bottom);
+        int left = cardPadLeft + bars.left;
+        int right = cardPadRight + bars.right;
+        int bottom = cardPadBottom + navInsetPx;
+        if (card.getPaddingLeft() != left || card.getPaddingRight() != right
+            || card.getPaddingBottom() != bottom) {
+            card.setPadding(left, card.getPaddingTop(), right, bottom);
+        }
+        if (open) reportCover();
+    }
+
+    /** Tells the listener how much of the band under the navigation bar the card covers. */
+    private void reportCover() {
+        float cover = HomeActionsSheetPolicy.navBandCover(card.getTop(), getHeight(), navInsetPx);
+        if (cover == reportedCover) return;
+        reportedCover = cover;
+        listener.onNavBandCovered(cover);
     }
 
     /** Whether the sheet is up, or on its way up. */
@@ -138,7 +176,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = true;
         setVisibility(VISIBLE);
         bringToFront();
-        ViewCompat.requestApplyInsets(this);
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
+        if (insets != null) applyInsets(insets);
         if (wasOpen) return;
         // Expanding before the card has been laid out with these rows would jump rather than
         // slide, so the settle starts on the first frame after layout.
@@ -170,6 +209,10 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = false;
         scrim.setAlpha(0f);
         setVisibility(GONE);
+        if (reportedCover != 0f) {
+            reportedCover = 0f;
+            listener.onNavBandCovered(0f);
+        }
     }
 
     @Override

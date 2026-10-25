@@ -56,6 +56,19 @@ public final class HomeActionsSheetPolicy {
     private HomeActionsSheetPolicy() {}
 
     /**
+     * How much of the band under the navigation bar the card covers, 0 to 1: nothing while it is
+     * below the screen's edge, all of it once its top has risen past the band. The under-pill strip
+     * fades out by this much, so it never paints over the card's foot. With no navigation bar any
+     * card on screen counts as covering it.
+     */
+    public static float navBandCover(int cardTopPx, int sheetHeightPx, int navInsetPx) {
+        int shown = sheetHeightPx - cardTopPx;
+        if (shown <= 0) return 0f;
+        if (navInsetPx <= 0) return 1f;
+        return Math.min(1f, shown / (float) navInsetPx);
+    }
+
+    /**
      * The sheet's rows for this state. Terminal is always first: a Home float opens on the page
      * whether or not the Workspace has a session.
      *

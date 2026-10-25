@@ -1659,6 +1659,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the plane's arriving bottom edge instead, and is handed back at 1 when the drawer closes.
      */
     private float mAppDrawerNavStripAlpha = 1f;
+    /**
+     * Home's long-press sheet's fade of the same strip, 1 less the share of the band under the
+     * navigation bar its card covers: the card runs under the pill, and the strip would paint over
+     * its foot. Multiplies the drawer's, so neither owner hands the other's fade back.
+     */
+    private float mHomeSheetNavStripAlpha = 1f;
     @Nullable private ImageView mDecorNavBarBlurBackdrop;
     @Nullable private View mDecorNavBarTintOverlay;
     @Nullable private Bitmap mInAppKeyboardBackdropBitmap;
@@ -1992,6 +1998,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
             if (mWelcomeSheet != null) mWelcomeSheet.applyInsets(insetsCompat);
+            // The root consumes the insets, so the overlays after it in this frame are handed them.
+            if (mHomeActionsSheet != null) mHomeActionsSheet.applyInsets(insetsCompat);
             // The drawer plane pins itself above a system keyboard; guarded on the field so a
             // keyboard rising over the terminal never builds a drawer that was never opened.
             if (mAppDrawerController != null) {
@@ -7676,7 +7684,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float clamped = Math.max(0f, Math.min(1f, alpha));
         if (mAppDrawerNavStripAlpha == clamped) return;
         mAppDrawerNavStripAlpha = clamped;
-        if (mDecorNavBarSurfaceOverlay != null) mDecorNavBarSurfaceOverlay.setAlpha(clamped);
+        if (mDecorNavBarSurfaceOverlay != null) mDecorNavBarSurfaceOverlay.setAlpha(decorNavStripAlpha());
+    }
+
+    /** Home's long-press sheet's fade of the under-pill strip. See {@link #mHomeSheetNavStripAlpha}. */
+    private void setHomeSheetDecorNavStripAlpha(float alpha) {
+        float clamped = Math.max(0f, Math.min(1f, alpha));
+        if (mHomeSheetNavStripAlpha == clamped) return;
+        mHomeSheetNavStripAlpha = clamped;
+        if (mDecorNavBarSurfaceOverlay != null) mDecorNavBarSurfaceOverlay.setAlpha(decorNavStripAlpha());
+    }
+
+    /** The strip's opacity: what both the drawer and Home's sheet leave of it. */
+    private float decorNavStripAlpha() {
+        return mAppDrawerNavStripAlpha * mHomeSheetNavStripAlpha;
     }
 
     private void removeDecorNavBarSurfaceOverlay() {
@@ -7744,9 +7765,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         applyDecorNavBarSurfaceBounds(overlay, true);
-        // Re-applied on every chrome pass: a restyle while the drawer is open must not hand the
-        // strip back at full opacity over the plane.
-        overlay.setAlpha(mAppDrawerNavStripAlpha);
+        // Re-applied on every chrome pass: a restyle while the drawer or Home's sheet is open must
+        // not hand the strip back at full opacity over the plane or the card.
+        overlay.setAlpha(decorNavStripAlpha());
 
         if (mDecorNavBarTintOverlay != null) {
             mDecorNavBarTintOverlay.setBackground(buildDecorNavBarTint(state));
@@ -26173,7 +26194,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (content == null) return;
         if (mHomeActionsSheet == null) {
             mHomeActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(this,
-                this::runHomeAction);
+                new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
+                    @Override public void onHomeAction(
+                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
+                        runHomeAction(item);
+                    }
+                    // The card runs under the pill; the strip above it fades as the card arrives.
+                    @Override public void onNavBandCovered(float covered) {
+                        setHomeSheetDecorNavStripAlpha(1f - covered);
+                    }
+                });
             content.addView(mHomeActionsSheet, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }

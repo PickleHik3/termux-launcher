@@ -20,6 +20,14 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(home): the long-press sheet runs under the navigation bar and the
+  Docked strip makes way for it" · long-press an empty spot on Home with the dock Docked (Peek,
+  Tray and one more design): the sheet's surface runs to the screen's bottom edge, the bottom row
+  sits wholly above the gesture pill, no dock-coloured band covers the card's foot; drag it down
+  and the under-pill strip returns as the card leaves, Back and a tap on the dim do the same.
+  Repeat with the built-in keyboard up, with Floating (unchanged), and with three-button
+  navigation (rows above the buttons). Open the drawer after the sheet closes: the strip still
+  fades under the plane and comes back · emulator or pong.
 - 2026-10-25 · commit "feat(appearance): hidden-items cards wrap their own text" · hide all six
   items in the Appearance editor: one-word cards (Keyboard) are one line tall, two-word cards two
   lines, the gap between cards stays equal, one label size throughout; tap a card shows it, drag
