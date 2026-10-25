@@ -111,8 +111,20 @@ REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
 # license.rst), this build was packaged by lfdevs and is published by sabamdarif/termux-desktop.
 # None of termux-desktop's scripts are used here. See THIRD_PARTY_NOTICES.md.
 VKW_BASE=https://github.com/sabamdarif/termux-desktop/releases/download/vulkan-wrapper-android_25.0.0-3
+# The pinned pacman file is not one pacman reads as it is: its entries start with "./", so pacman
+# finds no metadata in it, and its version has no release number. Once the checksum has matched,
+# it is packed again the way makepkg packs, with the release added and nothing else changed.
+# Takes the downloaded file, works in "<file>.repack" and prints the new file's path.
+repack_wrapper() {
+  local dir=$1.repack out=$1.repack/vulkan-wrapper-android-25.0.0-3.pkg.tar
+  mkdir "$dir" && mkdir "$dir/pkg" && tar -xf "$1" -C "$dir/pkg" || return 1
+  [ -f "$dir/pkg/.PKGINFO" ] || return 1
+  sed -i 's/^pkgver = 25\.0\.0$/pkgver = 25.0.0-3/' "$dir/pkg/.PKGINFO"
+  (cd "$dir/pkg" && tar -cf "$out" .PKGINFO .BUILDINFO .MTREE data) || return 1
+  echo "$out"
+}
 install_vulkan_wrapper() {
-  local arch file sum
+  local arch file sum rc
   arch=$(uname -m)
   case "$PM:$arch" in
     pacman:aarch64) file=vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz; sum=407a024fe25c37e34e83d32a199eb82e204aa1c80f391c5eecc88d5d4ca98f96 ;;
@@ -130,10 +142,13 @@ install_vulkan_wrapper() {
     detail "The downloaded Vulkan wrapper does not match its checksum, so it was not installed."
     rm -f "$VK_FILE"; VK_FILE=""; return 1
   fi
-  if { if [ $PM = pacman ]; then pacman -U --noconfirm "$VK_FILE"; else apt-get install "${APT_OPTS[@]}" "$VK_FILE"; fi; }; then
-    rm -f "$VK_FILE"; VK_FILE=""; return 0
-  fi
-  rm -f "$VK_FILE"; VK_FILE=""
+  if [ $PM = pacman ]; then
+    local repacked
+    repacked=$(repack_wrapper "$VK_FILE") && pacman -U --noconfirm "$repacked"
+  else apt-get install "${APT_OPTS[@]}" "$VK_FILE"; fi
+  rc=$?
+  rm -rf "$VK_FILE" "$VK_FILE.repack"; VK_FILE=""
+  [ $rc = 0 ] && return 0
   return 1
 }
 
@@ -174,7 +189,7 @@ stop_display() {
   fi
   SERVER_PID=""; true
 }
-cleanup_processes() { stop_virgl; stop_display; [ -n "$VK_FILE" ] && rm -f "$VK_FILE"; true; }
+cleanup_processes() { stop_virgl; stop_display; [ -n "$VK_FILE" ] && rm -rf "$VK_FILE" "$VK_FILE.repack"; true; }
 trap cleanup_processes EXIT
 trap 'exit 130' INT TERM HUP
 
