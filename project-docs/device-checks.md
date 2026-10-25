@@ -474,6 +474,22 @@ dropped; what follows is what still owes a look.
   shell and distro" · a day of real use: sound from kew, Firefox and an xfce
   desktop survives closing them, the screen off and an hour idle (the reporter's moto g15 case);
   battery at rest no worse than before (the server suspends its sink when idle) · pong.
+- 2026-10-25 · commit "fix(dock): each Peek glass surface wears its own reflection fade" ·
+  Fancier glass on, Peek, gesture navigation: under each icon a mirrored icon starts right at
+  the icon's lower edge on the card (the strongest part, about 29 px on pong, above the strip)
+  and fades on down behind the pill with no break, step or dark line where the strip starts;
+  before the fix the card above the strip showed none of it (screenshot
+  `peek-dock-bug.png`, 10-25). If the card part is still empty, `adb logcat -s
+  PeekGlassReflection` prints each view's parent, child index, size, origin and band: send that
+  line for the host · pong.
+- 2026-10-25 · same commit · the band at the pill's height: the strip under the pill reads ~25%
+  darker than the card right above it in the gaps between icons (pong screenshot: card
+  48,69,141 → strip 29,53,112 at x 328), with or without a reflection; this fix does not touch
+  it (the strip's glass and tint are the shared under-pill code). Judge whether it also shows
+  under the Tray; if only under Peek, it is the card's own glass program, if under both it is the
+  strip's · pong.
+- 2026-10-25 · same commit · a page swipe and an icon press under Peek, Fancier glass on: the
+  reflections ride with the icons with no stutter, GPU bars flat at rest · pong.
 - 2026-10-25 · commit "feat(dock): draw the Peek glass card and the icons' reflections on it" ·
   Home, Docked, Dock card → Design → Peek: a dark glass card inset about 3% from each side with
   generous top corners, the icons' centres on its top edge, no lower corners anywhere, the card

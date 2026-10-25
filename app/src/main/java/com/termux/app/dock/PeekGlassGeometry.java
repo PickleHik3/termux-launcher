@@ -131,6 +131,46 @@ public final class PeekGlassGeometry {
         return new Card(left, centerY, right, bottom, radius, screenBottom, axis, axis + depth);
     }
 
+    /**
+     * The reflection's band as one surface draws it: the glass host (origin 0, 0) or the strip
+     * under the gesture pill (its origin in the host's coordinates). Each surface fades and blurs
+     * its own share of the band, so the fade is measured from the band's top as it stands in that
+     * surface's pixels, and the blur's samples are held inside the share the surface shows; then
+     * a point at the seam has the same fade on both sides, and neither side reads past its edge.
+     *
+     * <p>{@code out} takes eight values: the band's left, top, right and bottom in the surface's
+     * pixels (placed as the live path places its recording: {@link Card#bandLeftPx},
+     * {@link Card#bandTopPx}), then the left, top, right and bottom of the part of it the surface
+     * shows. Answers whether the surface shows any of it; a surface with no size shows none.</p>
+     */
+    public static boolean reflectionBandIn(@NonNull Card card, float originX, float originY,
+                                           int surfaceWidthPx, int surfaceHeightPx,
+                                           @NonNull float[] out) {
+        float left = card.bandLeftPx() - originX;
+        float top = card.bandTopPx() - originY;
+        float right = left + card.bandWidthPx();
+        float bottom = top + card.bandHeightPx();
+        out[0] = left;
+        out[1] = top;
+        out[2] = right;
+        out[3] = bottom;
+        out[4] = Math.max(0f, left);
+        out[5] = Math.max(0f, top);
+        out[6] = Math.min(Math.max(0, surfaceWidthPx), right);
+        out[7] = Math.min(Math.max(0, surfaceHeightPx), bottom);
+        return card.reflectionDepth() >= 1f && out[6] > out[4] && out[7] > out[5];
+    }
+
+    /**
+     * How far down the band a surface's row {@code y} stands, 0 at the mirror line to 1 where the
+     * reflection has faded out, for the band {@link #reflectionBandIn} gave that surface: the
+     * live program's {@code t}, which sets both the fade and the blur.
+     */
+    public static float reflectionProgress(@NonNull float[] band, float y) {
+        float height = Math.max(1f, band[3] - band[1]);
+        return Math.max(0f, Math.min(1f, (y - band[1]) / height));
+    }
+
     /** One card, in the glass host's coordinates. */
     public static final class Card {
         public final float left;
@@ -163,6 +203,26 @@ public final class PeekGlassGeometry {
         /** The reflection's band: from the mirror line down to where it has faded out. */
         public float reflectionDepth() {
             return Math.max(0f, reflectionBottom - mirrorAxisY);
+        }
+
+        /** The band's left edge in whole pixels, where the live path stands its recording. */
+        public int bandLeftPx() {
+            return Math.round(left);
+        }
+
+        /** The band's top (the mirror line) in whole pixels, where the live path stands it. */
+        public int bandTopPx() {
+            return Math.round(mirrorAxisY);
+        }
+
+        /** The band's width in whole pixels: the card's. */
+        public int bandWidthPx() {
+            return Math.max(1, Math.round(right - left));
+        }
+
+        /** The band's height in whole pixels: the reflection's depth. */
+        public int bandHeightPx() {
+            return Math.max(1, Math.round(reflectionDepth()));
         }
 
         /** The same card moved by {@code dx}, {@code dy}: from the host's coordinates to another surface's. */
