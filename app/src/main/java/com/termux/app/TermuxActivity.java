@@ -26092,7 +26092,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean terminalShown = terminal != null && terminal.isShown();
         com.termux.app.x11.DisplayViewFocus.Holder holder = focus == null
             ? com.termux.app.x11.DisplayViewFocus.Holder.NONE
-            : focus instanceof TerminalView && !focus.isShown()
+            : focus instanceof TerminalView
+                && (!focus.isShown() || ((TerminalView) focus).mEmulator == null)
             ? com.termux.app.x11.DisplayViewFocus.Holder.TERMINAL_HIDDEN
             : !(focus instanceof com.termux.x11.LorieView)
             ? com.termux.app.x11.DisplayViewFocus.Holder.OTHER

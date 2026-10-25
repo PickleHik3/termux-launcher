@@ -109,7 +109,10 @@ public final class DisplayViewFocus {
         DISPLAY_SHOWING,
         /** Any other view: a terminal on screen, a text field. */
         OTHER,
-        /** A terminal view that is not on screen (its window minimized): it types nowhere. */
+        /**
+         * A terminal view that cannot type: off screen (its window minimized) or with no session
+         * attached, which swallows every key. Either way the keys belong to the overlays.
+         */
         TERMINAL_HIDDEN
     }
 
