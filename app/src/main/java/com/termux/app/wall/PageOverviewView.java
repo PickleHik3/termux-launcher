@@ -60,9 +60,9 @@ import java.util.Map;
 /**
  * The page overview (Launcher3's overview for this wall): the wall zoomed out to one strip of
  * cards, Home's pages first and then the current session's windows, with a gap at the seam. Each
- * card can be dragged within its own half, removed by its red button, and a Home page made the
- * one Home opens on by its home button; the pills at the bottom add a page, a terminal or a
- * display after the focused card. Back, or a tap on a card, zooms back into that card.
+ * card can be dragged within its own half, removed by its red button, and made Home by its home
+ * button — a Home page, the first terminal window or the display window ({@link StartInPolicy});
+ * the pills at the bottom add a page, a terminal or a display after the focused card. Back, or a tap on a card, zooms back into that card.
  *
  * <p>The wallpaper stays full-screen behind the cards. The card the wall rests on is the live
  * launcher itself, drawn scaled: the activity's root view is hidden (alpha 0, so it keeps drawing
@@ -95,7 +95,13 @@ public final class PageOverviewView extends FrameLayout {
         void removePage(int page);
         /** An empty page after the last. */
         void addPage();
-        void setDefaultPage(int page);
+        /**
+         * The card of {@code kind} at {@code index} (a Home page's index, or a window's row place)
+         * becomes Home: what is written is {@link StartInPolicy#choose}'s.
+         */
+        void chooseHome(@NonNull PageOverviewPolicy.Kind kind, int index);
+        /** Start in as it stands ({@link StartInPolicy#effective}), which the Home marker follows. */
+        @NonNull String startIn();
 
         // The current session's row of windows, the display window among them.
         int rowCount();
@@ -753,10 +759,10 @@ public final class PageOverviewView extends FrameLayout {
         if (!closed) reload();
     }
 
-    private void onMakeDefault(@NonNull Card card) {
-        if (!card.isHome()) return;
+    private void onMakeHome(@NonNull Card card) {
+        if (!showsHomeButton(card)) return;
         performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-        host.setDefaultPage(card.index);
+        host.chooseHome(card.kind, card.index);
         accessibility.invalidateRoot();
         invalidate();
     }
@@ -923,17 +929,32 @@ public final class PageOverviewView extends FrameLayout {
     /** What a card's buttons look like, which a picture of the whole card holds. */
     private int buttonsOf(@NonNull Card card) {
         int bits = PageOverviewPolicy.canDelete(card.kind, homeCount) ? 1 : 0;
-        if (PageOverviewPolicy.showsHomeButton(card.kind)) {
+        if (showsHomeButton(card)) {
             bits |= 2;
             if (isDefault(card)) bits |= 4;
         }
         return bits;
     }
 
+    /** Whether {@code card} wears the Home marker: the page, or the window, Start in names. */
     private boolean isDefault(@NonNull Card card) {
-        return card.isHome() && card.index
+        boolean defaultPage = card.isHome() && card.index
             == com.termux.app.launcher.home.HomePageEdits.clampDefault(host.defaultPage(),
                 host.pageCount());
+        return StartInPolicy.isHome(card.kind, defaultPage, isFirstTerminal(card), host.startIn());
+    }
+
+    private boolean showsHomeButton(@NonNull Card card) {
+        return PageOverviewPolicy.showsHomeButton(card.kind, isFirstTerminal(card));
+    }
+
+    /** Whether {@code card} is the first terminal window's, the one a start in the Workspace opens. */
+    private boolean isFirstTerminal(@NonNull Card card) {
+        if (card.kind != PageOverviewPolicy.Kind.TERMINAL) return false;
+        for (Card each : cards) {
+            if (each.kind == PageOverviewPolicy.Kind.TERMINAL) return each == card;
+        }
+        return false;
     }
 
     @Nullable
@@ -1175,7 +1196,7 @@ public final class PageOverviewView extends FrameLayout {
             canvas.drawCircle(at.centerX(), at.top, buttonRadius, fillPaint);
             drawIcon(canvas, deleteIcon, at.centerX(), at.top, onErrorColor, alpha);
         }
-        if (PageOverviewPolicy.showsHomeButton(card.kind)) {
+        if (showsHomeButton(card)) {
             boolean isDefault = isDefault(card);
             fillPaint.setColor(isDefault ? primaryColor : surfaceColor);
             fillPaint.setAlpha(alpha);
@@ -1266,7 +1287,7 @@ public final class PageOverviewView extends FrameLayout {
                 if (part != null) part[0] = Part.DELETE;
                 return card;
             }
-            if (PageOverviewPolicy.showsHomeButton(card.kind)
+            if (showsHomeButton(card)
                 && dist(x, y, rect.centerX(), rect.bottom) <= hit) {
                 if (part != null) part[0] = Part.HOME;
                 return card;
@@ -1358,7 +1379,7 @@ public final class PageOverviewView extends FrameLayout {
                     Card card = downCard;
                     switch (downPart) {
                         case DELETE: onDelete(card); break;
-                        case HOME: onMakeDefault(card); break;
+                        case HOME: onMakeHome(card); break;
                         default: closeInto(cards.indexOf(card), false); break;
                     }
                 }
@@ -1566,7 +1587,7 @@ public final class PageOverviewView extends FrameLayout {
                 Card card = cards.get(i);
                 ids.add(i * 3);
                 if (PageOverviewPolicy.canDelete(card.kind, homeCount)) ids.add(i * 3 + 1);
-                if (PageOverviewPolicy.showsHomeButton(card.kind)) ids.add(i * 3 + 2);
+                if (showsHomeButton(card)) ids.add(i * 3 + 2);
             }
         }
 
@@ -1592,16 +1613,16 @@ public final class PageOverviewView extends FrameLayout {
                 case HOME:
                     bounds.set(Math.round(rect.centerX() - r), Math.round(rect.bottom - r),
                         Math.round(rect.centerX() + r), Math.round(rect.bottom + r));
-                    node.setContentDescription(getContext().getString(
-                        R.string.home_pages_editor_make_default, card.number));
+                    node.setContentDescription(homeButtonLabel(card));
                     node.setCheckable(true);
                     node.setChecked(isDefault(card));
                     break;
                 default:
                     rect.round(bounds);
-                    String label = isDefault(card)
+                    String label = !isDefault(card) ? labelOf(card)
+                        : card.isHome()
                         ? getContext().getString(R.string.page_overview_default_page, card.number)
-                        : labelOf(card);
+                        : getContext().getString(R.string.page_overview_start_here, labelOf(card));
                     node.setContentDescription(getContext().getString(R.string.page_overview_open,
                         label));
                     break;
@@ -1619,10 +1640,22 @@ public final class PageOverviewView extends FrameLayout {
             Card card = cards.get(index);
             switch (Part.values()[id % 3]) {
                 case DELETE: onDelete(card); break;
-                case HOME: onMakeDefault(card); break;
+                case HOME: onMakeHome(card); break;
                 default: closeInto(index, false); break;
             }
             return true;
+        }
+    }
+
+    @NonNull
+    private String homeButtonLabel(@NonNull Card card) {
+        switch (card.kind) {
+            case HOME_PAGE:
+                return getContext().getString(R.string.home_pages_editor_make_default, card.number);
+            case TERMINAL:
+                return getContext().getString(R.string.page_overview_start_in_terminal);
+            default:
+                return getContext().getString(R.string.page_overview_start_on_display);
         }
     }
 

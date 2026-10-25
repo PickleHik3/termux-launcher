@@ -145,9 +145,13 @@ public final class PageOverviewPolicy {
         }
     }
 
-    /** Whether a card of {@code kind} shows the home button: Home page cards only. */
-    public static boolean showsHomeButton(@NonNull Kind kind) {
-        return kind == Kind.HOME_PAGE;
+    /**
+     * Whether a card shows the home button: every Home page, the display window, and of the
+     * terminal windows only the first ({@code firstTerminal}), the one a start in the Workspace
+     * opens on. Which card wears it is {@link StartInPolicy#isHome}'s.
+     */
+    public static boolean showsHomeButton(@NonNull Kind kind, boolean firstTerminal) {
+        return kind != Kind.TERMINAL || firstTerminal;
     }
 
     /**

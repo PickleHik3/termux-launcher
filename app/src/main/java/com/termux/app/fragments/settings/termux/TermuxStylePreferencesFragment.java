@@ -602,10 +602,15 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_az_lock_method":
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
-            case "app_launcher_start_in":
-                // Read at the next cold start only; nothing on screen changes.
-                mPreferences.setLauncherStartIn(value);
+            case "app_launcher_start_in": {
+                // Read at the next cold start only; nothing on screen changes. Display also turns
+                // on the display's start with the launcher, without which it would not hold.
+                com.termux.app.wall.StartInPolicy.Choice choice =
+                    com.termux.app.wall.StartInPolicy.choose(value);
+                if (choice.startsDisplay) mPreferences.setX11DisplayAutostartEnabled(true);
+                mPreferences.setLauncherStartIn(choice.startIn);
                 break;
+            }
             case "app_launcher_home_palette_gesture":
                 // Read at each swipe; nothing on screen changes.
                 mPreferences.setHomePaletteGesture(value);

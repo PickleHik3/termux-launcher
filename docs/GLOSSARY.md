@@ -284,8 +284,12 @@ code's word for a pane's shell, not for a session. See `project-docs/reference/t
 _Avoid_: tab (for a window), terminal (for a pane), column (Niri's word; in prose say window)
 
 **Start in**:
-The one setting that says where a cold start lands: Home (the default) or the Workspace, which
-opens one fresh shell window. It replaces the usage mode's Terminal alone.
+The one setting that says where a cold start lands: Home (the default), the Workspace, which
+opens one fresh shell window, or Display, the **display window**, which holds only while the
+display starts with the launcher (choosing it turns that on; turning it off falls back to the
+Workspace when a terminal window is open, else Home). It is also what the page overview's home
+button sets: a Home page, the first terminal window or the display window. It replaces the usage
+mode's Terminal alone.
 _Avoid_: default place, start page, usage mode
 
 **Search field**:

@@ -309,10 +309,14 @@ public final class TermuxPreferenceConstants {
         /** The version {@code WallReworkMigration} last brought this install to; absent is 0. */
         public static final String KEY_WALL_MIGRATION_VERSION = "wall_migration_version";
 
-        /** Start in: the page a cold start shows, Home page 1 or the Workspace (ADR 0008). */
+        /**
+         * Start in: the page a cold start shows, Home, the Workspace (ADR 0008) or the display
+         * window, which only holds while the display starts with the launcher.
+         */
         public static final String KEY_LAUNCHER_START_IN = "app_launcher_start_in";
         public static final String LAUNCHER_START_IN_HOME = "home";
         public static final String LAUNCHER_START_IN_WORKSPACE = "workspace";
+        public static final String LAUNCHER_START_IN_DISPLAY = "display";
         public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
 
         /**

@@ -1940,7 +1940,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastWallPage = com.termux.app.wall.WallRow.openingKind(
             mPendingWallState == null ? null
                 : mPendingWallState.getString(com.termux.app.wall.PaneWallController.ARG_HALF),
-            mPreferences.getLauncherStartIn());
+            effectiveStartIn());
+        watchStartIn();
         // Built after the preferences, and only while the Widgets place is on the wall, so a
         // terminal-only install never registers an app widget host at all — no binding, no
         // listening, no widget providers reconciled — and neither does a pane switched on under
@@ -10555,6 +10556,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Choreographer.getInstance().removeFrameCallback(mReturnHoldFrame);
         // Stops a wallpaper settle still running, so its animator lets this activity go.
         holdWallpaperParallax();
+        unwatchStartIn();
         mReturnHoldFramePosted = false;
         if (mTermuxActivityRootView != null) mTermuxActivityRootView.setBottomMarginWriter(null);
         if (mPaneController != null) mPaneController.setGeometryScheduler(null);
@@ -26203,6 +26205,82 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The page overview while it is up; null otherwise. */
     @Nullable private com.termux.app.wall.PageOverviewView mPageOverview;
 
+    // ---- Start in: which page is Home (StartInPolicy) ------------------------------------------
+
+    /**
+     * A cold start landed for Start in = Display: the display window comes in front once its
+     * display is up, which Start with the launcher brings about after the wall has landed.
+     */
+    private boolean mStartOnDisplayPending;
+    /**
+     * Start in follows the display's start: switched off in Settings while Display is Start in,
+     * Start in falls back at once, so Settings and Edit pages never show a Display that will not
+     * start. Held here, as the store keeps its listeners weakly.
+     */
+    @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener
+        mStartInListener;
+
+    /** Whether the display starts with the launcher here: switched on, on a build that has one. */
+    private boolean displayStartsWithLauncher() {
+        return isX11DisplayEnabled() && mPreferences.isX11DisplayAutostartEnabled();
+    }
+
+    /** Start in as it stands, the one value the Home marker and the start-up read. */
+    @NonNull
+    private String effectiveStartIn() {
+        return com.termux.app.wall.StartInPolicy.effective(
+            mPreferences == null ? null : mPreferences.getLauncherStartIn(),
+            displayStartsWithLauncher(), !rowWindows().isEmpty());
+    }
+
+    /** Writes a choice of Home: Start in, and the display's start when Display needs it. */
+    private void applyStartIn(@NonNull com.termux.app.wall.StartInPolicy.Choice choice) {
+        if (mPreferences == null) return;
+        if (choice.startsDisplay) mPreferences.setX11DisplayAutostartEnabled(true);
+        mPreferences.setLauncherStartIn(choice.startIn);
+    }
+
+    /** Stores Start in as it stands when the stored value no longer holds: an unstartable Display. */
+    private void settleStartIn() {
+        if (mPreferences == null) return;
+        String now = effectiveStartIn();
+        if (!now.equals(mPreferences.getLauncherStartIn())) mPreferences.setLauncherStartIn(now);
+    }
+
+    /** Edit pages really removed a window: Start in falls back if it named it. */
+    private void startInAfterRemoval(@NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind,
+                                     int terminalsLeft) {
+        if (mPreferences == null) return;
+        String next = com.termux.app.wall.StartInPolicy.afterRemoval(
+            mPreferences.getLauncherStartIn(), kind, terminalsLeft);
+        if (next != null) mPreferences.setLauncherStartIn(next);
+    }
+
+    /** Listens for the display's start and Start in, for {@link #settleStartIn} and the marker. */
+    private void watchStartIn() {
+        android.content.SharedPreferences store =
+            mPreferences == null ? null : mPreferences.getSharedPreferences();
+        if (store == null || mStartInListener != null) return;
+        mStartInListener = (changed, key) -> {
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART.equals(key)) {
+                settleStartIn();
+            } else if (!TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_START_IN.equals(key)) {
+                return;
+            }
+            if (mPageOverview != null) mPageOverview.refresh();
+        };
+        store.registerOnSharedPreferenceChangeListener(mStartInListener);
+    }
+
+    private void unwatchStartIn() {
+        android.content.SharedPreferences store =
+            mPreferences == null ? null : mPreferences.getSharedPreferences();
+        if (store != null && mStartInListener != null) {
+            store.unregisterOnSharedPreferenceChangeListener(mStartInListener);
+        }
+        mStartInListener = null;
+    }
+
     /** The display window's card key in the page overview: there is only ever one display. */
     private static final Object PAGE_OVERVIEW_DISPLAY_KEY = new Object();
 
@@ -26242,8 +26320,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void addPage() {
                     if (mWidgetPaneController != null) mWidgetPaneController.addPage();
                 }
-                @Override public void setDefaultPage(int page) {
-                    com.termux.app.launcher.home.HomeSettings.setDefaultPage(TermuxActivity.this, page);
+                @Override public void chooseHome(
+                        @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
+                    if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE) {
+                        com.termux.app.launcher.home.HomeSettings.setDefaultPage(
+                            TermuxActivity.this, index);
+                    }
+                    applyStartIn(com.termux.app.wall.StartInPolicy.choose(kind));
+                }
+                @Override @NonNull public String startIn() {
+                    return effectiveStartIn();
                 }
                 @Override public int rowCount() {
                     return rowWindowCount();
@@ -26272,14 +26358,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void removeWindow(int row) {
                     int slot = displayRowSlot();
+                    int terminals = rowWindows().size();
                     if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) {
                         // The undo window already stood in for the question: it stops now.
                         if (!isDisplayUp()) return;
                         if (!isEmbeddedDisplayRunning()) tearDownEmbeddedDisplay();
                         else stopEmbeddedDisplay();
+                        startInAfterRemoval(com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY,
+                            terminals);
                         return;
                     }
                     closeWindow(com.termux.app.wall.DisplaySlot.windowAt(row, slot));
+                    startInAfterRemoval(com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL,
+                        Math.max(0, terminals - 1));
                 }
                 @Override public void addTerminal(int row) {
                     insertTerminalWindowAtRow(row);
@@ -26831,6 +26922,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!running) hideDisplaySystemKeyboard();
         syncDisplayKeyboardRoute();
         syncDisplayOnRow();
+        // Start in = Display: the cold start's landing finishes on the display window.
+        if (running && mStartOnDisplayPending) {
+            mStartOnDisplayPending = false;
+            bringDisplayWindowInFront(false);
+        }
     }
 
     /** Follow the display's apps while a display runs; forget them when it stops. */
@@ -29654,8 +29750,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bundle state = mPendingWallState;
         mPendingWallState = null;
         if (mPaneWallController.restoreInstanceState(state)) return;
-        mPaneWallController.landOnColdStart(
-            mPreferences == null ? null : mPreferences.getLauncherStartIn());
+        // A Display that will not start (switched off while this activity was gone) falls back.
+        settleStartIn();
+        String startIn = effectiveStartIn();
+        mPaneWallController.landOnColdStart(startIn);
+        mStartOnDisplayPending = com.termux.app.wall.WallRow.START_IN_DISPLAY.equals(startIn);
     }
 
     /**

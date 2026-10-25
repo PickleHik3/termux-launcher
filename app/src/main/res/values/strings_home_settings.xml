@@ -103,6 +103,10 @@
     <string name="home_pages_editor_remove">Remove page %1$d</string>
     <!-- The page overview: Home's pages and the session's windows as cards. -->
     <string name="page_overview_default_page">Page %1$d, Home opens here</string>
+    <!-- A terminal or display card that is Home: %1$s is its name. -->
+    <string name="page_overview_start_here">%1$s, the launcher starts here</string>
+    <string name="page_overview_start_in_terminal">Start in Terminal</string>
+    <string name="page_overview_start_on_display">Start on Display</string>
     <string name="page_overview_terminal">Terminal %1$d</string>
     <string name="page_overview_display">Display</string>
     <string name="page_overview_open">Open %1$s</string>
