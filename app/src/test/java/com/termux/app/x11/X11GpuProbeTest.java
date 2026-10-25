@@ -157,6 +157,13 @@ public class X11GpuProbeTest {
         assertEquals("somevendor", X11GpuProbe.evaluate(in).gpu);
     }
 
+    /** Mesa picks Zink on any Vulkan driver unless told not to, and then ignores virpipe. */
+    @Test public void virglKeepsMesaOffZink() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "somevendor";
+        assertTrue(X11GpuProbe.evaluate(in).find(X11GpuProbe.Profile.VIRGL).env.contains("LIBGL_KOPPER_DISABLE=1"));
+    }
+
     @Test public void theJsonCarriesEveryProfileAndTheEnvText() throws Exception {
         X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
         in.kgsl = true;

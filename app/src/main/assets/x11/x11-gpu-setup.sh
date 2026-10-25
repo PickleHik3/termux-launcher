@@ -229,7 +229,7 @@ HELPER[turnip-zink]="-"
 WHY[turnip-zink]="the open Adreno driver (Turnip) with OpenGL on top (Zink). Usually the fastest on Qualcomm phones."
 
 PKGS[virgl]="mesa virglrenderer-android"
-ENV[virgl]="GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2 MESA_NO_ERROR=1 LIBGL_DRI3_DISABLE=1"
+ENV[virgl]="GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2 MESA_NO_ERROR=1 LIBGL_DRI3_DISABLE=1 LIBGL_KOPPER_DISABLE=1"
 HELPER[virgl]="virgl_test_server_android"
 WHY[virgl]="forwards OpenGL to the phone's own driver through a helper program."
 
