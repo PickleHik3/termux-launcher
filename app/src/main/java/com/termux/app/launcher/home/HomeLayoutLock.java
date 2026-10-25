@@ -6,7 +6,7 @@ import androidx.annotation.NonNull;
  * Settings › Home › Lock Home layout: while it is on, nothing on a Home page can be moved,
  * resized, added or taken away by hand, so a stray hold can no longer drag an icon off its place.
  * Taps still launch and open folders, and a long press on the free area still opens Home's sheet,
- * whose first page row then unlocks. Off, the default, is Home as it was.
+ * whose Lock layout switch then turns it off. Off, the default, is Home as it was.
  */
 public final class HomeLayoutLock {
 
@@ -34,8 +34,6 @@ public final class HomeLayoutLock {
     /** Whether Home's sheet offers {@code item} while the layout is {@code locked}. */
     public static boolean sheetOffers(boolean locked, @NonNull HomeActionsSheetPolicy.Item item) {
         switch (item) {
-            case LOCK_LAYOUT: return !locked;
-            case UNLOCK_LAYOUT: return locked;
             case ADD_WIDGET:
             case ADD_APP:
             case ADD_PAGE:

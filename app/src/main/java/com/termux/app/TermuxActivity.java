@@ -26326,6 +26326,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void onNavBandCovered(float covered) {
                         setHomeSheetDecorNavStripAlpha(1f - covered);
                     }
+                    @Override public void onLayoutLockChanged(boolean locked) {
+                        com.termux.app.launcher.home.HomeSettings.setLayoutLocked(
+                            TermuxActivity.this, locked);
+                        if (mWidgetPaneController != null) mWidgetPaneController.setLayoutLocked(locked);
+                    }
                 });
             content.addView(mHomeActionsSheet, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -26333,11 +26338,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeActionsRawX = rawX;
         mHomeActionsRawY = rawY;
         boolean hasPages = mWidgetPaneController != null;
-        mHomeActionsSheet.open(com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
-            isDefaultHomeApp(), hasPages,
-            hasPages && mWidgetPaneController.currentPageEmpty(),
-            hasPages ? mWidgetPaneController.homePageCount() : 0,
-            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this)));
+        boolean defaultHome = isDefaultHomeApp();
+        boolean pageEmpty = hasPages && mWidgetPaneController.currentPageEmpty();
+        int pageCount = hasPages ? mWidgetPaneController.homePageCount() : 0;
+        mHomeActionsSheet.open(locked -> com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
+                defaultHome, hasPages, pageEmpty, pageCount, locked),
+            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
     }
 
     /**
@@ -26744,15 +26750,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case REMOVE_PAGE:
                 if (mWidgetPaneController != null) mWidgetPaneController.removeCurrentPage();
                 break;
-            case LOCK_LAYOUT:
-            case UNLOCK_LAYOUT: {
-                boolean locked = item == com.termux.app.launcher.home.HomeActionsSheetPolicy.Item.LOCK_LAYOUT;
-                com.termux.app.launcher.home.HomeSettings.setLayoutLocked(this, locked);
-                if (mWidgetPaneController != null) mWidgetPaneController.setLayoutLocked(locked);
-                AppNotice.show(this, locked ? R.string.home_layout_locked_notice
-                    : R.string.home_layout_unlocked_notice, false);
-                break;
-            }
+            case LOCK_LAYOUT: break; // a switch on the card; see onLayoutLockChanged
             case WALLPAPER:
                 // The Appearance card: its Wallpaper row is in view, and Change leads to the picker.
                 openSurfaceEditor(com.termux.app.surfaces.EditorCard.APPEARANCE);
