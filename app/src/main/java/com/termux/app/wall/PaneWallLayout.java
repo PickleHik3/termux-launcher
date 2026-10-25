@@ -1404,6 +1404,10 @@ public final class PaneWallLayout extends ViewGroup {
             .corner(CornerZones.paneSizePx(density))
             .pills(grabberCentreX(page, slide), BorderDrag.PILL_SWIPE_WIDTH_DP * density,
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
+        // The display window's picture is the Linux app's to its rim: its borders stay in the
+        // air around it (BorderReach). A terminal window shares its edges as it always has.
+        BorderReach.apply(mBorderZone, BorderReach.ownsContent(mCurrent, mDisplayInFront),
+            density);
         // A window's bottom border is a seam band a fingertip tall, reaching into its last row
         // and the dock's top (SeamSwipe). Only for a press: the drawn borders never need it. A
         // Home page has no border.
