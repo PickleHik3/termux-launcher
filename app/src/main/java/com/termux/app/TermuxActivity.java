@@ -11420,6 +11420,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mWidgetPaneController.openPicker();
             }
         });
+        // An icon lifted out of the dock goes to Home the way one from the drawer does, and the
+        // drop targets come up where Home's own drag puts them.
+        mSuggestionBarView.setLiftHost(new SuggestionBarView.LiftHost() {
+            @Override @Nullable
+            public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+                return mWidgetPaneController == null ? null : mHomeAppDropTarget;
+            }
+            @Override public boolean dropTargetBand(@NonNull android.graphics.Rect out) {
+                return TermuxActivity.this.dropTargetBand(out);
+            }
+            @Override @Nullable public TerminalDress.Source dropTargetDress() {
+                return terminalDressSource();
+            }
+            @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+        });
         mSuggestionBarView.setFolderRenameHost(new SuggestionBarView.FolderRenameHost() {
             @Override public void beginFolderRename(long revision, @NonNull String folderId,
                                                    @NonNull String title,
@@ -27870,6 +27885,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
     }
 
+    private final int[] mDropTargetBandAt = new int[2];
+
+    /**
+     * Where the Remove and Uninstall targets sit while an icon is dragged, on screen: the status
+     * bar, while it runs along the top of the screen. False otherwise; they then sit just under
+     * the system bar.
+     */
+    private boolean dropTargetBand(@NonNull android.graphics.Rect out) {
+        View bar = findViewById(R.id.terminal_window_bar_host);
+        if (bar == null || !bar.isShown() || bar.getHeight() <= 0) return false;
+        bar.getLocationOnScreen(mDropTargetBandAt);
+        View root = bar.getRootView();
+        if (mDropTargetBandAt[1] + bar.getHeight() / 2 > root.getHeight() / 2) return false;
+        out.set(mDropTargetBandAt[0], mDropTargetBandAt[1],
+            mDropTargetBandAt[0] + bar.getWidth(), mDropTargetBandAt[1] + bar.getHeight());
+        return true;
+    }
+
     private void createWidgetPaneController() {
         View view = findViewById(R.id.widget_pane);
         // Terminal-only installs keep the status pane (clock, status) but not the widget grid.
@@ -27976,20 +28009,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void dismissHomeAppMenu() {
                     if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
                 }
-                // The drop targets sit in the status bar while it runs along the top of the screen.
-                private final int[] statusAt = new int[2];
                 @Override public boolean homeDropTargetBand(@NonNull android.graphics.Rect out) {
-                    View bar = findViewById(R.id.terminal_window_bar_host);
-                    if (bar == null || !bar.isShown() || bar.getHeight() <= 0) return false;
-                    bar.getLocationOnScreen(statusAt);
-                    View root = bar.getRootView();
-                    if (statusAt[1] + bar.getHeight() / 2 > root.getHeight() / 2) return false;
-                    out.set(statusAt[0], statusAt[1], statusAt[0] + bar.getWidth(),
-                        statusAt[1] + bar.getHeight());
-                    return true;
+                    return dropTargetBand(out);
                 }
                 @Override @Nullable public TerminalDress.Source homeDropTargetDress() {
                     return terminalDressSource();
+                }
+                // A Home icon dragged onto the dock goes into its pinned row.
+                @Override @Nullable public com.termux.app.dock.DockDrop dockDrop() {
+                    return mSuggestionBarView == null ? null : mSuggestionBarView.dockDrop();
                 }
                 @Override public void beginHomeFolderRename(@NonNull String name,
                         @NonNull FolderRenameTitleView title,

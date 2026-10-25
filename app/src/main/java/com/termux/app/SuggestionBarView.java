@@ -140,6 +140,7 @@ import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
+import com.termux.app.dock.DockDropPolicy;
 import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -3257,6 +3258,12 @@ public final class SuggestionBarView extends GridLayout
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (event == null) return super.dispatchTouchEvent(event);
+        DockLift lift = dockLift;
+        if (lift != null) {
+            // The finger carrying an icon out of the row: its stream is the carry's to the end.
+            routeDockLift(lift, event);
+            return true;
+        }
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
             if (activeAzLetter != null) {
@@ -3990,6 +3997,8 @@ public final class SuggestionBarView extends GridLayout
                 } else {
                     View pressTarget = resolvePrimaryPressTarget(view);
                     bindAppContextLongPress(pressTarget, entry, pinnedIndex, null, null, true);
+                    DockLift lift = dockLift;
+                    if (lift != null && pinnedItem == lift.pin) view.setAlpha(0f);
                 }
             } else {
                 View pressTarget = resolvePrimaryPressTarget(view);
@@ -6203,7 +6212,9 @@ public final class SuggestionBarView extends GridLayout
                             folderEntryPickup.run();
                         } else {
                             dismissFolderPopup();
-                            startPinnedDrag(pressTarget, pinnedIndex);
+                            if (!beginDockLift(pressTarget, pinnedIndex, rawX, rawY)) {
+                                startPinnedDrag(pressTarget, pinnedIndex);
+                            }
                         }
                         activeLongPressPickupState = null;
                         return true;
@@ -7576,6 +7587,8 @@ public final class SuggestionBarView extends GridLayout
 
     /** Invalidates pickup/local state before the dock row is hidden. */
     public void cancelActiveDockDrag() {
+        abortDockLift();
+        carryLeave();
         PinnedDragState state = activePinnedDragState;
         if (state != null) state.cancelled = true;
         FolderEntryDragState folderState = activeFolderEntryDragState;
@@ -7592,22 +7605,58 @@ public final class SuggestionBarView extends GridLayout
         clearFolderDragInsertionPreview();
     }
 
-    private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
-        Object localState = event.getLocalState();
-        boolean pinnedDrag = localState instanceof PinnedDragState;
-        FolderEntryDragState folderEntry = resolveFolderEntryDrag(event);
-        boolean folderEntryDrag = folderEntry != null;
-        if (!pinnedDrag && !folderEntryDrag) return false;
+    // ---- Icons carried onto and out of the row ------------------------------------------------
 
+    /**
+     * What the dock asks of the launcher around it while one of its icons is lifted out of the
+     * row: Home, to put it down on, and the band and dress for the Remove and Uninstall targets.
+     * Without one, an icon lifted out of the row reorders the row only, as it always did.
+     */
+    public interface LiftHost {
+        /** Home, to put a lifted icon down on; null where there is none. */
+        @Nullable com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget();
+        /** The status chrome along the top of the screen, on screen; false with none there. */
+        default boolean dropTargetBand(@NonNull Rect outOnScreen) { return false; }
+        /** What the terminal is wearing, for the targets to wear the notice pill's dress. */
+        @Nullable default com.termux.app.notice.TerminalDress.Source dropTargetDress() {
+            return null;
+        }
+        boolean reducedMotion();
+    }
+
+    @Nullable private LiftHost liftHost;
+
+    /** Who takes an icon lifted out of the row; null keeps a lift to reordering the row. */
+    public void setLiftHost(@Nullable LiftHost host) {
+        liftHost = host;
+    }
+
+    /**
+     * A point along the pinned row as a drop sees it: the app slot under it, the pin a drop there
+     * lands on (or the end of the list), and how far across the slot it is. One instance, refilled.
+     */
+    private static final class DropSlot {
+        /** The page's app slot under the point, around the Drawer tile where the row has one. */
+        int hoveredSlot;
+        int targetIndex;
+        @Nullable PinnedItem targetItem;
+        float dropXRatio;
+    }
+
+    private final DropSlot dropSlot = new DropSlot();
+
+    /** The slot a drop at {@code localX} along the row lands on, from the page as drawn. */
+    @NonNull
+    private DropSlot dropSlotAt(float localX) {
         boolean drawerTile = drawerTileShown();
         int slotCount = drawerTile ? drawerTileAppSlots + 1 : Math.max(1, maxButtonCount);
-        float width = Math.max(1f, targetView.getWidth());
-        float x = Math.max(0f, Math.min(width, event.getX()));
+        float width = Math.max(1f, getWidth());
+        float x = Math.max(0f, Math.min(width, localX));
         float slotWidth = width / slotCount;
-        float contentX = x;
-        int hoveredSlot = clamp((int) (contentX / Math.max(1f, slotWidth)), 0, slotCount - 1);
+        int hoveredSlot = clamp((int) (x / Math.max(1f, slotWidth)), 0, slotCount - 1);
         float slotStartX = hoveredSlot * slotWidth;
-        float dropXRatio = slotWidth <= 0f ? 0.5f : Math.max(0f, Math.min(1f, (contentX - slotStartX) / slotWidth));
+        float dropXRatio = slotWidth <= 0f ? 0.5f
+            : Math.max(0f, Math.min(1f, (x - slotStartX) / slotWidth));
         if (drawerTile) {
             // Columns around the Drawer tile hold the page's apps in order; a drop on the tile
             // itself lands beside it, on the side the finger is, or the other where none is.
@@ -7624,14 +7673,420 @@ public final class SuggestionBarView extends GridLayout
             }
             hoveredSlot = app;
         }
-
         int pageOffset = Math.max(0, pinnedPageIndex) * Math.max(1, pinnedItemsPerPage);
-        int targetIndex = clamp(pinnedIndexAtDrawnSlot(drawnPinnedIndices, hoveredSlot, pageOffset),
-            0, pinnedItems == null ? 0 : pinnedItems.size());
-        PinnedItem targetItem = null;
-        if (pinnedItems != null && targetIndex >= 0 && targetIndex < pinnedItems.size()) {
-            targetItem = pinnedItems.get(targetIndex);
+        int size = pinnedItems == null ? 0 : pinnedItems.size();
+        int targetIndex = clamp(pinnedIndexAtDrawnSlot(drawnPinnedIndices, hoveredSlot,
+            pageOffset), 0, size);
+        DropSlot slot = dropSlot;
+        slot.hoveredSlot = hoveredSlot;
+        slot.targetIndex = targetIndex;
+        slot.targetItem = pinnedItems != null && targetIndex < size
+            ? pinnedItems.get(targetIndex) : null;
+        slot.dropXRatio = dropXRatio;
+        return slot;
+    }
+
+    /** Whether a carried icon is over the row now, its gap open. */
+    private boolean carryHovering;
+    /** Which end of the row the carried icon rests at (-1, +1), or 0; and where along it, in px. */
+    private int carryEdgeDirection;
+    private float carryEdgeX;
+    private final Runnable carryEdgeFlip = this::flipCarriedPage;
+    private final int[] carryLocation = new int[2];
+
+    /**
+     * Whether the row takes an icon carried onto it: lying down, on its pinned pages (not the A–Z
+     * row or a typed line's suggestions), on screen, with somewhere to keep its pins.
+     */
+    private boolean takesCarriedIcons() {
+        return !vertical && configRepository != null && isShown() && activeAzLetter == null
+            && !azPreviewRendered && TextUtils.isEmpty(lastInput.trim());
+    }
+
+    /**
+     * A carried icon at ({@code rawX}, {@code rawY}) on screen: over the row, a gap opens at the
+     * slot under it and a rest at either end turns the page ({@link DockDropPolicy}). The gap moves
+     * only when the slot under the finger changes, so a resting finger costs nothing.
+     */
+    private boolean carryHover(float rawX, float rawY) {
+        if (!takesCarriedIcons()) {
+            carryLeave();
+            return false;
         }
+        getLocationOnScreen(carryLocation);
+        float x = rawX - carryLocation[0];
+        float y = rawY - carryLocation[1];
+        if (x < 0f || y < 0f || x >= getWidth() || y >= getHeight()) {
+            carryLeave();
+            return false;
+        }
+        carryHovering = true;
+        updateFolderDragInsertionPreview(dropSlotAt(x).hoveredSlot);
+        watchCarryEdge(x);
+        return true;
+    }
+
+    /** The carried icon left the row, or was let go: the gap closes and the ends stop turning. */
+    private void carryLeave() {
+        stopCarryEdge();
+        if (!carryHovering) return;
+        carryHovering = false;
+        clearFolderDragInsertionPreview();
+    }
+
+    /** A carried icon resting in the band at either end of the row turns the page after a pause. */
+    private void watchCarryEdge(float localX) {
+        carryEdgeX = localX;
+        int direction = DockDropPolicy.edgeDirection(localX, getWidth(),
+            dp((float) DockDropPolicy.EDGE_BAND_DP), pinnedPageIndex, getPinnedPagesCount());
+        if (direction == carryEdgeDirection) return;
+        carryEdgeDirection = direction;
+        removeCallbacks(carryEdgeFlip);
+        if (direction != 0) postDelayed(carryEdgeFlip, DockDropPolicy.EDGE_HOLD_MS);
+    }
+
+    private void stopCarryEdge() {
+        removeCallbacks(carryEdgeFlip);
+        carryEdgeDirection = 0;
+    }
+
+    /**
+     * The rest at the row's end lasted: the next page slides in, as a swipe brings it, and the one
+     * after follows after the same pause for as long as the icon stays there.
+     */
+    private void flipCarriedPage() {
+        int direction = DockDropPolicy.edgeDirection(carryEdgeX, getWidth(),
+            dp((float) DockDropPolicy.EDGE_BAND_DP), pinnedPageIndex, getPinnedPagesCount());
+        carryEdgeDirection = direction;
+        if (direction == 0) return;
+        animatePageSwitch(direction, 0f);
+        postDelayed(carryEdgeFlip, DockDropPolicy.EDGE_HOLD_MS);
+    }
+
+    /**
+     * An app carried in from Home let go over the row: into the slot under the finger on the page
+     * in view (a full page gives its last icon to the next), onto an icon to make a folder, or into
+     * the folder under it ({@link DockDropPolicy#outcome}).
+     */
+    private boolean carryDropApp(@NonNull AppRef app, float rawX, float rawY) {
+        if (!takesCarriedIcons() || pinnedItems == null) return false;
+        getLocationOnScreen(carryLocation);
+        DropSlot slot = dropSlotAt(rawX - carryLocation[0]);
+        AppRef ref = resolveForSelectionRef(app);
+        PinnedFolderItem folder = slot.targetItem instanceof PinnedFolderItem
+            ? (PinnedFolderItem) slot.targetItem : null;
+        DockDropPolicy.Outcome outcome = DockDropPolicy.outcome(findPinnedAppIndex(ref) >= 0,
+            slot.targetItem instanceof PinnedAppItem, folder != null,
+            folder != null && folder.containsApp(ref),
+            folder != null && folder.apps.size() < PinnedFolderItem.MAX_APPS, slot.dropXRatio);
+        switch (outcome) {
+            case ALREADY_THERE:
+                AppNotice.show(getContext(), R.string.dock_already_has_app, false);
+                return false;
+            case FOLDER_FULL:
+                showFolderAppendRejected(LauncherFolderMutator.AppendResult.CAPACITY);
+                return false;
+            case ADD_TO_FOLDER:
+                folder.apps.add(new PinnedAppItem(ref));
+                break;
+            case MAKE_FOLDER:
+                pinnedItems.set(slot.targetIndex,
+                    dockFolderOf((PinnedAppItem) slot.targetItem, new PinnedAppItem(ref)));
+                break;
+            case INSERT:
+            default:
+                int wanted = computeInsertionIndex(slot.targetIndex, slot.targetItem,
+                    slot.dropXRatio);
+                pinnedItems.add(DockDropPolicy.insertIndex(pinnedPageIndex,
+                    Math.max(1, pinnedItemsPerPage), pinnedItems.size(), wanted),
+                    new PinnedAppItem(ref));
+                break;
+        }
+        persistPinsAndReload();
+        return true;
+    }
+
+    /**
+     * A new dock folder in the place of {@code target}, holding it and {@code added} (unless they
+     * are the same app), as dropping one icon on another makes one.
+     */
+    @NonNull
+    private PinnedFolderItem dockFolderOf(@NonNull PinnedAppItem target,
+                                          @Nullable PinnedAppItem added) {
+        AppRef targetRef = resolveForSelectionRef(target.appRef);
+        PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), "Folder");
+        folder.apps.add(new PinnedAppItem(targetRef, target.iconOverride));
+        if (added != null) {
+            AppRef addedRef = resolveForSelectionRef(added.appRef);
+            if (!targetRef.stableId().equals(addedRef.stableId())) {
+                folder.apps.add(new PinnedAppItem(addedRef, added.iconOverride));
+            }
+        }
+        return folder;
+    }
+
+    /** The row as a place to put down an icon carried in from Home. */
+    @NonNull
+    public com.termux.app.dock.DockDrop dockDrop() {
+        return dockDrop;
+    }
+
+    private final com.termux.app.dock.DockDrop dockDrop = new com.termux.app.dock.DockDrop() {
+        @Override public boolean hoverApp(float rawX, float rawY) {
+            return carryHover(rawX, rawY);
+        }
+
+        @Override public void leave() {
+            carryLeave();
+        }
+
+        @Override public boolean dropApp(@NonNull AppRef app, float rawX, float rawY) {
+            return carryDropApp(app, rawX, rawY);
+        }
+    };
+
+    /** An app icon lifted out of the row, riding the finger that lifted it. */
+    private static final class DockLift {
+        @NonNull final com.termux.app.launcher.widget.IconCarry carry;
+        /** The pin as it was lifted, matched by identity when the row has changed since. */
+        @NonNull final PinnedAppItem pin;
+        final int sourceIndex;
+        @NonNull final LauncherAppEntry entry;
+        /** The slot it left, hidden while it is in the air. */
+        @NonNull final View sourceSlot;
+        /** The row's children have been told the stream is no longer theirs. */
+        boolean childrenCancelled;
+
+        DockLift(@NonNull com.termux.app.launcher.widget.IconCarry carry,
+                 @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry,
+                 @NonNull View sourceSlot) {
+            this.carry = carry;
+            this.pin = pin;
+            this.sourceIndex = sourceIndex;
+            this.entry = entry;
+            this.sourceSlot = sourceSlot;
+        }
+    }
+
+    @Nullable private DockLift dockLift;
+
+    /**
+     * Lifts the app at {@code pinnedIndex} out of the row under the finger, which goes on from
+     * here as a carry ({@code IconCarry}): back onto the row reorders it, onto Home puts it there
+     * and unpins it (a move), onto Remove unpins it with an Undo, onto Uninstall asks the system.
+     * False for what is not lifted this way (a folder, a rail, no host), which keeps the row's own
+     * drag.
+     */
+    private boolean beginDockLift(@NonNull View pressTarget, int pinnedIndex, float rawX,
+                                  float rawY) {
+        LiftHost lifts = liftHost;
+        if (lifts == null || vertical || pinnedItems == null || pinnedIndex < 0
+            || pinnedIndex >= pinnedItems.size()) return false;
+        PinnedItem item = pinnedItems.get(pinnedIndex);
+        if (!(item instanceof PinnedAppItem)) return false;
+        PinnedAppItem pin = (PinnedAppItem) item;
+        LauncherAppEntry entry = resolvePinnedApp(pin);
+        if (entry == null) return false;
+        int size = Math.max(1, iconSizePx());
+        Drawable icon = getRenderedIcon(entry, size);
+        if (icon == null) return false;
+        View slot = pressTarget;
+        while (slot.getParent() != this && slot.getParent() instanceof View) {
+            slot = (View) slot.getParent();
+        }
+        if (slot.getParent() != this) return false;
+        int[] at = carryLocation;
+        pressTarget.getLocationOnScreen(at);
+        float dx = at[0] + (pressTarget.getWidth() - size) / 2f - rawX;
+        float dy = at[1] + (pressTarget.getHeight() - size) / 2f - rawY;
+        com.termux.app.launcher.widget.HomeAppDrop drop =
+            new com.termux.app.launcher.widget.HomeAppDrop(entry.appRef,
+                entry.label == null ? "" : entry.label, icon, size);
+        List<com.termux.app.launcher.widget.HomeDropTargets.Target> targets =
+            com.termux.app.launcher.widget.LiftDropPolicy.targetsFor(
+                com.termux.app.launcher.widget.LiftDropPolicy.Item.DOCK_APP,
+                com.termux.app.launcher.widget.LiftOverlay.canUninstall(getContext(),
+                    entry.appRef));
+        DockLift[] made = new DockLift[1];
+        com.termux.app.launcher.widget.IconCarry carry = new com.termux.app.launcher.widget.IconCarry(
+            this, com.termux.app.launcher.widget.LiftDropPolicy.Item.DOCK_APP, drop, targets,
+            new com.termux.app.launcher.widget.IconCarry.Host() {
+                @Override @Nullable
+                public com.termux.app.launcher.widget.HomeAppDrop.Target home() {
+                    return lifts.homeAppDropTarget();
+                }
+                @Override public boolean hoverDock(float x, float y) { return carryHover(x, y); }
+                @Override public void leaveDock() { carryLeave(); }
+                @Override public boolean dropOnDock(float x, float y) {
+                    DockLift lift = made[0];
+                    return lift != null && dropLiftedOnRow(lift, x);
+                }
+                @Override public boolean targetBand(@NonNull Rect out) {
+                    return lifts.dropTargetBand(out);
+                }
+                @Override @Nullable
+                public com.termux.app.notice.TerminalDress.Source targetDress() {
+                    return lifts.dropTargetDress();
+                }
+                @Override public void onTarget(
+                        @NonNull com.termux.app.launcher.widget.HomeDropTargets.Target target) {
+                    DockLift lift = made[0];
+                    if (lift == null) return;
+                    if (target == com.termux.app.launcher.widget.HomeDropTargets.Target.UNINSTALL) {
+                        revealLiftSource(lift);
+                        requestUninstall(lift.entry);
+                    } else {
+                        unpinWithUndo(lift.pin);
+                    }
+                }
+                @Override public void onPlacedOnHome() {
+                    DockLift lift = made[0];
+                    // Moved, not copied: it leaves the row, and a move takes no Undo.
+                    if (lift != null) unpin(lift.pin);
+                }
+                @Override public void onReturned() {
+                    DockLift lift = made[0];
+                    if (lift != null) revealLiftSource(lift);
+                }
+                @Override public boolean reducedMotion() { return lifts.reducedMotion(); }
+            });
+        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry, slot);
+        made[0] = lift;
+        dockLift = lift;
+        slot.setAlpha(0f);
+        if (!carry.begin(icon, size, dx, dy, rawX, rawY)) {
+            dockLift = null;
+            slot.setAlpha(1f);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * The finger that lifted an icon out of the row, from the event after the lift to its release:
+     * the row's children are told once that the stream is no longer theirs, and every move goes to
+     * the carry. The row's own gesture state then stands down as for a cancel.
+     */
+    private void routeDockLift(@NonNull DockLift lift, @NonNull MotionEvent event) {
+        if (!lift.childrenCancelled) {
+            lift.childrenCancelled = true;
+            MotionEvent cancel = MotionEvent.obtain(event);
+            cancel.setAction(MotionEvent.ACTION_CANCEL);
+            super.dispatchTouchEvent(cancel);
+            cancel.recycle();
+        }
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_MOVE) {
+            lift.carry.move(event.getRawX(), event.getRawY());
+            return;
+        }
+        if (action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_CANCEL
+            && action != MotionEvent.ACTION_DOWN) return;
+        dockLift = null;
+        lift.carry.end(event.getRawX(), event.getRawY(), action != MotionEvent.ACTION_UP);
+        MotionEvent cancel = MotionEvent.obtain(event);
+        cancel.setAction(MotionEvent.ACTION_CANCEL);
+        dispatchTouchEvent(cancel);
+        cancel.recycle();
+    }
+
+    /** Ends an icon's lift that the row can no longer finish (it is hidden or torn down). */
+    private void abortDockLift() {
+        DockLift lift = dockLift;
+        if (lift == null) return;
+        dockLift = null;
+        lift.carry.end(0f, 0f, true);
+    }
+
+    /**
+     * The lifted icon let go back over the row: the row's own reorder, onto an icon a folder, onto
+     * a folder into it, exactly as the row's drag does.
+     */
+    private boolean dropLiftedOnRow(@NonNull DockLift lift, float rawX) {
+        if (pinnedItems == null || !takesCarriedIcons()) return false;
+        int source = lift.sourceIndex < pinnedItems.size()
+            && pinnedItems.get(lift.sourceIndex) == lift.pin
+            ? lift.sourceIndex : indexOfSamePin(pinnedItems, lift.pin);
+        if (source < 0) return false;
+        getLocationOnScreen(carryLocation);
+        DropSlot slot = dropSlotAt(rawX - carryLocation[0]);
+        // Back onto its own slot: nothing moves.
+        if (slot.targetIndex == source) return false;
+        return applyPinnedDrop(new PinnedDragState(source), slot.targetIndex, slot.targetItem,
+            slot.dropXRatio);
+    }
+
+    /** The slot the lifted icon left shows again: in place, or by drawing the row again. */
+    private void revealLiftSource(@NonNull DockLift lift) {
+        if (lift.sourceSlot.getParent() == this) {
+            lift.sourceSlot.setAlpha(1f);
+        } else {
+            reloadWithInput("", lastTerminalView);
+        }
+    }
+
+    /** Takes {@code pin} out of the row as the store holds it now, without an Undo. */
+    private void unpin(@NonNull PinnedItem pin) {
+        unpinFromStore(pin);
+    }
+
+    /** Takes {@code pin} out of the row and offers it back for five seconds, as Home's Remove does. */
+    private void unpinWithUndo(@NonNull PinnedItem pin) {
+        int index = unpinFromStore(pin);
+        if (index < 0) return;
+        Context context = getContext();
+        AppNotice.undoable(context, context.getString(R.string.dock_item_removed),
+            context.getString(R.string.home_item_removed_undo_hint), () -> restorePin(pin, index),
+            com.termux.app.launcher.widget.HomeItemUndo.HOLD_MS);
+    }
+
+    /**
+     * Removes {@code pin} from the list the store holds now (the row's copy may be behind it), and
+     * returns where it was, or -1 when it was not there.
+     */
+    private int unpinFromStore(@NonNull PinnedItem pin) {
+        if (configRepository == null) {
+            int index = pinnedItems == null ? -1 : indexOfSamePin(pinnedItems, pin);
+            if (index >= 0) {
+                pinnedItems.remove(index);
+                persistPinsAndReload();
+            }
+            return index;
+        }
+        List<PinnedItem> stored = configRepository.loadPinnedItems();
+        int index = indexOfSamePin(stored, pin);
+        pinnedItems = stored;
+        if (index < 0) {
+            reloadWithInput("", lastTerminalView);
+            return -1;
+        }
+        stored.remove(index);
+        persistPinsAndReload();
+        return index;
+    }
+
+    /** The Undo of {@link #unpinWithUndo}: the pin goes back where it was, unless it is back already. */
+    private void restorePin(@NonNull PinnedItem pin, int index) {
+        List<PinnedItem> stored = configRepository != null
+            ? configRepository.loadPinnedItems() : pinnedItems;
+        if (stored == null || indexOfSamePin(stored, pin) >= 0) return;
+        stored.add(DockDropPolicy.restoreIndex(index, stored.size()), pin);
+        pinnedItems = stored;
+        persistPinsAndReload();
+    }
+
+    private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
+        Object localState = event.getLocalState();
+        boolean pinnedDrag = localState instanceof PinnedDragState;
+        FolderEntryDragState folderEntry = resolveFolderEntryDrag(event);
+        boolean folderEntryDrag = folderEntry != null;
+        if (!pinnedDrag && !folderEntryDrag) return false;
+
+        DropSlot slot = dropSlotAt(event.getX());
+        int hoveredSlot = slot.hoveredSlot;
+        int targetIndex = slot.targetIndex;
+        PinnedItem targetItem = slot.targetItem;
+        float dropXRatio = slot.dropXRatio;
 
         switch (event.getAction()) {
             case DragEvent.ACTION_DRAG_STARTED:
@@ -7639,6 +8094,8 @@ public final class SuggestionBarView extends GridLayout
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
                 updateFolderDragInsertionPreview(hoveredSlot);
+                // A pin held at either end of the row turns its page, as a carried icon does.
+                if (!vertical) watchCarryEdge(event.getX());
                 return true;
             case DragEvent.ACTION_DRAG_ENTERED:
                 targetView.setAlpha(0.92f);
@@ -7646,9 +8103,11 @@ public final class SuggestionBarView extends GridLayout
                 return true;
             case DragEvent.ACTION_DRAG_EXITED:
                 targetView.setAlpha(1f);
+                stopCarryEdge();
                 return true;
             case DragEvent.ACTION_DROP:
                 targetView.setAlpha(1f);
+                stopCarryEdge();
                 clearFolderDragInsertionPreview();
                 if (folderEntryDrag) {
                     return applyFolderEntryDrop(folderEntry, targetIndex, targetItem, dropXRatio);
@@ -7656,6 +8115,7 @@ public final class SuggestionBarView extends GridLayout
                 return applyPinnedDrop((PinnedDragState) localState, targetIndex, targetItem, dropXRatio);
             case DragEvent.ACTION_DRAG_ENDED:
                 targetView.setAlpha(1f);
+                stopCarryEdge();
                 clearFolderDragInsertionPreview();
                 // A folder-entry drag left its source popup hidden but alive; finish it now.
                 if (folderEntryDrag) sharedFolderPopup.dismissImmediate();
@@ -7717,12 +8177,7 @@ public final class SuggestionBarView extends GridLayout
                 pinnedItems.remove(source);
             }
             target = clamp(target, 0, Math.max(0, pinnedItems.size() - 1));
-            PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), "Folder");
-            folder.apps.add(new PinnedAppItem(targetRef, targetApp.iconOverride));
-            if (sourceApp != null && sourceRef != null && !targetRef.stableId().equals(sourceRef.stableId())) {
-                folder.apps.add(new PinnedAppItem(sourceRef, sourceApp.iconOverride));
-            }
-            pinnedItems.set(target, folder);
+            pinnedItems.set(target, dockFolderOf(targetApp, sourceApp));
             persistPinsAndReload();
             return true;
         }
@@ -7786,7 +8241,7 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private boolean shouldCreateFolderOnDrop(float dropXRatio) {
-        return dropXRatio >= 0.28f && dropXRatio <= 0.72f;
+        return DockDropPolicy.onIcon(dropXRatio);
     }
 
     private boolean movePinnedItem(int fromIndex, int insertionIndex) {
