@@ -31439,6 +31439,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             // Its text is held to the contrast floor on what the pane band stands on.
             view.setContrastBackdrop(terminalTextSurface());
+            view.setContrastFloor(com.termux.app.terminal.TermuxTerminalSessionActivityClient
+                .terminalContrastFloor(getPreferences()));
             // A pane created while the key inspector is open must report through it too.
             com.termux.app.terminal.TerminalKeyInspector.attachTo(view);
             view.setUseTransparentFrameClear(false);

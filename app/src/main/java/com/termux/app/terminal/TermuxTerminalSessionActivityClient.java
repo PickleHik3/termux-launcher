@@ -1228,8 +1228,24 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     private void applyTextBackdropToPanes() {
         int backdrop = mHost.terminalTextSurface();
-        for (com.termux.view.TerminalView view : mHost.paneViews())
-            if (view != null) view.setContrastBackdrop(backdrop);
+        double floor = terminalContrastFloor(mHost.preferences());
+        for (com.termux.view.TerminalView view : mHost.paneViews()) {
+            if (view == null) continue;
+            view.setContrastBackdrop(backdrop);
+            view.setContrastFloor(floor);
+        }
+    }
+
+    /**
+     * The contrast the user's Terminal contrast level asks normal text to hold: Softer 3:1,
+     * Default 4.5:1, Harder 7:1. The level is only offered with wallpaper colours on, so without
+     * them the default holds.
+     */
+    public static double terminalContrastFloor(
+            @Nullable com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences) {
+        if (preferences == null || !preferences.isTerminalDynamicColorsEnabled())
+            return com.termux.view.ContrastFloor.TEXT;
+        return preferences.getTerminalContrastLevel().bodyTarget;
     }
 
     private void onTerminalTextGroundSettled() {

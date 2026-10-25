@@ -1215,6 +1215,7 @@ public final class TerminalView extends View {
                 replaced.mFallbackTypefaces, replaced.mSymbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
+        mRenderer.setContrastFloor(mContrastFloor);
         relayoutIfFirstRowMoved(replaced);
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
         // are the size of the screen and will never be replayed again.
@@ -1236,6 +1237,7 @@ public final class TerminalView extends View {
             r.mFontFeatures, r.mFontVariations, r.mFontMetricsAdjustments, r.mBoxDrawingPolicy,
             r.mFallbackTypefaces, r.mSymbolExpansion, r);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
+        mRenderer.setContrastFloor(mContrastFloor);
         relayoutIfFirstRowMoved(null);
         updateSize();
     }
@@ -1272,6 +1274,20 @@ public final class TerminalView extends View {
 
     public int getContrastBackdrop() {
         return mContrastBackdrop;
+    }
+
+    private double mContrastFloor = ContrastFloor.TEXT;
+
+    /**
+     * The contrast this pane's normal text is held to (faint text proportionally lower); see
+     * {@link TerminalRenderer#setContrastFloor}. Survives a renderer rebuild; set on change only.
+     */
+    public void setContrastFloor(double floor) {
+        final double text = floor > 0d ? floor : ContrastFloor.TEXT;
+        if (mContrastFloor == text) return;
+        mContrastFloor = text;
+        if (mRenderer != null) mRenderer.setContrastFloor(text);
+        invalidate();
     }
 
     public void setTypeface(Typeface newTypeface, Typeface newItalicTypeface) {
@@ -1380,6 +1396,7 @@ public final class TerminalView extends View {
             boxDrawingPolicy, fallbackTypefaces, symbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
+        mRenderer.setContrastFloor(mContrastFloor);
         relayoutIfFirstRowMoved(replaced);
         replaced.release();
         updateSize();
