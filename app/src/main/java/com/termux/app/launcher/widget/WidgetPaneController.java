@@ -656,15 +656,19 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             return new int[] {Math.min(columns, grid.columns), Math.min(rows, grid.rows)};
         }
 
-        @Override public int placeShortcut(@NonNull String owner, long profileSerial,
-                                           @NonNull Bundle options, @NonNull boolean[] newPage) {
+        @Override @Nullable public int[] placeShortcut(@NonNull String owner, long profileSerial,
+                                                       @NonNull Bundle options) {
             int before = widgets.repository().pageCount();
             LauncherWidgetRecord placed = widgets.addShortcut(owner, profileSerial, options,
                 currentPage);
-            if (placed == null) return -1;
-            newPage[0] = HomePinPolicy.landed(placed.page, before)
+            if (placed == null) return null;
+            boolean newPage = HomePinPolicy.landed(placed.page, before)
                 == HomePinPolicy.Landed.ON_NEW_PAGE;
-            return placed.page;
+            return new int[] {placed.appWidgetId, placed.page, newPage ? 1 : 0};
+        }
+
+        @Override public boolean removeShortcut(int key) {
+            return widgets.removeWidget(key) == LauncherWidgetHostController.AddResult.REMOVED;
         }
 
         @Override public void placeWidget(@NonNull AppWidgetProviderInfo info,

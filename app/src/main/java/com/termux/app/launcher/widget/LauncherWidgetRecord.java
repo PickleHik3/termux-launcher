@@ -36,11 +36,9 @@ import java.util.List;
  * is the synthetic {@link #FOLDER_PROVIDER}, so a folder whose apps change stays the same item for
  * the repository's provider-equality rule.</p>
  *
- * <p>A shortcut ({@link Kind#SHORTCUT}) is keyed the same way and is 1×1. Either an app's pinned
- * shortcut ({@link #SHORTCUT_ID} in its options, the app's package in its provider, and the
- * profile serial: the platform holds the intent and the artwork) or a legacy one
- * ({@link #SHORTCUT_INTENT} and {@link #SHORTCUT_ICON} in its options, which this launcher alone
- * holds). The label is {@link #APP_LABEL}.</p>
+ * <p>A shortcut ({@link Kind#SHORTCUT}) is keyed the same way and is 1×1: an app's pinned shortcut,
+ * with {@link #SHORTCUT_ID} in its options, the app's package in its provider and the profile
+ * serial (the platform holds the intent and the artwork). The label is {@link #APP_LABEL}.</p>
  */
 public final class LauncherWidgetRecord {
     public enum State { ACTIVE, PROVIDER_MISSING, DELETING }
@@ -54,14 +52,8 @@ public final class LauncherWidgetRecord {
     /** The app icon's options key for the label it was added under, shown while the app is gone. */
     public static final String APP_LABEL = "label";
 
-    /** A pinned shortcut's options key for the platform shortcut id; absent on a legacy one. */
+    /** A pinned shortcut's options key for the platform shortcut id. */
     public static final String SHORTCUT_ID = "shortcutId";
-
-    /** A legacy shortcut's options key for the intent it opens, as an intent URI. */
-    public static final String SHORTCUT_INTENT = "shortcutIntent";
-
-    /** A legacy shortcut's options key for its icon, a small PNG as base64. */
-    public static final String SHORTCUT_ICON = "shortcutIcon";
 
     /** The synthetic provider every folder on Home is recorded under; never a real package. */
     public static final ComponentName FOLDER_PROVIDER =
@@ -242,7 +234,7 @@ public final class LauncherWidgetRecord {
     /**
      * A shortcut keyed by {@code id} (negative, from the repository's allocator). {@code owner} is
      * the package it belongs to (the app's own for a pinned one); {@code options} carries
-     * {@link #APP_LABEL} and either {@link #SHORTCUT_ID} or the legacy pair.
+     * {@link #APP_LABEL} and {@link #SHORTCUT_ID}.
      */
     @NonNull
     public static LauncherWidgetRecord shortcut(int id, @NonNull String owner, long profileSerial,
@@ -264,10 +256,10 @@ public final class LauncherWidgetRecord {
     /** True for an app icon on a Home page. */
     public boolean isApp() { return kind == Kind.APP; }
 
-    /** True for a pinned or legacy shortcut on a Home page. */
+    /** True for a pinned shortcut on a Home page. */
     public boolean isShortcut() { return kind == Kind.SHORTCUT; }
 
-    /** The platform id of a pinned shortcut, or null for a legacy one and every other kind. */
+    /** The platform id of a pinned shortcut, or null for every other kind. */
     @Nullable public String shortcutId() { return sizeOptions.getString(SHORTCUT_ID); }
 
     /** True for a folder on a Home page. */

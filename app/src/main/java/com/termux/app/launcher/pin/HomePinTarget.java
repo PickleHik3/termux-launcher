@@ -9,7 +9,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.launcher.widget.WidgetGridDefinition;
 
 /**
- * Home, as the confirm card and the legacy shortcut receiver see it: the thing that puts an item
+ * Home, as the confirm card sees it: the thing that puts an item
  * on a page through the Home model. The Home pane implements it; the activity lends it to
  * {@link HomePinHandoff} while it is started.
  */
@@ -32,11 +32,14 @@ public interface HomePinTarget {
 
     /**
      * Puts a shortcut on Home: the page in front when it has room, else the first that has, else
-     * a new page. Returns the page it landed on counting from 0, or -1 when it could not be
-     * written. {@code newPage} reports a page made for it.
+     * a new page. Returns {key, page, newPage as 0 or 1}, the page counting from 0, or null when
+     * it could not be written.
      */
-    int placeShortcut(@NonNull String owner, long profileSerial, @NonNull Bundle options,
-                      @NonNull boolean[] newPage);
+    @Nullable int[] placeShortcut(@NonNull String owner, long profileSerial,
+                                  @NonNull Bundle options);
+
+    /** Takes back a shortcut {@link #placeShortcut} just placed, in one commit. */
+    boolean removeShortcut(int key);
 
     /**
      * Binds {@code info} and puts it on Home in a free area of its size, through the widget add

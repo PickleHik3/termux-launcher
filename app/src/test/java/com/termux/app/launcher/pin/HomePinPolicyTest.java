@@ -125,20 +125,15 @@ public class HomePinPolicyTest {
         assertEquals(4, HomePinPolicy.classicCells(250));
     }
 
-    @Test public void aLegacyLabelIsTrimmedAndCapped() {
-        assertEquals("", HomePinPolicy.legacyLabel(null));
-        assertEquals("", HomePinPolicy.legacyLabel("   "));
-        assertEquals("Maps", HomePinPolicy.legacyLabel("  Maps "));
-        assertEquals(HomePinPolicy.MAX_LABEL,
-            HomePinPolicy.legacyLabel(new String(new char[200]).replace('\0', 'x')).length());
-    }
-
-    @Test public void aLegacyIntentAtThisAppIsRefusedOnEveryEdition() {
-        assertFalse(HomePinPolicy.legacyIntentAllowed("com.edition.one", true, "com.edition.one"));
-        assertFalse(HomePinPolicy.legacyIntentAllowed("com.edition.two", false, "com.edition.two"));
-        assertTrue(HomePinPolicy.legacyIntentAllowed("com.edition.one", true, "com.edition.two"));
-        assertTrue(HomePinPolicy.legacyIntentAllowed(null, true, "com.edition.one"));
-        assertFalse(HomePinPolicy.legacyIntentAllowed(null, false, "com.edition.one"));
+    @Test public void aShortcutTakenBackLeavesNoRecordAndNoPage() {
+        Memory memory = new Memory();
+        LauncherWidgetRepository repository = new LauncherWidgetRepository(memory);
+        LauncherWidgetRecord placed = repository.addShortcut("a.pkg", 0L, 0, new Bundle());
+        assertNotNull(placed);
+        assertTrue(repository.removeRecord(placed.appWidgetId));
+        assertNull(repository.get(placed.appWidgetId));
+        assertNull(new LauncherWidgetRepository(memory).get(placed.appWidgetId));
+        assertEquals(1, repository.pageCount());
     }
 
     @Test public void aShortcutIsPlacedOnTheFrontPageAndSurvivesAReload() {

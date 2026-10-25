@@ -10,8 +10,7 @@ import com.termux.app.launcher.widget.WidgetGridDefinition;
  * What the confirm card says and where a pinned item goes, with no view or platform object in
  * sight. An app asking to pin a shortcut or a widget is answered here: the card's state (ready,
  * locked, too big for Home), the place it lands ({@link HomeItemPlacementPolicy}: the page in
- * front, else the first page with room, else a new page), and which of a legacy shortcut
- * broadcast's intents may be kept.
+ * front, else the first page with room, else a new page).
  */
 public final class HomePinPolicy {
 
@@ -27,9 +26,6 @@ public final class HomePinPolicy {
 
     /** How a finished add is worded. */
     public enum Landed { ON_PAGE, ON_NEW_PAGE, NOWHERE }
-
-    /** Longest label kept for a legacy shortcut, in characters. */
-    public static final int MAX_LABEL = 80;
 
     private HomePinPolicy() {}
 
@@ -69,31 +65,5 @@ public final class HomePinPolicy {
     public static Landed landed(int placedPage, int pageCountBefore) {
         if (placedPage < 0) return Landed.NOWHERE;
         return placedPage >= pageCountBefore ? Landed.ON_NEW_PAGE : Landed.ON_PAGE;
-    }
-
-    /**
-     * A legacy shortcut label: trimmed, capped, and blank when nothing is left (the caller then
-     * leaves the shortcut out, since an unnamed icon cannot be told apart).
-     */
-    @NonNull
-    public static String legacyLabel(@Nullable String name) {
-        if (name == null) return "";
-        String trimmed = name.trim();
-        return trimmed.length() <= MAX_LABEL ? trimmed : trimmed.substring(0, MAX_LABEL).trim();
-    }
-
-    /**
-     * Whether a legacy shortcut's intent may be kept. It is launched later by a tap, from this
-     * launcher's own identity, so an intent aimed at one of this app's own components (private
-     * ones included) is refused, and so is one with no target at all.
-     *
-     * @param componentPackage the intent's explicit component's package, or null for none
-     * @param hasAction whether the intent names an action
-     * @param ownPackage this launcher's package name, per edition
-     */
-    public static boolean legacyIntentAllowed(@Nullable String componentPackage, boolean hasAction,
-                                              @NonNull String ownPackage) {
-        if (componentPackage != null) return !componentPackage.equals(ownPackage);
-        return hasAction;
     }
 }

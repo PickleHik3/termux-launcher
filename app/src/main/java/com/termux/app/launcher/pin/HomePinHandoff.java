@@ -6,8 +6,8 @@ import androidx.annotation.Nullable;
 import java.util.ArrayDeque;
 
 /**
- * The seam between a pin request and Home. The confirm card and the legacy shortcut receiver
- * run in this process but own no Home model (the widget repository lives in the launcher
+ * The seam between a pin request and Home. The confirm card
+ * runs in this process but owns no Home model (the widget repository lives in the launcher
  * activity, one instance, so a second would overwrite the first); they hand their work to the
  * Home pane through here. The activity attaches its pane from start to stop; work that arrives
  * while nothing is attached waits, a few items at most, and runs on the next attach.

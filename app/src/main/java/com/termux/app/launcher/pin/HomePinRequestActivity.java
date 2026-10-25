@@ -208,13 +208,14 @@ public final class HomePinRequestActivity extends AppCompatActivity {
     }
 
     /**
-     * The shortcut is accepted first, so it is pinned to this launcher by the time Home looks it up,
-     * then placed. The card says where it went when Home answered now; when Home was not running it
-     * waits, and the card only says it was added.
+     * Written before it is accepted, so the system and Home never disagree: Home places the
+     * shortcut, then the request is accepted, and a refused or failed accept takes the record
+     * back. The card says where it went when Home answered now; when Home was not running the
+     * work waits, the card only says it was added, and Home names a failure.
      */
     private void addShortcut(@NonNull LauncherApps.PinItemRequest pin) {
         ShortcutInfo info = pin.getShortcutInfo();
-        if (info == null || !pin.isValid() || !pin.accept()) {
+        if (info == null || !pin.isValid()) {
             conclude(getString(R.string.home_pin_failed), false);
             return;
         }
@@ -227,13 +228,28 @@ public final class HomePinRequestActivity extends AppCompatActivity {
         final Context app = getApplicationContext();
         final String[] outcome = new String[1];
         boolean ranNow = HomePinHandoff.deliver(target -> {
-            boolean[] newPage = new boolean[1];
-            int page = target.placeShortcut(owner, serial, options, newPage);
-            outcome[0] = app.getString(page < 0 ? R.string.home_pin_failed
-                : newPage[0] ? R.string.home_pin_added_new_page : R.string.home_pin_added);
+            int[] placed = target.placeShortcut(owner, serial, options);
+            boolean accepted = false;
+            if (placed != null) {
+                try {
+                    accepted = pin.isValid() && pin.accept();
+                } catch (RuntimeException e) {
+                    accepted = false;
+                }
+                if (!accepted) target.removeShortcut(placed[0]);
+            }
+            if (!accepted) {
+                outcome[0] = app.getString(R.string.home_pin_failed);
+                target.notice(outcome[0]);
+            } else {
+                outcome[0] = app.getString(placed[2] == 1 ? R.string.home_pin_added_new_page
+                    : R.string.home_pin_added);
+            }
         });
+        boolean failed = ranNow && outcome[0] != null
+            && outcome[0].equals(getString(R.string.home_pin_failed));
         conclude(ranNow && outcome[0] != null ? outcome[0] : getString(R.string.home_pin_added),
-            true);
+            !failed);
     }
 
     /**

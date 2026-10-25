@@ -310,17 +310,6 @@
         </provider>
 
 
-        <!-- The legacy "install shortcut" broadcast. Only a sender holding the platform-era
-             permission reaches it; this app does not define that permission (every edition would). -->
-        <receiver
-            android:name=".app.launcher.pin.LegacyShortcutReceiver"
-            android:exported="true"
-            android:permission="com.android.launcher.permission.INSTALL_SHORTCUT">
-            <intent-filter>
-                <action android:name="com.android.launcher.action.INSTALL_SHORTCUT" />
-            </intent-filter>
-        </receiver>
-
         <receiver
             android:name=".app.TermuxOpenReceiver"
             android:exported="false" />
