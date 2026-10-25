@@ -107,8 +107,10 @@ public final class DisplayViewFocus {
         DISPLAY_AWAY,
         /** The display's view on its own window at rest: the keys are X's. */
         DISPLAY_SHOWING,
-        /** Any other view: a terminal, a text field. */
-        OTHER
+        /** Any other view: a terminal on screen, a text field. */
+        OTHER,
+        /** A terminal view that is not on screen (its window minimized): it types nowhere. */
+        TERMINAL_HIDDEN
     }
 
     /** Where the activity sends a key event. */
@@ -135,6 +137,26 @@ public final class DisplayViewFocus {
     public static Route routeFor(@NonNull Holder holder, int keyCode, boolean terminalTypes) {
         if (holder == Holder.OTHER || holder == Holder.DISPLAY_SHOWING) return Route.PASS;
         if (keyCode == KeyEvent.KEYCODE_BACK) return Route.PASS;
+        return terminalTypes ? Route.TERMINAL : Route.OVERLAYS;
+    }
+
+    /**
+     * {@link #routeFor(Holder, int, boolean)} with the two things a hidden terminal changes. An
+     * open search surface (the drawer's search, the palette) owns the keys whatever holds the
+     * focus and whether or not a terminal is on screen: it is offered them directly, never through
+     * a terminal that a minimized window keeps out of sight. With no search open and the terminal
+     * hidden the overlays are still offered the key (a sheet, Home's typed text); a key none of
+     * them takes is left to the activity, as before.
+     *
+     * @param terminalShown whether the active terminal view is on screen
+     * @param searchOpen    whether a search surface is open
+     */
+    @NonNull
+    public static Route routeFor(@NonNull Holder holder, int keyCode, boolean terminalTypes,
+                                 boolean terminalShown, boolean searchOpen) {
+        if (holder == Holder.OTHER || holder == Holder.DISPLAY_SHOWING) return Route.PASS;
+        if (keyCode == KeyEvent.KEYCODE_BACK) return Route.PASS;
+        if (searchOpen || !terminalShown) return Route.OVERLAYS;
         return terminalTypes ? Route.TERMINAL : Route.OVERLAYS;
     }
 }

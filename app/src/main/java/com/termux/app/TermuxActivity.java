@@ -26088,17 +26088,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean routeKeyNobodyHolds(@NonNull KeyEvent event) {
         View focus = getCurrentFocus();
+        TerminalView terminal = getTerminalView();
+        boolean terminalShown = terminal != null && terminal.isShown();
         com.termux.app.x11.DisplayViewFocus.Holder holder = focus == null
             ? com.termux.app.x11.DisplayViewFocus.Holder.NONE
+            : focus instanceof TerminalView && !focus.isShown()
+            ? com.termux.app.x11.DisplayViewFocus.Holder.TERMINAL_HIDDEN
             : !(focus instanceof com.termux.x11.LorieView)
             ? com.termux.app.x11.DisplayViewFocus.Holder.OTHER
             : isDisplayKeyHolderShowing()
             ? com.termux.app.x11.DisplayViewFocus.Holder.DISPLAY_SHOWING
             : com.termux.app.x11.DisplayViewFocus.Holder.DISPLAY_AWAY;
-        TerminalView terminal = getTerminalView();
         com.termux.app.x11.DisplayViewFocus.Route route =
             com.termux.app.x11.DisplayViewFocus.routeFor(holder, event.getKeyCode(),
-                terminal != null && terminal.mEmulator != null);
+                terminal != null && terminal.mEmulator != null, terminalShown,
+                isAppDrawerOpen() || isCommandPaletteOpen());
         if (route == com.termux.app.x11.DisplayViewFocus.Route.PASS) return false;
         if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
             returnKeysToTerminal();
