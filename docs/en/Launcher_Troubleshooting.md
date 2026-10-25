@@ -300,6 +300,13 @@ The Display place exists only while **Settings → Display → Display** is on, 
   (the server's `-legacy-drawing`).
 - **Apps cannot open the display from a proot.** Log in with `--shared-x11`, and check
   `echo $DISPLAY` inside.
+- **The whole phone freezes when a Linux app opens.** On some GPUs (reported on a Mali-G52, the
+  Moto G15) an app opening OpenGL through the virgl server hangs the phone; only a forced restart
+  (hold the power button) brings it back. The launcher ranks software rendering first on those
+  phones and says so in **Graphics acceleration**. To keep acceleration for everything else and
+  run one app in software, start it without the virgl driver: `env -u GALLIUM_DRIVER code-oss`.
+  Electron apps (Code-OSS among them) started from the app drawer under a virgl profile get
+  `--disable-gpu` on their own.
 - **Nothing is accelerated.** `glmark2-es2` names the renderer in its first lines; `llvmpipe`
   means a profile variable is missing or the profile does not fit this GPU. Run
   `termux-x11-gpu-setup` (or `tlstore display`): it tries every graphics profile that fits the phone
