@@ -57,6 +57,9 @@ Not "forgotten" — each has a stated reason to wait.
 | Unscroll | S | Kitty's `CSI + T`. The rest of the old "colour stack, palette notifications, pointer shapes" item is built: XTPUSHCOLORS/XTPOPCOLORS, mode 2031 with `CSI ? 997 n`, and OSC 22 are in `TerminalEmulator`, and OSC 99 desktop notifications are in `KittyNotifications`. Parser and state work with no current demand; prioritize when an application asks. |
 | Kittens and plugin scripts | M | Do not embed kitty's Python app API. `launcherctl` plus the registry already lets a shell script in any language drive the app. |
 | Multiple Android top-level windows as a core abstraction | — | The study rejects it outright: on a phone, tabs and panes inside one Activity are predictable and OS-managed multi-window is not. |
+| One action list for gestures, menus and commands | M | From the Octopi study (`active/power-user-round-2026-10-25.md`). Home gestures pick from `HomeGestures.Action` (eight actions), while the palette and `launcherctl` keep their own lists. One registry would let gestures, dock items and icon swipes run any palette action. Parked for the settings-access work. |
+| Richer widget picker | S | Also from the Octopi study. Ours already has search, per-app counts and previews; Octopi adds its search field at the bottom (thumb reach) and card rows. Small gain. |
+| Personal / Work tab in the drawer | M | `LauncherAppDataProvider` reads profiles, but the drawer has no Work tab or pause toggle (`reference/launcher/launcher-basics-research-2026-10-25.md`, flow 8). Few users run a work profile here. |
 
 ## Loose ends inside finished slices
 
