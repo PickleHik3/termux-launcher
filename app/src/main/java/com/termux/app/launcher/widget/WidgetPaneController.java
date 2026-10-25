@@ -122,11 +122,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         /**
          * A hold on a Home app icon: the App menu for {@code entry}, anchored on {@code anchor},
-         * the same card the dock and the drawer open. False when there is none to show, and the
+         * the card the dock and the drawer open in its Home form (no Add to home), whose Remove
+         * from Home row runs {@code removeFromHome}. False when there is none to show, and the
          * hold lifts the icon at once instead.
          */
         default boolean showHomeAppMenu(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
-                                        @NonNull View anchor) {
+                                        @NonNull View anchor, @NonNull Runnable removeFromHome) {
             return false;
         }
         /** The finger holding the menu travelled on and lifted the icon: the menu closes. */
@@ -1374,6 +1375,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             cell.setTranslationY(translationY);
             cell.setTranslationZ(dp(8));
         }
+        placeCarried(rawX, rawY);
         if (overDropTarget(record, rawX, rawY)) return;
         watchPageEdge(edit.turn, rawX);
         updateDragCandidate(record);
@@ -1519,6 +1521,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         Rect carried = paneBounds(record.cell);
         carried.offset(Math.round(cell.getTranslationX()), Math.round(cell.getTranslationY()));
         if (!pane.widgetDragLayer().lift(cell, carried)) return false;
+        if (carriedPicture != null) {
+            // The overlay already carries the icon over the page's edge: one picture, not two.
+            pane.widgetDragLayer().setAlpha(0f);
+            dragLayerHidden = true;
+        }
         cell.setTranslationX(0f);
         cell.setTranslationY(0f);
         cell.setTranslationZ(0f);
@@ -1822,6 +1829,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     @Nullable private List<HomeDropTargets.Target> dropKinds;
     private final Rect dropBand = new Rect();
     private final int[] windowLocation = new int[2];
+    /** The dragged icon's picture in the overlay while the targets are up, and the cell it hides. */
+    @Nullable private android.graphics.drawable.BitmapDrawable carriedPicture;
+    @Nullable private View carriedCell;
+    /** Where the picture's corner stands from the finger, on screen. */
+    private float carriedDx, carriedDy;
+    private final int[] carriedLocation = new int[2];
+    /** The drag layer was faded out for the picture: a page turn lifted the icon into it. */
+    private boolean dragLayerHidden;
 
     /**
      * A long press on anything on the page ({@link HomeIconLift#onLongPress}): an app icon opens
@@ -1861,7 +1876,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetCellView cell = pane.grid().cellForId(appWidgetId);
         View anchor = appIcons.viewOf(appWidgetId);
         if (anchor == null || !anchor.isAttachedToWindow()) anchor = cell;
-        if (anchor == null || !host.showHomeAppMenu(entry, anchor)) return false;
+        if (anchor == null || !host.showHomeAppMenu(entry, anchor,
+                () -> removeFromHomeByMenu(appWidgetId))) return false;
         hold = new IconHold(appWidgetId, rawX, rawY);
         keepFinger(cell);
         return true;
@@ -1937,7 +1953,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                     rawY - edit.dragStartRawY, slop)) return false;
             // Asked once per drag: a window with no room for them does not ask on every move.
             edit.targetsShown = true;
-            showDropTargets(record);
+            showDropTargets(record, rawX, rawY);
         }
         HomeDropTargets.Layout layout = dropLayout;
         if (layout == null) return false;
@@ -1964,7 +1980,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * system bar without one): Remove, and Uninstall for an app that can be uninstalled. Measured
      * and placed once here; the drag only hit-tests them.
      */
-    private void showDropTargets(@NonNull LauncherWidgetRecord record) {
+    private void showDropTargets(@NonNull LauncherWidgetRecord record, float rawX, float rawY) {
         View root = pane.getRootView();
         if (root == null || !pane.isAttachedToWindow() || root.getWidth() <= 0) return;
         android.content.Context context = pane.getContext();
@@ -2010,6 +2026,48 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         drawable.fadeIn(!host.reducedMotion());
         dropLayout = layout;
         dropKinds = kinds;
+        carryInOverlay(root, rawX, rawY);
+    }
+
+    /**
+     * The dragged icon, while the targets are up: a picture of its cell drawn in the same overlay,
+     * over the pills, so it can travel up into the status chrome's band. The page clips its own
+     * cells (and the status bar is drawn over the page), so the icon in the grid is hidden for as
+     * long as the picture stands in for it. One cell's pixels, let go with the targets.
+     */
+    private void carryInOverlay(@NonNull View root, float rawX, float rawY) {
+        if (edit == null || edit.lifted) return;
+        WidgetCellView cell = pane.grid().cellForId(edit.appWidgetId);
+        if (cell == null || cell.getWidth() <= 0 || cell.getHeight() <= 0) return;
+        android.graphics.Bitmap bitmap;
+        try {
+            bitmap = android.graphics.Bitmap.createBitmap(cell.getWidth(), cell.getHeight(),
+                android.graphics.Bitmap.Config.ARGB_8888);
+        } catch (RuntimeException | OutOfMemoryError failure) {
+            return;
+        }
+        cell.draw(new android.graphics.Canvas(bitmap));
+        cell.getLocationOnScreen(carriedLocation);
+        carriedDx = carriedLocation[0] - rawX;
+        carriedDy = carriedLocation[1] - rawY;
+        android.graphics.drawable.BitmapDrawable picture =
+            new android.graphics.drawable.BitmapDrawable(pane.getResources(), bitmap);
+        carriedPicture = picture;
+        carriedCell = cell;
+        placeCarried(rawX, rawY);
+        root.getOverlay().add(picture);
+        cell.setAlpha(0f);
+    }
+
+    /** Puts the overlay's picture of the dragged icon under the finger. */
+    private void placeCarried(float rawX, float rawY) {
+        android.graphics.drawable.BitmapDrawable picture = carriedPicture;
+        if (picture == null) return;
+        int left = Math.round(rawX + carriedDx) - windowLocation[0];
+        int top = Math.round(rawY + carriedDy) - windowLocation[1];
+        android.graphics.Bitmap bitmap = picture.getBitmap();
+        picture.setBounds(left, top, left + bitmap.getWidth(), top + bitmap.getHeight());
+        picture.invalidateSelf();
     }
 
     /** Takes the targets down, if they are up. */
@@ -2020,6 +2078,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         HomeDropTargetsDrawable drawable = dropTargetsDrawable;
         View holder = dropTargetsHost;
         dropTargetsHost = null;
+        android.graphics.drawable.BitmapDrawable picture = carriedPicture;
+        carriedPicture = null;
+        if (picture != null && holder != null) holder.getOverlay().remove(picture);
+        if (carriedCell != null) carriedCell.setAlpha(1f);
+        carriedCell = null;
+        if (dragLayerHidden) pane.widgetDragLayer().setAlpha(1f);
+        dragLayerHidden = false;
         if (drawable == null || holder == null) return;
         drawable.cancelFade();
         drawable.setHighlighted(-1);
@@ -2094,6 +2159,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             }
             removeWithUndo(appWidgetId, cell);
         });
+    }
+
+    /**
+     * The App menu's Remove from Home: what a drop on the Remove target does, with the same Undo.
+     * A locked layout refuses it as it refuses the lift.
+     */
+    private void removeFromHomeByMenu(int appWidgetId) {
+        if (destroyed || refusedWhileLocked(HomeLayoutLock.Edit.HOLD_TO_EDIT)) return;
+        if (edit != null && edit.appWidgetId == appWidgetId) exitEditMode();
+        removeWithUndo(appWidgetId, null);
     }
 
     /** Takes the item off Home and offers it back for {@link HomeItemUndo#HOLD_MS}. */

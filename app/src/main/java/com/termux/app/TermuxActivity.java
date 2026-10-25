@@ -27961,9 +27961,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // A hold on a Home icon opens the dock's App menu; the finger travelling on closes it.
                 @Override public boolean showHomeAppMenu(
                         @NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
-                        @NonNull View anchor) {
+                        @NonNull View anchor, @NonNull Runnable removeFromHome) {
                     if (mSuggestionBarView == null) return false;
-                    mSuggestionBarView.showDrawerAppContextPopup(anchor, entry, null);
+                    mSuggestionBarView.showHomeAppContextPopup(anchor, entry, removeFromHome);
                     return true;
                 }
                 @Override public void dismissHomeAppMenu() {

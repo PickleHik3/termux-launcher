@@ -6031,6 +6031,16 @@ public final class SuggestionBarView extends GridLayout
         showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null));
     }
 
+    /**
+     * Shows the App menu for an icon on Home, anchored to it: the drawer's card without Add to home,
+     * and with Remove from Home, which runs {@code removeFromHome}.
+     */
+    public void showHomeAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
+                                        @NonNull Runnable removeFromHome) {
+        dismissShortcutsPopup();
+        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null, removeFromHome));
+    }
+
     private void bindFolderContextLongPress(
         @NonNull View pressTarget,
         @NonNull PinnedFolderItem folder,
@@ -6357,7 +6367,9 @@ public final class SuggestionBarView extends GridLayout
         PinnedAppItem folderApp = folderSource ? findFolderApp(sourceFolder, context.folderEntryRef) : null;
         AppMenuPlan.Inputs inputs = new AppMenuPlan.Inputs();
         inputs.source = folderSource ? AppMenuPlan.Source.FOLDER_MEMBER
+            : context.removeFromHome != null ? AppMenuPlan.Source.HOME
             : topPinned ? AppMenuPlan.Source.PINNED : AppMenuPlan.Source.UNPINNED;
+        inputs.pinnedToDock = topPinned;
         inputs.badged = !linuxApp && LauncherNotificationBadgeStore.hasBadge(packageName);
         inputs.shortcutCount = shortcutCount;
         inputs.androidPackage = !linuxApp;
@@ -6452,6 +6464,13 @@ public final class SuggestionBarView extends GridLayout
             case MOVE_TO_DOCK:
                 return appMenuItem(R.string.app_menu_move_to_dock, R.drawable.ic_app_menu_move_to_dock,
                     () -> moveContextEntryToDock(context));
+            case REMOVE_FROM_HOME: {
+                Runnable remove = context.removeFromHome;
+                return appMenuItem(R.string.home_remove_from_home,
+                    R.drawable.ic_app_menu_remove_from_folder, () -> {
+                        if (remove != null) remove.run();
+                    });
+            }
             case REMOVE_FROM_FOLDER:
                 return appMenuItem(R.string.app_menu_remove_from_folder,
                     R.drawable.ic_app_menu_remove_from_folder, () -> removeFromContextSource(context));
@@ -7252,6 +7271,8 @@ public final class SuggestionBarView extends GridLayout
         final int pinnedIndex;
         @Nullable final String sourceFolderId;
         @Nullable final AppRef folderEntryRef;
+        /** Set for an icon on Home: what its Remove from Home row runs. */
+        @Nullable final Runnable removeFromHome;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -7260,11 +7281,23 @@ public final class SuggestionBarView extends GridLayout
             @Nullable String sourceFolderId,
             @Nullable AppRef folderEntryRef
         ) {
+            this(entry, anchor, pinnedIndex, sourceFolderId, folderEntryRef, null);
+        }
+
+        AppMenuContext(
+            @NonNull LauncherAppEntry entry,
+            @NonNull View anchor,
+            int pinnedIndex,
+            @Nullable String sourceFolderId,
+            @Nullable AppRef folderEntryRef,
+            @Nullable Runnable removeFromHome
+        ) {
             this.entry = entry;
             this.anchor = anchor;
             this.pinnedIndex = pinnedIndex;
             this.sourceFolderId = sourceFolderId;
             this.folderEntryRef = folderEntryRef;
+            this.removeFromHome = removeFromHome;
         }
     }
 

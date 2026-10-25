@@ -8,6 +8,7 @@ import static com.termux.app.launcher.popup.AppMenuPlan.Row.MOVE_TO_DOCK;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.NOTIFICATIONS;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.PIN;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.REMOVE_FROM_FOLDER;
+import static com.termux.app.launcher.popup.AppMenuPlan.Row.REMOVE_FROM_HOME;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.RESET_ICON;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.SHORTCUT;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.UNINSTALL;
@@ -110,6 +111,47 @@ public class AppMenuPlanTest {
         in.source = AppMenuPlan.Source.FOLDER_MEMBER;
         assertEquals(Collections.singletonList(Arrays.asList(WIDGETS, APP_INFO, MOVE_TO_DOCK,
                 REMOVE_FROM_FOLDER, CHANGE_ICON, UNINSTALL)),
+            AppMenuPlan.groups(in));
+    }
+
+    /** On Home: no Add to home (it is there), and Remove from Home just before Uninstall. */
+    @Test
+    public void aHomeIcon_tradesAddToHomeForRemoveFromHome() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.HOME;
+        assertEquals(Collections.singletonList(Arrays.asList(WIDGETS, APP_INFO, PIN, CHANGE_ICON,
+                REMOVE_FROM_HOME, UNINSTALL)),
+            AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void aHomeIconForAnAppOnTheDock_offersUnpin() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.HOME;
+        in.pinnedToDock = true;
+        in.customIcon = true;
+        assertEquals(Collections.singletonList(Arrays.asList(WIDGETS, APP_INFO, UNPIN, CHANGE_ICON,
+                RESET_ICON, REMOVE_FROM_HOME, UNINSTALL)),
+            AppMenuPlan.groups(in));
+    }
+
+    /** A Linux app on Home still comes off Home; it has nothing to uninstall. */
+    @Test
+    public void aHomeLinuxApp_keepsRemoveFromHome() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.HOME;
+        in.androidPackage = false;
+        assertEquals(Collections.singletonList(Arrays.asList(PIN, CHANGE_ICON, REMOVE_FROM_HOME)),
+            AppMenuPlan.groups(in));
+    }
+
+    /** The drawer's menu is unchanged: an unpinned app still offers Add to home. */
+    @Test
+    public void aDrawerApp_stillOffersAddToHome() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.UNPINNED;
+        assertEquals(Collections.singletonList(Arrays.asList(WIDGETS, APP_INFO, ADD_TO_HOME, PIN,
+                CHANGE_ICON, UNINSTALL)),
             AppMenuPlan.groups(in));
     }
 }
