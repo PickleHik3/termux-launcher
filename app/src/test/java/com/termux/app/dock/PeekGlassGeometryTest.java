@@ -1,6 +1,7 @@
 package com.termux.app.dock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -173,6 +174,111 @@ public class PeekGlassGeometryTest {
         assertEquals(0, tray.peekRowSideInsetPx);
         DockLayout floating = DockLayoutPolicy.compute(inputs(true, DockSurfaceSpec.PEEK_GLASS));
         assertEquals("Floating draws the tray's slab", 0, floating.peekRowSideInsetPx);
+    }
+
+    // ------------------------------------------------------------------ the band on two surfaces
+    //
+    // Pong (1080 x 2400, density 2.625, gesture navigation) as its screenshot measures it: seven
+    // 129 px icons whose lower edges stand 29 px above the host's bottom, a 63 px strip under the
+    // pill. The band is 0.6 x 129 = 77 px deep, so it hangs 29 px on the host and 48 px on the
+    // strip: the reflection's strongest rows are the host's, and the two must read as one band.
+
+    private static final int PONG_ICON = 129;
+    private static final int PONG_HOST_H = 180;
+    private static final int PONG_STRIP_H = 63;
+
+    private static float[] pongBoxes() {
+        float top = PONG_HOST_H - 29 - PONG_ICON;
+        int inset = PeekGlassGeometry.rowSideInsetPx(SCREEN_W, DENSITY);
+        float slot = (SCREEN_W - 2f * inset) / 7f;
+        float[] boxes = new float[7 * 4];
+        for (int i = 0; i < 7; i++) {
+            float cx = inset + slot * (i + 0.5f);
+            boxes[i * 4] = cx - PONG_ICON / 2f;
+            boxes[i * 4 + 1] = top;
+            boxes[i * 4 + 2] = cx + PONG_ICON / 2f;
+            boxes[i * 4 + 3] = top + PONG_ICON;
+        }
+        return boxes;
+    }
+
+    private static PeekGlassGeometry.Card pongCard() {
+        PeekGlassGeometry.Card card = PeekGlassGeometry.compute(pongBoxes(), 7, 0f, SCREEN_W,
+            PONG_HOST_H, SCREEN_W, PONG_HOST_H + PONG_STRIP_H, DENSITY);
+        assertNotNull(card);
+        return card;
+    }
+
+    /** The strip under the pill: inset as the card is, its origin at the host's bottom. */
+    private static float[] stripBand(PeekGlassGeometry.Card card, boolean[] shows) {
+        int inset = PeekGlassGeometry.sideInsetPx(SCREEN_W);
+        float[] band = new float[8];
+        shows[0] = PeekGlassGeometry.reflectionBandIn(card, inset, PONG_HOST_H,
+            SCREEN_W - 2 * inset, PONG_STRIP_H, band);
+        return band;
+    }
+
+    @Test
+    public void onPongTheBandHangsAcrossTheSeamWithItsStrongestRowsOnTheHost() {
+        PeekGlassGeometry.Card card = pongCard();
+        assertEquals(PONG_HOST_H - 29, card.mirrorAxisY, 0.01f);
+        assertEquals(77, card.bandHeightPx());
+        float[] host = new float[8];
+        assertTrue("the host shows the band's top",
+            PeekGlassGeometry.reflectionBandIn(card, 0f, 0f, SCREEN_W, PONG_HOST_H, host));
+        assertEquals(card.bandTopPx(), host[5], 0f);
+        assertEquals("the host shows the band down to its own bottom", PONG_HOST_H, host[7], 0f);
+        assertEquals(0f, PeekGlassGeometry.reflectionProgress(host, host[5]), 0f);
+        boolean[] shows = new boolean[1];
+        float[] strip = stripBand(card, shows);
+        assertTrue("the strip shows the rest", shows[0]);
+        assertEquals(0f, strip[5], 0f);
+        assertEquals(card.bandTopPx() + card.bandHeightPx() - PONG_HOST_H, strip[7], 0f);
+    }
+
+    @Test
+    public void theFadeRunsOnUnbrokenFromTheHostIntoTheStrip() {
+        PeekGlassGeometry.Card card = pongCard();
+        float[] host = new float[8];
+        PeekGlassGeometry.reflectionBandIn(card, 0f, 0f, SCREEN_W, PONG_HOST_H, host);
+        boolean[] shows = new boolean[1];
+        float[] strip = stripBand(card, shows);
+        // The host's last row and the strip's first are one row of the band apart, at any column.
+        float atSeamOnHost = PeekGlassGeometry.reflectionProgress(host, PONG_HOST_H);
+        float atSeamOnStrip = PeekGlassGeometry.reflectionProgress(strip, 0f);
+        assertEquals(atSeamOnHost, atSeamOnStrip, 1e-5f);
+        assertEquals(29f / 77f, atSeamOnStrip, 1e-4f);
+        // The old program measured the fade from each drawing's own top: both read 0 there.
+        assertTrue("the seam is part way down the band, not a fresh start",
+            atSeamOnStrip > 0.3f);
+        // Side by side the two surfaces put the band in the same place on screen.
+        int inset = PeekGlassGeometry.sideInsetPx(SCREEN_W);
+        assertEquals(host[0], strip[0] + inset, 0f);
+        assertEquals(host[1], strip[1] + PONG_HOST_H, 0f);
+    }
+
+    @Test
+    public void eachSurfaceHoldsItsBlurToItsOwnShareOfTheBand() {
+        PeekGlassGeometry.Card card = pongCard();
+        float[] host = new float[8];
+        PeekGlassGeometry.reflectionBandIn(card, 0f, 0f, SCREEN_W, PONG_HOST_H, host);
+        assertTrue(host[5] >= 0f && host[7] <= PONG_HOST_H);
+        assertTrue(host[4] >= host[0] && host[6] <= host[2]);
+        boolean[] shows = new boolean[1];
+        float[] strip = stripBand(card, shows);
+        assertTrue(strip[5] >= 0f && strip[7] <= PONG_STRIP_H);
+        assertTrue(strip[4] >= 0f && strip[6] <= SCREEN_W - 2 * PeekGlassGeometry.sideInsetPx(SCREEN_W));
+    }
+
+    @Test
+    public void aSurfaceWithNoSizeOrBelowTheBandShowsNone() {
+        PeekGlassGeometry.Card card = pongCard();
+        float[] band = new float[8];
+        assertFalse("not laid out yet",
+            PeekGlassGeometry.reflectionBandIn(card, 0f, 0f, 0, 0, band));
+        assertFalse("wholly under the band's end",
+            PeekGlassGeometry.reflectionBandIn(card, 0f, card.bandTopPx() + card.bandHeightPx(),
+                SCREEN_W, 40, band));
     }
 
     private static DockLayoutPolicy.DockInputs inputs(boolean capsule, DockSurfaceSpec surface) {

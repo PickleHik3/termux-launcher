@@ -35,8 +35,13 @@ import com.termux.shared.logger.Logger;
  * <p>Two ways to draw it, one per glass:</p>
  * <ul>
  *   <li><b>Live</b> (Fancier glass active, so Android 13 and up): the icon row is recorded into a
- *   {@link RenderNode}, flipped, and a {@link RuntimeShader} effect on that node fades and blurs
- *   it. The recording draws the row's icons as references to their own render nodes, so a press,
+ *   plain {@link RenderNode}, flipped, which both views draw; each view wears its own
+ *   {@link RuntimeShader} effect that fades and blurs what it draws, measured from the band's top
+ *   as it stands in that view ({@link PeekGlassGeometry#reflectionBandIn}), so the fade runs on
+ *   unbroken from the host into the strip. The effect stands on each view's own node, the way the
+ *   dock's backdrop wears its glass, never on the shared recording: with the effect on a node
+ *   drawn by two parents, the developer's phone showed the strip's share of the band and none of
+ *   the host's. The recording draws the row's icons as references to their own render nodes, so a press,
  *   a notification dot or a new icon shows in the reflection on the frame it shows on the icon,
  *   with nothing recorded again; the row is recorded again only when it lays out, when one of its
  *   icons asks to be drawn again (once a frame at most) and on each frame a page swipe moves the
@@ -65,25 +70,34 @@ public final class PeekGlassReflection {
     private static final float STILL_BLUR_DP = 1.5f;
 
     /**
-     * The live path's program. {@code content} is the flipped row as the node holds it, in the
-     * node's coordinates (the band's top is the mirror line); {@code uSize} the band; the blur
-     * grows from nothing at the mirror line to {@code uMaxBlur} at the band's far end, sampled on
-     * two rings of eight, and the reflection fades as (1 - t)^2 from {@code uAlpha}.
+     * The live path's program, worn by each view. {@code content} is what the view draws (the
+     * flipped row, in the view's pixels); {@code uBand} the band (left, top, right, bottom) in
+     * them and {@code uShown} the part of it the view shows. Nothing outside the band costs more
+     * than the test. The blur grows from nothing at the mirror line to {@code uMaxBlur} at the
+     * band's far end, sampled on two rings of eight held inside {@code uShown} (so the host and the
+     * strip each read only their own pixels and meet without a dark line at the seam), and the
+     * reflection fades as (1 - t)^2 from {@code uAlpha}, t measured down the whole band.
      */
     private static final String SHADER = ""
         + "uniform shader content;\n"
-        + "uniform float2 uSize;\n"
+        + "uniform float4 uBand;\n"
+        + "uniform float4 uShown;\n"
         + "uniform float uAlpha;\n"
         + "uniform float uMaxBlur;\n"
         + "half4 main(float2 p) {\n"
-        + "    float t = clamp(p.y / max(uSize.y, 1.0), 0.0, 1.0);\n"
+        + "    if (p.x < uShown.x || p.x > uShown.z || p.y < uShown.y || p.y > uShown.w) {\n"
+        + "        return half4(0.0);\n"
+        + "    }\n"
+        + "    float t = clamp((p.y - uBand.y) / max(uBand.w - uBand.y, 1.0), 0.0, 1.0);\n"
         + "    float r = uMaxBlur * t;\n"
-        + "    half4 acc = content.eval(p) * 0.2;\n"
+        + "    float2 lo = uShown.xy + float2(0.5, 0.5);\n"
+        + "    float2 hi = max(lo, uShown.zw - float2(0.5, 0.5));\n"
+        + "    half4 acc = content.eval(clamp(p, lo, hi)) * 0.2;\n"
         + "    for (int i = 0; i < 8; i++) {\n"
         + "        float a = float(i) * 0.7853982;\n"
         + "        float2 d = float2(cos(a), sin(a));\n"
-        + "        acc += content.eval(p + d * r) * 0.05;\n"
-        + "        acc += content.eval(p + d * (r * 0.5)) * 0.05;\n"
+        + "        acc += content.eval(clamp(p + d * r, lo, hi)) * 0.05;\n"
+        + "        acc += content.eval(clamp(p + d * (r * 0.5), lo, hi)) * 0.05;\n"
         + "    }\n"
         + "    float fade = 1.0 - t;\n"
         + "    return acc * half(uAlpha * fade * fade);\n"
@@ -114,14 +128,9 @@ public final class PeekGlassReflection {
 
     @Nullable private PeekReflectionView mHostView;
     @Nullable private PeekReflectionView mStripView;
-    /** The still path's blur as the views last wore it: 1 on, 0 off, -1 not set yet. */
-    private int mBlurState = -1;
 
-    // The live path.
+    // The live path: the flipped row, plain; each view wears the fade over it.
     @Nullable private Object mNode;
-    @Nullable private Object mShader;
-    private float mNodeAlpha = -1f;
-    private int mNodeWidth = -1, mNodeHeight = -1;
     private boolean mRecordPending;
 
     // The still path.
@@ -153,7 +162,6 @@ public final class PeekGlassReflection {
         }
         if (view.getParent() != host) {
             detach(view);
-            mBlurState = -1;
             int index = under != null && under.getParent() == host
                 ? host.indexOfChild(under) + 1 : host.getChildCount();
             host.addView(view, Math.min(index, host.getChildCount()), new ViewGroup.LayoutParams(
@@ -181,7 +189,6 @@ public final class PeekGlassReflection {
         }
         if (view.getParent() != strip) {
             detach(view);
-            mBlurState = -1;
             strip.addView(view, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -305,18 +312,95 @@ public final class PeekGlassReflection {
         canvas.restoreToCount(save);
     }
 
+    /**
+     * Shows or puts away the views and dresses each for the path drawing it: the live fade (its
+     * own program, aimed at the band as it stands in that view), Android 12's light blur on the
+     * still pictures, or nothing. A view is dressed again only when what it wears would change.
+     */
     private void syncViews() {
         boolean show = mShown && mCard != null;
-        int blur = show && !mLive ? 1 : 0;
-        boolean blurMoved = blur != mBlurState;
-        mBlurState = blur;
         for (PeekReflectionView view : new PeekReflectionView[] {mHostView, mStripView}) {
             if (view == null) continue;
             int visibility = show ? View.VISIBLE : View.GONE;
             if (view.getVisibility() != visibility) view.setVisibility(visibility);
-            if (blurMoved && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                Still.blur(view, blur == 1, STILL_BLUR_DP * mDensity);
+            if (show) dress(view);
         }
+    }
+
+    /** A view took a new size: the live fade's band in it is aimed again. */
+    void onViewResized(@NonNull PeekReflectionView view) {
+        if (mShown && mCard != null && view.getVisibility() == View.VISIBLE) dress(view);
+    }
+
+    private void dress(@NonNull PeekReflectionView view) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        if (mLive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            dressLive(view);
+        } else if (view.effectKind != PeekReflectionView.EFFECT_STILL) {
+            Still.blur(view, true, STILL_BLUR_DP * mDensity);
+            view.effectKind = PeekReflectionView.EFFECT_STILL;
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private void dressLive(@NonNull PeekReflectionView view) {
+        PeekGlassGeometry.Card card = mCard;
+        if (card == null) return;
+        float[] band = view.band;
+        boolean shows = PeekGlassGeometry.reflectionBandIn(card, view.originX(), view.originY(),
+            view.getWidth(), view.getHeight(), band);
+        if (!shows) {
+            // Not laid out yet, or none of the band falls on this view: nothing to fade. Its next
+            // size or the next card dresses it again.
+            if (view.effectKind != PeekReflectionView.EFFECT_NONE) {
+                view.setRenderEffect(null);
+                view.effectKind = PeekReflectionView.EFFECT_NONE;
+            }
+            return;
+        }
+        float maxBlur = PeekGlassGeometry.REFLECTION_MAX_BLUR_DP * mDensity;
+        float[] key = view.liveKey;
+        boolean same = view.effectKind == PeekReflectionView.EFFECT_LIVE
+            && Float.compare(key[8], mAlpha) == 0 && Float.compare(key[9], maxBlur) == 0;
+        for (int i = 0; same && i < 8; i++) same = Float.compare(key[i], band[i]) == 0;
+        if (same) return;
+        try {
+            if (view.liveShader == null) view.liveShader = Live.shader();
+            Live.effect(view, view.liveShader, band, mAlpha, maxBlur);
+        } catch (Throwable t) {
+            failLive(t);
+            return;
+        }
+        System.arraycopy(band, 0, key, 0, 8);
+        key[8] = mAlpha;
+        key[9] = maxBlur;
+        view.effectKind = PeekReflectionView.EFFECT_LIVE;
+        Logger.logDebug(LOG_TAG, "Peek glass reflection on " + describe(view) + ": band "
+            + band[0] + "," + band[1] + ".." + band[2] + "," + band[3] + " shown "
+            + band[4] + "," + band[5] + ".." + band[6] + "," + band[7]);
+    }
+
+    /** A view as a log line reads it: where it stands, its size and whether it shows. */
+    @NonNull
+    private static String describe(@NonNull PeekReflectionView view) {
+        ViewParent parent = view.getParent();
+        int index = parent instanceof ViewGroup ? ((ViewGroup) parent).indexOfChild(view) : -1;
+        int count = parent instanceof ViewGroup ? ((ViewGroup) parent).getChildCount() : 0;
+        return (parent == null ? "no parent" : parent.getClass().getSimpleName())
+            + " child " + index + "/" + count + " " + view.getWidth() + "x" + view.getHeight()
+            + " origin " + view.originX() + "," + view.originY()
+            + " visibility " + view.getVisibility();
+    }
+
+    /** The live path cannot run here (its program would not build): still pictures from now on. */
+    private void failLive(@NonNull Throwable t) {
+        Logger.logStackTraceWithMessage(LOG_TAG,
+            "Peek glass live reflection failed; still bitmaps from here on", t);
+        mLiveFailed = true;
+        mLive = false;
+        dropDrawings();
+        syncViews();
+        requestStillCapture();
     }
 
     private void invalidateViews() {
@@ -338,9 +422,6 @@ public final class PeekGlassReflection {
             Live.discard(mNode);
         }
         mNode = null;
-        mNodeAlpha = -1f;
-        mNodeWidth = -1;
-        mNodeHeight = -1;
         invalidateViews();
     }
 
@@ -359,26 +440,10 @@ public final class PeekGlassReflection {
         View view = row.view();
         if (!view.isAttachedToWindow() || view.getWidth() <= 0 || view.getHeight() <= 0) return;
         try {
-            if (mShader == null) mShader = Live.shader();
             if (mNode == null) mNode = Live.node();
-            int width = Math.max(1, Math.round(card.right - card.left));
-            int height = Math.max(1, Math.round(card.reflectionDepth()));
-            float maxBlur = PeekGlassGeometry.REFLECTION_MAX_BLUR_DP * mDensity;
-            if (width != mNodeWidth || height != mNodeHeight || Float.compare(mAlpha, mNodeAlpha) != 0) {
-                Live.effect(mNode, mShader, width, height, mAlpha, maxBlur);
-                mNodeWidth = width;
-                mNodeHeight = height;
-                mNodeAlpha = mAlpha;
-            }
-            Live.record(mNode, view, card, mRowDx, mRowDy, width, height);
+            Live.record(mNode, view, card, mRowDx, mRowDy);
         } catch (Throwable t) {
-            Logger.logStackTraceWithMessage(LOG_TAG,
-                "Peek glass live reflection failed; still bitmaps from here on", t);
-            mLiveFailed = true;
-            mLive = false;
-            dropDrawings();
-            syncViews();
-            requestStillCapture();
+            failLive(t);
             return;
         }
         invalidateViews();
@@ -399,15 +464,19 @@ public final class PeekGlassReflection {
             return new RuntimeShader(SHADER);
         }
 
-        static void effect(@NonNull Object node, @NonNull Object shader, int width, int height,
+        /**
+         * The fade and blur on {@code view}, aimed at the band as {@link
+         * PeekGlassGeometry#reflectionBandIn} placed it in the view's pixels.
+         */
+        static void effect(@NonNull View view, @NonNull Object shader, @NonNull float[] band,
                            float alpha, float maxBlurPx) {
             RuntimeShader program = (RuntimeShader) shader;
-            program.setFloatUniform("uSize", width, height);
+            program.setFloatUniform("uBand", band[0], band[1], band[2], band[3]);
+            program.setFloatUniform("uShown", band[4], band[5], band[6], band[7]);
             program.setFloatUniform("uAlpha", Math.max(0f, Math.min(1f, alpha)));
             program.setFloatUniform("uMaxBlur", Math.max(0f, maxBlurPx));
             // A RenderEffect copies the uniforms as they are: built again for each change.
-            ((RenderNode) node).setRenderEffect(
-                RenderEffect.createRuntimeShaderEffect(program, "content"));
+            view.setRenderEffect(RenderEffect.createRuntimeShaderEffect(program, "content"));
         }
 
         /**
@@ -416,11 +485,12 @@ public final class PeekGlassReflection {
          * below the band's top. The row's own slide (a page switch's translation) is drawn in.
          */
         static void record(@NonNull Object nodeObject, @NonNull View row,
-                           @NonNull PeekGlassGeometry.Card card, float rowDx, float rowDy,
-                           int width, int height) {
+                           @NonNull PeekGlassGeometry.Card card, float rowDx, float rowDy) {
             RenderNode node = (RenderNode) nodeObject;
-            int left = Math.round(card.left);
-            int top = Math.round(card.mirrorAxisY);
+            int left = card.bandLeftPx();
+            int top = card.bandTopPx();
+            int width = card.bandWidthPx();
+            int height = card.bandHeightPx();
             node.setPosition(left, top, left + width, top + height);
             RecordingCanvas canvas = node.beginRecording(width, height);
             try {

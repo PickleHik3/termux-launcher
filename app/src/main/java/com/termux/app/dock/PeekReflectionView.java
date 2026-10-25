@@ -16,7 +16,9 @@ import androidx.annotation.Nullable;
  * card's cut on the host and the strip's bounds below it are the reflection's too.
  *
  * <p>It draws nothing of its own and takes no touch; it is redrawn only when the reflection
- * changes.</p>
+ * changes. Under the live path the view itself wears the fade and blur (a RenderEffect on this
+ * view, over the plain recording it draws), the way the dock's backdrop wears its glass, so the
+ * effect stands on a node with exactly one parent; {@link PeekGlassReflection} sets it.</p>
  */
 @SuppressLint("ViewConstructor")
 public final class PeekReflectionView extends View {
@@ -24,6 +26,19 @@ public final class PeekReflectionView extends View {
     @NonNull private final PeekGlassReflection mSource;
     private float mOriginX;
     private float mOriginY;
+
+    /** What this view wears: not set yet, nothing, the still blur or the live fade. */
+    static final int EFFECT_UNSET = -1;
+    static final int EFFECT_NONE = 0;
+    static final int EFFECT_STILL = 1;
+    static final int EFFECT_LIVE = 2;
+    int effectKind = EFFECT_UNSET;
+    /** The live fade's program, one per view: a RenderEffect copies its uniforms when built. */
+    @Nullable Object liveShader;
+    /** The band in this view's pixels and what it shows of it ({@link PeekGlassGeometry#reflectionBandIn}). */
+    final float[] band = new float[8];
+    /** The values the live fade was last built with: the band, the strength and the blur. */
+    final float[] liveKey = new float[10];
 
     PeekReflectionView(@NonNull Context context, @NonNull PeekGlassReflection source) {
         super(context);
@@ -54,6 +69,13 @@ public final class PeekReflectionView extends View {
     @NonNull
     PeekGlassReflection source() {
         return mSource;
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        // The live fade holds its samples inside what this view shows of the band.
+        mSource.onViewResized(this);
     }
 
     @Override
