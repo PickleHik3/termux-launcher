@@ -81,7 +81,7 @@ public final class X11GpuProbe {
         @NonNull public String platform = "";
         /**
          * The system Vulkan driver's API version as Android encodes it
-         * ({@code FEATURE_VULKAN_HARDWARE_VERSION}), 0 when unknown. Below {@link #VULKAN_1_3}
+         * ({@code FEATURE_VULKAN_HARDWARE_VERSION}), 0 when unknown. Below {@link X11GpuProbe#VULKAN_1_3}
          * the wrapper's Zink cannot run on it.
          */
         public int vulkanApiVersion;
