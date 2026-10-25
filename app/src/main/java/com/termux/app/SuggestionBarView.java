@@ -811,6 +811,9 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null) configRepository.removeListener(configListener);
         LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
         if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
+        // An icon in the air, and the row's page turns under it, end with the window.
+        abortDockLift();
+        carryLeave();
         // Nothing is rendered, or kept queued, for a window that has gone.
         iconBinder.cancelAll();
         // A morph never outlives the window: a row that comes back lays out the dock's last
@@ -8060,6 +8063,12 @@ public final class SuggestionBarView extends GridLayout
                 }
                 @Override public boolean hoverDock(float x, float y) { return carryHover(x, y); }
                 @Override public void leaveDock() { carryLeave(); }
+                @Override public boolean handsOverToHome(float x, float y) {
+                    getLocationOnScreen(carryLocation);
+                    return DockDropPolicy.handsOverToHome(x, y, carryLocation[0],
+                        carryLocation[1], carryLocation[0] + getWidth(),
+                        carryLocation[1] + getHeight(), density());
+                }
                 @Override public boolean dropOnDock(float x, float y) {
                     DockLift lift = made[0];
                     return lift != null && dropLiftedOnRow(lift, x);

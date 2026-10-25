@@ -123,6 +123,22 @@ public class DockDropPolicyTest {
         assertEquals(24, DockDropPolicy.EDGE_BAND_DP);
     }
 
+    // ---- leaving the row for Home
+
+    /** The row spans (0, 2000)–(1000, 2100); density 2, so the hand-over is 48 px out. */
+    @Test
+    public void aFingerWanderingJustOffTheRowStaysTheRows() {
+        assertFalse(DockDropPolicy.handsOverToHome(500f, 1990f, 0f, 2000f, 1000f, 2100f, 2f));
+        assertFalse(DockDropPolicy.handsOverToHome(500f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
+    }
+
+    @Test
+    public void aFingerWellAboveTheRowIsHomes() {
+        assertTrue(DockDropPolicy.handsOverToHome(500f, 1952f, 0f, 2000f, 1000f, 2100f, 2f));
+        assertTrue("past a side too",
+            DockDropPolicy.handsOverToHome(1060f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
+    }
+
     // ---- Undo
 
     @Test

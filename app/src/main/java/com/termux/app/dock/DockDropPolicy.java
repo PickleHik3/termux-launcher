@@ -2,6 +2,7 @@ package com.termux.app.dock;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.launcher.drawer.DrawerHandOverPolicy;
 import com.termux.app.launcher.widget.WidgetPaneController;
 
 /**
@@ -117,6 +118,18 @@ public final class DockDropPolicy {
         if (x <= bandPx) return page > 0 ? -1 : 0;
         if (x >= width - bandPx) return page < pageCount - 1 ? 1 : 0;
         return 0;
+    }
+
+    /**
+     * Whether an icon lifted out of the row, now at ({@code x}, {@code y}) on screen, has left the
+     * row ({@code left}, {@code top}, {@code right}, {@code bottom}) far enough to be Home's: as an
+     * icon leaves the drawer, a finger {@link DrawerHandOverPolicy#CROSS_DP} past its edge. A
+     * finger that only wanders off the row while reordering it does not turn the wall to Home.
+     */
+    public static boolean handsOverToHome(float x, float y, float left, float top, float right,
+                                          float bottom, float density) {
+        float outside = Math.max(Math.max(left - x, x - right), Math.max(top - y, y - bottom));
+        return outside >= DrawerHandOverPolicy.CROSS_DP * density;
     }
 
     /**

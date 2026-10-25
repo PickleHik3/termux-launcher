@@ -36,6 +36,12 @@ public final class IconCarry {
         default boolean hoverDock(float rawX, float rawY) { return false; }
         /** The finger left the dock: the gap closes. */
         default void leaveDock() { }
+        /**
+         * Whether a finger at ({@code rawX}, {@code rawY}), off the dock, is far enough from where
+         * the icon came from for Home to take it over (and the wall to turn to Home). Once it has,
+         * Home keeps following it.
+         */
+        default boolean handsOverToHome(float rawX, float rawY) { return true; }
         /** Let go over the dock. True when the row took it. */
         default boolean dropOnDock(float rawX, float rawY) { return false; }
         /** The status chrome along the top of the screen, on screen, for the targets. */
@@ -172,6 +178,7 @@ public final class IconCarry {
     private void followHome(float rawX, float rawY) {
         HomeAppDrop.Follower follower = drop.follower();
         if (follower == null) {
+            if (!host.handsOverToHome(rawX, rawY)) return;
             HomeAppDrop.Target home = host.home();
             if (home == null || !home.canTakeAppDrop()) return;
             home.onAppDropStarted(drop, rawX, rawY);
