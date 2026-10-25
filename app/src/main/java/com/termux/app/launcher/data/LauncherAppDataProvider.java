@@ -157,7 +157,7 @@ public final class LauncherAppDataProvider {
      */
     private void addLinuxApps(@NonNull Snapshot snapshot) {
         linuxAppsById = Collections.emptyMap();
-        if (!com.termux.BuildConfig.X11_SERVER) return;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(context)) return;
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
         if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DrawerAppsEnabled()) return;
         Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> byId = new HashMap<>();

@@ -666,7 +666,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_theme":
                 return mKeyboardLook.getString(key, defValue);
             case "app_launcher_use_case_mode":
-                return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
+                return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mContext, mPreferences);
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_builtin_widget_style":
@@ -691,7 +691,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
      */
     private void applyUseCaseMode(String mode) {
         boolean displayBefore = mPreferences.isX11DisplayEnabled();
-        if (!com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, mode)) return;
+        if (!com.termux.app.launcher.LauncherUseCaseMode.applyMode(mContext, mPreferences, mode)) return;
         boolean displayAfter = mPreferences.isX11DisplayEnabled();
         if (displayBefore != displayAfter) {
             com.termux.app.x11.X11DisplaySwitch.onWritten(mContext, mPreferences, displayAfter);
