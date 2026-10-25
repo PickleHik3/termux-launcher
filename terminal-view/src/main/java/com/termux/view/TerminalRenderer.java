@@ -364,6 +364,14 @@ public final class TerminalRenderer {
     /** Colour of the curly underline under a detected URL; 0 leaves URLs unmarked. */
     private int mUrlUnderlineColor;
 
+    /**
+     * What text on the default background really stands on, opaque, or 0 while that is the
+     * palette's own background ({@link #setContrastBackdrop}).
+     */
+    private int mContrastBackdrop;
+    /** Normal and faint ink held to {@link ContrastFloor} on the current backdrop, per colour. */
+    private final ContrastFloor.Memo mContrastMemo = new ContrastFloor.Memo();
+
     /** The URL cells of the visible rows, refreshed each frame from the screen text. */
     private final UrlUnderlines mUrlUnderlines = new UrlUnderlines();
 
@@ -886,6 +894,60 @@ public final class TerminalRenderer {
 
     public int getUrlUnderlineColor() {
         return mUrlUnderlineColor;
+    }
+
+    /**
+     * Tell the renderer what text on the default background really stands on — a translucent pane
+     * over the wallpaper shows the wallpaper through its tint — so that text is held to
+     * {@link ContrastFloor} against it. Zero (or any transparent colour) means the palette's own
+     * background, which is what an opaque pane stands on. Text on a cell background of its own is
+     * left alone: it stands on that colour, which the program chose.
+     *
+     * <p>Set when the backdrop is measured anew, never per frame: a change re-records every row.</p>
+     */
+    public void setContrastBackdrop(int color) {
+        final int backdrop = (color >>> 24) == 0 ? 0 : color | 0xFF000000;
+        if (mContrastBackdrop == backdrop) return;
+        mContrastBackdrop = backdrop;
+        mRowCache.invalidate();
+    }
+
+    public int getContrastBackdrop() {
+        return mContrastBackdrop;
+    }
+
+    /**
+     * The ink a glyph is drawn in: {@code foreColor} — made faint for {@code dim} — held to its
+     * contrast floor where it stands on the default background {@code defaultBackColor}. Text in
+     * the default background's own colour was hidden on purpose and stays so; text on a cell
+     * background of its own is the program's choice and is only made faint.
+     */
+    int legibleInk(int foreColor, int backColor, int defaultBackColor, boolean dim) {
+        if (backColor != defaultBackColor
+            || (foreColor | 0xFF000000) == (defaultBackColor | 0xFF000000)) {
+            return dim ? ContrastFloor.dim(foreColor) : foreColor;
+        }
+        mContrastMemo.setBackdrop(mContrastBackdrop != 0 ? mContrastBackdrop : defaultBackColor);
+        return dim ? mContrastMemo.dimText(foreColor) : mContrastMemo.text(foreColor);
+    }
+
+    /**
+     * Whether a run is only seam glyphs — box drawing, block elements, braille, sextants and the
+     * Powerline separators — whose colour has to match the cell beside them rather than read as
+     * text, so the contrast floor leaves them their own.
+     */
+    static boolean isSeamRun(char[] text, int start, int length) {
+        if (length <= 0) return false;
+        final int end = start + length;
+        for (int i = start; i < end; ) {
+            final int codePoint = Character.codePointAt(text, i, end);
+            if (!BoxGeometry.isSynthesizable(codePoint, true)
+                && !(codePoint >= 0xE0B0 && codePoint <= 0xE0D7) && codePoint != ' ') {
+                return false;
+            }
+            i += Character.charCount(codePoint);
+        }
+        return true;
     }
 
     /** The ASCII advance table, for tests that check when a rebuild shares it. */
@@ -1760,8 +1822,10 @@ public final class TerminalRenderer {
             externalRow - block.row);
         final float blockHeight = TextBlockGeometry.height(mFontLineSpacing, block.rows);
         final float blockBottom = blockTop + blockHeight;
-        int foreColor = (int) (resolveRunColors(style, palette, boldWithBright, invert) >>> 32);
-        if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0) foreColor = dimColor(foreColor);
+        final long blockColors = resolveRunColors(style, palette, boldWithBright, invert);
+        int foreColor = legibleInk((int) (blockColors >>> 32), (int) blockColors,
+            palette[TextStyle.COLOR_INDEX_BACKGROUND],
+            (effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0);
         if (foregroundOverride != 0) foreColor = foregroundOverride;
         final boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
             | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
@@ -2398,8 +2462,16 @@ public final class TerminalRenderer {
             }
         }
         if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
-            if (dim) {
-                foreColor = dimColor(foreColor);
+            final int asked = dim ? dimColor(foreColor) : foreColor;
+            if (foregroundOverride != 0) {
+                foreColor = asked;
+            } else {
+                final int legible = legibleInk(foreColor, backColor,
+                    palette[TextStyle.COLOR_INDEX_BACKGROUND], dim);
+                // A seam glyph keeps its colour so it still meets the cell beside it; the run is
+                // only scanned for that when the floor would have moved its colour.
+                foreColor = legible != asked && isSeamRun(text, startCharIndex, runWidthChars)
+                    ? asked : legible;
             }
             // Underlines are drawn as geometry below, since Paint only knows one straight variant.
             mTextPaint.setUnderlineText(false);
@@ -2504,10 +2576,7 @@ public final class TerminalRenderer {
      * (https://bug735245.bugzilla-attachments.gnome.org/attachment.cgi?id=284267).
      */
     private static int dimColor(int color) {
-        final int red = (0xFF & (color >> 16)) * 2 / 3;
-        final int green = (0xFF & (color >> 8)) * 2 / 3;
-        final int blue = (0xFF & color) * 2 / 3;
-        return 0xFF000000 + (red << 16) + (green << 8) + blue;
+        return ContrastFloor.dim(color);
     }
 
     /**
