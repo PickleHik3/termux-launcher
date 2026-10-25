@@ -153,6 +153,26 @@ public final class LauncherWidgetRepository {
     }
 
     /**
+     * Puts a shortcut on Home like {@link #addApp}: on {@code preferredPage} when it has room, else
+     * the first page that has, else on a new page after the last. One commit. Returns the record as
+     * stored, or null when the write failed or the store is read-only, with nothing changed.
+     */
+    @Nullable
+    public synchronized LauncherWidgetRecord addShortcut(@NonNull String owner, long profileSerial,
+                                                         int preferredPage,
+                                                         @Nullable Bundle options) {
+        HomeItemPlacementPolicy.Choice choice = HomeItemPlacementPolicy.place(grid, pageCount,
+            preferredPage, this::occupancyOnPage, 1, 1);
+        if (choice == null) return null;
+        LauncherWidgetRecord record = LauncherWidgetRecord.shortcut(allocateBuiltinId(), owner,
+            profileSerial, choice.cell, choice.page, options);
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>(records);
+        next.put(record.appWidgetId, record);
+        int nextPages = choice.appendsPage ? pageCount + 1 : pageCount;
+        return commitValidated(next, pending, grid, nextPages, revision + 1) ? record : null;
+    }
+
+    /**
      * Puts an app icon on Home at {@code cell} of {@code page}: the cell a drag chose, so no other
      * page or cell is tried. One commit. Returns the icon as stored, or null when the page is not
      * there, the cell is taken or off the grid, or the write failed, with nothing changed.
@@ -1321,7 +1341,7 @@ public final class LauncherWidgetRepository {
     }
 
     private static boolean holdsApp(@NonNull Collection<LauncherWidgetRecord> values) {
-        for (LauncherWidgetRecord record : values) if (record.isApp()) return true;
+        for (LauncherWidgetRecord record : values) if (record.isApp() || record.isShortcut()) return true;
         return false;
     }
 
@@ -1447,6 +1467,11 @@ public final class LauncherWidgetRepository {
                 return null;
             }
             if (kind == LauncherWidgetRecord.Kind.FOLDER) return decodeFolder(value, cell);
+            if (kind == LauncherWidgetRecord.Kind.SHORTCUT) {
+                return LauncherWidgetRecord.shortcut(value.getInt("id"), provider.getPackageName(),
+                    value.optLong("profile", 0L), cell, Math.max(0, value.optInt("page", 0)),
+                    decodeBundle(value.optJSONObject("options")));
+            }
             if (kind == LauncherWidgetRecord.Kind.APP) {
                 com.termux.app.launcher.model.AppRef ref = decodeAppRef(value.getJSONObject("app"));
                 return LauncherWidgetRecord.app(value.getInt("id"), ref, cell,

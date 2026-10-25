@@ -22,6 +22,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.termux.app.launcher.home.HomeLayoutLock;
+import com.termux.app.launcher.pin.HomePinPolicy;
+import com.termux.app.launcher.pin.HomePinTarget;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetConfigSheet;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetHost;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetKind;
@@ -171,6 +173,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             }
         });
         pane.grid().setAppIconFactory(appIcons);
+        widgets.setAddObserver(pinAddObserver);
         // An app dragged in from the drawer reaches Home as a platform drag the pane follows.
         pane.setOnDragListener(appDropListener);
         catalog.setBuiltinSource(builtins);
@@ -584,6 +587,155 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         LauncherWidgetRecord placed = widgets.addApp(app.appRef, app.label, currentPage);
         return placed == null ? -1 : placed.page;
     }
+
+    // ---- Pin requests ------------------------------------------------------------------------
+
+    /** The widget add a pin request is waiting on, or null; {@link #pinAddObserver} answers it. */
+    @Nullable private HomePinTarget.WidgetResult pinResult;
+    /** The page that add made for itself, or -1 when it used one that was there. */
+    private int pinCreatedPage = -1;
+
+    private final LauncherWidgetHostController.AddObserver pinAddObserver =
+        new LauncherWidgetHostController.AddObserver() {
+            @Override public void onAddCommitted(int appWidgetId) {
+                HomePinTarget.WidgetResult waiting = pinResult;
+                if (waiting == null) return;
+                pinResult = null;
+                boolean newPage = pinCreatedPage >= 0;
+                pinCreatedPage = -1;
+                waiting.onPlaced(appWidgetId, newPage);
+            }
+            @Override public void onAddAbandoned(int appWidgetId) {
+                failPinnedWidget();
+            }
+        };
+
+    /** The add ended without the widget: the page it made for itself goes again, the card is told. */
+    private void failPinnedWidget() {
+        HomePinTarget.WidgetResult waiting = pinResult;
+        if (waiting == null) return;
+        pinResult = null;
+        int made = pinCreatedPage;
+        pinCreatedPage = -1;
+        if (made >= 0 && widgets.repository().recordsOnPage(made).isEmpty()) {
+            widgets.repository().removePage(made);
+        }
+        waiting.onFailed();
+    }
+
+    /**
+     * Home as an app asking to pin an item sees it. Put an item on the page in front, else the
+     * first with room, else a new page, through the same repository the sheet and the drawer use.
+     */
+    @NonNull public HomePinTarget pinTarget() { return pinTarget; }
+
+    private final HomePinTarget pinTarget = new HomePinTarget() {
+        @Override @NonNull public WidgetGridDefinition grid() {
+            return widgets.repository().gridDefinition();
+        }
+
+        @Override @NonNull public int[] spanFor(@NonNull AppWidgetProviderInfo info) {
+            WidgetGridDefinition grid = widgets.repository().gridDefinition();
+            if (pane.grid().getWidth() > 0 && pane.grid().getHeight() > 0) {
+                Rect padding = hostPadding(info);
+                WidgetGridMetrics.Span span = pane.grid().metrics().spanForPixels(
+                    Math.max(1, info.minWidth + padding.left + padding.right),
+                    Math.max(1, info.minHeight + padding.top + padding.bottom));
+                int columns = span.columns, rows = span.rows;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    columns = Math.max(columns, info.targetCellWidth);
+                    rows = Math.max(rows, info.targetCellHeight);
+                }
+                return new int[] {Math.max(1, columns), Math.max(1, rows)};
+            }
+            // The grid has not been measured (Home is not the page on screen): the classic
+            // 70dp-a-cell rule, which the provider's own minimum was written against.
+            float density = pane.getResources().getDisplayMetrics().density;
+            int columns = HomePinPolicy.classicCells(Math.round(info.minWidth / density));
+            int rows = HomePinPolicy.classicCells(Math.round(info.minHeight / density));
+            return new int[] {Math.min(columns, grid.columns), Math.min(rows, grid.rows)};
+        }
+
+        @Override public int placeShortcut(@NonNull String owner, long profileSerial,
+                                           @NonNull Bundle options, @NonNull boolean[] newPage) {
+            int before = widgets.repository().pageCount();
+            LauncherWidgetRecord placed = widgets.addShortcut(owner, profileSerial, options,
+                currentPage);
+            if (placed == null) return -1;
+            newPage[0] = HomePinPolicy.landed(placed.page, before)
+                == HomePinPolicy.Landed.ON_NEW_PAGE;
+            return placed.page;
+        }
+
+        @Override public void placeWidget(@NonNull AppWidgetProviderInfo info,
+                                          @NonNull HomePinTarget.WidgetResult result) {
+            LauncherWidgetRepository repository = widgets.repository();
+            if (pinResult != null || repository.pending() != null) {
+                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.BUSY));
+                result.onFailed();
+                return;
+            }
+            int[] span = spanFor(info);
+            HomeItemPlacementPolicy.Choice choice = HomePinPolicy.place(
+                repository.gridDefinition(), repository.pageCount(), currentPage,
+                repository::recordsOnPage, span[0], span[1]);
+            if (choice == null) {
+                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.NO_SPACE));
+                result.onFailed();
+                return;
+            }
+            int page = choice.page;
+            int made = -1;
+            if (choice.appendsPage) {
+                page = repository.addFreshPage();
+                if (page < 0) {
+                    pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+                    result.onFailed();
+                    return;
+                }
+                made = page;
+            }
+            Bundle options = new Bundle();
+            if (pane.grid().getWidth() > 0 && pane.grid().getHeight() > 0) {
+                Rect bounds = pane.grid().metrics().boundsFor(choice.cell);
+                Rect padding = hostPadding(info);
+                int gutter = WidgetCellView.gutterPx(pane.getResources());
+                options = initialOptions(
+                    bounds.width() - 2 * gutter - padding.left - padding.right,
+                    bounds.height() - 2 * gutter - padding.top - padding.bottom);
+            }
+            pinResult = result;
+            pinCreatedPage = made;
+            liveOrigin = UUID.randomUUID().toString();
+            host.captureWidgetSurfaceOrigin();
+            LauncherWidgetHostController.AddResult started = widgets.beginAdd(info, choice.cell,
+                page, repository.revision(), options, liveOrigin);
+            if (started == LauncherWidgetHostController.AddResult.STARTED) {
+                awaitingExternal = true;
+            } else if (started == LauncherWidgetHostController.AddResult.READY) {
+                render();
+                liveOrigin = null;
+            } else {
+                // Before the add had a transaction nobody was told; after, the observer was.
+                if (pinResult != null) {
+                    pane.showNotice(messageFor(started));
+                    failPinnedWidget();
+                }
+                liveOrigin = null;
+            }
+        }
+
+        @Override public boolean layoutLocked() { return layoutLocked; }
+
+        @Override public void unlockLayout() {
+            setLayoutLocked(false);
+            com.termux.app.launcher.home.HomeSettings.setLayoutLocked(pane.getContext(), false);
+        }
+
+        @Override public void notice(@Nullable String text) {
+            if (text != null && !text.isEmpty()) pane.showNotice(text);
+        }
+    };
 
     /**
      * A tap on an app icon whose app is gone: the page's edit mode opens on it, without a drag,

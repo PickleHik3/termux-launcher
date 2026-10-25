@@ -35,18 +35,33 @@ import java.util.List;
  * at least one; {@link HomeFolderPolicy} keeps a folder of one from standing. Its {@link #provider}
  * is the synthetic {@link #FOLDER_PROVIDER}, so a folder whose apps change stays the same item for
  * the repository's provider-equality rule.</p>
+ *
+ * <p>A shortcut ({@link Kind#SHORTCUT}) is keyed the same way and is 1×1. Either an app's pinned
+ * shortcut ({@link #SHORTCUT_ID} in its options, the app's package in its provider, and the
+ * profile serial: the platform holds the intent and the artwork) or a legacy one
+ * ({@link #SHORTCUT_INTENT} and {@link #SHORTCUT_ICON} in its options, which this launcher alone
+ * holds). The label is {@link #APP_LABEL}.</p>
  */
 public final class LauncherWidgetRecord {
     public enum State { ACTIVE, PROVIDER_MISSING, DELETING }
 
     /** What a Home item is. */
-    public enum Kind { APP_WIDGET, BUILTIN, APP, FOLDER }
+    public enum Kind { APP_WIDGET, BUILTIN, APP, FOLDER, SHORTCUT }
 
     /** The package a built-in widget's synthetic provider names; never a real package. */
     public static final String BUILTIN_PROVIDER_PACKAGE = "com.termux.launcher.builtin";
 
     /** The app icon's options key for the label it was added under, shown while the app is gone. */
     public static final String APP_LABEL = "label";
+
+    /** A pinned shortcut's options key for the platform shortcut id; absent on a legacy one. */
+    public static final String SHORTCUT_ID = "shortcutId";
+
+    /** A legacy shortcut's options key for the intent it opens, as an intent URI. */
+    public static final String SHORTCUT_INTENT = "shortcutIntent";
+
+    /** A legacy shortcut's options key for its icon, a small PNG as base64. */
+    public static final String SHORTCUT_ICON = "shortcutIcon";
 
     /** The synthetic provider every folder on Home is recorded under; never a real package. */
     public static final ComponentName FOLDER_PROVIDER =
@@ -146,6 +161,14 @@ public final class LauncherWidgetRecord {
                     throw new IllegalArgumentException("an app icon's id must be negative");
                 }
                 break;
+            case SHORTCUT:
+                if (appRef != null || builtinKind != null) {
+                    throw new IllegalArgumentException("a shortcut is not a built-in or an app");
+                }
+                if (appWidgetId >= 0) {
+                    throw new IllegalArgumentException("a shortcut's id must be negative");
+                }
+                break;
             case FOLDER:
                 if (folderName == null) throw new IllegalArgumentException("a folder needs a name");
                 if (folderApps == null || folderApps.isEmpty()) {
@@ -216,6 +239,20 @@ public final class LauncherWidgetRecord {
             State.ACTIVE, cell, page, null, null, name, apps);
     }
 
+    /**
+     * A shortcut keyed by {@code id} (negative, from the repository's allocator). {@code owner} is
+     * the package it belongs to (the app's own for a pinned one); {@code options} carries
+     * {@link #APP_LABEL} and either {@link #SHORTCUT_ID} or the legacy pair.
+     */
+    @NonNull
+    public static LauncherWidgetRecord shortcut(int id, @NonNull String owner, long profileSerial,
+                                                @NonNull WidgetCellRect cell, int page,
+                                                @Nullable Bundle options) {
+        return new LauncherWidgetRecord(id, new ComponentName(owner, "shortcut"), null,
+            Kind.SHORTCUT, null, profileSerial, State.ACTIVE, cell, page, options, null, null,
+            null);
+    }
+
     /** The synthetic provider a built-in widget of {@code kind} is recorded under. */
     @NonNull public static ComponentName builtinProvider(@NonNull String kind) {
         return new ComponentName(BUILTIN_PROVIDER_PACKAGE, kind);
@@ -226,6 +263,12 @@ public final class LauncherWidgetRecord {
 
     /** True for an app icon on a Home page. */
     public boolean isApp() { return kind == Kind.APP; }
+
+    /** True for a pinned or legacy shortcut on a Home page. */
+    public boolean isShortcut() { return kind == Kind.SHORTCUT; }
+
+    /** The platform id of a pinned shortcut, or null for a legacy one and every other kind. */
+    @Nullable public String shortcutId() { return sizeOptions.getString(SHORTCUT_ID); }
 
     /** True for a folder on a Home page. */
     public boolean isFolder() { return kind == Kind.FOLDER; }

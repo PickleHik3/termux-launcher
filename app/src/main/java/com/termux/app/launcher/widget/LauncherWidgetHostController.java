@@ -165,6 +165,18 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     @NonNull public LauncherAppWidgetHost host() { return host; }
     public void setListener(@Nullable Listener value) { listener = value; }
 
+    /** Told how an add ends, for a caller that owes another app an answer (a pin request). */
+    public interface AddObserver {
+        /** The widget {@code appWidgetId} is on Home. */
+        void onAddCommitted(int appWidgetId);
+        /** The add of {@code appWidgetId} ended without it: declined, failed or unavailable. */
+        void onAddAbandoned(int appWidgetId);
+    }
+
+    @Nullable private AddObserver addObserver;
+
+    public void setAddObserver(@Nullable AddObserver value) { addObserver = value; }
+
     private void notifyChanged(@NonNull AddResult result) {
         if (listener != null) listener.onWidgetRepositoryChanged(result);
     }
@@ -437,11 +449,15 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         if (!repository.finalizeActive(committing.token, record)) {
             return abandon(committing, AddResult.STORAGE_FAILURE);
         }
+        AddObserver observer = addObserver;
+        if (observer != null) observer.onAddCommitted(record.appWidgetId);
         return AddResult.READY;
     }
 
     @NonNull
     private AddResult abandon(@NonNull WidgetAddTransaction transaction, @NonNull AddResult result) {
+        AddObserver observer = addObserver;
+        if (observer != null) observer.onAddAbandoned(transaction.appWidgetId);
         if (!repository.beginPendingDeletion(transaction)) {
             // Storage is already failing, so retaining the system allocation would create an
             // untrackable leak. Delete the one known ID immediately; the older durable pending
@@ -524,6 +540,19 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         Bundle options = new Bundle();
         options.putString(LauncherWidgetRecord.APP_LABEL, label);
         LauncherWidgetRecord placed = repository.addAppAt(app, page, cell, options);
+        if (placed != null) notifyChanged(AddResult.IGNORED);
+        return placed;
+    }
+
+    /**
+     * Puts a shortcut on Home ({@link LauncherWidgetRepository#addShortcut}). The record as placed,
+     * or null when the write failed and nothing changed.
+     */
+    @Nullable
+    public LauncherWidgetRecord addShortcut(@NonNull String owner, long profileSerial,
+                                            @NonNull Bundle options, int preferredPage) {
+        LauncherWidgetRecord placed = repository.addShortcut(owner, profileSerial, preferredPage,
+            options);
         if (placed != null) notifyChanged(AddResult.IGNORED);
         return placed;
     }
