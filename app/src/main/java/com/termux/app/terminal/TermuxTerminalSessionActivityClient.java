@@ -1024,6 +1024,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // output. The row cache sees the palette move and re-records each row.
             for (com.termux.view.TerminalView view : mHost.paneViews())
                 view.invalidate();
+            applyTextBackdropToPanes();
             updateBackgroundColor();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
@@ -1191,6 +1192,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     public void refreshMaterialTerminalColorsIfNeeded() {
         if (mHost.preferences() == null) return;
+        // Cheap and on every door here, the settled ground included: the panes' text floor
+        // follows the measured backdrop whether or not the palette is rebuilt.
+        applyTextBackdropToPanes();
         if (!mHost.preferences().isTerminalDynamicColorsEnabled()) {
             // A custom colors.properties is followed: re-read it only when it changed.
             if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
@@ -1215,6 +1219,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             ? mHost.preferences().getTerminalBackgroundOpacity() : 100;
         return TerminalSurfacePolicy.inkLeaning(android.graphics.Color.alpha(ground) != 0,
             opacity, mTerminalInkPolarity);
+    }
+
+    /**
+     * Hand every pane what its default-background text really stands on, so the renderer holds it
+     * to its contrast floor there ({@code TerminalRenderer#setContrastBackdrop}). A pane re-records
+     * its rows only when the backdrop moved.
+     */
+    private void applyTextBackdropToPanes() {
+        int backdrop = mHost.terminalTextSurface();
+        for (com.termux.view.TerminalView view : mHost.paneViews())
+            if (view != null) view.setContrastBackdrop(backdrop);
     }
 
     private void onTerminalTextGroundSettled() {

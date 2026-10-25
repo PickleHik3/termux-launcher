@@ -63,6 +63,8 @@ public final class PromptLineFieldView extends View {
     @NonNull private final String mHint;
     @NonNull private CharSequence mFittedHint = "";
     @NonNull private PromptLineInk mInk;
+    /** The dock's glass under the prompt as measured ({@link #setGlassFace}); 0 until told. */
+    private int mGlassFace;
     private int mPressedWell;
     private float mRadiusPx;
     /** How far the well stands in from the view's sides ({@link #setWellSideInsetPx}). */
@@ -79,7 +81,7 @@ public final class PromptLineFieldView extends View {
         mHint = context.getString(R.string.dock_prompt_line_hint);
         mRadiusPx = DEFAULT_RADIUS_DP * mDensity;
         mText.setTypeface(Typeface.MONOSPACE);
-        mInk = resolveInk();
+        mInk = resolveInk().onFace(mGlassFace);
         mPressedWell = SchemeTone.toneShift(mInk.well, PRESSED_TONE_LIFT);
         setClickable(true);
         setFocusable(true);
@@ -121,11 +123,22 @@ public final class PromptLineFieldView extends View {
      * only when they moved, so a caller may ask on every scheme pass.
      */
     public void refreshTheme() {
-        PromptLineInk ink = resolveInk();
+        PromptLineInk ink = resolveInk().onFace(mGlassFace);
         if (ink.sameAs(mInk)) return;
         mInk = ink;
         mPressedWell = SchemeTone.toneShift(mInk.well, PRESSED_TONE_LIFT);
         invalidate();
+    }
+
+    /**
+     * The dock's glass under the prompt, opaque, as the chrome measured it; the prompt's inks are
+     * held to their contrast floor on the well as it lies there ({@link PromptLineInk#onFace}).
+     * Redraws only when the inks moved, so the dock may tell it on every glazing pass.
+     */
+    public void setGlassFace(int face) {
+        if (face == mGlassFace) return;
+        mGlassFace = face;
+        refreshTheme();
     }
 
     /** The prompt's colours from the terminal's own scheme, the one the panes draw with. */

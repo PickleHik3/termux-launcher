@@ -12460,8 +12460,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int base = resolveAzGestureAccentColor();
         OnGlass.Resolution glass = resolveAzGlass();
         // The letters are large text at minimum, so they are resolved at that tier and the rest of
-        // the row's colours are taken off the same measurement without asking for any more veil.
-        int letterInk = glass == null ? base : glass.ink;
+        // the row's colours are taken off the same measurement without asking for any more veil;
+        // then held to the text contrast floor on the face they really stand on.
+        int letterInk = glass == null ? base
+            : com.termux.view.ContrastFloor.atLeast(glass.ink, glass.surface,
+                com.termux.view.ContrastFloor.TEXT);
         if (mAzScrubRowView.getCurrentTextColor() != letterInk) {
             mAzScrubRowView.setTextColor(letterInk);
         }
@@ -13269,10 +13272,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
+        syncPromptLineInk(dockOpacity);
         // The Wall strip's clock is the status bar's and takes its ink the bar's way, from the
         // theme's roles; its tiles are the terminal scheme's. Either redraws only if it moved.
         if (mWallStripRow != null) mWallStripRow.refreshTheme();
     }
+
+    /**
+     * The Prompt line's inks on the dock's face as measured under it, so a clear dock over a pale
+     * wallpaper does not leave the prompt to the scheme's guess of its glass. Redraws only when
+     * its inks moved.
+     */
+    private void syncPromptLineInk(float dockOpacity) {
+        com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+        if (field == null || field.getVisibility() != View.VISIBLE || field.getWidth() <= 0
+            || field.getHeight() <= 0) return;
+        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        field.getLocationOnScreen(mPromptLineInkLocation);
+        mPromptLineInkRect.set(mPromptLineInkLocation[0], mPromptLineInkLocation[1],
+            mPromptLineInkLocation[0] + field.getWidth(),
+            mPromptLineInkLocation[1] + field.getHeight());
+        field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
+            mPromptLineInkRect));
+    }
+
+    @NonNull private final Rect mPromptLineInkRect = new Rect();
+    @NonNull private final int[] mPromptLineInkLocation = new int[2];
 
     /**
      * The extra keys' labels on the dock's face: the theme's on-surface colour where it reads
@@ -22390,6 +22415,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return enabled;
     }
 
+    /**
+     * What terminal text on the default background stands on (TerminalHost#terminalTextSurface):
+     * transparent off the wallpaper, where the palette's own background is the answer.
+     */
+    private int terminalTextSurface() {
+        if (mPreferences == null || mChrome == null || !shouldUseWallpaperPassthroughMode()) {
+            return Color.TRANSPARENT;
+        }
+        return mChrome.ink().terminalPaneSurface(paneSurfaceStyle().paneGlassTintColor());
+    }
+
     /** Whether wallpaper passthrough is currently on. */
     boolean isWallpaperModeEnabled() {
         return shouldUseWallpaperPassthroughMode();
@@ -31337,6 +31373,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxTerminalViewClient.applyUrlUnderlinePolicy(view);
                 mTermuxTerminalViewClient.applyPaddingFillPolicy(view);
             }
+            // Its text is held to the contrast floor on what the pane band stands on.
+            view.setContrastBackdrop(terminalTextSurface());
             // A pane created while the key inspector is open must report through it too.
             com.termux.app.terminal.TerminalKeyInspector.attachTo(view);
             view.setUseTransparentFrameClear(false);
@@ -32115,6 +32153,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return Color.TRANSPARENT;
             }
             return mChrome.ink().terminalPaneGround(paneSurfaceStyle().paneGlassTintColor());
+        }
+
+        @Override public int terminalTextSurface() {
+            return TermuxActivity.this.terminalTextSurface();
         }
 
         @Override public void setTerminalTextGroundListener(@Nullable Runnable listener) {

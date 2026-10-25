@@ -1214,6 +1214,7 @@ public final class TerminalView extends View {
                 replaced.mFontMetricsAdjustments, replaced.mBoxDrawingPolicy,
                 replaced.mFallbackTypefaces, replaced.mSymbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
+        mRenderer.setContrastBackdrop(mContrastBackdrop);
         relayoutIfFirstRowMoved(replaced);
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
         // are the size of the screen and will never be replayed again.
@@ -1234,6 +1235,7 @@ public final class TerminalView extends View {
             r.mItalicTypeface, r.mBoldItalicTypeface, r.mSymbolMaps, r.mLigaturePolicy,
             r.mFontFeatures, r.mFontVariations, r.mFontMetricsAdjustments, r.mBoxDrawingPolicy,
             r.mFallbackTypefaces, r.mSymbolExpansion, r);
+        mRenderer.setContrastBackdrop(mContrastBackdrop);
         relayoutIfFirstRowMoved(null);
         updateSize();
     }
@@ -1252,6 +1254,24 @@ public final class TerminalView extends View {
         mUrlUnderlineColor = color;
         if (mRenderer != null) mRenderer.setUrlUnderlineColor(color);
         invalidate();
+    }
+
+    private int mContrastBackdrop;
+
+    /**
+     * What this pane's text on the default background really stands on, opaque, or transparent
+     * for the palette's own background; see {@link TerminalRenderer#setContrastBackdrop}. Survives
+     * a renderer rebuild. Call it when the backdrop is measured anew, never per frame.
+     */
+    public void setContrastBackdrop(int color) {
+        if (mContrastBackdrop == color) return;
+        mContrastBackdrop = color;
+        if (mRenderer != null) mRenderer.setContrastBackdrop(color);
+        invalidate();
+    }
+
+    public int getContrastBackdrop() {
+        return mContrastBackdrop;
     }
 
     public void setTypeface(Typeface newTypeface, Typeface newItalicTypeface) {
@@ -1359,6 +1379,7 @@ public final class TerminalView extends View {
             symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
             boxDrawingPolicy, fallbackTypefaces, symbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
+        mRenderer.setContrastBackdrop(mContrastBackdrop);
         relayoutIfFirstRowMoved(replaced);
         replaced.release();
         updateSize();

@@ -587,7 +587,18 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     }
 
     /**
-     * Runs {@code listener} whenever {@link #terminalTextGround()} may have moved: a wallpaper,
+     * What the terminal's default text really stands on, which its contrast floor is held against
+     * ({@code TerminalView#setContrastBackdrop}): {@link android.graphics.Color#TRANSPARENT} while
+     * the terminal stands on its own opaque background, otherwise {@link #terminalTextGround()}
+     * with the panes' legibility veil over it. Cheap: it reads what the chrome last measured.
+     */
+    default int terminalTextSurface() {
+        return android.graphics.Color.TRANSPARENT;
+    }
+
+    /**
+     * Runs {@code listener} whenever {@link #terminalTextGround()} or
+     * {@link #terminalTextSurface()} may have moved: a wallpaper,
      * opacity or tint change, a pane resized by the keyboard or a split. It can run from inside a
      * draw, so it must only post. Null removes it.
      */
