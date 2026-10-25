@@ -320,6 +320,8 @@ public final class SeamCrossing {
         @Nullable PaneWallPage barPage;
         /** How far the slide has come toward the other half while the halves' bands differ; NaN otherwise. */
         float bandProgress = Float.NaN;
+        /** Whether the wall has come to rest: the crossing is held only for the page's commit. */
+        boolean landed;
 
         /** What a landed crossing keeps through the page's commit: the stack's dress. */
         @NonNull
@@ -330,6 +332,7 @@ public final class SeamCrossing {
             kept.stackDressPage = stackDressPage;
             kept.dressDiffers = dressDiffers;
             kept.shapeDiffers = shapeDiffers;
+            kept.landed = true;
             return kept;
         }
     }
@@ -556,6 +559,18 @@ public final class SeamCrossing {
     @Nullable
     public PaneWallPage other() {
         return mRun.other;
+    }
+
+    /**
+     * Whether the wall is sliding across the seam: a crossing has begun and has not landed. This
+     * is what the status bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while
+     * the wall slides, its own half's from the moment it lands. A landed crossing still names its
+     * {@link #other} page through the page's commit, but only for the stack, which keeps the dress
+     * it travelled in; the status bar does not, so the commit dresses it for the page it lands on
+     * and every pass after the settle finds it in that same dress.
+     */
+    public boolean sliding() {
+        return mRun.other != null && !mRun.landed;
     }
 
     /** The other half's layout as the crossing read it; null while none runs and once landed. */

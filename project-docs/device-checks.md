@@ -24,6 +24,12 @@ dropped; what follows is what still owes a look.
   grid, today a two-digit date in the first (Sunday) column, then in the last column: the circle is
   centred on the digits and holds both with a margin; at font scale 1.3 and in the narrowest span
   it shrinks to its cell and touches no neighbour · pong.
+- 2026-10-25 · commit "fix(statusbar): the strip behind the system bar keeps the pane's look
+  after a trip to the Workspace" · Home and the Workspace with different status-bar looks
+  (Opacity or Tint on one half only), wallpaper mode, Docked: swipe Home → Workspace → Home, and
+  Home → part way → back: the strip behind the system status bar and the status pane below it read
+  as one sheet of glass each time, in Home's look; the Workspace still shows its own · pong or
+  emulator, keyboard down and up.
 - 2026-10-25 · commit "feat(sound): one launcher-run sound server and media controls for
   every shell and distro" · in `proot-distro login debian`: the distro's
   `/etc/pulse/client.conf.d/termux-launcher.conf` names tcp:127.0.0.1:4713 and the cookie copy,
