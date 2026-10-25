@@ -532,6 +532,7 @@
     <string name="settings_x11_gpu_outcome_crashed">Didn\'t finish</string>
     <string name="settings_x11_gpu_outcome_timed_out">Took too long</string>
     <string name="settings_x11_gpu_outcome_not_accelerated">Ran without the graphics chip</string>
+    <string name="settings_x11_gpu_driver_too_old">Needs a newer graphics driver than this phone has</string>
     <string name="settings_x11_gpu_outcome_skipped">Not tried on this chip</string>
     <string name="settings_x11_gpu_outcome_unavailable">Not available to install here</string>
     <string name="settings_x11_gpu_not_measured">Not measured yet</string>

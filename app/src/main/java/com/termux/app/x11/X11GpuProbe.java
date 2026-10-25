@@ -1,6 +1,8 @@
 package com.termux.app.x11;
 
 import android.content.Context;
+import android.content.pm.FeatureInfo;
+import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -77,6 +79,12 @@ public final class X11GpuProbe {
          * (no renderer string) does not hide a known-freeze phone.
          */
         @NonNull public String platform = "";
+        /**
+         * The system Vulkan driver's API version as Android encodes it
+         * ({@code FEATURE_VULKAN_HARDWARE_VERSION}), 0 when unknown. Below {@link #VULKAN_1_3}
+         * the wrapper's Zink cannot run on it.
+         */
+        public int vulkanApiVersion;
 
         boolean hasIcd(@NonNull String needle) {
             for (String name : icdFiles) if (name.contains(needle)) return true;
@@ -110,10 +118,19 @@ public final class X11GpuProbe {
         @NonNull public final List<String> env;
         /** A helper process to keep running in Termux, or null. */
         @Nullable public final String serverCommand;
+        /** Why the benchmark must not try this profile on this phone, or null: it becomes a SKIP. */
+        @Nullable public final String notTriedReason;
 
         Recommendation(@NonNull Profile profile, @NonNull String reason, boolean installed,
                        @NonNull List<String> packages, @NonNull List<String> env,
                        @Nullable String serverCommand) {
+            this(profile, reason, installed, packages, env, serverCommand, null);
+        }
+
+        Recommendation(@NonNull Profile profile, @NonNull String reason, boolean installed,
+                       @NonNull List<String> packages, @NonNull List<String> env,
+                       @Nullable String serverCommand, @Nullable String notTriedReason) {
+            this.notTriedReason = notTriedReason;
             this.profile = profile;
             this.reason = reason;
             this.installed = installed;
@@ -238,11 +255,17 @@ public final class X11GpuProbe {
                         ? "it has frozen phones with this graphics chip"
                         : "it is untested on phones with this graphics chip, where virgl froze them"))
                         .append('\n');
+                } else if (r.notTriedReason != null) {
+                    out.append("SKIP").append(key).append(ProotDistro.singleQuote(r.notTriedReason))
+                        .append('\n');
                 }
             }
             return out.toString();
         }
     }
+
+    /** {@code FEATURE_VULKAN_HARDWARE_VERSION} for Vulkan 1.3, the least Zink on the wrapper runs on. */
+    static final int VULKAN_1_3 = 0x403000;
 
     private static final String ICD_DIR = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/share/vulkan/icd.d/";
 
@@ -399,7 +422,8 @@ public final class X11GpuProbe {
         return new Recommendation(Profile.VULKAN_WRAPPER,
             "the phone's Vulkan driver, wrapped for Zink",
             in.hasIcd("wrapper") && in.mesaDri, Arrays.asList(WRAPPER_PACKAGE, "mesa"),
-            env, null);
+            env, null, in.vulkanApiVersion > 0 && in.vulkanApiVersion < VULKAN_1_3
+                ? "the phone's graphics driver is too old for it" : null);
     }
 
     // ---- Gathering ----------------------------------------------------------------------------
@@ -426,6 +450,7 @@ public final class X11GpuProbe {
             cachedRenderer = renderer;
         }
         in.glRenderer = renderer;
+        in.vulkanApiVersion = vulkanApiVersion(context);
         String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
         in.virglServer = new File(prefix + "/bin/virgl_test_server_android").canExecute();
         in.angle = new File(prefix + "/lib/libGLESv2_angle.so").exists()
@@ -434,6 +459,18 @@ public final class X11GpuProbe {
         in.icdFiles = icds == null ? Collections.emptyList() : Arrays.asList(icds);
         in.mesaDri = new File(prefix + "/lib/dri").isDirectory();
         return evaluate(in);
+    }
+
+    /** The system Vulkan version from the hardware feature, or 0 when the phone does not say. */
+    private static int vulkanApiVersion(@NonNull Context context) {
+        try {
+            for (FeatureInfo feature : context.getPackageManager().getSystemAvailableFeatures()) {
+                if (PackageManager.FEATURE_VULKAN_HARDWARE_VERSION.equals(feature.name)) return feature.version;
+            }
+        } catch (Exception ignored) {
+            // Unknown is the safe answer: the wrapper is tried as before.
+        }
+        return 0;
     }
 
     @NonNull
