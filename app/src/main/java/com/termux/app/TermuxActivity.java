@@ -4749,10 +4749,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // preference.
             program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook)
                 .withCover(Math.max(0f, navStrip ? mNavStripGlassCover : mDockGlassCover)));
-            // The Dock design's own glass (the Tray's soft rim and shelf);
-            // the strip under the pill wears none of it.
+            // The Dock design's own glass (the Tray's soft rim and shelf); the strip under the
+            // pill wears none of it, but for the Peek card's soft rim on its sides while it is
+            // the card's foot (underPillStripSoftRimDp).
             if (navStrip) {
-                program.setDockSurface(0f, 0f);
+                program.setDockSurface(underPillStripSoftRimDp(), 0f);
             } else {
                 applyDockSurfaceGlass(program);
             }
@@ -5432,6 +5433,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View decor = getWindow().getDecorView();
         return decor == null ? 0
             : com.termux.app.dock.PeekGlassGeometry.sideInsetPx(decor.getWidth());
+    }
+
+    /**
+     * The soft rim the strip under the pill wears on its sides, dp: the card's while the card
+     * stands, so the card's sides and the strip's are one edge across the seam
+     * ({@link com.termux.app.dock.DockSurfaceSpec#underPillSoftRimDp}); 0 otherwise.
+     */
+    private float underPillStripSoftRimDp() {
+        if (mPreferences == null || peekStripSideInsetPx() <= 0) return 0f;
+        return shownDockSurfaceSpec().underPillSoftRimDp(true);
     }
 
     /**
@@ -8666,9 +8677,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 stripSeams = com.termux.app.chrome.ChromeEdgeRule.TOP
                     | com.termux.app.chrome.ChromeEdgeRule.BOTTOM;
             }
+            // Its seams pushed past the soft band too, where it wears the card's.
+            float density = getResources().getDisplayMetrics().density;
             float reachPx = com.termux.app.chrome.GlassRefraction.seamReachPx(
-                com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
-                getResources().getDisplayMetrics().density, 0f);
+                com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook), density, 0f,
+                underPillStripSoftRimDp() * density);
             float[] rect = new float[4];
             com.termux.app.chrome.GlassRefraction.rimRect(rect, 0f, 0f,
                 Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), reachPx,

@@ -34,6 +34,12 @@ dropped; what follows is what still owes a look.
   Home → part way → back: the strip behind the system status bar and the status pane below it read
   as one sheet of glass each time, in Home's look; the Workspace still shows its own · pong or
   emulator, keyboard down and up.
+- 2026-10-25 · commit "fix(peek): the strip under the pill wears the card's soft rim on its
+  sides" · Peek glass, Docked, keyboard down, Android 13+, on the home page whose wallpaper is
+  bright just left of the card (page 1 on pong): no lighter patch in the strip under the first
+  icon, the card's sides run on into the strip's with no change at the seam; check the right
+  side too, with Fancier glass on and off, and that the strip's top and bottom edges show no bend.
+  Keyboard up / Floating / Search field on: the strip as before (full width, seamed) · pong.
 - 2026-10-25 · commit "feat(sound): one launcher-run sound server and media controls for
   every shell and distro" · in `proot-distro login debian`: the distro's
   `/etc/pulse/client.conf.d/termux-launcher.conf` names tcp:127.0.0.1:4713 and the cookie copy,

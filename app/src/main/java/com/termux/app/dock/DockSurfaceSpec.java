@@ -142,6 +142,19 @@ public final class DockSurfaceSpec {
         }
     }
 
+    /**
+     * The soft rim band the strip under the gesture pill wears, dp: the card's own under Peek glass
+     * while the card stands ({@code cardStanding}), because there the strip is the card's foot, inset
+     * as the card is, and its sides are the card's sides run on past the seam. Worn with the narrow
+     * ring instead, those sides bent the picture differently from the card right above them, and
+     * where the wallpaper beside the card is bright, the frost it bleeds in showed through the strip
+     * as a lighter patch starting at the seam. 0 everywhere else, where the strip spans the screen
+     * and its sides are seams.
+     */
+    public float underPillSoftRimDp(boolean cardStanding) {
+        return peek && cardStanding ? softRimDp : 0f;
+    }
+
     /** Whether the glass program has anything of this spec's to draw. */
     public boolean wearsGlassFeatures() {
         return softRimDp > 0f || shelf > 0f;
