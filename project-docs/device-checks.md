@@ -20,6 +20,18 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(wall): the display window's borders stop at its edge" · display
+  window in front with a Linux app maximised (a scrollable list at its foot, a menu bar at its
+  top, a scrollbar at its right edge): a vertical swipe a row up from the bottom edge under the
+  grabber scrolls the app and does not open the keyboard; one a row down from the top edge under
+  the top grabber reaches the app and does not unfold the status bar; a sideways drag starting on
+  the picture's outermost left/right pixels and in its last row reaches the app and does not page;
+  a hold there is the app's. Then from the air outside the window: a sideways swipe on the bottom
+  or top air and on the side air pages, a vertical swipe on the bottom air opens and closes the
+  keyboard, a sideways swipe off the dock's top pages. Keyboard up and down (Overlay and Resize),
+  Docked and Floating, portrait and landscape, alone in the row and beside terminal windows;
+  a terminal window still pages from its last row and opens the keyboard from a row above its
+  bottom edge · emulator.
 - 2026-10-25 · commit "fix(home): the long-press sheet runs under the navigation bar and the
   Docked strip makes way for it" · long-press an empty spot on Home with the dock Docked (Peek,
   Tray and one more design): the sheet's surface runs to the screen's bottom edge, the bottom row

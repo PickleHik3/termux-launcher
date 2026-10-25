@@ -74,6 +74,13 @@ import com.termux.app.terminal.TerminalBodySwipe;
  * #downOnDock}: the dock has the finger, and its owner hands the wall the stream). In both a still
  * finger and a steeper start stay the content's.
  *
+ * <p>A page whose content owns everything inside its edges — the display window, whose picture
+ * is a Linux app's to its rim — keeps every zone out of it ({@link Zone#ownContent}): no side
+ * reach, no boxes by the pills, no seam band in its last row, no body swipe. Its borders are the
+ * air around it, and only where that air is thinner than {@link #MIN_BAND_DP} does a border
+ * reach in, by the frame line alone ({@link BorderReach#FRAME_STRIP_DP}). The dock's top keeps
+ * its part of the seam band, which lies outside the page.
+ *
  * <p>The hold is timed by whoever owns the finger; this class only says whether a hold that has
  * elapsed may claim ({@link #holdElapsed}). Pure, so the zone, the hold and the drag can be
  * tested without a view; one instance is reused across gestures, so a swipe allocates nothing.</p>
@@ -199,6 +206,15 @@ public final class BorderDrag {
         float mSeamAirBottom = Float.NaN;
         /** Whether the dock stands below the air, so the band reaches into its top. */
         boolean mSeamDock;
+        /** Whether a seam band is set at all ({@link #seam}); its last row's reach may be 0. */
+        boolean mSeamSet;
+        /**
+         * Whether the page's content owns everything inside its edges ({@link #ownContent}): no
+         * zone reaches past {@link #mFrameStrip} into it.
+         */
+        boolean mOwnsContent;
+        /** How far a border may reach into a page that owns its content: its frame line. */
+        float mFrameStrip;
 
         /** The page's edges, as it stands now (its slide applied). */
         @NonNull
@@ -285,6 +301,7 @@ public final class BorderDrag {
             mSeamDockReach = Math.max(0f, dockReachPx);
             mSeamAirBottom = dockTop;
             mSeamDock = !Float.isNaN(dockTop);
+            mSeamSet = true;
             return this;
         }
 
@@ -295,7 +312,58 @@ public final class BorderDrag {
             mSeamDockReach = 0f;
             mSeamAirBottom = Float.NaN;
             mSeamDock = false;
+            mSeamSet = false;
             return this;
+        }
+
+        /**
+         * The page's content owns everything inside its edges (the display window): every border
+         * stops at the page's edge, and only where a side's air is thinner than the minimum band
+         * does it reach in, by {@code frameStripPx} at most — the frame line, never the content.
+         * The boxes by the pills and the seam band's last row are gone; the seam band's part on
+         * the dock's top, outside the page, stays.
+         */
+        @NonNull
+        public Zone ownContent(float frameStripPx) {
+            mOwnsContent = true;
+            mFrameStrip = Math.max(0f, frameStripPx);
+            return this;
+        }
+
+        /** The page shares its edges with the borders again, as a terminal does (the default). */
+        @NonNull
+        public Zone shareContent() {
+            mOwnsContent = false;
+            mFrameStrip = 0f;
+            return this;
+        }
+
+        /**
+         * How far the seam band reaches above the bottom air into the page: none on a page that
+         * owns its content, and never past the middle of the page.
+         */
+        float seamPaneReach() {
+            if (mOwnsContent) return 0f;
+            return Math.max(0f, Math.min(mSeamReach, (mBottom - mTop) / 2f));
+        }
+
+        /**
+         * The seam band's part inside the page, its last row, as {@code left, top, right, bottom}
+         * in {@code out}, between the corner squares. False, with {@code out} untouched, where
+         * there is none.
+         */
+        public boolean seamPaneBounds(@NonNull float[] out) {
+            if (!mSeamSet || mRight <= mLeft || mBottom <= mTop) return false;
+            float corner = cornerSize();
+            float l = mLeft + corner;
+            float r = mRight - corner;
+            float t = mBottom - seamPaneReach();
+            if (r <= l || !(mBottom > t) || seamAirBottom() < mBottom) return false;
+            out[0] = l;
+            out[1] = t;
+            out[2] = r;
+            out[3] = mBottom;
+            return true;
         }
 
         /** Where the bottom air ends: the dock's top where one is set, else the wall's edge. */
@@ -307,11 +375,11 @@ public final class BorderDrag {
         /** Where {@code (x, y)} lies on the seam band ({@link SeamSwipe#startAt}). */
         @NonNull
         public SeamSwipe.Start seamAt(float x, float y) {
-            if (!(mSeamReach > 0f) || mRight <= mLeft || mBottom <= mTop) {
+            if (!mSeamSet || mRight <= mLeft || mBottom <= mTop) {
                 return SeamSwipe.Start.NONE;
             }
             return SeamSwipe.startAt(x, y, mLeft, mRight, cornerSize(), mBottom, seamAirBottom(),
-                Math.min(mSeamReach, (mBottom - mTop) / 2f), mSeamDockReach, mSeamDock);
+                seamPaneReach(), mSeamDockReach, mSeamDock);
         }
 
         /** The bottom pill's box by the page's bottom edge again, as {@link #pills} puts it. */
@@ -325,7 +393,8 @@ public final class BorderDrag {
          * How far inside the page's edge on {@code side} its zone reaches: the shortfall of that
          * side's air against the minimum band, or on the left and right the side reach where that
          * is further; 0 on the top and bottom wherever the air is at least the band, and never
-         * past the middle of the page.
+         * past the middle of the page. On a page that owns its content ({@link #ownContent}), 0
+         * wherever the air is at least the band, and the frame line at most where it is not.
          */
         public float inside(@NonNull Border side) {
             float gap;
@@ -338,7 +407,9 @@ public final class BorderDrag {
                 case BOTTOM: gap = mGapBottom; half = (mBottom - mTop) / 2f; break;
                 default: return 0f;
             }
-            return Math.max(0f, Math.min(Math.max(mMinBand - gap, reach), half));
+            float in = Math.max(0f, Math.min(Math.max(mMinBand - gap, reach), half));
+            if (!mOwnsContent) return in;
+            return gap >= mMinBand ? 0f : Math.min(in, mFrameStrip);
         }
 
         /**
@@ -391,6 +462,8 @@ public final class BorderDrag {
                 System.arraycopy(mBottomPill, 0, out, 0, 4);
                 return true;
             }
+            // A page that owns its content keeps the pills' swipes on its border's air.
+            if (mOwnsContent) return false;
             if (!(mPillWidth > 0f) || !(mPillReach > 0f)) return false;
             float corner = cornerSize();
             float l = Math.max(mLeft + corner, mPillCentreX - mPillWidth / 2f);
@@ -632,8 +705,8 @@ public final class BorderDrag {
         Border swipeSide = mBorder != Border.NONE ? mBorder : pillAt(x, y, zone);
         mKeyboardEligible = keyboardSwipe && swipeSide == Border.BOTTOM;
         mStatusEligible = statusSwipe && swipeSide == Border.TOP && !(y < statusTopLimit);
-        mBodySlides = bodySwipe && canPage && !mSlidePages && zone.holds(x, y)
-            && !(y < statusTopLimit);
+        mBodySlides = bodySwipe && canPage && !mSlidePages && !zone.mOwnsContent
+            && zone.holds(x, y) && !(y < statusTopLimit);
         mSeamStart = zone.seamAt(x, y);
         // The dock's part of the band is never this view's press: its owner calls downOnDock.
         if (mSeamStart == SeamSwipe.Start.DOCK) mSeamStart = SeamSwipe.Start.NONE;
