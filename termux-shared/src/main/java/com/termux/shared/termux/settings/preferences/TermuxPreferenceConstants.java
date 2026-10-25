@@ -587,6 +587,16 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_WALLPAPER_BACKDROP_DIM = 0;
 
         /**
+         * Magnification (percent) of the wallpaper copy the glass surfaces blur while the system
+         * draws the wallpaper, so it lands where the ROM composites it. Not a setting: the ROM's
+         * measured zoom, resolved by
+         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}. Nothing OS
+         * measured 103 for one wallpaper and about 108 for another; 103 is the closer common case.
+         */
+        public static final int DEFAULT_WALLPAPER_RENDER_ZOOM = 100;
+        public static final int DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS = 103;
+
+        /**
          * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
          * fixed 1dp hairline is the default; with the glass panes on, the gap is what makes each
          * pane read as its own floating terminal rather than a cell of one sheet.
