@@ -13,6 +13,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.graphics.Rect;
+import android.os.Bundle;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -24,6 +26,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -467,6 +472,7 @@ public final class CommandPaletteView extends View {
     private float mDownX;
     private float mDownY;
     private float mLastTouchY;
+    private final PaletteAccessibility mAccessibility;
     @Nullable private VelocityTracker mVelocity;
     private float mFlingVelocity;
     private final Runnable mFlingStep = this::stepFling;
@@ -482,7 +488,16 @@ public final class CommandPaletteView extends View {
         mMarkOutline.setStyle(Paint.Style.STROKE);
         mMarkOutline.setStrokeWidth(1f);
         setClickable(true);
+        mAccessibility = new PaletteAccessibility(this);
+        ViewCompat.setAccessibilityDelegate(this, mAccessibility);
+        ViewCompat.setImportantForAccessibility(this, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
         refreshPalette();
+    }
+
+    @Override
+    public boolean dispatchHoverEvent(MotionEvent event) {
+        // Touch exploration finds the virtual rows through hover events.
+        return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
     }
 
     public void setCallbacks(@Nullable Callbacks callbacks) {
@@ -538,7 +553,11 @@ public final class CommandPaletteView extends View {
         mBodyAlpha = clamp01(bodyAlpha);
         mStripAlpha = clamp01(stripAlpha);
         mStripOffset = stripOffsetPx;
+        float previousProgress = mProgress;
         mProgress = clamp01(progress);
+        // Only the palette appearing or going away changes what a screen reader can reach; the
+        // frames in between would flood it with events.
+        if ((previousProgress > 0.01f) != (mProgress > 0.01f)) mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -566,6 +585,7 @@ public final class CommandPaletteView extends View {
         mFocusIndex = focusIndex;
         // Chips are laid out by the next draw; until then none is tappable.
         mActionRects.clear();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -580,6 +600,7 @@ public final class CommandPaletteView extends View {
         if (keycaps == mKeycaps) return;
         mKeycaps = keycaps;
         measureKeycaps();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -614,6 +635,7 @@ public final class CommandPaletteView extends View {
     public void setHeader(@NonNull String metaText, @NonNull String crumb) {
         mMetaText = metaText;
         mCrumb = crumb;
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -621,6 +643,7 @@ public final class CommandPaletteView extends View {
         mQuery = query;
         mQueryPlaceholder = placeholder;
         restartCaret();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -675,6 +698,7 @@ public final class CommandPaletteView extends View {
         mArgumentPlaceholder = placeholder;
         mArgumentValue = value;
         restartCaret();
+        mAccessibility.invalidateRoot();
         invalidate();
     }
 
@@ -1031,11 +1055,7 @@ public final class CommandPaletteView extends View {
         // The chip first: its width is what the shortcut and the title have to leave room for.
         if (row.action != null) {
             float chipWidth = dp(ACTION_CHIP_DP);
-            float chipRight = shortcutRight;
-            float chipTop = top + dp(ROW_PAD_V)
-                + (lineHeight(SIZE_ROW) - chipWidth) / 2f;
-            mActionRects.put(index, new RectF(
-                chipRight - chipWidth, chipTop, chipRight, chipTop + chipWidth));
+            mActionRects.put(index, chipRect(top, shortcutRight));
             shortcutRight -= chipWidth + dp(CAP_GAP);
         }
         float titleWidth = shortcutRight - shortcutWidth - textLeft;
@@ -1484,6 +1504,14 @@ public final class CommandPaletteView extends View {
         if (index >= 0 && mRows.get(index).isSelectable()) mCallbacks.onRowTapped(index);
     }
 
+    /** The trailing chip of a row whose top is {@code top}, right edge at {@code right}. */
+    @NonNull
+    private RectF chipRect(float top, float right) {
+        float chipWidth = dp(ACTION_CHIP_DP);
+        float chipTop = top + dp(ROW_PAD_V) + (lineHeight(SIZE_ROW) - chipWidth) / 2f;
+        return new RectF(right - chipWidth, chipTop, right, chipTop + chipWidth);
+    }
+
     /**
      * The row whose call chip a tap lands on, or -1. The slop reaches past
      * the drawn round, further than the gap to the next row's chip, so the
@@ -1658,5 +1686,211 @@ public final class CommandPaletteView extends View {
 
     private static float clamp01(float value) {
         return value < 0f ? 0f : (value > 1f ? 1f : value);
+    }
+
+    // ------------------------------------------------------------------ accessibility
+
+    private static final int A11Y_FIELD = 0;
+    private static final int A11Y_ARGUMENT = 1;
+    private static final int A11Y_CAP_BASE = 100;
+    private static final int A11Y_ROW_BASE = 1000;
+    private static final int A11Y_CHIP_BASE = 1_000_000;
+
+    /** Whether the palette is up and so has anything for a screen reader. */
+    private boolean a11yOpen() {
+        return mCallbacks != null && mProgress > 0.01f && !mFrame.isEmpty();
+    }
+
+    /** Top of row {@code index} in view coordinates, scrolled. */
+    private float rowTop(int index) {
+        float y = listTop() - mScrollOffset;
+        for (int i = 0; i < index; i++) y += rowHeight(i);
+        return y;
+    }
+
+    private static void roundOut(@NonNull RectF in, @NonNull Rect out) {
+        out.set((int) Math.floor(in.left), (int) Math.floor(in.top),
+            (int) Math.ceil(in.right), (int) Math.ceil(in.bottom));
+        if (out.width() < 1) out.right = out.left + 1;
+        if (out.height() < 1) out.bottom = out.top + 1;
+    }
+
+    /** One node per control and result: the search field, each row and call chip, each keycap. */
+    private final class PaletteAccessibility extends ExploreByTouchHelper {
+        private final RectF mTemp = new RectF();
+
+        PaletteAccessibility(@NonNull View host) {
+            super(host);
+        }
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            if (!a11yOpen()) return HOST_ID;
+            layoutKeycaps();
+            for (int i = 0; i < mCapCount; i++) {
+                RectF cap = mCapRects.get(i);
+                if (x >= cap.left && x <= cap.right
+                    && y >= cap.top + mStripOffset && y <= cap.bottom + mStripOffset)
+                    return A11Y_CAP_BASE + i;
+            }
+            if (!mFrame.contains(x, y)) return HOST_ID;
+            if (y < listTop()) return A11Y_FIELD;
+            if (mArgumentMode && y > listBottom()) return A11Y_ARGUMENT;
+            int row = rowIndexAt(y);
+            if (row < 0) return HOST_ID;
+            if (mRows.get(row).action != null) {
+                RectF chip = chipRect(rowTop(row), mFrame.right - dp(ROW_PAD_RIGHT));
+                if (chip.contains(x, y)) return A11Y_CHIP_BASE + row;
+            }
+            return A11Y_ROW_BASE + row;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(List<Integer> ids) {
+            if (!a11yOpen()) return;
+            ids.add(A11Y_FIELD);
+            if (mArgumentMode) ids.add(A11Y_ARGUMENT);
+            for (int i = 0; i < mRows.size(); i++) {
+                ids.add(A11Y_ROW_BASE + i);
+                if (mRows.get(i).action != null) ids.add(A11Y_CHIP_BASE + i);
+            }
+            layoutKeycaps();
+            for (int i = 0; i < mCapCount; i++) ids.add(A11Y_CAP_BASE + i);
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int id,
+                                                    @NonNull AccessibilityNodeInfoCompat node) {
+            Rect bounds = new Rect();
+            if (id == A11Y_FIELD) {
+                mTemp.set(mFrame.left, mFrame.top, mFrame.right, listTop());
+                roundOut(mTemp, bounds);
+                node.setClassName("android.widget.EditText");
+                node.setEditable(false);
+                node.setText(mQuery);
+                node.setHintText(mQueryPlaceholder);
+                node.setContentDescription(getContext().getString(R.string.palette_a11y_search));
+                node.setFocusable(true);
+            } else if (id == A11Y_ARGUMENT) {
+                mTemp.set(mFrame.left, listBottom(), mFrame.right, mFrame.bottom);
+                roundOut(mTemp, bounds);
+                node.setClassName("android.widget.EditText");
+                node.setEditable(false);
+                node.setText(mArgumentValue);
+                node.setHintText(mArgumentPlaceholder);
+                node.setContentDescription(getContext().getString(R.string.palette_a11y_argument));
+                node.setFocusable(true);
+            } else if (id >= A11Y_CHIP_BASE) {
+                int row = id - A11Y_CHIP_BASE;
+                RectF chip = chipRect(rowTop(row), mFrame.right - dp(ROW_PAD_RIGHT));
+                roundOut(chip, bounds);
+                node.setClassName("android.widget.Button");
+                node.setText(getContext().getString(R.string.palette_a11y_call));
+                node.setContentDescription(getContext().getString(R.string.palette_a11y_call)
+                    + ", " + mRows.get(row).primary);
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+                node.setClickable(true);
+            } else if (id >= A11Y_ROW_BASE) {
+                int index = id - A11Y_ROW_BASE;
+                Row row = mRows.get(index);
+                float top = rowTop(index);
+                mTemp.set(mFrame.left, top, mFrame.right, top + rowHeight(index));
+                RectF viewport = new RectF(mFrame.left, listTop(), mFrame.right, listBottom());
+                // A row scrolled out of the list keeps its own bounds; the helper marks it hidden.
+                if (!mTemp.intersect(viewport)) mTemp.set(mFrame.left, top, mFrame.right,
+                    top + rowHeight(index));
+                roundOut(mTemp, bounds);
+                node.setText(row.primary);
+                if (row.isSelectable()) {
+                    node.setClassName("android.widget.Button");
+                    node.setEnabled(row.enabled);
+                    node.setSelected(index == mFocusIndex);
+                    node.setClickable(true);
+                    node.setLongClickable(true);
+                    node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+                    node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+                    StringBuilder spoken = new StringBuilder(row.primary);
+                    if (row.description != null && !row.description.isEmpty())
+                        spoken.append(", ").append(row.description);
+                    if (!row.shortcut.isEmpty()) spoken.append(", ").append(row.shortcut);
+                    node.setContentDescription(spoken);
+                } else {
+                    node.setClassName("android.widget.TextView");
+                    if (row.kind == KIND_CATEGORY) node.setHeading(true);
+                }
+            } else {
+                int index = id - A11Y_CAP_BASE;
+                layoutKeycaps();
+                RectF cap = mCapRects.get(index);
+                mTemp.set(cap.left, cap.top + mStripOffset, cap.right, cap.bottom + mStripOffset);
+                roundOut(mTemp, bounds);
+                node.setClassName("android.widget.Button");
+                node.setText(mKeycaps.get(index).label);
+                node.setClickable(true);
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            }
+            node.setBoundsInParent(bounds);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int id, int action,
+                                                        @Nullable Bundle args) {
+            if (mCallbacks == null) return false;
+            if (id >= A11Y_CHIP_BASE) {
+                if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
+                mCallbacks.onRowActionTapped(id - A11Y_CHIP_BASE);
+                return true;
+            }
+            if (id >= A11Y_ROW_BASE) {
+                int index = id - A11Y_ROW_BASE;
+                if (index >= mRows.size() || !mRows.get(index).isSelectable()) return false;
+                if (action == AccessibilityNodeInfoCompat.ACTION_CLICK) {
+                    mCallbacks.onRowTapped(index);
+                    return true;
+                }
+                if (action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK) {
+                    mCallbacks.onRowLongPressed(index);
+                    return true;
+                }
+                return false;
+            }
+            if (id >= A11Y_CAP_BASE) {
+                if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
+                mCallbacks.onKeycapTapped(id - A11Y_CAP_BASE);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                                                      @NonNull AccessibilityNodeInfoCompat info) {
+            super.onInitializeAccessibilityNodeInfo(host, info);
+            info.setPaneTitle(getContext().getString(R.string.palette_a11y_pane));
+            if (a11yOpen() && maxScroll() > 0f) {
+                info.setScrollable(true);
+                if (mScrollOffset > 0f) info.addAction(
+                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SCROLL_BACKWARD);
+                if (mScrollOffset < maxScroll()) info.addAction(
+                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SCROLL_FORWARD);
+            }
+        }
+
+        @Override
+        public boolean performAccessibilityAction(@NonNull View host, int action,
+                                                  @Nullable Bundle args) {
+            if (action == AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD
+                || action == AccessibilityNodeInfoCompat.ACTION_SCROLL_BACKWARD) {
+                float page = Math.max(dp(ROW_PAD_V), listBottom() - listTop());
+                boolean moved = scrollByPx(
+                    action == AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD ? page : -page);
+                if (moved) {
+                    invalidate();
+                    invalidateRoot();
+                }
+                return moved;
+            }
+            return super.performAccessibilityAction(host, action, args);
+        }
     }
 }

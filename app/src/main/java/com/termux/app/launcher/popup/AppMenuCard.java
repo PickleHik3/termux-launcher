@@ -11,6 +11,9 @@ import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.core.view.AccessibilityDelegateCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 
 import com.termux.app.material.M3;
 
@@ -44,6 +47,16 @@ public final class AppMenuCard {
             this.opensSubmenu = opensSubmenu;
         }
     }
+
+    /** Rows announce as buttons; a TextView would otherwise read as plain text. */
+    private static final AccessibilityDelegateCompat BUTTON_ROLE = new AccessibilityDelegateCompat() {
+        @Override
+        public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                                                      @NonNull AccessibilityNodeInfoCompat info) {
+            super.onInitializeAccessibilityNodeInfo(host, info);
+            info.setClassName("android.widget.Button");
+        }
+    };
 
     @NonNull public final AppMenuCardView view;
     /** Every row, top to bottom, for the drag-to-highlight tracker. */
@@ -120,6 +133,11 @@ public final class AppMenuCard {
                 row.setBackground(new AppMenuRowDrawable(shade, stateLayer, radii[0], radii[1]));
                 row.setElevation(elevation);
                 row.setClickable(true);
+                // Real views in a window of their own: say outright that they are buttons a
+                // screen reader should reach, and which one opens more.
+                ViewCompat.setImportantForAccessibility(row,
+                    ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
+                ViewCompat.setAccessibilityDelegate(row, BUTTON_ROLE);
                 Runnable action = item.action;
                 row.setOnClickListener(v -> factory.runWithFeedback(row, action));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, height);
