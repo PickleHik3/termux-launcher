@@ -133,6 +133,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         default void setDecorNavStripAlpha(float alpha) {}
 
+        /**
+         * Home's grid, folders, widgets and page dots, faded by alpha alone while the plane covers
+         * them; 1 whenever the drawer is not engaged. See {@link AppDrawerHomeCoverPolicy}.
+         */
+        default void setHomeContentAlpha(float alpha) {}
+
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
 
@@ -1885,6 +1891,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // surface that has to be faded rather than covered. Linear in p, which is what the plane's
         // own bottom edge is: the two cross over exactly as the glass arrives underneath it.
         mHost.setDecorNavStripAlpha(1f - p);
+        mHost.setHomeContentAlpha(AppDrawerHomeCoverPolicy.homeAlpha(p));
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
         if (target != null) target.setDrawerTransitionProgress(p);
@@ -2048,6 +2055,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             applyBand(mStatusBarView, 0f, 0f, 1f);
             applyAlpha(mStatusInsetStripView, 1f);
             mHost.setDecorNavStripAlpha(1f);
+            mHost.setHomeContentAlpha(1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
             if (mHostLayout != null) {
