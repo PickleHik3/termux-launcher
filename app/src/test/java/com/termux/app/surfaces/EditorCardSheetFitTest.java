@@ -220,10 +220,32 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void everyStripStandsOnOneLineWhenItsColumnsFit() {
+        for (float scale : new float[] {1f, 1.3f}) {
+            for (EditorCard card : EditorCard.values()) {
+                Fixture fixture = new Fixture(card, scale);
+                fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
+                fixture.layOut();
+                List<LegendSlider> legends = legends(fixture.sheet.rows());
+                java.util.Set<Object> lines = new java.util.HashSet<>();
+                for (LegendSlider legend : legends)
+                    lines.add(legend.getParent());
+                int min = legends.get(0).minColumnWidthPx();
+                int room = fixture.parent.getWidth() - 2 * fixture.dp(16);
+                boolean fits = legends.size() * min <= room;
+                System.out.println("strip " + card + " at " + scale + ": " + legends.size()
+                    + " columns, " + lines.size() + " lines, column " + legends.get(0).getWidth()
+                    + "px, min " + min + "px");
+                if (fits)
+                    assertEquals(card + " at " + scale + " is one line", 1, lines.size());
+            }
+        }
+    }
+
+    @Test
     public void rendersOfTheCardsAtDefaultAndLargeText() throws java.io.IOException {
         for (float scale : new float[] {1f, 1.3f}) {
-            for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.DOCK,
-                    EditorCard.APPEARANCE}) {
+            for (EditorCard card : EditorCard.values()) {
                 Fixture fixture = new Fixture(card, scale);
                 fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
                 fixture.layOut();

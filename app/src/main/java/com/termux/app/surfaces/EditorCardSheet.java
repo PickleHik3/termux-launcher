@@ -761,10 +761,12 @@ final class EditorCardSheet {
         int count = strip.members.size();
         if (count == 0)
             return;
-        int gap = dp(STRIP_GAP_DP);
         LegendSlider first = strip.members.get(0).legend;
         int column = first == null ? 1 : first.minColumnWidthPx();
-        int[] lines = stripLines(count, stripCapacity(stripWidthPx(), column, gap));
+        // One line whenever the columns' own minimums fit it: the gap is what is left over, up
+        // to STRIP_GAP_DP, so the tracks only part as far as there is room for.
+        int[] lines = stripLines(count, stripCapacity(stripWidthPx(), column, 0));
+        int gap = EditorRowFit.stripGapPx(stripWidthPx(), column, lines[0], dp(STRIP_GAP_DP));
         int length = mContext.getResources()
             .getDimensionPixelSize(R.dimen.appearance_editor_slider_length);
         int next = 0;

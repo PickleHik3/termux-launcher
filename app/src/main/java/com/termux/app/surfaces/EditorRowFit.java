@@ -42,4 +42,16 @@ final class EditorRowFit {
         }
         return 0f;
     }
+
+    /**
+     * The gap between a strip's columns: what {@code perLine} columns of at least
+     * {@code columnPx} leave of {@code widthPx}, shared between the gaps and capped at
+     * {@code maxGapPx}; never negative.
+     */
+    static int stripGapPx(int widthPx, int columnPx, int perLine, int maxGapPx) {
+        if (perLine <= 1)
+            return maxGapPx;
+        int spare = widthPx - perLine * columnPx;
+        return Math.max(0, Math.min(maxGapPx, spare / (perLine - 1)));
+    }
 }

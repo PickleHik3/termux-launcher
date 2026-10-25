@@ -32,4 +32,12 @@ public class EditorRowFitTest {
         assertEquals(0f, EditorRowFit.segmentsScale(220, 60f, 40, 100f, 3, 16, 4, 0.75f, 0.05f),
             0f);
     }
+
+    @Test
+    public void aStripGapIsWhatTheColumnsLeaveUpToTheMaximum() {
+        assertEquals(12, EditorRowFit.stripGapPx(379, 30, 7, 12));
+        assertEquals(8, EditorRowFit.stripGapPx(379, 40, 8, 12));
+        assertEquals(0, EditorRowFit.stripGapPx(300, 40, 8, 12));
+        assertEquals(12, EditorRowFit.stripGapPx(379, 40, 1, 12));
+    }
 }

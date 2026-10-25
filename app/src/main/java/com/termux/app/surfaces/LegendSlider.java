@@ -199,7 +199,7 @@ public final class LegendSlider extends View {
         super(context, attrs, defStyleAttr);
         float density = context.getResources().getDisplayMetrics().density;
         mTrackWidthPx = context.getResources().getDimension(R.dimen.appearance_editor_slider_track);
-        mMinTrackWidthPx = 20f * density;
+        mMinTrackWidthPx = 16f * density;
         mInsideCornerPx = context.getResources()
             .getDimension(R.dimen.appearance_editor_slider_inside_corner);
         mHandleWidthPx = context.getResources()

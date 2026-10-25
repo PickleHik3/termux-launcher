@@ -20,6 +20,10 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(appearance): a card's slider strip stands on one line when its columns fit" · on pong
+  (411 dp, font scale 1.0) the Dock card shows its 8 sliders, and the Keyboard card its 9, in one
+  row with every legend readable and each slider draggable; at font scale 1.3 the Keyboard card
+  may wrap to two rows, nothing clipped.
 - 2026-10-25 · commit "fix(appearance): segment rows stand label and control on one line" · on pong
   (411 dp, font scale 1.0) open the Home card: Label size and Folders each show the label with
   Small / Medium / Large (Compact / Default / Roomy) on the same line, segments touch-sized 48 dp,
