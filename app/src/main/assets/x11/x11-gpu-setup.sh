@@ -73,17 +73,35 @@ result() { printf '   -> %s\n' "$*"; }
 # ---------------------------------------------------------------------------------------------
 # Termux comes with either apt (the default) or pacman. Both are driven the same way here, and
 # neither ever gets to ask a question.
-if command -v pacman >/dev/null && [ -f "$PREFIX/etc/pacman.conf" ] && ! command -v dpkg >/dev/null; then PM=pacman; else PM=apt; fi
+#
+# Which one is decided by what Termux itself says it uses, not by which tools happen to be
+# installed: a pacman Termux can have the dpkg package too, with an empty dpkg database.
+# TERMUX_APP_PACKAGE_MANAGER (apt or pacman) is set inside the app's own shells,
+# TERMUX_MAIN_PACKAGE_FORMAT (debian or pacman) in a login over ssh; failing both, the package
+# database that actually holds packages decides.
+detect_pm() {
+  case ${TERMUX_APP_PACKAGE_MANAGER:-} in apt) echo apt; return ;; pacman) echo pacman; return ;; esac
+  case ${TERMUX_MAIN_PACKAGE_FORMAT:-} in debian) echo apt; return ;; pacman) echo pacman; return ;; esac
+  if command -v pacman >/dev/null && [ -n "$(ls -A "$PREFIX/var/lib/pacman/local" 2>/dev/null)" ]; then echo pacman; return; fi
+  if command -v apt-get >/dev/null && [ -s "$PREFIX/var/lib/dpkg/status" ]; then echo apt; return; fi
+  if command -v pacman >/dev/null && [ -f "$PREFIX/etc/pacman.conf" ] && ! command -v dpkg >/dev/null; then echo pacman; else echo apt; fi
+}
+PM=$(detect_pm)
+# apt never asks: no debconf dialogs, and a configuration file the user edited is kept without
+# the dpkg question about it. Packages go straight through apt-get, not "pkg", whose wrapper
+# would pick a mirror and refresh the lists again on every call.
+export DEBIAN_FRONTEND=noninteractive
+APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 installed_before() {
   if [ $PM = pacman ]; then pacman -Qq "$1" >/dev/null 2>&1
   else dpkg -s "$1" 2>/dev/null | grep -q '^Status: install ok installed'; fi
 }
 # A full upgrade before anything is added: installing onto stale libraries (or pacman's -Sy
 # without -u) leaves packages built against versions the phone does not have.
-pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else pkg update -y && pkg upgrade -y; fi; }
+pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else apt-get update && apt-get "${APT_OPTS[@]}" full-upgrade; fi; }
 pm_refresh() { if [ $PM = pacman ]; then pacman -Sy --noconfirm; else apt-get update; fi; }
-pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else pkg install -y "$@"; fi; }
-pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else pkg uninstall -y "$@" && apt-get autoremove -y; fi; }
+pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else apt-get install "${APT_OPTS[@]}" "$@"; fi; }
+pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else apt-get remove "${APT_OPTS[@]}" "$@" && apt-get autoremove "${APT_OPTS[@]}"; fi; }
 # With apt the X11 packages live in a repository that is itself a package; pacman has it built in.
 REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
 
@@ -112,7 +130,7 @@ install_vulkan_wrapper() {
     detail "The downloaded Vulkan wrapper does not match its checksum, so it was not installed."
     rm -f "$VK_FILE"; VK_FILE=""; return 1
   fi
-  if { if [ $PM = pacman ]; then pacman -U --noconfirm "$VK_FILE"; else apt-get install -y "$VK_FILE"; fi; }; then
+  if { if [ $PM = pacman ]; then pacman -U --noconfirm "$VK_FILE"; else apt-get install "${APT_OPTS[@]}" "$VK_FILE"; fi; }; then
     rm -f "$VK_FILE"; VK_FILE=""; return 0
   fi
   rm -f "$VK_FILE"; VK_FILE=""
@@ -391,7 +409,7 @@ else
     :
   else
     detail "Installing the test program inside Debian."
-    if pd sh -c 'apt-get update && apt-get install -y glmark2-es2 libgl1-mesa-dri'; then
+    if pd sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install ${APT_OPTS[*]} glmark2-es2 libgl1-mesa-dri"; then
       PROOT_INSTALLED_TEST=1
     else
       detail "Could not install it (see the output above); skipping the container."
@@ -429,7 +447,7 @@ else
       fi
     fi
     if [ $PROOT_INSTALLED_TEST = 1 ] && [ $KEEP = 0 ]; then
-      pd sh -c 'apt-get purge -y glmark2-es2 && apt-get autoremove -y' && detail "Removed the test program from Debian again."
+      pd sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get purge ${APT_OPTS[*]} glmark2-es2 && apt-get autoremove ${APT_OPTS[*]}" && detail "Removed the test program from Debian again."
     fi
   fi
   if [ -n "$PROOT_WINNER" ]; then

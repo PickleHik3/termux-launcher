@@ -1,5 +1,6 @@
 package com.termux.app.x11;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -23,7 +24,33 @@ public class X11GpuSetupScriptTest {
         assertFalse(s.contains("is already running; using it"));
     }
 
-    @Test public void vulkanWrapperIsDownloadedAndPinned() throws Exception {
+    /** Runs the script's detect_pm with the given environment and returns what it prints. */
+    private static String detectPm(String env) throws Exception {
+        String s = script();
+        int start = s.indexOf("detect_pm() {");
+        int end = s.indexOf("\n}\n", start) + 3;
+        File prefix = Files.createTempDirectory("pm").toFile();
+        File sh = File.createTempFile("detect", ".sh");
+        sh.deleteOnExit();
+        String body = "PREFIX=" + prefix.getAbsolutePath() + "\n" + s.substring(start, end) + "\ndetect_pm\n";
+        Files.write(sh.toPath(), body.getBytes(StandardCharsets.UTF_8));
+        ProcessBuilder pb = new ProcessBuilder("bash", "-c", env + " bash " + sh.getAbsolutePath());
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        p.waitFor();
+        return out;
+    }
+
+    /** A pacman Termux also has dpkg installed; Termux's own variables, not the tools, decide. */
+    @Test public void packageManagerFollowsTermuxNotWhichToolsExist() throws Exception {
+        assertEquals("pacman", detectPm("export TERMUX_APP_PACKAGE_MANAGER=pacman;"));
+        assertEquals("apt", detectPm("export TERMUX_APP_PACKAGE_MANAGER=apt;"));
+        assertEquals("pacman", detectPm("unset TERMUX_APP_PACKAGE_MANAGER; export TERMUX_MAIN_PACKAGE_FORMAT=pacman;"));
+        assertEquals("apt", detectPm("unset TERMUX_APP_PACKAGE_MANAGER; export TERMUX_MAIN_PACKAGE_FORMAT=debian;"));
+    }
+
+    @Test public void vulkanWrapperIsDownloadedAndPinned()throws Exception {
         String s = script();
         for (String sum : new String[] {
             "407a024fe25c37e34e83d32a199eb82e204aa1c80f391c5eecc88d5d4ca98f96",
