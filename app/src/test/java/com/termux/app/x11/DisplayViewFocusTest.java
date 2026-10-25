@@ -197,4 +197,60 @@ public class DisplayViewFocusTest {
         assertSame(DisplayViewFocus.Route.PASS, DisplayViewFocus.routeFor(
             DisplayViewFocus.Holder.DISPLAY_AWAY, KeyEvent.KEYCODE_BACK, false));
     }
+
+    private static DisplayViewFocus.Route five(DisplayViewFocus.Holder holder, int key,
+                                               boolean shown, boolean searchOpen) {
+        return DisplayViewFocus.routeFor(holder, key, true, shown, searchOpen);
+    }
+
+    @Test
+    public void anOpenSearchOwnsKeysWhenNobodyOrAHiddenViewHoldsThem() {
+        for (DisplayViewFocus.Holder h : new DisplayViewFocus.Holder[] {
+            DisplayViewFocus.Holder.NONE, DisplayViewFocus.Holder.DISPLAY_AWAY,
+            DisplayViewFocus.Holder.TERMINAL_HIDDEN}) {
+            for (boolean shown : new boolean[] {true, false}) {
+                assertSame(DisplayViewFocus.Route.OVERLAYS, five(h, KeyEvent.KEYCODE_M, shown, true));
+            }
+        }
+    }
+
+    @Test
+    public void withNoSearchAShownTerminalStillTakesTheKeys() {
+        assertSame(DisplayViewFocus.Route.TERMINAL,
+            five(DisplayViewFocus.Holder.NONE, KeyEvent.KEYCODE_M, true, false));
+        assertSame(DisplayViewFocus.Route.TERMINAL,
+            five(DisplayViewFocus.Holder.DISPLAY_AWAY, KeyEvent.KEYCODE_M, true, false));
+    }
+
+    @Test
+    public void aHiddenTerminalIsNeverTheTarget() {
+        assertSame(DisplayViewFocus.Route.OVERLAYS,
+            five(DisplayViewFocus.Holder.NONE, KeyEvent.KEYCODE_M, false, false));
+        assertSame(DisplayViewFocus.Route.OVERLAYS,
+            five(DisplayViewFocus.Holder.TERMINAL_HIDDEN, KeyEvent.KEYCODE_M, false, false));
+    }
+
+    @Test
+    public void aTextFieldOrTheShowingDisplayKeepsItsKeysEvenWithASearchOpen() {
+        for (boolean shown : new boolean[] {true, false}) {
+            assertSame(DisplayViewFocus.Route.PASS,
+                five(DisplayViewFocus.Holder.OTHER, KeyEvent.KEYCODE_M, shown, true));
+            assertSame(DisplayViewFocus.Route.PASS,
+                five(DisplayViewFocus.Holder.DISPLAY_SHOWING, KeyEvent.KEYCODE_M, shown, true));
+        }
+    }
+
+    @Test
+    public void backStaysTheActivitysWhateverIsOpen() {
+        assertSame(DisplayViewFocus.Route.PASS,
+            five(DisplayViewFocus.Holder.NONE, KeyEvent.KEYCODE_BACK, false, true));
+        assertSame(DisplayViewFocus.Route.PASS,
+            five(DisplayViewFocus.Holder.TERMINAL_HIDDEN, KeyEvent.KEYCODE_BACK, true, true));
+    }
+
+    @Test
+    public void noTerminalAtAllFallsToTheOverlays() {
+        assertSame(DisplayViewFocus.Route.OVERLAYS, DisplayViewFocus.routeFor(
+            DisplayViewFocus.Holder.NONE, KeyEvent.KEYCODE_M, false, true, false));
+    }
 }

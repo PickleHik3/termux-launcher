@@ -94,6 +94,18 @@ public final class AppDrawerSearchInputView extends AppCompatEditText {
             if (listener != null) listener.onDismissAction();
             return true;
         }
+        // Up and Down have no list to move through here (the drawer's results are not a focus
+        // order), and left to the field they would walk the focus out of it. Enter runs the first
+        // result, whichever way the keyboard reports it.
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+            return true;
+        if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            if (event.getRepeatCount() == 0) {
+                Listener listener = mListener;
+                if (listener != null) listener.onSearchAction();
+            }
+            return true;
+        }
         return super.onKeyDown(keyCode, event);
     }
 
