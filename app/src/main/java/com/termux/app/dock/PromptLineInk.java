@@ -4,6 +4,7 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 
 import com.termux.app.theme.SchemeTone;
+import com.termux.view.ContrastFloor;
 
 /**
  * The Prompt line's colours (spec "Prompt line"): a shell prompt drawn from the terminal's own
@@ -111,6 +112,26 @@ public final class PromptLineInk {
         int hint = SchemeTone.contrastTone(receded, surface, TEXT_CONTRAST);
         return new PromptLineInk(well, alpha, pressedAlpha, tinted, surface, directory, glyph,
             hint);
+    }
+
+    /**
+     * These colours with their inks held to {@link ContrastFloor#TEXT} on the well as it really
+     * lies at rest on {@code face}, the dock's glass under the prompt as measured: a clear dock
+     * over a pale wallpaper shows through the well, which {@link #resolve} cannot know. Inks
+     * already at the floor there are kept; transparent {@code face} (not measured yet) keeps all.
+     */
+    @NonNull
+    public PromptLineInk onFace(@ColorInt int face) {
+        if ((face >>> 24) == 0) return this;
+        int lying = ContrastFloor.composite(
+            (Math.round(Math.max(0f, Math.min(1f, wellAlpha)) * 255f) << 24) | (well & 0xFFFFFF),
+            face);
+        int floorDirectory = ContrastFloor.atLeast(directory, lying, ContrastFloor.TEXT);
+        int floorGlyph = ContrastFloor.atLeast(glyph, lying, ContrastFloor.TEXT);
+        int floorHint = ContrastFloor.atLeast(hint, lying, ContrastFloor.TEXT);
+        if (floorDirectory == directory && floorGlyph == glyph && floorHint == hint) return this;
+        return new PromptLineInk(well, wellAlpha, pressedWellAlpha, tinted, inkSurface,
+            floorDirectory, floorGlyph, floorHint);
     }
 
     /** Whether {@code other} holds the same colours. */

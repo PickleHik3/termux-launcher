@@ -247,6 +247,11 @@ public final class ChromeInk {
      * re-sample replaces it instead of leaving a gap. Transparent until a pane is measured.
      */
     @ColorInt private int mPaneGround = Color.TRANSPARENT;
+    /**
+     * The pane band's mean veiled glass as last measured: {@link #mPaneGround} with each pane's
+     * veil over it. Transparent until a pane is measured.
+     */
+    @ColorInt private int mPaneSurface = Color.TRANSPARENT;
     /** Told when {@link #mPaneGround} moves; see {@link #setOnTerminalPaneGroundChanged}. */
     @Nullable private Runnable mOnPaneGroundChanged;
     /** The user's legibility control as last read; every target is scaled by it. */
@@ -505,8 +510,10 @@ public final class ChromeInk {
         answer.flat = flat;
         int ground = meanPaneVote(tint);
         vote(GlassBackdropCache.Band.TERMINAL_PANE, ground);
-        if (ground != mPaneGround) {
+        int surface = meanPaneSurface(tint);
+        if (ground != mPaneGround || surface != mPaneSurface) {
             mPaneGround = ground;
+            mPaneSurface = surface;
             if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
         }
         return resolution;
@@ -530,6 +537,20 @@ public final class ChromeInk {
     }
 
     /**
+     * What the terminal's text really stands on across the pane band: {@link #terminalPaneGround}
+     * with each pane's veil laid over it, the mean of the panes, opaque. This, not the ground, is
+     * what text is held to its contrast floor against — the veil is drawn under it. Read only,
+     * never samples; until a pane is measured it is the ground itself.
+     *
+     * @param tint the pane's tint as drawn, alpha included, for the nominal answer
+     */
+    @ColorInt
+    public int terminalPaneSurface(@ColorInt int tint) {
+        if (Color.alpha(mPaneSurface) != 0) return mPaneSurface;
+        return terminalPaneGround(tint);
+    }
+
+    /**
      * The ground a previous run measured, answered by {@link #terminalPaneGround} until a pane is
      * measured in this one, so a launch does not start from the nominal glass. Ignored once a pane
      * has been measured, and for a transparent {@code ground}. Tells no listener: nothing was
@@ -541,7 +562,8 @@ public final class ChromeInk {
     }
 
     /**
-     * Runs {@code listener} each time {@link #terminalPaneGround} moves — only when a pane is
+     * Runs {@code listener} each time {@link #terminalPaneGround} or {@link #terminalPaneSurface}
+     * moves — only when a pane is
      * measured anew (a wallpaper, dim, tint or rect change), never for a memoised answer. It runs
      * inside whatever pass asked about the pane, a draw included, so it must only post. Null
      * removes it.
@@ -687,6 +709,23 @@ public final class ChromeInk {
             red += Color.red(pane.flat);
             green += Color.green(pane.flat);
             blue += Color.blue(pane.flat);
+            count++;
+        }
+        count = Math.max(1, count);
+        return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+    }
+
+    /** {@link #meanPaneVote} of each pane's veiled surface rather than its bare glass. */
+    @ColorInt
+    private int meanPaneSurface(@ColorInt int tint) {
+        long red = 0, green = 0, blue = 0;
+        int count = 0;
+        for (PaneAnswer pane : mPanes.values()) {
+            if (pane.tint != tint || pane.dim != mDimColor) continue;
+            int surface = pane.resolution.surface;
+            red += Color.red(surface);
+            green += Color.green(surface);
+            blue += Color.blue(surface);
             count++;
         }
         count = Math.max(1, count);
