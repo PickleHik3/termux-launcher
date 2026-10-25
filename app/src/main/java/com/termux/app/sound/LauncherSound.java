@@ -133,17 +133,17 @@ public final class LauncherSound {
      * What a new terminal session, background task or Linux app is given: {@code PULSE_SERVER},
      * and the bus when {@code dbus-daemon} is installed. Null when the launcher's server is not
      * the one to use — Sound off, {@code pulseaudio} missing, or the user's own setup. Cheap
-     * enough for any thread: a few file checks, and only the first time a directory listing.
+     * enough for any thread: a few file checks and one directory listing.
      */
     @Nullable
     public HashMap<String, String> environmentForNewShell() {
         try {
             if (!soundEnabled() || !canExecute(SoundPaths.PULSEAUDIO)) return null;
-            Boolean user = userSetup;
-            if (user == null) {
-                user = !StepAside.userFiles(new File(SoundPaths.USER_CONFIG_DIR).list()).isEmpty();
+            // Looked at afresh: files the user has just added win over what the last start saw.
+            if (Boolean.TRUE.equals(userSetup)
+                    || !StepAside.userFiles(new File(SoundPaths.USER_CONFIG_DIR).list()).isEmpty()) {
+                return null;
             }
-            if (user) return null;
             return new HashMap<>(SoundFiles.shellEnvironment(canExecute(SoundPaths.DBUS_DAEMON)));
         } catch (RuntimeException e) {
             Logger.logWarn(LOG_TAG, "No sound environment for a new shell: " + e.getMessage());
