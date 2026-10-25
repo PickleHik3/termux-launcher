@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
+import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 
 import com.termux.R;
@@ -37,6 +38,7 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
             return true;
         });
         HomeGesturesRows.bind(this);
+        offerDisplayStartIn();
         Preference lock = findPreference(HomeSettings.KEY_LAYOUT_LOCKED);
         if (lock != null) lock.setOnPreferenceChangeListener((row, value) -> {
             showEditPagesRow(Boolean.TRUE.equals(value));
@@ -49,6 +51,16 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
                 SettingsEditorDoors.open(this, row, SettingsEditorDoors.homePagesEditorIntent(context));
             return true;
         });
+    }
+
+    /** Start in offers Display only on a build that has a display; it is the list's last entry. */
+    private void offerDisplayStartIn() {
+        if (com.termux.BuildConfig.X11_SERVER) return;
+        ListPreference startIn = findPreference("app_launcher_start_in");
+        if (startIn == null || startIn.getEntries() == null || startIn.getEntryValues() == null
+            || startIn.getEntries().length < 3) return;
+        startIn.setEntries(java.util.Arrays.copyOf(startIn.getEntries(), 2));
+        startIn.setEntryValues(java.util.Arrays.copyOf(startIn.getEntryValues(), 2));
     }
 
     /** Edit pages changes the layout: while it is locked, its row waits for the lock to come off. */

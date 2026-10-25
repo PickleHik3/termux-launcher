@@ -82,6 +82,8 @@ public class WallRowTest {
     public void startInDecidesTheColdStartPage() {
         assertEquals(PaneWallPage.WIDGETS, WallRow.coldStart(WallRow.START_IN_HOME));
         assertEquals(PaneWallPage.TERMINAL, WallRow.coldStart(WallRow.START_IN_WORKSPACE));
+        assertEquals("the display window is one of the Workspace's", PaneWallPage.TERMINAL,
+            WallRow.coldStart(WallRow.START_IN_DISPLAY));
         assertEquals("unset is Home", PaneWallPage.WIDGETS, WallRow.coldStart(null));
         assertEquals(PaneWallPage.WIDGETS, WallRow.coldStart("TERMINAL"));
     }

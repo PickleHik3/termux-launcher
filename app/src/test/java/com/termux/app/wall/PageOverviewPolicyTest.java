@@ -115,10 +115,12 @@ public class PageOverviewPolicyTest {
     }
 
     @Test
-    public void onlyHomePagesHaveTheHomeButton() {
-        assertTrue(PageOverviewPolicy.showsHomeButton(Kind.HOME_PAGE));
-        assertFalse(PageOverviewPolicy.showsHomeButton(Kind.TERMINAL));
-        assertFalse(PageOverviewPolicy.showsHomeButton(Kind.DISPLAY));
+    public void homePagesTheFirstTerminalAndTheDisplayHaveTheHomeButton() {
+        assertTrue(PageOverviewPolicy.showsHomeButton(Kind.HOME_PAGE, false));
+        assertTrue("the terminal a start in the Workspace opens on",
+            PageOverviewPolicy.showsHomeButton(Kind.TERMINAL, true));
+        assertFalse("not every terminal", PageOverviewPolicy.showsHomeButton(Kind.TERMINAL, false));
+        assertTrue(PageOverviewPolicy.showsHomeButton(Kind.DISPLAY, false));
     }
 
     @Test

@@ -25,6 +25,11 @@ public final class WallRow {
     public static final String START_IN_HOME = "home";
     /** Start in: a cold start shows the Workspace, with one fresh shell window if it has none. */
     public static final String START_IN_WORKSPACE = "workspace";
+    /**
+     * Start in: a cold start shows the display window, which starts with the launcher. Only while
+     * that is on; see {@link StartInPolicy}.
+     */
+    public static final String START_IN_DISPLAY = "display";
 
     private WallRow() {}
 
@@ -132,10 +137,14 @@ public final class WallRow {
         return Math.max(0, Math.min(windowCount, currentWindow + 1));
     }
 
-    /** The page kind a cold start shows, by the Start in preference; Home for anything unknown. */
+    /**
+     * The page kind a cold start shows, by the Start in preference; Home for anything unknown.
+     * The display window is one of the Workspace's windows, so Display lands there too.
+     */
     @NonNull
     public static PaneWallPage coldStart(@Nullable String startIn) {
-        return START_IN_WORKSPACE.equals(startIn) ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
+        return START_IN_WORKSPACE.equals(startIn) || START_IN_DISPLAY.equals(startIn)
+            ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
     }
 
     /**

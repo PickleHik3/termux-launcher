@@ -24,6 +24,22 @@ dropped; what follows is what still owes a look.
   Linux apps, Input: before running Set up Linux apps, "Auto Keyboard" is greyed with "Set up Linux
   apps first"; once the guide's command has installed fcitx5 and you come back it is live and reads
   "Automatic Keyboard show & hide when you tap text input field"; its stored on/off is unchanged · pong.
+- 2026-10-25 · commit "feat(wall): make the terminal or the display window Home from Edit pages"
+  · Edit pages: the home button sits on every Home page, the first terminal card and the display
+  card, and only one card is filled. Tap it on the first terminal: Settings › Home › Start in reads
+  Terminal; on the display card: Start in reads Display and Linux apps › Start with the launcher is
+  on; on a Home page: Start in reads Home. Pick each value in Settings and reopen Edit pages: the
+  marker moved to match. With Display chosen, turn Start with the launcher off: Start in reads
+  Terminal with a terminal open, else Home. Close the display card (let the undo lapse) while it
+  is Home: same fallback. Close every terminal while the Workspace is Home: Start in reads Home.
+  Force-stop with Start in = Display: the launcher comes back on the display window and the
+  display runs · emulator, then pong.
+- 2026-10-25 · commit "fix(wall): hold the wallpaper still while Edit pages is open" · with a
+  managed wallpaper and Wallpaper parallax on, Home with three pages and two windows: open Edit
+  pages and scroll from the first card to the last; the wallpaper behind the cards does not move
+  at all, and the live card's glass (dock, status bar, pane slabs) stays aligned with it. Close on
+  a far card: the wallpaper glides once to that page's place, like a page swipe, with no jump; a
+  swipe started during that glide carries on smoothly · pong or emulator (portrait).
 - 2026-10-25 · commit "fix(calendar): centre today's circle on its number" · Calendar widget month
   grid, today a two-digit date in the first (Sunday) column, then in the last column: the circle is
   centred on the digits and holds both with a margin; at font scale 1.3 and in the narrowest span

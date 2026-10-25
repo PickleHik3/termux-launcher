@@ -1398,20 +1398,30 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
     }
 
-    /** Start in: {@code home} (Home page 1, the default) or {@code workspace}. */
+    /**
+     * Start in as stored: {@code home} (the default), {@code workspace} or {@code display};
+     * anything else is Home. Display holds only while the display starts with the launcher, which
+     * the app's {@code StartInPolicy} resolves.
+     */
     @NonNull
     public String getLauncherStartIn() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_LAUNCHER_START_IN, TERMUX_APP.DEFAULT_LAUNCHER_START_IN, true);
-        return TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value)
-            ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE : TERMUX_APP.LAUNCHER_START_IN_HOME;
+        return normalizeLauncherStartIn(value);
     }
 
     public void setLauncherStartIn(@Nullable String value) {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LAUNCHER_START_IN,
-            TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value)
-                ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE : TERMUX_APP.LAUNCHER_START_IN_HOME,
-            false);
+            normalizeLauncherStartIn(value), false);
+    }
+
+    @NonNull
+    private static String normalizeLauncherStartIn(@Nullable String value) {
+        if (TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value))
+            return TERMUX_APP.LAUNCHER_START_IN_WORKSPACE;
+        if (TERMUX_APP.LAUNCHER_START_IN_DISPLAY.equals(value))
+            return TERMUX_APP.LAUNCHER_START_IN_DISPLAY;
+        return TERMUX_APP.LAUNCHER_START_IN_HOME;
     }
 
     /** The palette gesture on Home: {@code swipe_up} (the default) or {@code off}. */

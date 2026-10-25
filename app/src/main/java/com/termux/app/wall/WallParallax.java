@@ -133,6 +133,31 @@ public final class WallParallax {
         return position / last * sparePx;
     }
 
+    /**
+     * How far the wall would have slid to move the wallpaper {@code gapPx}, in px of the wall's
+     * own travel: the gap in pages ({@link #offsetPx} spreads {@code sparePx} over
+     * {@code rowCount - 1} steps) times a page's width. Edit pages holds the wallpaper still while
+     * the wall jumps from card to card under it; when it lets go the wallpaper settles the rest
+     * of the way on a page's spring ({@link SettleSpring#page}) over this distance, so it moves
+     * as it would had the wall slid there. 0 while nothing pans.
+     */
+    public static float settleTravelPx(float gapPx, int rowCount, int sparePx, int pageWidthPx) {
+        if (sparePx <= 0 || rowCount <= 1 || pageWidthPx <= 0) return 0f;
+        return gapPx / sparePx * (rowCount - 1) * pageWidthPx;
+    }
+
+    /**
+     * The wallpaper's x-offset while a hold settles: the live offset plus the share of the gap
+     * left at the release still to go ({@code remaining}, 1 at the release and 0 once landed),
+     * held inside the picture. The live offset is read every frame, so a swipe during the settle
+     * carries the wallpaper with it instead of fighting it.
+     */
+    public static float settlingOffsetPx(float livePx, float gapPx, float remaining, int sparePx) {
+        if (sparePx <= 0) return 0f;
+        float left = Math.max(0f, Math.min(1f, remaining));
+        return Math.max(0f, Math.min(sparePx, livePx + gapPx * left));
+    }
+
     private static int clamp(int value, int low, int high) {
         return Math.max(low, Math.min(high, value));
     }

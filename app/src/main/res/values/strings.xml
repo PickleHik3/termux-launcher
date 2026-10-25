@@ -328,13 +328,16 @@
     <string name="settings_start_in_title">Start in</string>
     <string name="settings_start_in_home">Home</string>
     <string name="settings_start_in_workspace">Terminal</string>
+    <string name="settings_start_in_display">Display</string>
     <string-array name="settings_start_in_entries" translatable="false">
         <item>@string/settings_start_in_home</item>
         <item>@string/settings_start_in_workspace</item>
+        <item>@string/settings_start_in_display</item>
     </string-array>
     <string-array name="settings_start_in_values" translatable="false">
         <item>home</item>
         <item>workspace</item>
+        <item>display</item>
     </string-array>
     <string name="settings_home_palette_gesture_title">Palette gesture on Home</string>
     <string name="settings_home_palette_gesture_swipe_up">Swipe up</string>
