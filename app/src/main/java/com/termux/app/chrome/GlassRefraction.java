@@ -563,7 +563,19 @@ public final class GlassRefraction {
      * and the corner arc, with a little to spare.
      */
     public static float seamReachPx(@NonNull Look look, float density, float cornerRadiusPx) {
-        return Math.max(look.bandPx(density), Look.rimReachPx(density))
+        return seamReachPx(look, density, cornerRadiusPx, 0f);
+    }
+
+    /**
+     * {@link #seamReachPx(Look, float, float)} for a surface wearing the dock's soft rim band
+     * {@code softRimPx} wide ({@link Program#setDockSurface}): the band a seam edge must clear is
+     * the wider of the look's and the soft one, so a soft band deeper than the look's never bends
+     * the picture along a seam.
+     */
+    public static float seamReachPx(@NonNull Look look, float density, float cornerRadiusPx,
+                                    float softRimPx) {
+        return Math.max(Math.max(look.bandPx(density), Math.max(0f, softRimPx)),
+            Look.rimReachPx(density))
             + look.strengthPx(density) + Math.max(0f, cornerRadiusPx) + 2f * density;
     }
 
