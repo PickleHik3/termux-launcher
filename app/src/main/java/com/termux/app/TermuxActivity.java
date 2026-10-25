@@ -18728,6 +18728,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setAppDrawerDecorNavStripAlpha(alpha);
         }
 
+        @Override public void setHomeContentAlpha(float alpha) {
+            View pane = findViewById(R.id.widget_pane);
+            if (pane != null && pane.getAlpha() != alpha) pane.setAlpha(alpha);
+        }
+
         @Override public void flushPendingAccessoryGeometry() {
             TermuxActivity.this.flushPendingAccessoryGeometry();
         }
