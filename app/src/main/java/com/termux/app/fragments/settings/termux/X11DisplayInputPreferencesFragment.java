@@ -24,6 +24,7 @@ public class X11DisplayInputPreferencesFragment extends X11DisplayPreferencesFra
 
     private static final String KEY_KEYBOARD_OVER_DISPLAY = "x11_keyboard_over_display";
 
+    private static final String KEY_AUTO_KEYBOARD = "x11_keyboard_follows_text";
     private static final String KEY_TOUCH_MODE = "touchMode";
 
     @Nullable private PlaceLayoutStore mPlaces;
@@ -77,6 +78,18 @@ public class X11DisplayInputPreferencesFragment extends X11DisplayPreferencesFra
         super.onResume();
         // The touchpad's mode button writes the same values while the launcher is up.
         refreshKeyboardOverDisplay();
+        refreshAutoKeyboard();
+    }
+
+    /** Auto Keyboard needs fcitx5, which the Linux apps guide installs: greyed until it has run. */
+    private void refreshAutoKeyboard() {
+        androidx.preference.Preference row = findPreference(KEY_AUTO_KEYBOARD);
+        Context context = getContext();
+        if (row == null || context == null) return;
+        boolean ready = com.termux.app.x11.GuiAppsSetupGuide.isSetUp(context);
+        if (row.isEnabled() != ready) row.setEnabled(ready);
+        row.setSummary(ready ? com.termux.R.string.settings_x11_keyboard_follows_text_summary
+            : com.termux.R.string.settings_x11_keyboard_follows_text_needs_setup);
     }
 
     @Nullable

@@ -432,7 +432,9 @@ public final class X11DisplayHostController {
     /** The setting, which can move while the place is on screen. */
     private void reloadTextFocusPreferences() {
         TermuxAppSharedPreferences launcher = TermuxAppSharedPreferences.build(appContext);
-        textFocus.setEnabled(launcher == null || launcher.isX11KeyboardFollowsTextEnabled());
+        // Auto Keyboard needs fcitx5, so a stored "on" counts only once Linux apps are set up.
+        textFocus.setEnabled(GuiAppsSetupGuide.isSetUp(appContext)
+            && (launcher == null || launcher.isX11KeyboardFollowsTextEnabled()));
     }
 
     /** Hardware keys the page routes into X; true when X took the key. */
