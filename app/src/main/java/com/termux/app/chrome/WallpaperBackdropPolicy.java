@@ -9,14 +9,13 @@ import androidx.annotation.NonNull;
  * wallpaper behind it at a zoom we cannot read: on Nothing OS it measured 1.03 for one wallpaper
  * and 1.084 for another, it ignores {@code setWallpaperZoomOut}, and it moves with every wallpaper.
  * Every glass crop is cut from a frame this app captures itself, so the two pictures can only be
- * lined up by guessing that factor — which is what the Wallpaper alignment slider is.</p>
+ * lined up by guessing that factor, so the launcher captures at a zoom of 1.0 and does not guess.</p>
  *
  * <p>The way out is to stop guessing: when the wallpaper is a still image we can read, the launcher
  * draws it itself, from the very frame the crops come from. Backdrop and glass are then the same
  * pixels at the same offset, so alignment holds by construction on every ROM and the slider has
- * nothing left to correct — which is why {@link #renderZoomPercent} pins it to 100 there. A picture
- * we cannot be sure of (see {@link WallpaperPicture}) or a wallpaper we are not allowed to read
- * leaves the system drawing it, and the slider is the only tool that mode has.</p>
+ * nothing left to correct. A picture we cannot be sure of (see {@link WallpaperPicture}) or a
+ * wallpaper we are not allowed to read leaves the system drawing it.</p>
  */
 public final class WallpaperBackdropPolicy {
 
@@ -73,21 +72,5 @@ public final class WallpaperBackdropPolicy {
      */
     public static boolean showsSystemWallpaper(@NonNull Mode mode, boolean appOnlyPicture) {
         return !(mode == Mode.SELF_DRAWN && appOnlyPicture);
-    }
-
-    /**
-     * The zoom every capture in this mode is taken at, as the slider's percent.
-     *
-     * <p>Self-drawn shares one frame between the backdrop and the glass, so a zoom would move the
-     * glass off our own backdrop rather than onto the wallpaper: it is pinned at 1.0. Passthrough
-     * is still matching a picture drawn by someone else, and takes the user's number.</p>
-     */
-    public static int renderZoomPercent(@NonNull Mode mode, int preferencePercent) {
-        return mode == Mode.SELF_DRAWN ? 100 : preferencePercent;
-    }
-
-    /** Whether the Wallpaper alignment slider does anything in this mode. */
-    public static boolean alignmentSliderApplies(@NonNull Mode mode) {
-        return mode == Mode.PASSTHROUGH;
     }
 }

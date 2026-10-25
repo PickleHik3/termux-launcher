@@ -38,28 +38,4 @@ public class WallpaperBackdropPolicyTest {
         assertEquals(WallpaperBackdropPolicy.Mode.PASSTHROUGH,
             WallpaperBackdropPolicy.mode(false, WallpaperPicture.BEST_EFFORT, false));
     }
-
-    @Test
-    public void selfDrawnCapturesAtTrueSizeWhateverTheSliderSays() {
-        assertEquals(100, WallpaperBackdropPolicy.renderZoomPercent(
-            WallpaperBackdropPolicy.Mode.SELF_DRAWN, 108));
-        assertEquals(100, WallpaperBackdropPolicy.renderZoomPercent(
-            WallpaperBackdropPolicy.Mode.SELF_DRAWN, 90));
-    }
-
-    @Test
-    public void passthroughCapturesAtTheUsersOwnNumber() {
-        assertEquals(108, WallpaperBackdropPolicy.renderZoomPercent(
-            WallpaperBackdropPolicy.Mode.PASSTHROUGH, 108));
-        assertEquals(100, WallpaperBackdropPolicy.renderZoomPercent(
-            WallpaperBackdropPolicy.Mode.PASSTHROUGH, 100));
-    }
-
-    @Test
-    public void theSliderOnlyMattersWhileTheSystemDrawsTheWallpaper() {
-        assertTrue(WallpaperBackdropPolicy.alignmentSliderApplies(
-            WallpaperBackdropPolicy.Mode.PASSTHROUGH));
-        assertFalse(WallpaperBackdropPolicy.alignmentSliderApplies(
-            WallpaperBackdropPolicy.Mode.SELF_DRAWN));
-    }
 }

@@ -29,11 +29,6 @@
         app:title="@string/settings_wallpaper_title"
         app:summary="@string/termux_use_system_wallpaper_summary" />
     <Preference
-        app:key="wallpaper_render_zoom"
-        app:persistent="false"
-        app:title="@string/settings_wallpaper_alignment_title"
-        app:summary="@string/settings_wallpaper_alignment_summary" />
-    <Preference
         app:key="widgets_on_glass"
         app:persistent="false"
         app:title="@string/settings_widgets_on_glass_title"

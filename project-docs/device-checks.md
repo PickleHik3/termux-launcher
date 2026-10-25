@@ -20,6 +20,11 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "refactor(settings): remove the Wallpaper alignment control" · on a build
+  that still holds a stored non-100 alignment (or on Nothing OS), open Settings -> Appearance and
+  the Appearance editor: no Wallpaper alignment slider or row in either, search "alignment" finds
+  nothing, and the glass behind the surfaces still lines up with the wallpaper (self-drawn and
+  system-drawn wallpapers both).
 - 2026-10-25 · commit "fix(x11): GPU setup follows Termux's own package manager, refreshes once,
   never asks; add --estimate" · a full run on pong (pacman Termux with dpkg installed) prints
   "Package manager: pacman", syncs the databases once, installs the Vulkan wrapper's

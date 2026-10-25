@@ -11,8 +11,8 @@ public class SettingsEditorDoorsTest {
     @Test
     public void everyRowTheEditorHoldsOpensOnItsCard() {
         String[] appearance = {"theme_mode", "use_system_wallpaper", "terminal_dynamic_colors_enabled",
-            "terminal_contrast_level", "theme_templates_enabled", "wallpaper_render_zoom",
-            "wallpaper_alignment", "app_launcher_bw_icons", "app_launcher_icon_pack_package",
+            "terminal_contrast_level", "theme_templates_enabled",
+            "app_launcher_bw_icons", "app_launcher_icon_pack_package",
             "app_launcher_pinned_icon_pack_package", "fullscreen"};
         for (String key : appearance)
             assertEquals(key, EditorCard.APPEARANCE, SettingsEditorDoors.cardForSearchKey(key));

@@ -105,7 +105,6 @@
     <string name="appearance_row_wallpaper_colours">Wallpaper colours</string>
     <string name="appearance_row_full_screen">Full screen</string>
     <string name="appearance_row_minimal">Minimal</string>
-    <string name="appearance_row_alignment">Alignment</string>
     <string name="appearance_row_vibrancy">Vibrancy</string>
     <string name="appearance_row_tint_hue">Tint colour</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->

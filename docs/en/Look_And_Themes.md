@@ -152,7 +152,6 @@ above; the rows below it write the same settings as the Appearance card. Below t
 - **Wallpaper parallax**: the wallpaper pans a little as the row slides, from Home page 1 across
   the windows to the last page. Needs a wallpaper set through the launcher's picker; off in
   landscape and with animations off.
-- **Wallpaper alignment**: lines up the wallpaper behind the surfaces with the one on your screen.
 - **Monochrome icons**, **Icon pack** and **Pinned-app icon pack**.
 - **Keyboard look**: **Appearance** (opens the Keyboard card) and **Keyboard theme**.
 

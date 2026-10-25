@@ -264,7 +264,6 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_contrast, "terminal_contrast_level");
         key(R.drawable.ic_ms_format_paint, "theme_templates_enabled");
         key(R.drawable.ic_ms_wallpaper, "use_system_wallpaper");
-        key(R.drawable.ic_ms_crop, "wallpaper_render_zoom");
         key(R.drawable.ic_ms_filter_b_and_w, "app_launcher_bw_icons");
 
         // A row with no key of its own, by the page it opens.

@@ -1647,11 +1647,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * descriptor and each render pass asks once per surface. See {@link #refreshWallpaperPicture()}.
      */
     @NonNull private WallpaperPicture mWallpaperPicture = WallpaperPicture.MATCHES_SCREEN;
-    /**
-     * Wallpaper alignment the resident blur frames were captured at (percent), or -1 before the
-     * first read. See {@link #applyWallpaperRenderZoomIfChanged()}.
-     */
-    private int mAppliedWallpaperRenderZoomPercent = -1;
     @Nullable private FrameLayout mDecorNavBarSurfaceOverlay;
     /**
      * The app drawer's cross-fade of the under-pill strip; 1 whenever the drawer is not engaged.
@@ -1952,9 +1947,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyWidgetGridPreference();
         }
         mPreferences.migrateTerminalMarginAdjustmentDefaultIfNeeded();
-        // Every blur frame this activity captures is aligned with this value; remembering it here
-        // is what lets a later styling reload tell a moved slider from any other restyle.
-        mAppliedWallpaperRenderZoomPercent = effectiveWallpaperRenderZoomPercent();
         mLauncherTransitionController = new LauncherTransitionController(this, mPreferences);
         setMargins();
         setSuggestionBarView();
@@ -8972,7 +8964,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         final Rect target = new Rect(targetRect);
         final Rect frame = new Rect(frameRect);
-        final float zoom = systemWallpaperRenderZoom();
+        final float zoom = WALLPAPER_RENDER_ZOOM;
         // Lent to the worker: a new file landing (or onDestroy) clears the source on this thread,
         // and must not recycle the picture while the worker is still drawing from it. The cache
         // gives the loan back exactly once: after the draw, or when no job will ever draw it (the
@@ -9027,66 +9019,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Extra magnification the system applies when it renders the static wallpaper, about the
-     * display center, as a factor. ROMs that honor {@code setWallpaperZoomOut(0)} render at 1.0 and
-     * need no compensation; Nothing OS applies its own regardless of what the launcher asks for —
-     * and by an amount that depends on the wallpaper, which is why this is the user's Wallpaper
-     * alignment setting and not a constant. A stored 1328x2654 wallpaper measured 1.03, a
-     * 1400x3100 one about 1.084, on the same panel and the same ROM.
-     *
-     * <p>Only the composite zoom belongs here. Whatever scaling is baked into the stored bitmap is
-     * already in the pixels: the frost samples {@code WallpaperManager.getDrawable()}, which
-     * returns the wallpaper <em>as the system stored it</em>, so re-applying the store-scale
-     * double-counts it — that was the original bug.
-     *
-     * <p>How to measure one: set the wallpaper through the in-app picker, which keeps a byte-exact
-     * copy of the source, then fit {@code source = ((screen - centre) / zoom + centre) / fillScale}
-     * against the sharp wallpaper still visible in a screenshot's margins. For the 1328x2654 case
-     * 1.03 fit to a mean squared error of 4 with no pan term, against 355 for 1.00 and 564 for
-     * 1.10. Over-compensating displaces every frost by that error times its distance from the
-     * centre — around 75px at the status bar for seven percent — which is what "the blur is offset"
-     * looks like. Fit the number; do not nudge it by eye.
+     * The magnification the captures are taken at: none. Nothing OS composites the system
+     * wallpaper at its own zoom, which depends on the picture; a user-set compensation for it was
+     * removed, so the backdrop is cut at true size.
      */
-    private float systemWallpaperRenderZoom() {
-        return effectiveWallpaperRenderZoomPercent() / 100f;
-    }
-
-    /**
-     * The zoom the captures are actually taken at: the slider in passthrough mode, and 1.0 while
-     * the launcher draws the wallpaper itself, where backdrop and glass share one frame and a zoom
-     * would only slide the glass off our own backdrop.
-     */
-    private int effectiveWallpaperRenderZoomPercent() {
-        int percent = mPreferences != null
-            ? mPreferences.getWallpaperRenderZoom()
-            : TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER);
-        return WallpaperBackdropPolicy.renderZoomPercent(wallpaperBackdropMode(), percent);
-    }
-
-    /**
-     * Drops the pre-blurred frames when the wallpaper alignment moved.
-     *
-     * <p>Every resident frame was captured at the old zoom and the cache's identity does not
-     * include it (frame rect, source and wallpaper id only), so a styling reload alone would keep
-     * serving the misaligned crops. The value the frames were captured at is recorded in
-     * {@code onCreate}, so the comparison holds for a change made in Settings before this process
-     * had ever reloaded its styling.
-     *
-     * <p>It is the <em>effective</em> zoom that is compared, so switching to or from a live
-     * wallpaper — which moves the mode, and with it the zoom, without anyone touching the slider —
-     * drops the frames the same way a slider drag does.
-     */
-    private void applyWallpaperRenderZoomIfChanged() {
-        if (mPreferences == null)
-            return;
-        int percent = effectiveWallpaperRenderZoomPercent();
-        if (percent == mAppliedWallpaperRenderZoomPercent)
-            return;
-        mAppliedWallpaperRenderZoomPercent = percent;
-        mChrome.blurCache().clear();
-        updateTerminalGlassFrost();
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-    }
+    private static final float WALLPAPER_RENDER_ZOOM = 1f;
 
     /**
      * The glass bands blur a crop of the system wallpaper read through {@link WallpaperManager}.
@@ -9178,7 +9115,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final Rect target = new Rect(targetRect);
         // The system wallpaper never pans, so this is the decor's rect whenever it is reached.
         final Rect frameRect = getWallpaperCaptureFrameRect();
-        final float zoom = systemWallpaperRenderZoom();
+        final float zoom = WALLPAPER_RENDER_ZOOM;
         final WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
         return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.deferred(
             () -> decodeSystemWallpaperBackdrop(wallpaperManager, target, frameRect, zoom));
@@ -33160,9 +33097,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the running launcher on the way back from Settings, without a recreate.
         syncPlaceLayout();
         applySuggestionBarInputChar();
-        // Before the backdrop sync below: the sync re-cuts crops, and this is what makes it
-        // re-capture instead of re-cutting frames blurred at the old alignment.
-        applyWallpaperRenderZoomIfChanged();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
         // A Material palette follows the scheme: captured again here, never from the colours listener.
         applySeamlessStatusBackgroundModeIfNeeded();

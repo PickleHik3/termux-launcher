@@ -90,7 +90,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        configureWallpaperAlignment(context);
     }
 
     @Override
@@ -106,40 +105,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        if (context != null) updateWallpaperAlignmentVisibility(context);
-    }
-
-    /**
-     * Wallpaper alignment only has something to correct while the system is the one drawing the
-     * wallpaper. With a still wallpaper the launcher draws it itself from the frame its own
-     * surfaces are cut from, so the row is put away rather than left as a knob that does nothing;
-     * a picture the launcher cannot be sure of (or the switch being off) brings it back. The switch
-     * above it is on the same page, so it re-checks on the spot as well as on every resume.
-     */
-    private void configureWallpaperAlignment(@NonNull Context context) {
-        updateWallpaperAlignmentVisibility(context);
-        SwitchPreferenceCompat wallpaperSwitch = findPreference("use_system_wallpaper");
-        if (wallpaperSwitch == null) return;
-        wallpaperSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-            Preference alignment = findPreference("wallpaper_render_zoom");
-            if (alignment != null) {
-                alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
-                    WallpaperBackdropPolicy.mode(Boolean.TRUE.equals(newValue),
-                        WallpaperPictureReader.read(context,
-                            TermuxAppSharedPreferences.build(context, true)), true)));
-            }
-            return true;
-        });
-    }
-
-    private void updateWallpaperAlignmentVisibility(@NonNull Context context) {
-        Preference alignment = findPreference("wallpaper_render_zoom");
-        if (alignment == null) return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
-        alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
-            WallpaperBackdropPolicy.mode(wallpaperMode,
-                WallpaperPictureReader.read(context, preferences), true)));
     }
 
     /**
@@ -551,10 +516,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return;
         switch (key) {
-            case "wallpaper_render_zoom":
-                mPreferences.setWallpaperRenderZoom(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
             default:
                 break;
         }
@@ -567,8 +528,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return defValue;
         switch (key) {
-            case "wallpaper_render_zoom":
-                return mPreferences.getWallpaperRenderZoom();
             default:
                 return defValue;
         }

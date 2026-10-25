@@ -47,16 +47,6 @@ public class EditorSettingsSnapshotTest {
             values.put(key, value);
             writes.add(key);
         }
-
-        @Override public int getInt(@NonNull String key) {
-            Object value = values.get(key);
-            return value == null ? 100 : (Integer) value;
-        }
-
-        @Override public void putInt(@NonNull String key, int value) {
-            values.put(key, value);
-            writes.add(key);
-        }
     }
 
     @Test
@@ -67,17 +57,15 @@ public class EditorSettingsSnapshotTest {
 
         store.putString(HomeSettings.KEY_ICON_SCALE, "120");
         store.putBoolean("widgets_on_glass", true);
-        store.putInt("wallpaper_render_zoom", 110);
         store.writes.clear();
 
         List<String> written = entry.restore(store);
 
         assertEquals(store.writes, written);
-        assertEquals(3, written.size());
+        assertEquals(2, written.size());
         assertTrue(written.contains(HomeSettings.KEY_ICON_SCALE));
         assertEquals(null, store.getString(HomeSettings.KEY_ICON_SCALE));
         assertFalse(store.getBoolean("widgets_on_glass"));
-        assertEquals(100, store.getInt("wallpaper_render_zoom"));
         assertFalse("the theme did not change, so it is not written", written.contains("theme_mode"));
     }
 
