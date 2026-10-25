@@ -13,6 +13,10 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-10-25 · commit "fix(display): phones whose ABI has no X server never offer or start the display"
+  · An armeabi-v7a or x86 emulator image with the universal or split APK: open the launcher and
+  Settings; there is no Display entry or Display page, no Linux apps, and no crash (libXlorie.so
+  is shipped for arm64-v8a and x86_64 only). On arm64-v8a the Display page still opens.
 - 2026-10-12 · PR #65 · The widget picker opens without closing the launcher on Android 10 and 11
   (#62) · an API 29 or 30 emulator, or the reporter on the next drop.
 - 2026-10-12 · commit "feat(keyboard): paste a fresh screenshot from the paste key" · **Failed on
