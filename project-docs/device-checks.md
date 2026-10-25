@@ -927,3 +927,18 @@ Agent
 Developer
 - 2026-10-25 · 05ec8c647 · The Surface: settings as a centred two-pane sheet at 840dp · surface.
 - 2026-10-25 · b27f2b2df · First tap on an unpinned A–Z letter: icons already there on release; repeated scrubs leave no memory growth · pong.
+
+## Power-user round, wave 3 so far (2026-10-25)
+
+Seen on emu (debug, 0dcd99aaf): a Home icon's App menu offers Remove from Home and no Add to home;
+hold-and-drag lifts the icon above the status band; Remove turns red on hover; a drop removes it and
+Undo within the 5 s notice puts it back in its cell. Still owed:
+
+Agent
+- 2026-10-25 · 5b5b34d01 · A user app (installed, not system) shows both Remove and Uninstall while dragged; Uninstall opens the system dialog and the icon returns to its cell · emu.
+- 2026-10-25 · 5b5b34d01 · Layout locked: a hold-and-drag shows the refusal once and the menu stays; a folder lifts at once and Remove takes the folder, Undo brings its apps back · emu.
+- 2026-10-25 · 7c0873d3c · Pin requests: Chrome › Add to home screen shows the card and lands on the front page; with the page full, the next page or a new one; with the layout locked, "Unlock and add"; an app's own "Add widget" button (one with a configure screen) ends with the widget on Home · emu.
+- 2026-10-25 · 296455772 · Settings: close on a sub-page and reopen within 3 min (same page), after 3 min (root, no flash) · emu.
+
+Developer
+- 2026-10-25 · 5b5b34d01 · Five seconds for Undo: long enough in real use? · pong.
