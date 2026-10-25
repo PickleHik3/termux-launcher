@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Build;
+import android.os.SystemClock;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.MotionEvent;
@@ -94,8 +95,17 @@ public class SettingsActivity extends AppCompatActivity implements
      */
     private boolean mTwoPane;
 
-    /** Set in {@link #onStop}; read by {@link #onNewIntent} to judge whether the stack is stale. */
-    private long mLastStoppedAtEpochMs = 0;
+    /**
+     * When Settings last closed (elapsedRealtime), set in {@link #onStop}. Static so a reopen after
+     * the window finished sees it; read by {@link #onCreate} and {@link #onNewIntent} through
+     * {@link SettingsReopenPolicy}. After process death it is empty and Settings opens at the root.
+     */
+    private static long sLastClosedAtMs = SettingsReopenPolicy.NO_CLOSE;
+
+    @androidx.annotation.VisibleForTesting
+    static void setLastClosedAtMs(long closedAtMs) {
+        sLastClosedAtMs = closedAtMs;
+    }
 
     /** The sheet over Home the pages stand in; see {@link SettingsSheet}. */
     private SettingsSheet mSheet;
@@ -187,7 +197,10 @@ public class SettingsActivity extends AppCompatActivity implements
                 getSupportFragmentManager().beginTransaction()
                     .replace(R.id.settings_list, new RootPreferencesFragment()).commit();
             }
-            if (!(isPlainEntryIntent(intent) && restoreSavedStackIfFresh())) {
+            boolean plain = isPlainEntryIntent(intent);
+            boolean keepPage = plain && sLastClosedAtMs != SettingsReopenPolicy.NO_CLOSE
+                && !SettingsReopenPolicy.shouldReset(sLastClosedAtMs, SystemClock.elapsedRealtime(), false);
+            if (!(keepPage && restoreSavedStackIfFresh())) {
                 showInitialFragment(buildInitialFragment());
             }
         } else {
@@ -381,10 +394,11 @@ public class SettingsActivity extends AppCompatActivity implements
                 "com.termux.app.fragments.settings.termux.TaiPreferencesFragment");
             intent.putExtra(EXTRA_INITIAL_TITLE_RES, R.string.termux_ai_preferences_title);
         }
-        if (isPlainEntryIntent(intent) && isWithinRetainWindow()) {
-            // The user tapped Settings again from the launcher shortly after leaving it (this
-            // instance was never killed - it just went to the background); keep whatever screen
-            // and back stack they had instead of popping to root.
+        boolean plainEntry = isPlainEntryIntent(intent);
+        if (plainEntry && !SettingsReopenPolicy.shouldReset(
+                sLastClosedAtMs, SystemClock.elapsedRealtime(), false)) {
+            // Opened again within three minutes of closing (or still open): keep the page and back
+            // stack. Later than that a plain open pops to the root below, before the sheet shows.
             return;
         }
         // A deep link into an open Settings crosses the tree: whatever is on show fades through
@@ -396,7 +410,8 @@ public class SettingsActivity extends AppCompatActivity implements
             jumpTo(SettingsTree.path(SettingsTree.sectionPage(SettingsTree.Section.HOME).className), null);
             return;
         }
-        boolean instant = SettingsMotion.isInstant(this);
+        // A timed reset is not a navigation the user should see: no fade through the old page.
+        boolean instant = SettingsMotion.isInstant(this) || plainEntry;
         Fragment visible = fm.findFragmentById(R.id.settings);
         if (visible != null) SettingsTransitions.leaveByJump(this, visible, instant);
         mPushedScreens.clear();
@@ -412,7 +427,8 @@ public class SettingsActivity extends AppCompatActivity implements
     @Override
     protected void onStop() {
         super.onStop();
-        mLastStoppedAtEpochMs = System.currentTimeMillis();
+        long stoppedAtEpochMs = System.currentTimeMillis();
+        sLastClosedAtMs = SystemClock.elapsedRealtime();
         if (isFinishing() && (mPushedScreens.isEmpty() || (mTwoPane && isSectionPageAlone()))) {
             // A deliberate exit from the root screen (Back/Up with nothing left to pop): the next
             // open should start fresh at root, not resume a stack that no longer exists.
@@ -423,7 +439,7 @@ public class SettingsActivity extends AppCompatActivity implements
             for (SettingsBackStackState.Entry entry : mPushedScreens) {
                 if (!SettingsSearchFragment.class.getName().equals(entry.className)) kept.add(entry);
             }
-            SettingsBackStackState state = new SettingsBackStackState(kept, mLastStoppedAtEpochMs);
+            SettingsBackStackState state = new SettingsBackStackState(kept, stoppedAtEpochMs);
             getSettingsBackStackPreferences().edit()
                 .putString(PREFS_KEY_BACK_STACK_STATE, state.serialize()).apply();
         }
@@ -440,14 +456,6 @@ public class SettingsActivity extends AppCompatActivity implements
             && !intent.getBooleanExtra(EXTRA_OPEN_TAI_SETTINGS, false)
             && intent.getStringExtra(EXTRA_INITIAL_PLACE) == null
             && intent.getStringExtra(EXTRA_SCROLL_TO_KEY) == null;
-    }
-
-    private boolean isWithinRetainWindow() {
-        // 0 means this instance has not been stopped yet (e.g. onNewIntent while still resumed,
-        // which the platform allows for a singleTask Activity); treat that as still fresh.
-        if (mLastStoppedAtEpochMs == 0) return true;
-        long elapsed = System.currentTimeMillis() - mLastStoppedAtEpochMs;
-        return elapsed >= 0 && elapsed < SettingsBackStackState.RETAIN_WINDOW_MS;
     }
 
     private SharedPreferences getSettingsBackStackPreferences() {
