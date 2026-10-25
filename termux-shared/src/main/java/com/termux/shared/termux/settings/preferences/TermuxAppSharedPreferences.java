@@ -936,6 +936,57 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, value, false);
     }
 
+    /** Whose box the status row's camera gap follows: auto, custom or off; unknown reads as auto. */
+    @NonNull
+    public String getStatusBarCutoutMode() {
+        return normalizeStatusBarCutoutMode(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MODE, true));
+    }
+
+    public void setStatusBarCutoutMode(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE,
+            normalizeStatusBarCutoutMode(value), false);
+    }
+
+    @NonNull
+    private static String normalizeStatusBarCutoutMode(@Nullable String value) {
+        if (TERMUX_APP.STATUS_BAR_CUTOUT_CUSTOM.equals(value)) return TERMUX_APP.STATUS_BAR_CUTOUT_CUSTOM;
+        if (TERMUX_APP.STATUS_BAR_CUTOUT_OFF.equals(value)) return TERMUX_APP.STATUS_BAR_CUTOUT_OFF;
+        return TERMUX_APP.STATUS_BAR_CUTOUT_AUTO;
+    }
+
+    /** A custom camera gap's centre in dp from the screen's centre, clamped to its range. */
+    public int getStatusBarCutoutCenter() {
+        return clampStatusBarCutoutCenter(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_CENTER));
+    }
+
+    public void setStatusBarCutoutCenter(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER,
+            clampStatusBarCutoutCenter(value), false);
+    }
+
+    private static int clampStatusBarCutoutCenter(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_CENTER,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_CENTER, value));
+    }
+
+    /** A custom camera gap's width in dp, clamped to its range. */
+    public int getStatusBarCutoutWidth() {
+        return clampStatusBarCutoutWidth(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_WIDTH));
+    }
+
+    public void setStatusBarCutoutWidth(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH,
+            clampStatusBarCutoutWidth(value), false);
+    }
+
+    private static int clampStatusBarCutoutWidth(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_WIDTH,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_WIDTH, value));
+    }
+
     /** The place the weather is fetched for, trimmed; empty when it follows the device. */
     @NonNull
     public String getStatusWidgetWeatherLocation() {

@@ -297,6 +297,16 @@
         <item>litert-lm</item>
         <item>mnn-llm</item>
     </string-array>
+    <string-array name="settings_status_cutout_entries">
+        <item>@string/settings_status_cutout_auto</item>
+        <item>@string/settings_status_cutout_custom</item>
+        <item>@string/settings_status_cutout_off</item>
+    </string-array>
+    <string-array name="settings_status_cutout_values">
+        <item>auto</item>
+        <item>custom</item>
+        <item>off</item>
+    </string-array>
     <string-array name="x11_touch_mode_entries">
         <item>Trackpad</item>
         <item>Touch</item>
