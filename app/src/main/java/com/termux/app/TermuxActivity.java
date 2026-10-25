@@ -5421,8 +5421,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.TOP
                 | com.termux.app.chrome.ChromeEdgeRule.RIGHT);
         if (rim == null) return null;
-        return new android.graphics.drawable.InsetDrawable(rim, Math.round(card.left),
-            Math.round(card.top), Math.max(0, hostWidth - Math.round(card.right)), 0);
+        // Never a plain InsetDrawable: its insets would become the host's padding and lay every
+        // layer in the host out inside the card's box, long after the card is gone.
+        return com.termux.app.dock.PeekRimDrawable.forCard(rim, card, hostWidth);
     }
 
     /** The strip under the pill's inset from each side: the card's, while the card stands. */
@@ -6996,6 +6997,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDockShapeCut = true;
             mDockShapeCapsule = capsule;
             mDockShapeHeightPx = surfaceHeightPx;
+            // The host is never padded: its layers span it under every design, the Peek card
+            // being only its outline. A background that once handed it padding (the card's rim
+            // as a plain InsetDrawable did) leaves that padding behind when it is swapped out.
+            if (surface.getPaddingLeft() != 0 || surface.getPaddingTop() != 0
+                || surface.getPaddingRight() != 0 || surface.getPaddingBottom() != 0)
+                surface.setPadding(0, 0, 0, 0);
             // Peek glass: the card is worked out from the row and the host as laid out now; a
             // layout that moves either reads it again (onPeekLayoutSettled).
             syncPeekListeners();
