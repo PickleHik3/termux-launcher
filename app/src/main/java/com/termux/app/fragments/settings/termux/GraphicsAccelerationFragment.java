@@ -1,13 +1,19 @@
 package com.termux.app.fragments.settings.termux;
 
-import android.app.Activity;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
+import android.text.format.Formatter;
+import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -18,25 +24,33 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.radiobutton.MaterialRadioButton;
 import com.termux.R;
-import com.termux.app.TermuxService;
+import com.termux.app.activities.SettingsActivity;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.x11.LinuxAppCatalog;
 import com.termux.app.x11.X11CliInstaller;
+import com.termux.app.x11.X11GpuBenchmarkEstimate;
+import com.termux.app.x11.X11GpuBenchmarkRun;
 import com.termux.app.x11.X11GpuProbe;
 import com.termux.app.x11.X11GpuProfileStore;
 import com.termux.app.x11.X11LinuxAppRunner;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.net.uri.UriUtils;
 import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
+import com.termux.shared.termux.terminal.TermuxTerminalViewClientBase;
+import com.termux.terminal.TerminalColors;
+import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalSession;
+import com.termux.terminal.TextStyle;
+import com.termux.view.TerminalView;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -58,10 +72,14 @@ import java.util.concurrent.Executors;
  * <p>The benchmark's Home is the model, in shape and in parts: one list rebuilt whole on every
  * change and diffed by {@link TaiBenchListAdapter}, rows built in code from {@link TaiBenchViews},
  * the store and the device read on a single thread of its own and posted back. The benchmark
- * itself runs in the terminal: {@code termux-x11-gpu-setup} installs packages and tests each
- * profile on a private display, which is minutes of work the terminal shows better than a progress
- * bar. The page hands it {@link X11GpuProbe.Result#toTable}, so the profile table has one owner,
- * and reads its results file back when it is next shown ({@link X11GpuProfileStore#importResults}).
+ * itself is {@code termux-x11-gpu-setup}, which installs packages and tests each profile on a
+ * private display: minutes of package-manager output a terminal shows better than a progress bar.
+ * Run benchmark asks once first, with the sizes the script works out ({@code --estimate}), then
+ * starts it through {@link X11GpuBenchmarkRun}, which owns the run for the process. The floating
+ * bar turns into a read-only terminal panel on that run, with its step and a Stop button, and
+ * re-attaches whenever the page is shown again. The page hands the script
+ * {@link X11GpuProbe.Result#toTable}, so the profile table has one owner, and reads its results
+ * file back when the run ends or the page is next shown ({@link X11GpuProfileStore#importResults}).
  */
 @Keep
 public class GraphicsAccelerationFragment extends Fragment implements TaiBenchListAdapter.Factory {
@@ -72,8 +90,13 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     private static final int TYPE_NOTE = 4;
     private static final int TYPE_APPS = 5;
 
-    /** How long the launcher is given to come forward before the notice is raised on it. */
-    private static final long NOTICE_DELAY_MS = 350L;
+    /** The run panel's terminal text, before the font scale. */
+    private static final float TERMINAL_TEXT_SP = 11f;
+    /** The run panel's terminal height, and the most of a short (landscape) screen it takes. */
+    private static final int TERMINAL_HEIGHT_DP = 220;
+    private static final float TERMINAL_HEIGHT_SCREEN_SHARE = 0.35f;
+    private static final int TERMINAL_CORNER_DP = 8;
+    private static final int TERMINAL_INSET_DP = 6;
     /** Where the page leaves the profile table for the script it starts; the prefix's tmp. */
     private static final String TABLE_PATH = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH
         + "/x11-gpu-profiles.sh";
@@ -141,6 +164,43 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     @Nullable private Facts facts;
     @Nullable private View bar;
     @Nullable private X11GpuProfileStore store;
+    /** The bar's run panel, built with the bar; its terminal view exists only while there is a run. */
+    @Nullable private RunPanel runPanel;
+    @Nullable private TerminalView terminal;
+    @Nullable private AlertDialog confirmDialog;
+    /** The run state the bar last showed, so a run that just ended reads its results once. */
+    @Nullable private X11GpuBenchmarkRun.State shownRunState;
+
+    private final X11GpuBenchmarkRun.Listener runListener = new X11GpuBenchmarkRun.Listener() {
+        @Override
+        public void onScreenUpdated() {
+            TerminalView view = terminal;
+            if (view != null) view.onScreenUpdated();
+        }
+
+        @Override
+        public void onRunChanged() {
+            bindBar(facts);
+        }
+    };
+
+    /** The views of the run panel: the step line, the terminal's frame and the two buttons. */
+    private static final class RunPanel {
+        @NonNull final View root;
+        @NonNull final TextView status;
+        @NonNull final FrameLayout screen;
+        @NonNull final TextView stop;
+        @NonNull final TextView close;
+
+        RunPanel(@NonNull View root, @NonNull TextView status, @NonNull FrameLayout screen,
+                 @NonNull TextView stop, @NonNull TextView close) {
+            this.root = root;
+            this.status = status;
+            this.screen = screen;
+            this.stop = stop;
+            this.close = close;
+        }
+    }
 
     @Nullable
     @Override
@@ -176,16 +236,32 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
 
     @Override
     public void onDestroyView() {
+        AlertDialog dialog = confirmDialog;
+        if (dialog != null) dialog.dismiss();
+        confirmDialog = null;
         bar = null;
+        runPanel = null;
+        terminal = null;
+        shownRunState = null;
         super.onDestroyView();
     }
 
     @Override
     public void onStart() {
         super.onStart();
+        // The run went on while the page was away: the panel picks up its live or finished output.
+        X11GpuBenchmarkRun.get(requireContext()).attach(runListener);
         rebuild();
-        // Coming back from the terminal is when a benchmark's results file is new.
+        TerminalView view = terminal;
+        if (view != null) view.onScreenUpdated();
+        // A benchmark that ended while the page was away left a new results file.
         refresh();
+    }
+
+    @Override
+    public void onStop() {
+        X11GpuBenchmarkRun.get(requireContext()).detach(runListener);
+        super.onStop();
     }
 
     @Override
@@ -521,17 +597,155 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         });
         card.core.addView(run, TaiBenchViews.block(context, 10));
         TaiBenchViews.setEnabled(run, false);
+        runPanel = createRunPanel(context);
+        card.core.addView(runPanel.root);
         return card.outer;
+    }
+
+    /** The bar while a run is on: its step, its output, and Stop (or Close once it has ended). */
+    @NonNull
+    private RunPanel createRunPanel(@NonNull Context context) {
+        LinearLayout panel = new LinearLayout(context);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setVisibility(View.GONE);
+        TextView status = TaiBenchViews.body(context, "");
+        status.setSingleLine(true);
+        status.setEllipsize(TextUtils.TruncateAt.END);
+        panel.addView(status);
+        FrameLayout screen = new FrameLayout(context);
+        int inset = TaiBenchViews.dp(context, TERMINAL_INSET_DP);
+        screen.setPadding(inset, inset, inset, inset);
+        GradientDrawable ground = new GradientDrawable();
+        ground.setCornerRadius(TaiBenchViews.dp(context, TERMINAL_CORNER_DP));
+        screen.setBackground(ground);
+        screen.setClipToOutline(true);
+        int height = Math.min(TaiBenchViews.dp(context, TERMINAL_HEIGHT_DP),
+            Math.round(context.getResources().getDisplayMetrics().heightPixels * TERMINAL_HEIGHT_SCREEN_SHARE));
+        LinearLayout.LayoutParams screenParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
+        screenParams.topMargin = TaiBenchViews.dp(context, 8);
+        panel.addView(screen, screenParams);
+        TextView stop = TaiBenchViews.errorButton(context, getString(R.string.settings_x11_gpu_run_stop));
+        stop.setMinHeight(TaiBenchViews.dp(context, 44));
+        stop.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            X11GpuBenchmarkRun.get(v.getContext()).stop();
+        });
+        panel.addView(stop, TaiBenchViews.block(context, 10));
+        TextView close = TaiBenchViews.ghostButton(context, getString(R.string.settings_x11_gpu_run_close));
+        close.setMinHeight(TaiBenchViews.dp(context, 44));
+        close.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            X11GpuBenchmarkRun.get(v.getContext()).dismiss();
+        });
+        panel.addView(close, TaiBenchViews.block(context, 10));
+        return new RunPanel(panel, status, screen, stop, close);
     }
 
     private void bindBar(@Nullable Facts f) {
         View view = bar;
-        if (view == null) return;
+        RunPanel panel = runPanel;
+        Context context = getContext();
+        if (view == null || panel == null || context == null) return;
+        X11GpuBenchmarkRun run = X11GpuBenchmarkRun.get(context);
+        X11GpuBenchmarkRun.State state = run.state();
+        X11GpuBenchmarkRun.State before = shownRunState;
+        shownRunState = state;
+        // A run that ended while the page watched has just written its results.
+        if (before != null && before != state && !run.isActive() && state != X11GpuBenchmarkRun.State.IDLE) {
+            refresh();
+        }
         TextView line = view.findViewById(R.id.x11_gpu_text);
-        boolean ready = f != null && f.scriptInstalled;
-        line.setText(f != null && !f.scriptInstalled ? R.string.settings_x11_gpu_run_needs_display
-            : R.string.settings_x11_gpu_run_summary);
-        TaiBenchViews.setEnabled(view.findViewById(R.id.x11_gpu_action), ready);
+        View action = view.findViewById(R.id.x11_gpu_action);
+        boolean showingRun = state != X11GpuBenchmarkRun.State.IDLE;
+        setShown(line, !showingRun);
+        setShown(action, !showingRun);
+        setShown(panel.root, showingRun);
+        if (!showingRun) {
+            showTerminal(panel, null);
+            boolean ready = f != null && f.scriptInstalled;
+            line.setText(f != null && !f.scriptInstalled ? R.string.settings_x11_gpu_run_needs_display
+                : R.string.settings_x11_gpu_run_summary);
+            TaiBenchViews.setEnabled(action, ready);
+            return;
+        }
+        String status = X11GpuBenchmarkRun.statusText(context, state, run.step());
+        if (!TextUtils.equals(panel.status.getText(), status)) panel.status.setText(status);
+        setShown(panel.stop, run.isActive());
+        TaiBenchViews.setEnabled(panel.stop, state == X11GpuBenchmarkRun.State.RUNNING);
+        setShown(panel.close, !run.isActive());
+        showTerminal(panel, run.session());
+    }
+
+    private static void setShown(@NonNull View view, boolean shown) {
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
+    }
+
+    /**
+     * Puts a read-only terminal view on {@code session} in the panel, or takes it out. A view is
+     * made per session rather than switched between them, so a new run starts on a clean view.
+     */
+    private void showTerminal(@NonNull RunPanel panel, @Nullable TerminalSession session) {
+        TerminalView view = terminal;
+        if (view != null && view.getCurrentSession() == session) return;
+        if (view != null) {
+            panel.screen.removeView(view);
+            terminal = null;
+        }
+        if (session == null) return;
+        Context context = panel.screen.getContext();
+        view = new TerminalView(context, null);
+        view.setTerminalViewClient(new ReadOnlyTerminalClient());
+        view.setTextSize(Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
+            TERMINAL_TEXT_SP, context.getResources().getDisplayMetrics())));
+        view.setCursorSuppressed(true);
+        // Nothing is typed into the run: no focus, so no keyboard and no keys reach it.
+        view.setFocusable(false);
+        view.setFocusableInTouchMode(false);
+        view.setContentDescription(getString(R.string.settings_x11_gpu_run_output));
+        view.attachSession(session);
+        // The ground is the terminal's own, so its colours read the same in a light or dark theme.
+        // The view paints it too: it declares itself opaque and leaves default cells unpainted.
+        int ground = terminalBackground(session);
+        ((GradientDrawable) panel.screen.getBackground()).setColor(ground);
+        view.setBackgroundColor(ground);
+        panel.screen.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        terminal = view;
+    }
+
+    private static int terminalBackground(@NonNull TerminalSession session) {
+        TerminalEmulator emulator = session.getEmulator();
+        int color = emulator != null ? emulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]
+            : TerminalColors.COLOR_SCHEME.mDefaultColors[TextStyle.COLOR_INDEX_BACKGROUND];
+        return color | 0xFF000000;
+    }
+
+    /** The panel's terminal shows output and scrolls; it takes no keys, no text and no selection. */
+    private static final class ReadOnlyTerminalClient extends TermuxTerminalViewClientBase {
+        @Override
+        public boolean onKeyDown(int keyCode, KeyEvent e, TerminalSession session) {
+            return true;
+        }
+
+        @Override
+        public boolean onKeyUp(int keyCode, KeyEvent e) {
+            return true;
+        }
+
+        @Override
+        public boolean onCodePoint(int codePoint, boolean ctrlDown, TerminalSession session) {
+            return true;
+        }
+
+        @Override
+        public boolean onLongPress(MotionEvent event) {
+            return true;
+        }
+
+        @Override
+        public boolean isTerminalViewSelected() {
+            return false;
+        }
     }
 
     // ---- actions ----
@@ -546,20 +760,21 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     }
 
     /**
-     * Writes the profile table where the script can read it, then starts the script in a new
-     * terminal session and steps aside, the way the setup command's copy row does: Settings
-     * closes so the terminal is in front, and the notice follows it there.
+     * Writes the profile table where the script can read it, then asks once before anything runs:
+     * what the run downloads, the space it takes while it runs and what it gives back, as the
+     * script works them out. Run starts it on this page.
      */
     private void runBenchmark() {
         Facts f = facts;
         Context context = getContext();
         if (f == null || context == null || !f.scriptInstalled || executor.isShutdown()) return;
+        if (X11GpuBenchmarkRun.get(context).isActive() || confirmDialog != null) return;
         Context app = context.getApplicationContext();
         String table = f.gpu.toTable();
         executor.execute(() -> {
-            // A script written by an older build would refuse --profiles and stop at once; the
-            // launcher rewrites it on its next start (X11CliInstaller), so say that instead.
-            if (!knowsProfiles(new File(X11CliInstaller.GPU_SETUP_SCRIPT_PATH))) {
+            // A script written by an older build would refuse --estimate or --profiles and stop at
+            // once; the launcher rewrites it on its next start (X11CliInstaller), so say that instead.
+            if (!knowsPageOptions(new File(X11CliInstaller.GPU_SETUP_SCRIPT_PATH))) {
                 handler.post(() -> AppNotice.show(app, R.string.settings_x11_gpu_run_outdated));
                 return;
             }
@@ -576,33 +791,99 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
             }
             boolean ok = written;
             handler.post(() -> {
-                if (!ok) return;
-                Intent intent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE,
-                    UriUtils.getFileUri(X11CliInstaller.GPU_SETUP_SCRIPT_PATH));
-                intent.setClass(app, TermuxService.class);
-                intent.putExtra(TERMUX_SERVICE.EXTRA_ARGUMENTS, new String[] {"--profiles=" + TABLE_PATH});
-                intent.putExtra(TERMUX_SERVICE.EXTRA_COMMAND_LABEL, app.getString(R.string.settings_x11_gpu_run_label));
-                try {
-                    app.startService(intent);
-                } catch (RuntimeException e) {
-                    Logger.logStackTraceWithMessage("GraphicsAcceleration", "The benchmark could not be started", e);
-                    return;
-                }
-                Activity activity = getActivity();
-                if (activity != null) activity.finish();
-                // A handler of its own: finish() can run onDestroy() inside the delay.
-                new Handler(Looper.getMainLooper()).postDelayed(
-                    () -> AppNotice.show(app, R.string.settings_x11_gpu_run_started), NOTICE_DELAY_MS);
+                if (ok && isAdded() && getView() != null) confirm();
             });
         });
     }
 
-    /** Whether the installed benchmark script takes the page's {@code --profiles=} option. File work. */
+    /** The one question before a run, filled in with the sizes once the script has worked them out. */
+    private void confirm() {
+        Context context = requireContext();
+        Context app = context.getApplicationContext();
+        X11GpuBenchmarkRun.Estimate estimate = new X11GpuBenchmarkRun.Estimate();
+        AlertDialog dialog = new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.settings_x11_gpu_confirm_title)
+            .setMessage(confirmMessage(context, null))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.settings_x11_gpu_confirm_run, (d, which) -> start(app))
+            .create();
+        dialog.setOnDismissListener(d -> {
+            estimate.cancel();
+            if (confirmDialog == d) confirmDialog = null;
+        });
+        confirmDialog = dialog;
+        dialog.show();
+        // Run waits for the sizes: the estimate may be refreshing the package lists, and a run
+        // started beside it would find them locked.
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).setEnabled(false);
+        Thread worker = new Thread(() -> {
+            X11GpuBenchmarkEstimate sizes = estimate.run(app, X11CliInstaller.GPU_SETUP_SCRIPT_PATH, TABLE_PATH);
+            handler.post(() -> {
+                if (confirmDialog != dialog || !dialog.isShowing()) return;
+                dialog.setMessage(confirmMessage(dialog.getContext(), sizes));
+                dialog.getButton(DialogInterface.BUTTON_POSITIVE).setEnabled(true);
+            });
+        }, "x11-gpu-estimate");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    /** The confirmation's text: the three sizes (or why they are missing), then what the run does. */
     @VisibleForTesting
-    static boolean knowsProfiles(@NonNull File script) {
+    @NonNull
+    static String confirmMessage(@NonNull Context context, @Nullable X11GpuBenchmarkEstimate sizes) {
+        StringBuilder text = new StringBuilder();
+        if (sizes == null) {
+            text.append(context.getString(R.string.settings_x11_gpu_confirm_working));
+        } else if (sizes.noSizesKnown()) {
+            text.append(context.getString(R.string.settings_x11_gpu_confirm_unknown));
+        } else {
+            sizeLine(context, text, R.string.settings_x11_gpu_confirm_download, sizes.downloadBytes);
+            sizeLine(context, text, R.string.settings_x11_gpu_confirm_space, sizes.installBytes);
+            sizeLine(context, text, R.string.settings_x11_gpu_confirm_given_back, sizes.removableBytes);
+            if (!sizes.sizesKnown()) {
+                text.append('\n').append(context.getString(R.string.settings_x11_gpu_confirm_partial));
+            }
+        }
+        return text.append("\n\n").append(context.getString(R.string.settings_x11_gpu_confirm_note)).toString();
+    }
+
+    private static void sizeLine(@NonNull Context context, @NonNull StringBuilder text, int line, long bytes) {
+        if (bytes == X11GpuBenchmarkEstimate.UNKNOWN) return;
+        if (text.length() > 0) text.append('\n');
+        text.append(context.getString(line, Formatter.formatShortFileSize(context, bytes)));
+    }
+
+    /** Starts the confirmed run, with no question of its own left to ask. */
+    private void start(@NonNull Context app) {
+        if (executor.isShutdown()) return;
+        executor.execute(() -> {
+            X11GpuBenchmarkRun.Launch launch;
+            try {
+                launch = X11GpuBenchmarkRun.prepare(app, X11CliInstaller.GPU_SETUP_SCRIPT_PATH,
+                    "--yes", "--profiles=" + TABLE_PATH);
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage("GraphicsAcceleration", "The benchmark could not be prepared", e);
+                return;
+            }
+            handler.post(() -> {
+                Intent page = SettingsActivity.createFragmentIntent(app, GraphicsAccelerationFragment.class,
+                    R.string.settings_x11_gpu_title);
+                page.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                X11GpuBenchmarkRun.get(app).start(launch, page);
+            });
+        });
+    }
+
+    /**
+     * Whether the installed benchmark script takes the options this page runs it with:
+     * {@code --profiles=} and {@code --estimate}. File work.
+     */
+    @VisibleForTesting
+    static boolean knowsPageOptions(@NonNull File script) {
         try {
-            return new String(Files.readAllBytes(script.toPath()), StandardCharsets.UTF_8)
-                .contains("--profiles=*)");
+            String text = new String(Files.readAllBytes(script.toPath()), StandardCharsets.UTF_8);
+            return text.contains("--profiles=*)") && text.contains("--estimate");
         } catch (Exception e) {
             return false;
         }

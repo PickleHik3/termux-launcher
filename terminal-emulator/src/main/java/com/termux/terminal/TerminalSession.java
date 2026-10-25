@@ -98,6 +98,12 @@ public final class TerminalSession extends TerminalOutput {
     private boolean mBoldWithBright;
 
     /**
+     * Whether the session writes "[Process completed … - press Enter]" when its process ends.
+     * Off for a read-only session that says how it ended elsewhere and takes no Enter.
+     */
+    public boolean mShowsExitLine = true;
+
+    /**
      * The file descriptor referencing the master half of a pseudo-terminal pair, resulting from calling
      * {@link JNI#createSubprocess(String, String, String[], String[], int[], int, int, int, int)}.
      */
@@ -660,8 +666,10 @@ public final class TerminalSession extends TerminalOutput {
                     exitDescription += " (signal " + (-exitCode) + ")";
                 }
                 exitDescription += " - press Enter]";
-                byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
-                mEmulator.append(bytesToWrite, bytesToWrite.length);
+                if (mShowsExitLine) {
+                    byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
+                    mEmulator.append(bytesToWrite, bytesToWrite.length);
+                }
                 notifyScreenUpdate();
                 mClient.onSessionFinished(TerminalSession.this);
             } else if (drainProcessOutputSlice() && !hasMessages(MSG_NEW_INPUT)) {
