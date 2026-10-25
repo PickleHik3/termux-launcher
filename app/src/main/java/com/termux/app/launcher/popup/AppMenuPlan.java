@@ -13,7 +13,9 @@ import java.util.List;
  * top to bottom: the notifications row (only while the app is badged), the app's shortcuts, then the
  * actions in Launcher3's order — Widgets, App info, Add to home, Pin or Unpin, Change icon (with
  * Reset icon beside it once a custom icon is set), Uninstall. An app in a dock folder trades Pin for
- * Move to dock and Remove from folder, the two things only a folder member can do.
+ * Move to dock and Remove from folder, the two things only a folder member can do. An icon on Home
+ * has no Add to home (it is there already) and offers Remove from Home before Uninstall: the same
+ * thing its drag onto the Remove target does.
  */
 public final class AppMenuPlan {
 
@@ -31,6 +33,7 @@ public final class AppMenuPlan {
         UNPIN,
         MOVE_TO_DOCK,
         REMOVE_FROM_FOLDER,
+        REMOVE_FROM_HOME,
         CHANGE_ICON,
         RESET_ICON,
         UNINSTALL
@@ -38,12 +41,14 @@ public final class AppMenuPlan {
 
     /** Where the long-pressed icon lives, which decides the Pin slot. */
     public enum Source {
-        /** A drawer cell or a Home icon for an app not on the dock. */
+        /** A drawer cell for an app not on the dock. */
         UNPINNED,
         /** A dock icon, or a drawer cell for an app that is on the dock. */
         PINNED,
         /** An app inside a dock folder. */
-        FOLDER_MEMBER
+        FOLDER_MEMBER,
+        /** An app icon on a Home page; {@link Inputs#pinnedToDock} picks Pin or Unpin. */
+        HOME
     }
 
     /** What the host knows about the app; every flag defaults to "not offered". */
@@ -57,6 +62,8 @@ public final class AppMenuPlan {
         public boolean hasWidgets;
         public boolean canAddToHome;
         public boolean customIcon;
+        /** For {@link Source#HOME}: the app is also on the dock, so the row is Unpin. */
+        public boolean pinnedToDock;
     }
 
     private AppMenuPlan() {
@@ -86,7 +93,9 @@ public final class AppMenuPlan {
         List<Row> actions = new ArrayList<>(8);
         if (in.androidPackage && in.hasWidgets) actions.add(Row.WIDGETS);
         if (in.androidPackage) actions.add(Row.APP_INFO);
-        if (in.canAddToHome && in.source != Source.FOLDER_MEMBER) actions.add(Row.ADD_TO_HOME);
+        if (in.canAddToHome && in.source != Source.FOLDER_MEMBER && in.source != Source.HOME) {
+            actions.add(Row.ADD_TO_HOME);
+        }
         switch (in.source) {
             case FOLDER_MEMBER:
                 actions.add(Row.MOVE_TO_DOCK);
@@ -95,12 +104,16 @@ public final class AppMenuPlan {
             case PINNED:
                 actions.add(Row.UNPIN);
                 break;
+            case HOME:
+                actions.add(in.pinnedToDock ? Row.UNPIN : Row.PIN);
+                break;
             default:
                 actions.add(Row.PIN);
                 break;
         }
         actions.add(Row.CHANGE_ICON);
         if (in.customIcon) actions.add(Row.RESET_ICON);
+        if (in.source == Source.HOME) actions.add(Row.REMOVE_FROM_HOME);
         if (in.androidPackage) actions.add(Row.UNINSTALL);
         groups.add(actions);
         return groups;

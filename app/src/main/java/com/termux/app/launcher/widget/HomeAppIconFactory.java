@@ -174,6 +174,20 @@ public final class HomeAppIconFactory implements WidgetGridView.AppIconFactory,
         return LauncherAppDataProvider.getInstance(context).findByRef(member.app());
     }
 
+    /**
+     * The app behind the icon {@code record}, for its App menu: the catalogue's entry, or one made
+     * from the stored reference and label while the catalogue is still loading (the icon opens by
+     * that reference meanwhile too). Null for an app that is gone, or for anything but an icon.
+     */
+    @Nullable LauncherAppEntry menuEntryFor(@NonNull LauncherWidgetRecord record) {
+        AppRef ref = record.appRef();
+        if (!record.isApp() || ref == null) return null;
+        LauncherAppDataProvider apps = LauncherAppDataProvider.getInstance(context);
+        LauncherAppEntry entry = apps.findByRef(ref);
+        if (entry != null) return entry;
+        return apps.hasLoadedApps() ? null : new LauncherAppEntry(ref, record.appLabel(), null);
+    }
+
     /** Whether the catalogue has loaded, so a missing entry means the app is gone. */
     boolean catalogueLoaded() {
         return LauncherAppDataProvider.getInstance(context).hasLoadedApps();
