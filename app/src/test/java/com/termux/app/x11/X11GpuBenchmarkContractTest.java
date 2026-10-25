@@ -166,7 +166,9 @@ public class X11GpuBenchmarkContractTest {
     private String wrapperPrelude(String pm, String arch, String download) {
         Matcher m = Pattern.compile("(?ms)^WRAPPER_PKG=.*?^WRAPPER_DIR=\"\"\\n").matcher(script);
         assertTrue("the script pins the wrapper", m.find());
-        return "TMPDIR=$1; LOG=$1/log; PM=" + pm + "\n"
+        Matcher opts = Pattern.compile("(?m)^APT_OPTS=.*\\n").matcher(script);
+        assertTrue("the script names apt's options", opts.find());
+        return "TMPDIR=$1; LOG=$1/log; PM=" + pm + "\n" + opts.group()
             + "detail() { :; }\n"
             + "pacman-conf() { echo " + arch + "; }\n"
             + "dpkg() { echo " + arch + "; }\n"
@@ -233,7 +235,8 @@ public class X11GpuBenchmarkContractTest {
                 + "download-deleted\n",
             run(wrapperPrelude("pacman", "aarch64", "the wrapper") + body));
         assertEquals("installed\n"
-                + "apt-get install -y <tmp>/vulkan-wrapper-android_25.0.0-3_aarch64.deb\n"
+                + "apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+                + " <tmp>/vulkan-wrapper-android_25.0.0-3_aarch64.deb\n"
                 + url + "vulkan-wrapper-android_25.0.0-3_aarch64.deb\n"
                 + "download-deleted\n",
             run(wrapperPrelude("apt", "aarch64", "the wrapper") + body));
