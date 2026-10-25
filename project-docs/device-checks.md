@@ -22,7 +22,7 @@ dropped; what follows is what still owes a look.
 ## Agent
 - 2026-10-25 · commit "feat(settings): grey Auto Keyboard until Linux apps are set up" · Settings,
   Linux apps, Input: before running Set up Linux apps, "Auto Keyboard" is greyed with "Set up Linux
-  apps first"; after copying the command in the guide and coming back it is live and reads
+  apps first"; once the guide's command has installed fcitx5 and you come back it is live and reads
   "Automatic Keyboard show & hide when you tap text input field"; its stored on/off is unchanged · pong.
 - 2026-10-25 · commit "fix(calendar): centre today's circle on its number" · Calendar widget month
   grid, today a two-digit date in the first (Sunday) column, then in the last column: the circle is
