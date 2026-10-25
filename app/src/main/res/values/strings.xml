@@ -148,6 +148,15 @@
     <string name="settings_weather_fahrenheit_summary">Show °F instead of °C.</string>
     <string name="settings_weather_location_title">Location</string>
     <string name="settings_weather_location_summary_device">Uses your device location</string>
+    <string name="settings_status_cutout_header">Camera cutout</string>
+    <string name="settings_status_cutout_title">Keep icons clear of the camera</string>
+    <string name="settings_status_cutout_auto">Auto</string>
+    <string name="settings_status_cutout_custom">Custom</string>
+    <string name="settings_status_cutout_off">Off</string>
+    <string name="settings_status_cutout_center_title">Position</string>
+    <string name="settings_status_cutout_center_summary">Slide the gap left or right to line it up with the camera.</string>
+    <string name="settings_status_cutout_width_title">Width</string>
+    <string name="settings_status_cutout_width_summary">Make the gap as wide as the camera.</string>
     <string name="settings_weather_location_current">Now: %1$s</string>
     <string name="settings_weather_location_search_hint">Search for a city</string>
     <string name="settings_weather_location_type_more">Keep typing a city name</string>

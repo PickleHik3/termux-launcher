@@ -20,6 +20,14 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-25 · commit "fix(statusbar): the status row flows around the camera and clears the
+  screen's corners" (#163) · with the status bar along the top and Full screen on, screenshots in
+  portrait show a gap at the camera with the chips left of it and the readings right of it, and
+  the first and last items clear of the screen's rounded corners; landscape shows no gap; Full
+  screen off (row below the system bar) looks as before; at font scale 1.3 the chips ellipsize
+  and nothing sits under the camera; Settings › Status bar › Camera cutout shows Auto/Custom/Off
+  and the two sliders only on Custom · emulator with a punch-hole cutout (Display cutout:
+  Punch hole), then pong.
 - 2026-10-25 · commit "fix(graphics): skip the Vulkan wrapper on phones whose graphics driver is
   older than Vulkan 1.3" · pong (Vulkan 1.1): the Phone's Vulkan card says "Needs a newer graphics
   driver than this phone has" before and after a run; Run benchmark's sizes no longer count the
@@ -579,6 +587,11 @@ dropped; what follows is what still owes a look.
   pong.
 
 ## Developer
+- 2026-10-25 · commit "fix(statusbar): the status row flows around the camera and clears the
+  screen's corners" (#163) · on pong with the bar along the top in Full screen: the gap sits on
+  the camera, nothing hides under it, the row's first and last items clear the corner curve in
+  Docked and Floating; folding the bar open and shut moves no chip under the camera; Camera
+  cutout › Custom moves the gap with Position and resizes it with Width, Off removes it · pong.
 - 2026-10-25 · commit "fix(graphics): the benchmark bar stands apart from the cards, and its
   output fits" · during a run the floating bar reads as a layer above the cards (tint, outline,
   shadow) in light, dark, black and the Material You scheme; the terminal's lines mostly fit

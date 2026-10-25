@@ -649,6 +649,30 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
 
         /**
+         * Whose box the status row leaves its camera gap for when it shares the camera's band
+         * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
+         * {@link #STATUS_BAR_CUTOUT_CUSTOM} the centre and width below, {@link #STATUS_BAR_CUTOUT_OFF}
+         * leaves none.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_MODE = "status_bar_cutout_mode";
+        public static final String STATUS_BAR_CUTOUT_AUTO = "auto";
+        public static final String STATUS_BAR_CUTOUT_CUSTOM = "custom";
+        public static final String STATUS_BAR_CUTOUT_OFF = "off";
+        public static final String DEFAULT_STATUS_BAR_CUTOUT_MODE = STATUS_BAR_CUTOUT_AUTO;
+
+        /** A custom camera gap's centre, in dp from the screen's horizontal centre (left negative). */
+        public static final String KEY_STATUS_BAR_CUTOUT_CENTER = "status_bar_cutout_center";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_CENTER = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_CENTER = -200;
+        public static final int MAX_STATUS_BAR_CUTOUT_CENTER = 200;
+
+        /** A custom camera gap's full width, in dp. */
+        public static final String KEY_STATUS_BAR_CUTOUT_WIDTH = "status_bar_cutout_width";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_WIDTH = 32;
+        public static final int MIN_STATUS_BAR_CUTOUT_WIDTH = 0;
+        public static final int MAX_STATUS_BAR_CUTOUT_WIDTH = 160;
+
+        /**
          * The label of a place picked in Settings ("Salmiya, Hawalli") that the weather is fetched
          * for instead of the device's location. Empty means the device's last known location, which
          * is what needs the location permission; a place picked here never does.
