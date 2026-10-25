@@ -36,6 +36,18 @@ public class SoundPolicyTest {
         assertTrue(StepAside.userFiles(null).isEmpty());
     }
 
+    @Test public void termuxsOwnVolumeDatabasesAreNotTheUsersSetup() {
+        // ~/.config/pulse on pong after stock servers ran: Termux builds the "simple" backend.
+        String[] entries = {"993ebfdaaf39610445a933e96acb45ac-card-database.simple",
+            "993ebfdaaf39610445a933e96acb45ac-default-sink",
+            "993ebfdaaf39610445a933e96acb45ac-default-source",
+            "993ebfdaaf39610445a933e96acb45ac-device-volumes.simple",
+            "993ebfdaaf39610445a933e96acb45ac-runtime",
+            "993ebfdaaf39610445a933e96acb45ac-stream-volumes.simple", "cookie"};
+
+        assertTrue(StepAside.userFiles(entries).isEmpty());
+    }
+
     @Test public void anyOtherFileThereIsTheUsersSetup() {
         String[] entries = {"cookie", "default.pa", "client.conf", "0f-runtime", "daemon.conf.d"};
 

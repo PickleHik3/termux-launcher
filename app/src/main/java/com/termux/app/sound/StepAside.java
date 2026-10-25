@@ -23,12 +23,25 @@ final class StepAside {
      * What PulseAudio itself writes into {@code ~/.config/pulse} whenever it runs — its cookie,
      * the link to its runtime directory, its volume databases and the remembered default devices.
      * A user who never configured anything has these as soon as any client autospawned a server,
-     * so they are not a setup of the user's. Everything else there is.
+     * so they are not a setup of the user's. Everything else there is. A database's ending names
+     * the backend PulseAudio was built with: {@code .simple} in Termux, {@code .tdb} or
+     * {@code .gdbm} elsewhere.
      */
     static boolean isPulseState(@NonNull String name) {
         return name.equals("cookie") || name.equals(".pulse-cookie")
-            || name.endsWith("-runtime") || name.endsWith(".tdb")
-            || name.endsWith("-default-sink") || name.endsWith("-default-source");
+            || name.endsWith("-runtime")
+            || name.endsWith("-default-sink") || name.endsWith("-default-source")
+            || isDatabase(name);
+    }
+
+    private static final List<String> DATABASES = Arrays.asList(
+        "-card-database.", "-device-volumes.", "-stream-volumes.", "-device-manager.");
+
+    private static boolean isDatabase(@NonNull String name) {
+        for (String database : DATABASES) {
+            if (name.contains(database)) return true;
+        }
+        return false;
     }
 
     /** The entries of {@code ~/.config/pulse} that are the user's own (decision 7). */
