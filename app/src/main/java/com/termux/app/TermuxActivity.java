@@ -9934,6 +9934,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         androidx.core.graphics.Insets cutoutInsets = insetsCompat.getInsets(Type.displayCutout());
         mLastDisplayCutoutInsetLeft = cutoutInsets.left;
         mLastDisplayCutoutInsetRight = cutoutInsets.right;
+        syncStatusRowKeepOut(insetsCompat);
         syncExtraKeysHost();
         syncPinnedAppsHost();
         syncAzBarHosts();
@@ -9966,6 +9967,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         applyTerminalSurfaceAppearance();
+    }
+
+    /**
+     * Hands the status row what the screen takes from it (#163): the camera's box on the top edge,
+     * the screen's corner radii and the user's cutout choice. The row works out from where it
+     * stands whether the camera shares its band and how far its ends step in
+     * ({@link com.termux.app.statusbar.StatusRowKeepOut}); these insets are the window's, since
+     * the content view they arrive on starts at the window's origin.
+     */
+    private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
+        View row = findViewById(R.id.terminal_status_row);
+        if (!(row instanceof com.termux.app.statusbar.StatusRowLayout)) return;
+        // The top edge's box: Android's rects that touch it, joined. A side cutout in landscape
+        // stands off the top edge, so it is never one.
+        Rect hole = null;
+        androidx.core.view.DisplayCutoutCompat cutout = insetsCompat.getDisplayCutout();
+        if (cutout != null) {
+            for (Rect rect : cutout.getBoundingRects()) {
+                if (rect == null || rect.isEmpty() || rect.top > 0) continue;
+                if (hole == null) hole = new Rect(rect);
+                else hole.union(rect);
+            }
+        }
+        float[] radii = new float[4];
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            android.view.WindowInsets platform = insetsCompat.toWindowInsets();
+            if (platform != null) {
+                int[] positions = {android.view.RoundedCorner.POSITION_TOP_LEFT,
+                    android.view.RoundedCorner.POSITION_TOP_RIGHT,
+                    android.view.RoundedCorner.POSITION_BOTTOM_LEFT,
+                    android.view.RoundedCorner.POSITION_BOTTOM_RIGHT};
+                for (int i = 0; i < positions.length; i++) {
+                    android.view.RoundedCorner corner = platform.getRoundedCorner(positions[i]);
+                    if (corner != null) radii[i] = corner.getRadius();
+                }
+            }
+        }
+        int topBand = insetsCompat.getInsetsIgnoringVisibility(Type.statusBars()).top;
+        com.termux.app.statusbar.StatusRowKeepOut.Mode mode = mPreferences == null
+            ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
+            : com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
+                mPreferences.getStatusBarCutoutMode());
+        int customCentre = mPreferences == null ? 0
+            : Math.round(dpToPx(mPreferences.getStatusBarCutoutCenter()));
+        int customWidth = mPreferences == null ? 0
+            : Math.round(dpToPx(mPreferences.getStatusBarCutoutWidth()));
+        ((com.termux.app.statusbar.StatusRowLayout) row).setScreenKeepOut(
+            new com.termux.app.statusbar.StatusRowKeepOut.Screen(hole != null,
+                hole == null ? 0 : hole.left, hole == null ? 0 : hole.top,
+                hole == null ? 0 : hole.right, hole == null ? 0 : hole.bottom, topBand,
+                radii[0], radii[1], radii[2], radii[3], mode, customCentre, customWidth,
+                Math.round(dpToPx(com.termux.app.statusbar.StatusRowKeepOut.GAP_MARGIN_DP))));
     }
 
     /**
