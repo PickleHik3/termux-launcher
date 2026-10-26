@@ -20,6 +20,17 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-26 · editor redesign wave 5 (commit "feat(launcher): A–Z glass off, Faint and Pull
+  tab") · Dock card › Bars › A–Z: Show Faint → the letters rest at about 30% and come to full
+  under a finger, the scrub unchanged; Pull tab → the strip goes, Home's widgets and the
+  terminal take its room, a tab stands on the screen's edge 48 dp below the canvas top (touch
+  56 × 48 dp, out of Back's way), dragging it brings the letters out over Home and slides into
+  the scrub; Back still works from that edge above and below the tab, and the page swipe never
+  takes a drag that began on it · emulator, A–Z on Right, Left and Top, Home and Workspace.
+- 2026-10-26 · wave 5 (same commit) · A–Z Glass background off (the default) with the A–Z on
+  its own edge under Floating Style: no capsule behind the letters, and their ink flips to suit
+  the wallpaper under them (try a light and a dark wallpaper under Dark and Light themes); on
+  the dock's row, a shared plank or inside the Docked frame the shared sheet stays · emulator.
 - 2026-10-26 · editor redesign wave 5 (commit "feat(launcher): long-press popup on the dock,
   status bar and keyboard") · hold still on bare dock (between icons, an empty slot, the A–Z
   host's margin, between extra keys), on the status bar (clock, bare bar) and on the keyboard's

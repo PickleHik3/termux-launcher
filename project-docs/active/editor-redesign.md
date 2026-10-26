@@ -521,4 +521,9 @@ Each wave gets emulator before and after shots on a `~/reports` page. Pong only 
   notifications). The A–Z letters keep the scrub on any press, since it starts on the touch: the
   A–Z popup opens from its host's margin. A hold between dock icons no longer opens the pin
   editor (Settings › Default apps still does). Hide writes through the editor's own plan.
+  The A–Z's Show is folded into the resolved layout (`PlaceLayout.azTab`, never stored), so the
+  pull tab claims no band and revives the existing tab layer (`AzPullTabLayer`); Faint is the
+  letters' resting alpha; Glass background off hides the strip's own capsule and tells the ink
+  there is no glass, so the existing wallpaper sampler (`GlassInk.bareBandInk`) picks the ink.
+  Under the Docked frame, on the dock's row or on a shared plank the shared sheet stays.
 - Wave 6, new settings: not started

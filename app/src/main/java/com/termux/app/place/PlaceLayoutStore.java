@@ -737,7 +737,9 @@ public final class PlaceLayoutStore {
             widgetColumns(orientation),
             widgetRows(orientation),
             // The Dock design the variant draws: the one it holds, on either half.
-            DockStyle.effectiveStyle(dockStyle()));
+            DockStyle.effectiveStyle(dockStyle()),
+            // The Dock card's A–Z Show: the pull tab claims no band (editor-redesign §4).
+            !com.termux.app.launcher.az.AzShowMode.of(mStore).claimsBand());
     }
 
     /**

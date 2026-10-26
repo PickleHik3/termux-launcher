@@ -11790,8 +11790,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a band of that row's plank and the glass under both of them is the plank's, so the capsule
      * this host carries everywhere else is put away.
      *
-     * <p>The minimised pull tab is gone from the arrangement (2026-09-30), so the tab's layer is
-     * only ever put away here; the layer itself is left for a later cleanup.
+     * <p>Standing as its pull tab (the Dock card's A–Z Show, editor-redesign §4), the index has
+     * no band anywhere: the dock's row and this host both go, and the letters live in the pull
+     * tab's layer over the canvas ({@link AzPullTabLayer}), which is where the one scrub callback
+     * moves to. Faint keeps the bar where it is at a third of its opacity, and the glass switch
+     * takes away the host's own capsule, leaving the letters on the wallpaper.
      *
      * @return whether a host appeared or went, which the content's edge padding is derived from
      */
@@ -11800,7 +11803,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host == null) return false;
         ResolvedArrangement arranged = arrangement();
         PlaceLayout layout = arranged.layout();
-        boolean tabShown = false;
+        boolean tabShown = mPreferences != null && arranged.azTabShown();
         boolean lettersShown = mPreferences != null && arranged.azRowShown();
         PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
@@ -11822,7 +11825,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (the canvas band's sheet), and a second sheet here drew a darker strip inset from it.
         View ownGlass = findViewById(R.id.place_az_bar_host_glass);
         if (ownGlass != null)
-            ownGlass.setVisibility(onPlank || hasDockedFrameCard() ? View.GONE : View.VISIBLE);
+            ownGlass.setVisibility(com.termux.app.launcher.az.AzShowMode.ownGlassShown(
+                azGlassBackground(), onPlank || hasDockedFrameCard())
+                ? View.VISIBLE : View.GONE);
         host.setVisibility(wantHost ? View.VISIBLE : View.GONE);
         syncAzTabLayer(tabShown, edge);
 
@@ -11845,6 +11850,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Which face of the bar the matches are on, so the drag that picks one of them is
             // measured towards the band it is picking from.
             next.setPreviewTrackOutward(azPreviewTarget().side.isOutward());
+            next.setRestingAlpha(tabShown ? 1f : azShowMode().restingAlpha());
         }
         // A host that has just appeared needs its material now; one that was already up gets it
         // on the render pass, so an insets dispatch does not build a fresh drawable for nothing.
@@ -11853,6 +11859,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (changed && mTermuxActivityRootView != null)
             ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         return changed;
+    }
+
+    /** The Dock card's A–Z Show (editor-redesign §4). */
+    @NonNull
+    private com.termux.app.launcher.az.AzShowMode azShowMode() {
+        return com.termux.app.launcher.az.AzShowMode.of(
+            mPreferences == null ? null : mPreferences.getSharedPreferences());
+    }
+
+    /** The Dock card's A–Z Glass background switch (editor-redesign §4). */
+    private boolean azGlassBackground() {
+        return com.termux.app.launcher.az.AzShowMode.glassOf(
+            mPreferences == null ? null : mPreferences.getSharedPreferences());
+    }
+
+    /**
+     * Whether the letters stand in their own capsule with its glass switched off, so on the
+     * wallpaper: their ink is then chosen on the wallpaper under them, not on a glass face.
+     */
+    private boolean azLettersOnWallpaper() {
+        return mAzScrubRowView != null && mAzScrubRowView == mAzBarHostRowView
+            && !mAzBarOnPlank && !hasDockedFrameCard() && !azGlassBackground();
     }
 
     /**
@@ -11940,7 +11968,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         View host = findViewById(R.id.place_az_bar_host);
         if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank
-                && !hasDockedFrameCard()) {
+                && !hasDockedFrameCard() && azGlassBackground()) {
             applyOffDockPlankGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
@@ -13364,6 +13392,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // home of the letters (the dock, the plank, their own capsule) wears the dock's own.
         float azOpacity = mAzScrubRowView != null && mAzScrubRowView == mAzTabRowView
             ? Math.max(dockOpacity, AzTabPolicy.MIN_GLASS_OPACITY) : dockOpacity;
+        // Glass off in their own capsule: no glass under the letters, the wallpaper is the face.
+        if (azLettersOnWallpaper()) azOpacity = 0f;
         if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);

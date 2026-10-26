@@ -262,13 +262,12 @@ public final class EdgeStackPolicy {
     }
 
     /**
-     * Whether an element takes a band on its edge, which is whether it is shown: every element on
-     * screen stands in its edge's stack. The alphabets index's minimised pull tab, the one form
-     * that was on screen without claiming a band, is gone, so the two questions have one answer;
-     * the name stays because callers ask about the band, not about visibility.
+     * Whether an element takes a band on its edge: shown, and not the alphabets index standing as
+     * its pull tab ({@link PlaceLayout#azTab}), which is on screen but claims nothing, so it is in
+     * no stack, costs the content no inset and puts nothing on the dock.
      */
     public static boolean claimsBand(@NonNull PlaceLayout layout, @NonNull Element element) {
-        return isShown(layout, element);
+        return isShown(layout, element) && !(element == Element.AZ && layout.azTab);
     }
 
     /**

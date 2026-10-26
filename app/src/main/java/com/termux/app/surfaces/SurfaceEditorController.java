@@ -4583,6 +4583,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 store.edit().putBoolean(
                     com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND, on).apply();
             settingsWritten();
+            azWritten();
         }
 
         @Override public int azShow() {
@@ -4599,6 +4600,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 store.edit().putString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW,
                     values[Math.max(0, Math.min(values.length - 1, index))]).apply();
             settingsWritten();
+            azWritten();
+        }
+
+        /**
+         * The A–Z strip's look moved: the live chrome is arranged again, since the pull tab gives
+         * the strip's band back and Faint and the glass are applied with the bar's host.
+         */
+        private void azWritten() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null) layout.applyStoreWrite();
         }
 
         @Override public void openExtraKeysEditor() {
