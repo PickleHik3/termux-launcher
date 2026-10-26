@@ -35,30 +35,38 @@ public final class SegmentRow {
         void onPick(int index);
     }
 
-    /** One segment: a glyph alone, or a word. */
+    /** One segment: a glyph alone, a word, or a glyph before its word. */
     public static final class Segment {
         @NonNull public final CharSequence name;
         @DrawableRes public final int glyph;
+        private final boolean mWithWord;
 
-        private Segment(@NonNull CharSequence name, @DrawableRes int glyph) {
+        private Segment(@NonNull CharSequence name, @DrawableRes int glyph, boolean withWord) {
             this.name = name;
             this.glyph = glyph;
+            mWithWord = withWord;
         }
 
         /** A segment that reads {@code name}. */
         @NonNull
         public static Segment word(@NonNull CharSequence name) {
-            return new Segment(name, 0);
+            return new Segment(name, 0, true);
         }
 
         /** A segment that shows {@code glyph} alone; {@code name} on long-press. */
         @NonNull
         public static Segment glyph(@DrawableRes int glyph, @NonNull CharSequence name) {
-            return new Segment(name, glyph);
+            return new Segment(name, glyph, false);
+        }
+
+        /** A segment that shows {@code glyph} before the word {@code name} (the Dock's Style). */
+        @NonNull
+        public static Segment both(@DrawableRes int glyph, @NonNull CharSequence name) {
+            return new Segment(name, glyph, true);
         }
 
         public boolean glyphOnly() {
-            return glyph != 0;
+            return glyph != 0 && !mWithWord;
         }
     }
 
@@ -66,6 +74,9 @@ public final class SegmentRow {
     static final int GAP_DP = 2;
     /** A word segment's side padding. */
     static final int WORD_PAD_DP = 8;
+    /** The glyph before a word, and the gap after it. */
+    static final int WORD_GLYPH_DP = 18;
+    static final int WORD_GLYPH_GAP_DP = 6;
     /** The least room kept between the title and the pills beside it. */
     static final int TITLE_GAP_DP = 16;
 
@@ -118,8 +129,16 @@ public final class SegmentRow {
                 button.setContentDescription(segment.name);
             } else {
                 // No check mark: the container colour carries the choice, and a mark's room
-                // would stand every unchosen word off its centre.
-                button.setIcon(null);
+                // would stand every unchosen word off its centre. A glyph before the word takes
+                // the mark's place on every segment alike.
+                if (segment.glyph != 0) {
+                    button.setIconResource(segment.glyph);
+                    button.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+                    button.setIconSize(RowKit.dp(context, WORD_GLYPH_DP));
+                    button.setIconPadding(RowKit.dp(context, WORD_GLYPH_GAP_DP));
+                } else {
+                    button.setIcon(null);
+                }
                 button.setText(segment.name);
                 int pad = RowKit.dp(context, WORD_PAD_DP);
                 button.setPaddingRelative(pad, button.getPaddingTop(), pad,

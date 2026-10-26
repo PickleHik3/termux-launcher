@@ -862,6 +862,8 @@ final class EditorCardSheet {
         // The row kinds take the card's whole width and keep their own 16dp gutter.
         View own = mModel.rowView(row, availableWidthPx() + dp(ICON_COLUMN_DP) + dp(EDGE_DP));
         if (own != null) {
+            if (own.getParent() instanceof ViewGroup)
+                ((ViewGroup) own.getParent()).removeView(own);
             RowViews views = new RowViews(row, own);
             views.own = true;
             return views;

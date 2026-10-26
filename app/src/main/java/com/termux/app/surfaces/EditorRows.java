@@ -160,7 +160,17 @@ public final class EditorRows {
         STATUS_OPTIONS(Kind.SWITCH, R.string.editor_st_section_options, R.drawable.ic_ms_tune),
         /** The status bar's Indicators tiles: CPU, RAM, Weather, Notifications, Media. */
         STATUS_INDICATORS(Kind.SWITCH, R.string.editor_st_section_indicators,
-            R.drawable.ic_symbol_weather);
+            R.drawable.ic_symbol_weather),
+        // The Dock card's own rows (editor-redesign §2 Dock), drawn by cards/DockCard through
+        // EditorCardSheet.Model#rowView like the rows above; the Kind is again the stand-in.
+        /** The dock's Style, Docked or Floating, as glyph segments. */
+        DOCK_STYLE(Kind.MENU, R.string.editor_dock_row_style, R.drawable.ic_style_floating),
+        /** The Bars list: the dock's bars in order, each shown or not, each opening its settings. */
+        DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_drag_indicator_24),
+        /** The Dock type tiles, one chosen at a time. */
+        DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_symbol_dock_glass_tray),
+        /** The dock's Options tiles. */
+        DOCK_OPTIONS(Kind.SWITCH, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;

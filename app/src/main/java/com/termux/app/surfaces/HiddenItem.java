@@ -16,7 +16,7 @@ enum HiddenItem {
     STATUS_BAR(TrayItem.STATUS_BAR, R.string.settings_layout_miniature_status, EditorCard.STATUS),
     PINNED_APPS(TrayItem.PINNED_APPS, R.string.settings_layout_miniature_apps, EditorCard.DOCK),
     AZ_INDEX(TrayItem.AZ_INDEX, R.string.settings_layout_miniature_alphabets, EditorCard.DOCK),
-    EXTRA_KEYS(TrayItem.EXTRA_KEYS, R.string.settings_layout_miniature_keys, EditorCard.KEYBOARD),
+    EXTRA_KEYS(TrayItem.EXTRA_KEYS, R.string.settings_layout_miniature_keys, EditorCard.DOCK),
     KEYBOARD(TrayItem.KEYBOARD, R.string.appearance_card_keyboard, EditorCard.KEYBOARD),
     SEARCH_FIELD(null, R.string.appearance_row_search_field, EditorCard.DOCK);
 

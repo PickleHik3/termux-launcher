@@ -822,6 +822,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = cardForBlock(block, mHalf);
         if (card != null) {
             EditorDoor.EDITOR_OUTLINE.log(card);
+            if (card == EditorCard.DOCK)
+                dockCard().expand(dockBarOf(block));
             openCard(card, true);
         }
     }
@@ -1607,6 +1609,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         positionTargets();
         if (openItsCard && item.card.standsOn(mHalf)) {
             EditorDoor.EDITOR_HIDDEN_BAR.log(item.card);
+            if (item.card == EditorCard.DOCK)
+                dockCard().expand(item.tray == null ? null : item.tray.element);
             openCard(item.card, true);
         }
     }
@@ -2406,16 +2410,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Nullable @Override public CharSequence stripHeading(@NonNull Row first) {
+            if (mCard == EditorCard.DOCK)
+                return com.termux.app.surfaces.cards.DockCard.stripHeading(mHost.context());
             return mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(first)
                 ? getString(R.string.appearance_strip_all_surfaces) : null;
         }
 
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
+            if (mCard == EditorCard.DOCK)
+                return dockCard().view(row, widthPx);
             return statusTerminalRowView(row, widthPx);
         }
 
         @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
-            restateStatusTerminalRow(row, view);
+            if (mCard == EditorCard.DOCK)
+                dockCard().restate(row);
+            else
+                restateStatusTerminalRow(row, view);
         }
     }
 
@@ -3570,6 +3581,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 EditorCard card = cardOfGroup(index);
                 if (card != null) {
                     EditorDoor.EDITOR_OUTLINE.log(card);
+                    if (card == EditorCard.DOCK)
+                        dockCard().expand(dockBarAt(mDownRawX, mDownRawY));
                     openCard(card, true);
                 } else {
                     closeCard(true);
@@ -5394,4 +5407,350 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
             }
         };
+
+    // ------------------------------------------------------------------------------ Dock card
+    //
+    // The Dock card's Style, Bars, Dock type and Options rows (editor-redesign §2 Dock), built by
+    // cards/DockCard and read and written here.
+
+    @Nullable private com.termux.app.surfaces.cards.DockCard mDockCard;
+
+    @NonNull
+    private com.termux.app.surfaces.cards.DockCard dockCard() {
+        if (mDockCard == null)
+            mDockCard = new com.termux.app.surfaces.cards.DockCard(new DockHost());
+        return mDockCard;
+    }
+
+    /** The bar a tap at a raw screen point landed on: the A–Z strip, the extra keys, or neither. */
+    @Nullable
+    private Element dockBarAt(float rawX, float rawY) {
+        if (dockViewHit(R.id.apps_bar_az_row, rawX, rawY)
+            || dockViewHit(R.id.place_az_bar_host, rawX, rawY))
+            return Element.AZ;
+        if (dockViewHit(R.id.place_extra_keys_host, rawX, rawY)
+            || dockViewHit(R.id.terminal_toolbar_view_pager, rawX, rawY))
+            return Element.EXTRA_KEYS;
+        return null;
+    }
+
+    private boolean dockViewHit(int id, float rawX, float rawY) {
+        View view = mHost.findView(id);
+        if (view == null || !view.isShown() || view.getWidth() <= 0 || view.getHeight() <= 0)
+            return false;
+        android.graphics.Rect rect = new android.graphics.Rect();
+        if (!view.getGlobalVisibleRect(rect))
+            return false;
+        int[] window = new int[2];
+        view.getRootView().getLocationOnScreen(window);
+        return rect.contains(Math.round(rawX) - window[0], Math.round(rawY) - window[1]);
+    }
+
+    /** The bar an element of the canvas is, for the Dock card to open on. */
+    @Nullable
+    static Element dockBarOf(@NonNull LayoutCanvasView.Block block) {
+        switch (block) {
+            case ALPHABETS_ROW: return Element.AZ;
+            case EXTRA_KEYS: return Element.EXTRA_KEYS;
+            default: return null;
+        }
+    }
+
+    /** Where the A–Z strip's and the dock's new switches are stored, beside the app's own. */
+    @Nullable
+    private SharedPreferences dockPrefs() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs == null ? null : prefs.getSharedPreferences();
+    }
+
+    /** The bars stacked in {@code order} where they share an edge, written when anything moved. */
+    private void restackBars(@NonNull java.util.List<Element> order) {
+        LayoutEditorController layout = mHost.layoutEditor();
+        PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+        if (layout == null || arranged == null)
+            return;
+        PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(arranged, order);
+        if (!next.equals(arranged)) {
+            layout.writeSlots(next);
+            positionTargets();
+        }
+    }
+
+    private final class DockHost implements com.termux.app.surfaces.cards.DockCard.Host {
+        @NonNull @Override public Context context() {
+            return mHost.context();
+        }
+
+        @Override public boolean floating() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs != null
+                && prefs.getLayoutStyle() == TermuxAppSharedPreferences.LayoutStyle.FLOATING;
+        }
+
+        @Override public void setFloating(boolean floating) {
+            writeStyle(floating);
+            // The Height strip's range follows the style.
+            if (mSheet != null) mSheet.restate();
+        }
+
+        @NonNull @Override public java.util.List<Element> barOrder() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
+            java.util.List<Element> stored =
+                com.termux.app.surfaces.cards.BarOrder.parse(layout.barOrder());
+            PlaceLayout arranged = layout.arrangedLayout();
+            return arranged == null ? stored
+                : com.termux.app.surfaces.cards.BarOrder.reconcile(stored, arranged);
+        }
+
+        @Override public void setBarOrder(@NonNull java.util.List<Element> order) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            layout.setBarOrder(com.termux.app.surfaces.cards.BarOrder.format(order));
+            restackBars(order);
+        }
+
+        @Override public boolean offers(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.offers(bar);
+        }
+
+        @Override public boolean barShown(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.isShown(bar);
+        }
+
+        @Override public void setBarShown(@NonNull Element bar, boolean shown) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            java.util.List<Element> order = barOrder();
+            layout.setShown(bar, shown);
+            // Back in the list's place among the bars it now shares an edge with.
+            if (shown)
+                restackBars(order);
+            positionTargets();
+        }
+
+        @NonNull @Override
+        public com.termux.app.surfaces.cards.BarOrder.Position position(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+            if (arranged == null)
+                return bar == Element.AZ
+                    ? com.termux.app.surfaces.cards.BarOrder.Position.RIDES_APPS_ROW
+                    : com.termux.app.surfaces.cards.BarOrder.Position.ABOVE_KEYBOARD;
+            return com.termux.app.surfaces.cards.BarOrder.positionOf(bar, arranged.slot(bar));
+        }
+
+        @Override public void setPosition(@NonNull Element bar,
+                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+            if (layout == null || arranged == null)
+                return;
+            java.util.List<Element> order = barOrder();
+            PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(
+                com.termux.app.surfaces.cards.BarOrder.withPosition(arranged, bar, position),
+                order);
+            layout.writeSlots(next);
+            positionTargets();
+        }
+
+        @Override public int appIcons() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs == null ? AppearanceLooks.APP_ICONS_MIN
+                : Control.APP_ICONS.clamp(prefs.getAppLauncherButtonCount());
+        }
+
+        @Override public int appIconsFrom() {
+            return AppearanceLooks.APP_ICONS_MIN;
+        }
+
+        @Override public int appIconsTo() {
+            return AppearanceLooks.APP_ICONS_MAX;
+        }
+
+        @Override public void setAppIcons(int count) {
+            writeAppIcons(count);
+        }
+
+        @Override public boolean mostUsed() {
+            return AppearanceSettingsStore.getBoolean(mHost.context(),
+                "app_launcher_most_used_page", false);
+        }
+
+        @Override public void setMostUsed(boolean on) {
+            AppearanceSettingsStore.putBoolean(mHost.context(), "app_launcher_most_used_page", on);
+            settingsWritten();
+        }
+
+        @NonNull @Override public CharSequence iconPack() {
+            String pack = com.termux.app.launcher.data.IconPackChoices.current(prefs(),
+                com.termux.app.launcher.data.IconPackChoices.KEY_PINNED);
+            if (pack.isEmpty())
+                return getString(R.string.editor_dock_icon_pack_global);
+            android.content.pm.PackageManager manager = mHost.context().getPackageManager();
+            try {
+                return manager.getApplicationLabel(manager.getApplicationInfo(pack, 0));
+            } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+                return getString(R.string.editor_dock_icon_pack_global);
+            }
+        }
+
+        @Override public void pickIconPack() {
+            Context context = mHost.context();
+            CharSequence global = getString(R.string.editor_dock_icon_pack_global);
+            TermuxAppSharedPreferences prefs = prefs();
+            android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+            // Listing the packs asks the package manager: off the main thread.
+            new Thread(() -> {
+                com.termux.app.launcher.data.IconPackChoices.Listing listing =
+                    com.termux.app.launcher.data.IconPackChoices.listing(context, prefs,
+                        com.termux.app.launcher.data.IconPackChoices.KEY_PINNED, global);
+                main.post(() -> showIconPacks(listing));
+            }, "dock-icon-packs").start();
+        }
+
+        @Override public boolean azGlass() {
+            SharedPreferences store = dockPrefs();
+            return store == null
+                ? com.termux.app.surfaces.cards.DockCard.DEFAULT_AZ_GLASS_BACKGROUND
+                : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND,
+                    com.termux.app.surfaces.cards.DockCard.DEFAULT_AZ_GLASS_BACKGROUND);
+        }
+
+        @Override public void setAzGlass(boolean on) {
+            SharedPreferences store = dockPrefs();
+            if (store != null)
+                store.edit().putBoolean(
+                    com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND, on).apply();
+        }
+
+        @Override public int azShow() {
+            SharedPreferences store = dockPrefs();
+            String stored = store == null ? null
+                : store.getString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW, null);
+            return indexOf(com.termux.app.surfaces.cards.DockCard.AZ_SHOW_VALUES, stored, 0);
+        }
+
+        @Override public void setAzShow(int index) {
+            SharedPreferences store = dockPrefs();
+            String[] values = com.termux.app.surfaces.cards.DockCard.AZ_SHOW_VALUES;
+            if (store != null)
+                store.edit().putString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW,
+                    values[Math.max(0, Math.min(values.length - 1, index))]).apply();
+        }
+
+        @Override public void openExtraKeysEditor() {
+            openSettingsPage(
+                com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment.class,
+                R.string.settings_edit_extra_keys_title);
+        }
+
+        @Override public int dockType() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
+        }
+
+        @Override public void setDockType(int index) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null && index >= 0 && index < DockStyle.CHOICES.size())
+                layout.setDockStyle(DockStyle.CHOICES.get(index));
+            // Peek's Reflection stands with that type alone.
+            if (mSheet != null) mSheet.restate(Row.REFLECTION);
+        }
+
+        @Override public boolean option(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            Context context = mHost.context();
+            switch (option) {
+                case SEARCH_FIELD: return layout != null && layout.searchField();
+                case DRAWER_ICON: return layout != null && layout.drawerTile();
+                case COMMAND_PALETTE: {
+                    SharedPreferences store = dockPrefs();
+                    return store == null
+                        ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
+                        : store.getBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+                            com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
+                }
+                case NOTIFICATION_DOTS:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        "app_launcher_notification_dots", false);
+                case QUICK_REPLY:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        "app_launcher_quick_reply_swipe", true);
+                case MONOCHROME:
+                default:
+                    return AppearanceSettingsStore.getBoolean(context, "app_launcher_bw_icons",
+                        false);
+            }
+        }
+
+        @Override public void setOption(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option, boolean on) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            Context context = mHost.context();
+            switch (option) {
+                case SEARCH_FIELD:
+                    if (layout != null) layout.setSearchField(on);
+                    break;
+                case DRAWER_ICON:
+                    if (layout != null) layout.setDrawerTile(on);
+                    break;
+                case COMMAND_PALETTE: {
+                    SharedPreferences store = dockPrefs();
+                    if (store != null)
+                        store.edit().putBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on)
+                            .apply();
+                    break;
+                }
+                case NOTIFICATION_DOTS:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_notification_dots",
+                        on);
+                    settingsWritten();
+                    break;
+                case QUICK_REPLY:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_quick_reply_swipe",
+                        on);
+                    settingsWritten();
+                    break;
+                case MONOCHROME:
+                default:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_bw_icons", on);
+                    settingsWritten();
+                    break;
+            }
+        }
+    }
+
+    /** The apps row's icon packs to pick from; a pick lands at once, as Global's does. */
+    private void showIconPacks(
+            @NonNull com.termux.app.launcher.data.IconPackChoices.Listing listing) {
+        if (!mOpen)
+            return;
+        Context context = mHost.context();
+        CharSequence[] labels = new CharSequence[listing.entries.size()];
+        for (int i = 0; i < labels.length; i++)
+            labels[i] = listing.entries.get(i).label;
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.editor_dock_icon_pack)
+            .setSingleChoiceItems(labels, listing.checked, (dialog, which) -> {
+                if (which >= 0 && which < listing.entries.size()) {
+                    com.termux.app.launcher.data.IconPackChoices.applyLive(context, prefs(),
+                        com.termux.app.launcher.data.IconPackChoices.KEY_PINNED,
+                        listing.entries.get(which).value);
+                    settingsWritten();
+                    if (mSheet != null) mSheet.restate();
+                }
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
 }
