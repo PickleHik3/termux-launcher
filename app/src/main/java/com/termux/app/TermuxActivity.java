@@ -23105,7 +23105,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keeps the slide's clock to its last frame (ChromeSettle). Fed every frame, rests and
         // finger frames included, so a slide never carries on from a stale one.
         mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
-            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE);
+            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE,
+            currentWallPlace() == mLastWallPage);
         // A keyboard swipe drives the same travel by its finger while the wall stands still; the
         // layout passes it causes must not write the wall's resting frame over it.
         if (mKeyboardSwipeTravel) return;
@@ -23119,6 +23120,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Workspace's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
         java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(mPaneWallController.pages());
+        // The committed place is named so its keyboard, going away, is put away over the first
+        // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         // A slide toward another window of the Workspace stays on its place: the wall's offset
         // alone reads the previous window as Home, the place on the left.
         com.termux.app.wall.PaneWallPage place = currentWallPlace();
@@ -23126,12 +23129,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController::showsInnerPage;
         float chromeOffsetPx = mChromeSettle.chromeOffsetPx();
         com.termux.app.place.PlaceChromeTravel.Frame frame =
-            com.termux.app.place.PlaceChromeTravel.at(pages, place, chromeOffsetPx, offsetPx,
-                wall.getWidth(), mChromeRestStates, inner);
+            com.termux.app.place.PlaceChromeTravel.at(pages, place, chromeOffsetPx,
+                mChromeSettle.keyboardOffsetPx(), wall.getWidth(), mChromeRestStates,
+                mLastWallPage, inner);
         // The status bar rides with the Workspace's page, so it reads where the wall stands.
         com.termux.app.place.PlaceChromeTravel.Frame wallFrame = chromeOffsetPx == offsetPx
             ? frame : com.termux.app.place.PlaceChromeTravel.at(pages, place, offsetPx,
-                wall.getWidth(), mChromeRestStates, inner);
+                wall.getWidth(), mChromeRestStates, mLastWallPage, inner);
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);
