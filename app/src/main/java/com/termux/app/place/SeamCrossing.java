@@ -722,6 +722,33 @@ public final class SeamCrossing {
     }
 
     /**
+     * The Dock design the stack's slab wears on this frame: the committed half's, except on a
+     * pictured dip ({@link #pictured}), where the stack is the other half's own from the first
+     * frame — its rows, its dress and its design (Tray, Beads, Strip or Peek) — so the dock it
+     * brings in rises looking as it rests and nothing changes at the settle. Null while no
+     * crossing holds the designs.
+     */
+    @Nullable
+    public DockStyle stackDesign() {
+        return pictured() ? mRun.otherDesign : mRun.committedDesign;
+    }
+
+    /** The Search field the stack carries on this frame, read as {@link #stackDesign} is. */
+    public boolean stackSearchField() {
+        return pictured() ? mRun.otherSearchField : mRun.committedSearchField;
+    }
+
+    /**
+     * Whether the stack wears another Dock design or Search field than the committed half's on
+     * this frame: a pictured dip between halves whose docks differ. The stack's slab is dressed
+     * for the other half as it is laid out for it, on the crossing's first frame.
+     */
+    public boolean stackDesignApart() {
+        return pictured() && (mRun.otherDesign != mRun.committedDesign
+            || mRun.otherSearchField != mRun.committedSearchField);
+    }
+
+    /**
      * How much of the Search field the dock carries, from {@code here} on the committed half
      * toward the other half's as the slide eases the bands; {@code here} while nothing eases.
      */
