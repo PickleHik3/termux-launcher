@@ -547,3 +547,9 @@ Agent
 - 2026-10-26 · d6ee66a88 · Calendar widget on dark glass: today's disc is visible and the digit reads; on light glass and a bright-primary scheme the primary disc is kept · emu, pong.
 - 2026-10-26 · 898eaa163 · Keyboard popup: a hold in a key gap, on a key's outer 4 dp, on the side margins, the bottom strip and the top band opens the popup; a hold on a key's centre still repeats or shows alternates; a quick tap on a key's outer 4 dp still types; the toolbar row and the keyboard height are unchanged; the same on the Floating keyboard · emu, pong.
 - 2026-10-26 · f8b7497f9 · Workspace, A–Z Pull tab on the right and on a bottom row: the tab rests at the same y after three drags and after a Home → Workspace swipe; it never covers `~ $` or the line ends · emu.
+
+## Full screen corners and camera (2026-10-27)
+- 2026-10-27 · 58b498715 · Full screen on, status row shown: toggling Full screen steps the row's ends in by the corner radius each time, no jump; the camera gap stays · pong.
+- 2026-10-27 · 9295241b2 · Full screen on, keyboard up: the keyboard's bottom corners follow the screen's curve once its bottom is within the corner band; above that its own radius; change the chin with the keyboard up and the curve follows on the same frame · pong.
+- 2026-10-27 · 2ddd83270 · Full screen on, status row hidden: the first terminal row sits below the camera with no reflow jump, taps land on the right cell, the glass still reaches the top; Full screen off restores everything · pong.
+- 2026-10-27 · c6cc6312f · Full screen on, window bar at the top: its chips step in from the corners; chips under the camera itself are not yet avoided (next drop) · pong.
