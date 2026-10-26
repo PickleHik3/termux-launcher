@@ -42,6 +42,7 @@ final class CalendarMonthGridView extends View {
     /** A two-digit number's ink, so today's disc is one size on every day of the month. */
     private final Rect sizing = new Rect();
     private final float[] disc = new float[3];
+    private int[] todayColours = {0, 0};
 
     @Nullable private CalendarLayoutPlanner.Grid grid;
     @NonNull private final String[] names = new String[7];
@@ -113,16 +114,18 @@ final class CalendarMonthGridView extends View {
             boolean isToday = day == todayDay;
             if (isToday) {
                 fitDisc(grid, i, DAY_LABELS[day], rtl, width);
-                fillPaint.setColor(style.primary);
+                todayColours = CalendarTodayDiscPolicy.todayDiscColours(style.card, style.primary,
+                    style.onPrimary, style.onSurface);
+                fillPaint.setColor(todayColours[0]);
                 canvas.drawCircle(disc[0], disc[1], disc[2], fillPaint);
             }
-            dayPaint.setColor(isToday ? style.onPrimary
+            dayPaint.setColor(isToday ? todayColours[1]
                 : weekendColumns[col] ? style.onSurfaceVariant : style.onSurface);
             drawText(canvas, DAY_LABELS[day], grid.digits.get(i), dayPaint, rtl, width);
             int mark = dayMarks[day];
             if (mark != 0) {
                 set(rect, grid.dots.get(i), rtl, width);
-                fillPaint.setColor(isToday ? style.onPrimary : mark);
+                fillPaint.setColor(isToday ? todayColours[1] : mark);
                 canvas.drawCircle(rect.centerX(), rect.centerY(), rect.width() / 2f, fillPaint);
             }
         }

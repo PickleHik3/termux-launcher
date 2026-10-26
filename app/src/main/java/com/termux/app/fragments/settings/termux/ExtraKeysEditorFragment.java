@@ -720,7 +720,9 @@ public class ExtraKeysEditorFragment extends Fragment
                 ExtraKeysLayoutModel.Key key = keys.get(i);
                 TextView cap = capView(context, key);
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    dp(KEY_CAP_DP), dp(KEY_CAP_DP));
+                    LinearLayout.LayoutParams.WRAP_CONTENT, dp(KEY_CAP_DP));
+                cap.setMinWidth(dp(KEY_CAP_DP));
+                cap.setMaxWidth(dp(2 * KEY_CAP_DP));
                 if (i > 0) params.setMarginStart(dp(GAP_DP));
                 caps.addView(cap, params);
             }

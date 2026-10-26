@@ -404,7 +404,10 @@ public final class ExtraKeyDetailSheet {
         MaterialShapeDrawable background = M3.surface(context,
             com.google.android.material.R.attr.shapeAppearanceCornerMedium, colorCap);
         view.setBackground(background);
-        view.setLayoutParams(new LinearLayout.LayoutParams(dp(widthDp), dp(heightDp)));
+        view.setLayoutParams(new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(heightDp)));
+        view.setMinWidth(dp(widthDp));
+        view.setMaxWidth(dp(2 * widthDp));
         return view;
     }
 

@@ -3,6 +3,7 @@ package com.termux.app.surfaces;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -285,7 +286,8 @@ public final class SurfaceLongPress {
     /**
      * The boxes of the children under ({@code x}, {@code y}) that keep a long-press of their own:
      * anything long-clickable (app icons, window chips), the A–Z letters, the keyboard's keys (only
-     * where a key's cell is, {@link juloo.keyboard2.Keyboard2View#hasKeyAt}), the pinned
+     * on a key's core: its drawn rectangle, {@link juloo.keyboard2.Keyboard2View#drawnKeyRectAt},
+     * inset {@link SurfaceLongPressRoute#POPUP_KEY_CORE_INSET_DP} on each side), the pinned
      * notifications, and each extra key.
      */
     private void collectOwners(@Nullable View view, float x, float y, @NonNull List<Box> out) {
@@ -293,8 +295,9 @@ public final class SurfaceLongPress {
         Box box = boxOf(view);
         if (box != null && box.contains(x, y)) {
             if (view instanceof juloo.keyboard2.Keyboard2View) {
-                // Only a key's cell is the key's; the margins round the rows are the frame.
-                if (((juloo.keyboard2.Keyboard2View) view).hasKeyAt(x - box.left, y - box.top))
+                // Only a key's core is the key's: the gaps, each key's outer band and the
+                // margins round the rows are the frame, so a hold there opens the popup.
+                if (onKeyCore((juloo.keyboard2.Keyboard2View) view, box, x, y))
                     out.add(box);
             } else if (ownsLongPress(view)) {
                 out.add(box);
@@ -304,6 +307,20 @@ public final class SurfaceLongPress {
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++)
             collectOwners(group.getChildAt(i), x, y, out);
+    }
+
+    private final RectF mKeyRect = new RectF();
+
+    /** Whether the screen point ({@code x}, {@code y}) is on a key's core in {@code keyboard}. */
+    private boolean onKeyCore(@NonNull juloo.keyboard2.Keyboard2View keyboard, @NonNull Box box,
+                              float x, float y) {
+        if (!keyboard.drawnKeyRectAt(x - box.left, y - box.top, mKeyRect)) return false;
+        Box drawn = new Box(box.left + mKeyRect.left, box.top + mKeyRect.top,
+            box.left + mKeyRect.right, box.top + mKeyRect.bottom);
+        float insetPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+            SurfaceLongPressRoute.POPUP_KEY_CORE_INSET_DP,
+            keyboard.getResources().getDisplayMetrics());
+        return SurfaceLongPressRoute.onKeyCore(x, y, drawn, insetPx);
     }
 
     private static boolean ownsLongPress(@NonNull View view) {
