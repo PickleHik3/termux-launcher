@@ -14,6 +14,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -121,8 +123,13 @@ public class SurfaceEditorHomeGlassTest {
             WallHalf.HOME));
     }
 
+    /**
+     * Reset puts Home's glass back as it ships, not as the editor found it: Undo is what takes
+     * the card back to the open, and a reset that restored the open state did nothing for a card
+     * opened on the glass it was meant to clear (EditorCardReset).
+     */
     @Test
-    public void resetHomePutsTheGlassBackOnTheLookHomeOpenedWith() {
+    public void resetHomePutsTheGlassBackAsItShips() {
         SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
         model(editor).onValue(Row.OPACITY, 50, false);
         model(editor).onValue(Row.FROST, 70, false);
@@ -131,10 +138,14 @@ public class SurfaceEditorHomeGlassTest {
         ReflectionHelpers.callInstanceMethod(editor, "resetCard");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
-        assertEquals(92, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
-        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
-        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME));
-        assertEquals(GlassControls.glassFor(0, 0), model(editor).value(Row.FROST));
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME));
+        assertEquals(GlassControls.glassFor(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+            TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN), model(editor).value(Row.FROST));
         assertEquals("the Workspace is untouched", 40,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
     }

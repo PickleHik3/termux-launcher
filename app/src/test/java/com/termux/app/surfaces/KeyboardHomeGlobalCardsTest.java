@@ -140,7 +140,14 @@ public class KeyboardHomeGlobalCardsTest {
     }
 
     @Test
-    public void showWallpaperIsTheWallpaperRowsSwitch() {
+    public void showWallpaperIsTheWallpaperRowsSwitch() throws ClassNotFoundException {
+        // Settings' style store is a process-wide singleton: one an earlier test built reads the
+        // preferences of that test's application, while the wallpaper switch writes through this
+        // one's, so the row read back what the earlier test left (full suite only). Build it
+        // afresh for this application.
+        ReflectionHelpers.setStaticField(Class.forName(
+            "com.termux.app.fragments.settings.termux.TermuxStylePreferencesDataStore"),
+            "mInstance", null);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
         EditorCardSheet.Model model = model(editor);
         model.onValue(Row.SHOW_WALLPAPER, 1, false);
