@@ -115,6 +115,10 @@ public class ScreenMatchTest {
 
     @Test
     public void undoPutsEveryKeyBackAsItStood() {
+        // A layout's seed is written the first time it is used; a Match uses both layouts, and
+        // Undo puts them back on that seed, so the comparison starts from it.
+        store.seed(LayoutVariant.HOME);
+        store.seed(LayoutVariant.NORMAL);
         for (WallHalf target : WallHalf.values()) {
             Map<String, ?> before = new HashMap<>(prefs.getAll());
             ScreenMatch.Undo undo = ScreenMatch.match(launcher, store, target);
@@ -126,6 +130,28 @@ public class ScreenMatchTest {
             assertEquals(target + ": back exactly as it was", before,
                 new HashMap<>(prefs.getAll()));
         }
+    }
+
+    @Test
+    public void aHomeOrientationNotUsedYetIsCopiedAsItWouldShow() {
+        PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
+        normal.setSlot(PlaceOrientation.LANDSCAPE, Element.APPS, Slot.on(Edge.RIGHT, 0));
+        assertNotNull(ScreenMatch.match(launcher, store, WallHalf.WORKSPACE));
+        assertEquals("Home's landscape, never used, is copied as its seed (the Workspace's own), "
+                + "not as an empty layout", Edge.RIGHT,
+            normal.slot(PlaceOrientation.LANDSCAPE, Element.APPS).edge);
+    }
+
+    @Test
+    public void undoOverAnOrientationNotUsedYetPutsItBackOnItsSeed() {
+        PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        normal.setSlot(PlaceOrientation.LANDSCAPE, Element.APPS, Slot.on(Edge.RIGHT, 0));
+        ScreenMatch.Undo undo = ScreenMatch.match(launcher, store, WallHalf.HOME);
+        assertNotNull(undo);
+        undo.restore(launcher);
+        assertEquals("Home's landscape reads as it did before the Match", Edge.RIGHT,
+            home.slot(PlaceOrientation.LANDSCAPE, Element.APPS).edge);
     }
 
     @Test

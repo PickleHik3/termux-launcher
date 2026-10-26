@@ -526,9 +526,7 @@ public final class PlaceLayoutStore {
     public void copyArrangement(@NonNull LayoutVariant from, @NonNull LayoutVariant to) {
         if (mStore == null || from == to) return;
         // A layout never used is seeded first, so the copy is what that screen showed.
-        PlaceLayoutStore source = forVariant(from);
-        for (PlaceOrientation orientation : PlaceOrientation.values())
-            source.variantKey(orientation, KEY_DOCK_HEIGHT);
+        seed(from);
         Map<String, ?> all = mStore.getAll();
         SharedPreferences.Editor editor = mStore.edit();
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
@@ -545,6 +543,16 @@ public final class PlaceLayoutStore {
         for (PlaceOrientation orientation : PlaceOrientation.values())
             mSeeded[to.ordinal()][orientation.ordinal()] = true;
         mRevision.incrementAndGet();
+    }
+
+    /**
+     * Gives {@code variant}'s layout its starting point in every orientation it has not been used
+     * in yet ({@link #seedIfNeeded}), so what is read or copied from it, or taken before a copy
+     * over it, is what that screen shows. Nothing for the normal layout, which is never seeded.
+     */
+    public void seed(@NonNull LayoutVariant variant) {
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            seedIfNeeded(variant, orientation);
     }
 
     /** Every key {@link #copyArrangement copyArrangement(from, to)} may write or remove. */

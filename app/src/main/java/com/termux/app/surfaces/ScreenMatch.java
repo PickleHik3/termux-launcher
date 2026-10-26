@@ -106,6 +106,10 @@ public final class ScreenMatch {
         boolean minimal = places.isMinimal();
         LayoutVariant from = layoutOf(target.other(), minimal);
         LayoutVariant to = layoutOf(target, minimal);
+        // Both layouts seeded before the snapshot: an orientation not used yet would otherwise be
+        // taken as empty, and Undo would leave it empty rather than on its seed.
+        places.seed(from);
+        places.seed(to);
         List<String> keys = keysWritten(places, target, from, to);
         Map<String, ?> all = store.getAll();
         Map<String, Object> before = new HashMap<>();
