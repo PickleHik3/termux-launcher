@@ -8205,6 +8205,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // and the keyboard's own margins are rim enough.
         int innerPadding = floating ? Math.round(dpToPx(3)) : capsule ? Math.round(dpToPx(6)) : 0;
         int innerTopPadding = floating ? 0 : innerPadding;
+        // A Docked keyboard keeps a frame above its top row a hold can find: the band its
+        // long-press popup opens on (editor-redesign §3). The capsule's gap and rim already make
+        // it; a slice of the Docked frame grows its padding to it. A floating card has its handle
+        // row for that band.
+        if (!floating) {
+            innerTopPadding = com.termux.app.surfaces.SurfaceLongPressRoute.keyboardTopPaddingPx(
+                getResources().getDisplayMetrics().density, topMargin, innerTopPadding,
+                getResources().getDimension(juloo.keyboard2.R.dimen.margin_top));
+        }
         // The user's own chin allowance, from Settings, and it lands in a different place per shape:
         // padding inside the docked slab, a taller gap under the floating capsule. In the stack the
         // capsule's gap is not this host's to carry: the stack's own bottom margin is the one edge
@@ -13460,6 +13469,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
         syncPromptLineInk(dockOpacity);
+        syncDockTilesInk(dockOpacity);
         // The Wall strip's clock is the status bar's and takes its ink the bar's way, from the
         // theme's roles; its tiles are the terminal scheme's. Either redraws only if it moved.
         if (mWallStripRow != null) mWallStripRow.refreshTheme();
@@ -13482,6 +13492,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
             mPromptLineInkRect));
     }
+
+    /**
+     * The apps row's Drawer tile and Command palette tile glyphs on the dock's face as measured
+     * under the row, as the extra keys' labels are: a dark theme over a light wallpaper gets dark
+     * glyphs. The row retints only when the ink moved.
+     */
+    private void syncDockTilesInk(float dockOpacity) {
+        SuggestionBarView row = mSuggestionBarView;
+        if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0 || !row.isShown()) return;
+        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        row.getLocationOnScreen(mDockTilesInkLocation);
+        mDockTilesInkRect.set(mDockTilesInkLocation[0], mDockTilesInkLocation[1],
+            mDockTilesInkLocation[0] + row.getWidth(), mDockTilesInkLocation[1] + row.getHeight());
+        row.setTileFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mDockTilesInkRect),
+            mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
+    }
+
+    @NonNull private final Rect mDockTilesInkRect = new Rect();
+    @NonNull private final int[] mDockTilesInkLocation = new int[2];
 
     @NonNull private final Rect mPromptLineInkRect = new Rect();
     @NonNull private final int[] mPromptLineInkLocation = new int[2];

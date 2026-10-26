@@ -112,6 +112,38 @@ public class SurfaceLongPressRouteTest {
         assertTrue("the frame above the keys", press(500, 1220, keys).opensPopup());
     }
 
+    /**
+     * A Docked keyboard at density 3 (the emulator's xxhdpi): its host's top padding grown to the
+     * 12 dp band (36 px) over the keys' 3 dp (9 px) margin, so the top row's cells start at
+     * 1200 + 27 + 9. A hold on the band is the frame's; a hold on a key, gap included, is the key's.
+     */
+    @Test
+    public void theTopBandOpensThePopupAndAKeyKeepsItsHold() {
+        int padding = SurfaceLongPressRoute.keyboardTopPaddingPx(3f, 0, 0, 9f);
+        assertEquals("12 dp less the keys' own 3 dp", 27, padding);
+        float keysTop = 1200 + padding + 9;
+        // The key under the press, its cell taking the gap under it.
+        Box q = new Box(9, keysTop, 109, keysTop + 150);
+
+        Answer band = press(59, 1200 + 18, q);
+        assertTrue("the band above the top row", band.opensPopup());
+        assertEquals(Target.KEYBOARD, band.target());
+
+        Answer key = press(59, keysTop + 140, q);
+        assertEquals(Target.KEYBOARD, key.target());
+        assertTrue("a key, its gap included, keeps its alternates", key.childOwns);
+        assertFalse(key.opensPopup());
+
+        assertTrue("the side margin beside the rows", press(4, keysTop + 60).opensPopup());
+    }
+
+    @Test
+    public void aKeyboardAlreadyThatTallKeepsItsPadding() {
+        // The capsule: a 4 dp gap and a 6 dp rim over the keys' 3 dp make 13 dp.
+        assertEquals(18, SurfaceLongPressRoute.keyboardTopPaddingPx(3f, 12, 18, 9f));
+        assertEquals(0, SurfaceLongPressRoute.keyboardTopPaddingPx(3f, 40, 0, 9f));
+    }
+
     @Test
     public void aWindowChipOnTheStatusBarKeepsItsLift() {
         Box chip = new Box(40, 60, 160, 96);

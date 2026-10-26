@@ -1956,6 +1956,17 @@ public class Keyboard2View extends View
     return null;
   }
 
+  /**
+   * Whether a touch at ({@code tx}, {@code ty}), in this view's coordinates, lands on a key: the
+   * cell a key owns, its gaps to the neighbours included, as {@link #onTouch} reads a press. False
+   * on the margins around the rows (above the top row, beside and under the rows), which are the
+   * keyboard's frame rather than any key's.
+   */
+  public boolean hasKeyAt(float tx, float ty)
+  {
+    return getKeyAtPosition(tx, ty) != null;
+  }
+
   private KeyboardData.Key getKeyAtPosition(float tx, float ty)
   {
     KeyboardData.Row row = getRowAtPosition(ty);

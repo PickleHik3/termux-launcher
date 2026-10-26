@@ -69,6 +69,43 @@ public class WallpaperInkTest {
         assertFalse(pale(WallpaperInk.stripInk(face, NIGHT_ON_SURFACE, BODY)));
     }
 
+    // ------------------------------------------------------------------ the dock's tiles
+
+    /** The folders' shell wash the Drawer and palette tiles wear: 15% white. */
+    private static final int SHELL = 0x26FFFFFF;
+    private static final double LARGE = OnGlass.TARGET_LARGE_TEXT;
+
+    @Test
+    public void aTilesGlyphOnAPaleDockUnderADarkThemeIsDark() {
+        // The checker's case: a clear dock over a light wallpaper, the dark theme's pale ink.
+        int dock = WallpaperInk.faceOf(LIGHT_WALLPAPER, Color.TRANSPARENT, NIGHT_BASE, 0.1f);
+        int glyph = WallpaperInk.tileInk(dock, SHELL, NIGHT_ON_SURFACE, LARGE);
+        assertFalse("pale on pale was the bug", pale(glyph));
+        int shellFace = OnGlass.opaque(OnGlass.composite(SHELL, dock));
+        assertTrue(OnGlass.ratio(glyph, shellFace) >= LARGE);
+    }
+
+    @Test
+    public void aTilesGlyphOnTheThemesGlassKeepsTheThemesInk() {
+        int dock = WallpaperInk.faceOf(LIGHT_WALLPAPER, Color.TRANSPARENT, NIGHT_BASE, 1f);
+        assertEquals(NIGHT_ON_SURFACE, WallpaperInk.tileInk(dock, SHELL, NIGHT_ON_SURFACE, LARGE));
+    }
+
+    @Test
+    public void aTilesGlyphOnADarkDockUnderALightThemeIsPale() {
+        int dock = WallpaperInk.faceOf(DARK_WALLPAPER, Color.TRANSPARENT, LIGHT_BASE, 0f);
+        int shellFace = OnGlass.opaque(OnGlass.composite(SHELL, dock));
+        int glyph = WallpaperInk.tileInk(dock, SHELL, LIGHT_ON_SURFACE, LARGE);
+        assertTrue(GlassInk.isPaleSide(glyph, shellFace));
+        assertTrue(OnGlass.ratio(glyph, shellFace) >= LARGE);
+    }
+
+    @Test
+    public void beforeTheDockIsMeasuredATileKeepsTheThemesInk() {
+        assertEquals(NIGHT_ON_SURFACE,
+            WallpaperInk.tileInk(Color.TRANSPARENT, SHELL, NIGHT_ON_SURFACE, LARGE));
+    }
+
     @Test
     public void extraKeysOnTheThemesGlassKeepTheThemesInk() {
         int night = WallpaperInk.faceOf(LIGHT_WALLPAPER, Color.TRANSPARENT, NIGHT_BASE, 1f);

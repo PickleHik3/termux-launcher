@@ -1019,9 +1019,11 @@ public final class SuggestionBarView extends GridLayout
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
         Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_terminal);
+        paletteTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
-            DrawableCompat.setTint(glyph, getLauncherTextColor());
+            DrawableCompat.setTint(glyph, tileGlyphInk());
+            paletteTileGlyph = glyph;
             tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
         }
         tile.setContentDescription(getContext().getString(R.string.dock_command_palette_tile));
@@ -1031,6 +1033,38 @@ public final class SuggestionBarView extends GridLayout
         shell.addView(tile);
         slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
         return shell;
+    }
+
+    /** The Drawer tile's and the palette tile's glyphs as last built, retinted in place. */
+    @Nullable private Drawable drawerTileGlyph;
+    @Nullable private Drawable paletteTileGlyph;
+    /** The dock's face measured under the row, transparent before a sample; and its tier. */
+    private int tileFace = android.graphics.Color.TRANSPARENT;
+    private double tileInkTarget = com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT;
+
+    /**
+     * The face the dock's own glass and the wallpaper make under the row, as the chrome measured
+     * it: the Drawer tile's and the palette tile's glyphs take their ink on it
+     * ({@link com.termux.app.chrome.WallpaperInk#tileInk}), so a dark theme over a light wallpaper
+     * does not leave a pale glyph on a pale shell. Retints only when the ink moved.
+     */
+    public void setTileFace(int face, double target) {
+        if (tileFace == face && tileInkTarget == target) return;
+        tileFace = face;
+        tileInkTarget = target;
+        int ink = tileGlyphInk();
+        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph}) {
+            if (glyph == null) continue;
+            DrawableCompat.setTint(glyph, ink);
+            glyph.invalidateSelf();
+        }
+    }
+
+    /** The tiles' glyph ink: the theme's, held legible on the shell over the dock's face. */
+    private int tileGlyphInk() {
+        return com.termux.app.chrome.WallpaperInk.tileInk(tileFace,
+            com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR),
+            getLauncherTextColor(), tileInkTarget);
     }
 
     /** How many apps a page of the row lying down holds: its slots, less the Drawer tile's. */
@@ -1124,9 +1158,11 @@ public final class SuggestionBarView extends GridLayout
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
         Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_apps);
+        drawerTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
-            DrawableCompat.setTint(glyph, getLauncherTextColor());
+            DrawableCompat.setTint(glyph, tileGlyphInk());
+            drawerTileGlyph = glyph;
             // A share of the box rather than pixels, so a new icon size keeps the glyph's air.
             tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
         }

@@ -38,4 +38,44 @@ public class EditorLabelInkTest {
         assertEquals(0xFFFFFFFF, EditorLabelInk.average(px, 2, 0x00000000));
         assertEquals(PALE, EditorLabelInk.pick(EditorLabelInk.average(px, 2, 0xE6000000), DARK, PALE));
     }
+
+    /** A picture dark in its top half and light in its bottom half, shaped like a phone. */
+    private static int[] splitPicture() {
+        int w = EditorLabelInk.SAMPLE_WIDTH;
+        int h = EditorLabelInk.sampleHeight(1080, 2400);
+        int[] px = new int[w * h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                px[y * w + x] = y < h / 2 ? 0xFF202020 : 0xFFF3EFE6;
+        return px;
+    }
+
+    @Test
+    public void theLabelReadsThePictureAtItsOwnHeight() {
+        int h = EditorLabelInk.sampleHeight(1080, 2400);
+        assertEquals(36, h);
+        int[] px = splitPicture();
+        int w = EditorLabelInk.SAMPLE_WIDTH;
+        // The label over the card, two thirds down the screen: the light half, so dark ink in
+        // either theme, since the theme is not asked.
+        assertEquals(DARK, EditorLabelInk.pick(EditorLabelInk.band(px, w, h, 0.66f), DARK, PALE));
+        assertEquals(PALE, EditorLabelInk.pick(EditorLabelInk.band(px, w, h, 0.2f), DARK, PALE));
+        // Out of range is held to the picture's edges.
+        assertEquals(DARK, EditorLabelInk.pick(EditorLabelInk.band(px, w, h, 1.4f), DARK, PALE));
+        assertEquals(PALE, EditorLabelInk.pick(EditorLabelInk.band(px, w, h, -1f), DARK, PALE));
+    }
+
+    @Test
+    public void thePictureIsCentreCroppedToTheScreensShape() {
+        // A square picture into a tall sample: scaled to the height, the sides cut evenly.
+        int[] square = EditorLabelInk.cropBounds(1000, 1000, 16, 36);
+        assertEquals(0, square[1]);
+        assertEquals(36, square[3]);
+        assertEquals(-10, square[0]);
+        assertEquals(26, square[2]);
+        // A picture with no size of its own fills the sample.
+        int[] none = EditorLabelInk.cropBounds(-1, -1, 16, 36);
+        assertEquals(0, none[0]);
+        assertEquals(36, none[3]);
+    }
 }

@@ -18,9 +18,11 @@ import java.util.List;
  * </pre>
  *
  * <p>The rule table: anywhere on the dock's frame (the apps row, the A–Z and extra-keys strips,
- * between items), anywhere on the status bar, the keyboard's frame and top edge. What keeps its
- * own long-press: app icons (the App menu), extra keys, the A–Z letters (the scrub starts on the
- * touch, so a press on them is already a scrub), keyboard keys, and on the status bar the window
+ * between items), anywhere on the status bar, the keyboard's frame and top edge (the band above
+ * its top row, at least {@link #KEYBOARD_TOP_BAND_DP} tall, and the margins beside and under the
+ * rows; a Floating keyboard's card with its handle row). What keeps its own long-press: app icons
+ * (the App menu), extra keys, the A–Z letters (the scrub starts on the touch, so a press on them is
+ * already a scrub), keyboard keys (each key's cell, gaps included), and on the status bar the window
  * chips and pinned notifications, which lift or open a menu on a hold. The terminal and Home are
  * no target at all, so their long-presses are never seen here.</p>
  *
@@ -31,6 +33,31 @@ import java.util.List;
 public final class SurfaceLongPressRoute {
 
     private SurfaceLongPressRoute() {}
+
+    /**
+     * The least height of the keyboard's frame above its top row of keys, in dp: the band a hold
+     * opens the keyboard's popup on (§3, "Its frame and top edge"). A key's cell, its gaps to the
+     * neighbours included, is the key's, so without this band a Docked keyboard has only the
+     * keys' own few-dp top margin, which no thumb finds.
+     */
+    public static final int KEYBOARD_TOP_BAND_DP = 12;
+
+    /**
+     * The inner top padding a Docked keyboard's host takes so the frame above its top row is at
+     * least {@link #KEYBOARD_TOP_BAND_DP}: what the host already has, or more when its top margin,
+     * its padding and the keys' own top margin together fall short. A host already that tall (the
+     * capsule's gap and rim) keeps its padding.
+     *
+     * @param topMarginPx the host's top margin inside the keyboard's container
+     * @param innerTopPaddingPx the padding the host's shape gives it
+     * @param keysTopMarginPx the keyboard view's own margin above its first row
+     */
+    public static int keyboardTopPaddingPx(float density, int topMarginPx, int innerTopPaddingPx,
+                                           float keysTopMarginPx) {
+        int band = Math.round(Math.max(0f, density) * KEYBOARD_TOP_BAND_DP);
+        int above = Math.max(0, topMarginPx) + Math.max(0, Math.round(keysTopMarginPx));
+        return Math.max(Math.max(0, innerTopPaddingPx), band - above);
+    }
 
     /** The three surfaces a long-press can open the popup on. */
     public enum Target {

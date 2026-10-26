@@ -560,6 +560,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mBar.setListener(new BarListener());
         }
         mBar.attach(content);
+        // A picture read before the bar existed is applied now; a new bar starts at the theme's.
+        mLabelInk = 0;
+        if (mLabelPicture == null)
+            mBar.resetHalfNameInk();
+        applyLabelInk();
         TermuxAppSharedPreferences hintPrefs = prefs();
         mBar.setThemeHintWanted(hintPrefs != null && !hintPrefs.isAppearanceThemeHintSeen());
         mBar.setShown(true);
@@ -654,10 +659,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mOpen || layout == null || layout.shownOrientation() == null)
             return;
         boolean landscape = layout.shownOrientation() == PlaceOrientation.LANDSCAPE;
-        android.widget.Toast.makeText(mHost.context(), landscape
-                ? R.string.appearance_bar_turn_for_portrait
-                : R.string.appearance_bar_turn_for_landscape,
-            android.widget.Toast.LENGTH_SHORT).show();
+        // In the theme hint's bubble over the page label, not a toast across it.
+        if (mBar != null)
+            mBar.showNote(landscape ? R.string.appearance_bar_turn_for_portrait
+                : R.string.appearance_bar_turn_for_landscape);
     }
 
     /** The chip follows the orientation the session edits, which turns with the phone. */
@@ -1176,6 +1181,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? mWindowHeightPx - sheet.sheetTopPx() + gap
             : barLift + dp(EditorBar.BAR_DP) + gap;
         bar.place(barLift, halfLift);
+        applyLabelInk();
         placeStack();
     }
 
@@ -1467,9 +1473,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mWallpaperToken;
     @Nullable private Drawable mEditorWallpaper;
 
+    /**
+     * The picture the page label stands on, as a small copy centre-cropped to the decor the way
+     * the screen shows it ({@link EditorLabelInk#cropBounds}), for {@link #applyLabelInk}; null
+     * while there is none. Kept for the session: the label moves with the card.
+     */
+    @Nullable private int[] mLabelPicture;
+    private int mLabelPictureWidth;
+    private int mLabelPictureHeight;
+    /** The label's ink as last set, so a placement that did not move it costs nothing. */
+    private int mLabelInk;
+
     /** Passthrough mode: the picture is read off the main thread and painted inside the container. */
     private void loadEditorWallpaper(@NonNull View rootContainer) {
         final int token = ++mWallpaperToken;
+        View decor = rootContainer.getRootView();
+        final int decorWidth = decor != null && decor.getWidth() > 0 ? decor.getWidth()
+            : rootContainer.getResources().getDisplayMetrics().widthPixels;
+        final int decorHeight = decor != null && decor.getHeight() > 0 ? decor.getHeight()
+            : rootContainer.getResources().getDisplayMetrics().heightPixels;
         Thread reader = new Thread(() -> {
             Drawable wallpaper;
             try {
@@ -1478,27 +1500,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 wallpaper = null;
             }
             final Drawable picture = wallpaper;
-            // The label stands on the wallpaper even when the editor does not paint it (a theme
-            // relaunch, a managed look): the ink follows that picture, never the theme.
-            final int backdrop = picture != null ? sampleFootInk(picture)
-                : sampleSystemFootInk(rootContainer.getContext());
+            // The label stands on the wallpaper the screen shows outside the scaled frame, which
+            // is the picture the frame paints (the managed one or the system's), or the system's
+            // still when the editor reads none. Its ink follows that picture, never the theme.
+            final int[] sample = picture != null
+                ? sampleLabelPicture(picture, decorWidth, decorHeight)
+                : sampleSystemLabelPicture(rootContainer.getContext(), decorWidth, decorHeight);
+            final int sampleHeight = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
             rootContainer.post(() -> {
                 if (!mSession || token != mWallpaperToken)
                     return;
+                mLabelPicture = sample;
+                mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
+                mLabelPictureHeight = sampleHeight;
+                // The bar may not be up yet (the first open after a theme relaunch); present()
+                // applies the ink again once it is.
+                applyLabelInk();
                 if (picture != null) {
                     mEditorWallpaper = picture;
                     showEditorWallpaper(picture);
-                    if (mBar != null) {
-                        int[] inks = mBar.halfNameInks();
-                        mBar.setHalfNameInk(EditorLabelInk.pick(backdrop, inks[0], inks[1]));
-                    }
-                } else {
-                    if (backdrop != 0 && mBar != null) {
-                        int[] inks = mBar.halfNameInks();
-                        mBar.setHalfNameInk(EditorLabelInk.pick(backdrop, inks[0], inks[1]));
-                    }
-                    if (mPageListener != null)
-                        mPageListener.onFrameWallpaperMissing();
+                } else if (mPageListener != null) {
+                    mPageListener.onFrameWallpaperMissing();
                 }
                 wallpaperSettled();
             });
@@ -1508,47 +1530,78 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The colour the page label stands on: the foot of the wallpaper, averaged, as the
-     * preview draws it, with no theme dim over it (the dim pushed a dark theme's sample dark). Read off the main thread; the drawable is drawn into a small bitmap and not kept.
+     * The page label's ink from the picture under it: the sampled rows at the label's height on
+     * the screen ({@link EditorLabelInk#band}), with no theme dim over them. Called when the
+     * picture arrives, when the bar goes up and whenever the label moves; it sets the ink only
+     * when it changed.
      */
-    /** The foot of the system's still wallpaper, averaged; 0 when there is none to read. */
-    private static int sampleSystemFootInk(@NonNull android.content.Context context) {
+    private void applyLabelInk() {
+        EditorBar bar = mBar;
+        int[] picture = mLabelPicture;
+        if (bar == null || picture == null)
+            return;
+        View label = bar.halfRow();
+        View decor = label.getRootView();
+        if (label.getParent() == null || decor == null || decor.getHeight() <= 0)
+            return;
+        label.getLocationOnScreen(mTmpLocation);
+        float centre = mTmpLocation[1] + label.getHeight() / 2f;
+        decor.getLocationOnScreen(mTmpDecorLocation);
+        float fraction = (centre - mTmpDecorLocation[1]) / decor.getHeight();
+        int backdrop = EditorLabelInk.band(picture, mLabelPictureWidth, mLabelPictureHeight,
+            fraction);
+        int[] inks = bar.halfNameInks();
+        int ink = EditorLabelInk.pick(backdrop, inks[0], inks[1]);
+        if (ink == mLabelInk)
+            return;
+        mLabelInk = ink;
+        bar.setHalfNameInk(ink);
+    }
+
+    @NonNull private final int[] mTmpLocation = new int[2];
+    @NonNull private final int[] mTmpDecorLocation = new int[2];
+
+    /** The system's still wallpaper, sampled as {@link #sampleLabelPicture}; null for none. */
+    @Nullable
+    private static int[] sampleSystemLabelPicture(@NonNull android.content.Context context,
+                                                  int decorWidth, int decorHeight) {
         try {
             android.app.WallpaperManager manager =
                 android.app.WallpaperManager.getInstance(context);
             if (manager.getWallpaperInfo() != null)
-                return 0;
+                return null;
             Drawable system = manager.getDrawable();
-            if (system == null)
-                return 0;
-            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(16, 16,
-                android.graphics.Bitmap.Config.ARGB_8888);
-            system.setBounds(0, 0, 16, 16);
-            system.draw(new android.graphics.Canvas(bmp));
-            int[] px = new int[16 * 4];
-            bmp.getPixels(px, 0, 16, 0, 12, 16, 4);
-            bmp.recycle();
-            return EditorLabelInk.average(px, px.length, 0);
+            return system == null ? null : sampleLabelPicture(system, decorWidth, decorHeight);
         } catch (RuntimeException e) {
-            return 0;
+            return null;
         }
     }
 
-    private int sampleFootInk(@NonNull Drawable picture) {
+    /**
+     * {@code picture} drawn into a {@link EditorLabelInk#SAMPLE_WIDTH}-wide bitmap of the decor's
+     * shape, centre-cropped as the frame paints it, and its pixels; null when it cannot be drawn.
+     * Read off the main thread; the bitmap is not kept.
+     */
+    @Nullable
+    private static int[] sampleLabelPicture(@NonNull Drawable picture, int decorWidth,
+                                            int decorHeight) {
         try {
-            final int w = 16, h = 16;
+            int w = EditorLabelInk.SAMPLE_WIDTH;
+            int h = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
             android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(w, h,
                 android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Rect old = picture.copyBounds();
-            picture.setBounds(0, 0, w, h);
+            int[] bounds = EditorLabelInk.cropBounds(picture.getIntrinsicWidth(),
+                picture.getIntrinsicHeight(), w, h);
+            picture.setBounds(bounds[0], bounds[1], bounds[2], bounds[3]);
             picture.draw(new android.graphics.Canvas(bmp));
             picture.setBounds(old);
-            int[] px = new int[w * 4];
-            bmp.getPixels(px, 0, w, 0, h - 4, w, 4);
+            int[] px = new int[w * h];
+            bmp.getPixels(px, 0, w, 0, 0, w, h);
             bmp.recycle();
-            return EditorLabelInk.average(px, px.length, 0);
+            return px;
         } catch (RuntimeException e) {
-            return 0xFF808080;
+            return null;
         }
     }
 
@@ -3931,6 +3984,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mWallpaperSettled = false;
         mWallpaperWaiter = null;
         mEditorWallpaper = null;
+        mLabelPicture = null;
+        mLabelInk = 0;
         releaseIconsContent();
         AppearanceEditorFrame frame = mFrame;
         if (frame != null) {

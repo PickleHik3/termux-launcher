@@ -36,6 +36,7 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.statusbar.PinnedNotificationsView;
+import com.termux.app.terminal.inappkeyboard.FloatingKeyboardFrame;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Answer;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Box;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Target;
@@ -254,6 +255,10 @@ public final class SurfaceLongPress {
                           @NonNull int[] ids) {
         for (int id : ids) {
             View view = mHost.findView(id);
+            // A Floating keyboard's frame is its card: the handle row above the keys included.
+            if (target == Target.KEYBOARD && view != null
+                && view.getParent() instanceof FloatingKeyboardFrame)
+                view = (View) view.getParent();
             Box box = boxOf(view);
             if (box == null) continue;
             Zone zone = new Zone(target, bar, box);
@@ -279,13 +284,22 @@ public final class SurfaceLongPress {
 
     /**
      * The boxes of the children under ({@code x}, {@code y}) that keep a long-press of their own:
-     * anything long-clickable (app icons, window chips), the A–Z letters, the keyboard's keys, the
-     * pinned notifications, and each extra key.
+     * anything long-clickable (app icons, window chips), the A–Z letters, the keyboard's keys (only
+     * where a key's cell is, {@link juloo.keyboard2.Keyboard2View#hasKeyAt}), the pinned
+     * notifications, and each extra key.
      */
     private void collectOwners(@Nullable View view, float x, float y, @NonNull List<Box> out) {
         if (view == null || view.getVisibility() != View.VISIBLE) return;
         Box box = boxOf(view);
-        if (box != null && box.contains(x, y) && ownsLongPress(view)) out.add(box);
+        if (box != null && box.contains(x, y)) {
+            if (view instanceof juloo.keyboard2.Keyboard2View) {
+                // Only a key's cell is the key's; the margins round the rows are the frame.
+                if (((juloo.keyboard2.Keyboard2View) view).hasKeyAt(x - box.left, y - box.top))
+                    out.add(box);
+            } else if (ownsLongPress(view)) {
+                out.add(box);
+            }
+        }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++)
@@ -295,7 +309,6 @@ public final class SurfaceLongPress {
     private static boolean ownsLongPress(@NonNull View view) {
         return view.isLongClickable()
             || view instanceof AzScrubRowView
-            || view instanceof juloo.keyboard2.Keyboard2View
             || view instanceof PinnedNotificationsView
             || view.getParent() instanceof ExtraKeysView;
     }

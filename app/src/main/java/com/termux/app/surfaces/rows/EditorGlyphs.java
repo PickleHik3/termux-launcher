@@ -60,6 +60,8 @@ public final class EditorGlyphs {
     @DrawableRes public static final int AZ_FAINT = R.drawable.ic_ed_az_faint;
     @DrawableRes public static final int AZ_PULL_TAB = R.drawable.ic_ed_az_pull_tab;
     @DrawableRes public static final int WALLPAPER_COLOURS = R.drawable.ic_ed_wallpaper_colours;
+    /** Show wallpaper: Wallpaper colours' frame with an eye in it, so the two read apart. */
+    @DrawableRes public static final int SHOW_WALLPAPER = R.drawable.ic_ed_show_wallpaper;
     @DrawableRes public static final int MATERIAL_CRT = R.drawable.ic_ed_material_crt;
     @DrawableRes public static final int LOOK = R.drawable.ic_ed_look;
     @DrawableRes public static final int MONOCHROME = R.drawable.ic_ed_monochrome;
@@ -72,7 +74,7 @@ public final class EditorGlyphs {
             CLOCK_ALIGN_CENTER, CLOCK_ALIGN_RIGHT, FOLDER_COMPACT, FOLDER_DEFAULT, FOLDER_ROOMY,
             LABEL_SMALL, LABEL_MEDIUM, LABEL_LARGE, ICON_SMALL, ICON_DEFAULT, ICON_LARGE,
             KB_BACKGROUND_OPACITY, KB_KEY_OPACITY, BOTTOM_PADDING, BARS_REORDER, BAR_SETTINGS,
-            GLASS_OFF, AZ_SHOWN, AZ_FAINT, AZ_PULL_TAB, WALLPAPER_COLOURS, MATERIAL_CRT,
+            GLASS_OFF, AZ_SHOWN, AZ_FAINT, AZ_PULL_TAB, WALLPAPER_COLOURS, SHOW_WALLPAPER, MATERIAL_CRT,
             LOOK, MONOCHROME};
     }
 }
