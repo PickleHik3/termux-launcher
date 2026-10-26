@@ -145,4 +145,23 @@ public class EditorDoorTest {
         System.arraycopy(pages, 0, out, 0, pages.length);
         return out;
     }
+
+    @Test
+    public void aScreenCardFollowsThePageSwipeAndElementCardsStay() {
+        assertEquals(EditorCard.WORKSPACE,
+            EditorDoor.cardAfterSwipe(EditorCard.HOME, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE, true));
+        assertEquals(EditorCard.HOME,
+            EditorDoor.cardAfterSwipe(EditorCard.WORKSPACE, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.HOME, true));
+        // Terminal only: no Home page, nothing changes.
+        assertEquals(null,
+            EditorDoor.cardAfterSwipe(EditorCard.WORKSPACE, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.HOME, false));
+        for (EditorCard card : new EditorCard[] {EditorCard.STATUS, EditorCard.DOCK,
+                EditorCard.KEYBOARD, EditorCard.TERMINAL, EditorCard.APPEARANCE, null})
+            assertEquals(null, EditorDoor.cardAfterSwipe(card,
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.HOME, true));
+        assertEquals(EditorCard.HOME,
+            EditorDoor.EDITOR_PAGE_SWIPE.cardFor(PaneWallPage.WIDGETS, null));
+        assertEquals(EditorCard.WORKSPACE,
+            EditorDoor.EDITOR_PAGE_SWIPE.cardFor(PaneWallPage.TERMINAL, null));
+    }
 }

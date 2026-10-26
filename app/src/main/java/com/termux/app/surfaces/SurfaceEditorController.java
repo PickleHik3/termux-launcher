@@ -639,6 +639,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * card up stays when its object stands there too; otherwise it goes down.
      */
     private void switchHalf(@NonNull WallHalf half, boolean animate) {
+        switchHalf(half, animate, false);
+    }
+
+    /** {@code swiped}: the user swiped the preview, so a screen's card follows the page. */
+    private void switchHalf(@NonNull WallHalf half, boolean animate, boolean swiped) {
         if (!mOpen || half == mHalf)
             return;
         if (half == WallHalf.HOME && !useAs().showsHomePage()) {
@@ -651,7 +656,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.showHome(half == WallHalf.HOME, animate);
         if (mBar != null)
             mBar.setHalf(half);
-        if (mCard != null && !mCard.standsOn(half))
+        EditorCard followed = EditorDoor.cardAfterSwipe(mCard, half, useAs().showsHomePage());
+        if (followed != null && swiped) {
+            // A screen's card follows the page: same detent, rows rebuilt and scrolled to the top.
+            EditorCardSheet sheet = mSheet;
+            int detent = sheet != null ? sheet.detent() : -1;
+            EditorDoor.EDITOR_PAGE_SWIPE.log(followed);
+            openCard(followed, false);
+            if (sheet != null && detent >= 0 && mCard == followed)
+                sheet.setDetent(detent, false);
+        } else if (mCard != null && !mCard.standsOn(half))
             closeCard(true);
         else
             restateCard();
@@ -3332,7 +3346,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         float dx = event.getRawX() - mDownRawX;
                         if (mSwiping) {
                             if (Math.abs(dx) >= dp(SWIPE_DP))
-                                switchHalf(dx > 0 ? WallHalf.HOME : WallHalf.WORKSPACE, true);
+                                switchHalf(dx > 0 ? WallHalf.HOME : WallHalf.WORKSPACE, true, true);
                             return true;
                         }
                         float x = event.getX();

@@ -56,6 +56,11 @@ public enum EditorDoor {
     EDITOR_HIDDEN_BAR("editor-hidden-bar"),
     /** In the editor: a tap on the page label under the frame, Home or Workspace. */
     EDITOR_PAGE_LABEL("editor-page-label"),
+    /**
+     * In the editor: the preview swiped to the other page while a screen's card is open; the card
+     * becomes the card of the page the swipe settled on.
+     */
+    EDITOR_PAGE_SWIPE("editor-page-swipe"),
     /** In the editor: the Global row on a screen's card. */
     EDITOR_GLOBAL_CHIP("editor-global-chip"),
     /** Settings › Home › Edit on screen. */
@@ -122,6 +127,7 @@ public enum EditorDoor {
             case POPUP_STATUS:
                 return EditorCard.STATUS;
             case EDITOR_PAGE_LABEL:
+            case EDITOR_PAGE_SWIPE:
                 return onScreen == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
             case PANE_CONTROLS:
                 return onScreen == null ? null : screenCard(onScreen);
@@ -170,6 +176,23 @@ public enum EditorDoor {
         if (page == PaneWallPage.WIDGETS) return EditorCard.HOME;
         if (page == PaneWallPage.TERMINAL) return EditorCard.TERMINAL;
         return null;
+    }
+
+    /**
+     * The card that replaces {@code open} when the preview settles on {@code half}: a screen's card
+     * (Home's or the Workspace's) gives way to the card of the screen now shown; an element card,
+     * or no card, stays as it is (null). Null too when the screen has no card to give (no Home
+     * page under Terminal only, {@code showsHomePage} false) or the card already fits.
+     */
+    @Nullable
+    public static EditorCard cardAfterSwipe(@Nullable EditorCard open, @NonNull WallHalf half,
+                                            boolean showsHomePage) {
+        if (open != EditorCard.HOME && open != EditorCard.WORKSPACE)
+            return null;
+        if (half == WallHalf.HOME && !showsHomePage)
+            return null;
+        EditorCard next = EditorCard.forScreen(half);
+        return next == open ? null : next;
     }
 
     /** {@link #cardFor}, with the door's line logged. */
