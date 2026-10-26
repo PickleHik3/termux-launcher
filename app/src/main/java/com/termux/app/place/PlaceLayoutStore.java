@@ -270,7 +270,8 @@ public final class PlaceLayoutStore {
         underKeyboardKeyName(Element.APPS), underKeyboardKeyName(Element.AZ),
         underKeyboardKeyName(Element.EXTRA_KEYS),
         restoreEdgeKeyName(Element.STATUS), restoreEdgeKeyName(Element.APPS),
-        restoreEdgeKeyName(Element.EXTRA_KEYS)
+        restoreEdgeKeyName(Element.EXTRA_KEYS),
+        PlaceLayoutStore.KEY_BAR_ORDER
     };
 
     /**
@@ -2156,5 +2157,25 @@ public final class PlaceLayoutStore {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    // ---------------------------------------------------------------- Dock card
+
+    /**
+     * The Dock card's Bars list, top to bottom, beside the slots it stacks:
+     * {@code layout.<orientation>.bar_order}, the bars' storage keys comma separated. Only bars
+     * on edges of their own need it; where bars share an edge their slots' order is the truth.
+     */
+    private static final String KEY_BAR_ORDER = "bar_order";
+
+    /** The Bars list as stored for {@code orientation}, or null where it never was. */
+    @Nullable
+    public String barOrder(@NonNull PlaceOrientation orientation) {
+        return readString(orientation, KEY_BAR_ORDER);
+    }
+
+    public void setBarOrder(@NonNull PlaceOrientation orientation, @NonNull String order) {
+        if (order.equals(barOrder(orientation))) return;
+        writeString(orientation, KEY_BAR_ORDER, order);
     }
 }

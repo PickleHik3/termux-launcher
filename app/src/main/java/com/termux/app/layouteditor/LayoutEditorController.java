@@ -818,4 +818,29 @@ public final class LayoutEditorController {
     private static String scaleText(float scale) {
         return String.format(Locale.getDefault(), "%.2f", scale);
     }
+
+    // ------------------------------------------------------------------------- Dock card
+
+    /** The edited layout as stored, before the page's dress, or null with no session. */
+    @Nullable
+    public PlaceLayout arrangedLayout() {
+        return mPlan == null ? null : mPlan.arrangedLayout();
+    }
+
+    /** Writes every slot of {@code next} that moved; the live place and the canvas follow. */
+    public void writeSlots(@NonNull PlaceLayout next) {
+        if (mPlan != null)
+            afterWrite(mPlan.writeSlots(next));
+    }
+
+    /** The Dock card's Bars list as stored for the shown orientation, or null. */
+    @Nullable
+    public String barOrder() {
+        return mPlan == null ? null : mPlan.barOrder();
+    }
+
+    public void setBarOrder(@NonNull String order) {
+        if (mPlan != null)
+            mPlan.setBarOrder(order);
+    }
 }

@@ -639,4 +639,45 @@ public final class LayoutEditorPlan {
             mPlaces = mRoot.forVariant(mVariant);
         }
     }
+
+    // ------------------------------------------------------------------------- Dock card
+
+    /**
+     * The shown orientation's arrangement as this layout stores it, before the page's dress: what
+     * a drop is written against ({@link LayoutChooserModel#applyDrop}).
+     */
+    @NonNull
+    public PlaceLayout arrangedLayout() {
+        return mPlaces.resolve(mShownOrientation);
+    }
+
+    /**
+     * Every slot of {@code next} that differs from {@link #arrangedLayout}, written for the shown
+     * orientation: the Dock card's Position rows and its restacking. The page's dress decides
+     * what it may write, as for a drop.
+     */
+    @NonNull
+    public Drop writeSlots(@NonNull PlaceLayout next) {
+        PlaceLayout now = arrangedLayout();
+        boolean wrote = false;
+        for (Element element : Element.values()) {
+            if (!dress().wears(element)) continue;
+            Slot slot = next.slot(element);
+            if (slot.equals(now.slot(element))) continue;
+            mPlaces.setSlot(mShownOrientation, element, slot);
+            wrote = true;
+        }
+        if (!wrote) return Drop.NONE;
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** The Dock card's Bars list for the shown orientation, or null where it never was stored. */
+    @Nullable
+    public String barOrder() {
+        return mPlaces.barOrder(mShownOrientation);
+    }
+
+    public void setBarOrder(@NonNull String order) {
+        mPlaces.setBarOrder(mShownOrientation, order);
+    }
 }
