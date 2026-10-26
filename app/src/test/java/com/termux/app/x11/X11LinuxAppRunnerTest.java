@@ -251,4 +251,16 @@ public class X11LinuxAppRunnerTest {
         assertEquals(X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList(), false),
             X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList(), false, null));
     }
+
+    @Test public void aKnownFreezeGpuStartsEveryAppInSoftwareEvenWithVirglInstalled() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "mali";
+        in.glRenderer = "Mali-G52 MC2";
+        in.virglServer = true;
+        in.angle = true;
+        in.mesaDri = true;
+        java.util.List<String> env = X11LinuxAppRunner.installedEnv(X11GpuProbe.evaluate(in));
+        org.junit.Assert.assertTrue(env.toString(), env.contains("GALLIUM_DRIVER=llvmpipe"));
+        org.junit.Assert.assertFalse(X11LinuxAppRunner.usesVirgl(env));
+    }
 }

@@ -29,7 +29,7 @@ public final class X11Autostart {
      */
     @Nullable
     public static String[] commandToRun(@NonNull Context context) {
-        if (!com.termux.BuildConfig.X11_SERVER) return null;
+        if (!X11ServerSupport.isAvailable(context)) return null;
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
         if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DisplayAutostartEnabled()) {
             return null;

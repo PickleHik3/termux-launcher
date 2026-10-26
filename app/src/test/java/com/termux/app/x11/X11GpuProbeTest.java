@@ -157,6 +157,13 @@ public class X11GpuProbeTest {
         assertEquals("somevendor", X11GpuProbe.evaluate(in).gpu);
     }
 
+    /** Mesa picks Zink on any Vulkan driver unless told not to, and then ignores virpipe. */
+    @Test public void virglKeepsMesaOffZink() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "somevendor";
+        assertTrue(X11GpuProbe.evaluate(in).ranked.get(0).env.contains("LIBGL_KOPPER_DISABLE=1"));
+    }
+
     @Test public void theJsonCarriesEveryProfileAndTheEnvText() throws Exception {
         X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
         in.kgsl = true;
@@ -166,5 +173,35 @@ public class X11GpuProbeTest {
         assertEquals("turnip-zink", json.getString("recommended"));
         assertEquals(4, json.getJSONArray("profiles").length());
         assertTrue(json.getString("env_text").startsWith("# "));
+    }
+
+    @Test public void aKnownFreezeGpuRanksSoftwareFirstAndWarnsOnVirgl() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "mali";
+        in.glRenderer = "Mali-G52 MC2";
+        in.virglServer = true;
+        in.angle = true;
+        in.mesaDri = true;
+
+        X11GpuProbe.Result result = X11GpuProbe.evaluate(in);
+        assertEquals("software", result.ranked.get(0).profile.id);
+        assertTrue(result.ranked.get(0).installed);
+        assertNull("software is what the row recommends", result.recommended());
+        boolean warned = false;
+        for (X11GpuProbe.Recommendation r : result.ranked) {
+            if (r.profile == X11GpuProbe.Profile.VIRGL_ANGLE || r.profile == X11GpuProbe.Profile.VIRGL) {
+                assertTrue(r.reason, r.reason.contains("frozen the whole phone"));
+                warned = true;
+            }
+        }
+        assertTrue(warned);
+        assertTrue(X11GpuProbe.knownFreeze(in));
+        in.glRenderer = "Mali-G78";
+        assertFalse(X11GpuProbe.knownFreeze(in));
+        // The GL probe may say nothing (a failed throwaway context): the chip name still matches.
+        in.glRenderer = "";
+        in.board = "mt6768";
+        assertTrue(X11GpuProbe.knownFreeze(in));
+        assertEquals("software", X11GpuProbe.evaluate(in).ranked.get(0).profile.id);
     }
 }

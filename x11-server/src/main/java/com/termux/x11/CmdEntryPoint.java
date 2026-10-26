@@ -35,6 +35,11 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     public static Context ctx;
     private final Intent intent = createIntent();
     private boolean broadcastPending;
+    /**
+     * A throwaway server (the launcher's graphics setup test) sets this so no app adopts it as the
+     * display: with it, nothing is ever announced.
+     */
+    static final boolean HEADLESS = "1".equals(System.getenv("TERMUX_X11_HEADLESS"));
 
     /**
      * Command-line entry point.
@@ -71,6 +76,8 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     }
 
     private void sendBroadcast() {
+        if (HEADLESS)
+            return;
         // Called from native (the X server thread) on every knock on the port; coalesce
         // bursts into a single broadcast fired 250ms later.
         synchronized (this) {
@@ -85,6 +92,8 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     }
 
     static void sendBroadcast(Intent intent) {
+        if (HEADLESS)
+            return;
         try {
             ctx.sendBroadcast(intent);
         } catch (Exception e) {
@@ -134,7 +143,7 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     // In some cases Android Activity part can not connect opened port.
     // In this case opened port works like a lock file.
     private void sendBroadcastDelayed() {
-        if (!connected())
+        if (!HEADLESS && !connected())
             sendBroadcast(intent);
 
         handler.postDelayed(this::sendBroadcastDelayed, 1000);

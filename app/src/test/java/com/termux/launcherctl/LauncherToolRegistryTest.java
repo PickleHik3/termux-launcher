@@ -100,6 +100,10 @@ public class LauncherToolRegistryTest {
         assertEquals(LauncherToolRegistry.BindingCondition.SPLITS_OFF,
             registry.getTool("clipboard.paste").defaultBindings.get(0).condition);
         assertEquals("ctrl+alt+v", registry.getTool("clipboard.paste").defaultBindings.get(0).stroke);
+        // The desktop terminal paste stroke, unconditional, so a hardware keyboard pastes.
+        assertEquals("ctrl+shift+v", registry.getTool("clipboard.paste").defaultBindings.get(1).stroke);
+        assertEquals(LauncherToolRegistry.BindingCondition.ALWAYS,
+            registry.getTool("clipboard.paste").defaultBindings.get(1).condition);
         // Ctrl+Alt+r renames the window with splits on and the pane with them off; the shifted
         // Ctrl+Alt+R renames the session. Each case names a different thing, so no two of the three
         // rename prompts are ever synonyms.
@@ -137,9 +141,11 @@ public class LauncherToolRegistryTest {
     public void uiProjectionCarriesBindingConditions() throws Exception {
         JSONObject ui = registry.getTool("clipboard.paste").toUiJson();
         JSONArray bindings = ui.getJSONArray("defaultBindings");
-        assertEquals(1, bindings.length());
+        assertEquals(2, bindings.length());
         assertEquals("ctrl+alt+v", bindings.getJSONObject(0).getString("stroke"));
         assertEquals("splits-off", bindings.getJSONObject(0).getString("condition"));
+        assertEquals("ctrl+shift+v", bindings.getJSONObject(1).getString("stroke"));
+        assertEquals("always", bindings.getJSONObject(1).getString("condition"));
     }
 
     @Test
