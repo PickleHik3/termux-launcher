@@ -109,13 +109,6 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void theLayoutModeDoorOpensTheEditorAtRest() {
-        for (PaneWallPage page : pagesAndNone())
-            assertNull(EditorDoor.LAYOUT_EDITOR.cardFor(page, EditorCard.DOCK));
-        assertEquals("layout-editor -> REST", EditorDoor.LAYOUT_EDITOR.line(null));
-    }
-
-    @Test
     public void theSectionIntentNamesTheWorkspaceCard() {
         assertEquals(EditorCard.WORKSPACE, EditorDoor.SECTION_INTENT.cardFor(null,
             AppearanceEditorEntry.cardOf("workspace")));

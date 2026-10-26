@@ -182,8 +182,6 @@ public final class WidgetPaneFrame extends PaneContentFrame
         default void showHelpOverlay() {}
         /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
-        /** The grid: open the Layout editor on this place, as every corner tab does. */
-        default void openLayoutEditor() {}
         /** Whether the launcher is in minimal mode, which the tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** The minimal-mode glyph: turn minimal mode on or off, as every corner tab does. */
