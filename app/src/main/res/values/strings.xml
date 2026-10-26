@@ -1202,11 +1202,6 @@
                 <string name="termux_top_pane_clock_style_minimal">Minimal</string>
                 <!-- Minimal in its heavier weight, as the settings list names it. -->
                 <string name="termux_top_pane_clock_style_minimal_medium">Minimal, medium</string>
-                <!-- The Look's clock picker: Minimal's weight row, shown while Minimal is the face. -->
-                <string name="termux_surface_tuning_clock_weight">Weight</string>
-                <string name="termux_surface_tuning_clock_weight_thin">Thin</string>
-                <string name="termux_surface_tuning_clock_weight_medium">Medium</string>
-                <string name="termux_surface_tuning_clock_weight_description">Minimal weight: %1$s</string>
                 <string name="termux_top_pane_clock_style_led">LED matrix</string>
                 <string name="termux_top_pane_clock_style_tape">Tape</string>
                 <string name="termux_top_pane_clock_style_slab">Slab</string>
@@ -2121,9 +2116,6 @@
                      window pills. Content inside the bar, not a surface, so it has its own knob. -->
                 <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
                 <string name="termux_surface_tuning_clock_open">Change the clock face or position</string>
-                <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
-                <string name="termux_surface_tuning_clock_position_description">%1$s clock position</string>
-                <string name="termux_surface_tuning_clock_selected">✓</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>

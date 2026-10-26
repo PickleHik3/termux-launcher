@@ -70,7 +70,6 @@ public class StatusTerminalCardsTest {
             Row.STATUS_OPTIONS, Row.STATUS_INDICATORS), rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
         assertFalse("the Visible switch is the header's eye", rows.contains(Row.VISIBLE));
-        assertFalse("the indicators open into tiles", rows.contains(Row.LINK_INDICATORS));
         assertFalse("12-hour is an Options tile", rows.contains(Row.CLOCK_12H));
     }
 

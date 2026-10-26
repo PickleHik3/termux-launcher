@@ -88,21 +88,17 @@ public final class EditorRows {
         CORNERS(Kind.STRIP, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
         MARGIN(Kind.STRIP, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
         DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
-        SEARCH_FIELD(Kind.SWITCH, R.string.appearance_row_search_field, R.drawable.ic_symbol_search),
-        DRAWER_ICON(Kind.SWITCH, R.string.layout_editor_drawer_tile, R.drawable.ic_symbol_apps),
         /**
          * How strongly the icons' reflections show on the Peek glass card, 0 (off) to strong;
          * the Dock card shows it only while Peek glass is the design.
          */
         REFLECTION(Kind.STRIP, R.string.appearance_row_reflection,
             R.drawable.ic_symbol_dock_peek_glass),
-        APP_ICONS(Kind.STRIP, R.string.appearance_row_app_icons, R.drawable.ic_symbol_apps),
         TEXT_SIZE(Kind.STRIP, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
         SPLIT_GAP(Kind.STRIP, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
-        ICON_SIZE(Kind.STRIP, R.string.appearance_row_icon_size, R.drawable.ic_symbol_grid_view),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
         GLASS_WIDGETS(Kind.SWITCH, R.string.appearance_row_glass_widgets, R.drawable.ic_symbol_stacks),
         TWO_LINE(Kind.SWITCH, R.string.appearance_row_two_line, R.drawable.ic_editor_text_size),
@@ -130,7 +126,6 @@ public final class EditorRows {
         WALLPAPER(Kind.WALLPAPER, R.string.appearance_row_wallpaper, R.drawable.ic_symbol_wallpaper),
         THEME(Kind.SEGMENTS, R.string.appearance_row_theme, R.drawable.ic_editor_dark_mode),
         ICON_PACK(Kind.EXPANDER, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
-        MONOCHROME(Kind.SWITCH, R.string.appearance_row_monochrome, R.drawable.ic_editor_contrast),
         WALLPAPER_COLOURS(Kind.SWITCH, R.string.appearance_row_wallpaper_colours,
             R.drawable.ic_symbol_palette),
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
@@ -141,11 +136,7 @@ public final class EditorRows {
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
         LINK_PAGES(Kind.LINK, R.string.appearance_row_pages, R.drawable.ic_symbol_grid_view),
-        LINK_INDICATORS(Kind.LINK, R.string.appearance_row_indicators, R.drawable.ic_symbol_weather),
         LINK_FONT(Kind.LINK, R.string.appearance_row_font, R.drawable.ic_editor_text_size),
-        LINK_DOCK_ITEMS(Kind.LINK, R.string.appearance_row_dock_items, R.drawable.ic_symbol_apps),
-        LINK_KEYBOARD_SIZE(Kind.LINK, R.string.appearance_row_keyboard_size,
-            R.drawable.ic_editor_height),
         LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard),
         // The Status bar and Terminal cards' own rows (editor-redesign §2): each is drawn by its
         // card from the row kinds (EditorCardSheet.Model#rowView); the Kind is the sheet's

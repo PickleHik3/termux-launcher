@@ -56,9 +56,8 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         assertEquals(Arrays.asList(Row.DOCK_TYPE), EditorRows.tier(EditorCard.DOCK, ALL, 2));
         assertEquals(Arrays.asList(Row.DOCK_OPTIONS), EditorRows.tier(EditorCard.DOCK, ALL, 3));
+        // No Dock items link and no App icons strip: those rows are gone with the old card.
         List<Row> rows = rowsOf(EditorCard.DOCK, ALL);
-        assertFalse("no Dock items link", rows.contains(Row.LINK_DOCK_ITEMS));
-        assertFalse("App icons moved into Apps", rows.contains(Row.APP_ICONS));
         assertFalse("no dock-wide Style or Design rows", rows.contains(Row.STYLE)
             || rows.contains(Row.DESIGN));
     }
@@ -78,8 +77,6 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 2));
         assertEquals(Arrays.asList(Row.SECTION_MORE, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
-        assertFalse("the floating keyboard is sized on the keyboard itself",
-            rowsOf(EditorCard.KEYBOARD, ALL).contains(Row.LINK_KEYBOARD_SIZE));
     }
 
     @Test
@@ -112,13 +109,11 @@ public class EditorRowsTest {
             Row.WALLPAPER_SCROLL), EditorRows.tier(EditorCard.HOME, ALL, 2));
         assertEquals(Arrays.asList(Row.MATCH_WORKSPACE, Row.SECTION_MORE, Row.LINK_GLOBAL,
             Row.LINK_GESTURES, Row.LINK_PAGES), EditorRows.tier(EditorCard.HOME, ALL, 3));
-        assertFalse("the dock sizes its own icons on its card",
-            rowsOf(EditorCard.HOME, ALL).contains(Row.ICON_SIZE));
         for (WallHalf frame : WallHalf.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
                 assertEquals(row + " with the frame on " + frame, WallHalf.HOME,
                     EditorRows.halfFor(EditorCard.HOME, row, frame));
-            assertNull(EditorRows.halfFor(EditorCard.HOME, Row.ICON_SIZE, frame));
+            assertNull(EditorRows.halfFor(EditorCard.HOME, Row.HOME_ICON_SIZE, frame));
         }
     }
 
@@ -168,7 +163,7 @@ public class EditorRowsTest {
     @Test
     public void everyValueSliderIsAStripColumnAndTheLookIsTheOneHorizontalSlider() {
         for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-            Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP, Row.ICON_SIZE, Row.APP_ICONS,
+            Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP,
             Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
             Row.VIBRANCY, Row.GLASS_EDGE})
             assertEquals(row + " is vertical", Kind.STRIP, row.kind);
@@ -275,7 +270,7 @@ public class EditorRowsTest {
             EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.FROST));
         assertFalse(EditorRows.marksOwnValue(EditorCard.DOCK, Row.CORNERS));
         assertFalse(EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.TEXT_SIZE));
-        assertFalse(EditorRows.marksOwnValue(EditorCard.HOME, Row.ICON_SIZE));
+        assertFalse(EditorRows.marksOwnValue(EditorCard.HOME, Row.HOME_ICON_SIZE));
         assertFalse("Home's glass is the Base itself", EditorRows.marksOwnValue(EditorCard.HOME,
             Row.FROST));
     }
