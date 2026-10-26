@@ -208,4 +208,59 @@ public class SurfaceLongPressRouteTest {
         Box clamped = SurfaceLongPressRoute.anchor(APPS, -50, 1850);
         assertEquals(APPS.left, clamped.left, 0f);
     }
+
+    // Two keys side by side at density 1 (dp = px): drawn 0..40 and 42.4..82.4 across, 10..50
+    // down, a 2.4 dp gap between them; the keyboard view spans 0..100 by 0..60.
+    private static final float INSET = SurfaceLongPressRoute.POPUP_KEY_CORE_INSET_DP;
+    private static final Box LEFT_KEY = new Box(0, 10, 40, 50);
+    private static final Box RIGHT_KEY = new Box(42.4f, 10, 82.4f, 50);
+
+    @Test
+    public void aHoldInTheGapBetweenKeysOpensThePopup() {
+        // The gap's centre: whichever key's rectangle the cell gives, the point is outside it.
+        assertFalse(SurfaceLongPressRoute.onKeyCore(41.2f, 30, LEFT_KEY, INSET));
+        assertFalse(SurfaceLongPressRoute.onKeyCore(41.2f, 30, RIGHT_KEY, INSET));
+    }
+
+    @Test
+    public void aHoldOnAKeysOuterBandOpensThePopup() {
+        assertFalse("1.5 dp into a key from the gap",
+            SurfaceLongPressRoute.onKeyCore(43.9f, 30, RIGHT_KEY, INSET));
+        assertFalse("1.5 dp into a key from its bottom",
+            SurfaceLongPressRoute.onKeyCore(20, 48.5f, LEFT_KEY, INSET));
+    }
+
+    @Test
+    public void aHoldOnAKeysCoreKeepsTheKeysLongPress() {
+        assertTrue("the key's centre",
+            SurfaceLongPressRoute.onKeyCore(62.4f, 30, RIGHT_KEY, INSET));
+        assertFalse("3 dp inside the key's edge is still its band",
+            SurfaceLongPressRoute.onKeyCore(45.4f, 30, RIGHT_KEY, INSET));
+        assertTrue("just past the inset",
+            SurfaceLongPressRoute.onKeyCore(46.5f, 30, RIGHT_KEY, INSET));
+    }
+
+    @Test
+    public void theBottomStripAndSideMarginOpenThePopup() {
+        assertFalse("bottom strip", SurfaceLongPressRoute.onKeyCore(20, 55, LEFT_KEY, INSET));
+        assertFalse("side margin", SurfaceLongPressRoute.onKeyCore(90, 30, RIGHT_KEY, INSET));
+        assertFalse("an empty rectangle is no key",
+            SurfaceLongPressRoute.onKeyCore(5, 5, new Box(0, 0, 0, 0), INSET));
+        assertFalse("a key too small for its inset has no core",
+            SurfaceLongPressRoute.onKeyCore(3, 3, new Box(0, 0, 6, 6), INSET));
+    }
+
+    @Test
+    public void aCoreHoldOwnsTheKeyboardsPressAndABandHoldDoesNot() {
+        // As SurfaceLongPress feeds the route: the keyboard's box is an owner only on a core.
+        float y = 1230;
+        Box key = new Box(100, 1210, 140, 1250);
+        assertTrue(SurfaceLongPressRoute.onKeyCore(120, y, key, INSET));
+        assertFalse(press(120, y, KEYBOARD).opensPopup());
+
+        assertFalse(SurfaceLongPressRoute.onKeyCore(101.5f, y, key, INSET));
+        Answer band = press(101.5f, y);
+        assertTrue(band.opensPopup());
+        assertEquals(Target.KEYBOARD, band.target());
+    }
 }

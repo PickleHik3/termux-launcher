@@ -22,7 +22,8 @@ import java.util.List;
  * its top row, the margins beside and under the rows and the gaps between keys; a Floating
  * keyboard's card with its handle row). What keeps its own long-press: app icons
  * (the App menu), extra keys, the A–Z letters (the scrub starts on the touch, so a press on them is
- * already a scrub), keyboard keys (each drawn key, not its gaps), and on the status bar the window
+ * already a scrub), keyboard keys (each drawn key's core, {@link #POPUP_KEY_CORE_INSET_DP} inside its edges;
+ * not its outer band nor the gaps), and on the status bar the window
  * chips and pinned notifications, which lift or open a menu on a hold. The terminal and Home are
  * no target at all, so their long-presses are never seen here.</p>
  *
@@ -33,6 +34,13 @@ import java.util.List;
 public final class SurfaceLongPressRoute {
 
     private SurfaceLongPressRoute() {}
+
+    /**
+     * How far inside a keyboard key's drawn rectangle its own long-press starts, on each side.
+     * The gaps between keys are about 2.4 dp, under the touch slop, so a hold aimed at a gap
+     * lands on a key; the key's outer 4 dp open the popup too.
+     */
+    public static final float POPUP_KEY_CORE_INSET_DP = 4f;
 
     /** The three surfaces a long-press can open the popup on. */
     public enum Target {
@@ -154,6 +162,19 @@ public final class SurfaceLongPressRoute {
             if (owner.contains(x, y)) return new Answer(hit, true);
         }
         return new Answer(hit, false);
+    }
+
+    /**
+     * Whether ({@code x}, {@code y}) is on a keyboard key's core: inside {@code drawnKey} (the
+     * key's drawn rectangle) inset by {@code insetPx} on each side. Only the core keeps the key's
+     * long-press (repeat, alternates); its outer band, the gaps and the margins open the popup.
+     * False for an empty rectangle or one the inset leaves empty.
+     */
+    public static boolean onKeyCore(float x, float y, @NonNull Box drawnKey, float insetPx) {
+        float inset = Math.max(0f, insetPx);
+        Box core = new Box(drawnKey.left + inset, drawnKey.top + inset,
+            drawnKey.right - inset, drawnKey.bottom - inset);
+        return core.contains(x, y);
     }
 
     /**
