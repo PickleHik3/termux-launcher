@@ -294,25 +294,38 @@ public final class LensBeadGeometry {
     public static Beads follow(@NonNull Beads rest, float offsetPx, float stillCenterX,
                                @NonNull float[] neighbourCentersX, int neighbourCount,
                                float left, float right, float scale) {
+        return Float.isNaN(stillCenterX)
+            ? follow(rest, offsetPx, NO_STILLS, 0, neighbourCentersX, neighbourCount, left, right,
+                scale)
+            : follow(rest, offsetPx, new float[] {stillCenterX}, 1, neighbourCentersX,
+                neighbourCount, left, right, scale);
+    }
+
+    private static final float[] NO_STILLS = new float[0];
+
+    /**
+     * {@link #follow(Beads, float, float[], int, float, float, float)} for a row holding tiles
+     * that are no page's and stand still while the pages move, the Drawer tile (#97) and the
+     * Command palette tile, at {@code stillCentersX} ({@code stillCount} of them, in the
+     * surface's coordinates; {@link PaletteTilePolicy#stillColumns} names their slots). Each
+     * pins the rest's bead nearest it, within a radius of it and never one another tile took,
+     * so that bead stays under its tile while every other one rides with its icon. A centre
+     * with no bead in reach, or NaN, pins nothing.
+     */
+    @NonNull
+    public static Beads follow(@NonNull Beads rest, float offsetPx,
+                               @NonNull float[] stillCentersX, int stillCount,
+                               @NonNull float[] neighbourCentersX, int neighbourCount,
+                               float left, float right, float scale) {
         float s = Float.isNaN(scale) ? 1f : Math.max(0f, Math.min(1f, scale));
         // Never quite nothing: a radius of 0 is the program's "no beads", which is the slab.
         float radius = Math.max(0.5f, rest.radiusPx * s);
         int neighbours = Math.max(0, Math.min(neighbourCount, neighbourCentersX.length));
-        int still = -1;
-        if (!Float.isNaN(stillCenterX)) {
-            float nearest = rest.radiusPx;
-            for (int i = 0; i < rest.count(); i++) {
-                float away = Math.abs(rest.centerX(i) - stillCenterX);
-                if (away <= nearest) {
-                    nearest = away;
-                    still = i;
-                }
-            }
-        }
+        boolean[] still = pinnedBeads(rest, stillCentersX, stillCount);
         float[] all = new float[rest.count() + neighbours];
         int n = 0;
         for (int i = 0; i < rest.count(); i++) {
-            float cx = rest.centerX(i) + (i == still ? 0f : offsetPx);
+            float cx = rest.centerX(i) + (still != null && still[i] ? 0f : offsetPx);
             if (cx + radius > left && cx - radius < right) all[n++] = cx;
         }
         for (int i = 0; i < neighbours; i++) {
@@ -333,6 +346,35 @@ public final class LensBeadGeometry {
         }
         Arrays.sort(kept);
         return rest.withCentres(kept, radius);
+    }
+
+    /**
+     * Which of the rest's beads the still tiles at {@code stillCentersX} pin, or null for none:
+     * for each tile in turn, the nearest bead within a radius of it that no tile took yet.
+     */
+    @Nullable
+    static boolean[] pinnedBeads(@NonNull Beads rest, @NonNull float[] stillCentersX,
+                                 int stillCount) {
+        int stills = Math.max(0, Math.min(stillCount, stillCentersX.length));
+        boolean[] pinned = null;
+        for (int t = 0; t < stills; t++) {
+            float x = stillCentersX[t];
+            if (Float.isNaN(x)) continue;
+            int nearestBead = -1;
+            float nearest = rest.radiusPx;
+            for (int i = 0; i < rest.count(); i++) {
+                if (pinned != null && pinned[i]) continue;
+                float away = Math.abs(rest.centerX(i) - x);
+                if (away <= nearest) {
+                    nearest = away;
+                    nearestBead = i;
+                }
+            }
+            if (nearestBead < 0) continue;
+            if (pinned == null) pinned = new boolean[rest.count()];
+            pinned[nearestBead] = true;
+        }
+        return pinned;
     }
 
     /**

@@ -142,6 +142,61 @@ public class SuggestionBarDrawerTileTest {
         assertEquals(centreX(drawerTile()) - row[0], tile, 1f);
     }
 
+    /**
+     * The Command palette tile is a still tile like the Drawer tile: no page's, on a bead of its
+     * own, so the row names its centre among the ones a swipe holds still, with or without the
+     * Drawer tile, and a rail names none.
+     */
+    @Test public void thePaletteTileIsAStillTileBesideTheDrawerTile() {
+        float[] stills = new float[4];
+        float[] boxes = new float[4 * 16];
+        assertEquals("no tiles, no still centres", 0, bar.stillTileCentersX(stills));
+        int[] row = new int[2];
+
+        bar.setPaletteTile(true, () -> { });
+        idle();
+        assertNotNull(paletteTile());
+        bar.getLocationOnScreen(row);
+        assertEquals("the palette alone", 1, bar.stillTileCentersX(stills));
+        assertEquals(centreX(paletteTile()) - row[0], stills[0], 1f);
+        assertBoxed(stills[0], boxes, bar.layoutIconBoxes(boxes));
+
+        for (DrawerTilePolicy.Position position : DrawerTilePolicy.Position.values()) {
+            bar.setDrawerTile(position, listener);
+            idle();
+            bar.getLocationOnScreen(row);
+            assertEquals(position + ": both tiles", 2, bar.stillTileCentersX(stills));
+            assertEquals(position + ": the Drawer tile's", centreX(drawerTile()) - row[0],
+                stills[0], 1f);
+            assertEquals(position + ": the palette's", centreX(paletteTile()) - row[0],
+                stills[1], 1f);
+            int count = bar.layoutIconBoxes(boxes);
+            assertBoxed(stills[0], boxes, count);
+            assertBoxed(stills[1], boxes, count);
+        }
+
+        bar.setPaletteTile(false, null);
+        idle();
+        assertEquals("the Drawer tile alone", 1, bar.stillTileCentersX(stills));
+        assertEquals(bar.drawerTileCenterX(), stills[0], 0f);
+
+        bar.setPaletteTile(true, () -> { });
+        bar.setVerticalForm(true);
+        idle();
+        assertEquals("a rail holds neither", 0, bar.stillTileCentersX(stills));
+    }
+
+    private static void assertBoxed(float centre, float[] boxes, int count) {
+        boolean matched = false;
+        for (int i = 0; i < count; i++)
+            matched |= Math.abs((boxes[i * 4] + boxes[i * 4 + 2]) * 0.5f - centre) < 0.5f;
+        assertTrue("the still centre " + centre + " is a beaded box's", matched);
+    }
+
+    private View paletteTile() {
+        return findNamed(bar, activity.getString(R.string.dock_command_palette_tile));
+    }
+
     private View drawerTile() {
         return findNamed(bar, activity.getString(R.string.dock_drawer_tile));
     }

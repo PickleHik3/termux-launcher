@@ -4945,6 +4945,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mDockBeadsRowDy = Float.NaN;
     private float mDockBeadsBottomPx = Float.NaN;
     private float mDockBeadsSpanLeft = Float.NaN, mDockBeadsSpanRight = Float.NaN;
+    /** Scratch for the row's still tiles (Drawer, palette), whose beads a swipe holds still. */
+    private final float[] mDockBeadStills = new float[2];
     /** Scratch for the neighbouring page's icons a swipe stages. */
     private final float[] mDockBeadNeighbours =
         new float[com.termux.app.dock.LensBeadGeometry.MAX_DRAWN_BEADS];
@@ -5069,11 +5071,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (int i = 0; i < neighbours; i++) mDockBeadNeighbours[i] += mDockBeadsRowDx;
             float left = Float.isNaN(mDockBeadsSpanLeft) ? 0f : mDockBeadsSpanLeft;
             float right = Float.isNaN(mDockBeadsSpanRight) ? Float.MAX_VALUE : mDockBeadsSpanRight;
-            // The Drawer tile is no page's: its bead stands still under it (#97).
-            float tile = row.drawerTileCenterX();
+            // The Drawer tile (#97) and the palette tile are no page's: their beads stand still
+            // under them.
+            int stills = row.stillTileCentersX(mDockBeadStills);
+            for (int i = 0; i < stills; i++) mDockBeadStills[i] += mDockBeadsRowDx;
             moving = com.termux.app.dock.LensBeadGeometry.follow(rest, row.drawnPageOffsetPx(),
-                Float.isNaN(tile) ? Float.NaN : tile + mDockBeadsRowDx, mDockBeadNeighbours,
-                neighbours, left, right, row.drawnPageFade());
+                mDockBeadStills, stills, mDockBeadNeighbours, neighbours, left, right,
+                row.drawnPageFade());
         }
         if (moving == null && mDockBeadsMoving == null) return;
         if (moving != null && moving.equals(mDockBeadsMoving)) return;

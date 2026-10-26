@@ -852,7 +852,7 @@ public final class SuggestionBarView extends GridLayout
             super.dispatchDraw(canvas);
             canvas.restore();
             drawSwipePreviewPage(canvas);
-            drawDrawerTileUnshifted(canvas);
+            drawStillTilesUnshifted(canvas);
             canvas.restoreToCount(clipSave);
             return;
         }
@@ -937,8 +937,11 @@ public final class SuggestionBarView extends GridLayout
     private int drawerTileAppSlots;
     /** Whether a long press has picked the tile up and a drag is moving it. */
     private boolean drawerTileDragging;
-    /** Whether {@link #drawChild} is drawing the tile outside a swipe's offset just now. */
-    private boolean drawingDrawerTileUnshifted;
+    /**
+     * Whether {@link #drawChild} is drawing the still tiles (the Drawer tile, the palette tile)
+     * outside a swipe's offset just now.
+     */
+    private boolean drawingStillTilesUnshifted;
 
     /**
      * The Drawer tile at {@code position}, or none for null. A change re-lays the row's slots: on a
@@ -1042,12 +1045,46 @@ public final class SuggestionBarView extends GridLayout
      * carries the pages, or NaN where the row holds none: Lens beads keep its bead there.
      */
     public float drawerTileCenterX() {
-        View shell = drawerTileSlot;
-        if (!drawerTileShown() || shell == null || shell.getVisibility() != VISIBLE
+        return drawerTileShown() ? tileCenterX(drawerTileSlot) : Float.NaN;
+    }
+
+    /**
+     * The palette tile's icon centre along the row as laid out, where it stands while a swipe
+     * carries the pages, or NaN where the row holds none: Lens beads keep its bead there.
+     */
+    public float paletteTileCenterX() {
+        return paletteTileShown() ? tileCenterX(paletteTileSlot) : Float.NaN;
+    }
+
+    /**
+     * The icon centres of the row's still tiles, the ones no page holds (the Drawer tile and the
+     * palette tile, {@link com.termux.app.dock.PaletteTilePolicy#stillColumns}), as laid out,
+     * into {@code out}; how many. A swipe or a page switch draws them where they stand, and Lens
+     * beads keep a bead under each. 0 on a rail and where the row holds neither.
+     */
+    public int stillTileCentersX(@NonNull float[] out) {
+        if (vertical) return 0;
+        int count = 0;
+        float drawer = drawerTileCenterX();
+        if (!Float.isNaN(drawer) && count < out.length) out[count++] = drawer;
+        float palette = paletteTileCenterX();
+        if (!Float.isNaN(palette) && count < out.length) out[count++] = palette;
+        return count;
+    }
+
+    /** A tile's icon centre along the row as laid out, or NaN where it is not on screen. */
+    private float tileCenterX(@Nullable View shell) {
+        if (shell == null || shell.getVisibility() != VISIBLE
             || !(shell instanceof ViewGroup) || ((ViewGroup) shell).getChildCount() == 0)
             return Float.NaN;
         View box = ((ViewGroup) shell).getChildAt(0);
         return shell.getLeft() + box.getLeft() + box.getWidth() * 0.5f;
+    }
+
+    /** Whether {@code child} is one of the row's still tiles on screen: no page's, so held still. */
+    private boolean isStillTile(@NonNull View child) {
+        return (child == drawerTileSlot && drawerTileShown())
+            || (child == paletteTileSlot && paletteTileShown());
     }
 
     /** Whether the row on screen holds the Drawer tile (a pinned page lying down). */
@@ -1187,13 +1224,13 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * A finger's page swipe draws the row's icons off their places, and the Drawer tile is no
-     * page's: it is drawn where it stands, after the pages ({@link #dispatchDraw}).
+     * A finger's page swipe draws the row's icons off their places, and the Drawer tile and the
+     * palette tile are no page's: they are drawn where they stand, after the pages
+     * ({@link #dispatchDraw}).
      */
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
-        if (child == drawerTileSlot && !drawingDrawerTileUnshifted && swipeOffsetDrawn()
-            && drawerTileShown()) return false;
+        if (!drawingStillTilesUnshifted && swipeOffsetDrawn() && isStillTile(child)) return false;
         // A crossing's morph draws the slot at the frame's icon and its share of the frame's row.
         if (slotMorph(child)) {
             int save = canvas.save();
@@ -1206,15 +1243,18 @@ public final class SuggestionBarView extends GridLayout
         return super.drawChild(canvas, child, drawingTime);
     }
 
-    /** The Drawer tile, drawn where it stands while a swipe offsets the pages. */
-    private void drawDrawerTileUnshifted(@NonNull Canvas canvas) {
-        View tile = drawerTileSlot;
-        if (tile == null || !drawerTileShown() || tile.getVisibility() != VISIBLE) return;
-        drawingDrawerTileUnshifted = true;
+    /** The still tiles (Drawer, palette), drawn where they stand while a swipe offsets the pages. */
+    private void drawStillTilesUnshifted(@NonNull Canvas canvas) {
+        drawingStillTilesUnshifted = true;
         try {
-            drawChild(canvas, tile, getDrawingTime());
+            View drawer = drawerTileSlot;
+            if (drawer != null && drawer.getVisibility() == VISIBLE && isStillTile(drawer))
+                drawChild(canvas, drawer, getDrawingTime());
+            View palette = paletteTileSlot;
+            if (palette != null && palette.getVisibility() == VISIBLE && isStillTile(palette))
+                drawChild(canvas, palette, getDrawingTime());
         } finally {
-            drawingDrawerTileUnshifted = false;
+            drawingStillTilesUnshifted = false;
         }
     }
 
@@ -1409,12 +1449,15 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void notifyIconsMoved() {
-        // A page switch slides the whole row; the Drawer tile is no page's, so it holds its place.
+        // A page switch slides the whole row; the Drawer tile and the palette tile are no page's,
+        // so they hold their places.
+        float hold = pageSwitchAnimating ? -getTranslationX() : 0f;
         View tile = drawerTileSlot;
-        if (tile != null && drawerTileShown() && !drawerTileDragging) {
-            float hold = pageSwitchAnimating ? -getTranslationX() : 0f;
-            if (tile.getTranslationX() != hold) tile.setTranslationX(hold);
-        }
+        if (tile != null && drawerTileShown() && !drawerTileDragging
+            && tile.getTranslationX() != hold) tile.setTranslationX(hold);
+        View palette = paletteTileSlot;
+        if (palette != null && paletteTileShown() && palette.getTranslationX() != hold)
+            palette.setTranslationX(hold);
         Runnable listener = iconMotionListener;
         if (listener != null) listener.run();
     }
@@ -7492,9 +7535,9 @@ public final class SuggestionBarView extends GridLayout
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child == null) continue;
-            // The Drawer tile is not an app the drop shifts; the apps before it are its children
-            // in their own order.
-            if (child == drawerTileSlot) continue;
+            // The Drawer tile and the palette tile are not apps the drop shifts; the apps before
+            // them are its children in their own order.
+            if (child == drawerTileSlot || child == paletteTileSlot) continue;
             float tx = 0f;
             if (folderDragHoverIndex >= 0 && i >= folderDragHoverIndex) {
                 tx += insertShift;
