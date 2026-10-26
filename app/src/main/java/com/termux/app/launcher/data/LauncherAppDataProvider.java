@@ -168,7 +168,7 @@ public final class LauncherAppDataProvider {
     private void addLauncherEntries(@NonNull Snapshot snapshot) {
         addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.terminal(),
             context.getString(com.termux.R.string.launcher_entry_terminal));
-        if (!listsLinuxApps(com.termux.BuildConfig.X11_SERVER, showLinuxApps())) return;
+        if (!listsLinuxApps(com.termux.app.x11.X11ServerSupport.isAvailable(context), showLinuxApps())) return;
         addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.display(),
             context.getString(com.termux.R.string.launcher_entry_display));
     }
@@ -206,7 +206,7 @@ public final class LauncherAppDataProvider {
         synchronized (this) {
             if (!loaded) return false;
         }
-        if (!listsLinuxApps(com.termux.BuildConfig.X11_SERVER, showLinuxApps())) return false;
+        if (!listsLinuxApps(com.termux.app.x11.X11ServerSupport.isAvailable(context), showLinuxApps())) return false;
         return com.termux.app.x11.LinuxAppCatalog.signature(
             com.termux.app.x11.LinuxAppCatalog.roots()) != linuxAppsSignature;
     }
@@ -218,7 +218,7 @@ public final class LauncherAppDataProvider {
      * nothing changed, so a surface about to show the catalogue (the palette) can ask every time.
      */
     public void refreshIfLinuxAppsChanged(@Nullable Runnable onChanged) {
-        if (!com.termux.BuildConfig.X11_SERVER) return;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(context)) return;
         executor.execute(() -> {
             if (linuxAppsStale()) refreshAsync(null, onChanged);
         });
@@ -268,7 +268,7 @@ public final class LauncherAppDataProvider {
      */
     private void addLinuxApps(@NonNull Snapshot snapshot) {
         linuxAppsById = Collections.emptyMap();
-        if (!listsLinuxApps(com.termux.BuildConfig.X11_SERVER, showLinuxApps())) return;
+        if (!listsLinuxApps(com.termux.app.x11.X11ServerSupport.isAvailable(context), showLinuxApps())) return;
         List<com.termux.app.x11.LinuxAppCatalog.Root> roots = com.termux.app.x11.LinuxAppCatalog.roots();
         // Read before the scan: a file landing during it shows as a change next time, not as none.
         linuxAppsSignature = com.termux.app.x11.LinuxAppCatalog.signature(roots);

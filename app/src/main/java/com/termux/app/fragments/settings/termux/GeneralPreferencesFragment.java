@@ -99,7 +99,7 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         CharSequence[] values = context.getResources().getTextArray(R.array.settings_start_in_values);
         int offered = Math.min(entries.length, values.length);
         // Display is the list's last entry, and only a build with a display offers it.
-        if (!com.termux.BuildConfig.X11_SERVER && offered >= 3) offered = 2;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(context) && offered >= 3) offered = 2;
         java.util.List<String> valueList = new java.util.ArrayList<>(offered);
         for (int i = 0; i < offered; i++) valueList.add(values[i].toString());
         java.util.List<Integer> kept = useAs.startInChoices(valueList);

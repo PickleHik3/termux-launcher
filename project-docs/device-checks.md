@@ -562,3 +562,22 @@ Agent
   reopen the row: the summary reads "Portrait: … · Landscape: …" and nothing is ticked. Change it
   while a display is on screen, return to the launcher: the pad's mode button and the keyboard follow
   without a restart · emulator.
+
+## From dev (1.2.1), merged into pre for 1.3.0-pre.4
+- 2026-10-25 · commit "fix(display): phones whose ABI has no X server never offer or start the display"
+  · An armeabi-v7a or x86 emulator image with the universal or split APK: open the launcher and
+  Settings; there is no Display entry or Display page, no Linux apps, and no crash (libXlorie.so
+  is shipped for arm64-v8a and x86_64 only). On arm64-v8a the Display page still opens.
+- 2026-10-25 · commit "fix(x11): bump the installer so the new benchmark script is written" · On a
+  pacman Termux, `x11-gpu-setup.sh` runs in pacman mode ("Package manager: pacman"), installs the
+  Vulkan wrapper (repacked, `pacman -U` accepts it), and the virgl run reports a virgl renderer,
+  not Zink · pong over adb, with the developer's go-ahead.
+- 2026-10-24 · fix(display) graphics setup uses a private headless display · On pong, run
+  `termux-x11-gpu-setup --yes`: (1) with the Linux display on and an app open, it stays connected
+  with no reset and the glass is kept; (2) with the display off, `pgrep -af termux-x11` and
+  `ls $PREFIX/tmp/.X11-unix` show nothing left afterwards; (3) the Vulkan wrapper is downloaded,
+  tested and removed again if it lost (kept if it won), and a wrong checksum is refused · pong,
+  by hand.
+- 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
+  in landscape and portrait: repeated short and long flicks scroll it and never raise the
+  keyboard; a still tap still raises it; a slow drag under a row still clicks · pong, by hand.

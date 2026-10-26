@@ -11124,7 +11124,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxLauncherConfigInstaller.ensureInstalled(this);
             // Same for the display's and the tool store's commands: their start-up pass found no
             // prefix to write into.
-            if (com.termux.BuildConfig.X11_SERVER) {
+            if (com.termux.app.x11.X11ServerSupport.isAvailable(this)) {
                 com.termux.app.x11.X11CliInstaller.installAsync(this, result -> { });
             }
             com.termux.app.store.TlstoreInstaller.installAsync(this, result -> { });
@@ -25682,7 +25682,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * comes up on demand and its window is on the row while it is ({@link #isDisplayUp}).
      */
     public boolean isX11DisplayEnabled() {
-        return com.termux.BuildConfig.X11_SERVER && mPreferences != null;
+        return com.termux.app.x11.X11ServerSupport.isAvailable(TermuxActivity.this) && mPreferences != null;
     }
 
     /**
@@ -26550,7 +26550,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * desktop files changed or a distro was installed or removed; forced, whatever the files say.
      */
     private void refreshLinuxApps(boolean force) {
-        if (!com.termux.BuildConfig.X11_SERVER) return;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(TermuxActivity.this)) return;
         long signature = com.termux.app.x11.LinuxAppCatalog.signature(
             com.termux.app.x11.LinuxAppCatalog.roots());
         if (!force && signature == mLinuxAppsSignature) return;
@@ -27268,7 +27268,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
     private void installLinuxAppRunner() {
-        if (!com.termux.BuildConfig.X11_SERVER) return;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(TermuxActivity.this)) return;
         // A display that announces itself with no window open opens one (ADR 0008).
         mUnclaimedDisplayListener = this::claimKeptDisplay;
         com.termux.app.x11.X11DisplayReceiver.setUnclaimedListener(mUnclaimedDisplayListener);
@@ -27576,7 +27576,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.x11.X11WindowIconResolver displayWindowIcons() {
-        if (!com.termux.BuildConfig.X11_SERVER) return null;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(this)) return null;
         if (mDisplayWindowIcons == null) {
             mDisplayWindowIcons = new com.termux.app.x11.X11WindowIconResolver(getResources(),
                 (wmClass, icon, name) -> {
