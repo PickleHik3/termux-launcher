@@ -13469,6 +13469,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
         syncPromptLineInk(dockOpacity);
+        syncDockTilesInk(dockOpacity);
         // The Wall strip's clock is the status bar's and takes its ink the bar's way, from the
         // theme's roles; its tiles are the terminal scheme's. Either redraws only if it moved.
         if (mWallStripRow != null) mWallStripRow.refreshTheme();
@@ -13491,6 +13492,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
             mPromptLineInkRect));
     }
+
+    /**
+     * The apps row's Drawer tile and Command palette tile glyphs on the dock's face as measured
+     * under the row, as the extra keys' labels are: a dark theme over a light wallpaper gets dark
+     * glyphs. The row retints only when the ink moved.
+     */
+    private void syncDockTilesInk(float dockOpacity) {
+        SuggestionBarView row = mSuggestionBarView;
+        if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0 || !row.isShown()) return;
+        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        row.getLocationOnScreen(mDockTilesInkLocation);
+        mDockTilesInkRect.set(mDockTilesInkLocation[0], mDockTilesInkLocation[1],
+            mDockTilesInkLocation[0] + row.getWidth(), mDockTilesInkLocation[1] + row.getHeight());
+        row.setTileFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mDockTilesInkRect),
+            mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
+    }
+
+    @NonNull private final Rect mDockTilesInkRect = new Rect();
+    @NonNull private final int[] mDockTilesInkLocation = new int[2];
 
     @NonNull private final Rect mPromptLineInkRect = new Rect();
     @NonNull private final int[] mPromptLineInkLocation = new int[2];

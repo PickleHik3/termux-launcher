@@ -69,6 +69,25 @@ public final class WallpaperInk {
     }
 
     /**
+     * The glyph of a tile on the dock's apps row (the Drawer tile, the Command palette tile): the
+     * tile's shell, the folders' wash, laid over the dock's face under the row, and on that
+     * {@link #stripInk} of the theme's ink. A dark theme's pale glyph on a dock over a light
+     * wallpaper turns dark; on the theme's own glass it stays the theme's. Before the dock's face
+     * has been measured ({@code dockFace} transparent) the theme's ink stands.
+     *
+     * @param dockFace the opaque face measured under the row ({@link ChromeInk#faceUnder}), or
+     *     {@link Color#TRANSPARENT} before a sample
+     * @param shellFill the tile shell's own fill, translucent
+     */
+    @ColorInt
+    public static int tileInk(@ColorInt int dockFace, @ColorInt int shellFill,
+                              @ColorInt int themeInk, double target) {
+        if (Color.alpha(dockFace) == 0) return themeInk;
+        int face = OnGlass.opaque(OnGlass.composite(shellFill, OnGlass.opaque(dockFace)));
+        return stripInk(face, themeInk, target);
+    }
+
+    /**
      * Text written straight on the wallpaper with no theme colour of its own to keep — Home's
      * icon labels, the empty page's hint, the page dots: whichever of the two inks contrasts more
      * with the wallpaper under it. A light wallpaper takes {@code darkInk} in either theme.
