@@ -259,6 +259,8 @@ public final class ChromeInk {
     @ColorInt private int mBaseColor;
     @ColorInt private int mAccentColor;
     @ColorInt private int mDimColor;
+    /** {@link ChromeRenderer.Surfaces#wallpaperHintColor} as last read. */
+    @ColorInt private int mHintColor;
     private boolean mModeRead;
 
     @NonNull private final Rect mTmpSampleRect = new Rect();
@@ -662,6 +664,34 @@ public final class ChromeInk {
     public int widgetWallpaper(@NonNull Rect rootRect) {
         readMode();
         return OnGlass.backdrop(widgetSample(rootRect).wallpaper, mDimColor, Color.TRANSPARENT);
+    }
+
+    /**
+     * The wallpaper under {@code rootRect} under the launcher's dim, opaque, read afresh through
+     * the one sampler; {@link Color#TRANSPARENT} while nothing can be read there. For text drawn
+     * straight on the wallpaper (editor-redesign §8: Home's labels, the page dots, the empty
+     * page's hint), which keeps its own answer against {@link #wallpaperGeneration} rather than
+     * crowding the widgets' memo.
+     */
+    @ColorInt
+    public int wallpaperSample(@NonNull Rect rootRect) {
+        readMode();
+        int read = mCache.sampleUncached(rootRect);
+        if (Color.alpha(read) == 0) return Color.TRANSPARENT;
+        return OnGlass.backdrop(read, mDimColor, Color.TRANSPARENT);
+    }
+
+    /** What {@link #wallpaperSample} stands for while it reads nothing: the fallback, under the dim. */
+    @ColorInt
+    public int wallpaperFallback() {
+        readMode();
+        return OnGlass.backdrop(mCache.fallbackWallpaper(), mDimColor, Color.TRANSPARENT);
+    }
+
+    /** Moves on every {@link #invalidate}: a new wallpaper, palette, dim or mode. */
+    public int wallpaperGeneration() {
+        readMode();
+        return mCache.generation();
     }
 
     /** The widget's remembered entry at {@code rootRect}, sampled when it has not been read yet. */
@@ -1437,9 +1467,8 @@ public final class ChromeInk {
     @ColorInt
     private int flatFace(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
         BandGlass glass = glassFor(band);
-        int under = OnGlass.backdrop(mCache.wallpaperUnder(band, rootRect), mDimColor, Color.TRANSPARENT);
-        return OnGlass.opaque(OnGlass.composite(OnGlass.withAlpha(baseOf(glass),
-            ChromePolicy.dockGlassBaseAlpha(glass.opacity)), under));
+        return WallpaperInk.faceOf(mCache.wallpaperUnder(band, rootRect), mDimColor, baseOf(glass),
+            glass.opacity);
     }
 
     /**
@@ -1624,19 +1653,23 @@ public final class ChromeInk {
         int base = mSurfaces.glassBaseColor();
         int accent = mSurfaces.accentColor();
         int dim = mSurfaces.wallpaperDimColor();
+        int hint = mSurfaces.wallpaperHintColor();
         LegibilityLevel level = mSurfaces.legibilityLevel();
         if (mModeRead && base == mBaseColor && accent == mAccentColor && dim == mDimColor
-                && level == mLevel) {
+                && hint == mHintColor && level == mLevel) {
             return;
         }
         mBaseColor = base;
         mAccentColor = accent;
         mDimColor = dim;
+        mHintColor = hint;
         mLevel = level;
         mModeRead = true;
-        // Before anything is measured a band is answered with the mode's nominal glass, which is
-        // exactly what the app drew before this round: no flash, and no crash.
-        mCache.setFallbackWallpaper(base);
+        // Before anything is measured a band is answered with the wallpaper as the system
+        // describes it, else with the mode's nominal glass, which is what the app drew before
+        // this round: no flash, and no crash. Without the description, bare text over a light
+        // wallpaper kept the dark theme's pale ink (editor-redesign §8).
+        mCache.setFallbackWallpaper(WallpaperInk.fallbackWallpaper(base, hint));
         invalidate();
     }
 

@@ -1718,6 +1718,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return resolveWallpaperBackdropDimColor();
         }
 
+        @Override public int wallpaperHintColor() {
+            return resolveWallpaperHintColor();
+        }
+
         @Override public boolean roundedDockStyle() {
             return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         }
@@ -4599,13 +4603,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * The system's description of its wallpaper as one colour ({@code WallpaperInk#hintColor}),
+     * read when the listener registers and whenever the system reports new colours; transparent
+     * before then, below API 27, and when the system said nothing.
+     */
+    @androidx.annotation.ColorInt private int mSystemWallpaperHint = Color.TRANSPARENT;
+
+    /**
+     * What the chrome's ink assumes the wallpaper is until it has read one (editor-redesign §8):
+     * the system's description while the launcher shows the system wallpaper, which is the case
+     * where the launcher may not be able to read it; transparent otherwise, so the launcher's own
+     * picture is never described by someone else's colours.
+     */
+    @androidx.annotation.ColorInt
+    private int resolveWallpaperHintColor() {
+        return shouldUseWallpaperPassthroughMode() ? mSystemWallpaperHint : Color.TRANSPARENT;
+    }
+
+    private void readSystemWallpaperHint(@Nullable WallpaperColors colors) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1 || colors == null) {
+            mSystemWallpaperHint = Color.TRANSPARENT;
+            return;
+        }
+        boolean darkText = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && (colors.getColorHints() & WallpaperColors.HINT_SUPPORTS_DARK_TEXT) != 0;
+        int primary = colors.getPrimaryColor().toArgb();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            // No public hint before S: the primary colour's own side is the best there is.
+            darkText = androidx.core.graphics.ColorUtils.calculateLuminance(primary) > 0.5d;
+        }
+        mSystemWallpaperHint = com.termux.app.chrome.WallpaperInk.hintColor(primary, darkText);
+    }
+
     private void registerWallpaperColorsChangedListener() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1 || mWallpaperColorsChangedListener != null) {
             return;
         }
         try {
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
+            readSystemWallpaperHint(wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM));
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
+                if ((which & WallpaperManager.FLAG_SYSTEM) != 0) readSystemWallpaperHint(colors);
                 // The new id first, so nothing that runs from here on cuts a frame for the old one.
                 com.termux.app.chrome.WallpaperSourceFacts facts = refreshWallpaperSourceFacts();
                 // A wallpaper set outside the launcher is still a wallpaper change: tagged so the
@@ -9615,6 +9654,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzBarHosts();
             syncOffDockPlank(arrangement().layout());
             refreshOffDockGlass();
+            // The extra keys or the letters standing on another edge, with nothing left on the
+            // dock, still take their ink from the face under them (the plank wears the dock's
+            // glass), not from the theme they were built in.
+            syncDockGlassInks(state.barAlpha);
             applyDecorNavBarSurfaceState(state);
             applyInAppKeyboardSurfaceState(state);
             mKeyboardGeometry.completePendingOpenReveal(state);

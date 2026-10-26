@@ -121,6 +121,14 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return dim;
     }
 
+    /** {@link ChromeRenderer.Surfaces#wallpaperHintColor}; transparent for none. */
+    int wallpaperHint = 0;
+
+    @Override
+    public int wallpaperHintColor() {
+        return wallpaperHint;
+    }
+
     @Override
     public int outlineColor() {
         return 0xFF808080;

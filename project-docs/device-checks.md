@@ -978,3 +978,18 @@ Agent
 Developer
 - 2026-10-26 · wave 4 · The welcome page's two choice cards: do they read as the app's segment style? · pong.
 
+
+## Wallpaper-aware ink (editor-redesign wave 4b, §8, 2026-10-26)
+
+Built on a worker branch; nothing seen on a device yet. Still owed:
+
+Agent
+- 2026-10-26 · wave 4b · Dark theme, a light still wallpaper, Use system wallpaper on: the extra keys' icons and labels and the glass-off A–Z letters are dark on both Home and the Workspace, keyboard up and down; the same with a dark wallpaper under the light theme gives pale ink · emu.
+- 2026-10-26 · wave 4b · Dock opacity 0, 10, 50 and 100 under the dark theme on a light wallpaper: the extra keys stay readable at each, theme ink only once the glass is thick enough to be the face · emu.
+- 2026-10-26 · wave 4b · Extra keys at every Position (Bottom, Top, Left, Right, Above keyboard, Rides apps row), including with nothing else left on the dock: their ink follows the wallpaper under the strip · emu.
+- 2026-10-26 · wave 4b · Home icon and folder labels: dark on a light wallpaper, white on a dark one, in both themes; Label shadow on gives a soft glow/shadow away from the ink, stronger on a mid-grey wallpaper; off gives none; a folder popup's labels keep the popup's ink · emu.
+- 2026-10-26 · wave 4b · The empty page's "Long-press to add widgets" hint and the page dots (two or more pages) read on a light wallpaper under the dark theme · emu.
+- 2026-10-26 · wave 4b · Change the wallpaper (system picker, then the launcher's own) while on Home: labels, hint, dots, extra keys and letters re-ink without a restart · emu.
+
+Developer
+- 2026-10-26 · wave 4b · Dark labels with a pale glow on a light wallpaper: does it read as Home's label, or should the shadow stay dark always? · pong.

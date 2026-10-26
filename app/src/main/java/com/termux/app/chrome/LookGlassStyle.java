@@ -147,6 +147,18 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
         return mChrome.ink().widgetWallpaper(rootRect);
     }
 
+    @Override public int wallpaperSample(@NonNull Rect rootRect) {
+        return mChrome.ink().wallpaperSample(rootRect);
+    }
+
+    @Override public int wallpaperFallback() {
+        return mChrome.ink().wallpaperFallback();
+    }
+
+    @Override public int wallpaperGeneration() {
+        return mChrome.ink().wallpaperGeneration();
+    }
+
     // ----- PaneSurfaceStyle --------------------------------------------------------------------
 
     @Override public boolean isPaneGlassActive() {

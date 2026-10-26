@@ -29,4 +29,26 @@ public interface WidgetInkSource {
 
     /** {@link ChromeInk#widgetWallpaper}. */
     @ColorInt int widgetWallpaper(@NonNull Rect rootRect);
+
+    /**
+     * {@link ChromeInk#wallpaperSample}: the wallpaper under a small rect on the page (a Home
+     * label, the page dots), read afresh, {@link android.graphics.Color#TRANSPARENT} while
+     * nothing can be read. Not memoised, so the widgets' answers are not crowded out; the caller
+     * keeps its own answer against {@link #wallpaperGeneration}.
+     */
+    @ColorInt
+    default int wallpaperSample(@NonNull Rect rootRect) {
+        return android.graphics.Color.TRANSPARENT;
+    }
+
+    /** {@link ChromeInk#wallpaperFallback}: what to assume where {@link #wallpaperSample} read nothing. */
+    @ColorInt
+    default int wallpaperFallback() {
+        return android.graphics.Color.TRANSPARENT;
+    }
+
+    /** {@link ChromeInk#wallpaperGeneration}: moves whenever every sample is stale. */
+    default int wallpaperGeneration() {
+        return 0;
+    }
 }
