@@ -1020,11 +1020,18 @@ public class SeamCrossingTest {
             assertEquals(DockStyle.WALL_STRIP, home);
             drive.picture = pictured;
             drive.slow(0f, 0.6f).slow(0.6f, 0.05f);
+            boolean sawHome = false;
             for (Step step : drive.steps) {
                 if (!step.active) continue;
-                assertSame("pictured " + pictured + " at " + step.fraction,
-                    pictured ? home : window, step.stackDesign);
+                // The design goes with the stack's dress: from the first frame when pictured, from
+                // the dip's swap (and back at it) when not.
+                DockStyle expected = step.stackDressPage == PaneWallPage.WIDGETS ? home : window;
+                if (pictured) assertSame(PaneWallPage.WIDGETS, step.stackDressPage);
+                assertSame("pictured " + pictured + " at " + step.fraction, expected,
+                    step.stackDesign);
+                sawHome |= step.stackDesign == home;
             }
+            assertTrue("the arriving design is worn on the way", sawHome);
             assertEquals(pictured, drive.crossing.stackDesignApart());
             drive.crossing.land();
             assertNull("the landing reads the committed page's again",

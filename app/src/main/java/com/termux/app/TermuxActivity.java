@@ -23394,12 +23394,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The rows it now stands carry their own half's Drawer tile, laid in while none
                 // of them shows.
                 syncDrawerTile();
-                // A pictured dip's stack is the other half's own from this frame: its slab takes
-                // that half's Dock design too, while none of it shows, so the dock rises as it
-                // rests and the settle has nothing to re-dress (SeamCrossing#stackDesign).
-                if (seam.restyle() && mCrossing.seam().stackDesignApart()) {
-                    restyleDockSurface();
-                    mDockDesignTravelledTo = mCrossing.seam().other();
+                // The slab's Dock design goes with the stack's dress, on the frame it changes
+                // halves while none of it shows — a pictured dip's first, a dip's swap, either way
+                // round — so the dock rises as it rests and the settle has nothing to re-dress
+                // (SeamCrossing#stackDesign), whether a finger, a home press or a tap started it.
+                if (seam.restyle()) {
+                    com.termux.app.wall.PaneWallPage wears =
+                        mCrossing.seam().stackDesignApart() ? mCrossing.seam().other() : null;
+                    if (wears != mDockDesignTravelledTo) {
+                        mDockDesignTravelledTo = wears;
+                        restyleDockSurface();
+                    }
                 }
                 // In this frame, so the stack's height the translation below reads is the new one.
                 mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
