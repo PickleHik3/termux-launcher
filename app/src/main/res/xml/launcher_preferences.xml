@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Apps & dock (was Dock & drawer). The dock's own page folded in here (pinned apps and the
+<!-- Dock (was Dock & drawer, then Apps & dock). The dock's own page folded in here (pinned apps and the
      usage-ranked page); Home's rows moved to Home and Set as default launcher to General. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">

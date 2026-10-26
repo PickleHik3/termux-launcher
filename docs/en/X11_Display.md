@@ -7,7 +7,7 @@ so everything you know from Termux:X11 (its flags, its preferences, `pkill termu
 same way. This page is the short route from installing the pieces to running a desktop in a proot.
 
 There is nothing to switch on. The display starts when something asks for it: a Linux app tapped in
-the app drawer, the **Display** entry under **Linux Apps**, or `termux-x11` run from a shell. Its
+the app drawer, the **Display** entry under **Linux apps**, or `termux-x11` run from a shell. Its
 window joins the end of your row, like a new window, and leaves when the display stops. There is
 one display window at most. (Older versions had a Display place on the wall, a Display switch in
 Settings, and a screen mark at the status bar's edge; the display window replaces all three.)
@@ -27,7 +27,7 @@ display can be started from any shell.
    On a pacman-based install the X11 repository is already configured, so `pacman -S
    xkeyboard-config` is all it takes; on the VAJ edition skip the first line, its repository has
    the package directly. Until the layouts are installed the display window says so.
-2. Open the bare display with **Display** under **Linux Apps** in the app drawer, or start one from
+2. Open the bare display with **Display** under **Linux apps** in the app drawer, or start one from
    any shell:
 
    ```sh
@@ -311,13 +311,13 @@ Mesa 26 picks its own path unless all three of `LIBGL_ALWAYS_SOFTWARE`, `GALLIUM
 
 ## Apps on the display
 
-The Linux apps installed in your prefix appear in the app drawer under **Linux Apps**, beside your
+The Linux apps installed in your prefix appear in the app drawer under **Linux apps**, beside your
 Android apps, with their own icons. Tapping one starts the display if it is not running, opens the
 app on it full size, and opens or brings up the display window. Nothing to type. **Display**, in
 the same list, opens the bare display. They can be pinned and searched like any other app. `pkg install firefox`, and Firefox is in the
 drawer the next time you return to the launcher.
 
-Apps installed inside a distro are listed the same way, under **Linux Apps** in the drawer, and
+Apps installed inside a distro are listed the same way, under **Linux apps** in the drawer, and
 the launcher can set a distro up for you; see [Linux apps from a distro](Linux_Apps_From_A_Distro.md).
 An app whose menu entry asks for a terminal opens in a new terminal window, right after the current
 one, rather than on the display.

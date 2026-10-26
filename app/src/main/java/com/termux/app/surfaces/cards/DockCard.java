@@ -70,7 +70,7 @@ public final class DockCard {
             R.string.editor_dock_option_notification_dots, 0),
         QUICK_REPLY(R.drawable.ic_ms_swipe_up_alt, R.string.editor_dock_option_quick_reply,
             R.string.editor_dock_option_quick_reply_hint),
-        MONOCHROME(R.drawable.ic_ms_filter_b_and_w, R.string.editor_dock_option_monochrome, 0);
+        MONOCHROME(R.drawable.ic_ed_monochrome, R.string.editor_dock_option_monochrome, 0);
 
         @DrawableRes final int glyph;
         @StringRes final int word;

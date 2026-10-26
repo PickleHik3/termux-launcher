@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.launcher.home.HomeSettings;
 
 /**
- * The Settings › Dock &amp; drawer rows added with the settings restructure's third wave, stored in
+ * The Settings › Dock rows added with the settings restructure's third wave, stored in
  * the app's default preferences beside Home's and read only through here. Every default is the
  * drawer as it was, so an install that never opens the rows sees no change and nothing is pinned.
  *
