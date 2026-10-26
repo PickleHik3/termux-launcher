@@ -67,6 +67,16 @@ public class SettingsActivity extends AppCompatActivity implements
      */
     public static final String EXTRA_INITIAL_PLACE = "settings_initial_place";
     public static final String EXTRA_SCROLL_TO_KEY = "settings_scroll_to_key";
+    /**
+     * Which section chip a page should open on: a {@code PreferenceCategory}'s key. The
+     * Appearance editor's chips land on a section this way (Home's Gestures).
+     */
+    public static final String EXTRA_SECTION_KEY = "settings_section_key";
+    /**
+     * The page was opened from the Appearance editor, which is still open under Settings: a
+     * row that would open the editor goes back to it instead of opening it again.
+     */
+    public static final String EXTRA_FROM_EDITOR = "settings_from_editor";
 
     /** SharedPreferences key for the JSON stack {@link SettingsBackStackState} serializes. */
     static final String PREFS_KEY_BACK_STACK_STATE = "settings_back_stack_state_v1";
@@ -143,10 +153,14 @@ public class SettingsActivity extends AppCompatActivity implements
     static Bundle deepLinkArguments(@NonNull Intent intent) {
         String place = intent.getStringExtra(EXTRA_INITIAL_PLACE);
         String scrollToKey = intent.getStringExtra(EXTRA_SCROLL_TO_KEY);
-        if (place == null && scrollToKey == null) return null;
+        String section = intent.getStringExtra(EXTRA_SECTION_KEY);
+        boolean fromEditor = intent.getBooleanExtra(EXTRA_FROM_EDITOR, false);
+        if (place == null && scrollToKey == null && section == null && !fromEditor) return null;
         Bundle arguments = new Bundle();
         if (place != null) arguments.putString(EXTRA_INITIAL_PLACE, place);
         if (scrollToKey != null) arguments.putString(EXTRA_SCROLL_TO_KEY, scrollToKey);
+        if (section != null) arguments.putString(EXTRA_SECTION_KEY, section);
+        if (fromEditor) arguments.putBoolean(EXTRA_FROM_EDITOR, true);
         return arguments;
     }
 

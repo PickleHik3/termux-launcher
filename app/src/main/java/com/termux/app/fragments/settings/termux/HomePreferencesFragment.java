@@ -34,9 +34,16 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         super.onCreatePreferences(savedInstanceState, rootKey);
         Preference layout = findPreference("home_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
+            if (openedFromEditor()) {
+                // The editor that opened this page is still open under it, on the Home card:
+                // going back lands there instead of opening a second one over Settings.
+                if (getActivity() != null) getActivity().finish();
+                return true;
+            }
             SettingsEditorDoors.openEditor(this, row, com.termux.app.surfaces.EditorDoor.SETTINGS_HOME);
             return true;
         });
+        adoptIconSizePreset();
         HomeGesturesRows.bind(this);
         offerDisplayStartIn();
         Preference lock = findPreference(HomeSettings.KEY_LAYOUT_LOCKED);
@@ -51,6 +58,26 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
                 SettingsEditorDoors.open(this, row, SettingsEditorDoors.homePagesEditorIntent(context));
             return true;
         });
+    }
+
+    /** Whether the Appearance editor opened this page (its Gestures or Edit pages chip). */
+    private boolean openedFromEditor() {
+        Bundle arguments = getArguments();
+        return arguments != null && arguments.getBoolean(
+            com.termux.app.activities.SettingsActivity.EXTRA_FROM_EDITOR, false);
+    }
+
+    /**
+     * Icon size is one of three presets now (editor-redesign §6); a percentage stored before
+     * reads as the preset nearest it, and is written back as that preset so the list shows it.
+     */
+    private void adoptIconSizePreset() {
+        ListPreference size = findPreference(HomeSettings.KEY_ICON_SCALE);
+        if (size == null) return;
+        String stored = size.getValue();
+        com.termux.app.launcher.widget.HomeIconSize preset =
+            com.termux.app.launcher.widget.HomeIconSize.fromStored(stored);
+        if (!preset.value.equals(stored)) size.setValue(preset.value);
     }
 
     /** Start in offers Display only on a build that has a display; it is the list's last entry. */
