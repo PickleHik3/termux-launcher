@@ -37,13 +37,15 @@ public final class GuiAppsSetupGuide {
     public static java.util.function.BooleanSupplier fcitx5Installed = FCITX5_ON_DISK;
 
     /**
-     * Whether Linux apps are set up as far as fcitx5-backed features care: fcitx5 is installed,
-     * not merely the guide's command copied. An edition with no guide (nix) has nothing to wait
+     * Whether Linux apps are set up as far as fcitx5-backed features care: the guide's command was
+     * copied (the same fact the Linux apps row's "Not set up yet" reads) and fcitx5 is installed.
+     * A stray fcitx5 left in the prefix alone does not count. An edition with no guide (nix) has nothing to wait
      * for, so it counts as set up.
      */
     public static boolean isSetUp(@NonNull Context context) {
         TourEdition edition = TourEdition.of(context.getPackageName());
-        return GuiAppsSetup.routesFor(edition).isEmpty() || fcitx5Installed.getAsBoolean();
+        if (GuiAppsSetup.routesFor(edition).isEmpty()) return true;
+        return preferences(context).getBoolean(KEY_COPIED, false) && fcitx5Installed.getAsBoolean();
     }
 
     /** One screen of the guide. */
