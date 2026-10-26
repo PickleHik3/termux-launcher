@@ -3289,7 +3289,7 @@
     <string name="help_term_style_title">Docked or Floating</string>
     <string name="help_term_style_definition">Docked joins the bars into one frame of glass; Floating gives each its own card.</string>
     <string name="help_term_tray_title">Hidden elements</string>
-    <string name="help_term_tray_definition">Bars you hid with the eye on their card. They wait at the side of the editor, and a tap opens a bar\'s card to bring it back.</string>
+    <string name="help_term_tray_definition">Bars hidden with the eye wait at the side of the editor; tap one to open its card and bring it back.</string>
     <string name="help_term_pinned_title">Pinned notification</string>
     <string name="help_term_pinned_definition">A notification card beside the clock, kept there by one of your rules.</string>
     <string name="help_term_dictation_title">Dictation</string>
