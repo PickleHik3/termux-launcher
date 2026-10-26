@@ -17174,6 +17174,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setDrawerTile(on ? (store != null ? store.drawerTilePosition()
                 : com.termux.app.dock.DrawerTilePolicy.DEFAULT) : null,
             on ? mDrawerTileListener : null);
+        syncPaletteTile(bar);
+    }
+
+    // ------------------------------------------------------------------ Command palette tile
+    //
+    // The Command palette button (Dock card Options, pref dock_command_palette_button, one switch
+    // for both halves): the apps row's trailing slot (PaletteTilePolicy), with any Dock design.
+    // A tap opens the palette with the keyboard raised, as the Search field's does.
+
+    @Nullable private android.content.SharedPreferences mPaletteTileStore;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
+        mPaletteTileKnob = (preferences, key) -> {
+            if (com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON.equals(key)
+                && mSuggestionBarView != null) {
+                // The row takes or gives back the slot, and the dock is dressed again (beads).
+                restyleDockSurface();
+            }
+        };
+
+    private void syncPaletteTile(@NonNull SuggestionBarView bar) {
+        android.content.SharedPreferences store =
+            mPreferences == null ? null : mPreferences.getSharedPreferences();
+        if (store != null && mPaletteTileStore != store) {
+            if (mPaletteTileStore != null)
+                mPaletteTileStore.unregisterOnSharedPreferenceChangeListener(mPaletteTileKnob);
+            store.registerOnSharedPreferenceChangeListener(mPaletteTileKnob);
+            mPaletteTileStore = store;
+        }
+        boolean on = store == null
+            ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
+            : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+                com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
+        bar.setPaletteTile(on, on ? () -> getCommandPaletteController().openFromField(null, true)
+            : null);
     }
 
     /**
