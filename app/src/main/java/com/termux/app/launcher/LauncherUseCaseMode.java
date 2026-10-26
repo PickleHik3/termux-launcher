@@ -1,5 +1,7 @@
 package com.termux.app.launcher;
 
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -65,9 +67,9 @@ public final class LauncherUseCaseMode {
 
     private LauncherUseCaseMode() {}
 
-    /** Whether this build carries the display server, and so may offer {@link #MODE_DISPLAY}. */
-    public static boolean isDisplayOffered() {
-        return com.termux.BuildConfig.X11_SERVER;
+    /** Whether this install can run the display server, and so may offer {@link #MODE_DISPLAY}. */
+    public static boolean isDisplayOffered(@NonNull Context context) {
+        return com.termux.app.x11.X11ServerSupport.isAvailable(context);
     }
 
     /** The modes the picker offers, in order; the display only in a build that carries one. */
@@ -86,8 +88,9 @@ public final class LauncherUseCaseMode {
      * terminal-only user wants it more, not less.
      */
     @NonNull
-    public static String currentMode(@NonNull TermuxAppSharedPreferences preferences) {
-        return currentMode(preferences, isDisplayOffered());
+    public static String currentMode(@NonNull Context context,
+                                     @NonNull TermuxAppSharedPreferences preferences) {
+        return currentMode(preferences, isDisplayOffered(context));
     }
 
     @NonNull
@@ -126,13 +129,15 @@ public final class LauncherUseCaseMode {
     }
 
     public static boolean isTerminalOnly(@NonNull TermuxAppSharedPreferences preferences) {
-        return MODE_TERMINAL.equals(currentMode(preferences));
+        // Terminal does not depend on whether the display is offered, so no context is needed.
+        return MODE_TERMINAL.equals(currentMode(preferences, false));
     }
 
     /** Applies a mode with this build's display on offer; see {@link #applyMode(TermuxAppSharedPreferences, String, boolean)}. */
-    public static boolean applyMode(@NonNull TermuxAppSharedPreferences preferences,
+    public static boolean applyMode(@NonNull Context context,
+                                    @NonNull TermuxAppSharedPreferences preferences,
                                     @Nullable String mode) {
-        return applyMode(preferences, mode, isDisplayOffered());
+        return applyMode(preferences, mode, isDisplayOffered(context));
     }
 
     /**

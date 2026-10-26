@@ -27,7 +27,8 @@ clipboard, a notice tells you it is there, and Settings closes so the terminal i
 it and press Enter.
 
 For a full Linux, pick a **Linux Distro** first: Debian, Ubuntu or Arch Linux, Debian if you are not
-sure. The pasted command installs the distro if you have none, then asks you, in the terminal, for a
+sure. On arm64 phones the setup installs Arch from the `menci/archlinuxarm` image, because the
+Docker `archlinux` image is amd64-only. The pasted command installs the distro if you have none, then asks you, in the terminal, for a
 username and a password for your account inside it. The password is only ever typed there; the
 launcher never stores it. The username is kept so the launcher knows which account your apps belong
 to, which is what lets a tap on a Linux app open as you. The same command adds the fonts a fresh

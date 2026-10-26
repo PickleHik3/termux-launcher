@@ -61,6 +61,13 @@ public final class GuiAppsSetup {
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
 
+    /**
+     * The Arch image for arm64 phones. The official {@code archlinux} image is amd64-only, so
+     * proot-distro 5.x installs Arch Linux ARM from this multi-arch image, rebuilt daily and the
+     * one upstream points to (termux/proot-distro issue 672). It ships its own pacman keyring.
+     */
+    private static final String ARCH_ARM_IMAGE = "menci/archlinuxarm";
+
     /** The one line the whole thing ends on, so the user knows it worked and where to look. */
     public static final String DONE_LINE =
         "Done. Your apps appear in the app drawer under Linux apps.";
@@ -360,6 +367,22 @@ public final class GuiAppsSetup {
     }
 
     /**
+     * The step that fetches the container. Arch is the one distro with no image for arm64 on
+     * Docker Hub, so on an arm64 phone it comes from an Arch Linux ARM image, under the same name.
+     */
+    @NonNull
+    static String installStep(@NonNull Distro distro) {
+        if (distro != Distro.ARCH) return "proot-distro install " + distro.alias;
+        return "{\n"
+            + "if [ \"$(uname -m)\" = aarch64 ]; then\n"
+            + "proot-distro install " + ARCH_ARM_IMAGE + " --name " + distro.alias + "\n"
+            + "else\n"
+            + "proot-distro install " + distro.alias + "\n"
+            + "fi\n"
+            + "}";
+    }
+
+    /**
      * The whole distro route as one command.
      *
      * <p>It is wrapped in a subshell for two reasons. {@code set -e} inside it stops at the first
@@ -386,7 +409,7 @@ public final class GuiAppsSetup {
             .append(" >/dev/null 2>&1 || { pkg install -y x11-repo >/dev/null 2>&1 || true; "
                 + "pkg install -y ").append(WINDOW_MANAGER_PACKAGE).append("; }\n");
         out.append("[ -d \"").append(CONTAINERS_PATH).append('/').append(distro.alias)
-            .append("/rootfs\" ] || proot-distro install ").append(distro.alias).append('\n');
+            .append("/rootfs\" ] || ").append(installStep(distro)).append('\n');
         // The name is asked for out here, not inside the container: the container is entered once,
         // and a name that was refused would mean entering it again.
         out.append("LUSER=\n");

@@ -11,7 +11,8 @@
 #   2. Lists the ways that chip can be used, from the most promising to "no acceleration".
 #   3. Brings the installed packages up to date, then installs the small test program and the
 #      driver packages for each way (remembering which were already there).
-#   4. Starts a private display for the tests, so nothing you have open is disturbed.
+#   4. Starts a private, invisible display for the tests. The display you use is never touched:
+#      if it is on, it stays connected; if it is off, nothing is left running afterwards.
 #   5. Tries each way with a short 3D test, hardest scenes first. A way passes only if it
 #      really uses the graphics chip, finishes without crashing, and is clearly faster than
 #      the no-acceleration baseline.
@@ -23,9 +24,9 @@
 #   --keep        leave every installed package in place afterwards
 #   --skip-proot  do not test inside the Debian container
 #   --yes         do not pause for confirmation before installing anything
-#   --display=N   use display :N for the tests (default :7)
+#   --display=N   start looking for a free display for the tests at :N (default :7)
 #
-# Nothing here changes the launcher's settings. The launcher runs a Linux app with the
+# Nothing here changes the launcher's settings, and the test display never appears on screen. The launcher runs a Linux app with the
 # profile whose driver packages are installed, so after this script only the winner's
 # packages remain and the drawer uses it on its own.
 
@@ -72,19 +73,84 @@ result() { printf '   -> %s\n' "$*"; }
 # ---------------------------------------------------------------------------------------------
 # Termux comes with either apt (the default) or pacman. Both are driven the same way here, and
 # neither ever gets to ask a question.
-if command -v pacman >/dev/null && [ -f "$PREFIX/etc/pacman.conf" ] && ! command -v dpkg >/dev/null; then PM=pacman; else PM=apt; fi
+#
+# Which one is decided by what Termux itself says it uses, not by which tools happen to be
+# installed: a pacman Termux can have the dpkg package too, with an empty dpkg database.
+# TERMUX_APP_PACKAGE_MANAGER (apt or pacman) is set inside the app's own shells,
+# TERMUX_MAIN_PACKAGE_FORMAT (debian or pacman) in a login over ssh; failing both, the package
+# database that actually holds packages decides.
+detect_pm() {
+  case ${TERMUX_APP_PACKAGE_MANAGER:-} in apt) echo apt; return ;; pacman) echo pacman; return ;; esac
+  case ${TERMUX_MAIN_PACKAGE_FORMAT:-} in debian) echo apt; return ;; pacman) echo pacman; return ;; esac
+  if command -v pacman >/dev/null && [ -n "$(ls -A "$PREFIX/var/lib/pacman/local" 2>/dev/null)" ]; then echo pacman; return; fi
+  if command -v apt-get >/dev/null && [ -s "$PREFIX/var/lib/dpkg/status" ]; then echo apt; return; fi
+  if command -v pacman >/dev/null && [ -f "$PREFIX/etc/pacman.conf" ] && ! command -v dpkg >/dev/null; then echo pacman; else echo apt; fi
+}
+PM=$(detect_pm)
+# apt never asks: no debconf dialogs, and a configuration file the user edited is kept without
+# the dpkg question about it. Packages go straight through apt-get, not "pkg", whose wrapper
+# would pick a mirror and refresh the lists again on every call.
+export DEBIAN_FRONTEND=noninteractive
+APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 installed_before() {
   if [ $PM = pacman ]; then pacman -Qq "$1" >/dev/null 2>&1
   else dpkg -s "$1" 2>/dev/null | grep -q '^Status: install ok installed'; fi
 }
 # A full upgrade before anything is added: installing onto stale libraries (or pacman's -Sy
 # without -u) leaves packages built against versions the phone does not have.
-pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else pkg update -y && pkg upgrade -y; fi; }
+pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else apt-get update && apt-get "${APT_OPTS[@]}" full-upgrade; fi; }
 pm_refresh() { if [ $PM = pacman ]; then pacman -Sy --noconfirm; else apt-get update; fi; }
-pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else pkg install -y "$@"; fi; }
-pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else pkg uninstall -y "$@" && apt-get autoremove -y; fi; }
+pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else apt-get install "${APT_OPTS[@]}" "$@"; fi; }
+pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else apt-get remove "${APT_OPTS[@]}" "$@" && apt-get autoremove "${APT_OPTS[@]}"; fi; }
 # With apt the X11 packages live in a repository that is itself a package; pacman has it built in.
 REPO_PKG=""; [ $PM = apt ] && REPO_PKG=x11-repo
+
+# vulkan-wrapper-android is in none of Termux's package sources, so it comes as a pinned prebuilt
+# download that must match its checksum. Returns 0 once it is installed.
+# Credit: the wrapper driver is xMeM's (Mesa, MIT core licence; the package installs its
+# license.rst), this build was packaged by lfdevs and is published by sabamdarif/termux-desktop.
+# None of termux-desktop's scripts are used here. See THIRD_PARTY_NOTICES.md.
+VKW_BASE=https://github.com/sabamdarif/termux-desktop/releases/download/vulkan-wrapper-android_25.0.0-3
+# The pinned pacman file is not one pacman reads as it is: its entries start with "./", so pacman
+# finds no metadata in it, and its version has no release number. Once the checksum has matched,
+# it is packed again the way makepkg packs, with the release added and nothing else changed.
+# Takes the downloaded file, works in "<file>.repack" and prints the new file's path.
+repack_wrapper() {
+  local dir=$1.repack out=$1.repack/vulkan-wrapper-android-25.0.0-3.pkg.tar
+  mkdir "$dir" && mkdir "$dir/pkg" && tar -xf "$1" -C "$dir/pkg" || return 1
+  [ -f "$dir/pkg/.PKGINFO" ] || return 1
+  sed -i 's/^pkgver = 25\.0\.0$/pkgver = 25.0.0-3/' "$dir/pkg/.PKGINFO"
+  (cd "$dir/pkg" && tar -cf "$out" .PKGINFO .BUILDINFO .MTREE data) || return 1
+  echo "$out"
+}
+install_vulkan_wrapper() {
+  local arch file sum rc
+  arch=$(uname -m)
+  case "$PM:$arch" in
+    pacman:aarch64) file=vulkan-wrapper-android_25.0.0-3-aarch64.pkg.tar.xz; sum=407a024fe25c37e34e83d32a199eb82e204aa1c80f391c5eecc88d5d4ca98f96 ;;
+    pacman:arm*) file=vulkan-wrapper-android_25.0.0-3-arm.pkg.tar.xz; sum=dec9d90eed2cb4d5e21acd665661e3f20476d13711b9c27eb38d9c276a3d4890 ;;
+    apt:aarch64) file=vulkan-wrapper-android_25.0.0-3_aarch64.deb; sum=fc11784fee6a553eae78b30a4bff267981b735be7b1d4fac4e894e09be8058ca ;;
+    apt:arm*) file=vulkan-wrapper-android_25.0.0-3_arm.deb; sum=2fbbf12d692534e640d270faa8f840c08ef0d38a65cbb191dd1bf896a32b923f ;;
+    *) detail "No build of the Vulkan wrapper exists for this phone ($arch)."; return 1 ;;
+  esac
+  VK_FILE=$TMPDIR/$file
+  detail "Downloading the Vulkan wrapper."
+  if ! curl -fsSL --retry 2 -o "$VK_FILE" "$VKW_BASE/$file" >>"$LOG" 2>&1; then
+    detail "The Vulkan wrapper could not be downloaded."; rm -f "$VK_FILE"; VK_FILE=""; return 1
+  fi
+  if [ "$(sha256sum "$VK_FILE" | cut -d' ' -f1)" != "$sum" ]; then
+    detail "The downloaded Vulkan wrapper does not match its checksum, so it was not installed."
+    rm -f "$VK_FILE"; VK_FILE=""; return 1
+  fi
+  if [ $PM = pacman ]; then
+    local repacked
+    repacked=$(repack_wrapper "$VK_FILE") && pacman -U --noconfirm "$repacked"
+  else apt-get install "${APT_OPTS[@]}" "$VK_FILE"; fi
+  rc=$?
+  rm -rf "$VK_FILE" "$VK_FILE.repack"; VK_FILE=""
+  [ $rc = 0 ] && return 0
+  return 1
+}
 
 # Keep track of what we install so it can be removed again. A package that was already on the
 # phone before we started is never touched.
@@ -95,7 +161,9 @@ install_pkgs() {
   [ ${#missing[@]} -eq 0 ] && return 0
   detail "Installing: ${missing[*]}"
   # On the terminal, not in the log: an install can take minutes and must not look stuck.
-  if pm_install "${missing[@]}"; then
+  local repo=()
+  for p in "${missing[@]}"; do [ "$p" = vulkan-wrapper-android ] || repo+=("$p"); done
+  if { [ ${#repo[@]} -eq 0 ] || pm_install "${repo[@]}"; } && { [[ " ${missing[*]} " != *" vulkan-wrapper-android "* ]] || install_vulkan_wrapper; }; then
     WE_INSTALLED+=("${missing[@]}")
     return 0
   fi
@@ -106,13 +174,24 @@ install_pkgs() {
 
 # Background helpers we start and must stop again.
 SERVER_PID=""; VIRGL_PID=""
+VK_FILE=""
 stop_virgl()   { [ -n "$VIRGL_PID" ] && kill "$VIRGL_PID" 2>/dev/null; VIRGL_PID=""; pkill -f virgl_test_server_android 2>/dev/null; true; }
+# Stops only the display this run started. The termux-x11 command execs into the server, so
+# SERVER_PID is the server itself; the pattern below is the fallback, and names this run's
+# display number, so it cannot match the one you use.
 stop_display() {
-  [ -n "$SERVER_PID" ] && { kill "$SERVER_PID" 2>/dev/null; sleep 1; rm -f "$TMPDIR/.X11-unix/X$DISPLAY_NO"; }
+  if [ -n "$SERVER_PID" ]; then
+    kill "$SERVER_PID" 2>/dev/null
+    for _ in 1 2 3 4 5 6; do kill -0 "$SERVER_PID" 2>/dev/null || break; sleep 0.5; done
+    kill -0 "$SERVER_PID" 2>/dev/null && kill -9 "$SERVER_PID" 2>/dev/null
+    pkill -f "termux-x11 .* :$DISPLAY_NO -ac" 2>/dev/null
+    rm -f "$TMPDIR/.X11-unix/X$DISPLAY_NO" "$HOME/.tmp/.X11-unix/X$DISPLAY_NO"
+  fi
   SERVER_PID=""; true
 }
-cleanup_processes() { stop_virgl; stop_display; }
+cleanup_processes() { stop_virgl; stop_display; [ -n "$VK_FILE" ] && rm -rf "$VK_FILE" "$VK_FILE.repack"; true; }
 trap cleanup_processes EXIT
+trap 'exit 130' INT TERM HUP
 
 # ---------------------------------------------------------------------------------------------
 step 1 "Looking at the phone's graphics chip"
@@ -150,7 +229,7 @@ HELPER[turnip-zink]="-"
 WHY[turnip-zink]="the open Adreno driver (Turnip) with OpenGL on top (Zink). Usually the fastest on Qualcomm phones."
 
 PKGS[virgl]="mesa virglrenderer-android"
-ENV[virgl]="GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2 MESA_NO_ERROR=1 LIBGL_DRI3_DISABLE=1"
+ENV[virgl]="GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2 MESA_NO_ERROR=1 LIBGL_DRI3_DISABLE=1 LIBGL_KOPPER_DISABLE=1"
 HELPER[virgl]="virgl_test_server_android"
 WHY[virgl]="forwards OpenGL to the phone's own driver through a helper program."
 
@@ -160,6 +239,7 @@ HELPER[virgl-angle]="virgl_test_server_android --angle-gl"
 WHY[virgl-angle]="like virgl, but through Google's ANGLE, for chips whose own OpenGL driver misbehaves."
 
 PKGS[vulkan-wrapper]="mesa vulkan-wrapper-android"
+# (installed by install_vulkan_wrapper, not from the repositories)
 ENV[vulkan-wrapper]="VK_ICD_FILENAMES=$ICD_DIR/wrapper_icd.aarch64.json MESA_LOADER_DRIVER_OVERRIDE=zink"
 [ $GPU_KIND = mali ] && ENV[vulkan-wrapper]="${ENV[vulkan-wrapper]} MESA_VK_WSI_PRESENT_MODE=mailbox MESA_VK_WSI_DEBUG=blit"
 HELPER[vulkan-wrapper]="-"
@@ -226,27 +306,35 @@ result "newly installed: ${WE_INSTALLED[*]:-none}; already on the phone:${ALREAD
 
 # ---------------------------------------------------------------------------------------------
 step 4 "Starting a private display for the tests"
-SOCKET=$TMPDIR/.X11-unix/X$DISPLAY_NO
 # A socket file alone proves nothing: an earlier run may have left one behind. Ask the display.
-display_answers() { DISPLAY=$TEST_DISPLAY timeout 10 glmark2-es2 --off-screen -s 64x64 -b build:duration=0.2 >/dev/null 2>&1; }
-if [ -S "$SOCKET" ] && display_answers; then
-  detail "A display $TEST_DISPLAY is already running; using it."
-else
-  if [ -e "$SOCKET" ]; then
-    detail "Removing a leftover socket from an earlier run."
-    rm -f "$SOCKET" "$HOME/.tmp/.X11-unix/X$DISPLAY_NO"
-  fi
-  if ! command -v termux-x11 >/dev/null; then
-    say "The display command (termux-x11) is not installed. Turn the Linux display on in the launcher's settings first."; exit 1
-  fi
-  termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
-  SERVER_PID=$!
-  for _ in $(seq 1 20); do [ -S "$SOCKET" ] && break; sleep 0.5; done
-  if [ ! -S "$SOCKET" ]; then
-    say "The display did not start. Its messages are in $LOG."; exit 1
-  fi
-  detail "Display $TEST_DISPLAY is up. Nothing is shown on screen; the tests draw off-screen."
+display_answers() { DISPLAY=:$1 timeout 10 glmark2-es2 --off-screen -s 64x64 -b build:duration=0.2 >/dev/null 2>&1; }
+if ! command -v termux-x11 >/dev/null; then
+  say "The display command (termux-x11) is not installed. Turn the Linux display on in the launcher's settings first."; exit 1
 fi
+# Never use a display that is already running (it may be the one you are using): take the first
+# free number from :7 up. A leftover socket that answers nobody is removed and its number reused.
+FOUND=""
+for n in $(seq "$DISPLAY_NO" $((DISPLAY_NO + 20))); do
+  sock=$TMPDIR/.X11-unix/X$n
+  if [ -S "$sock" ]; then
+    display_answers "$n" && continue
+    detail "Removing a leftover socket from an earlier run (:$n)."
+    rm -f "$sock" "$HOME/.tmp/.X11-unix/X$n"
+  elif [ -e "$sock" ]; then
+    continue
+  fi
+  FOUND=$n; break
+done
+[ -n "$FOUND" ] || { say "No free display number was found near :$DISPLAY_NO."; exit 1; }
+DISPLAY_NO=$FOUND; TEST_DISPLAY=":$DISPLAY_NO"; SOCKET=$TMPDIR/.X11-unix/X$DISPLAY_NO
+# Headless: the server never announces itself, so the launcher cannot mistake it for your display.
+TERMUX_X11_HEADLESS=1 termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 20); do [ -S "$SOCKET" ] && break; sleep 0.5; done
+if [ ! -S "$SOCKET" ]; then
+  say "The display did not start. Its messages are in $LOG."; exit 1
+fi
+detail "Display $TEST_DISPLAY is up. It is separate from yours and nothing is shown on screen; the tests draw off-screen."
 export DISPLAY=$TEST_DISPLAY
 
 # ---------------------------------------------------------------------------------------------
@@ -336,7 +424,7 @@ else
     :
   else
     detail "Installing the test program inside Debian."
-    if pd sh -c 'apt-get update && apt-get install -y glmark2-es2 libgl1-mesa-dri'; then
+    if pd sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install ${APT_OPTS[*]} glmark2-es2 libgl1-mesa-dri"; then
       PROOT_INSTALLED_TEST=1
     else
       detail "Could not install it (see the output above); skipping the container."
@@ -374,7 +462,7 @@ else
       fi
     fi
     if [ $PROOT_INSTALLED_TEST = 1 ] && [ $KEEP = 0 ]; then
-      pd sh -c 'apt-get purge -y glmark2-es2 && apt-get autoremove -y' && detail "Removed the test program from Debian again."
+      pd sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get purge ${APT_OPTS[*]} glmark2-es2 && apt-get autoremove ${APT_OPTS[*]}" && detail "Removed the test program from Debian again."
     fi
   fi
   if [ -n "$PROOT_WINNER" ]; then

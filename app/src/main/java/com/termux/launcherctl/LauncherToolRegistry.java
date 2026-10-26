@@ -957,7 +957,10 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
             CATEGORY_CLIPBOARD, R.string.tool_clipboard_paste, R.string.tool_desc_clipboard_paste,
-            Collections.singletonList(Binding.of("ctrl+alt+v", BindingCondition.SPLITS_OFF)),
+            // Ctrl+Shift+V is what every desktop terminal pastes with, so a hardware keyboard
+            // gets it too; it never collides with the pane split that owns Ctrl+Alt+V.
+            Arrays.asList(Binding.of("ctrl+alt+v", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+shift+v")),
             REQUIRES_SESSION);
 
         // Actions carrying a required argument. The palette skips these because it
