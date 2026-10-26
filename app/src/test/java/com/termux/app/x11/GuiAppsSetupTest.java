@@ -93,8 +93,18 @@ public class GuiAppsSetupTest {
             assertTrue(command.contains("pkg install -y openbox; }"));
             assertTrue(distro.name(), command.contains(
                 "[ -d \"$PREFIX/var/lib/proot-distro/containers/" + distro.alias
-                    + "/rootfs\" ] || proot-distro install " + distro.alias));
+                    + "/rootfs\" ] || " + GuiAppsSetup.installStep(distro)));
         }
+        assertEquals("proot-distro install debian", GuiAppsSetup.installStep(Distro.DEBIAN));
+        assertEquals("proot-distro install ubuntu", GuiAppsSetup.installStep(Distro.UBUNTU));
+    }
+
+    @Test public void archOnArm64ComesFromTheArchLinuxArmImageUnderTheSameName() {
+        String step = GuiAppsSetup.installStep(Distro.ARCH);
+
+        assertTrue(step.contains("if [ \"$(uname -m)\" = aarch64 ]; then\n"
+            + "proot-distro install menci/archlinuxarm --name archlinux\n"
+            + "else\nproot-distro install archlinux\nfi"));
     }
 
     @Test public void theDistroRouteAsksForANameAndWillNotTakeABadOne() {

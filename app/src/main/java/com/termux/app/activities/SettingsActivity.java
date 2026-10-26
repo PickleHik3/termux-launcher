@@ -704,7 +704,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
             // A build made without the X server has no display to set up.
             Preference display = findPreference("display");
-            if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
+            if (display != null && !com.termux.app.x11.X11ServerSupport.isAvailable(context)) display.setVisible(false);
             SettingsLayoutUtils.applyRootLayout(this);
             configureUseAsRow(context);
             configureSearch();
@@ -742,7 +742,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             // plain row every page below uses, with the chevron a chooser promises.
             row.setLayoutResource(R.layout.preference_settings_row);
             row.setWidgetLayoutResource(R.layout.preference_widget_chevron);
-            List<String> modes = LauncherUseCaseMode.offeredModes(com.termux.BuildConfig.X11_SERVER);
+            List<String> modes = LauncherUseCaseMode.offeredModes(com.termux.app.x11.X11ServerSupport.isAvailable(context));
             CharSequence[] entries = new CharSequence[modes.size()];
             CharSequence[] values = new CharSequence[modes.size()];
             for (int i = 0; i < modes.size(); i++) {
@@ -777,7 +777,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
                     .build(context, true);
             if (preferences == null) return;
-            String mode = LauncherUseCaseMode.summaryMode(preferences, com.termux.BuildConfig.X11_SERVER);
+            String mode = LauncherUseCaseMode.summaryMode(preferences, com.termux.app.x11.X11ServerSupport.isAvailable(context));
             CharSequence summary = context.getString(LauncherUseCaseMode.titleRes(mode));
             row.setSummary(summary);
             // The search box restores this when a query is cleared, so it has to follow the mode.
