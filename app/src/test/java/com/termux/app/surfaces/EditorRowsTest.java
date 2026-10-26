@@ -50,14 +50,17 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theDockCardOpensOnItsStripThenItsPlace() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-            Row.MARGIN, Row.APP_ICONS, Row.REFLECTION),
+    public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
+        assertEquals(Arrays.asList(Row.DOCK_STYLE, Row.DOCK_BARS, Row.FROST, Row.OPACITY,
+            Row.TINT, Row.HEIGHT, Row.CORNERS, Row.MARGIN, Row.REFLECTION),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
-        assertEquals(Arrays.asList(Row.STYLE, Row.DESIGN),
-            EditorRows.tier(EditorCard.DOCK, ALL, 2));
-        assertEquals(Arrays.asList(Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_DOCK_ITEMS),
-            EditorRows.tier(EditorCard.DOCK, ALL, 3));
+        assertEquals(Arrays.asList(Row.DOCK_TYPE), EditorRows.tier(EditorCard.DOCK, ALL, 2));
+        assertEquals(Arrays.asList(Row.DOCK_OPTIONS), EditorRows.tier(EditorCard.DOCK, ALL, 3));
+        List<Row> rows = rowsOf(EditorCard.DOCK, ALL);
+        assertFalse("no Dock items link", rows.contains(Row.LINK_DOCK_ITEMS));
+        assertFalse("App icons moved into Apps", rows.contains(Row.APP_ICONS));
+        assertFalse("no dock-wide Style or Design rows", rows.contains(Row.STYLE)
+            || rows.contains(Row.DESIGN));
     }
 
     @Test

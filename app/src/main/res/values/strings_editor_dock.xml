@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Dock card of the Appearance editor (editor-redesign §2 Dock). -->
+<resources>
+    <string name="editor_dock_row_style">Style</string>
+    <string name="editor_dock_row_bars">Bars</string>
+    <string name="editor_dock_row_type">Dock type</string>
+    <string name="editor_dock_row_options">Options</string>
+    <string name="editor_dock_appearance">Appearance</string>
+
+    <string name="editor_dock_bars_hint">Hold the handle to reorder</string>
+    <string name="editor_dock_bar_apps">Apps</string>
+    <string name="editor_dock_bar_az">A–Z</string>
+    <string name="editor_dock_bar_extra_keys">Extra keys</string>
+    <string name="editor_dock_bar_handle">Reorder %1$s</string>
+    <string name="editor_dock_bar_settings">%1$s settings</string>
+    <string name="editor_dock_bar_show">Show %1$s</string>
+    <string name="editor_dock_bar_hide">Hide %1$s</string>
+    <string name="editor_dock_bar_move_up">Move up</string>
+    <string name="editor_dock_bar_move_down">Move down</string>
+
+    <string name="editor_dock_position">Position</string>
+    <string name="editor_dock_position_top">Top</string>
+    <string name="editor_dock_position_bottom">Bottom</string>
+    <string name="editor_dock_position_left">Left</string>
+    <string name="editor_dock_position_right">Right</string>
+    <string name="editor_dock_position_above_keyboard">Above the keyboard</string>
+    <string name="editor_dock_position_rides_apps_row">Rides the apps row</string>
+
+    <string name="editor_dock_app_icons">App icons</string>
+    <string name="editor_dock_most_used">Most used row</string>
+    <string name="editor_dock_icon_pack">Icon pack</string>
+    <string name="editor_dock_icon_pack_global">Same as Global</string>
+    <string name="editor_dock_icon_pack_hint">The icon pack here applies to the apps row only.</string>
+
+    <string name="editor_dock_az_glass">Glass background</string>
+    <string name="editor_dock_az_show">Show</string>
+    <string name="editor_dock_az_shown">Shown</string>
+    <string name="editor_dock_az_faint">Faint</string>
+    <string name="editor_dock_az_pull_tab">Pull tab</string>
+    <string name="editor_dock_az_hint">Faint keeps the letters scrubbable at low opacity. Pull tab frees the strip for widgets; scrubbing the tab brings the letters up over Home.</string>
+
+    <string name="editor_dock_extra_keys_editor">Extra keys editor</string>
+
+    <string name="editor_dock_option_search_field">Search field</string>
+    <string name="editor_dock_option_drawer_icon">Drawer icon</string>
+    <string name="editor_dock_option_command_palette">Command palette</string>
+    <string name="editor_dock_option_notification_dots">Notification dots</string>
+    <string name="editor_dock_option_quick_reply">Quick reply</string>
+    <string name="editor_dock_option_quick_reply_hint">Swipe up on an app icon with a dot to reply</string>
+    <string name="editor_dock_option_monochrome">Monochrome icons</string>
+</resources>

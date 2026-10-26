@@ -69,7 +69,13 @@ public final class EditorRows {
          * A row that does one thing in place, named by a word at its end: the Match rows' Copy,
          * which reads Undo while the copy can still be taken back.
          */
-        ACTION
+        ACTION,
+        /**
+         * A row the card builds itself from the row kinds under {@code surfaces/rows}
+         * ({@link EditorCardSheet.Model#customRow}): the Dock card's Style, Bars, Dock type and
+         * Options.
+         */
+        CUSTOM
     }
 
     /** Every row any card has. */
@@ -146,7 +152,12 @@ public final class EditorRows {
         LINK_DOCK_ITEMS(Kind.LINK, R.string.appearance_row_dock_items, R.drawable.ic_symbol_apps),
         LINK_KEYBOARD_SIZE(Kind.LINK, R.string.appearance_row_keyboard_size,
             R.drawable.ic_editor_height),
-        LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard);
+        LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard),
+        // Dock card (editor-redesign §2 Dock): rows the card builds itself.
+        DOCK_STYLE(Kind.CUSTOM, R.string.editor_dock_row_style, R.drawable.ic_style_floating),
+        DOCK_BARS(Kind.CUSTOM, R.string.editor_dock_row_bars, R.drawable.ic_drag_indicator_24),
+        DOCK_TYPE(Kind.CUSTOM, R.string.editor_dock_row_type, R.drawable.ic_symbol_dock_glass_tray),
+        DOCK_OPTIONS(Kind.CUSTOM, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;

@@ -104,6 +104,18 @@ final class EditorCardSheet {
         default CharSequence stripHeading(@NonNull Row first) {
             return null;
         }
+
+        /**
+         * The view of a row the card builds itself ({@link Kind#CUSTOM}), for a sheet
+         * {@code widthPx} wide, or null for none. Asked each time the card's rows are built.
+         */
+        @Nullable
+        default View customRow(@NonNull Row row, int widthPx) {
+            return null;
+        }
+
+        /** A custom row read again, with every other row ({@link #restate}). */
+        default void restateCustom(@NonNull Row row) {}
     }
 
     /** What the header and the sheet itself report. */
@@ -852,6 +864,7 @@ final class EditorCardSheet {
             case WALLPAPER: return wallpaperRow(row);
             case EXPANDER: return expanderRow(row);
             case ACTION: return commandRow(row);
+            case CUSTOM: return customRow(row);
             case MENU:
             case LINK:
             default:
@@ -1244,6 +1257,17 @@ final class EditorCardSheet {
         return views;
     }
 
+    /** A row the card builds itself, across the sheet's whole width; empty when it has none. */
+    @NonNull
+    private RowViews customRow(@NonNull Row row) {
+        View view = mModel.customRow(row, availableWidthPx() + dp(ICON_COLUMN_DP) + dp(EDGE_DP));
+        if (view == null)
+            view = new View(mContext);
+        if (view.getParent() instanceof ViewGroup)
+            ((ViewGroup) view.getParent()).removeView(view);
+        return new RowViews(row, view);
+    }
+
     // ------------------------------------------------------------------------------ restating
 
     /** Every row read again from the model, the header's eye with them. */
@@ -1336,6 +1360,8 @@ final class EditorCardSheet {
         mRestating = true;
         try {
             EditorViews.setVisible(views.root, mModel.shown(row));
+            if (row.kind == Kind.CUSTOM)
+                mModel.restateCustom(row);
             if (views.strip != null)
                 restateStrip(views.strip);
             if (views.root.isEnabled() != enabled)

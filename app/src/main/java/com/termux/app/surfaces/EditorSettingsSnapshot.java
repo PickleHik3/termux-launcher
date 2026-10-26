@@ -25,6 +25,7 @@ final class EditorSettingsSnapshot {
     static final List<String> STRING_KEYS = Arrays.asList(
         "theme_mode",
         "app_launcher_icon_pack_package",
+        "app_launcher_pinned_icon_pack_package",
         "app_launcher_builtin_widget_style",
         HomeSettings.KEY_ICON_SCALE,
         HomeSettings.KEY_LABEL_SIZE,
@@ -37,6 +38,9 @@ final class EditorSettingsSnapshot {
         "use_system_wallpaper",
         "widgets_on_glass",
         "app_launcher_bw_icons",
+        "app_launcher_most_used_page",
+        "app_launcher_notification_dots",
+        "app_launcher_quick_reply_swipe",
         "wallpaper_parallax",
         HomeSettings.KEY_LABEL_TWO_LINES,
         HomeSettings.KEY_LABEL_SHADOW,
@@ -76,6 +80,7 @@ final class EditorSettingsSnapshot {
     static boolean defaultOf(@NonNull String key) {
         switch (key) {
             case "wallpaper_parallax":
+            case "app_launcher_quick_reply_swipe":
             case HomeSettings.KEY_LABEL_SHADOW:
                 return true;
             default:
