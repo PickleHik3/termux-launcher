@@ -413,7 +413,7 @@ public class EditorRowKindsTest {
             assertNotNull(name, drawable);
             assertEquals(name, f.dp(24), drawable.getIntrinsicWidth());
         }
-        assertEquals(32, EditorGlyphs.all().length);
+        assertEquals(34, EditorGlyphs.all().length);
     }
 
     @Test
