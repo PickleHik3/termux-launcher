@@ -27,6 +27,12 @@ public class EditorLabelInkTest {
     }
 
     @Test
+    public void aLightPictureWithNoDimKeepsDarkInk() {
+        int[] px = {0xFFF3EFE6, 0xFFEDE8DC};
+        assertEquals(DARK, EditorLabelInk.pick(EditorLabelInk.average(px, 2, 0), DARK, PALE));
+    }
+
+    @Test
     public void theDimIsLaidOverTheAverage() {
         int[] px = {0xFFFFFFFF, 0xFFFFFFFF};
         assertEquals(0xFFFFFFFF, EditorLabelInk.average(px, 2, 0x00000000));

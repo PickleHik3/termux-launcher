@@ -1025,24 +1025,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = mCard;
         if (prefs == null || card == null)
             return;
-        switch (card) {
-            case HOME:
-                resetHome();
-                break;
-            case WORKSPACE:
-                // The Workspace's glass back on the Look it wore when the editor opened.
-                if (mEntry != null)
-                    mEntry.restoreHalfBase(prefs, WallHalf.WORKSPACE, SurfaceProperty.BLUR,
-                        SurfaceProperty.GRAIN, SurfaceProperty.OPACITY, SurfaceProperty.TINT);
-                break;
-            case APPEARANCE:
-                for (SurfaceSlot slot : SurfaceSlot.values())
-                    prefs.resetSurfaceToLook(slot, mHalf);
-                break;
-            default:
-                if (card.slot != null)
-                    prefs.resetSurfaceToLook(card.slot, mHalf);
-                break;
+        EditorCardReset.resetStore(prefs, card, mHalf);
+        mScreenFrostPosition.clear();
+        if (card == EditorCard.HOME)
+            resetHome();
+        if (card == EditorCard.DOCK) {
+            // The dock's height lives in the layout session, so its Undo covers it.
+            float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null)
+                layout.setDockHeightScale(scale);
+            else
+                prefs.setAppLauncherBarHeightScale(scale);
         }
         syncAfterBulkWrite();
     }
@@ -1052,10 +1047,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * wore when the editor opened (its Base as captured on entry).
      */
     private void resetHome() {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs != null && mEntry != null)
-            mEntry.restoreHalfBase(prefs, WallHalf.HOME, SurfaceProperty.BLUR,
-                SurfaceProperty.GRAIN, SurfaceProperty.OPACITY, SurfaceProperty.TINT);
         Context context = mHost.context();
         for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
             HomeSettings.KEY_FOLDER_DENSITY,
@@ -1783,8 +1774,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The colour the page label stands on: the foot of the wallpaper, averaged, under the root's
-     * dim. Read off the main thread; the drawable is drawn into a small bitmap and not kept.
+     * The colour the page label stands on: the foot of the wallpaper, averaged, as the
+     * preview draws it, with no theme dim over it (the dim pushed a dark theme's sample dark). Read off the main thread; the drawable is drawn into a small bitmap and not kept.
      */
     private int sampleFootInk(@NonNull Drawable picture) {
         try {
@@ -1798,7 +1789,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             int[] px = new int[w * 4];
             bmp.getPixels(px, 0, w, 0, h - 4, w, 4);
             bmp.recycle();
-            return EditorLabelInk.average(px, px.length, mHost.editorWallpaperDimColor());
+            return EditorLabelInk.average(px, px.length, 0);
         } catch (RuntimeException e) {
             return 0xFF808080;
         }
