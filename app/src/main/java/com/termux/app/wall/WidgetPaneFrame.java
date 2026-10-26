@@ -788,6 +788,10 @@ public final class WidgetPaneFrame extends PaneContentFrame
             ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).grid()
                 .setCellCornerRadius(PaneGlass.radiusPx(look, density));
         }
+        // The labels, the hint and the page dots read the wallpaper under them through the same
+        // Look, so a new wallpaper, dim or mode reaches them on the pass that reaches the widgets.
+        if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView)
+            ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).refreshWallpaperInk();
     }
 
     /**

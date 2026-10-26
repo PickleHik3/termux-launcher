@@ -38,6 +38,8 @@ final class HomeFolderView extends ViewGroup implements com.termux.app.theme.Tex
     private final float density;
     @NonNull private HomeAppIconMetrics metrics = HomeAppIconMetrics.of(0, 0, 0, 1f);
     @NonNull private HomeIconStyle style = HomeIconStyle.DEFAULT;
+    /** The label's ink from the wallpaper under it (editor-redesign §8). */
+    private final HomeLabelInk labelInk = new HomeLabelInk();
 
     HomeFolderView(@NonNull Context context) {
         super(context);
@@ -105,8 +107,23 @@ final class HomeFolderView extends ViewGroup implements com.termux.app.theme.Tex
         if (style.equals(value)) return;
         style = value;
         HomeIconLabels.dress(label, value, density);
+        // The dress put Home's fixed shadow back; the wallpaper's ink and shadow, once known, win.
+        labelInk.apply(label, value.shadow, density);
         HomeIconLabels.fitLines(this, label, getWidth(), getHeight(), value, density, false);
         requestLayout();
+    }
+
+    /**
+     * The label takes light or dark ink from the wallpaper under it, read through the page's
+     * Look; a label on no Home page (a folder popup's cell, on its own glass) is left as it is.
+     * Cheap when nothing moved: the sample is kept until the label moves or the wallpaper does.
+     */
+    void refreshLabelInk() {
+        if (label.getVisibility() != VISIBLE) return;
+        com.termux.app.chrome.WidgetInkSource source = HomeLabelInk.sourceFor(this);
+        if (source == null) return;
+        labelInk.wallpaperUnder(label, source);
+        labelInk.apply(label, style.shadow, density);
     }
 
     @Override public void onTextScaleChanged() {
@@ -153,6 +170,7 @@ final class HomeFolderView extends ViewGroup implements com.termux.app.theme.Tex
             int labelLeft = (width - labelWidth) / 2;
             int labelTop = top + icon + gap;
             label.layout(labelLeft, labelTop, labelLeft + labelWidth, labelTop + labelHeight);
+            refreshLabelInk();
         }
     }
 
