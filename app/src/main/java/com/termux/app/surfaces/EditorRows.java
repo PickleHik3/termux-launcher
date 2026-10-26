@@ -69,7 +69,21 @@ public final class EditorRows {
          * A row that does one thing in place, named by a word at its end: the Match rows' Copy,
          * which reads Undo while the copy can still be taken back.
          */
-        ACTION
+        ACTION,
+        /** − value + at the row's end: Home's Columns and Rows. */
+        STEPPER,
+        /**
+         * A section's header ({@link com.termux.app.surfaces.rows.SectionHeader}): its name, and
+         * the model's summary as the note at its end. Not a control.
+         */
+        SECTION,
+        /** A line of small print under the row before it: the row's name is the text. */
+        HINT,
+        /**
+         * The link between the two strips either side of it in a strip run, on or off: the
+         * keyboard's Background and Key opacity.
+         */
+        STRIP_LINK
     }
 
     /** Every row any card has. */
@@ -146,7 +160,33 @@ public final class EditorRows {
         LINK_DOCK_ITEMS(Kind.LINK, R.string.appearance_row_dock_items, R.drawable.ic_symbol_apps),
         LINK_KEYBOARD_SIZE(Kind.LINK, R.string.appearance_row_keyboard_size,
             R.drawable.ic_editor_height),
-        LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard);
+        LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard),
+
+        // Keyboard, Home and Global cards (editor-redesign §2).
+        /** The air under the keyboard's last key row (the layout's chin), in dp. */
+        BOTTOM_PADDING(Kind.STRIP, R.string.editor_row_bottom_padding,
+            R.drawable.ic_ed_bottom_padding),
+        /** The keyboard's two opacities move together, keeping their difference. */
+        OPACITY_LINK(Kind.STRIP_LINK, R.string.editor_row_opacity_link, R.drawable.ic_ms_link),
+        /** Home's widget grid, in cells. */
+        HOME_COLUMNS(Kind.STEPPER, R.string.editor_row_columns, R.drawable.ic_ed_grid_columns),
+        HOME_ROWS(Kind.STEPPER, R.string.editor_row_rows, R.drawable.ic_ed_grid_rows),
+        /** Home's icon size: Small, Default or Large ({@code HomeIconSize}). */
+        HOME_ICON_SIZE(Kind.SEGMENTS, R.string.editor_row_home_icon_size, R.drawable.ic_ms_apps),
+        /** The wallpaper behind both screens, shown or not (the Wallpaper row keeps Change). */
+        SHOW_WALLPAPER(Kind.SWITCH, R.string.editor_row_show_wallpaper, R.drawable.ic_ms_image),
+        SECTION_GLASS(Kind.SECTION, R.string.editor_section_glass, 0),
+        SECTION_SHAPE(Kind.SECTION, R.string.editor_section_shape, 0),
+        SECTION_MORE(Kind.SECTION, R.string.editor_section_more, 0),
+        SECTION_GRID(Kind.SECTION, R.string.editor_section_grid, 0),
+        SECTION_LOOK(Kind.SECTION, R.string.editor_section_look, 0),
+        SECTION_LABELS_FOLDERS(Kind.SECTION, R.string.editor_section_labels_folders, 0),
+        SECTION_OPTIONS(Kind.SECTION, R.string.editor_section_options, 0),
+        SECTION_WALLPAPER(Kind.SECTION, R.string.editor_section_wallpaper, 0),
+        SECTION_COLOUR(Kind.SECTION, R.string.editor_section_colour, 0),
+        SECTION_GLASS_MATERIAL(Kind.SECTION, R.string.editor_section_glass_material, 0),
+        /** Under the glass material strips: where Edge and Depth show. */
+        HINT_GLASS_MATERIAL(Kind.HINT, R.string.editor_hint_glass_material, 0);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;

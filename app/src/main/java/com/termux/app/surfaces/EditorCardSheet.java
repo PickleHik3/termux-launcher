@@ -104,6 +104,32 @@ final class EditorCardSheet {
         default CharSequence stripHeading(@NonNull Row first) {
             return null;
         }
+
+        /**
+         * The name the card gives {@code row} where it is not the row's own ("Background
+         * opacity", the chip "Theme"), or null. Read by the redesigned cards ({@link CardBody}).
+         */
+        @Nullable
+        default CharSequence name(@NonNull Row row) {
+            return null;
+        }
+
+        /** The glyph the card gives {@code row}, or 0 for the row's own. */
+        default int glyph(@NonNull Row row) {
+            return 0;
+        }
+
+        /** A row's choices as colour swatches, one per choice (Tint colour), or null. */
+        @Nullable
+        default int[] swatches(@NonNull Row row) {
+            return null;
+        }
+
+        /** The typeface a choice's word is written in (Numerals), or null for the row's own. */
+        @Nullable
+        default android.graphics.Typeface choiceTypeface(@NonNull Row row, int index) {
+            return null;
+        }
     }
 
     /** What the header and the sheet itself report. */
@@ -158,6 +184,8 @@ final class EditorCardSheet {
     @NonNull private final LinearLayout mRows;
     @NonNull private final Map<Row, RowViews> mRowViews = new EnumMap<>(Row.class);
     @Nullable private EditorCard mCard;
+    /** A redesigned card's rows ({@link CardBody}), or null while the sheet builds its own. */
+    @Nullable private CardBody mBody;
     private boolean mRestating;
     private int mDetent = DETENT_HALF;
     private int mHalfPx;
@@ -355,7 +383,7 @@ final class EditorCardSheet {
         return height;
     }
 
-    private static final Object TIER_ONE_TAG = new Object();
+    static final Object TIER_ONE_TAG = new Object();
 
     /**
      * The least the half detent may stand: the header, the first row and the foot clearance over
@@ -669,6 +697,14 @@ final class EditorCardSheet {
     private void build(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> specs) {
         mRows.removeAllViews();
         mRowViews.clear();
+        mBody = null;
+        if (CardBody.redesigned(card)) {
+            mBody = CardBody.build(mContext, mModel, specs,
+                availableWidthPx() + dp(ICON_COLUMN_DP) + dp(EDGE_DP), mRows, TIER_ONE_TAG,
+                () -> setDetent(DETENT_FULL, true));
+            restateEye();
+            return;
+        }
         int tier = 0;
         Strip strip = null;
         for (EditorRows.Spec spec : specs) {
@@ -1248,6 +1284,8 @@ final class EditorCardSheet {
 
     /** Every row read again from the model, the header's eye with them. */
     void restate() {
+        if (mBody != null)
+            mBody.restate();
         for (RowViews views : mRowViews.values())
             restate(views);
         restateEye();
@@ -1324,6 +1362,8 @@ final class EditorCardSheet {
 
     /** One row read again from the model. */
     void restate(@NonNull Row row) {
+        if (mBody != null)
+            mBody.restate(row);
         RowViews views = mRowViews.get(row);
         if (views != null)
             restate(views);

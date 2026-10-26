@@ -11,7 +11,8 @@ import java.util.List;
 
 /**
  * The Workspace card's rows (editor-redesign §2, Workspace): Home's twin, the Workspace half's
- * Look and Base, which the bars on the Workspace wear while they follow it.
+ * Look as tiles and its glass, which the bars on the Workspace wear while they follow it; Match
+ * Home styling; and the Global chip.
  */
 public final class WorkspaceCard {
 
@@ -21,8 +22,9 @@ public final class WorkspaceCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT)
-            .tier(3, Row.MATCH_HOME, Row.LINK_GLOBAL)
+            .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY,
+                Row.TINT)
+            .tier(3, Row.MATCH_HOME, Row.SECTION_MORE, Row.LINK_GLOBAL)
             .build();
     }
 }

@@ -10,8 +10,11 @@ import com.termux.app.surfaces.EditorRows.Spec;
 import java.util.List;
 
 /**
- * The Home card's rows (editor-redesign §2, Home): Home's glass first, the Home half's Base,
- * which the widgets, the status bar and the dock on Home wear while they follow it.
+ * The Home card's rows (editor-redesign §2, Home): the widget grid's Columns and Rows; Home's
+ * Look and its own glass (the Home half's Base, which the widgets, the status bar and the dock on
+ * Home wear while they follow it); labels, icon size, folders and numerals as glyph and word
+ * rows; the five options as tiles; Match Workspace styling; and the Global, Gestures and Edit
+ * pages chips. The dock sizes its own icons on its card.
  */
 public final class HomeCard {
 
@@ -21,10 +24,12 @@ public final class HomeCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.FROST, Row.OPACITY, Row.TINT, Row.ICON_SIZE, Row.LABEL_SIZE,
-                Row.GLASS_WIDGETS)
-            .tier(2, Row.TWO_LINE, Row.LABEL_SHADOW, Row.FOLDERS, Row.NUMERALS, Row.PAGE_DOTS)
-            .tier(3, Row.WALLPAPER_SCROLL, Row.MATCH_WORKSPACE, Row.LINK_GESTURES,
+            .tier(1, Row.SECTION_GRID, Row.HOME_COLUMNS, Row.HOME_ROWS, Row.SECTION_LOOK,
+                Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY, Row.TINT)
+            .tier(2, Row.SECTION_LABELS_FOLDERS, Row.LABEL_SIZE, Row.HOME_ICON_SIZE, Row.FOLDERS,
+                Row.NUMERALS, Row.SECTION_OPTIONS, Row.GLASS_WIDGETS, Row.TWO_LINE,
+                Row.LABEL_SHADOW, Row.PAGE_DOTS, Row.WALLPAPER_SCROLL)
+            .tier(3, Row.MATCH_WORKSPACE, Row.SECTION_MORE, Row.LINK_GLOBAL, Row.LINK_GESTURES,
                 Row.LINK_PAGES)
             .build();
     }

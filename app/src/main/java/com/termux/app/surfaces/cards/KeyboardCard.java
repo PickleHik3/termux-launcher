@@ -10,8 +10,10 @@ import com.termux.app.surfaces.EditorRows.Spec;
 import java.util.List;
 
 /**
- * The Keyboard card's rows (editor-redesign §2, Keyboard): Key opacity stands beside Opacity, the
- * pair the opacity link moves together.
+ * The Keyboard card's rows (editor-redesign §2, Keyboard): Type first, as glyphs; Glass with
+ * Background opacity and Key opacity side by side and the link that moves them together between
+ * them; Shape, ending on Bottom padding; and the Theme and Layouts chips. The floating keyboard is
+ * sized by the grip on the keyboard itself, so the card has no Size link.
  */
 public final class KeyboardCard {
 
@@ -21,10 +23,11 @@ public final class KeyboardCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT, Row.KEY_CORNERS,
-                Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN)
-            .tier(2, Row.KEYBOARD_THEME)
-            .tier(3, Row.FORM, Row.LINK_KEYBOARD_SIZE, Row.LINK_LAYOUTS)
+            .tier(1, Row.FORM, Row.SECTION_GLASS, Row.FROST, Row.TINT, Row.OPACITY,
+                Row.OPACITY_LINK, Row.KEY_OPACITY)
+            .tier(2, Row.SECTION_SHAPE, Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT,
+                Row.CORNERS, Row.MARGIN, Row.BOTTOM_PADDING)
+            .tier(3, Row.SECTION_MORE, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)
             .build();
     }
 }

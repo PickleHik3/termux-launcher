@@ -312,6 +312,16 @@ public final class LayoutEditorPlan {
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
+    /** Home's widget grid in the shown orientation: its columns. */
+    public int widgetColumns() {
+        return mPlaces.widgetColumns(mShownOrientation);
+    }
+
+    /** Home's widget grid in the shown orientation: its rows. */
+    public int widgetRows() {
+        return mPlaces.widgetRows(mShownOrientation);
+    }
+
     /** Home's corner handle dragged: the grid in whole cells. */
     @NonNull
     public Drop setWidgetGrid(int columns, int rows) {

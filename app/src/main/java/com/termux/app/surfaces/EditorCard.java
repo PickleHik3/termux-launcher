@@ -35,7 +35,7 @@ public enum EditorCard {
         R.drawable.ic_symbol_dock_glass_tray),
     KEYBOARD("keyboard", SurfaceSlot.KEYBOARD, R.string.appearance_card_keyboard,
         R.drawable.ic_symbol_keyboard),
-    APPEARANCE("appearance", null, R.string.appearance_card_appearance,
+    APPEARANCE("appearance", null, R.string.appearance_row_global,
         R.drawable.ic_symbol_palette);
 
     /** The name a door and a deep link use. */

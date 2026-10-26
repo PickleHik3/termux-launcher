@@ -1,6 +1,7 @@
 package com.termux.app.surfaces.rows;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,7 +11,10 @@ import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.google.android.material.button.MaterialButton;
+import com.termux.R;
 import com.termux.app.surfaces.LegendSlider;
 
 import java.util.ArrayList;
@@ -26,6 +30,10 @@ import java.util.List;
  *
  * <p>The columns stand on as few lines as hold them, spread evenly, the fuller lines first, every
  * column as wide as the first line's, so the tracks keep one grid.</p>
+ *
+ * <p>Two neighbouring strips may be linked (the keyboard's Background and Key opacity): a toggle
+ * with the link glyph stands between them, level with the tracks, and says on or off by its
+ * colour; what the link does is the caller's.</p>
  */
 public final class StripRow {
 
@@ -41,6 +49,11 @@ public final class StripRow {
 
         /** A strip's finger lifted. */
         void onReleased(int index);
+    }
+
+    /** The link between two strips was turned on or off by touch. */
+    public interface OnLink {
+        void onLink(boolean on);
     }
 
     /** One strip: its glyph, name, range and readout. */
@@ -91,12 +104,16 @@ public final class StripRow {
 
     @NonNull public final LinearLayout root;
     @NonNull public final List<Column> columns;
+    /** The link between two strips, or null where the strip has none. */
+    @Nullable public final MaterialButton link;
     @NonNull private final List<Strip> mStrips;
+    private boolean mSettingLink;
 
     private StripRow(@NonNull LinearLayout root, @NonNull List<Column> columns,
-                     @NonNull List<Strip> strips) {
+                     @NonNull List<Strip> strips, @Nullable MaterialButton link) {
         this.root = root;
         this.columns = Collections.unmodifiableList(columns);
+        this.link = link;
         mStrips = strips;
     }
 
@@ -104,6 +121,19 @@ public final class StripRow {
     @NonNull
     public static StripRow build(@NonNull Context context, @NonNull List<Strip> strips,
                                  @NonNull int[] values, int widthPx, @NonNull Listener listener) {
+        return build(context, strips, values, widthPx, listener, -1, "", false, null);
+    }
+
+    /**
+     * Builds the strips with a link between strip {@code linkAfter} and the next, named
+     * {@code linkName} (its long-press and its spoken name), on while {@code linked}. A
+     * {@code linkAfter} with no strip after it builds no link.
+     */
+    @NonNull
+    public static StripRow build(@NonNull Context context, @NonNull List<Strip> strips,
+                                 @NonNull int[] values, int widthPx, @NonNull Listener listener,
+                                 int linkAfter, @NonNull CharSequence linkName, boolean linked,
+                                 @Nullable OnLink onLink) {
         List<Strip> held = new ArrayList<>(strips);
         List<Column> columns = new ArrayList<>(held.size());
         int widest = RowKit.dp(context, RowKit.TOUCH_DP);
@@ -119,7 +149,10 @@ public final class StripRow {
         }
         int edge = RowKit.dp(context, RowKit.EDGE_DP);
         int gap = RowKit.dp(context, GAP_DP);
-        int room = Math.max(1, widthPx - 2 * edge);
+        boolean linking = linkAfter >= 0 && linkAfter < held.size() - 1;
+        MaterialButton link = linking ? linkButton(context, linkName) : null;
+        int touch = RowKit.dp(context, RowKit.TOUCH_DP);
+        int room = Math.max(1, widthPx - 2 * edge - (linking ? touch + gap : 0));
         int[] lines = lines(columns.size(), capacity(room, widest, gap));
 
         LinearLayout root = new LinearLayout(context);
@@ -140,7 +173,17 @@ public final class StripRow {
                     ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
                 if (c > 0)
                     params.setMarginStart(gap);
-                line.addView(columns.get(next++).root, params);
+                line.addView(columns.get(next).root, params);
+                if (link != null && next == linkAfter) {
+                    // Level with the tracks: under the glyph and its gap, centred on the track.
+                    LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(touch,
+                        touch);
+                    linkParams.setMarginStart(gap);
+                    linkParams.topMargin = RowKit.dp(context, RowKit.GLYPH_DP + 4)
+                        + (RowKit.dp(context, TRACK_DP) - touch) / 2;
+                    line.addView(link, linkParams);
+                }
+                next++;
             }
             int missing = lines[0] - lines[l];
             if (missing > 0) {
@@ -149,10 +192,64 @@ public final class StripRow {
                 line.addView(new View(context), rest);
             }
         }
-        StripRow row = new StripRow(root, columns, held);
+        StripRow row = new StripRow(root, columns, held, link);
         for (int i = 0; i < columns.size(); i++)
             row.setValue(i, i < values.length ? values[i] : held.get(i).from);
+        if (link != null) {
+            row.setLinked(linked);
+            link.addOnCheckedChangeListener((button, on) -> {
+                if (!row.mSettingLink && onLink != null)
+                    onLink.onLink(on);
+            });
+        }
         return row;
+    }
+
+    /** Shows the link on or off without reporting it. */
+    public void setLinked(boolean on) {
+        if (link == null || link.isChecked() == on)
+            return;
+        mSettingLink = true;
+        try {
+            link.setChecked(on);
+        } finally {
+            mSettingLink = false;
+        }
+    }
+
+    /** Whether the link is on; false where there is none. */
+    public boolean isLinked() {
+        return link != null && link.isChecked();
+    }
+
+    /** Shows or puts away strip {@code index}; its line keeps its place in the grid. */
+    public void setShown(int index, boolean shown) {
+        if (index < 0 || index >= columns.size())
+            return;
+        int visibility = shown ? View.VISIBLE : View.INVISIBLE;
+        View column = columns.get(index).root;
+        if (column.getVisibility() != visibility)
+            column.setVisibility(visibility);
+    }
+
+    /** The link: the link glyph, on the secondary container while on, a 48dp target. */
+    @NonNull
+    private static MaterialButton linkButton(@NonNull Context context,
+                                             @NonNull CharSequence name) {
+        MaterialButton button = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        button.setIconResource(R.drawable.ic_ms_link);
+        button.setCheckable(true);
+        button.setContentDescription(name);
+        GlyphNames.name(button, name);
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        button.setIconTint(new ColorStateList(states, new int[] {
+            RowKit.color(context, com.google.android.material.R.attr.colorOnSecondaryContainer),
+            RowKit.color(context, com.google.android.material.R.attr.colorOnSurfaceVariant)}));
+        button.setBackgroundTintList(new ColorStateList(states, new int[] {
+            RowKit.color(context, com.google.android.material.R.attr.colorSecondaryContainer),
+            0}));
+        return button;
     }
 
     /** Shows strip {@code index} at {@code value} without reporting it; not while it drags. */
