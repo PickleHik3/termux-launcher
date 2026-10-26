@@ -104,6 +104,19 @@ final class EditorCardSheet {
         default CharSequence stripHeading(@NonNull Row first) {
             return null;
         }
+
+        /**
+         * A row the card draws itself from the row kinds under {@code surfaces/rows} (a section
+         * with its header, preview tiles, a tile grid, glyph segments), {@code widthPx} wide; or
+         * null for the sheet's own row of the row's {@link Kind}. Asked once per card open.
+         */
+        @Nullable
+        default View rowView(@NonNull Row row, int widthPx) {
+            return null;
+        }
+
+        /** Reads a {@link #rowView} again from the values, as {@link #restate()} does any row. */
+        default void restateRowView(@NonNull Row row, @NonNull View view) {}
     }
 
     /** What the header and the sheet itself report. */
@@ -643,6 +656,8 @@ final class EditorCardSheet {
         @Nullable List<TextView> stopLabels;
         @Nullable FrameLayout expander;
         boolean tracking;
+        /** The model drew the row itself ({@link Model#rowView}); it restates it too. */
+        boolean own;
 
         RowViews(@NonNull Row row, @NonNull View root) {
             this.row = row;
@@ -844,6 +859,13 @@ final class EditorCardSheet {
 
     @NonNull
     private RowViews buildRow(@NonNull Row row) {
+        // The row kinds take the card's whole width and keep their own 16dp gutter.
+        View own = mModel.rowView(row, availableWidthPx() + dp(ICON_COLUMN_DP) + dp(EDGE_DP));
+        if (own != null) {
+            RowViews views = new RowViews(row, own);
+            views.own = true;
+            return views;
+        }
         switch (row.kind) {
             case SWITCH: return switchRow(row);
             case SEGMENTS: return segmentsRow(row);
@@ -1336,6 +1358,10 @@ final class EditorCardSheet {
         mRestating = true;
         try {
             EditorViews.setVisible(views.root, mModel.shown(row));
+            if (views.own) {
+                mModel.restateRowView(row, views.root);
+                return;
+            }
             if (views.strip != null)
                 restateStrip(views.strip);
             if (views.root.isEnabled() != enabled)

@@ -146,7 +146,21 @@ public final class EditorRows {
         LINK_DOCK_ITEMS(Kind.LINK, R.string.appearance_row_dock_items, R.drawable.ic_symbol_apps),
         LINK_KEYBOARD_SIZE(Kind.LINK, R.string.appearance_row_keyboard_size,
             R.drawable.ic_editor_height),
-        LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard);
+        LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard),
+        // The Status bar and Terminal cards' own rows (editor-redesign §2): each is drawn by its
+        // card from the row kinds (EditorCardSheet.Model#rowView); the Kind is the sheet's
+        // stand-in where no card draws it.
+        /** The status bar's edge, Top or Bottom, as glyph segments. */
+        STATUS_POSITION(Kind.MENU, R.string.editor_st_position, R.drawable.ic_editor_position),
+        /** The header over a card's glass and shape strip: "Glass", noted "Shape". */
+        GLASS_SECTION(Kind.MENU, R.string.editor_st_section_glass, R.drawable.ic_editor_blur),
+        /** The status clock's place in the bar, Left, Center or Right, as glyph segments. */
+        CLOCK_POSITION(Kind.MENU, R.string.editor_st_clock_position, R.drawable.ic_editor_clock),
+        /** The status bar's Options tiles: 12-hour, Seconds, °F weather, Camera gap. */
+        STATUS_OPTIONS(Kind.SWITCH, R.string.editor_st_section_options, R.drawable.ic_ms_tune),
+        /** The status bar's Indicators tiles: CPU, RAM, Weather, Notifications, Media. */
+        STATUS_INDICATORS(Kind.SWITCH, R.string.editor_st_section_indicators,
+            R.drawable.ic_symbol_weather);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;

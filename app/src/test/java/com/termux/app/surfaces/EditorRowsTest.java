@@ -62,8 +62,8 @@ public class EditorRowsTest {
 
     @Test
     public void theStatusBarAndKeyboardCardsOpenOnTheirStripAndPlace() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN),
-            EditorRows.tier(EditorCard.STATUS, ALL, 1));
+        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.GLASS_SECTION, Row.FROST, Row.OPACITY,
+            Row.TINT, Row.CORNERS, Row.MARGIN), EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT,
             Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
@@ -82,8 +82,9 @@ public class EditorRowsTest {
 
     @Test
     public void theTerminalCardHasNoPlaceOfItsOwn() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE, Row.CORNERS,
-            Row.MARGIN, Row.SPLIT_GAP), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
+        assertEquals(Arrays.asList(Row.GLASS_SECTION, Row.FROST, Row.OPACITY, Row.TINT,
+            Row.TEXT_SIZE, Row.CORNERS, Row.MARGIN, Row.SPLIT_GAP),
+            EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
     }
