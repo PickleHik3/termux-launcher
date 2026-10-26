@@ -1769,7 +1769,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The older two-way mode value is mapped once here, before anything reads it.
         com.termux.app.launcher.LauncherUseCaseMode.migrateIfNeeded(mPreferences,
-            com.termux.BuildConfig.X11_SERVER);
+            com.termux.app.x11.X11ServerSupport.isAvailable(this));
         // Built after the preferences, and only while the Widgets place is on the wall, so a
         // terminal-only install never registers an app widget host at all — no binding, no
         // listening, no widget providers reconciled — and neither does a pane switched on under
@@ -1989,7 +1989,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * server connection down the same way a switch moved in Settings does.
      */
     private void setEmbeddedDisplayEnabled(boolean enabled) {
-        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
+        if (mPreferences == null || !com.termux.app.x11.X11ServerSupport.isAvailable(this)) return;
         if (enabled) {
             turnOnEmbeddedDisplay();
             return;
@@ -2798,7 +2798,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean displayOffered() {
-            return com.termux.BuildConfig.X11_SERVER;
+            return com.termux.app.x11.X11ServerSupport.isAvailable(TermuxActivity.this);
         }
 
         @Override public boolean displayOn() {
@@ -9424,7 +9424,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxLauncherConfigInstaller.ensureInstalled(this);
             // Same for the display's and the tool store's commands: their start-up pass found no
             // prefix to write into.
-            if (com.termux.BuildConfig.X11_SERVER) {
+            if (com.termux.app.x11.X11ServerSupport.isAvailable(this)) {
                 com.termux.app.x11.X11CliInstaller.installAsync(this, result -> { });
             }
             com.termux.app.store.TlstoreInstaller.installAsync(this, result -> { });
@@ -20543,7 +20543,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * server; there is no Display page while it is off.
      */
     public boolean isX11DisplayEnabled() {
-        return com.termux.BuildConfig.X11_SERVER && mPreferences != null
+        return com.termux.app.x11.X11ServerSupport.isAvailable(this) && mPreferences != null
             && mPreferences.isX11DisplayEnabled();
     }
 
@@ -20873,7 +20873,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * when the display was just switched on or off, which decides whether they are listed at all.
      */
     private void refreshLinuxApps(boolean force) {
-        if (!com.termux.BuildConfig.X11_SERVER) return;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(this)) return;
         // The drawer lists Linux apps only while the display is on, so with it off there is
         // nothing to re-read on every resume; the forced call that follows the switch itself is
         // what drops them from the drawer.
@@ -20920,7 +20920,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
     private void installLinuxAppRunner() {
-        if (!com.termux.BuildConfig.X11_SERVER) return;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(this)) return;
         mLinuxAppsHost = new com.termux.app.x11.X11LinuxAppRunner.Host() {
                 @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
                 @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
@@ -21073,7 +21073,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * button: the setting flips and the Display place comes onto the wall with a live connection.
      */
     private void turnOnEmbeddedDisplay() {
-        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
+        if (mPreferences == null || !com.termux.app.x11.X11ServerSupport.isAvailable(this)) return;
         com.termux.app.x11.X11DisplaySwitch.write(this, mPreferences, true);
         attachEmbeddedDisplay();
     }
@@ -21210,7 +21210,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.x11.X11WindowIconResolver displayWindowIcons() {
-        if (!com.termux.BuildConfig.X11_SERVER) return null;
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(this)) return null;
         if (mDisplayWindowIcons == null) {
             mDisplayWindowIcons = new com.termux.app.x11.X11WindowIconResolver(getResources(),
                 (wmClass, icon) -> {

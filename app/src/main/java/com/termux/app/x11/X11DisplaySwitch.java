@@ -31,7 +31,7 @@ public final class X11DisplaySwitch {
      */
     public static boolean write(@NonNull Context context,
                                 @NonNull TermuxAppSharedPreferences preferences, boolean enabled) {
-        if (!com.termux.BuildConfig.X11_SERVER && enabled) return false;
+        if (!X11ServerSupport.isAvailable(context) && enabled) return false;
         if (preferences.isX11DisplayEnabled() == enabled) return false;
         preferences.setX11DisplayEnabled(enabled);
         onWritten(context, preferences, enabled);
@@ -42,7 +42,7 @@ public final class X11DisplaySwitch {
     public static void onWritten(@NonNull Context context,
                                  @NonNull TermuxAppSharedPreferences preferences, boolean enabled) {
         LauncherUseCaseMode.onDisplaySwitched(preferences, enabled,
-            LauncherUseCaseMode.isDisplayOffered());
+            LauncherUseCaseMode.isDisplayOffered(context));
         if (enabled) X11Defaults.applyOnce(context);
         else X11CliInstaller.uninstallAsync(context);
         LauncherAppDataProvider.getInstance(context).refreshAsync(null, null);
