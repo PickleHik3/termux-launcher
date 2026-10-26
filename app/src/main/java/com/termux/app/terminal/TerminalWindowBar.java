@@ -533,9 +533,76 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * again.
      */
     public boolean setTrailingGapPx(int px) {
-        int gap = Math.max(0, px);
-        if (getPaddingEnd() == gap) return false;
-        setPaddingRelative(getPaddingStart(), getPaddingTop(), gap, getPaddingBottom());
+        mTrailingGapPx = Math.max(0, px);
+        return applySidePadding();
+    }
+
+    /** The status row's trailing gap, before the screen's corners are added to it. */
+    private int mTrailingGapPx;
+    /** The window's camera box and corners while Full screen; null outside it. */
+    @Nullable private com.termux.app.statusbar.StatusRowKeepOut.Screen mScreenKeepOut;
+    /** The answer the bar's padding was last made for. */
+    @NonNull private com.termux.app.statusbar.StatusRowKeepOut.Answer mKeepOut =
+        com.termux.app.statusbar.StatusRowKeepOut.Answer.NONE;
+
+    /**
+     * The window's camera box and corner radii, handed over only while Full screen (null outside
+     * it, which leaves the bar as it always was). Where the bar stands in that window's top band,
+     * its ends step in from the screen's corners. Compared first, so the host may hand it over on
+     * every insets pass.
+     */
+    public void setScreenKeepOut(@Nullable com.termux.app.statusbar.StatusRowKeepOut.Screen screen) {
+        if (mScreenKeepOut == null ? screen == null : mScreenKeepOut.equals(screen)) return;
+        mScreenKeepOut = screen;
+        if (onWindowLaidOutForKeepOut()) requestLayout();
+    }
+
+    /** For tests: the answer the bar's padding is made for now. */
+    @NonNull
+    com.termux.app.statusbar.StatusRowKeepOut.Answer keepOut() {
+        return mKeepOut;
+    }
+
+    /**
+     * Re-reads the answer for where the bar stands at rest (translations left out) and pads the
+     * bar for it. A pane that moves under the bar (Full screen lifting it to the top) leaves the
+     * bar's own frame as it was, so this is asked after every window layout as well.
+     *
+     * @return whether the padding changed
+     */
+    private boolean onWindowLaidOutForKeepOut() {
+        int x = 0;
+        int y = 0;
+        View view = this;
+        while (true) {
+            x += view.getLeft();
+            y += view.getTop();
+            android.view.ViewParent parent = view.getParent();
+            if (!(parent instanceof View)) break;
+            View up = (View) parent;
+            x -= up.getScrollX();
+            y -= up.getScrollY();
+            view = up;
+        }
+        com.termux.app.statusbar.StatusRowKeepOut.Answer answer = getWidth() <= 0
+            ? com.termux.app.statusbar.StatusRowKeepOut.Answer.NONE
+            : WindowBarKeepOut.answer(mScreenKeepOut, view.getWidth(), view.getHeight(), x, y,
+                x + getWidth(), y + getHeight());
+        if (answer.equals(mKeepOut)) return false;
+        mKeepOut = answer;
+        return applySidePadding();
+    }
+
+    private final android.view.ViewTreeObserver.OnGlobalLayoutListener mKeepOutLaidOut = () -> {
+        if (onWindowLaidOutForKeepOut()) requestLayout();
+    };
+
+    /** Pads the bar's sides for the corners plus the trailing gap; whether anything changed. */
+    private boolean applySidePadding() {
+        int[] sides = WindowBarKeepOut.sidePaddingPx(mKeepOut, mTrailingGapPx,
+            getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        if (getPaddingLeft() == sides[0] && getPaddingRight() == sides[1]) return false;
+        setPadding(sides[0], getPaddingTop(), sides[1], getPaddingBottom());
         return true;
     }
 
@@ -1655,12 +1722,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         mAttached = true;
+        getViewTreeObserver().addOnGlobalLayoutListener(mKeepOutLaidOut);
         updateBusyAnimator();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         mAttached = false;
+        getViewTreeObserver().removeOnGlobalLayoutListener(mKeepOutLaidOut);
         abandonLift();
         cancelScrollAnimation();
         if (mBreathTick != null) {
