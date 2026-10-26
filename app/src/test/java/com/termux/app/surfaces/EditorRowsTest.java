@@ -119,7 +119,7 @@ public class EditorRowsTest {
 
     @Test
     public void theGlobalCardOpensOnTheWallpaperThenTheColourAndKeepsTheGlassMaterial() {
-        assertEquals(Arrays.asList(Row.SECTION_WALLPAPER, Row.WALLPAPER, Row.SHOW_WALLPAPER,
+        assertEquals(Arrays.asList(Row.SECTION_WALLPAPER, Row.CHANGE_WALLPAPER, Row.SHOW_WALLPAPER,
             Row.WALLPAPER_COLOURS, Row.SECTION_COLOUR, Row.THEME, Row.CONTRAST, Row.TINT_HUE),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_GLASS_MATERIAL, Row.VIBRANCY, Row.GLASS_EDGE,
@@ -210,7 +210,7 @@ public class EditorRowsTest {
             Row.DEPTH, Row.TEXT_SIZE})
             assertTrue(row.name(), EditorRows.isAllSurfaces(row));
         assertFalse(EditorRows.isAllSurfaces(Row.LOOK));
-        assertFalse(EditorRows.isAllSurfaces(Row.WALLPAPER));
+        assertFalse(EditorRows.isAllSurfaces(Row.CHANGE_WALLPAPER));
     }
 
     @Test

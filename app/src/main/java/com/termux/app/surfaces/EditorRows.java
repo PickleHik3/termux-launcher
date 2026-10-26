@@ -123,7 +123,6 @@ public final class EditorRows {
         KEY_SPACING(Kind.STRIP, R.string.appearance_row_key_spacing, R.drawable.ic_editor_margin),
         FORM(Kind.SEGMENTS, R.string.appearance_row_form, R.drawable.ic_symbol_keyboard_floating),
         LOOK(Kind.LOOK, R.string.appearance_row_look, R.drawable.ic_ed_look),
-        WALLPAPER(Kind.WALLPAPER, R.string.appearance_row_wallpaper, R.drawable.ic_symbol_wallpaper),
         THEME(Kind.SEGMENTS, R.string.appearance_row_theme, R.drawable.ic_editor_dark_mode),
         ICON_PACK(Kind.EXPANDER, R.string.appearance_row_icon_pack, R.drawable.ic_symbol_icon_pack),
         WALLPAPER_COLOURS(Kind.SWITCH, R.string.appearance_row_wallpaper_colours,
@@ -175,7 +174,12 @@ public final class EditorRows {
         HOME_ROWS(Kind.MENU, R.string.editor_row_rows, R.drawable.ic_ed_grid_rows),
         /** Home's icon size: Small, Default or Large ({@code HomeIconSize}). */
         HOME_ICON_SIZE(Kind.SEGMENTS, R.string.editor_row_home_icon_size, R.drawable.ic_ms_apps),
-        /** The wallpaper behind both screens, shown or not (the Wallpaper row keeps Change). */
+        /**
+         * A shortcut tile that never reads on: it opens the wallpaper picker (Change wallpaper).
+         */
+        CHANGE_WALLPAPER(Kind.SWITCH, R.string.editor_row_change_wallpaper,
+            R.drawable.ic_ms_wallpaper),
+        /** The wallpaper behind both screens, shown or not. */
         SHOW_WALLPAPER(Kind.SWITCH, R.string.editor_row_show_wallpaper,
             R.drawable.ic_ed_show_wallpaper),
         /** A section's header: its name, and the model's summary as the note at its end. */

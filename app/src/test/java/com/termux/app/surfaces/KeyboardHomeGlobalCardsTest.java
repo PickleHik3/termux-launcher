@@ -151,9 +151,9 @@ public class KeyboardHomeGlobalCardsTest {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
         EditorCardSheet.Model model = model(editor);
         model.onValue(Row.SHOW_WALLPAPER, 1, false);
-        assertEquals(1, model.value(Row.WALLPAPER));
+        assertEquals(1, model.value(Row.SHOW_WALLPAPER));
+        assertEquals("Change wallpaper never reads on", 0, model.value(Row.CHANGE_WALLPAPER));
         model.onValue(Row.SHOW_WALLPAPER, 0, false);
-        assertEquals(0, model.value(Row.WALLPAPER));
         assertEquals(0, model.value(Row.SHOW_WALLPAPER));
     }
 

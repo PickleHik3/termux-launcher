@@ -1955,9 +1955,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return 0;
                 }
                 case LOOK: return lookStop(mHalf);
-                case WALLPAPER:
-                    return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
-                        ? 1 : 0;
+                case CHANGE_WALLPAPER: return 0;
                 case THEME:
                     return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
                 case WALLPAPER_COLOURS:
@@ -2380,9 +2378,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LOOK:
                 writeLook(value, dragging);
                 break;
-            case WALLPAPER:
-                AppearanceSettingsStore.putBoolean(context, "use_system_wallpaper", value != 0);
-                settingsWritten();
+            case CHANGE_WALLPAPER:
+                // Never written: the tile is a shortcut and its tap goes to onAction.
                 break;
             case THEME:
                 previewTheme(THEMES[clamp(value, 0, 2)]);
@@ -2434,7 +2431,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case KEYBOARD_THEME:
                 openKeyboardTheme();
                 break;
-            case WALLPAPER:
+            case CHANGE_WALLPAPER:
                 if (mPageListener != null) mPageListener.onOpenWallpaper();
                 break;
             case ICON_PACK: {
@@ -4989,6 +4986,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LABEL_SHADOW: return R.drawable.ic_ms_blur_on;
             case PAGE_DOTS: return R.drawable.ic_ms_more_horiz;
             case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
+            case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;
             case LINK_GESTURES: return R.drawable.ic_ms_swipe;
             case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
             case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
