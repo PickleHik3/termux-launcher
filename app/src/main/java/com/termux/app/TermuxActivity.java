@@ -2258,8 +2258,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             restoreInAppKeyboardTypingClaim();
             // A home press while the launcher is in front lands on Home page 1, from a window or
             // from another Home page; a return from another app finds the page it left.
-            logDockDress("home intent goesHome=" + mHomePress.goesHome()
-                + " visible=" + isVisible());
             if (mHomePress.goesHome() && mPaneWallController != null) {
                 mPaneWallController.goHome(isVisible());
                 // Home floats stay on their pages; a focused one gives the keyboard back.
@@ -2278,7 +2276,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onStart() {
         super.onStart();
-        logDockDress("onStart");
         com.termux.app.terminal.TouchDownHint.attach(this);
         if (mScene != null) mScene.attach();
         // Both arrivals the launcher has: unlocking the phone, and switching back from another
@@ -2577,7 +2574,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onResume() {
         super.onResume();
-        logDockDress("onResume");
         mHomePress.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
         // Text left waiting in the pill holds the screen again, its idle release started over.
@@ -3165,7 +3161,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
-        logDockDress("onPause");
         mReturnHold.onPaused();
         dismissHelpOverlay();
         // An edit of the dictation card's text is kept and its typing handed back, before the
@@ -9549,7 +9544,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncDockShelf(state);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
-        logDockDress("dock backdrop applied rect=" + backdropTargetRect);
         // The keyboard-local cover is deliberately retained until this expanded surface is ready.
         // Remove it now so dock and keyboard switch atomically to the unified material — unless
         // the keyboard is mid-way between materials, when its own pass owns what it wears.
@@ -10647,7 +10641,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             android.util.Log.d(TerminalView.GEOMETRY_LOG_TAG, "return hold begin reason=stop");
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
-        logDockDress("onStop");
         mIsVisible = false;
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mX11Display != null) mX11Display.detachView();
@@ -17304,8 +17297,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
-        logDockDress("restyleForPage " + from + "->" + to + " travelledTo="
-            + mDockDesignTravelledTo);
         // A pictured dip dressed the slab for this page on its first frame: it already wears it.
         if (mDockDesignTravelledTo == to) {
             mDockDesignTravelledTo = null;
@@ -17321,39 +17312,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A settle lands the place's geometry at once (ADR 0003): an ease under way gives way.
         cancelDockBandEase();
         restyleDockSurface();
-    }
-
-    /**
-     * TEMPORARY (DockDress): one line per step of the dock's dress around a home press, with the
-     * design the slab is dressed for, the page, the wall's state and who asked. Remove with the
-     * fix it is here to find.
-     */
-    private void logDockDress(@NonNull String what) {
-        try {
-            doLogDockDress(what);
-        } catch (Throwable t) {
-            android.util.Log.d("DockDress", what + " (state unreadable: " + t + ")");
-        }
-    }
-
-    private void doLogDockDress(@NonNull String what) {
-        StringBuilder trace = new StringBuilder();
-        StackTraceElement[] frames = new Throwable().getStackTrace();
-        for (int i = 1; i < Math.min(frames.length, 7); i++) {
-            trace.append(" < ").append(frames[i].getMethodName()).append(':')
-                .append(frames[i].getLineNumber());
-        }
-        com.termux.app.wall.PaneWallLayout wall = mPaneWallController == null ? null
-            : mPaneWallController.wall();
-        android.util.Log.d("DockDress", android.os.SystemClock.uptimeMillis() + " " + what
-            + " | last=" + mLastWallPage
-            + " design=" + (mPreferences == null ? "?" : String.valueOf(committedDockDesign()))
-            + " shown=" + (mPreferences == null ? "?" : shownDockSurfaceSpec().toString())
-            + " wallMoving=" + (wall != null && wall.isMoving())
-            + " offset=" + (wall == null ? 0f : wall.offsetPx())
-            + " ledgerDirty=" + (mChrome != null
-                && mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY))
-            + trace);
     }
 
     /**
@@ -17385,7 +17343,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDressedDockDesign = committedDockDesign();
             mDressedSearchField = committedSearchField();
         }
-        logDockDress("restyleDockSurface");
         if (mPreferences == null || mChrome == null) return;
         syncDockBeadsListeners();
         // The Drawer tile comes and goes with the page's toggle.
@@ -24169,7 +24126,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
-        logDockDress("settle page=" + page + " crossing=" + mCrossing.crossing());
         // Everything the settle shows, hides and lays out asks for its geometry inside one batch:
         // a keyboard going away, the place's own keyboard coming up and the content's room are
         // one pass, run in this frame at the batch's end.
