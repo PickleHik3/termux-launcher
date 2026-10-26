@@ -19,22 +19,6 @@
         <item name="windowNoTitle">true</item>
     </style>
 
-    <!-- Settings as a sheet over the live Home (SettingsSheet). The window is see-through and
-         undimmed, so Home, the activity below, keeps drawing behind it; only the sheet paints.
-         Translucency must come from the manifest's theme: Android decides from it whether the
-         activity below stays visible, and skips the splash for a see-through window. The sheet
-         moves itself, so the window does not animate. -->
-    <style name="Theme.TermuxApp.SettingsSheet" parent="Theme.TermuxApp.DayNight.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:colorBackgroundCacheHint">@null</item>
-        <item name="android:backgroundDimEnabled">false</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
-        <item name="android:windowAnimationStyle">@style/Animation.Termux.SettingsSheet</item>
-    </style>
-
     <!-- The confirm card for an app asking to pin a shortcut or widget: a small card over a dimmed
          window, with Home still visible behind it. -->
     <style name="Theme.TermuxApp.PinCard" parent="Theme.TermuxApp.DayNight.NoActionBar">
@@ -45,19 +29,6 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
-    </style>
-
-    <style name="Animation.Termux.SettingsSheet" parent="">
-        <item name="android:activityOpenEnterAnimation">@null</item>
-        <item name="android:activityOpenExitAnimation">@null</item>
-        <item name="android:activityCloseEnterAnimation">@null</item>
-        <item name="android:activityCloseExitAnimation">@null</item>
-        <item name="android:taskOpenEnterAnimation">@null</item>
-        <item name="android:taskOpenExitAnimation">@null</item>
-        <item name="android:taskCloseEnterAnimation">@null</item>
-        <item name="android:taskCloseExitAnimation">@null</item>
-        <item name="android:taskToFrontEnterAnimation">@null</item>
-        <item name="android:taskToFrontExitAnimation">@null</item>
     </style>
 
     <!-- Light aliases of the DayNight themes. -->
