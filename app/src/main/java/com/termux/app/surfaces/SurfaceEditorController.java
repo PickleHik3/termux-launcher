@@ -659,10 +659,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mOpen || layout == null || layout.shownOrientation() == null)
             return;
         boolean landscape = layout.shownOrientation() == PlaceOrientation.LANDSCAPE;
-        android.widget.Toast.makeText(mHost.context(), landscape
-                ? R.string.appearance_bar_turn_for_portrait
-                : R.string.appearance_bar_turn_for_landscape,
-            android.widget.Toast.LENGTH_SHORT).show();
+        // In the theme hint's bubble over the page label, not a toast across it.
+        if (mBar != null)
+            mBar.showNote(landscape ? R.string.appearance_bar_turn_for_portrait
+                : R.string.appearance_bar_turn_for_landscape);
     }
 
     /** The chip follows the orientation the session edits, which turns with the phone. */

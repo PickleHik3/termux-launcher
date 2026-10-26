@@ -57,6 +57,8 @@ final class EditorBar {
      * keeps this far from the screen's sides.
      */
     private static final int HINT_GAP_DP = 6;
+    /** How long a passing note stays up. */
+    private static final long NOTE_MS = 2500L;
     private static final int HINT_SIDE_DP = 16;
 
     @NonNull private final Context mContext;
@@ -67,6 +69,14 @@ final class EditorBar {
     @NonNull private final MaterialButton mPalette;
     @NonNull private final TextView mHint;
     private boolean mHintWanted;
+    /**
+     * A passing note in the theme hint's bubble (the orientation chip's "Turn the phone"), above
+     * the half line so it never covers the page's name; it goes by itself.
+     */
+    @NonNull private final TextView mNote;
+    @NonNull private final Runnable mHideNote;
+    private float mBarLiftPx;
+    private float mHalfLiftPx;
     /** The half line's height as last set; the hint stands above it. */
     private int mHalfRowPx;
     @NonNull private final LinearLayout mHalfRow;
@@ -143,6 +153,10 @@ final class EditorBar {
             dismissThemeHint();
             if (mListener != null) mListener.onPalette();
         });
+        mNote = bubble(context);
+        mNote.setOnClickListener(v -> hideNote());
+        mHideNote = this::hideNote;
+        mNote.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeNote());
         mBar.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> alignHint());
         mHint.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> alignHint());
 
@@ -203,6 +217,11 @@ final class EditorBar {
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
             hint.bottomMargin = dp(HINT_GAP_DP);
             content.addView(mHint, hint);
+            FrameLayout.LayoutParams note = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            note.bottomMargin = dp(HINT_GAP_DP);
+            content.addView(mNote, note);
         }
     }
 
@@ -220,7 +239,8 @@ final class EditorBar {
     }
 
     void detach() {
-        for (View view : new View[] {mHalfRow, mBar, mHint}) {
+        hideNote();
+        for (View view : new View[] {mHalfRow, mBar, mHint, mNote}) {
             if (view.getParent() instanceof ViewGroup)
                 ((ViewGroup) view.getParent()).removeView(view);
         }
@@ -294,6 +314,61 @@ final class EditorBar {
         mHalfRow.setTranslationY(-halfLiftPx);
         int halfRowPx = mHalfRowPx > 0 ? mHalfRowPx : mHalfRow.getHeight();
         mHint.setTranslationY(-(Math.max(barLiftPx + dp(BAR_DP), halfLiftPx + halfRowPx)));
+        mBarLiftPx = barLiftPx;
+        mHalfLiftPx = halfLiftPx;
+        placeNote();
+    }
+
+    /**
+     * Shows {@code textRes} for a moment in the hint's bubble over the half line, where a toast
+     * would have covered the page's name; a tap or the time takes it away.
+     */
+    void showNote(int textRes) {
+        mNote.removeCallbacks(mHideNote);
+        mNote.setText(textRes);
+        mNote.animate().cancel();
+        mNote.setAlpha(0f);
+        mNote.setVisibility(View.VISIBLE);
+        placeNote();
+        mNote.animate().alpha(1f).setDuration(150L).start();
+        mNote.postDelayed(mHideNote, NOTE_MS);
+    }
+
+    private void hideNote() {
+        mNote.removeCallbacks(mHideNote);
+        mNote.animate().cancel();
+        mNote.setVisibility(View.GONE);
+    }
+
+    /** Over the half line and the bar, and over the theme hint while that is up. */
+    private void placeNote() {
+        int halfRowPx = mHalfRowPx > 0 ? mHalfRowPx : mHalfRow.getHeight();
+        float lift = Math.max(mBarLiftPx + dp(BAR_DP), mHalfLiftPx + halfRowPx);
+        if (mHint.getVisibility() == View.VISIBLE && mHint.getHeight() > 0)
+            lift += mHint.getHeight() + dp(HINT_GAP_DP);
+        mNote.setTranslationY(-lift);
+    }
+
+    /** The theme hint's bubble: label text on the secondary container, a 16 dp round. */
+    @NonNull
+    private TextView bubble(@NonNull Context context) {
+        TextView bubble = new TextView(context);
+        EditorViews.textAppearance(bubble,
+            com.google.android.material.R.attr.textAppearanceLabelLarge);
+        bubble.setTextColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSecondaryContainer, 0));
+        bubble.setGravity(Gravity.CENTER);
+        bubble.setPadding(dp(14), dp(8), dp(14), dp(8));
+        bubble.setMaxWidth(context.getResources().getDisplayMetrics().widthPixels
+            - 2 * dp(HINT_SIDE_DP));
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(16));
+        shape.setColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSecondaryContainer, 0));
+        bubble.setBackground(shape);
+        bubble.setElevation(dp(4));
+        bubble.setVisibility(View.GONE);
+        return bubble;
     }
 
     /** The bar shown (at rest) or hidden (a card is up). */
@@ -322,6 +397,7 @@ final class EditorBar {
         if (mHalfRow.getVisibility() != visibility) mHalfRow.setVisibility(visibility);
         if (!shown && mBar.getVisibility() != View.GONE) mBar.setVisibility(View.GONE);
         if (!shown && mHint.getVisibility() != View.GONE) mHint.setVisibility(View.GONE);
+        if (!shown) hideNote();
     }
 
     /**
