@@ -10,7 +10,9 @@ import androidx.annotation.Nullable;
  *
  * <p>The key once held a percentage of the dock's 48 dp (80 to 120). Such a value is read as the
  * preset nearest the size it drew, so an upgrade keeps each icon as close to its old size as the
- * presets allow; a key never written reads as {@link #DEFAULT}.</p>
+ * presets allow. A key never written reads as {@link #SMALL}, the 48 dp the old default of
+ * 100% drew, so no one's icons change size on upgrade; {@link #DEFAULT} is only the middle
+ * preset's name.</p>
  */
 public enum HomeIconSize {
     SMALL("small", 48),
@@ -19,6 +21,12 @@ public enum HomeIconSize {
 
     /** The size the dock's icons are drawn at, which the old percentages were taken of. */
     public static final int DOCK_ICON_DP = 48;
+
+    /**
+     * The preset a key never written reads as: the size the old default percentage, 100, drew
+     * (48 dp), so an icon nobody sized keeps its size.
+     */
+    @NonNull public static final HomeIconSize UNSET = SMALL;
 
     /** What the key stores. */
     @NonNull public final String value;
@@ -37,12 +45,13 @@ public enum HomeIconSize {
 
     /**
      * The preset {@code stored} names: a preset's value, or an old percentage of 48 dp read as
-     * the preset nearest the size it drew. Unset or unreadable is {@link #DEFAULT}.
+     * the preset nearest the size it drew. Unset or unreadable is {@link #UNSET}, as the old
+     * default of 100% reads.
      */
     @NonNull
     public static HomeIconSize fromStored(@Nullable String stored) {
         if (stored == null)
-            return DEFAULT;
+            return UNSET;
         String text = stored.trim();
         for (HomeIconSize size : values()) {
             if (size.value.equals(text))
@@ -51,7 +60,7 @@ public enum HomeIconSize {
         try {
             return nearestDp(Integer.parseInt(text) * DOCK_ICON_DP / 100f);
         } catch (NumberFormatException e) {
-            return DEFAULT;
+            return UNSET;
         }
     }
 

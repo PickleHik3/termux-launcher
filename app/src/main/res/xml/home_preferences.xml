@@ -19,7 +19,7 @@
             app:entries="@array/editor_home_icon_size_entries"
             app:entryValues="@array/editor_home_icon_size_values"
             app:useSimpleSummaryProvider="true"
-            android:defaultValue="default" />
+            android:defaultValue="small" />
         <ListPreference
             app:key="app_launcher_home_label_size"
             app:title="@string/settings_home_label_size_title"

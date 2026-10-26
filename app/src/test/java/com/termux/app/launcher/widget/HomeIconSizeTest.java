@@ -7,7 +7,7 @@ import org.junit.Test;
 /**
  * Home's icon size presets (editor-redesign §6): Small 48, Default 54 and Large 60 dp on the key
  * Settings › Home always used, an old percentage of the dock's 48 dp read as the preset nearest
- * the size it drew.
+ * the size it drew, and an unset key read as the 48 dp the old default drew.
  */
 public class HomeIconSizeTest {
 
@@ -42,10 +42,15 @@ public class HomeIconSizeTest {
     }
 
     @Test
-    public void unsetOrUnreadableIsTheDefault() {
-        assertEquals(HomeIconSize.DEFAULT, HomeIconSize.fromStored(null));
-        assertEquals(HomeIconSize.DEFAULT, HomeIconSize.fromStored("big"));
-        assertEquals(HomeIconSize.DEFAULT, HomeIconSize.fromStored(""));
+    public void unsetOrUnreadableReadsAsTheOldDefaultsSize() {
+        // Today's default, 100% (48 dp), and a key never written draw the same icon: no one's
+        // icons change size on upgrade.
+        assertEquals(HomeIconSize.fromStored("100"), HomeIconSize.fromStored(null));
+        assertEquals(HomeIconSize.SMALL, HomeIconSize.fromStored(null));
+        assertEquals(48, HomeIconSize.fromStored(null).dp);
+        assertEquals(HomeIconSize.SMALL, HomeIconSize.UNSET);
+        assertEquals(HomeIconSize.SMALL, HomeIconSize.fromStored("big"));
+        assertEquals(HomeIconSize.SMALL, HomeIconSize.fromStored(""));
     }
 
     @Test

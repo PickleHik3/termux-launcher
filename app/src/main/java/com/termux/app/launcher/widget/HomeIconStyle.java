@@ -33,8 +33,9 @@ public final class HomeIconStyle {
         }
     }
 
+    /** The style of a Home nobody styled: an unset icon size reads as {@link HomeIconSize#UNSET}. */
     public static final HomeIconStyle DEFAULT =
-        new HomeIconStyle(HomeIconSize.DEFAULT, LabelSize.DEFAULT, false, true);
+        new HomeIconStyle(HomeIconSize.UNSET, LabelSize.DEFAULT, false, true);
 
     /** The icon's size: one of the three presets ({@link HomeIconSize}). */
     @NonNull public final HomeIconSize iconSize;

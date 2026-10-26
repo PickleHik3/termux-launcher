@@ -35,9 +35,10 @@ public class HomeIconStyleTest {
     }
 
     @Test
-    public void theDefaultIsTheDefaultPreset() {
+    public void theDefaultIsWhatAnUnsetIconSizeReads() {
         HomeIconStyle style = HomeIconStyle.DEFAULT;
-        assertEquals(HomeIconSize.DEFAULT, style.iconSize);
+        assertEquals(HomeIconSize.fromStored(null), style.iconSize);
+        assertEquals(48, style.iconSize.dp);
         assertEquals(HomeAppIconView.LABEL_SP, style.labelSize.sp, 0f);
         assertFalse(style.twoLines);
         assertTrue(style.shadow);
