@@ -983,3 +983,14 @@ Agent
 Developer
 - 2026-10-26 · wave 4 · The welcome page's two choice cards: do they read as the app's segment style? · pong.
 - 2026-10-26 · wave 4b · Dark labels with a pale glow on a light wallpaper: does it read as Home's label, or should the shadow stay dark always? · pong.
+
+## Home ⇄ Workspace as one motion (2026-10-26, f30d90c1c)
+
+- 2026-10-26 · Both directions as a fling, a slow drag and a spring-back: no flash on the first frame (the leaving stack's picture takes over from the live stack) and none at landing (the picture is dropped and the stack re-dressed in one frame) · pong.
+- 2026-10-26 · Home → Workspace: no reflow or scroll jump after arrival; the terminal is laid out at its keyboard-up size before it shows · pong.
+- 2026-10-26 · A spring-back to Home leaves Home's room intact (no stray bottom inset) · pong.
+- 2026-10-26 · Stack transition, both directions: the glass edge and the pane rims fade with the terminal text, never text without an edge · pong.
+- 2026-10-26 · Lens beads and the Search field during the crossing; a plain border with the pre-size · pong.
+- 2026-10-26 · Halves dressed alike under Slide: keyboard timing unchanged from the 09-27/28 calls · pong.
+- 2026-10-26 · Home-only swipes, Peek, the drawer, reduced motion and Animation speed off: unchanged · pong.
+- 2026-10-26 · Perfetto: first-frame cost of the stack picture (trace section Wall.stackPicture) and memory while a crossing runs; below Android 10 the old dip runs · pong.
