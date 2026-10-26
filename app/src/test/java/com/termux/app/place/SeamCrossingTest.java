@@ -955,6 +955,8 @@ public class SeamCrossingTest {
         }
         assertEquals(0f, drive.last().pictureReveal, EPSILON);
         assertEquals(1f, drive.last().dockReveal, EPSILON);
+        assertTrue("the window's keyboard leaves with the picture",
+            drive.crossing.picturesKeyboardAway());
     }
 
     @Test
@@ -973,6 +975,7 @@ public class SeamCrossingTest {
                 step.keyboardReveal, EPSILON);
             assertEquals(1f - step.fraction, step.pictureReveal, EPSILON);
         }
+        assertFalse("Home has no keyboard to put away", drive.crossing.picturesKeyboardAway());
     }
 
     /**
@@ -1048,6 +1051,7 @@ public class SeamCrossingTest {
             PaneWallPage.WIDGETS, home(), false, false).slow(0f, 1f);
         assertTrue(drive.askedForPicture);
         assertFalse(drive.crossing.pictured());
+        assertFalse(drive.crossing.picturesKeyboardAway());
         for (Step step : drive.steps) {
             assertTrue(Float.isNaN(step.pictureReveal));
             assertEquals(SeamTravel.dockReveal(SeamTravel.DockPlan.DIP, step.progress),

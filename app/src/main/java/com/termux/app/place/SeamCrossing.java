@@ -443,6 +443,17 @@ public final class SeamCrossing {
         mRun.pictured = taken && mRun.wholeStack;
     }
 
+    /**
+     * Whether a pictured dip puts the committed half's keyboard away with its picture: the
+     * keyboard is in the committed stack, and the other half keeps none, so the stack it stands
+     * from the first frame is that half's rest — no keyboard laid out under its rows, its glass
+     * and its foot measured as they rest — rather than its rows over a keyboard pushed below the
+     * screen.
+     */
+    public boolean picturesKeyboardAway() {
+        return pictured() && mRun.committedKeyboard && !mRun.otherKeyboard;
+    }
+
     /** Whether the committed half's stack is drawn from its picture on this crossing. */
     public boolean pictured() {
         return mRun.pictured && mRun.wholeStack;

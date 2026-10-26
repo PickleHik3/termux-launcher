@@ -149,8 +149,29 @@ public final class StackPicture extends View {
         return mThere[1] - mHere[1] + getTranslationY() + view.getHeight();
     }
 
+    /** Bumped by every release, so a release booked for later never takes a newer picture. */
+    private int mGeneration;
+
+    /**
+     * The picture goes once {@code delayMs} have passed, where it stands until then: for a stack
+     * put back at its rest over it whose keyboard takes a few frames to draw again, which the
+     * picture, under the stack and identical to it there, covers meanwhile.
+     */
+    public void releaseAfter(long delayMs) {
+        int generation = mGeneration;
+        postDelayed(() -> {
+            if (generation == mGeneration) release();
+        }, Math.max(0L, delayMs));
+    }
+
+    /** Whether the picture shows all of itself, at the stack's own place. */
+    public boolean atRest() {
+        return mBitmap != null && getVisibility() == VISIBLE && mSinkPx == 0f;
+    }
+
     /** The picture goes, and the buffer it held with it. */
     public void release() {
+        mGeneration++;
         Bitmap bitmap = mBitmap;
         Image image = mImage;
         ImageReader reader = mReader;
