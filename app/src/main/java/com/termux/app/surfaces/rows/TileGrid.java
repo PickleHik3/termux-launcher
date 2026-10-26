@@ -6,7 +6,6 @@ import android.graphics.Paint;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
@@ -58,12 +57,12 @@ public final class TileGrid {
     static final int ICON_GAP_DP = 4;
     static final int CORNER_DP = 16;
 
-    @NonNull public final LinearLayout root;
+    @NonNull public final ViewGroup root;
     @NonNull public final List<MaterialButton> tiles;
     public final int columns;
     private boolean mSetting;
 
-    private TileGrid(@NonNull LinearLayout root, @NonNull List<MaterialButton> tiles,
+    private TileGrid(@NonNull ViewGroup root, @NonNull List<MaterialButton> tiles,
                      int columns) {
         this.root = root;
         this.tiles = Collections.unmodifiableList(tiles);
@@ -89,64 +88,15 @@ public final class TileGrid {
         int tileMin = Math.max(RowKit.dp(context, MIN_TILE_DP),
             (int) Math.ceil(widestWord) + 2 * padH + RowKit.dp(context, 4));
         int columns = columns(room, tileMin, gap, tiles.size(), MAX_COLUMNS);
-        int tileWidth = (room - gap * (columns - 1)) / Math.max(1, columns);
 
-        // Every tile as tall as the tallest: its glyph, its word's lines and its padding.
-        int lines = 1;
-        for (int i = 0; i < tiles.size(); i++) {
-            float text = buttons.get(i).getPaint().measureText(tiles.get(i).word.toString());
-            if (text > tileWidth - 2 * padH)
-                lines = 2;
-        }
-        int height = tileHeightPx(context, buttons.isEmpty() ? null : buttons.get(0), lines);
-
-        LinearLayout root = new LinearLayout(context);
-        root.setOrientation(LinearLayout.VERTICAL);
+        // Every tile as tall as the tallest, two lines of its word at most: the grid measures
+        // them all and gives each that one height, so a row never reads ragged.
+        Lines root = new Lines(context, columns, gap, widthPx,
+            tileHeightPx(context, buttons.isEmpty() ? null : buttons.get(0), 1));
         root.setPadding(edge, RowKit.dp(context, 4), edge, RowKit.dp(context, 8));
-        LinearLayout line = null;
-        for (int i = 0; i < buttons.size(); i++) {
-            if (i % columns == 0) {
-                line = new LinearLayout(context);
-                line.setOrientation(LinearLayout.HORIZONTAL);
-                line.setWeightSum(columns);
-                LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                if (i > 0)
-                    lineParams.topMargin = gap;
-                root.addView(line, lineParams);
-            }
-            MaterialButton button = buttons.get(i);
-            button.setMinHeight(height);
-            button.setMinimumHeight(height);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            if (i % columns > 0)
-                params.setMarginStart(gap);
-            line.addView(button, params);
-        }
-        int missing = buttons.isEmpty() ? 0 : (columns - buttons.size() % columns) % columns;
-        if (missing > 0 && line != null) {
-            // The missing tiles' share, gaps included, so the last line keeps the columns.
-            LinearLayout.LayoutParams rest = new LinearLayout.LayoutParams(0, 1, missing);
-            rest.setMarginStart(gap * missing);
-            line.addView(new View(context), rest);
-        }
-        // The estimate above can undercount a wrapped word (font scale, insets): after layout the
-        // tallest tile sets every tile's height, so the grid never reads uneven.
-        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int tallest = 0;
-            for (MaterialButton button : buttons)
-                tallest = Math.max(tallest, button.getHeight());
-            for (MaterialButton button : buttons) {
-                if (tallest > 0 && button.getMinimumHeight() < tallest) {
-                    for (MaterialButton each : buttons) {
-                        each.setMinHeight(tallest);
-                        each.setMinimumHeight(tallest);
-                    }
-                    break;
-                }
-            }
-        });
+        for (MaterialButton button : buttons)
+            root.addView(button, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         TileGrid grid = new TileGrid(root, buttons, columns);
         for (int i = 0; i < buttons.size(); i++)
             grid.setOn(i, i < on.length && on[i]);
@@ -227,6 +177,90 @@ public final class TileGrid {
             RowKit.color(context, com.google.android.material.R.attr.colorOutline)}));
         GlyphNames.name(button, tile.hint != null ? tile.hint : tile.word);
         return button;
+    }
+
+    /**
+     * The grid itself: {@code columns} equal columns {@code gap} apart, top-aligned lines
+     * {@code gap} apart, as wide as its parent gives it (the card's width when unbounded). It measures every tile at its column's width, takes the tallest (never
+     * under {@code floorPx}) and measures every tile again at that one height, in the same pass, so
+     * a one-line word and a two-line word make the same tile at any text size. Hidden tiles
+     * ({@link View#INVISIBLE}) keep their place; gone ones give it up.
+     */
+    static final class Lines extends ViewGroup {
+        private final int mColumns;
+        private final int mGap;
+        private final int mFloor;
+        private final int mFallbackWidth;
+        private int mTileWidth;
+        private int mTileHeight;
+
+        Lines(@NonNull Context context, int columns, int gap, int fallbackWidthPx, int floorPx) {
+            super(context);
+            mFallbackWidth = fallbackWidthPx;
+            mColumns = Math.max(1, columns);
+            mGap = gap;
+            mFloor = floorPx;
+        }
+
+        /** The one height every tile was measured at. */
+        int tileHeight() {
+            return mTileHeight;
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int width = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+                ? mFallbackWidth : MeasureSpec.getSize(widthMeasureSpec);
+            int room = Math.max(0, width - getPaddingLeft() - getPaddingRight());
+            mTileWidth = Math.max(0, (room - mGap * (mColumns - 1)) / mColumns);
+            int across = MeasureSpec.makeMeasureSpec(mTileWidth, MeasureSpec.EXACTLY);
+            int free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            int tallest = mFloor;
+            int count = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() == GONE)
+                    continue;
+                child.measure(across, free);
+                tallest = Math.max(tallest, child.getMeasuredHeight());
+                count++;
+            }
+            int down = MeasureSpec.makeMeasureSpec(tallest, MeasureSpec.EXACTLY);
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() != GONE && child.getMeasuredHeight() != tallest)
+                    child.measure(across, down);
+            }
+            mTileHeight = tallest;
+            int lines = (count + mColumns - 1) / mColumns;
+            int height = getPaddingTop() + getPaddingBottom()
+                + (lines == 0 ? 0 : lines * tallest + (lines - 1) * mGap);
+            setMeasuredDimension(resolveSize(width, widthMeasureSpec),
+                resolveSize(height, heightMeasureSpec));
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int room = (r - l) - getPaddingLeft() - getPaddingRight();
+            // What the even split leaves over (a pixel or two) goes to both sides alike.
+            int spare = Math.max(0, room - mColumns * mTileWidth - (mColumns - 1) * mGap) / 2;
+            int slot = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() == GONE)
+                    continue;
+                int column = slot % mColumns;
+                int line = slot / mColumns;
+                int start = spare + column * (mTileWidth + mGap);
+                int left = rtl ? (r - l) - getPaddingRight() - start - mTileWidth
+                    : getPaddingLeft() + start;
+                int top = getPaddingTop() + line * (mTileHeight + mGap);
+                child.layout(left, top, left + child.getMeasuredWidth(),
+                    top + child.getMeasuredHeight());
+                slot++;
+            }
+        }
     }
 
     /** A tile's height: its padding, its glyph, the gap and {@code lines} lines of its word. */
