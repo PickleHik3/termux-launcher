@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * The Workspace card's rows (editor-redesign §2, Workspace): Home's twin, the Workspace half's
  * Look as tiles and its glass, which the bars on the Workspace wear while they follow it; Match
- * Home styling; and the Global chip.
+ * Home styling (not under Use as Terminal only, which has no Home to match); and the Global chip.
  */
 public final class WorkspaceCard {
 
@@ -21,10 +21,10 @@ public final class WorkspaceCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return new EditorRows.CardRows()
+        EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY,
-                Row.TINT)
-            .tier(3, Row.MATCH_HOME, Row.SECTION_MORE, Row.LINK_GLOBAL)
-            .build();
+                Row.TINT);
+        if (offers.homeShown) rows.tier(3, Row.MATCH_HOME);
+        return rows.tier(3, Row.SECTION_MORE, Row.LINK_GLOBAL).build();
     }
 }

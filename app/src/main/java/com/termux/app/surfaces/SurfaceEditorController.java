@@ -237,6 +237,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return mHost.preferences();
     }
 
+    /** Use as, read fresh: Terminal only has no Home half, no Home card and no Match rows. */
+    @NonNull
+    private com.termux.app.wall.UseAs useAs() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return com.termux.app.wall.UseAs.read(prefs == null ? null : prefs.getUseAs());
+    }
+
     @Nullable
     private TermuxInAppKeyboard keyboard() {
         return mHost.inAppKeyboard();
@@ -479,9 +486,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         beginSession();
         if (!mSession)
             return;
+        // Terminal only has no Home: a door to Home's card opens the editor at rest, and says so.
+        com.termux.app.wall.UseAs useAs = useAs();
+        if (!useAs.reaches(card)) {
+            android.util.Log.i(EditorDoor.LOG_TAG, useAs.doorLine(card.key + "-card"));
+            card = null;
+        }
         // A card that stands on one screen opens on it: Home's card over a Workspace left on
         // screen would be refused by cardRefusal, leaving the editor with no card.
-        place = EditorDoor.placeFor(card, place, mHost.pageOnScreen());
+        place = useAs.editorPlace(EditorDoor.placeFor(card, place, mHost.pageOnScreen()));
         if (mOpen) {
             if (place != null)
                 switchHalf(SeamDress.halfOf(place), true);
@@ -525,7 +538,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mSessionCustom.copyFrom(carried.custom);
             refreshSettingsSignature();
         }
-        PaneWallPage page = place != null ? place : mHost.pageOnScreen();
+        PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
         mHalf = page == null ? WallHalf.WORKSPACE : SeamDress.halfOf(page);
         mCard = null;
         mRaisedKeyboard = false;
@@ -615,6 +628,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void switchHalf(@NonNull WallHalf half, boolean animate) {
         if (!mOpen || half == mHalf)
             return;
+        if (half == WallHalf.HOME && !useAs().showsHomePage()) {
+            android.util.Log.i(EditorDoor.LOG_TAG, useAs().doorLine("editor-home-half"));
+            return;
+        }
         mHalf = half;
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null)
@@ -701,6 +718,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return "the editor is not presented";
         if (mSheet == null)
             return "the editor has no card sheet";
+        if (!useAs().reaches(card))
+            return "Use as Terminal only has no Home card";
         if (!card.standsOn(mHalf))
             return "it does not stand on the " + mHalf + " half";
         return null;
@@ -738,7 +757,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private EditorRows.Offers offers() {
-        return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available());
+        return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available(),
+            useAs().showsHomePage());
     }
 
     @NonNull
