@@ -1029,6 +1029,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 layout.setDockStyle(DockStyle.GLASS_TRAY);
                 layout.setSearchField(false);
                 layout.setDrawerTile(false);
+                layout.setWallStripHeightDp(
+                    com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP);
             } else {
                 prefs.setAppLauncherBarHeightScale(scale);
             }
@@ -5283,6 +5285,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             openSettingsPage(
                 com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment.class,
                 R.string.settings_edit_extra_keys_title);
+        }
+
+        @Override public int stripHeightDp() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            int dp = layout == null ? -1 : layout.wallStripHeightDp();
+            return dp > 0 ? dp : com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP;
+        }
+
+        @Override public void setStripHeightDp(int dp) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null)
+                layout.setWallStripHeightDp(dp);
         }
 
         @Override public int dockType() {

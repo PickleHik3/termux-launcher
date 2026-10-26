@@ -563,6 +563,17 @@ public final class LayoutEditorController {
         afterWrite(drop);
     }
 
+    /** The Strip type's row height in the shown orientation, in dp, or -1 with no session. */
+    public int wallStripHeightDp() {
+        return mPlan == null ? -1 : mPlan.wallStripHeightDp();
+    }
+
+    /** The Strip type's row height (the Dock card's Strip height), through the session's Undo. */
+    public void setWallStripHeightDp(int dp) {
+        if (mPlan != null)
+            afterWrite(mPlan.setWallStripHeightDp(dp));
+    }
+
     /** Home's widget grid in the shown orientation, as {columns, rows}; null with no session. */
     @Nullable
     public int[] widgetGrid() {

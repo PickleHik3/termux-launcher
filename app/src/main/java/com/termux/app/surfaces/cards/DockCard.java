@@ -14,6 +14,7 @@ import androidx.annotation.StringRes;
 
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
+import com.termux.app.dock.WallStripRowPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Offers;
@@ -122,6 +123,17 @@ public final class DockCard {
         void setDockType(int index);
         boolean option(@NonNull Option option);
         void setOption(@NonNull Option option, boolean on);
+
+        /**
+         * The Strip type's row height, in dp (editor-redesign §1: bar Height moves in from the
+         * retired Layout mode, where it was the Strip row's handle). Shown under the Dock type
+         * tiles while the Strip is the type.
+         */
+        default int stripHeightDp() {
+            return WallStripRowPolicy.DEFAULT_HEIGHT_DP;
+        }
+
+        default void setStripHeightDp(int dp) {}
     }
 
     /** The dock types' glyphs and words, today's, in the order the tiles show them. */
@@ -131,6 +143,10 @@ public final class DockCard {
     private static final int[] TYPE_WORDS = {R.string.layout_editor_dock_style_glass_tray,
         R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
         R.string.layout_editor_dock_style_peek_glass};
+
+    /** The Strip's index among the type tiles, which alone carries the Strip height row. */
+    static final int STRIP_TYPE = com.termux.app.dock.DockStyle.CHOICES.indexOf(
+        com.termux.app.dock.DockStyle.WALL_STRIP);
 
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
@@ -154,6 +170,8 @@ public final class DockCard {
     @Nullable private SegmentRow mStyle;
     @Nullable private BarsList mBars;
     @Nullable private TileGrid mType;
+    /** The Strip type's height, under the type tiles; shown while the Strip is the type. */
+    @Nullable private StepperRow mStripHeight;
     @Nullable private TileGrid mOptions;
     @NonNull private final Map<Element, BarViews> mBarViews = new EnumMap<>(Element.class);
     /** A restatement sets the switches; only a touch reports. */
@@ -225,7 +243,19 @@ public final class DockCard {
                         mHost.setDockType(index);
                     restateType();
                 });
-                return section(context, R.string.editor_dock_row_type, mType.root);
+                mStripHeight = StepperRow.build(context, R.drawable.ic_ms_height,
+                    context.getString(R.string.editor_dock_strip_height),
+                    WallStripRowPolicy.MIN_HEIGHT_DP, WallStripRowPolicy.MAX_HEIGHT_DP,
+                    WallStripRowPolicy.HEIGHT_STEP_DP, mHost.stripHeightDp(),
+                    value -> context.getString(R.string.editor_dock_strip_height_value, value),
+                    mHost::setStripHeightDp);
+                LinearLayout body = new LinearLayout(context);
+                body.setOrientation(LinearLayout.VERTICAL);
+                body.addView(mType.root, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                body.addView(mStripHeight.root);
+                restateStripHeight();
+                return section(context, R.string.editor_dock_row_type, body);
             }
             case DOCK_OPTIONS: {
                 List<TileGrid.Tile> tiles = new ArrayList<>();
@@ -276,6 +306,16 @@ public final class DockCard {
         int chosen = mHost.dockType();
         for (int i = 0; i < type.tiles.size(); i++)
             type.setOn(i, i == chosen);
+        restateStripHeight();
+    }
+
+    /** The Strip height row shows with the Strip type alone, at the stored height. */
+    private void restateStripHeight() {
+        StepperRow strip = mStripHeight;
+        if (strip == null)
+            return;
+        strip.root.setVisibility(mHost.dockType() == STRIP_TYPE ? View.VISIBLE : View.GONE);
+        strip.setValue(mHost.stripHeightDp());
     }
 
     // ------------------------------------------------------------------------------- the bars

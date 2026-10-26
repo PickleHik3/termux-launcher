@@ -41,6 +41,9 @@
 
     <string name="editor_dock_extra_keys_editor">Extra keys editor</string>
 
+    <string name="editor_dock_strip_height">Strip height</string>
+    <string name="editor_dock_strip_height_value">%1$d dp</string>
+
     <string name="editor_dock_option_search_field">Search field</string>
     <string name="editor_dock_option_drawer_icon">Drawer icon</string>
     <string name="editor_dock_option_command_palette">Command palette</string>
