@@ -19,7 +19,7 @@ final class SettingsReopenPolicy {
      * @param closedAtMs when Settings last closed, or {@link #NO_CLOSE}
      * @param nowMs the clock now
      * @param deepLink the launch names a specific page, which always wins
-     * @return true when the pages should pop back to the root before the sheet shows
+     * @return true when the pages should pop back to the root before the page shows
      */
     static boolean shouldReset(long closedAtMs, long nowMs, boolean deepLink) {
         if (deepLink) return false;

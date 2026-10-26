@@ -93,8 +93,6 @@ public class SettingsTwoPaneTest {
         assertEquals(PAGES + "TerminalPreferencesFragment", detail(activity).getClass().getName());
         assertFalse(activity.isFinishing());
         activity.onBackPressed();
-        // The sheet slides away before the window goes.
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1));
         assertTrue("Back from a section's page leaves Settings", activity.isFinishing());
     }
 
