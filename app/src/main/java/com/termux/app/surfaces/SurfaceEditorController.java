@@ -2409,6 +2409,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(first)
                 ? getString(R.string.appearance_strip_all_surfaces) : null;
         }
+
+        @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
+            return statusTerminalRowView(row, widthPx);
+        }
+
+        @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
+            restateStatusTerminalRow(row, view);
+        }
     }
 
     /** Home's icon size, a percent of the dock's 48dp, as Settings › Home offers it. */
@@ -5156,4 +5164,234 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         syncLayoutCanvas();
         positionOutline();
     }
+
+    // ------------------------------------------------------- Status bar and Terminal cards
+
+    /** The rows the Status bar and Terminal cards drew themselves, for their restates. */
+    @NonNull private final java.util.Map<Row, com.termux.app.surfaces.cards.CardRowView> mOwnRows =
+        new java.util.EnumMap<>(Row.class);
+
+    /**
+     * The Status bar or Terminal card's own row for {@code row} ({@link
+     * EditorCardSheet.Model#rowView}), or null for a row the sheet draws.
+     */
+    @Nullable
+    private View statusTerminalRowView(@NonNull Row row, int widthPx) {
+        EditorCard card = mCard;
+        Context context = mHost.context();
+        com.termux.app.surfaces.cards.CardRowView built = null;
+        if (card == EditorCard.STATUS)
+            built = com.termux.app.surfaces.cards.StatusBarCard.view(context, row, widthPx,
+                mStatusCardHost);
+        else if (card == EditorCard.TERMINAL)
+            built = com.termux.app.surfaces.cards.TerminalCard.view(context, row, widthPx,
+                mTerminalCardHost);
+        if (built == null) {
+            mOwnRows.remove(row);
+            return null;
+        }
+        mOwnRows.put(row, built);
+        return built.view;
+    }
+
+    /** Reads a row {@link #statusTerminalRowView} built again from the values. */
+    private void restateStatusTerminalRow(@NonNull Row row, @NonNull View view) {
+        com.termux.app.surfaces.cards.CardRowView built = mOwnRows.get(row);
+        if (built != null && built.view == view)
+            built.restate();
+    }
+
+    /** The Status bar card's reads and writes, through the paths its old rows and Settings take. */
+    @NonNull private final com.termux.app.surfaces.cards.StatusBarCard.Host mStatusCardHost =
+        new com.termux.app.surfaces.cards.StatusBarCard.Host() {
+            @Override public int position() {
+                LayoutEditorController layout = mHost.layoutEditor();
+                return com.termux.app.surfaces.cards.StatusBarCard.positionIndex(
+                    layout == null ? null : layout.edgeOf(Element.STATUS));
+            }
+
+            @Override public void setPosition(int index) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                PlaceLayout.Edge[] edges = com.termux.app.surfaces.cards.StatusBarCard.POSITIONS;
+                if (layout == null || index < 0 || index >= edges.length)
+                    return;
+                layout.moveTo(Element.STATUS, edges[index]);
+                positionTargets();
+                syncDirty();
+            }
+
+            @Override public int clockFace() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.faceIndex(
+                    prefs == null ? null : prefs.getTopPaneClockStyle());
+            }
+
+            @Override public void setClockFace(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return;
+                pickClockStyle(com.termux.app.surfaces.cards.StatusBarCard.faceStyle(index,
+                    prefs.getTopPaneClockStyle()));
+            }
+
+            @Override public int clockPosition() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.alignmentIndex(
+                    prefs == null ? null : prefs.getTopPaneClockAlignment());
+            }
+
+            @Override public void setClockPosition(int index) {
+                String[] alignments = com.termux.app.surfaces.cards.StatusBarCard.ALIGNMENTS;
+                if (index >= 0 && index < alignments.length)
+                    pickClockAlignment(alignments[index]);
+            }
+
+            @Override public boolean option(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return false;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_12H:
+                        return prefs.isTopPaneClockAmPmEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_SECONDS:
+                        return prefs.isStatusClockSecondsEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_FAHRENHEIT:
+                        return prefs.isStatusWidgetWeatherFahrenheit();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_CAMERA_GAP:
+                        return com.termux.app.surfaces.cards.StatusBarCard.cameraGapOn(
+                            prefs.getStatusBarCutoutMode());
+                    default:
+                        return false;
+                }
+            }
+
+            @Override public void setOption(int index, boolean on) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || option(index) == on)
+                    return;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_12H:
+                        // The old 12-hour row's write, so the bar and the Wall strip follow.
+                        mModel.onValue(Row.CLOCK_12H, on ? 1 : 0, false);
+                        return;
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_SECONDS:
+                        prefs.setStatusClockSecondsEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_FAHRENHEIT:
+                        prefs.setStatusWidgetWeatherFahrenheit(on);
+                        break;
+                    default:
+                        return;
+                }
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
+            @Override public boolean indicator(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return false;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
+                        return prefs.isStatusWidgetCpuEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
+                        return prefs.isStatusWidgetRamEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
+                        return prefs.isStatusWidgetWeatherEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_NOTIFICATIONS:
+                        return prefs.isStatusWidgetNotificationsEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
+                        return prefs.isStatusWidgetMediaEnabled();
+                    default:
+                        return false;
+                }
+            }
+
+            @Override public void setIndicator(int index, boolean on) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || indicator(index) == on)
+                    return;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
+                        prefs.setStatusWidgetCpuEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
+                        prefs.setStatusWidgetRamEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
+                        prefs.setStatusWidgetWeatherEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_NOTIFICATIONS:
+                        prefs.setStatusWidgetNotificationsEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
+                        prefs.setStatusWidgetMediaEnabled(on);
+                        break;
+                    default:
+                        return;
+                }
+                // The bar's refresh ends in its widgets' pass, which reads every indicator.
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
+            @Override public void openCameraGap() {
+                Context context = mHost.context();
+                try {
+                    context.startActivity(SettingsActivity.createFragmentIntent(context,
+                        StatusBarPreferencesFragment.class,
+                        R.string.settings_destination_status_bar, null,
+                        TermuxPreferenceConstants.TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE));
+                } catch (RuntimeException e) {
+                    // No Settings to open (a stripped build): the editor stays as it is.
+                }
+            }
+        };
+
+    /** The Terminal card's reads and writes, through the paths its old rows and Settings take. */
+    @NonNull private final com.termux.app.surfaces.cards.TerminalCard.Host mTerminalCardHost =
+        new com.termux.app.surfaces.cards.TerminalCard.Host() {
+            @Override public int contrast() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 1
+                    : AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+            }
+
+            @Override public void setContrast(int index) {
+                // The old Contrast row's write: the palette rebuilds at the new level.
+                mModel.onValue(Row.CONTRAST, index, false);
+                syncDirty();
+            }
+
+            @Override public int trail() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 1
+                    : com.termux.app.surfaces.cards.TerminalCard.trailIndex(
+                        prefs.isTerminalCursorTrailEnabled(), prefs.getTerminalCursorTrailStyle());
+            }
+
+            @Override public void setTrail(int index) {
+                List<String> trails = com.termux.app.surfaces.cards.TerminalCard.TRAILS;
+                if (index >= 0 && index < trails.size())
+                    writeTrailStyle(trails.get(index));
+            }
+
+            @Override public int effect() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 0
+                    : com.termux.app.surfaces.cards.TerminalCard.effectIndex(
+                        prefs.getTerminalRetroEffect());
+            }
+
+            @Override public void setEffect(int index) {
+                List<String> effects = com.termux.app.surfaces.cards.TerminalCard.EFFECTS;
+                if (index >= 0 && index < effects.size())
+                    writeRetroEffect(effects.get(index));
+            }
+
+            @Override public void openFont() {
+                // The old Font link's page.
+                openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
+            }
+        };
 }

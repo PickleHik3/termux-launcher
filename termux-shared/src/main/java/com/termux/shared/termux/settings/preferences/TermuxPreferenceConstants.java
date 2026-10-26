@@ -649,6 +649,21 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
 
         /**
+         * Whether the status bar shows a small bell, with the count, while notifications are
+         * waiting: the same notifications the dock badges its icons with. Off by default.
+         */
+        public static final String KEY_STATUS_WIDGET_NOTIFICATIONS = "status_widget_notifications";
+        public static final boolean DEFAULT_STATUS_WIDGET_NOTIFICATIONS = false;
+
+        /**
+         * Whether the status bar's clock draws its seconds (the bar's own clock, the clock the Wall
+         * strip borrows from it, and the editor's preview of them). On by default: the bar has
+         * always drawn them.
+         */
+        public static final String KEY_STATUS_CLOCK_SECONDS = "status_clock_seconds";
+        public static final boolean DEFAULT_STATUS_CLOCK_SECONDS = true;
+
+        /**
          * Whose box the status row leaves its camera gap for when it shares the camera's band
          * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
          * {@link #STATUS_BAR_CUTOUT_CUSTOM} the centre and width below, {@link #STATUS_BAR_CUTOUT_OFF}
@@ -696,7 +711,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CURSOR_TRAIL_STYLE = "terminal_cursor_trail_style";
         public static final String DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE = "default";
 
-        /** Retro terminal effect id (none, crt, crt_green, crt_amber, tft). Global, API 33+. */
+        /** Retro terminal effect id (none, crt, crt_green, crt_amber, crt_material, tft). Global, API 33+. */
         public static final String KEY_TERMINAL_RETRO_EFFECT = "terminal_retro_effect";
         public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
 

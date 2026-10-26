@@ -394,6 +394,7 @@
         <item>CRT</item>
         <item>CRT (green)</item>
         <item>CRT (amber)</item>
+        <item>CRT (Material colours)</item>
         <item>TFT grid</item>
     </string-array>
     <string-array name="settings_terminal_retro_effect_values">
@@ -401,6 +402,7 @@
         <item>crt</item>
         <item>crt_green</item>
         <item>crt_amber</item>
+        <item>crt_material</item>
         <item>tft</item>
     </string-array>
 </resources>

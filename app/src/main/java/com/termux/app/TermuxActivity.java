@@ -10698,6 +10698,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // on the main looper for a window that is going away.
         mGeometry.dispose();
         releasePeekReflection();
+        // The badge store is process-wide: it must not hold on to a dead activity.
+        com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.removeListener(
+            mStatusNotificationsListener);
+        mStatusNotificationsListener = null;
         // Dropped, not resumed: the panes go with the window.
         mReturnHold.cancel();
         Choreographer.getInstance().removeFrameCallback(mReturnHoldFrame);
@@ -17788,6 +17792,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (row == null || mPreferences == null) return;
         row.setClockFace(mPreferences.getTopPaneClockStyle(),
             mPreferences.isTopPaneClockAmPmEnabled(), mPreferences.isLazyModeEnabled());
+        row.setClockSeconds(mPreferences.isStatusClockSecondsEnabled());
     }
 
     /**
@@ -22602,6 +22607,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null)
             return;
         String retroEffect = mPreferences.getTerminalRetroEffect();
+        // The Material CRT glows in the theme's primary: read before any screen is built with it.
+        com.termux.app.terminal.PaneRetroStyle.setMaterialPrimary(
+            com.google.android.material.color.MaterialColors.getColor(this,
+                androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4));
         if (mChromeRetroEffect == null) {
             View root = findViewById(R.id.activity_termux_root_view);
             if (root != null) mChromeRetroEffect = new com.termux.app.chrome.ChromeRetroEffect(root);
@@ -27574,6 +27583,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncStatusBarInk();
     }
 
+    /**
+     * Hears the notifications the dock badges its icons with, while the status bar's
+     * notifications indicator is on; null while it is off.
+     */
+    @Nullable private com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.Listener
+        mStatusNotificationsListener;
+
+    /**
+     * The status bar's notifications mark ({@code status_widget_notifications}): a bell and the
+     * count while notifications wait, the same ones the dock badges ({@link
+     * com.termux.app.statusbar.StatusNotificationsMark}); gone with none, or with the indicator
+     * off. Listens to the badge store only while the indicator is on.
+     */
+    private void syncStatusNotificationsMark() {
+        boolean enabled = mPreferences != null && mPreferences.isStatusWidgetNotificationsEnabled();
+        if (enabled && mStatusNotificationsListener == null) {
+            mStatusNotificationsListener = packages -> runOnUiThread(this::showStatusNotificationsMark);
+            // Adding it reports the packages at once, which draws the mark.
+            com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.addListener(
+                mStatusNotificationsListener);
+            return;
+        }
+        if (!enabled && mStatusNotificationsListener != null) {
+            com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.removeListener(
+                mStatusNotificationsListener);
+            mStatusNotificationsListener = null;
+        }
+        showStatusNotificationsMark();
+    }
+
+    private void showStatusNotificationsMark() {
+        com.termux.app.statusbar.StatusBarWidgetView mark =
+            findViewById(R.id.terminal_status_widget_notifications);
+        com.termux.app.statusbar.MaterialDotSeparatorView dot =
+            findViewById(R.id.terminal_status_dot_notifications);
+        if (mark == null || dot == null) return;
+        boolean enabled = mPreferences != null && mPreferences.isStatusWidgetNotificationsEnabled();
+        int count = enabled ? com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
+            .countFor(com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
+                .getActivePackages()) : 0;
+        boolean shown = com.termux.app.statusbar.StatusNotificationsMark.shown(enabled, count);
+        if (shown && mark.getTag() == null) {
+            mark.setTag("wired");
+            mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+            mark.setIconGlyph(com.termux.app.statusbar.StatusNotificationsMark.GLYPH);
+        }
+        if (shown)
+            mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));
+        boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
+            || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetWeatherEnabled());
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        boolean changed = mark.getVisibility() != visibility;
+        mark.setVisibility(visibility);
+        dot.setVisibility(shown && anyStatBefore ? View.VISIBLE : View.GONE);
+        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+        if (changed) syncStatusBarInk();
+    }
+
     public boolean isMouseMode() {
         return mFrameContent.isMouseMode();
     }
@@ -28761,6 +28828,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setStyle(mPreferences.getTopPaneClockStyle());
                 clock.setAlignment(mPreferences.getTopPaneClockAlignment());
                 clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
+                clock.setSeconds(mPreferences.isStatusClockSecondsEnabled());
             }
         }
         // The slot places the clock's cell by the same alignment the widget draws with, so the
@@ -29421,13 +29489,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The status widgets and their dots, in the order the row lays them out. */
     private static final int[] STATUS_INK_WIDGET_IDS = {
         R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
-        R.id.terminal_status_widget_weather, R.id.terminal_status_widget_ai,
-        R.id.terminal_status_widget_mouse,
+        R.id.terminal_status_widget_weather, R.id.terminal_status_widget_notifications,
+        R.id.terminal_status_widget_ai, R.id.terminal_status_widget_mouse,
     };
 
     private static final int[] STATUS_INK_DOT_IDS = {
         R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
-        R.id.terminal_status_dot_ai, R.id.terminal_status_dot_mouse,
+        R.id.terminal_status_dot_notifications, R.id.terminal_status_dot_ai,
+        R.id.terminal_status_dot_mouse,
     };
 
     /**
@@ -29608,6 +29677,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         ensureAiIndicatorController();
+        syncStatusNotificationsMark();
         // The tiers just moved, and a tier is which hue this widget's ink is toned from.
         syncStatusBarInk();
     }

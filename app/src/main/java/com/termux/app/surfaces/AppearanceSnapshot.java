@@ -74,6 +74,11 @@ final class AppearanceSnapshot {
     private final String mClockStyle;
     private final String mClockAlignment;
     /**
+     * The status bar's switches the Status bar card writes, in {@link #statusSwitches} order:
+     * 12-hour, seconds, °F weather, and the CPU, RAM, weather, media and notifications indicators.
+     */
+    private final boolean[] mStatusSwitches;
+    /**
      * Every half's own key as stored (ADR 0013): a key absent here is absent in the store, so a
      * half that followed the shared value at open follows it again after a restore.
      */
@@ -132,7 +137,31 @@ final class AppearanceSnapshot {
         mRetroEffect = prefs.getTerminalRetroEffect();
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
+        mStatusSwitches = statusSwitches(prefs);
         mHalfKeys = halfKeys(prefs);
+    }
+
+    /** The status bar's switches, as {@link #mStatusSwitches} keeps them. */
+    @NonNull
+    private static boolean[] statusSwitches(@NonNull TermuxAppSharedPreferences prefs) {
+        return new boolean[] {prefs.isTopPaneClockAmPmEnabled(), prefs.isStatusClockSecondsEnabled(),
+            prefs.isStatusWidgetWeatherFahrenheit(), prefs.isStatusWidgetCpuEnabled(),
+            prefs.isStatusWidgetRamEnabled(), prefs.isStatusWidgetWeatherEnabled(),
+            prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled()};
+    }
+
+    /** Writes back the status bar's switches that differ from the store's now. */
+    private static void restoreStatusSwitches(@NonNull TermuxAppSharedPreferences prefs,
+                                              @NonNull boolean[] kept) {
+        boolean[] now = statusSwitches(prefs);
+        if (now[0] != kept[0]) prefs.setTopPaneClockAmPmEnabled(kept[0]);
+        if (now[1] != kept[1]) prefs.setStatusClockSecondsEnabled(kept[1]);
+        if (now[2] != kept[2]) prefs.setStatusWidgetWeatherFahrenheit(kept[2]);
+        if (now[3] != kept[3]) prefs.setStatusWidgetCpuEnabled(kept[3]);
+        if (now[4] != kept[4]) prefs.setStatusWidgetRamEnabled(kept[4]);
+        if (now[5] != kept[5]) prefs.setStatusWidgetWeatherEnabled(kept[5]);
+        if (now[6] != kept[6]) prefs.setStatusWidgetMediaEnabled(kept[6]);
+        if (now[7] != kept[7]) prefs.setStatusWidgetNotificationsEnabled(kept[7]);
     }
 
     private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {
@@ -190,6 +219,7 @@ final class AppearanceSnapshot {
         prefs.setTerminalRetroEffect(mRetroEffect);
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
+        restoreStatusSwitches(prefs, mStatusSwitches);
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
     }
@@ -219,6 +249,7 @@ final class AppearanceSnapshot {
             .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
+            .append('|').append(java.util.Arrays.toString(mStatusSwitches))
             .append('|').append(mHalfKeys)
             .toString();
     }
