@@ -51,6 +51,9 @@ public class LayoutEditorHomeLayoutSwitchTest {
             app.getSharedPreferences("layout-editor-home-switch-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
         places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+        // Every store holds a Home layout since version 14; the flag off is what a store before
+        // it held, which the plan still turns until Layout mode is retired.
+        places.setHomeLayout(false);
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
     }
 

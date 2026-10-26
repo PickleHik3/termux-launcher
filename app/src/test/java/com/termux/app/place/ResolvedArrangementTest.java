@@ -45,11 +45,15 @@ public class ResolvedArrangementTest {
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
     }
 
-    /** A store dressed in {@code style} and {@code design} on the one shared layout. */
+    /**
+     * A store dressed in {@code style} and {@code design} on both screens' layouts, which start
+     * identical (editor-redesign §1).
+     */
     private PlaceLayoutStore dressed(LayoutStyle style, DockStyle design) {
         PlaceLayoutStore store = new PlaceLayoutStore(launcher);
         launcher.setLayoutStyle(style);
         store.forVariant(LayoutVariant.NORMAL).setDockStyle(design);
+        store.forVariant(LayoutVariant.HOME).setDockStyle(design);
         return store;
     }
 
@@ -67,7 +71,8 @@ public class ResolvedArrangementTest {
 
                         assertEquals(cell, home, a.home());
                         assertEquals(cell, orientation, a.orientation());
-                        assertEquals(cell, LayoutVariant.NORMAL, a.variant());
+                        LayoutVariant variant = home ? LayoutVariant.HOME : LayoutVariant.NORMAL;
+                        assertEquals(cell, variant, a.variant());
                         assertEquals(cell, style, a.layoutStyle());
                         assertEquals(cell, style == LayoutStyle.FLOATING, a.floating());
                         assertEquals(cell, design, a.design());
@@ -91,7 +96,7 @@ public class ResolvedArrangementTest {
 
                         assertPredicatesArePlaceChromePolicys(cell, a);
                         assertEquals(cell, a, ResolvedArrangement.resolve(store, orientation,
-                            LayoutVariant.NORMAL, home, style));
+                            variant, home, style));
                     }
                 }
             }

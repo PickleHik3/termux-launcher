@@ -309,8 +309,13 @@ public class EditorCardSheetFitTest {
                 assertTrue(card + ": " + legend.getContentDescription() + " stands open, no More",
                     legend.isShown() && legend.getWidth() > 0);
             List<com.google.android.material.slider.Slider> sliders = sliders(fixture.sheet.rows());
-            assertEquals(card + ": the Look's is the one horizontal slider",
-                card == EditorCard.APPEARANCE ? 1 : 0, sliders.size());
+            int looks = 0;
+            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
+                if (spec.row == EditorRows.Row.LOOK)
+                    looks++;
+            }
+            assertEquals(card + ": the Look's is the one horizontal slider", looks,
+                sliders.size());
             for (TextView text : texts(fixture.sheet.rows()))
                 assertTrue(card + " has no More row", !"More".contentEquals(text.getText()));
         }

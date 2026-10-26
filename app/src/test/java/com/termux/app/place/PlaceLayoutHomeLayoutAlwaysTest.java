@@ -111,6 +111,21 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
     }
 
     @Test
+    public void theUpgradeCopiesOnceAndALaterStartKeepsHomesEdits() {
+        current().forVariant(LayoutVariant.NORMAL).setSlot(PlaceOrientation.PORTRAIT,
+            Element.APPS, Slot.on(Edge.LEFT, 0));
+        PlaceLayoutStore upgraded = upgradedFrom13(false);
+        upgraded.forVariant(LayoutVariant.HOME).setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
+            Slot.on(Edge.TOP, 0));
+
+        PlaceLayoutStore again = new PlaceLayoutStore(launcher);
+        assertEquals("Home's edit is not copied over again", Edge.TOP, again
+            .forVariant(LayoutVariant.HOME).slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
+        assertEquals(Edge.LEFT, again.forVariant(LayoutVariant.NORMAL)
+            .slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
+    }
+
+    @Test
     public void aNewInstallHoldsAHomeLayoutFromTheStart() {
         PlaceLayoutStore fresh = new PlaceLayoutStore(launcher);
         assertTrue(fresh.hasHomeLayout());
