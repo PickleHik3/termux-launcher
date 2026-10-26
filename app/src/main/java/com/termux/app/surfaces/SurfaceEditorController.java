@@ -86,8 +86,8 @@ import java.util.Locale;
  *
  * <p><b>The frame.</b> {@code terminal_root_container} scaled about a top-centre pivot
  * ({@link AppearanceEditorFrame}), at rest between the top line and the half line over the editor
- * bar ({@link EditorBar}); every surface wears a quiet outline, and a hidden one is a card in the stack
- * beside the frame ({@link HiddenStackView}). With a card up the frame shrinks and moves so the selected surface, which alone wears the
+ * bar ({@link EditorBar}); every surface wears a quiet outline, and a hidden one comes back from the
+ * Elements list on its screen's card. With a card up the frame shrinks and moves so the selected surface, which alone wears the
  * primary ring, stays in view ({@link EditorFramePose}). While the editor is up the terminal's own
  * touches are taken by the gesture overlay, the in-app keyboard is raised so it can be tapped, and
  * the pane wall's paging is held.</p>
@@ -506,8 +506,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mOpen) {
             if (place != null)
                 switchHalf(SeamDress.halfOf(place), true);
-            if (card != null) raiseOrReport(card);
-            else closeCard(true);
+            if (card != null) {
+                raiseOrReport(card);
+                raiseFromPeek();
+            } else {
+                collapseCard(true);
+            }
+            if (mCard == null)
+                raiseScreenCard();
             if (onSettled != null)
                 onSettled.run();
             return;
@@ -556,13 +562,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null) {
             layout.setOnChangedListener(this::onArrangementChanged);
-            layout.setOnPlaceShownListener(() -> {
-                restateCard();
-                refreshStack();
-            });
+            layout.setOnPlaceShownListener(this::restateCard);
             layout.begin(place, carried == null ? null : carried.arrangement);
         }
-        attachStack(content);
         if (mBar == null) {
             mBar = new EditorBar(mHost.context());
             mBar.setListener(new BarListener());
@@ -577,6 +579,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mBar.setThemeHintWanted(hintPrefs != null && !hintPrefs.isAppearanceThemeHintSeen());
         mBar.setShown(true);
         mBar.setBarShown(true, false);
+        mBarUp = true;
         mBar.setHalf(mHalf);
         mBar.setOrientation(layout != null && layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
         if (mSheet == null)
@@ -591,8 +594,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // The card goes up now, not in the frame pass below: that pass is a post, and a post can
         // wait behind a pending traversal, so a card raised there is not up when this returns.
         // The sheet waits below the screen for its detents and rises with the frame's first pose.
+        // With no card named (or one that cannot stand here) the screen's card stands at peek:
+        // the sheet is never down while the editor is open.
         if (card != null)
             raiseOrReport(card);
+        if (mCard == null)
+            raiseScreenCard();
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
@@ -665,9 +672,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             openCard(followed, false);
             if (sheet != null && detent >= 0 && mCard == followed)
                 sheet.setDetent(detent, false);
-        } else if (mCard != null && !mCard.standsOn(half))
-            closeCard(true);
-        else
+        } else if (mCard != null && !mCard.standsOn(half)) {
+            // The card's object is not on this screen: the screen's own card takes its place, at
+            // the same detent.
+            EditorCard screen = EditorCard.forScreen(half);
+            EditorDoor.EDITOR_PAGE_SWIPE.log(screen);
+            openCard(screen, animate);
+        } else
             restateCard();
         positionTargets();
     }
@@ -709,7 +720,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void onPalette() {
             EditorCard card = EditorDoor.EDITOR_PALETTE.route(null, null);
-            if (card != null) openCard(card, true);
+            if (card == null)
+                return;
+            openCard(card, true);
+            // The palette stands on the card's header at peek: its card rises to be seen.
+            raiseFromPeek();
         }
 
         @Override public void onPageLabel() {
@@ -752,34 +767,79 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return null;
     }
 
-    /** Raises {@code card}, on the half the frame shows. */
+    /**
+     * Raises {@code card}, on the half the frame shows: a sheet that is down rises to its half
+     * detent, and a card already up gives way to it at the detent it stands at.
+     */
     private void openCard(@NonNull EditorCard card, boolean animate) {
+        openCard(card, animate, EditorCardSheet.DETENT_HALF);
+    }
+
+    /** {@link #openCard(EditorCard, boolean)}, a sheet that is down rising to {@code raiseTo}. */
+    private void openCard(@NonNull EditorCard card, boolean animate, int raiseTo) {
         EditorCardSheet sheet = mSheet;
         if (sheet == null || cardRefusal(card) != null)
             return;
         mCard = card;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
-        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate);
-        if (mBar != null)
-            mBar.setBarShown(false, animate);
+        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
+        restateBar(animate);
         layoutSheet();
         applyPose(animate);
         positionOutline();
     }
 
-    /** Puts the card down; the bar comes back. */
-    private void closeCard(boolean animate) {
+    /** The card of the screen the frame shows, at peek: the editor's resting state. */
+    private void raiseScreenCard() {
+        openCard(EditorCard.forScreen(mHalf), true, EditorCardSheet.DETENT_PEEK);
+    }
+
+    /**
+     * Takes the card to peek, the header alone over the navigation inset, with the editor bar on
+     * it. The card is never put down while the editor is open.
+     */
+    private void collapseCard(boolean animate) {
         EditorCardSheet sheet = mSheet;
-        if (mCard == null)
+        if (!sheetUp() || sheet == null)
             return;
-        mCard = null;
-        if (sheet != null)
-            sheet.hide(animate, null);
-        if (mBar != null && mOpen)
-            mBar.setBarShown(true, animate);
+        sheet.setDetent(EditorCardSheet.DETENT_PEEK, animate);
+        restateBar(animate);
         applyPose(animate);
-        positionOutline();
+    }
+
+    /** A card at peek rises to its half detent: a door that names a card means to show it. */
+    private void raiseFromPeek() {
+        EditorCardSheet sheet = mSheet;
+        if (sheetUp() && sheet != null && sheet.detent() == EditorCardSheet.DETENT_PEEK)
+            sheet.setDetent(EditorCardSheet.DETENT_HALF, true);
+    }
+
+    /** Whether a card is up, at any detent. */
+    private boolean sheetUp() {
+        EditorCardSheet sheet = mSheet;
+        return mCard != null && sheet != null && sheet.isShown();
+    }
+
+    /** Whether the card stands at peek with the editor bar on its header. */
+    private boolean barOverSheet() {
+        EditorCardSheet sheet = mSheet;
+        return sheetUp() && sheet != null && sheet.detent() == EditorCardSheet.DETENT_PEEK;
+    }
+
+    /** Whether the editor bar is up: with no card, or on the card's header at peek. */
+    private boolean mBarUp;
+
+    /** The editor bar shows at peek and hides above it; changed only when that changes. */
+    private void restateBar(boolean animate) {
+        EditorBar bar = mBar;
+        if (bar == null || !mOpen)
+            return;
+        boolean up = !sheetUp() || barOverSheet();
+        if (up == mBarUp)
+            return;
+        mBarUp = up;
+        bar.setBarShown(up, animate);
     }
 
     @NonNull
@@ -813,10 +873,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     private final class SheetListener implements EditorCardSheet.Listener {
-        @Override public void onClose() {
-            closeCard(true);
-        }
-
         @Override public void onReset() {
             resetCard();
         }
@@ -967,8 +1023,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         refreshPoseWindow();
         mFrameCtxValid = true;
         layoutSheet();
-        // The first pose already knows whether the rail stands (SPEC §3.6a item 3).
-        readHidden();
         if (mTargetScale < 0f) {
             // The first pose: the frame grows into place from full size.
             EditorFramePose.Pose pose = targetPose();
@@ -983,7 +1037,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         if (mEditorWallpaper != null)
             showEditorWallpaper(mEditorWallpaper);
-        refreshStack();
         return true;
     }
 
@@ -1034,8 +1087,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The pose the frame is heading for: with a card up, over the card at the detent it is
-     * settling on; at rest, over the editor bar.
+     * The pose the frame is heading for: over the card at the detent it is settling on, and at
+     * peek over the editor bar on the card's header; with no card, over the editor bar.
      */
     @NonNull
     private EditorFramePose.Pose targetPose() {
@@ -1043,19 +1096,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCardSheet sheet = mSheet;
         if (window == null)
             return new EditorFramePose.Pose(1f, 0f, 0f);
-        float cardTop = mCard != null && sheet != null
-            ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
-        return EditorFramePose.railPose(window, cardTop, poseReserve(), mHidden.size(), false);
+        if (!sheetUp() || sheet == null)
+            return EditorFramePose.pose(window, Float.MAX_VALUE);
+        return EditorFramePose.pose(window,
+            poseTop(window, window.heightPx - sheet.heightAt(sheet.detent())));
     }
 
-    /** The band on the frame's left that the stack of hidden items keeps clear. */
-    @NonNull
-    private EditorFramePose.Reserve poseReserve() {
-        AppearanceEditorFrame frame = mFrame;
-        int width = frame == null ? 0 : frame.root().getWidth();
-        return new EditorFramePose.Reserve(
-            mContainerLeftPx + HiddenStackPolicy.reservePx(density()), mContainerLeftPx, width,
-            mWindowWidthPx, dp(HiddenStackPolicy.SIDE_DP));
+    /** The top the poses read for a card whose top edge is at {@code sheetTopPx}. */
+    private float poseTop(@NonNull EditorFramePose.Window window, float sheetTopPx) {
+        return barOverSheet() ? EditorFramePose.topOverBar(window, sheetTopPx) : sheetTopPx;
     }
 
     /**
@@ -1188,9 +1237,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The bar over the navigation inset, and the half line: over the bar at rest, over the card
-     * while one is up, the frame above it either way (the poses leave it the room). By
-     * translation, every frame of the card's motion included.
+     * The bar on the card's header at peek (over the navigation inset with no card), and the half
+     * line over the bar, or over the card while it stands higher with the bar hidden; the frame
+     * above it either way (the poses leave it the room). By translation, every frame of the
+     * card's motion included.
      */
     private void placeBar() {
         EditorBar bar = mBar;
@@ -1198,170 +1248,141 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (bar == null || !mFrameCtxValid)
             return;
         int gap = dp(EditorFramePose.GAP_DP);
-        float barLift = mNavInsetPx + dp(EditorBar.FOOT_GAP_DP);
-        float halfLift = mCard != null && sheet != null && sheet.isShown()
-            ? mWindowHeightPx - sheet.sheetTopPx() + gap
-            : barLift + dp(EditorBar.BAR_DP) + gap;
+        boolean up = sheetUp() && sheet != null;
+        float under = up ? mWindowHeightPx - sheet.sheetTopPx() : mNavInsetPx;
+        float barLift = under + dp(EditorBar.FOOT_GAP_DP);
+        float halfLift = !up || barOverSheet() ? barLift + dp(EditorBar.BAR_DP) + gap
+            : under + gap;
         bar.place(barLift, halfLift);
         applyLabelInk();
-        placeStack();
     }
 
-    // ------------------------------------------------------------------ the hidden items' stack
+    // ---------------------------------------------------------------------- the Elements list
 
-    @Nullable private HiddenStackView mStack;
-    /** What the edited layout puts away now, in the stack's order. */
-    private final List<HiddenItem> mHidden = new ArrayList<>();
-    /** What the stack was last laid out for, so a pass that changes nothing touches nothing. */
-    @Nullable private String mStackSignature;
-    @Nullable private HiddenStackPolicy.Measure mStackMeasure;
-    private float mLabelBasePx;
-    private float mLabelForFontScale = -1f;
-    private float mLabelPx;
+    /** The Elements list on the screen card that is up, or null. */
+    @Nullable private com.termux.app.surfaces.cards.ElementsList mElements;
 
-    private void attachStack(@NonNull ViewGroup content) {
-        HiddenStackView stack = mStack;
-        if (stack == null) {
-            stack = new HiddenStackView(mHost.context());
-            stack.setListener(new HiddenStackView.Listener() {
-                @Override public void onShow(@NonNull HiddenItem item) {
-                    showHidden(item, true);
-                }
-
-                @Override public void onDropped(@NonNull HiddenItem item, float rawX, float rawY) {
-                    // Dragged out of the tray and let go over the frame: back where it was.
-                    if (isOverFrame(rawX, rawY))
-                        showHidden(item, false);
-                }
-            });
-            mStack = stack;
-        }
-        if (stack.getParent() != content) {
-            if (stack.getParent() instanceof ViewGroup)
-                ((ViewGroup) stack.getParent()).removeView(stack);
-            content.addView(stack, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        }
-    }
-
-    private void detachStack() {
-        HiddenStackView stack = mStack;
-        if (stack != null && stack.getParent() instanceof ViewGroup)
-            ((ViewGroup) stack.getParent()).removeView(stack);
-        mHidden.clear();
-        mStackSignature = null;
-    }
-
-    /** The items the edited layout puts away, read again; the stack and the frame follow. */
-    private void refreshStack() {
-        boolean wasEmpty = mHidden.isEmpty();
-        readHidden();
-        placeStack();
-        // The rail comes or goes with the first hidden item or the last: the frame's offset
-        // follows.
-        if (wasEmpty != mHidden.isEmpty())
-            applyPose(true);
-    }
-
-    /** What the edited layout puts away, read into {@link #mHidden}. */
-    private void readHidden() {
-        LayoutEditorController layout = mHost.layoutEditor();
-        mHidden.clear();
-        if (mOpen && layout != null) {
-            for (LayoutEditorPlan.TrayItem tray : layout.trayItems()) {
-                HiddenItem item = HiddenItem.of(tray);
-                if (item != null) mHidden.add(item);
-            }
-            if (layout.offers(Element.APPS)) {
-                if (!layout.searchField()) mHidden.add(HiddenItem.SEARCH_FIELD);
-            }
-        }
-    }
-
-    /** Lays the cards out for the window and the card up now. */
-    private void placeStack() {
-        HiddenStackView stack = mStack;
-        EditorFramePose.Window window = mPoseWindow;
-        EditorCardSheet sheet = mSheet;
-        if (stack == null || window == null || !mFrameCtxValid || !mOpen)
-            return;
-        float density = density();
-        int top = window.topPx();
-        float cardTop = mCard != null && sheet != null
-            ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
-        int available = Math.max(0,
-            Math.round(EditorFramePose.stackBottomPx(window, cardTop)) - top);
-        // Each card is as tall as its own wrapped label; the one label size shrinks only when
-        // the cards, the empty slot a lifted element drops into and the gaps would not fit.
-        float fontScale = getResources().getConfiguration().fontScale;
-        if (mStackMeasure == null) mStackMeasure = HiddenStackView.measure(mHost.context());
-        if (fontScale != mLabelForFontScale) {
-            mLabelBasePx = HiddenStackView.fittedLabelPx(mHost.context(), mStackMeasure);
-            mLabelForFontScale = fontScale;
-        }
-        List<String> labels = new ArrayList<>();
-        for (HiddenItem item : mHidden)
-            labels.add(mHost.context().getString(item.labelRes));
-        int cardWidth = HiddenStackPolicy.cardWidthPx(density);
-        mLabelPx = HiddenStackPolicy.stackLabelPx(labels, mStackMeasure, mLabelBasePx, cardWidth,
-            available, density);
-        int[] heights = HiddenStackPolicy.cardHeightsPx(labels, mStackMeasure, mLabelPx,
-            cardWidth, density);
-        int slot = HiddenStackPolicy.slotHeightPx(mStackMeasure, mLabelPx, density);
-        int left = mContainerLeftPx + dp(HiddenStackPolicy.SIDE_DP);
-        HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(heights, slot, left, top, available,
-            density);
-        String signature = mHidden + "/" + left + "/" + top + "/" + Arrays.toString(heights) + "/"
-            + mLabelPx
-            + "/" + available;
-        if (!signature.equals(mStackSignature)) {
-            mStackSignature = signature;
-            stack.set(mHidden, rail, mLabelPx);
-        }
-    }
-
-    /** Whether a raw screen point is over the frame. */
-    private boolean isOverFrame(float rawX, float rawY) {
-        int[] rect = mFrameRectInContent;
-        View content = mHost.findView(android.R.id.content);
-        if (rect == null || content == null)
-            return false;
-        int[] at = new int[2];
-        content.getLocationOnScreen(at);
-        float x = rawX - at[0];
-        float y = rawY - at[1];
-        return x >= rect[0] && x <= rect[2] && y >= rect[1] && y <= rect[3];
+    /** The Elements list for {@code screen}'s card, as the sheet builds it. */
+    @NonNull
+    private View elementsView(@NonNull WallHalf screen) {
+        com.termux.app.surfaces.cards.ElementsList list =
+            com.termux.app.surfaces.cards.ElementsList.build(mHost.context(), new ElementsHost(),
+                com.termux.app.surfaces.cards.ElementRows.rows(screen), true);
+        mElements = list;
+        return list.root;
     }
 
     /**
-     * Shows a hidden item again where it was (a tap on its card, or the card let go over the
-     * frame), and after a tap raises the card the item belongs to.
+     * Shows or puts away {@code element}, or the keyboard for null: what the card headers' eyes
+     * write, and the Elements list's for the status bar and the keyboard. Through the layout
+     * session, so Undo and Discard cover it.
      */
-    private void showHidden(@NonNull HiddenItem item, boolean openItsCard) {
+    private void writeShown(@Nullable Element element, boolean shown) {
         LayoutEditorController layout = mHost.layoutEditor();
-        if (!mOpen || layout == null)
+        if (layout == null)
             return;
-        switch (item) {
-            case KEYBOARD:
-                layout.setKeyboardShown(true);
-                if (!mHost.isInAppKeyboardShown())
-                    mRaisedKeyboard = mHost.showInAppKeyboardForEditor() || mRaisedKeyboard;
-                break;
-            case SEARCH_FIELD:
-                layout.setSearchField(true);
-                break;
-            default:
-                if (item.tray != null && item.tray.element != null)
-                    layout.setShown(item.tray.element, true);
-                break;
+        if (element == null) {
+            layout.setKeyboardShown(shown);
+            if (shown && !mHost.isInAppKeyboardShown()) {
+                mRaisedKeyboard = mHost.showInAppKeyboardForEditor() || mRaisedKeyboard;
+            } else if (!shown && mHost.isInAppKeyboardShown()) {
+                // The frame stops drawing it: off reads off, and its row in the Elements list
+                // greys out.
+                mHost.hideInAppKeyboardForEditor();
+                mRaisedKeyboard = false;
+            }
+        } else {
+            layout.setShown(element, shown);
         }
-        refreshStack();
         positionTargets();
-        if (openItsCard && item.card.standsOn(mHalf)) {
-            EditorDoor.EDITOR_HIDDEN_BAR.log(item.card);
-            if (item.card == EditorCard.DOCK)
-                dockCard().expand(item.tray == null ? null : item.tray.element);
-            openCard(item.card, true);
+    }
+
+    /**
+     * What the Elements list reads and writes: the same values as each element's own card (the
+     * header's eye, the Bars list's eye, the Dock card's Options tiles), so the two agree.
+     */
+    private final class ElementsHost implements com.termux.app.surfaces.cards.ElementsList.Host {
+        @NonNull private final DockHost mDock = new DockHost();
+
+        @Override public boolean offers(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (item.element != null)
+                return layout != null && layout.offers(item.element);
+            if (item.ridesTheDock())
+                return layout != null && layout.offers(Element.APPS);
+            return true;
+        }
+
+        @Override public boolean shown(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            switch (item.visibility) {
+                case ELEMENT:
+                    return layout != null && item.element != null && layout.isShown(item.element);
+                case KEYBOARD:
+                    // What the frame draws, as the Keyboard card's eye reads it.
+                    return mHost.isInAppKeyboardShown();
+                case SEARCH_FIELD:
+                    return mDock.option(com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD);
+                case DRAWER_TILE:
+                    return mDock.option(com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON);
+                case COMMAND_PALETTE_BUTTON:
+                    return mDock.option(
+                        com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE);
+                case NONE:
+                default:
+                    return true;
+            }
+        }
+
+        @Override public void setShown(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item, boolean shown) {
+            switch (item.visibility) {
+                case ELEMENT:
+                    if (item.element == null)
+                        return;
+                    if (item.element == Element.STATUS)
+                        writeShown(Element.STATUS, shown);
+                    else
+                        mDock.setBarShown(item.element, shown);
+                    break;
+                case KEYBOARD:
+                    writeShown(null, shown);
+                    break;
+                case SEARCH_FIELD:
+                    mDock.setOption(com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD,
+                        shown);
+                    break;
+                case DRAWER_TILE:
+                    mDock.setOption(com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON,
+                        shown);
+                    break;
+                case COMMAND_PALETTE_BUTTON:
+                    mDock.setOption(
+                        com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE, shown);
+                    break;
+                case NONE:
+                default:
+                    return;
+            }
+            positionTargets();
+            syncDirty();
+            EditorCardSheet sheet = mSheet;
+            if (sheet != null && sheet.isShown())
+                sheet.restate();
+        }
+
+        @Override public void open(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            EditorCard card = EditorDoor.ELEMENTS_LIST.route(null, item.card);
+            if (card == null || !mOpen)
+                return;
+            if (card == EditorCard.DOCK)
+                dockCard().expand(item.expandedBar());
+            openCard(card, true);
+            EditorCardSheet sheet = mSheet;
+            if (item.section != null && sheet != null && mCard == card)
+                sheet.scrollTo(item.section);
         }
     }
 
@@ -1383,6 +1404,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         if (detent != mLastDetent) {
             mLastDetent = detent;
+            restateBar(true);
             applyPose(true);
         }
     }
@@ -1390,6 +1412,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The card came to rest: the frame's pose and the outlines are made final. */
     private void onCardSettled() {
         mLastDetent = -1;
+        restateBar(true);
         if (mFrameAnimator == null)
             applyPose(false);
     }
@@ -1404,8 +1427,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntering = false;
         frame.root().animate().cancel();
         mFollowingSheet = true;
-        EditorFramePose.Pose pose = EditorFramePose.railPose(window, cardTopPx, poseReserve(),
-            mHidden.size(), false);
+        EditorFramePose.Pose pose = EditorFramePose.pose(window, poseTop(window, cardTopPx));
         frame.setPose(pose.scale, pose.translationX, pose.translationY);
     }
 
@@ -1720,7 +1742,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The arrangement moved (a drop, a switch, a height): the dirty state and the card. */
     private void onArrangementChanged() {
         syncDirty();
-        refreshStack();
         if (!mSliderDragActive && mSheet != null && mSheet.isShown())
             mSheet.restate();
     }
@@ -1803,16 +1824,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             commitAndExit();
     }
 
-    /** Back inside the editor: a card put down. */
+    /**
+     * Back inside the editor: a card above peek goes to peek. At peek Back is the surface's, which
+     * leaves the editor as Done and Discard do.
+     */
     @Override
     public boolean consumeBack() {
-        if (!mOpen)
+        EditorCardSheet sheet = mSheet;
+        if (!mOpen || !sheetUp() || sheet == null
+            || sheet.detent() == EditorCardSheet.DETENT_PEEK)
             return false;
-        if (mCard != null) {
-            closeCard(true);
-            return true;
-        }
-        return false;
+        collapseCard(true);
+        return true;
     }
 
     /** The Keyboard theme page in Settings, over the editor; Back returns to the same session. */
@@ -2226,6 +2249,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
             EditorCard card = mCard;
+            if (row == Row.ELEMENTS && card != null) {
+                WallHalf screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
+                if (screen != null)
+                    return elementsView(screen);
+            }
             if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
             if (card != null && CardBody.redesigned(card))
@@ -2235,6 +2263,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
             EditorCard card = mCard;
+            com.termux.app.surfaces.cards.ElementsList elements = mElements;
+            if (row == Row.ELEMENTS && elements != null && elements.root == view) {
+                elements.restate();
+                return;
+            }
             if (card == EditorCard.DOCK)
                 dockCard().restate(row);
             else if (card != null && CardBody.redesigned(card)) {
@@ -2317,24 +2350,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 }
                 syncDirty();
                 break;
-            case VISIBLE: {
-                if (layout == null) break;
-                Element element = elementOf(card);
-                if (element == null) {
-                    layout.setKeyboardShown(value != 0);
-                    if (value != 0 && !mHost.isInAppKeyboardShown()) {
-                        mRaisedKeyboard = mHost.showInAppKeyboardForEditor() || mRaisedKeyboard;
-                    } else if (value == 0 && mHost.isInAppKeyboardShown()) {
-                        // The frame stops drawing it: off reads off, and its card joins the stack.
-                        mHost.hideInAppKeyboardForEditor();
-                        mRaisedKeyboard = false;
-                    }
-                } else {
-                    layout.setShown(element, value != 0);
-                }
-                positionTargets();
+            case VISIBLE:
+                writeShown(elementOf(card), value != 0);
                 break;
-            }
             case STYLE:
                 writeStyle(value == 1);
                 break;
@@ -3352,7 +3370,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         dockCard().expand(dockBarAt(mDownRawX, mDownRawY));
                     openCard(card, true);
                 } else {
-                    closeCard(true);
+                    collapseCard(true);
                 }
             });
             group.setOnTouchListener((view, event) -> {
@@ -3420,7 +3438,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Where a card's surface stands in the overlay's space; null when the frame has no such
-     * surface (a hidden one is a card in the stack beside the frame, {@link HiddenStackView}).
+     * surface (a hidden one, which comes back from its screen card's Elements list).
      * Home's is the whole frame.
      */
     @Nullable
@@ -3924,7 +3942,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.onPlaceOrientationChanged();
             restateOrientation();
             restateCard();
-            refreshStack();
         });
     }
 
@@ -3956,7 +3973,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.setOnChangedListener(null);
             layout.setOnPlaceShownListener(null);
         }
-        detachStack();
+        mElements = null;
         cancelFrameAnimator();
         mFrameCtxValid = false;
         mTargetScale = -1f;

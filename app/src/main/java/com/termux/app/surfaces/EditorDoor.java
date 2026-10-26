@@ -52,8 +52,12 @@ public enum EditorDoor {
      * canvas; the card is the surface's.
      */
     EDITOR_OUTLINE("editor-outline"),
-    /** In the editor: a hidden bar's pill, brought back with its card; the card is the bar's. */
-    EDITOR_HIDDEN_BAR("editor-hidden-bar"),
+    /**
+     * In the editor: a row's sliders glyph in the Elements list at the end of a screen's card;
+     * the card is the element's (the Dock card for the apps row, the A–Z, the extra keys and the
+     * dock's own tiles).
+     */
+    ELEMENTS_LIST("elements-list"),
     /** In the editor: a tap on the page label under the frame, Home or Workspace. */
     EDITOR_PAGE_LABEL("editor-page-label"),
     /**
@@ -135,7 +139,7 @@ public enum EditorDoor {
             case LAUNCHERCTL:
                 return pageCard(onScreen);
             case EDITOR_OUTLINE:
-            case EDITOR_HIDDEN_BAR:
+            case ELEMENTS_LIST:
             case SETTINGS_SEARCH:
             case SECTION_INTENT:
             default:

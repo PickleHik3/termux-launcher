@@ -25,9 +25,10 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
  * palette glyph that opens the Appearance card; under the frame, two dots and the name of the
  * half the frame shows. Views only: what a press means is {@link Listener}'s.
  *
- * <p>Both views stand in the content view at its foot and move by translation alone, so a card
- * rising or falling never lays anything out per frame. The bar hides while a card is up (its
- * Done is the bar's, so finishing is ✕ and then Done); the half line stays, over the card.</p>
+ * <p>Both views stand in the content view and move by translation alone, so a card rising or
+ * falling never lays anything out per frame. The bar stands on the card's header while the card
+ * is at peek and hides while it stands higher (finishing is a pull down to peek, or Back, and
+ * then Done); the half line stays, over the bar or over the card.</p>
  */
 final class EditorBar {
 

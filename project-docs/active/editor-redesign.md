@@ -58,7 +58,8 @@ engineering notes. The sections keep the review's numbers; the review has no §7
   an eye and a sliders glyph that opens its own settings. Each bar has its own Position there (top,
   bottom, left, right, above the keyboard); there is no dock-wide Position. The list order stacks
   bars that share an edge.
-- **Hidden bars wait in a tray** at the screen edge while you edit; drag one out to bring it back.
+- **Hidden elements come back from the Elements list** at the end of the screen's card (changed
+  10-26 evening; the edge tray of pills is gone).
 - **No ⋮ menu.** It only ever held "Reset" and "Copy to". Copy to goes (the Match rows replace it),
   so the header gets a reset button in its place.
 - **Long-press** the dock, the status bar or the keyboard for a small popup with Edit and Hide. Their
@@ -347,7 +348,8 @@ Inside the editor:
 - Editor at rest > tap an outline > Status bar, Dock, Keyboard or Terminal card.
 - Editor at rest > tap the page label > Home or Workspace card.
 - Editor at rest > palette pill > Global card.
-- Editor at rest > drag a bar out of the edge tray > Dock card, on that bar.
+- Screen card > Elements list > a row's sliders glyph > that element's card (the Dock card on that
+  bar, or at its Options for the Search field, Drawer icon and Command palette).
 
 From Settings and tools:
 - Settings > Home · Terminal · Keyboard > Edit on screen > Home, Terminal or Keyboard card.
@@ -373,7 +375,7 @@ Out of a card:
 | In the editor: tap a surface outline | Status bar, Terminal, Dock (the A–Z row and extra keys too) or Keyboard card | Same, except tapping the A–Z row or extra keys opens the Dock card with that bar expanded |
 | In the editor: tap the page label (Home / Workspace) | Nothing | That screen's card (new) |
 | In the editor: the palette pill | Appearance card | Global card |
-| In the editor: a hidden bar's pill | Its card; hidden extra keys open the Keyboard card | The edge tray; dragging a bar out brings it back, and tapping it opens the Dock card with that bar expanded |
+| In the editor: a row of the screen card's Elements list (`elements-list`) | A hidden bar's pill in the edge tray (`editor-hidden-bar`, removed 10-26 evening) | The eye shows or hides the element; the sliders glyph opens its card: Status bar, Dock (with that bar expanded, or at Options), Keyboard, Terminal |
 | Settings > Home / Terminal / Keyboard > Layout editor | Home, Terminal or Keyboard card | Same cards; the row is renamed Edit on screen |
 | Settings > Look | Editor at rest | Global card |
 | Terminal More sheet > Appearance | The editor | Workspace card |
@@ -507,8 +509,35 @@ Each wave gets emulator before and after shots on a `~/reports` page. Pong only 
 - Settings search ranks an exact title first.
 - The A–Z popup opens only from its host's margin: a hold on the letters is already a scrub.
 - Glass-off A–Z under the Docked frame or a shared plank does nothing yet: the shared sheet stays.
-- Hide has no Undo snackbar: the tray and the eye bring a bar back.
+- Hide has no Undo snackbar: the Elements list and the eye bring a bar back.
 - The Camera gap tile stays a tile that never reads on, since the gap is not a setting.
+
+### Developer changes 10-26 evening
+
+1. **The card sheet is never put down.** It is a persistent bottom sheet with three detents: peek
+   (a 24 dp grab zone with the handle over a 48 dp header row: icon, title, eye and reset; 72 dp
+   over the navigation inset), half and full. A drag works from the grab zone and the header
+   row; a fling goes to the next detent the way it was thrown, a slow release to the nearest,
+   never off screen. A tap on the header goes up a detent, and from full back to peek. The ✕ is
+   removed: the handle, a drag and Back take the card to peek. Back above peek goes to peek; at
+   peek it leaves the editor as Done and Discard do (the unsaved-changes question). The editor
+   bar (orientation, Undo, Done, palette) stands on the card's header at peek and hides above
+   it, so the frame at peek sits over the bar. The editor opens with the screen's card at peek
+   when no door names a card. Opening another card (an outline, a chip, the page label, the page
+   swipe, the Elements list) puts it in place at the detent the sheet stands at; the palette, and
+   a door from outside that names a card, raise a card at peek to half.
+2. **The edge pills of hidden elements are removed** (`HiddenStackView`, `HiddenStackPolicy`,
+   `HiddenItem`, the rail's frame reserve and the `editor-hidden-bar` door). The hide/show state
+   itself is the same layout session state.
+3. **An Elements list ends each screen's card**, after the Match row and before More: Status bar,
+   Apps row, A–Z, Extra keys, Keyboard, Search field, Drawer icon, Command palette, then Terminal
+   (Workspace) or Widgets (Home), neither with an eye. Each row's sliders glyph opens the
+   element's card through the `elements-list` door: Status bar, the Dock card with that bar
+   expanded, Keyboard, Terminal; the Search field, Drawer icon and Command palette open the Dock
+   card at its Options, and Widgets Home's own Grid. The eye writes what the element's own card
+   writes (the slot's shown flag as the Bars list does, the keyboard switch, the `search_field`,
+   `drawer_tile` and `dock_command_palette_button` tiles), so both stay in step and Undo and
+   Discard cover it. Rows a page does not wear stand down. Policy: `cards/ElementRows`.
 
 ## Open points
 

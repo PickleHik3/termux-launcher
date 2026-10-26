@@ -28,8 +28,8 @@ public class EditorScreenCardsTest {
     public void theWorkspaceCardHoldsItsLookItsGlassItsMatchAndGlobal() {
         assertEquals(Arrays.asList(Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST,
             Row.OPACITY, Row.TINT), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
-        assertEquals(Arrays.asList(Row.MATCH_HOME, Row.SECTION_MORE, Row.LINK_GLOBAL),
-            EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
+        assertEquals(Arrays.asList(Row.MATCH_HOME, Row.ELEMENTS, Row.SECTION_MORE,
+            Row.LINK_GLOBAL), EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
     }
 
     @Test

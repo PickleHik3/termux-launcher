@@ -161,89 +161,21 @@ final class EditorFramePose {
      */
     @NonNull
     static Pose pose(@NonNull Window window, float cardTopPx) {
-        return pose(window, cardTopPx, null);
-    }
-
-    /**
-     * {@link #pose(Window, float)} with a band kept clear on the frame's left (the hidden items'
-     * stack): the scale is capped so the frame's right edge keeps its margin, and the frame is
-     * moved across just far enough that its left edge clears the band.
-     */
-    @NonNull
-    static Pose pose(@NonNull Window window, float cardTopPx, @Nullable Reserve reserve) {
         int top = window.topPx();
         float bottom = Math.min(window.restBottomPx(), window.bottomOverCardPx(cardTopPx));
-        float cap = restScale(window);
-        if (reserve != null)
-            cap = Math.min(cap, reserve.maxScale());
-        float scale = fitScale(window.visibleHeightPx, top, bottom, cap);
-        float tx = reserve == null ? 0f : reserve.shiftFor(scale);
+        float scale = fitScale(window.visibleHeightPx, top, bottom, restScale(window));
         float ty = top + window.revealTopPx * scale - window.containerTopPx;
         float halfLineTop = top + window.visibleHeightPx * scale + window.gapPx();
-        return new Pose(scale, tx, ty, halfLineTop);
+        return new Pose(scale, 0f, ty, halfLineTop);
     }
 
     /**
-     * The pose for the hidden items' rail (appearance-layout-editor SPEC §3.6a item 3), with the
-     * card's top edge at {@code cardTopPx}:
-     * <ul>
-     *   <li>something hidden: the rail stands, and the frame keeps the one offset {@link
-     *   #pose(Window, float, Reserve)} gives, lifted or not;</li>
-     *   <li>nothing hidden, nothing lifted: no rail, no reserve, the frame centred;</li>
-     *   <li>nothing hidden, an element lifted: the pose something hidden would give, so the
-     *   frame slides and shrinks clear of the rail's band in one move, fits the window, and does
-     *   not step again when the drop hides the element.</li>
-     * </ul>
+     * The top the poses read for a card at its peek detent, whose top edge is at
+     * {@code sheetTopPx}: the editor bar stands on the card's header there, so the frame and the
+     * half line keep clear of the bar as well (the bar's foot gap and its height above the card).
      */
-    @NonNull
-    static Pose railPose(@NonNull Window window, float cardTopPx, @NonNull Reserve reserve,
-                         int hiddenCount, boolean lifted) {
-        if (hiddenCount > 0)
-            return pose(window, cardTopPx, reserve);
-        if (!lifted)
-            return pose(window, cardTopPx, null);
-        return pose(window, cardTopPx, reserve);
-    }
-
-    /**
-     * The room the hidden items' stack takes on the frame's left, in px of the content view: the
-     * frame's left edge may not stand left of {@link #leftPx}, nor its right edge past the window
-     * less {@link #rightMarginPx}.
-     */
-    static final class Reserve {
-        final int leftPx;
-        final int containerLeftPx;
-        final int containerWidthPx;
-        final int windowWidthPx;
-        final int rightMarginPx;
-
-        Reserve(int leftPx, int containerLeftPx, int containerWidthPx, int windowWidthPx,
-                int rightMarginPx) {
-            this.leftPx = leftPx;
-            this.containerLeftPx = containerLeftPx;
-            this.containerWidthPx = containerWidthPx;
-            this.windowWidthPx = windowWidthPx;
-            this.rightMarginPx = rightMarginPx;
-        }
-
-        /** The largest scale whose frame fits between the band and the right margin. */
-        float maxScale() {
-            if (containerWidthPx <= 0)
-                return 1f;
-            float room = windowWidthPx - rightMarginPx - leftPx;
-            return Math.max(MIN_SCALE, room / containerWidthPx);
-        }
-
-        /** How far across the frame at {@code scale} moves so its left edge clears the band. */
-        float shiftFor(float scale) {
-            float centredLeft = containerLeftPx + containerWidthPx * (1f - scale) / 2f;
-            return Math.max(0f, leftPx - centredLeft);
-        }
-    }
-
-    /** The lowest the stack of hidden items may reach with a card whose top is here. */
-    static float stackBottomPx(@NonNull Window window, float cardTopPx) {
-        return Math.min(window.restBottomPx(), window.bottomOverCardPx(cardTopPx));
+    static float topOverBar(@NonNull Window window, float sheetTopPx) {
+        return sheetTopPx - window.footGapPx - window.barPx;
     }
 
     /** The pose at rest: no card. */

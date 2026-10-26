@@ -42,15 +42,19 @@ import java.util.Map;
 
 /**
  * One card of the Appearance editor (appearance-and-settings-rework §3, §7, §8; wireframes 02–04):
- * a bottom sheet with a 64dp header (the object's icon and name, then its eye where the object can
- * be hidden, reset and ✕; editor-redesign §1) over its rows, tier by tier, every row always shown;
- * the rows scroll. Views only: every value is read from {@link Model} and every
- * touch reported to it, so the same sheet is every card.
+ * a persistent bottom sheet with a 72dp header (a 24dp grab zone with the handle, then a 48dp row:
+ * the object's icon and name, its eye where the object can be hidden, and reset; editor-redesign
+ * §1 and the developer changes of 10-26 evening) over its rows, tier by tier, every row always
+ * shown; the rows scroll. Views only: every value is read from {@link Model} and every touch
+ * reported to it, so the same sheet is every card.
  *
- * <p><b>Detents.</b> The sheet is laid out once at the full detent's height and stands at the
- * half detent by translation, so neither a detent change nor a drag of the header lays anything
- * out per frame. At the half detent the rows' bottom padding grows by the part of the sheet
- * below the screen, so the last row still scrolls clear of the navigation inset by 16dp.</p>
+ * <p><b>Detents.</b> Three: peek (the header alone over the navigation inset), half and full. The
+ * sheet is never put down while the editor is open: a drag or Back takes it to peek, and the
+ * handle stays on screen to pull it up again. It is laid out once at the full detent's height and
+ * stands at the others by translation, so neither a detent change nor a drag of the header lays
+ * anything out per frame. Below the full detent the rows' bottom padding grows by the part of the
+ * sheet below the screen, so the last row still scrolls clear of the navigation inset by
+ * 16dp.</p>
  *
  * <p><b>Rows.</b> Content-driven heights (a strip is at least 72dp, a switch row 56dp), labels
  * on one line, ellipsized. Every value slider ({@link Kind#STRIP}), glass and sizes alike, stands
@@ -123,7 +127,6 @@ final class EditorCardSheet {
 
     /** What the header and the sheet itself report. */
     interface Listener {
-        void onClose();
         /** The header's reset: the card's keys back as they were, with no question asked. */
         void onReset();
         /** The sheet stands at a new top edge: every frame of its motion, and while dragged. */
@@ -135,8 +138,14 @@ final class EditorCardSheet {
 
     static final int DETENT_HALF = 0;
     static final int DETENT_FULL = 1;
+    /** The header alone: the handle, the icon, the title and the header's buttons. */
+    static final int DETENT_PEEK = 2;
 
-    static final int HEADER_DP = 64;
+    /** The grab zone over the header's row: the handle in it, the drag starting anywhere on it. */
+    static final int GRAB_DP = 24;
+    /** The header's row: icon, title and buttons, as tall as a button's touch target. */
+    static final int HEADER_ROW_DP = 48;
+    static final int HEADER_DP = GRAB_DP + HEADER_ROW_DP;
     static final int CORNER_DP = 24;
     /** The last row clears the navigation inset by this much at either detent. */
     static final int FOOT_CLEARANCE_DP = 16;
@@ -161,7 +170,8 @@ final class EditorCardSheet {
     @NonNull private final Listener mListener;
     @NonNull private final FrameLayout mSheet;
     @NonNull private final LinearLayout mColumn;
-    @NonNull private final FrameLayout mHeader;
+    @NonNull private final LinearLayout mHeader;
+    @NonNull private final FrameLayout mGrab;
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
     /** Shows or hides the card's object; gone on a card whose object cannot be hidden. */
@@ -175,6 +185,7 @@ final class EditorCardSheet {
     @Nullable private EditorCard mCard;
     private boolean mRestating;
     private int mDetent = DETENT_HALF;
+    private int mPeekPx;
     private int mHalfPx;
     private int mFullPx;
     private int mNavInsetPx;
@@ -202,19 +213,39 @@ final class EditorCardSheet {
         mSheet.addView(mColumn, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
 
-        mHeader = new FrameLayout(context);
+        mHeader = new LinearLayout(context);
+        mHeader.setOrientation(LinearLayout.VERTICAL);
         mColumn.addView(mHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             dp(HEADER_DP)));
+        mGrab = new FrameLayout(context);
+        mGrab.setContentDescription(context.getString(R.string.appearance_card_handle));
+        mGrab.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        androidx.core.view.ViewCompat.addAccessibilityAction(mGrab,
+            context.getString(R.string.appearance_card_expand), (v, args) -> {
+                if (!mShown || mDetent == DETENT_FULL)
+                    return false;
+                settle(mDetent == DETENT_PEEK ? DETENT_HALF : DETENT_FULL, true);
+                return true;
+            });
+        androidx.core.view.ViewCompat.addAccessibilityAction(mGrab,
+            context.getString(R.string.appearance_card_collapse), (v, args) -> {
+                if (!mShown || mDetent == DETENT_PEEK)
+                    return false;
+                settle(DETENT_PEEK, true);
+                return true;
+            });
+        mHeader.addView(mGrab, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(GRAB_DP)));
+        FrameLayout headerRow = new FrameLayout(context);
+        mHeader.addView(headerRow, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(HEADER_ROW_DP)));
         View handle = new View(context);
         GradientDrawable handleShape = new GradientDrawable();
         handleShape.setCornerRadius(dp(2));
         handleShape.setColor(EditorViews.color(context,
             com.google.android.material.R.attr.colorOutline));
         handle.setBackground(handleShape);
-        FrameLayout.LayoutParams handleParams = new FrameLayout.LayoutParams(dp(32), dp(4),
-            Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        handleParams.topMargin = dp(8);
-        mHeader.addView(handle, handleParams);
+        mGrab.addView(handle, new FrameLayout.LayoutParams(dp(32), dp(4), Gravity.CENTER));
 
         mHeaderIcon = new ImageView(context);
         mHeaderIcon.setImageTintList(ColorStateList.valueOf(EditorViews.color(context,
@@ -222,7 +253,7 @@ final class EditorCardSheet {
         FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(dp(24), dp(24),
             Gravity.START | Gravity.CENTER_VERTICAL);
         iconParams.setMarginStart(dp(EDGE_DP));
-        mHeader.addView(mHeaderIcon, iconParams);
+        headerRow.addView(mHeaderIcon, iconParams);
 
         mTitle = new TextView(context);
         EditorViews.textAppearance(mTitle, com.google.android.material.R.attr.textAppearanceTitleLarge);
@@ -236,18 +267,14 @@ final class EditorCardSheet {
             Gravity.START | Gravity.CENTER_VERTICAL);
         titleParams.setMarginStart(dp(ICON_COLUMN_DP));
         titleParams.setMarginEnd(headerButtonsDp(true));
-        mHeader.addView(mTitle, titleParams);
+        headerRow.addView(mTitle, titleParams);
 
-        // From the end: ✕, reset where the ⋮ menu sat (it only held Reset and Copy to, and the
-        // Match rows replaced Copy to), then the eye where the card has one.
-        MaterialButton close = headerButton(R.drawable.ic_symbol_close,
-            R.string.appearance_card_close);
-        close.setOnClickListener(v -> mListener.onClose());
-        mHeader.addView(close, headerButtonParams(0));
-
+        // From the end: reset where the ⋮ menu sat (it only held Reset and Copy to, and the
+        // Match rows replaced Copy to), then the eye where the card has one. There is no ✕: the
+        // card is never put down, and the handle, a drag or Back takes it to peek.
         mReset = headerButton(R.drawable.ic_ms_restart_alt, R.string.appearance_card_reset);
         mReset.setOnClickListener(v -> mListener.onReset());
-        mHeader.addView(mReset, headerButtonParams(1));
+        headerRow.addView(mReset, headerButtonParams(0));
 
         mEye = headerButton(R.drawable.ic_ms_visibility, R.string.appearance_row_visible);
         mEye.setCheckable(true);
@@ -259,7 +286,7 @@ final class EditorCardSheet {
             restateEye();
         });
         mEye.setVisibility(View.GONE);
-        mHeader.addView(mEye, headerButtonParams(2));
+        headerRow.addView(mEye, headerButtonParams(1));
         bindHeaderDrag();
 
         mScroll = new ScrollView(context);
@@ -295,12 +322,16 @@ final class EditorCardSheet {
     }
 
     /**
-     * The two detents' heights and the navigation inset the rows clear. The sheet takes the full
-     * height as its own (laid out only when this changes) and the half by translation.
+     * The half and full detents' heights and the navigation inset the rows clear; the peek
+     * detent is the header over the inset ({@link #peekHeightPx}). The sheet takes the full
+     * height as its own (laid out only when this changes) and the others by translation.
      */
     void setGeometry(int halfPx, int fullPx, int navInsetPx) {
         int full = Math.max(fullPx, halfPx);
-        boolean changed = full != mFullPx || halfPx != mHalfPx || navInsetPx != mNavInsetPx;
+        int peek = peekHeightPx(dp(HEADER_DP), navInsetPx, halfPx);
+        boolean changed = full != mFullPx || halfPx != mHalfPx || navInsetPx != mNavInsetPx
+            || peek != mPeekPx;
+        mPeekPx = peek;
         mHalfPx = halfPx;
         mFullPx = full;
         mNavInsetPx = navInsetPx;
@@ -329,9 +360,19 @@ final class EditorCardSheet {
     private boolean mParked;
     private boolean mParkedAnimate;
 
+    /**
+     * The peek detent's height: the header over the navigation inset, never taller than the half
+     * detent.
+     */
+    static int peekHeightPx(int headerPx, int navInsetPx, int halfPx) {
+        return Math.max(0, Math.min(halfPx, headerPx + navInsetPx));
+    }
+
     /** How tall the sheet stands at {@code detent}. */
     int heightAt(int detent) {
-        return detent == DETENT_FULL ? mFullPx : mHalfPx;
+        if (detent == DETENT_FULL) return mFullPx;
+        if (detent == DETENT_PEEK) return mPeekPx;
+        return mHalfPx;
     }
 
     int detent() {
@@ -390,11 +431,18 @@ final class EditorCardSheet {
     // ----------------------------------------------------------------------------------- cards
 
     /**
-     * Builds {@code card}'s rows and raises the sheet to its half detent. {@code resetLabel} names
-     * the header's reset button for accessibility and its long-press ("Reset dock").
+     * Builds {@code card}'s rows and raises the sheet to its half detent, or, with a card already
+     * up, puts {@code card} in its place at the detent the sheet stands at. {@code resetLabel}
+     * names the header's reset button for accessibility and its long-press ("Reset dock").
      */
     void show(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> rows,
               @NonNull String resetLabel, boolean animate) {
+        show(card, rows, resetLabel, animate, DETENT_HALF);
+    }
+
+    /** {@link #show}, raising a sheet that is down to {@code raiseTo} instead of the half detent. */
+    void show(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> rows,
+              @NonNull String resetLabel, boolean animate, int raiseTo) {
         boolean sameCard = mShown && card == mCard;
         mCard = card;
         mReset.setContentDescription(resetLabel);
@@ -418,8 +466,9 @@ final class EditorCardSheet {
         mSheet.setContentDescription(mContext.getString(card.titleRes));
         boolean wasShown = mShown;
         mShown = true;
-        if (!wasShown || !sameCard)
-            mDetent = DETENT_HALF;
+        // A card swapped in stands where the last one stood.
+        if (!wasShown)
+            mDetent = raiseTo;
         if (mFullPx <= 0) {
             // A restatement while parked keeps the slide the card was raised with.
             mParkedAnimate = (mParked && mParkedAnimate) || animate;
@@ -478,7 +527,34 @@ final class EditorCardSheet {
     void setDetent(int detent, boolean animate) {
         if (!mShown)
             return;
+        if (mFullPx <= 0 || mParked) {
+            // No detents yet: the sheet rises to this one once it has them.
+            mDetent = detent;
+            return;
+        }
         settle(detent, animate);
+    }
+
+    /**
+     * Scrolls the rows so {@code row} stands at the top of the card, once they are laid out: the
+     * Elements list opening the Dock card at its Options.
+     */
+    void scrollTo(@NonNull Row row) {
+        RowViews views = mRowViews.get(row);
+        if (views == null)
+            return;
+        View target = views.strip != null ? views.strip.root : views.root;
+        mScroll.post(() -> {
+            int y = 0;
+            for (View at = target; at != null && at != mRows; ) {
+                y += at.getTop();
+                at = at.getParent() instanceof View ? (View) at.getParent() : null;
+            }
+            if (ReducedMotion.isEnabled(mContext))
+                mScroll.scrollTo(0, y);
+            else
+                mScroll.smoothScrollTo(0, y);
+        });
     }
 
     private void settle(int detent, boolean animate) {
@@ -503,7 +579,7 @@ final class EditorCardSheet {
     }
 
     private float translationFor(int detent) {
-        return detent == DETENT_FULL ? 0f : Math.max(0, mFullPx - mHalfPx);
+        return Math.max(0, mFullPx - heightAt(detent));
     }
 
     /**
@@ -538,9 +614,10 @@ final class EditorCardSheet {
     // ------------------------------------------------------------------------------ header drag
 
     /**
-     * The header, its handle included, drags the sheet between its detents: a tap flips them, a
-     * fling goes the way it was thrown, a slow release goes to the nearer one, and a drag well
-     * below the half detent puts the card down.
+     * The header, its grab zone included, drags the sheet between its three detents, never below
+     * peek: a tap goes to the next one up and from the full detent back to peek ({@link
+     * #tapDetent}), a fling goes the way it was thrown, and a slow release goes to the nearest
+     * ({@link #releaseDetent}).
      */
     @SuppressLint("ClickableViewAccessibility")
     private void bindHeaderDrag() {
@@ -571,7 +648,8 @@ final class EditorCardSheet {
                             view.getParent().requestDisallowInterceptTouchEvent(true);
                     }
                     if (dragging[0]) {
-                        mSheet.setTranslationY(Math.max(0f, down[1] + dy));
+                        mSheet.setTranslationY(Math.max(0f,
+                            Math.min(translationFor(DETENT_PEEK), down[1] + dy)));
                         mListener.onSheetMoved(mDetent, sheetTopPx());
                     }
                     return true;
@@ -587,17 +665,11 @@ final class EditorCardSheet {
                         tracker[0] = null;
                     }
                     if (!dragging[0]) {
-                        // A tap on the header or its handle flips between the two detents.
-                        settle(mDetent == DETENT_FULL ? DETENT_HALF : DETENT_FULL, true);
+                        settle(tapDetent(mDetent), true);
                         return true;
                     }
-                    int target = releaseDetent(mSheet.getTranslationY(),
-                        translationFor(DETENT_HALF), mHalfPx, velocity, flingPxPerS);
-                    if (target < 0) {
-                        mListener.onClose();
-                        return true;
-                    }
-                    settle(target, true);
+                    settle(releaseDetent(mSheet.getTranslationY(), translationFor(DETENT_HALF),
+                        translationFor(DETENT_PEEK), velocity, flingPxPerS), true);
                     return true;
                 }
                 case MotionEvent.ACTION_CANCEL:
@@ -623,19 +695,31 @@ final class EditorCardSheet {
     }
 
     /**
-     * Where a released drag goes: {@link #DETENT_FULL}, {@link #DETENT_HALF}, or -1 to put the
-     * card down. {@code atPx} is the sheet's translation (0 at the full detent,
-     * {@code halfTranslationPx} at the half one); {@code velocityPxPerS} is positive downwards.
+     * Where a released drag goes: {@link #DETENT_FULL}, {@link #DETENT_HALF} or {@link
+     * #DETENT_PEEK}; never off screen. {@code atPx} is the sheet's translation (0 at the full
+     * detent, {@code halfTranslationPx} at the half one, {@code peekTranslationPx} at peek);
+     * {@code velocityPxPerS} is positive downwards. A fling goes to the next detent the way it was
+     * thrown; a slow release to the nearest.
      */
-    static int releaseDetent(float atPx, float halfTranslationPx, int halfHeightPx,
+    static int releaseDetent(float atPx, float halfTranslationPx, float peekTranslationPx,
                              float velocityPxPerS, float flingPxPerS) {
-        if (atPx > halfTranslationPx + halfHeightPx * 0.4f)
-            return -1;
         if (velocityPxPerS <= -flingPxPerS)
-            return DETENT_FULL;
+            return atPx > halfTranslationPx ? DETENT_HALF : DETENT_FULL;
         if (velocityPxPerS >= flingPxPerS)
-            return atPx > halfTranslationPx ? -1 : DETENT_HALF;
-        return Math.abs(atPx) < Math.abs(atPx - halfTranslationPx) ? DETENT_FULL : DETENT_HALF;
+            return atPx < halfTranslationPx ? DETENT_HALF : DETENT_PEEK;
+        float toFull = Math.abs(atPx);
+        float toHalf = Math.abs(atPx - halfTranslationPx);
+        float toPeek = Math.abs(atPx - peekTranslationPx);
+        if (toFull < toHalf && toFull <= toPeek)
+            return DETENT_FULL;
+        return toHalf <= toPeek ? DETENT_HALF : DETENT_PEEK;
+    }
+
+    /** Where a tap on the header goes: up a detent, and from the full detent back to peek. */
+    static int tapDetent(int detent) {
+        if (detent == DETENT_PEEK) return DETENT_HALF;
+        if (detent == DETENT_HALF) return DETENT_FULL;
+        return DETENT_PEEK;
     }
 
     // ------------------------------------------------------------------------------------ rows
@@ -1612,9 +1696,9 @@ final class EditorCardSheet {
         return line;
     }
 
-    /** The room the header's buttons take at its end: ✕ and reset, and the eye with it. */
+    /** The room the header's buttons take at its end: reset, and the eye with it. */
     private int headerButtonsDp(boolean withEye) {
-        return dp(HEADER_END_DP + HEADER_BUTTON_DP * (withEye ? 3 : 2) + 8);
+        return dp(HEADER_END_DP + HEADER_BUTTON_DP * (withEye ? 2 : 1) + 8);
     }
 
     /** The {@code index}th header button from the end. */

@@ -14,6 +14,8 @@ import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
+import com.termux.app.surfaces.cards.ElementRows.Item;
+import com.termux.app.surfaces.cards.ElementsList;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
@@ -95,25 +97,79 @@ public class SurfaceEditorHalvesTest {
     }
 
     @Test
-    public void aHiddenDockCanBeTappedBackAndItsSwitchShowsIt() {
+    public void aDockHiddenOnItsCardComesBackFromTheElementsList() {
         LayoutEditorController layout = layoutEditor();
         SurfaceEditorController editor = open(PaneWallPage.TERMINAL, layout);
         editor.present(EditorCard.DOCK, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         model(editor).onValue(Row.VISIBLE, 0, false);
         assertFalse(layout.isShown(Element.APPS));
-        assertTrue("a hidden dock joins the hidden-items stack",
-            hiddenStack(editor).contains(HiddenItem.PINNED_APPS));
 
-        model(editor).onValue(Row.VISIBLE, 1, false);
-        assertTrue(layout.isShown(Element.APPS));
-        assertFalse("a shown dock leaves the stack",
-            hiddenStack(editor).contains(HiddenItem.PINNED_APPS));
+        editor.present(EditorCard.WORKSPACE, null, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        ElementsList.Host elements = elements(editor);
+        assertFalse("the Elements list reads the dock hidden", elements.shown(Item.APPS_ROW));
+        elements.setShown(Item.APPS_ROW, true);
+        assertTrue("its eye brings the dock back", layout.isShown(Element.APPS));
+
+        editor.present(EditorCard.DOCK, null, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals("the Dock card's eye agrees", 1, model(editor).value(Row.VISIBLE));
     }
 
-    @SuppressWarnings("unchecked")
-    private static List<HiddenItem> hiddenStack(SurfaceEditorController editor) {
-        return (List<HiddenItem>) ReflectionHelpers.getField(editor, "mHidden");
+    @Test
+    public void theElementsListAndTheStatusCardsEyeWriteOneValue() {
+        LayoutEditorController layout = layoutEditor();
+        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, layout);
+        assertEquals("the screen's card stands at peek", EditorCard.WORKSPACE, editor.shownCard());
+        ElementsList.Host elements = elements(editor);
+        assertTrue(elements.shown(Item.STATUS_BAR));
+        elements.setShown(Item.STATUS_BAR, false);
+        assertFalse(layout.isShown(Element.STATUS));
+
+        editor.present(EditorCard.STATUS, null, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals("the Status bar card's eye reads it hidden", 0,
+            model(editor).value(Row.VISIBLE));
+        model(editor).onValue(Row.VISIBLE, 1, false);
+        assertTrue(layout.isShown(Element.STATUS));
+        assertTrue("and the list reads it back", elements.shown(Item.STATUS_BAR));
+    }
+
+    @Test
+    public void theDocksTilesAndTheElementsListWriteOneValue() {
+        LayoutEditorController layout = layoutEditor();
+        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, layout);
+        ElementsList.Host elements = elements(editor);
+        boolean search = layout.searchField();
+        assertEquals(search, elements.shown(Item.SEARCH_FIELD));
+        elements.setShown(Item.SEARCH_FIELD, !search);
+        assertEquals("the Dock card's Search field tile reads the same key", !search,
+            layout.searchField());
+        boolean drawer = layout.drawerTile();
+        elements.setShown(Item.DRAWER_ICON, !drawer);
+        assertEquals(!drawer, layout.drawerTile());
+    }
+
+    @Test
+    public void theSlidersGlyphOpensTheElementsCard() {
+        SurfaceEditorController editor = open(PaneWallPage.TERMINAL);
+        ElementsList.Host elements = elements(editor);
+        elements.open(Item.TERMINAL);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals(EditorCard.TERMINAL, editor.shownCard());
+        editor.present(EditorCard.WORKSPACE, null, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        elements(editor).open(Item.SEARCH_FIELD);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals("the Search field's settings are the Dock card's Options", EditorCard.DOCK,
+            editor.shownCard());
+    }
+
+    private static ElementsList.Host elements(SurfaceEditorController editor) {
+        ElementsList list = ReflectionHelpers.getField(editor, "mElements");
+        assertTrue("the screen card holds the Elements list", list != null);
+        return ReflectionHelpers.getField(list, "mHost");
     }
 
     // ------------------------------------------------------------------------------- the drive

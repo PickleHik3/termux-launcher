@@ -139,7 +139,6 @@ public class EditorCardHeaderTest {
             activity.setContentView(parent, new ViewGroup.LayoutParams(width, height));
             model = new Model(themed);
             sheet = new EditorCardSheet(themed, model, new EditorCardSheet.Listener() {
-                @Override public void onClose() {}
                 @Override public void onReset() {
                     resets++;
                 }

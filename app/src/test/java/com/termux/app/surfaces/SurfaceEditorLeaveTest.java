@@ -43,8 +43,8 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 
 /**
- * Leaving the editor (AGENTS.md, "the Appearance editor commits only on Done"): Back puts a card
- * down first; from rest, any difference from the state at open asks the unsaved-changes question;
+ * Leaving the editor (AGENTS.md, "the Appearance editor commits only on Done"): Back takes a card
+ * above peek to peek first; at peek, any difference from the state at open asks the unsaved-changes question;
  * Discard puts everything back as it was at open, both halves and every layout; Done keeps.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -68,15 +68,17 @@ public class SurfaceEditorLeaveTest {
     }
 
     @Test
-    public void backPutsTheCardDownThenAWorkspaceChangeAsks() {
+    public void backTakesTheCardToPeekThenAWorkspaceChangeAsks() {
         SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, null);
         assertEquals(WallHalf.WORKSPACE, editor.half());
         model(editor).onValue(Row.OPACITY, 21, false);
         model(editor).onReleased(Row.OPACITY);
 
-        assertTrue("Back with a card up is spent on the card", editor.consumeBack());
-        assertNull(editor.shownCard());
-        assertFalse("at rest Back is the surface's to leave by", editor.consumeBack());
+        assertTrue("Back with a card above peek is spent on the card", editor.consumeBack());
+        assertEquals("the card stays, at peek", EditorCard.DOCK, editor.shownCard());
+        EditorCardSheet sheet = org.robolectric.util.ReflectionHelpers.getField(editor, "mSheet");
+        assertEquals(EditorCardSheet.DETENT_PEEK, sheet.detent());
+        assertFalse("at peek Back is the surface's to leave by", editor.consumeBack());
 
         boolean[] left = {false};
         editor.requestLeave(() -> left[0] = true);

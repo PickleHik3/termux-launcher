@@ -80,12 +80,13 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
-    public void theHeaderIsSixtyFourAndTheRowsAtLeastTheirHeights() {
+    public void theHeaderIsSeventyTwoAndTheRowsAtLeastTheirHeights() {
         Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
         fixture.layOut();
         float density = fixture.themed.getResources().getDisplayMetrics().density;
         LinearLayout column = (LinearLayout) ((ViewGroup) fixture.sheet.view()).getChildAt(0);
-        assertEquals(Math.round(64 * density), column.getChildAt(0).getHeight());
+        // A 24dp grab zone over the 48dp row of icon, title and buttons.
+        assertEquals(Math.round(72 * density), column.getChildAt(0).getHeight());
         // The Dock's strip follows its Style and Bars rows.
         View strip = legends(fixture.sheet.rows()).get(0);
         while (strip.getParent() != fixture.sheet.rows())
@@ -516,7 +517,6 @@ public class EditorCardSheetFitTest {
             parent = new FrameLayout(themed);
             activity.setContentView(parent, new ViewGroup.LayoutParams(mWidth, mHeight));
             sheet = new EditorCardSheet(themed, new FakeModel(themed), new EditorCardSheet.Listener() {
-                @Override public void onClose() {}
                 @Override public void onReset() {}
                 @Override public void onSheetMoved(int detent, float topPx) {}
             });

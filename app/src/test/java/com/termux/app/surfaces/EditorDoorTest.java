@@ -100,7 +100,7 @@ public class EditorDoorTest {
     @Test
     public void theNamingDoorsOpenWhatTheyName() {
         for (EditorDoor door : new EditorDoor[] {EditorDoor.EDITOR_OUTLINE,
-                EditorDoor.EDITOR_HIDDEN_BAR, EditorDoor.SETTINGS_SEARCH,
+                EditorDoor.ELEMENTS_LIST, EditorDoor.SETTINGS_SEARCH,
                 EditorDoor.SECTION_INTENT}) {
             for (EditorCard card : EditorCard.values())
                 assertEquals(door.doorName, card, door.cardFor(PaneWallPage.WIDGETS, card));

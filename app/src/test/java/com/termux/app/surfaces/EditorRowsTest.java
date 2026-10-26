@@ -107,8 +107,9 @@ public class EditorRowsTest {
             Row.HOME_ICON_SIZE, Row.FOLDERS, Row.NUMERALS, Row.SECTION_OPTIONS,
             Row.GLASS_WIDGETS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
             Row.WALLPAPER_SCROLL), EditorRows.tier(EditorCard.HOME, ALL, 2));
-        assertEquals(Arrays.asList(Row.MATCH_WORKSPACE, Row.SECTION_MORE, Row.LINK_GLOBAL,
-            Row.LINK_GESTURES, Row.LINK_PAGES), EditorRows.tier(EditorCard.HOME, ALL, 3));
+        assertEquals(Arrays.asList(Row.MATCH_WORKSPACE, Row.ELEMENTS, Row.SECTION_MORE,
+            Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES),
+            EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (WallHalf frame : WallHalf.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
                 assertEquals(row + " with the frame on " + frame, WallHalf.HOME,

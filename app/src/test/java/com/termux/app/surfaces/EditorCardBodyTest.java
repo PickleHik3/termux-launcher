@@ -238,7 +238,6 @@ public class EditorCardBodyTest {
                 EditorRows.rows(card, new EditorRows.Offers(true, true)),
                 () -> built[0].setDetent(EditorCardSheet.DETENT_FULL, true));
             sheet = new EditorCardSheet(themed, model, new EditorCardSheet.Listener() {
-                @Override public void onClose() {}
                 @Override public void onReset() {}
                 @Override public void onSheetMoved(int detent, float topPx) {}
             });
