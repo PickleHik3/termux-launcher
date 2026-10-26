@@ -1961,7 +1961,8 @@ public class Keyboard2View extends View
    * inside the key's own rectangle, not in the gap to its neighbours (half a key margin on each
    * side) nor on the margins around the rows (above the top row, beside and under the rows). Those
    * are the keyboard's frame rather than any key's. A press still starts a key by its whole cell,
-   * as {@link #onTouch} reads it; this only decides who owns a long hold.
+   * as {@link #onTouch} reads it. The long-press popup does not use this: it reads
+   * {@link #drawnKeyRectAt} and keeps only a key's core, so gaps, key edges and margins open it.
    */
   public boolean hasKeyAt(float tx, float ty)
   {
@@ -1998,6 +1999,46 @@ public class Keyboard2View extends View
       }
     }
     return true;
+  }
+
+  /**
+   * The drawn rectangle, in this view's coordinates, of the key whose cell holds ({@code tx},
+   * {@code ty}), with the same arithmetic as {@link #onDraw}. False, and {@code out} untouched,
+   * when no key's cell holds the point (the band above the top row, the side margins, the strip
+   * under the rows). A point in the gap beside a key still gives that key's rectangle; the caller
+   * decides how far inside it counts as the key.
+   */
+  public boolean drawnKeyRectAt(float tx, float ty, RectF out)
+  {
+    if (_keyboard == null || _tc == null)
+      return false;
+    KeyboardData.Row hitRow = getRowAtPosition(ty);
+    KeyboardData.Key key = getKeyAtPosition(tx, ty);
+    if (hitRow == null || key == null)
+      return false;
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      if (row == hitRow)
+      {
+        float x = _marginLeft + _tc.margin_left;
+        for (KeyboardData.Key k : row.keys)
+        {
+          x += k.shift * _keyWidth;
+          if (k == key)
+          {
+            out.set(x, y, x + _keyWidth * k.width - _tc.horizontal_margin,
+                y + row.height * _tc.row_height - _tc.vertical_margin);
+            return true;
+          }
+          x += _keyWidth * k.width;
+        }
+        return false;
+      }
+      y += row.height * _tc.row_height;
+    }
+    return false;
   }
 
   private KeyboardData.Key getKeyAtPosition(float tx, float ty)
