@@ -2262,6 +2262,7 @@
     <string name="dock_wall_strip_new_terminal">New terminal</string>
     <!-- The Drawer tile (#97), spoken: it opens the app drawer; hold to move it. -->
     <string name="dock_drawer_tile">All apps</string>
+    <string name="dock_command_palette_tile">Command palette</string>
     <string name="palette_home_minimise_floats">Minimise all floats</string>
     <string name="palette_home_minimise_floats_hint">Tuck every floating terminal into its chip</string>
     <string name="palette_home_restore_floats">Restore floats</string>
