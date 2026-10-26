@@ -2929,6 +2929,27 @@ public final class PaneWallLayout extends ViewGroup {
         requestLayout();
     }
 
+    /**
+     * How much shorter than the wall the terminal's page is laid out at its bottom: the room the
+     * chrome of the place a slide is arriving on will take from the content, given to the page
+     * ahead of the settle so its panes take their final size while the page arrives
+     * ({@code Crossing#preSizeTerminal}). 0 at rest.
+     */
+    private int mTerminalBottomInsetPx;
+
+    /** See {@link #mTerminalBottomInsetPx}. */
+    public void setTerminalBottomInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mTerminalBottomInsetPx) return;
+        mTerminalBottomInsetPx = inset;
+        requestLayout();
+    }
+
+    /** How far {@code child} ends above the wall's bottom, beyond its frame. */
+    private int pageBottomInsetPx(@NonNull View child) {
+        return child == mTerminalHost ? mTerminalBottomInsetPx : 0;
+    }
+
     /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
     private int pageTopInsetPx(@NonNull View child) {
         return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
@@ -2958,7 +2979,7 @@ public final class PaneWallLayout extends ViewGroup {
                 - getPaddingRight() - frameMarginPx(child, margins.leftMargin)
                 - frameMarginPx(child, margins.rightMargin)), MeasureSpec.EXACTLY);
             int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
-                - getPaddingBottom() - pageTopInsetPx(child)
+                - getPaddingBottom() - pageTopInsetPx(child) - pageBottomInsetPx(child)
                 - frameMarginPx(child, margins.topMargin)
                 - frameMarginPx(child, margins.bottomMargin)), MeasureSpec.EXACTLY);
             child.measure(childWidth, childHeight);
@@ -2982,7 +3003,7 @@ public final class PaneWallLayout extends ViewGroup {
                 + frameMarginPx(child, margins.topMargin);
             int right = Math.max(left, r - l - getPaddingRight()
                 - frameMarginPx(child, margins.rightMargin));
-            int bottom = Math.max(top, b - t - getPaddingBottom()
+            int bottom = Math.max(top, b - t - getPaddingBottom() - pageBottomInsetPx(child)
                 - frameMarginPx(child, margins.bottomMargin));
             // A page that came on screen during this pass was not measured by it.
             if (child.getMeasuredWidth() != right - left || child.getMeasuredHeight() != bottom - top) {

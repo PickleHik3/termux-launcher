@@ -98,10 +98,17 @@ public class CrossingTest {
     }
 
     private static SeamCrossing.Half half(@NonNull PaneWallPage page, boolean keyboardUp) {
+        return half(page, keyboardUp, false);
+    }
+
+    /** With {@code apart}, the window's stack is sized apart from Home's: a whole-stack dip. */
+    private static SeamCrossing.Half half(@NonNull PaneWallPage page, boolean keyboardUp,
+                                          boolean apart) {
         Dress dress = new DressResolver(new Stored()).dressOf(page);
         PlaceLayout layout = page == PaneWallPage.WIDGETS ? HOME : WINDOW;
+        float dock = apart && page != PaneWallPage.WIDGETS ? 0.8f : 1f;
         return SeamCrossing.Half.of(page, dress, layout,
-            SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0), keyboardUp);
+            SeamDress.StackDress.of(dress.shape(), dock, 1f, 0), keyboardUp);
     }
 
     // ---- The adapter, recorded ----
@@ -112,6 +119,11 @@ public class CrossingTest {
         float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN;
         int coverPx = -1;
         int folds;
+        // The picture of the committed half's stack, and the terminal page's pre-size.
+        boolean pictureTaken = true;
+        int pictures, pictureDrops;
+        float pictureReveal = Float.NaN;
+        int preSizePx = -1;
         final List<PaneWallPage> preRolls = new ArrayList<>();
         // The row: told both rests once, dressed every frame, laid out once at the landing.
         int morphBegins, dresses, morphEnds;
@@ -130,6 +142,14 @@ public class CrossingTest {
         }
         @Override public void rideX(float px) { barX = px; }
         @Override public void cover(int px) { coverPx = px; }
+        @Override public void preSize(int px) { preSizePx = px; }
+        @Override public boolean picture() {
+            pictures++;
+            assertNull("the picture is taken before the row is told anything", leaving);
+            return pictureTaken;
+        }
+        @Override public void pictureAt(float reveal) { pictureReveal = reveal; }
+        @Override public void dropPicture() { pictureDrops++; }
         @Override public void preRoll(@NonNull PaneWallPage target) { preRolls.add(target); }
         @Override public void beginMorph(@NonNull DockLayout from, @NonNull DockLayout to) {
             morphBegins++;
@@ -159,11 +179,16 @@ public class CrossingTest {
         final PlaceChromeTravel.States states;
 
         Drive(@NonNull PaneWallPage from, boolean fromKeyboard, boolean toKeyboard) {
+            this(from, fromKeyboard, toKeyboard, false);
+        }
+
+        Drive(@NonNull PaneWallPage from, boolean fromKeyboard, boolean toKeyboard,
+              boolean apart) {
             committed = from;
             PaneWallPage to = from == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL
                 : PaneWallPage.WIDGETS;
-            here = half(from, fromKeyboard);
-            there = half(to, toKeyboard);
+            here = half(from, fromKeyboard, apart);
+            there = half(to, toKeyboard, apart);
             states = place -> new Rest(place == committed ? fromKeyboard : toKeyboard, false, true);
         }
 
@@ -503,6 +528,102 @@ public class CrossingTest {
         assertFalse(released.seam().barTravelled());
         assertFalse(released.seam().redressesBack(PaneWallPage.WIDGETS));
         assertFalse(released.storeMoved());
+    }
+
+    /**
+     * Halves dressed apart, both standing a stack: the leaving stack is pictured once, before the
+     * row hears of the crossing, the picture sinks as the stack rises, the row wears the arriving
+     * rest from the first frame, and the landing takes the picture away.
+     */
+    @Test
+    public void aWholeStackDipPicturesTheLeavingStackAndCrossesBothOverTheWholeWay() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = new Drive(from, from != PaneWallPage.WIDGETS,
+                from == PaneWallPage.WIDGETS, true);
+            for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
+                float fraction = Math.min(1f, f);
+                SeamCrossing.Answers answers = drive.step(fraction);
+                assertTrue(from + " pictured", drive.crossing.seam().pictured());
+                assertEquals(from + " picture at " + fraction, 1f - fraction,
+                    drive.moves.pictureReveal, 1e-4f);
+                assertEquals(from + " stack at " + fraction, fraction, answers.dockReveal(),
+                    1e-4f);
+                assertEquals(from + " the stack's translation at " + fraction,
+                    200f * (1f - fraction), drive.moves.dockPx, 0.05f);
+                assertArrayEquals(from + " the arriving rest throughout",
+                    dressOf(restOf(across(from))), drive.dress());
+            }
+            assertEquals(1, drive.moves.pictures);
+            assertEquals(0, drive.moves.pictureDrops);
+            drive.crossing.land(across(from), REVISION);
+            assertEquals(1, drive.moves.pictureDrops);
+            drive.crossing.end();
+            assertTrue(drive.crossing.idle());
+        }
+    }
+
+    @Test
+    public void aPictureThatCannotBeTakenLeavesTheDipAsItWas() {
+        Drive drive = new Drive(PaneWallPage.TERMINAL, true, false, true);
+        drive.moves.pictureTaken = false;
+        drive.step(0.3f);
+        assertEquals(1, drive.moves.pictures);
+        assertFalse(drive.crossing.seam().pictured());
+        assertTrue(Float.isNaN(drive.moves.pictureReveal));
+        drive.crossing.land(PaneWallPage.TERMINAL, REVISION);
+        assertEquals(0, drive.moves.pictureDrops);
+    }
+
+    @Test
+    public void halvesDressedAlikeArePicturedNever() {
+        Drive drive = new Drive(PaneWallPage.TERMINAL, true, false);
+        drive.step(0.3f);
+        assertEquals(0, drive.moves.pictures);
+    }
+
+    /**
+     * Toward a place whose chrome takes more room, the terminal's page is laid out short of it
+     * once, under the hold; the cover counts the gap already left; the landing puts the page back
+     * in the pass that gives the content the same room, and says how much that was.
+     */
+    @Test
+    public void theTerminalIsPreSizedOnceAndPutBackAtTheLanding() {
+        Moves moves = new Moves();
+        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        crossing.preSizeTerminal(0, 500);
+        assertEquals("nothing taken, nothing pre-sized", -1, moves.preSizePx);
+        assertFalse(crossing.holdsContent());
+        crossing.preSizeTerminal(300, 500);
+        assertTrue(crossing.holdsContent());
+        assertEquals(500, crossing.heldReservationPx());
+        assertEquals(300, moves.preSizePx);
+        assertEquals(300, crossing.terminalPreSizePx());
+        crossing.preSizeTerminal(120, 500);
+        assertEquals("once per slide", 300, crossing.terminalPreSizePx());
+        // The keyboard rising through the held room covers nothing of a page already that short.
+        crossing.heldOverlap(300);
+        crossing.coverAt(100f);
+        assertEquals(0, moves.coverPx);
+        Crossing.Landing landing = crossing.land(PaneWallPage.TERMINAL, REVISION);
+        assertEquals(300, landing.terminalPreSizePx());
+        assertEquals(0, moves.preSizePx);
+        assertEquals(0, crossing.terminalPreSizePx());
+        crossing.end();
+        assertTrue(crossing.idle());
+    }
+
+    @Test
+    public void theHigherOfTheStacksAndThePicturesEdgesCovers() {
+        assertEquals(120, Crossing.coverPx(80, 120, 0));
+        assertEquals(80, Crossing.coverPx(80, 0, 0));
+        assertEquals(20, Crossing.coverPx(80, 120, 100));
+        assertEquals(0, Crossing.coverPx(80, 120, 300));
+        Moves moves = new Moves();
+        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        crossing.hold(0);
+        crossing.heldOverlap(200);
+        crossing.coverAt(150f, 90);
+        assertEquals(90, moves.coverPx);
     }
 
     @Test
