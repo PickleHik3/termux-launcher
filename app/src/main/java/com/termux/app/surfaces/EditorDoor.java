@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.Locale;
 
@@ -113,8 +114,9 @@ public enum EditorDoor {
                 return EditorCard.KEYBOARD;
             case EDITOR_PAGE_LABEL:
                 return onScreen == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
-            case TERMINAL_CONTEXT_MENU:
             case PANE_CONTROLS:
+                return onScreen == null ? null : screenCard(onScreen);
+            case TERMINAL_CONTEXT_MENU:
             case LAUNCHERCTL:
                 return pageCard(onScreen);
             case LAYOUT_EDITOR:
@@ -126,6 +128,30 @@ public enum EditorDoor {
             default:
                 return named;
         }
+    }
+
+    /** The card of the screen {@code page} is on: Home's on Home, the Workspace's elsewhere. */
+    @NonNull
+    static EditorCard screenCard(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
+    }
+
+    /**
+     * The page the editor opens on. A card that stands on one screen only (Home's, the
+     * Workspace's, the terminal's) opens on that screen when the page on screen is the other; else
+     * {@code place}, null for the page on screen.
+     */
+    @Nullable
+    public static PaneWallPage placeFor(@Nullable EditorCard card, @Nullable PaneWallPage place,
+                                        @Nullable PaneWallPage onScreen) {
+        if (place != null || card == null)
+            return place;
+        if (onScreen != null && card.standsOn(
+                onScreen == PaneWallPage.WIDGETS ? WallHalf.HOME : WallHalf.WORKSPACE))
+            return null;
+        if (card == EditorCard.HOME) return PaneWallPage.WIDGETS;
+        if (card == EditorCard.TERMINAL || card == EditorCard.WORKSPACE) return PaneWallPage.TERMINAL;
+        return null;
     }
 
     /**
