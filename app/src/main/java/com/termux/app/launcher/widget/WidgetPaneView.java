@@ -267,7 +267,10 @@ public final class WidgetPaneView extends FrameLayout {
         notice = new TextView(context); notice.setId(R.id.widget_pane_notice); notice.setGravity(Gravity.CENTER);
         hideNotice = () -> notice.setVisibility(GONE);
         notice.setVisibility(GONE); notice.setPadding(dp(12), dp(6), dp(12), dp(6));
-        LayoutParams noticeParams = new LayoutParams(LayoutParams.WRAP_CONTENT, dp(48),
+        notice.setMinHeight(dp(48)); notice.setMaxLines(2); notice.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(notice, 9, 15, 1,
+            android.util.TypedValue.COMPLEX_UNIT_SP);
+        LayoutParams noticeParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
             Gravity.TOP | Gravity.CENTER_HORIZONTAL); addView(notice, noticeParams);
 
         picker = new WidgetPickerSheetView(context, new WidgetPickerAdapter.Listener() {

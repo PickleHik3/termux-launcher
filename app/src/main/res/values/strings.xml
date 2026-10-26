@@ -224,7 +224,7 @@
     <string name="settings_extra_keys_sheet_swipe_up">On swipe up (optional)</string>
     <string name="settings_extra_keys_sheet_none">None</string>
     <string name="settings_extra_keys_sheet_label">Display label</string>
-    <string name="settings_extra_keys_sheet_label_hint">Blank shows the key name</string>
+    <string name="settings_extra_keys_sheet_label_hint">Blank shows the name</string>
     <string name="settings_extra_keys_sheet_swipe_label">Swipe-up label</string>
     <string name="settings_extra_keys_sheet_swipe_label_hint">Small label above the key</string>
     <string name="settings_extra_keys_sheet_clear_swipe_up">Remove swipe-up action</string>
