@@ -23,27 +23,27 @@ have their own layout.
 
 ## Move a bar
 
-The dock and the status bar each have a **Position** on their card: the edges they may stand on.
-You can also **hold a bar in the frame and drag it**: the frame turns into a drawing of your layout
-while you hold, the edges the bar may stand on are outlined, and dropping it between two bars on
-the same edge sets their order. Letting go anywhere else, or pressing Back, puts it back.
+Every bar has a **Position** on its card. The status bar's is on the Status bar card. The apps
+row, the A–Z index and the extra keys are the **Bars** list on the Dock card: tap a bar's sliders
+glyph for its settings, Position among them. Where two bars share an edge, the order of the Bars
+list is the order they stack in; hold a row's handle to reorder.
 
-The terminal stays where it is and the bars arrange around it. The A–Z index rides the apps row
-while they share an edge.
+The terminal stays where it is and the bars arrange around it. The A–Z index can ride the apps
+row.
 
-**Under the keyboard.** The drawing also offers a slot below the keyboard. Drop the apps row, the
-A–Z index or the extra keys there and they stay at the bottom of the screen, with the keyboard
-opening above them. The status bar always stands over the keyboard.
+**Bottom or above the keyboard.** Along the bottom, **Bottom** keeps the apps row or the extra keys
+at the foot of the screen with the keyboard opening above them; **Above the keyboard** stands them
+over it. The status bar always stands over the keyboard.
 
-**The other orientation.** The orientation chip on the editor bar shows the other orientation as
-that drawing, in your device's real shape. Tap a bar on it for its card, or drag it; what you
-change there appears when you turn the phone.
+**The other orientation.** The editor always edits the orientation the phone is in, and the chip
+on the editor bar says which one. Turn the phone to edit the other one: the editor stays open and
+its cards turn with it.
 
 ## Hide and bring back
 
-Turn **Visible** off on the dock's, the status bar's or the keyboard's card to hide it. A hidden
-surface keeps a dashed outline in the frame where it would stand: tap it, and turn **Visible** back
-on.
+Turn a bar off with the eye on its card (on the Dock card, the eye on its row in the Bars list).
+Hidden bars wait as small cards beside the frame: tap one to open its card, or drag it onto the
+frame and let go to bring it back where it was.
 
 **Keyboard on/off.** The keyboard's **Visible** is the keyboard's on/off switch. Off, nothing raises
 it, not a tap on the terminal and not a text field, until you turn it on again. It is the same
@@ -61,9 +61,9 @@ Each size is set per orientation.
   Beads it sits in its own capsule under the beads).
 - **Dock height**: **Height** on the Dock card. The icons grow and shrink with it.
 - **Keyboard height**: **Height** on the Keyboard card.
-- In the drawing (while you hold a bar, or in the other orientation), a selected bar shows a handle
-  for its size, and Home's first cell a round handle that snaps the widget grid to whole cells. See
-  [Widgets](Widgets.md#grid-size).
+- **Strip height**: under **Dock type** on the Dock card while the Strip is the type.
+- **Bottom padding**: on the Keyboard card, the air under the last row of keys.
+- **Widget grid**: **Columns** and **Rows** on the Home card. See [Widgets](Widgets.md#grid-size).
 
 ## Keyboard type
 

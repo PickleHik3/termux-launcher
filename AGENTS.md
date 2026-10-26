@@ -141,7 +141,8 @@ everywhere else. Before calling a change done, walk this list and say which entr
     installer, dock/glass rendering views.
   - `app/terminal/` — terminal hosting, clients, panes, find/copy modes, `inappkeyboard/`.
   - `app/surfaces/` — the Appearance editor, inheritance row table, presets, materials, outlines.
-  - `app/layouteditor/` — the Layout editor: the miniature, the orientation toggle, the size rows.
+  - `app/layouteditor/` — the layout session under the editor's cards (`LayoutEditorController`,
+    policy in `LayoutEditorPlan`): Undo, the dirty state and every Position and size write.
   - `app/launcher/` — app catalogue, icons, paging, popups, A–Z scrub, notifications.
   - `app/chrome/`, `app/dock/`, `app/statusbar/`, `app/notice/`, `app/theme/`, `app/settings/`,
     `app/tour/` — the named chrome subsystems.

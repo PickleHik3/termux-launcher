@@ -20,6 +20,20 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-26 · editor redesign wave 3 (commit "feat(editor): Strip height moves onto the Dock
+  card") · Dock card, Dock type Strip → a Strip height row under the type tiles (84 dp); + and −
+  step 4 dp between 56 and 128 and the live Strip row follows at once; Undo puts it back; the
+  card's reset returns 84 dp; Tray, Beads and Peek hide the row · emulator.
+- 2026-10-26 · wave 3 (commit "refactor(editor): retire Layout mode's canvas; rotate to edit") ·
+  open the editor in portrait and turn the phone: the editor stays open, the chip reads
+  Landscape, the open card reads landscape's values, and a Position change lands on the live
+  landscape launcher; turn back: portrait is as it was; Undo after a turn puts back both
+  orientations; a tap on the chip shows "Turn the phone to edit landscape" (or portrait) and
+  changes nothing · emulator (rotation), then pong.
+- 2026-10-26 · same · hide the A–Z strip with its eye on the Dock card → a card in the rail; tap
+  it → the Dock card opens on A–Z; drag it out and let go over the frame → A–Z comes back where it
+  was; let go outside the frame → nothing changes. A long hold on a surface in the frame lifts
+  nothing (a tap still opens its card); Back with a card up puts the card down · emulator.
 - 2026-10-25 · commit "fix(statusbar): the status row flows around the camera and clears the
   screen's corners" (#163) · with the status bar along the top and Full screen on, screenshots in
   portrait show a gap at the camera with the chips left of it and the readings right of it, and
@@ -80,8 +94,7 @@ dropped; what follows is what still owes a look.
 - 2026-10-25 · commit "feat(appearance): hidden-items cards wrap their own text" · hide all six
   items in the Appearance editor: one-word cards (Keyboard) are one line tall, two-word cards two
   lines, the gap between cards stays equal, one label size throughout; tap a card shows it, drag
-  a card into the frame shows it where it lands, dragging a frame element over the rail
-  highlights the border and drops into the slot after the last card; repeat at font scale 1.3,
+  a card into the frame shows it where it was; repeat at font scale 1.3,
   in Home and Workspace halves, dark and light; with the card sheet up the stack shrinks its
   text, never overlaps the sheet · emulator or pong.
 - 2026-10-25 · commit "refactor(settings): edge colours follow Wallpaper colors" · Settings ->
@@ -179,7 +192,7 @@ dropped; what follows is what still owes a look.
   Style…") · Home Floating with a status bar along the bottom, the window Docked with it along
   the top: swipe Home → window with the window's pane not shown before → the pane meets the dock
   with no gap and no jump at the settle · emulator (no checker found the route to opposite
-  bars per half; the Layout editor's place icon at 645,1728 switches halves).
+  bars per half; in the editor a sideways swipe on the frame or the page label switches halves).
 - 2026-10-22 · PR #99 (migrations 9–13) and the glass rounds · Upgrade from the shipped stable
   (1.0.6 / 1.1.0 release APK) over a real profile with a Home dock height, Corners or Margin set
   apart, a Prompt line or Taskbar dock style and a Custom Look → Home keeps its rows, Prompt line
@@ -438,7 +451,7 @@ dropped; what follows is what still owes a look.
   the audit's shots at rest (no Element gained or lost, same Style, same dock) · emulator.
 - 2026-10-23 · same commit · a slow drag Home → window and back in Docked and in Floating, with
   Tray and with Beads → no Element appears or disappears mid-slide or at the landing that the
-  audit's clips did not show; a Style or Dock design change in the Layout editor shows on the
+  audit's clips did not show; a Style or Dock type change on the editor's Dock card shows on the
   next pass on both halves · emulator, frames recorded.
 - 2026-10-23 · #143 (merge f19d7e1ff) · the status bar at rest with the capsule, folded and open:
   row height, foot and slot the same as 52831bcac (Docked Tray and Floating seen) and the row
@@ -489,7 +502,7 @@ dropped; what follows is what still owes a look.
 
 - 2026-10-24 · Appearance + Settings rework (branch feat/appearance-settings-rework, on pong as
   1.1.0-pre.6+dev.f076a2dbe) · taste: the one-rule editor (tap a surface → card; palette glyph →
-  Appearance card; swipe the frame between Home and Workspace; hold-drag moves), the per-half dock
+  Appearance card; swipe the frame between Home and Workspace), the per-half dock
   look while sliding (the stack dips and comes back in the arriving half's glass), the M3 settings
   pages in your scheme, the clock widgets' stacked AM/PM, glass widgets by default · pong.
 - 2026-10-24 · same · known small items from the emulator: Settings reopened after a force-stop
@@ -500,8 +513,6 @@ dropped; what follows is what still owes a look.
 - 2026-10-24 · #159 editor · the card's rise, the frame's shrink and the half line moving with the
   card read as one motion; a header drag between detents follows the thumb; no dropped frame while
   a slider drags on the dock card · pong.
-- 2026-10-24 · same · the hold-and-drag on the live frame: the switch to the layout drawing under
-  the thumb is acceptable, or a drag on the live frame itself is wanted · pong.
 - 2026-10-24 · #159 model · the dip a differing look now causes on every crossing (the same dip
   a differing icon size gets) is acceptable to the eye, or the status bar's change at the landing
   on Home reads as a snap · pong.
@@ -515,8 +526,8 @@ dropped; what follows is what still owes a look.
 - 2026-10-23 · finding (emulator, #151) · the App menu showed only after the injected finger
   lifted, not at the long-press threshold (icon lifted at 2 s): confirm it is the injection, or a
   real wait for release · pong, a hand on the icon.
-- 2026-10-23 · finding (emulator, #146/#142) · after changing the Dock design to Beads in the
-  Layout editor on Home, the dock rested on the most-used page instead of the 7 pins: leftover
+- 2026-10-23 · finding (emulator, #146/#142) · after changing the Dock type to Beads in the
+  editor on Home, the dock rested on the most-used page instead of the 7 pins: leftover
   emulator state, or the resting page lost on a design change · emulator, fresh install.
 - 2026-10-23 · #142 phase 2 (commit "feat(place): the crossing morphs the dock's row and holds
   every reader") · a slow drag Home → window and back, and a fling reversed mid-way, in both
@@ -559,13 +570,6 @@ dropped; what follows is what still owes a look.
   Dock or Keyboard) opens; drag a card into the frame and let go → the item comes back, the card
   does not open; drag a card and let go outside the frame → it springs back, nothing changes ·
   emulator.
-- 2026-10-24 · 10aced449 · hold the dock or the status bar in the frame and drag it over the left
-  column → a dashed "drop" zone shows, goes primary-coloured while the finger is over it, and the
-  drop hides the item as a new card; a drop elsewhere moves it as before · emulator.
-- 2026-10-24 · 10aced449 · Home and the Workspace share the layout (Home's own layout off): hide
-  the pinned apps on Home → the Workspace still shows its dock, Home's own layout reads on in the
-  Home card, nothing else on Home moved; then hide the pinned apps on the Workspace first with
-  Home's own layout off → Home keeps its dock · emulator.
 - 2026-10-24 · 10aced449 · the dock's Search field off (Dock card switch) and Drawer tile off
   (Dock design Tray) → a Search field and a Drawer tile card in the stack; tapping one turns it
   on again in the dock of that half only; Undo and Discard put the stack back as it was ·
@@ -657,33 +661,6 @@ dropped; what follows is what still owes a look.
   where it falls back to the tray (a Workspace window on the shared layout): judge the icons'
   size there; 3-button navigation (taller strip, buttons over the card) and no navigation bar
   (the reflection only has the air under the icons) · pong.
-- 2026-10-24 · commit "feat(editor): live drag over the real frame…" · Appearance editor, hold
-  the dock and drag it over the top, side and bottom slots: the frame stays the real launcher (no
-  grey tiles, clock outline or icon dock), the dock's own picture follows the finger slightly
-  raised, the status bar and other bars slide aside smoothly (no stutter, no terminal reflow under
-  the finger); drop: the bars settle on their real places with no flash of the old layout and no
-  jump at the hand-over; release off any slot: everything slides back. Both Styles, glass on ·
-  pong (no emulator).
-- 2026-10-24 · same · with nothing hidden, at rest: the frame is centred with no rail; hold an
-  element: the frame slides right in about 0.2s at the same size and the rail shows only its empty
-  slot in a dotted border; drop on an edge: it slides back to centre; drop on the rail: it stays
-  offset (and shrinks slightly to the reserve's scale). Look at the frame's right edge while
-  offset at rest: it runs about 10dp past the screen on pong · pong.
-- 2026-10-24 · same · with something hidden: tap the dock (card up), hold, drag, drop: the frame
-  never moves or rescales and the card stays up · pong.
-- 2026-10-24 · same · drag the A–Z card out of the rail: over the rail it stays a chip; over a
-  slot in the frame the chip goes and a tinted shape of the index's size stands at the slot while
-  the bars move aside; drop: the index appears there; let go over no slot: it stays hidden. The
-  keyboard and Search field cards still restore where they were · pong.
-- 2026-10-24 · commit "feat(layout-canvas): slim drop markers…" · hold the A–Z index, then the
-  status bar: every slot a slim dotted rounded marker on its gap line, none touching another or
-  the frame's edge, top and bottom markers starting after the side strips where those show, side
-  strips only for an element that can stand on a side; the hovered slot opens to the element's
-  size and corners, solid with a light tint · pong.
-- 2026-10-24 · commit "feat(editor): the hidden rail's border hugs its cards…" · two elements
-  hidden, hold a third: the rail's dotted border wraps both chips and one empty slot under them
-  with even air on all four sides, ends there (not down at the bar), and the chips do not move
-  when it shows; finger over it, solid and tinted; drop there hides the element · pong.
 - 2026-10-24 · widget settings sheet (7fd67a8c8) · Clock gear: the bottom sheet of cards matches
   the mockup (~/reports/clock-settings-2026-10-24/); real faces in the tiles, check badge on the
   selected one; Save and the Glass labels show their text; the selected Glass segment's corners are
