@@ -170,7 +170,7 @@ public class SeamCrossingTest {
         /** The frame {@code fraction} of the way from the committed page to the other half. */
         Frame frameAt(float fraction) {
             float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
-            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states, committed);
+            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
         }
 
         Step step(float fraction) {

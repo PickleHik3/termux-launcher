@@ -169,7 +169,7 @@ public class CrossingTest {
 
         Frame frameAt(float fraction) {
             float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
-            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states, committed);
+            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
         }
 
         SeamCrossing.Answers step(float fraction) {
@@ -310,22 +310,19 @@ public class CrossingTest {
 
     @Test
     public void theKeyboardTravelsWithTheHalfThatHasItOpen() {
-        // The window has it open and Home does not: it goes with the window, over the first
-        // half of the way out, and comes back with the window on the way in.
+        // The window has it open and Home does not: it goes with the window, in step with the
+        // page the whole way out, and comes back with the window on the way in.
         Drive out = new Drive(PaneWallPage.TERMINAL, true, false);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
             float fraction = Math.min(1f, f);
             SeamCrossing.Answers answers = out.step(fraction);
-            assertEquals("out at " + fraction,
-                1f - PlaceChromeTravel.keyboardHideFraction(fraction),
-                answers.keyboardReveal(), 1e-4f);
+            assertEquals("out at " + fraction, 1f - fraction, answers.keyboardReveal(), 1e-4f);
         }
         Drive in = new Drive(PaneWallPage.WIDGETS, false, true);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
             float fraction = Math.min(1f, f);
             SeamCrossing.Answers answers = in.step(fraction);
-            assertEquals("in at " + fraction, PlaceChromeTravel.chromeFraction(fraction),
-                answers.keyboardReveal(), 1e-4f);
+            assertEquals("in at " + fraction, fraction, answers.keyboardReveal(), 1e-4f);
         }
     }
 

@@ -45,7 +45,7 @@ public class WindowSlideChromeTravelTest {
 
     private static Frame at(float offsetFraction, InnerPages inner) {
         return PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, offsetFraction * WIDTH, WIDTH,
-            STATES, PaneWallPage.TERMINAL, inner);
+            STATES, inner);
     }
 
     private static void assertStaysOnWorkspace(Frame frame) {
@@ -98,7 +98,7 @@ public class WindowSlideChromeTravelTest {
     @Test
     public void atRestNothingIsAsked() {
         Frame frame = PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, 0f, WIDTH, STATES,
-            PaneWallPage.TERMINAL, steps -> {
+            steps -> {
                 throw new AssertionError("asked at rest");
             });
         assertStaysOnWorkspace(frame);
