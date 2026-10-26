@@ -243,15 +243,23 @@ public final class EditorRows {
     /**
      * What the device and the build offer, which takes a few rows away: the glass edge (Depth and
      * the glass edge's colour, drawn only on Android 13 with a wallpaper set from the launcher),
-     * and the terminal effect (only where its shader runs).
+     * and the terminal effect (only where its shader runs). Use as takes the Match rows away
+     * under Terminal only ({@code homeShown} false, {@link com.termux.app.wall.UseAs#shows}).
      */
     public static final class Offers {
         public final boolean glassEdge;
         public final boolean terminalEffect;
+        /** Whether Home is a screen at all: false under Use as Terminal only. */
+        public final boolean homeShown;
 
         public Offers(boolean glassEdge, boolean terminalEffect) {
+            this(glassEdge, terminalEffect, true);
+        }
+
+        public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown) {
             this.glassEdge = glassEdge;
             this.terminalEffect = terminalEffect;
+            this.homeShown = homeShown;
         }
     }
 

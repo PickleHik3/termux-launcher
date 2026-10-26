@@ -934,3 +934,20 @@ Agent
 
 Developer
 - 2026-10-25 · 6b6fc51b8 · Drag feel on pong: the hold, the sideways pickup from the dock, no jank in the carried picture · pong.
+
+## Use as: Home screen or Terminal only (editor-redesign wave 4, 2026-10-26)
+
+Built on the wave 4 worker branch; nothing seen on a device yet. Still owed:
+
+Agent
+- 2026-10-26 · wave 4 · Fresh install: the welcome sheet opens on "How will you use it?" with Home screen chosen; tapping a card moves the outline; Continue shows the switches page; long copy fits at 1.3× font scale · emu.
+- 2026-10-26 · wave 4 · Welcome: choose Terminal only, Continue: the Home page leaves behind the sheet and the wall stands on the Workspace; Show me around skips the two Home lessons · emu.
+- 2026-10-26 · wave 4 · Settings › General › Launcher: Use as and Start in rows with icons, sentence case, the look of the page unchanged; Terminal only drops Home from Start in and shows Terminal where Home was stored; back to Home screen shows Home again · emu.
+- 2026-10-26 · wave 4 · Terminal only, live from Settings while the launcher rests on Home: back in the launcher it stands on the Workspace, same window in front; the root's Home row is gone; searching "icon size" or "gestures" finds no Home row; two-pane (tablet width) opens on Terminal · emu.
+- 2026-10-26 · wave 4 · Terminal only: the home press lands on the Workspace; with no window it starts one shell; the wall does not swipe to a Home page; the editor's page swipe and page label never reach Home; the Workspace card has no Match Home styling row; `launcherctl wall.go page=widgets` is refused · emu.
+- 2026-10-26 · wave 4 · Terminal only while not the default home app: exiting the last shell ends the app as plain Termux; while the default home app: an empty Workspace stays · emu.
+- 2026-10-26 · wave 4 · An upgrade over a build without Use as: no prompt, Home screen, Start in where it was · emu.
+
+Developer
+- 2026-10-26 · wave 4 · The welcome page's two choice cards: do they read as the app's segment style? · pong.
+

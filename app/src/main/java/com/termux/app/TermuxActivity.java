@@ -1935,7 +1935,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastWallPage = com.termux.app.wall.WallRow.openingKind(
             mPendingWallState == null ? null
                 : mPendingWallState.getString(com.termux.app.wall.PaneWallController.ARG_HALF),
-            effectiveStartIn());
+            useAs().startIn(effectiveStartIn()));
+        if (!useAs().showsHomePage())
+            mLastWallPage = com.termux.app.wall.PaneWallPage.TERMINAL;
         watchStartIn();
         // Built after the preferences, and only while the Widgets place is on the wall, so a
         // terminal-only install never registers an app widget host at all — no binding, no
@@ -2870,7 +2872,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override public boolean hasHome() {
-                    return mPaneWallController != null && mPaneWallController.hasWidgetsPage();
+                    return mPaneWallController != null && mPaneWallController.hasWidgetsPage()
+                        && useAs().showsHomePage();
                 }
             });
             mFirstBootTour.setSetupHost(welcomeSheet());
@@ -11169,8 +11172,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private String arrangementStartIn() {
         return com.termux.app.terminal.ArrangementRecovery.effectiveStartIn(
-            mPreferences == null ? null : mPreferences.getLauncherStartIn(),
-            com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+            useAs().startIn(mPreferences == null ? null : mPreferences.getLauncherStartIn()),
+            com.termux.app.wall.WallRow.lastShellClosedShowsHome(homePagesShown(),
                 isDefaultHomeApp()));
     }
 
@@ -11682,9 +11685,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * home screen. The host, the page and the controller all follow this one answer.
      */
     private boolean isWidgetsPageWanted() {
-        // Home is always on the wall (ADR 0008): neither the usage mode nor the widget pane
-        // switch takes it off any more.
+        // Home's grid is always built (ADR 0008): neither the widget pane switch nor Use as takes
+        // it off, so switching Use as back to Home screen finds it ready. Use as only takes the
+        // page off the wall's row (homePagesShown).
         return mPreferences != null;
+    }
+
+    /** Use as, read fresh: Terminal only takes the Home page, its settings and its doors away. */
+    @NonNull
+    private com.termux.app.wall.UseAs useAs() {
+        return com.termux.app.wall.UseAs.read(mPreferences == null ? null : mPreferences.getUseAs());
+    }
+
+    /** Whether the wall's row has Home pages: built, and not taken off by Terminal only. */
+    private boolean homePagesShown() {
+        return isWidgetsPageWanted() && useAs().showsHomePage();
     }
 
     /**
@@ -24441,6 +24456,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
                 // Home is always on the row; the Workspace while there is a window to show.
                 @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+                @NonNull @Override public com.termux.app.wall.UseAs useAs() {
+                    return TermuxActivity.this.useAs();
+                }
                 // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
                 // 2026-10-19): the same fresh shell the Terminal entry starts there.
                 @Override public boolean canStartWorkspace() {
@@ -26413,6 +26431,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences == null ? null : mPreferences.getSharedPreferences();
         if (store == null || mStartInListener != null) return;
         mStartInListener = (changed, key) -> {
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_USE_AS.equals(key)) {
+                applyUseAs();
+                return;
+            }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART.equals(key)) {
                 settleStartIn();
             } else if (!TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_START_IN.equals(key)) {
@@ -26421,6 +26443,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPageOverview != null) mPageOverview.refresh();
         };
         store.registerOnSharedPreferenceChangeListener(mStartInListener);
+    }
+
+    /**
+     * Use as changed (Settings, or the welcome sheet's first page): the wall's row is read again,
+     * so choosing Terminal only while on the Home page moves the wall to the Workspace, and Edit
+     * pages, which is Home's, goes down.
+     */
+    private void applyUseAs() {
+        if (mPaneWallController == null) return;
+        com.termux.app.wall.UseAs useAs = useAs();
+        boolean leaves = useAs.leaves(mPaneWallController.currentPage());
+        if (!useAs.showsHomePage() && mPageOverview != null) mPageOverview.closeImmediately();
+        mPaneWallController.refreshPages();
+        if (leaves) mPaneWallController.goToWorkspace(false);
     }
 
     private void unwatchStartIn() {
@@ -26443,6 +26479,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void openPageOverview(boolean fromSettings) {
         if (mWidgetPaneController == null || mPaneWallController == null) return;
         if (mPageOverview != null) return;
+        // Edit pages is Home's: Terminal only has no Home pages to edit.
+        if (!useAs().showsHomePage()) {
+            Logger.logInfo(com.termux.app.wall.UseAs.LOG_TAG, useAs().doorLine("edit-pages"));
+            return;
+        }
         if (mWidgetPaneController.refusedWhileLocked(
                 com.termux.app.launcher.home.HomeLayoutLock.Edit.EDIT_PAGES)) return;
         View root = findViewById(R.id.activity_termux_root_view);
@@ -31660,7 +31701,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean staysWhenWorkspaceEmpty() {
-            return com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+            return com.termux.app.wall.WallRow.lastShellClosedShowsHome(homePagesShown(),
                 isDefaultHomeApp());
         }
 

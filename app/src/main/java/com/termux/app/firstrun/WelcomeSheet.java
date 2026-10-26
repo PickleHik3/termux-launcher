@@ -3,6 +3,8 @@ package com.termux.app.firstrun;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.wall.UseAs;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -10,8 +12,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * What the first-run setup sheet shows and decides: five switches, the city search the weather
- * switch reveals, and the models the offline voice and AI switch downloads.
+ * What the first-run setup sheet shows and decides: on its first page, how the launcher is used
+ * (Use as: Home screen or Terminal only, editor-redesign §1); then five switches, the city search
+ * the weather switch reveals, and the models the offline voice and AI switch downloads.
+ *
+ * <p>The first page starts on what the launcher is used as now (Home screen on a first launch)
+ * and Continue applies the choice before the switches show, so the wall behind the sheet is the
+ * one the user picked by the time the run starts.
  *
  * <p>The sheet is where the run is offered, so every switch starts where the launcher stands —
  * a first launch reads the shipped defaults, a Replay reads what the user has since chosen — and
@@ -28,6 +35,14 @@ import java.util.Set;
  * <p>Pure, so every rule here is a unit test. The view draws it; the host applies it.
  */
 public final class WelcomeSheet {
+
+    /** The sheet's pages, in the order it shows them. */
+    public enum Page {
+        /** "How will you use it?": Home screen or Terminal only, then Continue. */
+        USE_AS,
+        /** The switches, and the two ways into the run. */
+        SETUP
+    }
 
     /** The sheet's rows, in the order it reads them. */
     public enum Row { WALLPAPER, WEATHER, CONTACTS, DISPLAY, AI }
@@ -57,6 +72,8 @@ public final class WelcomeSheet {
         public boolean displayOn;
         /** The models this phone is offered, from {@link TaiWelcomeCard#rows}. */
         @NonNull public List<TaiWelcomeCard.Row> aiRows = Collections.emptyList();
+        /** What the launcher is used as now: the first page's choice starts here. */
+        @NonNull public UseAs useAs = UseAs.HOME;
     }
 
     private boolean mWallpaper;
@@ -70,8 +87,11 @@ public final class WelcomeSheet {
     private final boolean mDisplayOffered;
     @NonNull private final List<TaiWelcomeCard.Row> mAiRows;
     @NonNull private final LinkedHashSet<String> mTicked = new LinkedHashSet<>();
+    @NonNull private Page mPage = Page.USE_AS;
+    @NonNull private UseAs mUseAs;
 
     private WelcomeSheet(@NonNull Start start) {
+        mUseAs = start.useAs;
         mWallpaper = start.wallpaperColours;
         // The weather counts as on only when it has somewhere to be for: switched on with neither
         // a picked place nor the location, it shows nothing, and the sheet should not say otherwise.
@@ -89,6 +109,34 @@ public final class WelcomeSheet {
     @NonNull
     public static WelcomeSheet from(@NonNull Start start) {
         return new WelcomeSheet(start);
+    }
+
+    /** The page on show. */
+    @NonNull
+    public Page page() {
+        return mPage;
+    }
+
+    /** The first page's choice. */
+    @NonNull
+    public UseAs useAs() {
+        return mUseAs;
+    }
+
+    /** A choice on the first page was tapped; nothing is applied until Continue. */
+    public void chooseUseAs(@NonNull UseAs useAs) {
+        if (mPage == Page.USE_AS) mUseAs = useAs;
+    }
+
+    /**
+     * Continue on the first page: the switches show. Returns the choice to apply, or null when
+     * the sheet was already past the first page.
+     */
+    @Nullable
+    public UseAs continueFromUseAs() {
+        if (mPage != Page.USE_AS) return null;
+        mPage = Page.SETUP;
+        return mUseAs;
     }
 
     /** The rows this sheet carries: no display row without a display, no AI row without models. */

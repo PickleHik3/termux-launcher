@@ -175,13 +175,24 @@ public final class SettingsSearchIndex {
     }
 
     /**
-     * The entries matching {@code query}, best first: a title that starts with the query, then a
-     * title holding it as a word start, then anywhere in the title, then in the row's summary.
+     * The entries matching {@code query}, best first: a title that is the query, then one that
+     * starts with it, then a title holding it as a word start, then anywhere in the title, then
+     * in the row's summary.
      * Within a rank, hits in {@code scope} (the section the reader searched from) come first, then
      * pages before rows, then tree order. Every word of a multi-word query must match.
      */
     @NonNull
     public List<Entry> search(@NonNull String query, @Nullable SettingsTree.Section scope, int limit) {
+        return search(query, scope, limit, null);
+    }
+
+    /**
+     * {@link #search}, less every hit in {@code hidden}: Home's section under Use as Terminal
+     * only, whose pages a hit would open.
+     */
+    @NonNull
+    public List<Entry> search(@NonNull String query, @Nullable SettingsTree.Section scope, int limit,
+                              @Nullable SettingsTree.Section hidden) {
         String needle = query.trim().toLowerCase(Locale.ROOT);
         List<Entry> hits = new ArrayList<>();
         if (needle.isEmpty()) return hits;
@@ -189,6 +200,7 @@ public final class SettingsSearchIndex {
         List<int[]> ranks = new ArrayList<>();
         for (int i = 0; i < mEntries.size(); i++) {
             Entry entry = mEntries.get(i);
+            if (hidden != null && entry.section == hidden) continue;
             int rank = rank(entry, needle, words);
             if (rank < 0) continue;
             int scoped = scope != null && entry.section == scope ? 0 : 1;
@@ -208,11 +220,15 @@ public final class SettingsSearchIndex {
         return hits;
     }
 
-    /** 0 best .. 3 summary only; -1 no match. */
+    /**
+     * 0 best .. 4 summary only; -1 no match. A title that is the query itself comes first, so
+     * "start in" finds Start in before "Start in the lower half".
+     */
     private static int rank(@NonNull Entry entry, @NonNull String needle, @NonNull String[] words) {
-        if (entry.titleLower.startsWith(needle)) return 0;
-        if (entry.titleLower.contains(" " + needle)) return 1;
-        if (entry.titleLower.contains(needle)) return 2;
+        if (entry.titleLower.equals(needle)) return 0;
+        if (entry.titleLower.startsWith(needle)) return 1;
+        if (entry.titleLower.contains(" " + needle)) return 2;
+        if (entry.titleLower.contains(needle)) return 3;
         boolean all = true;
         for (String word : words) {
             if (!entry.titleLower.contains(word) && !entry.summaryLower.contains(word)) {
@@ -220,7 +236,7 @@ public final class SettingsSearchIndex {
                 break;
             }
         }
-        return all ? 3 : -1;
+        return all ? 4 : -1;
     }
 
     /** The same row reached twice (a row on a page that is also indexed as itself) shows once. */

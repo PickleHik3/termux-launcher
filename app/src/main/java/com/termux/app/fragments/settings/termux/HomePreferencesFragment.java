@@ -12,8 +12,8 @@ import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.wall.PaneWallPage;
 
 /**
- * Home: the section for the Home half — the Appearance editor first, then every gesture, widgets,
- * the wallpaper's scroll and where a cold start lands. Reuses {@link LauncherPreferencesFragment}'s
+ * Home: the section for the Home half — the Appearance editor first, then every gesture, widgets
+ * and the wallpaper's scroll. Use as Terminal only hides it (Start in lives in General). Reuses {@link LauncherPreferencesFragment}'s
  * store and listeners (every row writes the key it always did); only the XML and title differ.
  */
 @Keep
@@ -45,7 +45,6 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         });
         adoptIconSizePreset();
         HomeGesturesRows.bind(this);
-        offerDisplayStartIn();
         Preference lock = findPreference(HomeSettings.KEY_LAYOUT_LOCKED);
         if (lock != null) lock.setOnPreferenceChangeListener((row, value) -> {
             showEditPagesRow(Boolean.TRUE.equals(value));
@@ -78,16 +77,6 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         com.termux.app.launcher.widget.HomeIconSize preset =
             com.termux.app.launcher.widget.HomeIconSize.fromStored(stored);
         if (!preset.value.equals(stored)) size.setValue(preset.value);
-    }
-
-    /** Start in offers Display only on a build that has a display; it is the list's last entry. */
-    private void offerDisplayStartIn() {
-        if (com.termux.BuildConfig.X11_SERVER) return;
-        ListPreference startIn = findPreference("app_launcher_start_in");
-        if (startIn == null || startIn.getEntries() == null || startIn.getEntryValues() == null
-            || startIn.getEntries().length < 3) return;
-        startIn.setEntries(java.util.Arrays.copyOf(startIn.getEntries(), 2));
-        startIn.setEntryValues(java.util.Arrays.copyOf(startIn.getEntryValues(), 2));
     }
 
     /** Edit pages changes the layout: while it is locked, its row waits for the lock to come off. */

@@ -158,6 +158,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_lock, "app_launcher_home_layout_locked", "app_launcher_az_lock_method",
             "app_launcher_sub_lock");
         key(R.drawable.ic_ms_start, "app_launcher_start_in");
+        key(R.drawable.ic_ms_home, "use_as");
 
         // Dock & drawer, app search
         key(R.drawable.ic_ms_push_pin, "app_launcher_default_buttons", "essential_notification_rules_manage");

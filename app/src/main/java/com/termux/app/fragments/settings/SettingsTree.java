@@ -359,7 +359,9 @@ public final class SettingsTree {
                 if (key.equals("app_launcher_notifications_link")) return "NotificationsPreferencesFragment";
                 return null;
             case "HomePreferencesFragment":
+                // Start in stands beside Use as now, which Terminal only cannot take away.
                 return key.equals("app_launcher_home_page_transition")
+                    || key.equals("app_launcher_start_in")
                     ? "GeneralPreferencesFragment" : null;
             case "TermuxStylePreferencesFragment":
                 if (key.equals("terminal_fonts")) return "TerminalTextPreferencesFragment";
@@ -436,7 +438,7 @@ public final class SettingsTree {
                         return null; // tai_remote_category and tai_remote_provider stay on the overview.
                 }
             default:
-                if (ROOT.equals(className) && key.equals("app_launcher_start_in")) return "HomePreferencesFragment";
+                if (ROOT.equals(className) && key.equals("app_launcher_start_in")) return "GeneralPreferencesFragment";
                 return null;
         }
     }
