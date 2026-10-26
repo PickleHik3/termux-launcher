@@ -1020,8 +1020,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The card header's reset, with no question asked: the object back on the half's Look (Home:
-     * back as it shipped).
+     * The card header's reset, with no question asked: the object's glass back on the half's Look
+     * (a screen's own glass back as it shipped), and every other value the card's rows show back
+     * as it ships ({@link EditorCardReset}); where bars stand stays. Undo, not Reset, returns to
+     * the state the editor opened on.
      */
     private void resetCard() {
         TermuxAppSharedPreferences prefs = prefs();
@@ -1030,25 +1032,49 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         EditorCardReset.resetStore(prefs, card, mHalf);
         mScreenFrostPosition.clear();
+        mLinkAnchor = null;
+        LayoutEditorController layout = mHost.layoutEditor();
         if (card == EditorCard.HOME)
             resetHome();
         if (card == EditorCard.DOCK) {
-            // The dock's height lives in the layout session, so its Undo covers it.
+            // The dock's height, type and the Search field and Drawer icon live in the layout
+            // session, so its Undo covers them.
             float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
                 .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout != null)
+            if (layout != null) {
                 layout.setDockHeightScale(scale);
-            else
+                layout.setDockStyle(DockStyle.GLASS_TRAY);
+                layout.setSearchField(false);
+                layout.setDrawerTile(false);
+            } else {
                 prefs.setAppLauncherBarHeightScale(scale);
+            }
+            writeStyle(false);
+            resetDockOptions();
+        }
+        if (card == EditorCard.KEYBOARD && layout != null) {
+            layout.setKeyboardForm(PlaceLayout.KeyboardForm.DOCKED);
+            layout.setKeyboardHeightScale(prefs.getDefaultInAppKeyboardHeightScale(), false);
+            layout.setKeyboardChinDp(com.termux.shared.termux.settings.preferences
+                .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING, false);
         }
         syncAfterBulkWrite();
     }
 
-    /**
-     * Home's rows back to what they ship with, and Home's glass back on the Look the Home half
-     * wore when the editor opened (its Base as captured on entry).
-     */
+    /** The Dock card's options and the apps row's Most used switch back as they ship. */
+    private void resetDockOptions() {
+        Context context = mHost.context();
+        for (String key : new String[] {"app_launcher_notification_dots",
+            "app_launcher_quick_reply_swipe", "app_launcher_bw_icons",
+            "app_launcher_most_used_page"}) {
+            boolean shipped = EditorSettingsSnapshot.defaultOf(key);
+            if (AppearanceSettingsStore.getBoolean(context, key, shipped) != shipped)
+                AppearanceSettingsStore.putBoolean(context, key, shipped);
+        }
+        settingsWritten();
+    }
+
+    /** Home's rows and widget grid back to what they ship with (its glass: EditorCardReset). */
     private void resetHome() {
         Context context = mHost.context();
         for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
@@ -1064,6 +1090,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style", null);
         settingsWritten();
         mHost.applyHomeSettings();
+        // The widget grid lives in the layout session, so its Undo covers it.
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (layout != null)
+            layout.setWidgetGrid(com.termux.shared.termux.settings.preferences
+                    .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
     }
 
     // ----------------------------------------------------------------------------- the frame
