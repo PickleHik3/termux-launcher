@@ -367,8 +367,20 @@ final class CardBody {
             tiles.add(new TileGrid.Tile(glyph(row), name(row), mModel.summary(row)));
             on[i] = mModel.value(row) != 0;
         }
-        TileGrid grid = TileGrid.build(mContext, tiles, on, widthPx,
-            (index, checked) -> mModel.onValue(rows.get(index), checked ? 1 : 0, false));
+        TileGrid[] built = new TileGrid[1];
+        built[0] = TileGrid.build(mContext, tiles, on, widthPx,
+            (index, checked) -> {
+                Row row = rows.get(index);
+                if (row == Row.CHANGE_WALLPAPER) {
+                    // A shortcut, not a switch: it never reads on, and opens the picker.
+                    View tile = built[0].tiles.get(index);
+                    tile.post(() -> built[0].setOn(index, false));
+                    mModel.onAction(row, tile);
+                    return;
+                }
+                mModel.onValue(row, checked ? 1 : 0, false);
+            });
+        TileGrid grid = built[0];
         return new CardRowView(grid.root, () -> {
             for (int i = 0; i < rows.size(); i++) {
                 Row row = rows.get(i);

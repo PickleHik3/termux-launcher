@@ -30,7 +30,7 @@ engineering notes. The sections keep the review's numbers; the review has no §7
   material, icon pack and tool colours. An edit changes only the screen you are on. On a fresh install
   the two arrangements are identical.
 - **Global is one card.** The palette pill's card is renamed Global and becomes the master page for
-  what both screens share: wallpaper first (Change, Show wallpaper, Wallpaper colours), then theme,
+  what both screens share: wallpaper first (tiles Change wallpaper, Show wallpaper, Wallpaper colours), then theme,
   contrast, tint colour, the glass material (Vibrancy, plus Edge and Depth where the phone draws
   them), full screen, minimal, icon pack and tool colours. No slider from today's card is lost: Look,
   Frost, Opacity and Tint move to each screen's card, and Text size to the Terminal card.
@@ -252,7 +252,7 @@ Today: four screens of scrolling, Own layout switch at the very bottom.
 
 Header: palette glyph, title "Global", reset, ✕. No eye.
 
-1. **Wallpaper**: a Wallpaper row with a Change button; tiles Show wallpaper on, Wallpaper colours on.
+1. **Wallpaper**: tiles Change wallpaper (a shortcut that never reads on), Show wallpaper, Wallpaper colours.
 2. **Colour**:
    - Theme (glyphs): System, Light, Dark. The drawing marks no default.
    - Contrast (words): Softer, Default (default), Harder.
@@ -263,8 +263,8 @@ Header: palette glyph, title "Global", reset, ✕. No eye.
 5. **More** (chips): Icon pack, Tool colours.
 
 Rationale:
-- Becomes the Global card: everything both screens share, with Wallpaper first (Change, Show
-  wallpaper, Wallpaper colours).
+- Becomes the Global card: everything both screens share, with Wallpaper first (tiles Change
+  wallpaper, Show wallpaper, Wallpaper colours).
 - Glass material keeps the strips that set how glass behaves rather than how much there is:
   Vibrancy, plus Edge and Depth where the phone draws the glass edge. None of today's strips are lost.
 - Look and Frost, Opacity and Tint move to the Home and Workspace cards, because each screen stores
@@ -491,6 +491,7 @@ Each wave gets emulator before and after shots on a `~/reports` page. Pong only 
 
 ## Decisions made during the build
 
+- Change wallpaper is a tile on the Global card, not a chip on a Wallpaper row: the developer asked, 10-26.
 - Pane controls open the Workspace card on the Workspace: the approved flow wins over the door table.
 - Edge sizes (corners, margin) stay shared between the two screens, as the layouts page has it.
 - Reset means the shipped defaults; Undo restores the as-opened state. Two different promises, two words.

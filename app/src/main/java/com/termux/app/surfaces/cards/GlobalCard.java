@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * The Global card's rows (editor-redesign §1 "Global is one card", §2 Global): what both screens
- * share. Wallpaper first (Change, Show wallpaper, Wallpaper colours); then the colour (Theme,
+ * share. Wallpaper first (tiles Change wallpaper, Show wallpaper, Wallpaper colours); then the colour (Theme,
  * Contrast, Tint colour); the glass material (Vibrancy, and Edge and Depth where the phone draws
  * the glass edge); Full screen and Minimal; and the Icon pack and Tool colours chips. Look and the
  * glass amounts live on each screen's card, Text size on the Terminal's.
@@ -24,7 +24,7 @@ public final class GlobalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_WALLPAPER, Row.WALLPAPER, Row.SHOW_WALLPAPER,
+            .tier(1, Row.SECTION_WALLPAPER, Row.CHANGE_WALLPAPER, Row.SHOW_WALLPAPER,
                 Row.WALLPAPER_COLOURS, Row.SECTION_COLOUR, Row.THEME, Row.CONTRAST, Row.TINT_HUE)
             .tier(2, Row.SECTION_GLASS_MATERIAL, Row.VIBRANCY);
         if (offers.glassEdge)
