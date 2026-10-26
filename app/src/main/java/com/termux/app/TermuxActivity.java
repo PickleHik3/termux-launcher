@@ -13723,11 +13723,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
+        String door = intent.getStringExtra(com.termux.app.surfaces.AppearanceEditorEntry.EXTRA_DOOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
+        intent.removeExtra(com.termux.app.surfaces.AppearanceEditorEntry.EXTRA_DOOR);
+        // The door that sent it (a Settings row) names itself; anything else is the section intent.
+        com.termux.app.surfaces.EditorDoor
+            .forName(door, com.termux.app.surfaces.EditorDoor.SECTION_INTENT)
+            .log(com.termux.app.surfaces.EditorCard.forKey(initialSection));
         openAppearanceSurface(initialSection, null, null);
-        // Keyboard's Appearance row in Settings: closing the editor goes back to Settings.
+        // A Settings row's door: closing the editor goes back to Settings.
         if (fromSettings) mAppearanceFromSettings = true;
     }
 
@@ -13738,6 +13744,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_WALLPAPER_STYLE);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
+        com.termux.app.surfaces.EditorDoor.SECTION_INTENT.log(null);
         openAppearanceSurface();
         // Settings' Appearance row: closing the surface goes back to Settings, as its old Look page did.
         mAppearanceFromSettings = fromSettings;
@@ -13804,6 +13811,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
         // The wall has to be built before the editor can be held on a place, and a cold start
         // delivers the intent while the root view is still being laid out.
+        com.termux.app.surfaces.EditorDoor.LAYOUT_EDITOR.route(place, null);
         openAppearanceSurface(null, place, null);
     }
 
@@ -18479,10 +18487,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxTerminalViewClient.shareSessionTranscript();
                 return true;
             case CONTEXT_MENU_APPEARANCE_ID:
-                // The editor at rest on the Workspace half, no card up: the terminal is the
-                // thing held, so its frame is what the person meets first.
-                openSurfaceEditorAtRest(com.termux.app.surfaces.AppearanceEditorEntry
-                    .terminalMenuPlace(currentWallPlace()));
+                // The Workspace's card, on the Workspace half: the terminal is the thing held.
+                openSurfaceEditorOn(com.termux.app.surfaces.EditorDoor.TERMINAL_SHEET_APPEARANCE
+                        .route(currentWallPlace(), null),
+                    com.termux.app.surfaces.AppearanceEditorEntry
+                        .terminalMenuPlace(currentWallPlace()));
                 return true;
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
@@ -18497,7 +18506,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showKillSessionDialog(session);
                 return true;
             case CONTEXT_MENU_SURFACE_EDITOR_ID:
-                openSurfaceEditor();
+                openSurfaceEditor(com.termux.app.surfaces.EditorDoor.TERMINAL_CONTEXT_MENU);
                 return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 com.termux.app.terminal.TerminalCommandPalette.show(this);
@@ -22608,14 +22617,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController.setRetroEffectPreference(retroEffect);
     }
 
-    void openSurfaceEditor() {
-        // The page's own object: Home's card on Home, the terminal's over a window, none over the
-        // display (appearance-and-settings-rework §4: every door opens on its page's object).
-        com.termux.app.wall.PaneWallPage page = currentWallPlace();
-        openSurfaceEditor(page == com.termux.app.wall.PaneWallPage.WIDGETS
-            ? com.termux.app.surfaces.EditorCard.HOME
-            : page == com.termux.app.wall.PaneWallPage.TERMINAL
-                ? com.termux.app.surfaces.EditorCard.TERMINAL : null);
+    /**
+     * Opens the editor through {@code door}, on the card its row of the door table names (a
+     * page-led door: the page's own object), and logs the door's line.
+     */
+    void openSurfaceEditor(@NonNull com.termux.app.surfaces.EditorDoor door) {
+        openSurfaceEditor(door.route(currentWallPlace(), null));
     }
 
     /** Opens the editor with {@code card} up, or at rest for null. */
@@ -22625,12 +22632,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Opens the editor at rest on {@code place}'s half, no card up. Naming the place also skips
-     * the card a recent visit left up, which a door with neither card nor place reopens.
+     * Opens the editor on {@code place}'s half with {@code card} up, or at rest for null. Naming
+     * the place also skips the card a recent visit left up, which a door with neither card nor
+     * place reopens.
      */
-    private void openSurfaceEditorAtRest(@NonNull com.termux.app.wall.PaneWallPage place) {
+    private void openSurfaceEditorOn(@Nullable com.termux.app.surfaces.EditorCard card,
+                                     @NonNull com.termux.app.wall.PaneWallPage place) {
         mAppearanceFromSettings = false;
-        openAppearanceSurface(null, place, null);
+        openAppearanceSurface(card == null ? null : card.key, place, null);
     }
 
     void openSettings() {
@@ -25273,7 +25282,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditor();
+                TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
             }
             @Override public void openLayoutEditor() {
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
@@ -25651,7 +25660,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditor();
+                TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
             }
             @Override public void openLayoutEditor() {
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
@@ -26801,9 +26810,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case LOCK_LAYOUT: break; // a switch on the card; see onLayoutLockChanged
             case WALLPAPER:
                 // The Appearance card: its Wallpaper row is in view, and Change leads to the picker.
-                openSurfaceEditor(com.termux.app.surfaces.EditorCard.APPEARANCE);
+                openSurfaceEditor(com.termux.app.surfaces.EditorDoor.HOME_SHEET_WALLPAPER);
                 break;
-            case APPEARANCE: openSurfaceEditor(com.termux.app.surfaces.EditorCard.HOME); break;
+            case APPEARANCE:
+                openSurfaceEditor(com.termux.app.surfaces.EditorDoor.HOME_SHEET_APPEARANCE);
+                break;
             case LAUNCHER_SETTINGS: openSettings(); break;
             case SET_DEFAULT_HOME: HomeAppChooser.open(this); break;
             case HELP: showHelpOverlay(); break;
@@ -31448,7 +31459,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSurfaceEditor() {
-            TermuxActivity.this.openSurfaceEditor();
+            TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
         }
 
         @Override public void openLayoutEditor() {
@@ -32278,7 +32289,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openWallpaperPicker() {
             // The Appearance card, whose Wallpaper row leads to the picker.
-            TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorCard.APPEARANCE);
+            TermuxActivity.this.openSurfaceEditor(
+                com.termux.app.surfaces.EditorDoor.LAUNCHERCTL_WALLPAPER);
         }
 
         @Override public boolean toggleWallpaperMode() {
@@ -32321,7 +32333,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSurfaceEditor() {
-            TermuxActivity.this.openSurfaceEditor();
+            TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.LAUNCHERCTL);
         }
 
         @Override public void updateWindowBackgroundForCurrentSession() {

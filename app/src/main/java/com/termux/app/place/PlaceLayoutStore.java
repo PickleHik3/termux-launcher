@@ -78,7 +78,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Search field on ({@link #migratePromptLineToTheSearchField}). Version 12 turns the Taskbar
  * design into the Tray with the Drawer tile on where it stood ({@link
  * #migrateTaskbarToTheDrawerTile}). Version 13 drops the Home layout's own sizes and shape, which
- * it now reads linked from the Workspace's ({@link #migrateToLinkedKeys}).
+ * it now reads linked from the Workspace's ({@link #migrateToLinkedKeys}). Version 14 gives every
+ * install a Home layout: the switch is gone, and Home and the Workspace each keep their own
+ * arrangement ({@link #migrateToHomeLayoutAlways}).
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -86,7 +88,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 13;
+    @VisibleForTesting static final int MIGRATION_VERSION = 14;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -228,8 +230,10 @@ public final class PlaceLayoutStore {
      */
     private static final String KEY_MINIMAL = "minimal";
     /**
-     * The Home layout switch, one flag for the whole launcher: {@code place.home_layout}. Absent
-     * is off, Home wearing the shared layout.
+     * Whether Home holds a layout of its own, one flag for the whole launcher:
+     * {@code place.home_layout}. Version 14 sets it on every install and nothing turns it off
+     * any more (the editor's Own layout switch is gone); absent is the old shared layout, which
+     * only a store not yet migrated reads.
      */
     private static final String KEY_HOME_LAYOUT = "home_layout";
     private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
@@ -506,6 +510,81 @@ public final class PlaceLayoutStore {
             copy(editor, all, layoutWideKey(worn, key), layoutWideKey(LayoutVariant.HOME, key));
         editor.apply();
         mRevision.incrementAndGet();
+    }
+
+    /**
+     * Copies {@code from}'s arrangement over {@code to}'s: the Match rows' layout half (Match
+     * Workspace Styling on the Home card, Match Home Styling on the Workspace card). Where every
+     * bar stands in either orientation, which are put away and their order, the keyboard's form,
+     * and the Dock design with its Search field and Drawer tile. Not copied: the widget grid
+     * (Home's alone), the linked sizes when Home is either side (one value already, {@link
+     * #LINKED_KEYS}), and when Home is either side the extra keys, which only the Workspace wears
+     * ({@link DressResolver#wornOn}). A key {@code from} does not hold is removed from {@code to},
+     * so the copy reads exactly as the source did. {@link #arrangementKeys} names every key this
+     * writes, for an undo snapshot taken before it.
+     */
+    public void copyArrangement(@NonNull LayoutVariant from, @NonNull LayoutVariant to) {
+        if (mStore == null || from == to) return;
+        // A layout never used is seeded first, so the copy is what that screen showed.
+        seed(from);
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (copiesArrangementKey(key, from, to))
+                    copy(editor, all, layoutKey(from, orientation, key),
+                        layoutKey(to, orientation, key));
+            }
+        }
+        for (String key : LAYOUT_WIDE_KEYS)
+            copy(editor, all, layoutWideKey(from, key), layoutWideKey(to, key));
+        editor.apply();
+        // The target is whole now: it must not be seeded over on its next read.
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            mSeeded[to.ordinal()][orientation.ordinal()] = true;
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Gives {@code variant}'s layout its starting point in every orientation it has not been used
+     * in yet ({@link #seedIfNeeded}), so what is read or copied from it, or taken before a copy
+     * over it, is what that screen shows. Nothing for the normal layout, which is never seeded.
+     */
+    public void seed(@NonNull LayoutVariant variant) {
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            seedIfNeeded(variant, orientation);
+    }
+
+    /** Every key {@link #copyArrangement copyArrangement(from, to)} may write or remove. */
+    @NonNull
+    public java.util.List<String> arrangementKeys(@NonNull LayoutVariant from,
+                                                  @NonNull LayoutVariant to) {
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        if (from == to) return keys;
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (copiesArrangementKey(key, from, to))
+                    keys.add(layoutKey(to, orientation, key));
+            }
+        }
+        for (String key : LAYOUT_WIDE_KEYS)
+            keys.add(layoutWideKey(to, key));
+        return keys;
+    }
+
+    /** Whether a copy between two layouts carries {@code key} ({@link #copyArrangement}). */
+    private static boolean copiesArrangementKey(@NonNull String key, @NonNull LayoutVariant from,
+                                                @NonNull LayoutVariant to) {
+        if (isGridKey(key)) return false;
+        boolean home = from == LayoutVariant.HOME || to == LayoutVariant.HOME;
+        return !home || (!isLinkedKey(key) && !isWorkspaceOnlyKey(key));
+    }
+
+    /** The extra keys' placement keys: the one element only the Workspace wears. */
+    private static boolean isWorkspaceOnlyKey(@NonNull String key) {
+        return KEY_EXTRA_KEYS.equals(key) || orderKeyName(Element.EXTRA_KEYS).equals(key)
+            || underKeyboardKeyName(Element.EXTRA_KEYS).equals(key)
+            || restoreEdgeKeyName(Element.EXTRA_KEYS).equals(key);
     }
 
     /** {@code to} set to what {@code all} holds under {@code from}, or removed where it holds none. */
@@ -1534,6 +1613,7 @@ public final class PlaceLayoutStore {
         if (fromVersion < 11) migratePromptLineToTheSearchField();
         if (fromVersion < 12) migrateTaskbarToTheDrawerTile();
         if (fromVersion < 13) migrateToLinkedKeys();
+        if (fromVersion < 14) migrateToHomeLayoutAlways();
         // A new install starts on the new default design; an install that ran this store before
         // (fromVersion above 0) or was updated from an earlier build keeps the absent key's tray.
         if (startsOnNewInstallDefault(fromVersion, installTimes())) seedNewInstallDockDesign();
@@ -1680,6 +1760,21 @@ public final class PlaceLayoutStore {
             .remove(TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS)
             .remove(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP);
         editor.apply();
+    }
+
+    /**
+     * Version 14: Home and the Workspace each keep their own layout (editor-redesign §1, §9). A
+     * Home that wore the shared layout gets a copy of the Workspace's normal one, the layout it
+     * was wearing, so nothing on screen moves: where every bar stands, which are put away (the
+     * hidden stack) and their order, the Dock design and its toggles ({@link #setHomeLayout}).
+     * The keyboard's height and chin (Bottom padding) and the other linked sizes need no copy:
+     * the Home layout reads them from the normal one ({@link #LINKED_KEYS}). A Home layout
+     * already on is left as it is.
+     */
+    private void migrateToHomeLayoutAlways() {
+        if (mStore.getBoolean(homeLayoutKey(), false)) return;
+        copyIntoHomeLayout(LayoutVariant.NORMAL);
+        mStore.edit().putBoolean(homeLayoutKey(), true).apply();
     }
 
     /**

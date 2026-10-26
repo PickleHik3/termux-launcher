@@ -542,7 +542,8 @@ public class SettingsActivity extends AppCompatActivity implements
         if (path.get(path.size() - 1).door) {
             // A row the Appearance editor holds: the editor opens over the launcher on its card.
             startActivity(com.termux.app.fragments.settings.termux.SettingsEditorDoors.editorIntent(
-                this, com.termux.app.fragments.settings.termux.SettingsEditorDoors.cardForSearchKey(key)));
+                this, com.termux.app.fragments.settings.termux.SettingsEditorDoors.cardForSearchKey(key),
+                com.termux.app.surfaces.EditorDoor.SETTINGS_SEARCH));
             return;
         }
         jumpTo(path, key);
@@ -907,7 +908,8 @@ public class SettingsActivity extends AppCompatActivity implements
             // Appearance is the editor itself, over the live launcher, not a page of rows.
             Preference appearance = findPreference(SettingsTree.Section.APPEARANCE.rootKey);
             if (appearance != null) appearance.setOnPreferenceClickListener(row -> {
-                com.termux.app.fragments.settings.termux.SettingsEditorDoors.openEditor(this, row, null);
+                com.termux.app.fragments.settings.termux.SettingsEditorDoors.openEditor(this, row,
+                    com.termux.app.surfaces.EditorDoor.SETTINGS_LOOK);
                 return true;
             });
             SettingsSearchPreference search = findPreference("settings_search");

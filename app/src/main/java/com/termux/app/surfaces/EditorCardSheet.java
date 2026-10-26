@@ -874,6 +874,7 @@ final class EditorCardSheet {
             case LOOK: return lookRow(row);
             case WALLPAPER: return wallpaperRow(row);
             case EXPANDER: return expanderRow(row);
+            case ACTION: return commandRow(row);
             case MENU:
             case LINK:
             default:
@@ -1252,6 +1253,28 @@ final class EditorCardSheet {
         return views;
     }
 
+    /**
+     * A row that does one thing in place, named by a text button at its end: the Match rows'
+     * Copy, which reads Undo while the copy can be taken back ({@link Model#readout}).
+     */
+    @NonNull
+    private RowViews commandRow(@NonNull Row row) {
+        LinearLayout root = horizontalRow(SWITCH_ROW_MIN_DP);
+        RowViews views = new RowViews(row, root);
+        root.addView(iconView(row.iconRes));
+        root.addView(labelColumn(row, views),
+            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        MaterialButton command = new MaterialButton(mContext, null,
+            androidx.appcompat.R.attr.borderlessButtonStyle);
+        command.setSingleLine(true);
+        command.setOnClickListener(v -> mModel.onAction(row, v));
+        root.addView(command, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(48)));
+        root.setOnClickListener(v -> mModel.onAction(row, v));
+        views.value = command;
+        return views;
+    }
+
     // ------------------------------------------------------------------------------ restating
 
     /** Every row read again from the model. */
@@ -1299,6 +1322,8 @@ final class EditorCardSheet {
             views.root.setAlpha(enabled ? 1f : 0.5f);
             if (views.dot != null)
                 EditorViews.setVisible(views.dot, mModel.ownValue(row));
+            if (row.kind == Kind.ACTION && views.value != null)
+                EditorViews.setText(views.value, mModel.readout(row, value));
             if (views.summary != null) {
                 CharSequence summary = mModel.summary(row);
                 EditorViews.setText(views.summary, summary);

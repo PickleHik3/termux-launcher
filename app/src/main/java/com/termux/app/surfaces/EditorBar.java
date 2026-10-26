@@ -39,6 +39,8 @@ final class EditorBar {
         void onPalette();
         /** The theme hint went for good: the palette or the bubble was tapped. */
         void onThemeHintSeen();
+        /** The page label under the frame (Home or Workspace) was tapped: that screen's card. */
+        default void onPageLabel() {}
     }
 
     /** The bar's height and its items' visual height inside their 48dp targets. */
@@ -164,6 +166,7 @@ final class EditorBar {
         nameParams.setMarginStart(dp(12));
         mHalfRow.addView(mHalfName, nameParams);
         mHalfRow.setMinimumHeight(dp(EditorFramePose.HALF_ROW_DP));
+        mHalfRow.setOnClickListener(v -> { if (mListener != null) mListener.onPageLabel(); });
         setOrientation(false);
         setHalf(WallHalf.WORKSPACE);
         setDirty(false);

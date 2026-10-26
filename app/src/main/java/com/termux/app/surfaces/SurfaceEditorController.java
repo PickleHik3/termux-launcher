@@ -318,6 +318,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mDepthSet = GlassEdgeControls.NONE;
     /** The half the frame shows: where a card writes. */
     @NonNull private WallHalf mHalf = WallHalf.WORKSPACE;
+    /**
+     * Each Match this visit that can still be taken back, by the screen it copied onto (the
+     * Match rows' Undo). Dropped when the editor closes or its Undo puts everything back.
+     */
+    @NonNull private final java.util.EnumMap<WallHalf, ScreenMatch.Undo> mMatchUndos =
+        new java.util.EnumMap<>(WallHalf.class);
     /** The card that is up, or null. */
     @Nullable private EditorCard mCard;
     /** Whether the editor raised the in-app keyboard itself, and so owes taking it down. */
@@ -811,8 +817,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mOpen || mCanvasForDrag || block == null)
             return;
         EditorCard card = cardForBlock(block, mHalf);
-        if (card != null)
+        if (card != null) {
+            EditorDoor.EDITOR_OUTLINE.log(card);
             openCard(card, true);
+        }
     }
 
     /** The card an element of the canvas opens. */
@@ -884,7 +892,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public void onPalette() {
-            openCard(EditorCard.APPEARANCE, true);
+            EditorCard card = EditorDoor.EDITOR_PALETTE.route(null, null);
+            if (card != null) openCard(card, true);
+        }
+
+        @Override public void onPageLabel() {
+            if (!mOpen)
+                return;
+            EditorCard card = EditorDoor.EDITOR_PAGE_LABEL.route(mHalf == WallHalf.HOME
+                ? com.termux.app.wall.PaneWallPage.WIDGETS
+                : com.termux.app.wall.PaneWallPage.TERMINAL, null);
+            if (card != null) openCard(card, true);
         }
 
         @Override public void onThemeHintSeen() {
@@ -967,6 +985,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private String resetLabel(@NonNull EditorCard card) {
         switch (card) {
             case HOME: return getString(R.string.appearance_reset_home);
+            case WORKSPACE: return getString(R.string.appearance_reset_workspace);
             case STATUS: return getString(R.string.appearance_reset_status);
             case TERMINAL: return getString(R.string.appearance_reset_terminal);
             case DOCK: return getString(R.string.appearance_reset_dock);
@@ -1017,6 +1036,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         switch (card) {
             case HOME:
                 resetHome();
+                break;
+            case WORKSPACE:
+                // The Workspace's glass back on the Look it wore when the editor opened.
+                if (mEntry != null)
+                    mEntry.restoreHalfBase(prefs, WallHalf.WORKSPACE, SurfaceProperty.BLUR,
+                        SurfaceProperty.GRAIN, SurfaceProperty.OPACITY, SurfaceProperty.TINT);
                 break;
             case APPEARANCE:
                 for (SurfaceSlot slot : SurfaceSlot.values())
@@ -1610,8 +1635,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         refreshStack();
         positionTargets();
-        if (openItsCard && item.card.standsOn(mHalf))
+        if (openItsCard && item.card.standsOn(mHalf)) {
+            EditorDoor.EDITOR_HIDDEN_BAR.log(item.card);
             openCard(item.card, true);
+        }
     }
 
     /** The card stands at a new top edge, or settled on a detent. */
@@ -2116,7 +2143,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
-                case OWN_LAYOUT: return layout != null && layout.hasHomeLayout() ? 1 : 0;
+                case MATCH_WORKSPACE:
+                case MATCH_HOME:
+                    return mMatchUndos.containsKey(matchTarget(row)) ? 1 : 0;
                 case CLOCK_12H: return prefs.isTopPaneClockAmPmEnabled() ? 1 : 0;
                 case KEY_OPACITY: return keyOpacityValue(prefs);
                 case KEY_CORNERS:
@@ -2242,6 +2271,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return String.valueOf(value);
                 case LOOK:
                     return lookStopName(value);
+                case MATCH_WORKSPACE:
+                case MATCH_HOME:
+                    return getString(value != 0 ? R.string.appearance_match_undo
+                        : R.string.appearance_match_copy);
                 default:
                     return String.valueOf(value);
             }
@@ -2435,8 +2468,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case TINT:
                 // Each value re-bakes the blurred frames: a drag holds that for its release.
                 holdFrameBakesForDrag();
-                if (card == EditorCard.HOME)
-                    writeHomeGlass(row, value);
+                if (isScreenCard(card))
+                    writeScreenGlass(row, value);
                 else if (card.slot == null)
                     writeShared(row, value);
                 else if (!writeLinkedOpacity(row, value, dragging))
@@ -2526,7 +2559,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
                 settingsWritten();
                 break;
-            case OWN_LAYOUT: if (layout != null) layout.setHomeLayout(value != 0); break;
             case CLOCK_12H:
                 if (prefs.isTopPaneClockAmPmEnabled() != (value != 0)) {
                     prefs.setTopPaneClockAmPmEnabled(value != 0);
@@ -2660,9 +2692,52 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
                 break;
+            case MATCH_WORKSPACE:
+            case MATCH_HOME:
+                toggleMatch(matchTarget(row));
+                break;
+            case LINK_GLOBAL: {
+                EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
+                if (global != null) openCard(global, true);
+                break;
+            }
             default:
                 break;
         }
+    }
+
+    // ---- the Match rows ----------------------------------------------------------------------
+
+    /** The screen a Match row copies onto: Home for Match Workspace styling, else the Workspace. */
+    @NonNull
+    private static WallHalf matchTarget(@NonNull Row row) {
+        return row == Row.MATCH_WORKSPACE ? WallHalf.HOME : WallHalf.WORKSPACE;
+    }
+
+    /**
+     * A Match row tapped: Copy takes the other screen's layout and glass ({@link ScreenMatch});
+     * Undo, while the copy is still held this visit, puts this screen back as it was.
+     */
+    private void toggleMatch(@NonNull WallHalf target) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        com.termux.app.place.PlaceLayoutStore places = layout == null ? null : layout.places();
+        if (prefs == null || layout == null || places == null)
+            return;
+        ScreenMatch.Undo undo = mMatchUndos.remove(target);
+        if (undo != null) {
+            undo.restore(prefs);
+        } else {
+            undo = ScreenMatch.match(prefs, places, target);
+            if (undo != null) mMatchUndos.put(target, undo);
+        }
+        // The Look slider reads the half's values again rather than a Custom held this visit.
+        mHeldCustom.remove(target);
+        layout.applyStoreWrite();
+        mHost.redressChrome();
+        syncAfterBulkWrite();
+        syncDirty();
+        if (mSheet != null) mSheet.restate();
     }
 
     private interface Choice {
@@ -2775,11 +2850,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int grain = GlassControls.grainForGlass(glass);
         WallHalf half = writeHalf(Row.FROST);
         prefs.setSurfaceGlassPosition(card.slot, glass);
-        if (card == EditorCard.HOME) {
-            // Home's Base alone: a surface that holds its own Home value keeps it.
-            prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME,
-                AppearanceLooks.blurDp(blur));
-            prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME,
+        if (isScreenCard(card) && half != null) {
+            // The screen's Base alone: a surface that holds its own value there keeps it.
+            prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half, AppearanceLooks.blurDp(blur));
+            prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
                 AppearanceLooks.grainPercent(grain));
         } else if (card.slot == null) {
             GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
@@ -2809,18 +2883,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Home's Opacity or Tint: the Home half's Base, which Home's widgets, status bar and dock
-     * wear while they follow it. Unlike the Appearance card's shared glass it puts no surface
-     * back on the Base: a dock or status bar given its own Home value on its card keeps it.
+     * A screen card's Opacity or Tint: that half's Base (Home's on the Home card, the
+     * Workspace's on the Workspace card), which the surfaces on it wear while they follow it.
+     * Unlike the Appearance card's shared glass it puts no surface back on the Base: a dock or
+     * status bar given its own value there on its card keeps it.
      */
-    private void writeHomeGlass(@NonNull Row row, int value) {
+    private void writeScreenGlass(@NonNull Row row, int value) {
         TermuxAppSharedPreferences prefs = prefs();
         SurfaceProperty property = row.property();
-        if (prefs == null || property == null)
+        WallHalf half = writeHalf(row);
+        if (prefs == null || property == null || half == null)
             return;
         int clamped = row == Row.OPACITY ? AppearanceLooks.opacityPercent(value)
             : AppearanceLooks.tintPercent(value);
-        prefs.setSurfaceBaseValue(property, WallHalf.HOME, clamped);
+        prefs.setSurfaceBaseValue(property, half, clamped);
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
         restateGlassRow(row);
@@ -3461,8 +3537,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             final int index = i;
             group.setOnClickListener(view -> {
                 EditorCard card = cardOfGroup(index);
-                if (card != null) openCard(card, true);
-                else closeCard(true);
+                if (card != null) {
+                    EditorDoor.EDITOR_OUTLINE.log(card);
+                    openCard(card, true);
+                } else {
+                    closeCard(true);
+                }
             });
             group.setOnTouchListener((view, event) -> {
                 if (!mOpen)
@@ -3912,7 +3992,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int[] overlayOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn(overlay, root, overlayOffset))
             return null;
-        if (card == null || card == EditorCard.HOME)
+        if (card == null || isScreenCard(card))
             return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
         if (card == EditorCard.TERMINAL) {
             int[] frame = mHost.terminalFrameRectInRoot();
@@ -4060,17 +4140,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         float scale = mTargetScale > 0f ? mTargetScale : 1f;
         int stroke = Math.max(1, Math.round(dp(RING_DP) / scale));
-        int grow = card == EditorCard.HOME ? -stroke : stroke;
+        int grow = isScreenCard(card) ? -stroke : stroke;
         int[] grown = {rect[0] - grow, rect[1] - grow, rect[2] + grow, rect[3] + grow};
         placeInOverlay(outline, overlay, grown);
         GradientDrawable ring = new GradientDrawable();
         ring.setColor(0);
         ring.setStroke(stroke, mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary));
-        ring.setCornerRadius(card == EditorCard.HOME ? 0f
+        ring.setCornerRadius(isScreenCard(card) ? 0f
             : Math.max(0f, outlineRadiusPx(card) + grow));
         outline.setBackground(ring);
         EditorViews.setVisible(outline, true);
+    }
+
+    /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
+    private static boolean isScreenCard(@Nullable EditorCard card) {
+        return card == EditorCard.HOME || card == EditorCard.WORKSPACE;
     }
 
     /** The radius a surface's outline wears: the surface's own. */
@@ -4599,6 +4684,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
     private void revertToEntry() {
         dropLookDrag();
+        // A Match onto a layout the session did not take on entry (Home's, opened in minimal
+        // mode) is put back by its own Undo; the session's revert covers the rest.
+        TermuxAppSharedPreferences matched = prefs();
+        if (matched != null) {
+            for (ScreenMatch.Undo undo : mMatchUndos.values())
+                undo.restore(matched);
+        }
+        mMatchUndos.clear();
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.isDirty())
             layout.revert();
@@ -4729,6 +4822,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSliderDragActive)
             endDrag();
         mOpen = false;
+        mMatchUndos.clear();
         mHost.retainGlassCapture(false);
         mFramed = false;
         mPresentToken++;

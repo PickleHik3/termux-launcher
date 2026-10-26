@@ -83,8 +83,9 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         LauncherIconPackPreferenceController.configure(this, context);
         Preference appearanceSurface = findPreference("appearance_surface");
         if (appearanceSurface != null) appearanceSurface.setOnPreferenceClickListener(preference -> {
-            // The launcher comes forward with the Appearance surface open; Back returns here.
-            SettingsEditorDoors.openEditor(this, preference, null);
+            // The launcher comes forward on the Global card; Back returns here.
+            SettingsEditorDoors.openEditor(this, preference,
+                com.termux.app.surfaces.EditorDoor.SETTINGS_LOOK);
             return true;
         });
         configureTerminalContrastPreference();

@@ -52,6 +52,9 @@ public class LayoutEditorSharedLayoutTest {
         prefs.edit().clear().commit();
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
         places = new PlaceLayoutStore(launcher);
+        // Home on the shared layout: what a store before version 14 held, which the plan still
+        // handles until Layout mode is retired.
+        places.setHomeLayout(false);
         places.setStatusBarEdge(PORTRAIT, Edge.TOP);
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setExtraKeys(PORTRAIT, RowPlacement.BOTTOM);

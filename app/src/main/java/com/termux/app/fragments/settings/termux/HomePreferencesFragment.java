@@ -34,7 +34,7 @@ public class HomePreferencesFragment extends LauncherPreferencesFragment {
         super.onCreatePreferences(savedInstanceState, rootKey);
         Preference layout = findPreference("home_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
-            SettingsEditorDoors.openEditor(this, row, com.termux.app.surfaces.EditorCard.HOME);
+            SettingsEditorDoors.openEditor(this, row, com.termux.app.surfaces.EditorDoor.SETTINGS_HOME);
             return true;
         });
         HomeGesturesRows.bind(this);

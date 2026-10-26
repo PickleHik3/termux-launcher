@@ -710,6 +710,23 @@ public final class LayoutEditorController {
         sync();
     }
 
+    /** The store the session edits, or null before the launcher has one. */
+    @Nullable
+    public PlaceLayoutStore places() {
+        return mHost.places();
+    }
+
+    /**
+     * Something wrote the store's layout keys directly (the editor's Match rows): the chrome is
+     * arranged again and the canvas re-read, as after a revert.
+     */
+    public void applyStoreWrite() {
+        if (mPlan == null)
+            return;
+        mHost.applyPlaceArrangement();
+        sync();
+    }
+
     /** Re-reads the canvas from the plan, and tells the host something may have moved. */
     public void sync() {
         Views views = mViews;

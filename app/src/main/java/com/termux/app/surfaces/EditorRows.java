@@ -57,7 +57,12 @@ public final class EditorRows {
         /** The wallpaper: shown or not, and Change. */
         WALLPAPER,
         /** A row that opens a panel under it in the card: the icon packs. */
-        EXPANDER
+        EXPANDER,
+        /**
+         * A row that does one thing in place, named by a word at its end: the Match rows' Copy,
+         * which reads Undo while the copy can still be taken back.
+         */
+        ACTION
     }
 
     /** Every row any card has. */
@@ -100,7 +105,13 @@ public final class EditorRows {
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
-        OWN_LAYOUT(Kind.SWITCH, R.string.appearance_row_own_layout, R.drawable.ic_symbol_home),
+        /** Home's card: Home takes the Workspace's layout and glass ({@link ScreenMatch}). */
+        MATCH_WORKSPACE(Kind.ACTION, R.string.appearance_row_match_workspace,
+            R.drawable.ic_ms_swap_horiz),
+        /** The Workspace's card: the Workspace takes Home's layout and glass. */
+        MATCH_HOME(Kind.ACTION, R.string.appearance_row_match_home, R.drawable.ic_ms_swap_horiz),
+        /** A screen's card to the card both screens share (the palette's). */
+        LINK_GLOBAL(Kind.LINK, R.string.appearance_row_global, R.drawable.ic_symbol_palette),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
         CLOCK_FACE(Kind.MENU, R.string.appearance_row_clock_face, R.drawable.ic_editor_clock),
         KEYBOARD_THEME(Kind.LINK, R.string.appearance_row_keyboard_theme, R.drawable.ic_symbol_palette),
@@ -206,8 +217,14 @@ public final class EditorRows {
                     Row.GLASS_WIDGETS);
                 add(out, 2, Row.TWO_LINE, Row.LABEL_SHADOW, Row.FOLDERS, Row.NUMERALS,
                     Row.PAGE_DOTS);
-                add(out, 3, Row.WALLPAPER_SCROLL, Row.OWN_LAYOUT, Row.LINK_GESTURES,
+                add(out, 3, Row.WALLPAPER_SCROLL, Row.MATCH_WORKSPACE, Row.LINK_GESTURES,
                     Row.LINK_PAGES);
+                break;
+            case WORKSPACE:
+                // Home's twin (editor-redesign §2): the Workspace half's Look and Base, which the
+                // bars on the Workspace wear while they follow it.
+                add(out, 1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT);
+                add(out, 3, Row.MATCH_HOME, Row.LINK_GLOBAL);
                 break;
             case STATUS:
                 add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN,
@@ -282,7 +299,8 @@ public final class EditorRows {
      * where it writes one value for the wall (ADR 0013 §4): the per-half glass numbers of the
      * dock, the status bar and the keyboard, the Look slider and the shared glass the
      * Appearance card's Frost, Opacity and Tint write, follow the frame; Home's glass is the Home
-     * half's Base whatever the frame shows; the terminal's numbers (it stands on the Workspace
+     * half's Base whatever the frame shows, and the Workspace card's Look and glass the Workspace
+     * half's; the terminal's numbers (it stands on the Workspace
      * alone), corners, margins, heights, places, the Dock's style and design, and every app-wide
      * choice do not.
      */
@@ -291,6 +309,8 @@ public final class EditorRows {
                                    @NonNull WallHalf frameHalf) {
         if (card == EditorCard.HOME)
             return row.property() != null ? WallHalf.HOME : null;
+        if (card == EditorCard.WORKSPACE)
+            return row == Row.LOOK || row.property() != null ? WallHalf.WORKSPACE : null;
         if (card == EditorCard.APPEARANCE)
             return row == Row.LOOK || row.property() != null ? frameHalf : null;
         SurfaceProperty property = row.property();
