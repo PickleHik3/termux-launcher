@@ -12,7 +12,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
 /**
  * The objects the Appearance editor has a card for (appearance-and-settings-rework §2–§3): the
  * five surfaces a tap in the frame lands on, the Workspace screen's own card (editor-redesign §1,
- * Home's twin), and the Appearance card the editor bar's palette opens. One card per object; what each card holds is {@link EditorRows}.
+ * Home's twin), and the Appearance card the editor bar's palette opens. One card per object; what
+ * each card holds is {@link EditorRows}.
  *
  * <p>{@link #key} is the name a door passes ({@link AppearanceEditorEntry}): the section names
  * Settings' deep links have always used ({@code dock}, {@code keyboard}, {@code status},

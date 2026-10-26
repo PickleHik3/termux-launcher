@@ -46,8 +46,13 @@ public enum EditorDoor {
     LAUNCHERCTL_WALLPAPER("launcherctl-wallpaper"),
     /** In the editor: the palette pill. */
     EDITOR_PALETTE("editor-palette"),
-    /** In the editor: a tap on a surface's outline; the card is the surface's. */
+    /**
+     * In the editor: a tap on a surface's outline, or on its element in the other orientation's
+     * canvas; the card is the surface's.
+     */
     EDITOR_OUTLINE("editor-outline"),
+    /** In the editor: a hidden bar's pill, brought back with its card; the card is the bar's. */
+    EDITOR_HIDDEN_BAR("editor-hidden-bar"),
     /** In the editor: a tap on the page label under the frame, Home or Workspace. */
     EDITOR_PAGE_LABEL("editor-page-label"),
     /** In the editor: the Global row on a screen's card. */
@@ -62,7 +67,12 @@ public enum EditorDoor {
     SETTINGS_LOOK("settings-look"),
     /** A Settings search hit on a row the editor holds; the card is the row's. */
     SETTINGS_SEARCH("settings-search"),
-    /** The editor's intent naming a card by its key, from anywhere else. */
+    /**
+     * The Layout-mode door ({@code EXTRA_LAYOUT_EDITOR}, through {@code openLayoutEditor}): the
+     * live editor at rest on the place it names, until Layout mode is retired.
+     */
+    LAYOUT_EDITOR("layout-editor"),
+    /** The editor's intent naming a card by its key (or none), from anywhere else. */
     SECTION_INTENT("section-intent");
 
     /** The tag every door's line is logged under. */
@@ -107,7 +117,10 @@ public enum EditorDoor {
             case PANE_CONTROLS:
             case LAUNCHERCTL:
                 return pageCard(onScreen);
+            case LAYOUT_EDITOR:
+                return null;
             case EDITOR_OUTLINE:
+            case EDITOR_HIDDEN_BAR:
             case SETTINGS_SEARCH:
             case SECTION_INTENT:
             default:

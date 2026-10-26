@@ -74,12 +74,14 @@ public final class AppearanceEditorEntry {
     }
 
     /**
-     * Where the terminal long-press menu's Appearance opens the editor: at rest, no card up, on
-     * the Workspace half. The page on screen is kept when it stands on the Workspace (a terminal
-     * or the display window), so the frame does not slide; anything else lands on the terminal.
+     * Where the terminal sheet's Appearance opens the editor: on the Workspace half, with the
+     * Workspace card up ({@link EditorDoor#TERMINAL_SHEET_APPEARANCE}). The page on screen is kept
+     * when it stands on the Workspace (a terminal or the display window), so the frame does not
+     * slide; anything else lands on the terminal.
      *
      * <pre>
-     *   openAppearanceSurface(null, AppearanceEditorEntry.terminalMenuPlace(currentWallPlace()), null);
+     *   openAppearanceSurface(EditorCard.WORKSPACE.key,
+     *       AppearanceEditorEntry.terminalMenuPlace(currentWallPlace()), null);
      * </pre>
      */
     @NonNull

@@ -67,11 +67,19 @@ public class EditorDoorTest {
     @Test
     public void theNamingDoorsOpenWhatTheyName() {
         for (EditorDoor door : new EditorDoor[] {EditorDoor.EDITOR_OUTLINE,
-                EditorDoor.SETTINGS_SEARCH, EditorDoor.SECTION_INTENT}) {
+                EditorDoor.EDITOR_HIDDEN_BAR, EditorDoor.SETTINGS_SEARCH,
+                EditorDoor.SECTION_INTENT}) {
             for (EditorCard card : EditorCard.values())
                 assertEquals(door.doorName, card, door.cardFor(PaneWallPage.WIDGETS, card));
             assertNull(door.cardFor(PaneWallPage.WIDGETS, null));
         }
+    }
+
+    @Test
+    public void theLayoutModeDoorOpensTheEditorAtRest() {
+        for (PaneWallPage page : pagesAndNone())
+            assertNull(EditorDoor.LAYOUT_EDITOR.cardFor(page, EditorCard.DOCK));
+        assertEquals("layout-editor -> REST", EditorDoor.LAYOUT_EDITOR.line(null));
     }
 
     @Test

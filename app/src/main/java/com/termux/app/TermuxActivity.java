@@ -13733,7 +13733,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .forName(door, com.termux.app.surfaces.EditorDoor.SECTION_INTENT)
             .log(com.termux.app.surfaces.EditorCard.forKey(initialSection));
         openAppearanceSurface(initialSection, null, null);
-        // Keyboard's Appearance row in Settings: closing the editor goes back to Settings.
+        // A Settings row's door: closing the editor goes back to Settings.
         if (fromSettings) mAppearanceFromSettings = true;
     }
 
@@ -13744,6 +13744,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_WALLPAPER_STYLE);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
+        com.termux.app.surfaces.EditorDoor.SECTION_INTENT.log(null);
         openAppearanceSurface();
         // Settings' Appearance row: closing the surface goes back to Settings, as its old Look page did.
         mAppearanceFromSettings = fromSettings;
@@ -13810,6 +13811,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
         // The wall has to be built before the editor can be held on a place, and a cold start
         // delivers the intent while the root view is still being laid out.
+        com.termux.app.surfaces.EditorDoor.LAYOUT_EDITOR.route(place, null);
         openAppearanceSurface(null, place, null);
     }
 

@@ -817,8 +817,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mOpen || mCanvasForDrag || block == null)
             return;
         EditorCard card = cardForBlock(block, mHalf);
-        if (card != null)
+        if (card != null) {
+            EditorDoor.EDITOR_OUTLINE.log(card);
             openCard(card, true);
+        }
     }
 
     /** The card an element of the canvas opens. */
@@ -1633,8 +1635,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         refreshStack();
         positionTargets();
-        if (openItsCard && item.card.standsOn(mHalf))
+        if (openItsCard && item.card.standsOn(mHalf)) {
+            EditorDoor.EDITOR_HIDDEN_BAR.log(item.card);
             openCard(item.card, true);
+        }
     }
 
     /** The card stands at a new top edge, or settled on a detent. */
