@@ -18,7 +18,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 /**
- * Settings › Home › Icons and labels: the default is Home as it was, the icon size scales the
+ * Settings › Home › Icons and labels: the default is the Default preset, the icon size scales the
  * dock's 48 dp, two lines are taken only where the cell has room for them, and at a 1.3 font
  * scale no label is ever cut by its cell.
  */
@@ -35,21 +35,16 @@ public class HomeIconStyleTest {
     }
 
     @Test
-    public void theDefaultIsHomeAsItWas() {
+    public void theDefaultIsTheDefaultPreset() {
         HomeIconStyle style = HomeIconStyle.DEFAULT;
-        assertEquals(100, style.iconScalePercent);
+        assertEquals(HomeIconSize.DEFAULT, style.iconSize);
         assertEquals(HomeAppIconView.LABEL_SP, style.labelSize.sp, 0f);
         assertFalse(style.twoLines);
         assertTrue(style.shadow);
     }
 
     @Test
-    public void storedScalesAreReadLenientlyToAnOfferedOne() {
-        assertEquals(100, HomeIconStyle.parseScale(null));
-        assertEquals(100, HomeIconStyle.parseScale("big"));
-        assertEquals(110, HomeIconStyle.parseScale("110"));
-        assertEquals(120, HomeIconStyle.parseScale("400"));
-        assertEquals(80, HomeIconStyle.parseScale("10"));
+    public void storedLabelSizesAreReadLeniently() {
         assertEquals(HomeIconStyle.LabelSize.DEFAULT, HomeIconStyle.LabelSize.fromValue(null));
         assertEquals(HomeIconStyle.LabelSize.LARGE, HomeIconStyle.LabelSize.fromValue("large"));
     }
@@ -78,8 +73,8 @@ public class HomeIconStyleTest {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         HomeIconStyle[] styles = {
             HomeIconStyle.DEFAULT,
-            new HomeIconStyle(120, HomeIconStyle.LabelSize.LARGE, true, true),
-            new HomeIconStyle(80, HomeIconStyle.LabelSize.SMALL, true, false),
+            new HomeIconStyle(HomeIconSize.LARGE, HomeIconStyle.LabelSize.LARGE, true, true),
+            new HomeIconStyle(HomeIconSize.SMALL, HomeIconStyle.LabelSize.SMALL, true, false),
         };
         int[][] cells = {{160, 180}, {140, 150}, {120, 120}, {200, 260}};
         for (HomeIconStyle style : styles) {
@@ -91,7 +86,7 @@ public class HomeIconStyleTest {
                     View.MeasureSpec.makeMeasureSpec(cell[1], View.MeasureSpec.EXACTLY));
                 view.layout(0, 0, cell[0], cell[1]);
                 TextView label = labelOf(view);
-                String where = style.iconScalePercent + "% " + style.labelSize + " two="
+                String where = style.iconSize + " " + style.labelSize + " two="
                     + style.twoLines + " in " + cell[0] + "x" + cell[1];
                 if (label.getVisibility() != View.VISIBLE) continue;
                 assertTrue(where + ": label inside the cell",
