@@ -1772,6 +1772,20 @@ public final class PlaceLayoutStore {
      * already on is left as it is.
      */
     private void migrateToHomeLayoutAlways() {
+        // The widget grid is Home's alone and read only from Home's keys. A grid still held in
+        // the shared (normal) keys, where the older steps put it, moves to Home's, unless Home
+        // already holds its own.
+        Map<String, ?> stored = mStore.getAll();
+        SharedPreferences.Editor gridEditor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (!isGridKey(key)) continue;
+                String home = layoutKey(LayoutVariant.HOME, orientation, key);
+                Object shared = stored.get(layoutKey(LayoutVariant.NORMAL, orientation, key));
+                if (shared != null && !stored.containsKey(home)) put(gridEditor, home, shared);
+            }
+        }
+        gridEditor.apply();
         if (mStore.getBoolean(homeLayoutKey(), false)) return;
         copyIntoHomeLayout(LayoutVariant.NORMAL);
         mStore.edit().putBoolean(homeLayoutKey(), true).apply();
