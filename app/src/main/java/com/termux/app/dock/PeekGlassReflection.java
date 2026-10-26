@@ -218,6 +218,9 @@ public final class PeekGlassReflection {
             || Float.compare(rowDx, mRowDx) != 0 || Float.compare(rowDy, mRowDy) != 0
             || liveNow != mLive || !mShown;
         boolean alphaMoved = Float.compare(alpha, mAlpha) != 0;
+        plog("update geometryMoved=" + geometryMoved + " alphaMoved=" + alphaMoved + " live="
+            + liveNow + " alpha=" + alpha + " depth=" + card.reflectionDepth() + " card=" + card
+            + " rowDx=" + rowDx + " rowDy=" + rowDy + " moving=" + row.iconsMoving());
         mCard = card;
         mRow = row;
         mRowDx = rowDx;
@@ -244,6 +247,7 @@ public final class PeekGlassReflection {
 
     /** Nothing reflected, the views put away, and every drawing let go. */
     public void clear() {
+        plog("clear");
         mShown = false;
         mCard = null;
         mRow = null;
@@ -276,6 +280,7 @@ public final class PeekGlassReflection {
      * with the icons; the still one is put away until the row is back at rest.
      */
     public void onIconsMoved() {
+        plog("onIconsMoved shown=" + mShown + " moving=" + (mRow != null && mRow.iconsMoving()));
         Row row = mRow;
         if (!mShown || row == null) return;
         if (mLive) {
@@ -432,7 +437,21 @@ public final class PeekGlassReflection {
         record();
     }
 
+    /** TEMPORARY (PeekReflect): one line per step of the reflection, with who asked. */
+    public static void plog(@NonNull String what) {
+        StringBuilder trace = new StringBuilder();
+        StackTraceElement[] frames = new Throwable().getStackTrace();
+        for (int i = 2; i < Math.min(frames.length, 8); i++) {
+            trace.append(" < ").append(frames[i].getMethodName()).append(':')
+                .append(frames[i].getLineNumber());
+        }
+        android.util.Log.d("PeekReflect", android.os.SystemClock.uptimeMillis() + " " + what
+            + trace);
+    }
+
     private void record() {
+        plog("record live=" + mLive + " card=" + (mCard != null) + " row=" + (mRow != null)
+            + " depth=" + (mCard == null ? -1f : mCard.reflectionDepth()));
         if (!mLive || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
         PeekGlassGeometry.Card card = mCard;
         Row row = mRow;
@@ -527,6 +546,9 @@ public final class PeekGlassReflection {
     private void captureStill() {
         Row row = mRow;
         PeekGlassGeometry.Card card = mCard;
+        plog("captureStill row=" + (row != null) + " card=" + (card != null) + " live=" + mLive
+            + " shown=" + mShown + " moving=" + (row != null && row.iconsMoving())
+            + " depth=" + (card == null ? -1f : card.reflectionDepth()));
         if (row == null || card == null || mLive || !mShown) return;
         View view = row.view();
         // A row mid-swipe shows icons in passing: the settle after it asks again.

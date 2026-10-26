@@ -5658,6 +5658,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onPeekLayoutSettled() {
         com.termux.app.dock.PeekGlassGeometry.Card card = resolvePeekCard();
+        com.termux.app.dock.PeekGlassReflection.plog("onPeekLayoutSettled card=" + card
+            + " was=" + mPeekCard + " wanted=" + peekCardWanted());
         if (java.util.Objects.equals(card, mPeekCard)) {
             syncPeekReflection();
             return;
@@ -5691,6 +5693,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPeekReflection() {
         com.termux.app.dock.PeekGlassGeometry.Card card = mPeekCard;
+        com.termux.app.dock.PeekGlassReflection.plog("syncPeekReflection card=" + (card != null)
+            + " crossing=" + mCrossing.crossing() + " stackY="
+            + (hotView(R.id.accessory_stack_container) == null ? 0f
+                : hotView(R.id.accessory_stack_container).getTranslationY())
+            + " fancier=" + (mFancierGlassLook != null));
         int strength = mPreferences == null ? 0 : com.termux.app.dock.PeekGlassPreferences
             .reflection(mPreferences.getSharedPreferences());
         SuggestionBarView row = mSuggestionBarView;
