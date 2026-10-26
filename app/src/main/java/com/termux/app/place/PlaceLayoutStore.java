@@ -512,6 +512,73 @@ public final class PlaceLayoutStore {
         mRevision.incrementAndGet();
     }
 
+    /**
+     * Copies {@code from}'s arrangement over {@code to}'s: the Match rows' layout half (Match
+     * Workspace Styling on the Home card, Match Home Styling on the Workspace card). Where every
+     * bar stands in either orientation, which are put away and their order, the keyboard's form,
+     * and the Dock design with its Search field and Drawer tile. Not copied: the widget grid
+     * (Home's alone), the linked sizes when Home is either side (one value already, {@link
+     * #LINKED_KEYS}), and when Home is either side the extra keys, which only the Workspace wears
+     * ({@link DressResolver#wornOn}). A key {@code from} does not hold is removed from {@code to},
+     * so the copy reads exactly as the source did. {@link #arrangementKeys} names every key this
+     * writes, for an undo snapshot taken before it.
+     */
+    public void copyArrangement(@NonNull LayoutVariant from, @NonNull LayoutVariant to) {
+        if (mStore == null || from == to) return;
+        // A layout never used is seeded first, so the copy is what that screen showed.
+        PlaceLayoutStore source = forVariant(from);
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            source.variantKey(orientation, KEY_DOCK_HEIGHT);
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (copiesArrangementKey(key, from, to))
+                    copy(editor, all, layoutKey(from, orientation, key),
+                        layoutKey(to, orientation, key));
+            }
+        }
+        for (String key : LAYOUT_WIDE_KEYS)
+            copy(editor, all, layoutWideKey(from, key), layoutWideKey(to, key));
+        editor.apply();
+        // The target is whole now: it must not be seeded over on its next read.
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            mSeeded[to.ordinal()][orientation.ordinal()] = true;
+        mRevision.incrementAndGet();
+    }
+
+    /** Every key {@link #copyArrangement copyArrangement(from, to)} may write or remove. */
+    @NonNull
+    public java.util.List<String> arrangementKeys(@NonNull LayoutVariant from,
+                                                  @NonNull LayoutVariant to) {
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        if (from == to) return keys;
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (copiesArrangementKey(key, from, to))
+                    keys.add(layoutKey(to, orientation, key));
+            }
+        }
+        for (String key : LAYOUT_WIDE_KEYS)
+            keys.add(layoutWideKey(to, key));
+        return keys;
+    }
+
+    /** Whether a copy between two layouts carries {@code key} ({@link #copyArrangement}). */
+    private static boolean copiesArrangementKey(@NonNull String key, @NonNull LayoutVariant from,
+                                                @NonNull LayoutVariant to) {
+        if (isGridKey(key)) return false;
+        boolean home = from == LayoutVariant.HOME || to == LayoutVariant.HOME;
+        return !home || (!isLinkedKey(key) && !isWorkspaceOnlyKey(key));
+    }
+
+    /** The extra keys' placement keys: the one element only the Workspace wears. */
+    private static boolean isWorkspaceOnlyKey(@NonNull String key) {
+        return KEY_EXTRA_KEYS.equals(key) || orderKeyName(Element.EXTRA_KEYS).equals(key)
+            || underKeyboardKeyName(Element.EXTRA_KEYS).equals(key)
+            || restoreEdgeKeyName(Element.EXTRA_KEYS).equals(key);
+    }
+
     /** {@code to} set to what {@code all} holds under {@code from}, or removed where it holds none. */
     private static void copy(@NonNull SharedPreferences.Editor editor, @NonNull Map<String, ?> all,
                              @NonNull String from, @NonNull String to) {
