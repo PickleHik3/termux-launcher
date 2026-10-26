@@ -67,7 +67,6 @@ public class WidgetPaneFrameTapTest {
         @Override public boolean editWidgets() { log.add("edit"); return true; }
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
-        @Override public void openLayoutEditor() { log.add("layout"); }
         boolean minimal;
         @Override public boolean isMinimalMode() { return minimal; }
         @Override public void toggleMinimalMode() { minimal = !minimal; log.add("minimal"); }

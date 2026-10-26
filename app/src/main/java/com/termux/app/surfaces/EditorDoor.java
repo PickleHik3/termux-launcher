@@ -68,11 +68,6 @@ public enum EditorDoor {
     SETTINGS_LOOK("settings-look"),
     /** A Settings search hit on a row the editor holds; the card is the row's. */
     SETTINGS_SEARCH("settings-search"),
-    /**
-     * The Layout-mode door ({@code EXTRA_LAYOUT_EDITOR}, through {@code openLayoutEditor}): the
-     * live editor at rest on the place it names, until Layout mode is retired.
-     */
-    LAYOUT_EDITOR("layout-editor"),
     /** The editor's intent naming a card by its key (or none), from anywhere else. */
     SECTION_INTENT("section-intent");
 
@@ -119,8 +114,6 @@ public enum EditorDoor {
             case TERMINAL_CONTEXT_MENU:
             case LAUNCHERCTL:
                 return pageCard(onScreen);
-            case LAYOUT_EDITOR:
-                return null;
             case EDITOR_OUTLINE:
             case EDITOR_HIDDEN_BAR:
             case SETTINGS_SEARCH:

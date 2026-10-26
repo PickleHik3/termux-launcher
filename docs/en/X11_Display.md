@@ -135,7 +135,8 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   - **Fixes**: **Compatibility drawing** and **Swap colour channels**.
 
   Where the extra keys stand while the display is showing (along the bottom, or in a column on the
-  left or right edge) is in the Layout editor, opened on a display window.
+  left or right edge) is the extra keys' **Position** on the Dock card, in Appearance opened on a
+  display window.
 - **Preferences from a shell.** `termux-x11-preference list` shows every setting;
   `termux-x11-preference touchMode:2` sets one, exactly as in Termux:X11, and the running
   display follows.

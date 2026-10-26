@@ -114,9 +114,9 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - Settings root (10-24): Your launcher (Home / Apps & dock / Terminal / Linux apps), Everywhere
   (Appearance / Keyboard / Notifications / On-device AI), System (General). The root's Appearance
   row opens the Appearance editor directly (no page); Home › Appearance and Terminal › Appearance
-  open the Layout editor on that place. In the Layout editor its home icon (about 645,1728) edits Home's layout, "Home's own"
-  (654,1875); a tap on the preview dock (540,1485) opens Tray / Beads / Strip / Search / Drawer;
-  Done (993,220), then `ad launch com.termux` (the Settings task stays in front).
+  open that place's card in the Appearance editor (2026-10-26: Layout mode is retired; Position
+  and sizes are rows on the cards). Done (993,220), then `ad launch com.termux` (the Settings task
+  stays in front).
 
 ## The wall rework (feat/wall-rework, 2026-10-18)
 
@@ -126,9 +126,9 @@ ad -s emu runas com.termux 'launcherctl pane list'
   full-size float Close is about 1006,283 and Minimise about 796,283.
 - The Terminal entry's menu is a long press at 76,2190 on the dock (New float here / New window).
   The dock's edit sheet is a long press at 540,2180; the Terminal entry is under MOST USED there.
-- Layout editor on Home without the corner tab:
-  `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.LAYOUT_EDITOR true --es com.termux.app.extra.LAYOUT_EDITOR_PLACE widgets`.
-  Its tray chips are Status bar, Extra keys, Keyboard; the keyboard chip toggles always on.
+- The Appearance editor on a named card without the corner tab (the Layout-mode intent
+  `LAYOUT_EDITOR` was deleted 2026-10-26):
+  `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.DOCK_TUNING true --es com.termux.app.extra.DOCK_TUNING_SECTION home|dock|status|keyboard|terminal|workspace`.
 - Ctrl+Alt+F over adb: `adb shell input keycombination 113 57 34` (C=31, V=47, H=36).
 - Migration seeding: force-stop, then `sed -i` through `ad runas` on
   `/data/data/com.termux/shared_prefs/com.termux_preferences.xml` (insert before `</map>`:
@@ -149,8 +149,8 @@ ad -s emu runas com.termux 'launcherctl pane list'
   at 810,1700 opens a split). In the drawer: the chevron at 102,542 expands a session, Home at
   118,1245, the session's Float row under it.
 - The display's controls appear from a long press at 1030,262 on the display window; power at 604,285.
-- Layout editor on Home: Done at 993,221; the tray's eye at 970,1726; the Keyboard chip at 864,1873.
-  Dragging a canvas block needs `input motionevent DOWN`, a 1.2 s hold, MOVE steps and UP;
+- (Retired 2026-10-26 with Layout mode: the canvas, its tray and its drags.) Dragging a canvas
+  block needed `input motionevent DOWN`, a 1.2 s hold, MOVE steps and UP;
   `ad swipe` does not drag it.
 - The prefix's gtk3 desktop files ship with `NoDisplay=true`, so they are not Linux apps in the
   drawer or the palette and `launcherctl launch gtk3-demo` answers 404 until that flag is false.
@@ -175,7 +175,8 @@ ad -s emu runas com.termux 'launcherctl pane list'
 ## Wall rework phase two (feat/wall-rework-phase2, 2026-10-18)
 
 - Home's long-press sheet (a long press on a free cell) has Terminal, Add a widget, Add a page,
-  Edit pages, Layout, Wallpaper and Look; Layout opens the Appearance editor in Layout mode.
+  Edit pages, Layout, Wallpaper and Look; Layout opens the Appearance editor (Layout mode itself
+  is retired since 2026-10-26).
 - The corner long-press toolbar hangs off the page's corner, not the screen's. On a window it is
   the window's (Appearance, minimal, tiling, settings, help); on Home it is Home's (pencil, plus,
   palette, help), whose palette is the button described "Appearance" and opens the Overview. A
@@ -271,10 +272,9 @@ a Linux app.
   last row (pref `app_launcher_start_in=home|workspace`). Swipe up / Swipe down: Home › Gestures.
   Page transition: General › Motion (search "transition"); Battery & performance, Living glass and
   Glass refraction: General (the glass rows are disabled until a launcher wallpaper is set).
-- **Layout editor** from Home: long-press a free cell (540,1000) → Layout (245,1927), or
-  `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.LAYOUT_EDITOR true --es
-  com.termux.app.extra.LAYOUT_EDITOR_PLACE widgets|terminal` (does nothing while the activity is
-  already up). Tap the preview dock (540,1485, about 4 s after opening) for the chips: #1 Tray
+- **Layout editor** (retired 2026-10-26; what follows is history): from Home, long-press a free
+  cell (540,1000) → Layout (245,1927). Today the cards hold Position and sizes; open one with
+  `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.DOCK_TUNING true --es com.termux.app.extra.DOCK_TUNING_SECTION home|dock|status|keyboard|terminal|workspace`. Tap the preview dock (540,1485, about 4 s after opening) for the chips: #1 Tray
   138, #2 Beads 332, #3 Strip 525, Search 746, Drawer 940 at y about 2022–2040. Docked/Floating
   icons about 375/498,1728; the place icon 645,1728 switches Home ↔ window; the tray eye 970,1726
   lists hidden items (Keyboard chip 190,2020 is tap-to-restore); Done 993,221; Undo 858,219 (reverts
@@ -343,6 +343,6 @@ a Linux app.
   Back, never a tap: the tap lands on whatever is behind the card.
 - A wall drag takes only from the gap just under the pane (about y=1232 in a window at
   1080x2400); mid-screen drags on the terminal do nothing.
-- The Layout editor opens with `--ez com.termux.app.extra.LAYOUT_EDITOR true --es
-  com.termux.app.extra.PLACE widgets`; the Dock design chips sit at about (139,2022) Tray and
+- (History: the retired Layout editor opened with a `LAYOUT_EDITOR` intent, now deleted.) The
+  Dock design chips sit at about (139,2022) Tray and
   (332,2022) Beads.

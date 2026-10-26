@@ -260,17 +260,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Opens Edit pages over Home: Settings › Home › Edit pages. */
     public static final String EXTRA_HOME_PAGES_EDITOR =
         "com.termux.app.extra.HOME_PAGES_EDITOR";
-    /** Opens the Layout editor over the live place, from any door that sends an intent. */
-    public static final String EXTRA_LAYOUT_EDITOR =
-        "com.termux.app.extra.LAYOUT_EDITOR";
-    /**
-     * The place the Layout editor should open on — {@code widgets}, {@code terminal} or
-     * {@code display}, as {@link com.termux.app.wall.PaneWallPage#toolName()} names them. Absent or
-     * unknown opens it on the place the user is already looking at. The layout is every place's, so
-     * this only decides which place the wall shows behind the editor and what its miniature draws.
-     */
-    public static final String EXTRA_LAYOUT_EDITOR_PLACE =
-        "com.termux.app.extra.LAYOUT_EDITOR_PLACE";
     /** Opens the extra-keys row editor over the live terminal, from Settings. */
     public static final String EXTRA_EDIT_EXTRA_KEYS =
         "com.termux.app.extra.EDIT_EXTRA_KEYS";
@@ -2047,7 +2036,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState == null) {
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
-            handleLayoutEditorIntent(getIntent());
             handleHomePagesEditorIntent(getIntent());
             handleWallpaperStyleIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
@@ -2237,7 +2225,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setIntent(intent);
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
-        handleLayoutEditorIntent(intent);
         handleHomePagesEditorIntent(intent);
         handleWallpaperStyleIntent(intent);
         handleEditExtraKeysIntent(intent);
@@ -13755,40 +13742,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The place a Layout editor intent names, or null for none. Anything the wall does not have a
-     * place for is not an error: the editor opens on the place on screen, which is what an unnamed
-     * place means anyway.
-     */
-    @Nullable
-    @VisibleForTesting
-    static com.termux.app.wall.PaneWallPage parseLayoutEditorPlace(@Nullable String name) {
-        if (name == null) return null;
-        for (com.termux.app.wall.PaneWallPage page : com.termux.app.wall.PaneWallPage.values()) {
-            if (page.toolName().equalsIgnoreCase(name.trim())) return page;
-        }
-        return null;
-    }
-
-    /**
-     * Any door that names a place: the launcher comes forward on that
-     * place with the Layout editor over it. An unnamed place opens it on whatever is on screen.
-     */
-    private void handleLayoutEditorIntent(@Nullable Intent intent) {
-        if (intent == null || !intent.getBooleanExtra(EXTRA_LAYOUT_EDITOR, false))
-            return;
-        com.termux.app.wall.PaneWallPage place =
-            parseLayoutEditorPlace(intent.getStringExtra(EXTRA_LAYOUT_EDITOR_PLACE));
-        boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
-        intent.removeExtra(EXTRA_LAYOUT_EDITOR);
-        intent.removeExtra(EXTRA_LAYOUT_EDITOR_PLACE);
-        intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
-        openLayoutEditor(place);
-        // Settings' Layout rows (Home, Terminal): closing the editor goes back to Settings, as
-        // the Look page's Appearance row does.
-        if (fromSettings) mAppearanceFromSettings = true;
-    }
-
-    /**
      * Settings › Home › Edit pages: the launcher comes forward on Home with the page overview over
      * it; Back out of it goes back to Settings.
      */
@@ -13808,18 +13761,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else open.run();
     }
 
-    /**
-     * Opens the editor in Layout mode on one place, or on the place the user is looking at for
-     * null (SPEC §3.1: the Layout glyph and sheet item open the same screen in Layout mode).
-     */
-    void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
-        // The wall has to be built before the editor can be held on a place, and a cold start
-        // delivers the intent while the root view is still being laid out.
-        com.termux.app.surfaces.EditorDoor.LAYOUT_EDITOR.route(place, null);
-        openAppearanceSurface(null, place, null);
-    }
-
-    /** The activity's half of the Layout editor's seam: its views, the places, the chrome pass. */
+    /** The activity's half of the layout session's seam: the places and the chrome pass. */
     private final class LayoutEditorHost
             implements com.termux.app.layouteditor.LayoutEditorController.Host {
         @NonNull @Override public Context context() {
@@ -13832,52 +13774,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @NonNull @Override public com.termux.app.wall.PaneWallPage placeOnScreen() {
             return currentWallPlace();
-        }
-
-        @Override public int extraKeyCount() {
-            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
-                return -1;
-            }
-            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
-                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
-            return matrix.length == 0 ? -1 : matrix[0].length;
-        }
-
-        @NonNull @Override
-        public java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> extraKeySlots() {
-            java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> slots =
-                new java.util.ArrayList<>();
-            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
-                return slots;
-            }
-            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
-                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
-            if (matrix.length == 0) return slots;
-            // The real bar draws an icon key as a Nerd Font code point on the bundled symbols
-            // face (ExtraKeysView.setKeyCapText), so an icon key here is that glyph on that face.
-            android.graphics.Typeface symbols =
-                com.termux.shared.termux.font.NerdFontSpans.typeface(TermuxActivity.this);
-            for (com.termux.shared.termux.extrakeys.ExtraKeyButton button : matrix[0]) {
-                String display = button == null ? null : button.getDisplay();
-                if (display == null) display = "";
-                if (symbols != null && isAllNerdSymbols(display)) {
-                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofIcon(
-                        new com.termux.app.fragments.settings.LayoutCanvasKeyGlyph(display, symbols)));
-                } else {
-                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofText(display));
-                }
-            }
-            return slots;
-        }
-
-        private boolean isAllNerdSymbols(@NonNull String display) {
-            if (display.isEmpty()) return false;
-            for (int i = 0; i < display.length(); ) {
-                int codePoint = display.codePointAt(i);
-                if (!com.termux.shared.termux.font.NerdFontSpans.isNerdSymbol(codePoint)) return false;
-                i += Character.charCount(codePoint);
-            }
-            return true;
         }
 
         @NonNull @Override public PlaceOrientation placeOrientation() {
@@ -13899,10 +13795,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.setGesturesEnabled(!held);
         }
 
-        @Override public int themeColor(int attr, int fallbackRes) {
-            return getTermuxThemeColor(attr, fallbackRes);
-        }
-
         // The editor's half slide: the wall slides inside the scaled container, gestures held.
         @Override public void slidePaneWallToPlace(@NonNull com.termux.app.wall.PaneWallPage place) {
             if (mPaneWallController == null) return;
@@ -13912,40 +13804,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             else
                 mPaneWallController.goTo(place, true);
             mPaneWallController.setGesturesEnabled(false);
-        }
-
-        // The pinned apps as laid out: the dock's row, or the rail or off-dock row where the
-        // place stands them. Their thickness is the short side either way, which is what the
-        // dock's height scale sizes.
-        @Override public int measuredDockHeightDp() {
-            int px = shownThicknessPx(R.id.apps_bar_row_host);
-            // The Search field shares the row's host; the size scale is the row's own.
-            if (px > 0 && mPromptLineField != null
-                && mPromptLineField.getVisibility() == View.VISIBLE
-                && mPromptLineField.getParent() == findViewById(R.id.apps_bar_row_host))
-                px = Math.max(0, px - mAppliedPromptFieldBandPx);
-            // So does the Wall strip's first row.
-            if (px > 0 && mWallStripRow != null
-                && mWallStripRow.getVisibility() == View.VISIBLE
-                && mWallStripRow.getParent() == findViewById(R.id.apps_bar_row_host))
-                px = Math.max(0, px - mAppliedWallStripBandPx);
-            if (px <= 0) px = shownThicknessPx(R.id.place_apps_bar_host);
-            float density = getResources().getDisplayMetrics().density;
-            return px <= 0 || density <= 0f ? -1 : Math.round(px / density);
-        }
-
-        @Override public int measuredKeyboardHeightDp() {
-            View keys = findViewById(R.id.inapp_keyboard_view_host);
-            float density = getResources().getDisplayMetrics().density;
-            if (keys == null || !keys.isShown() || keys.getHeight() <= 0 || density <= 0f)
-                return -1;
-            return Math.round(keys.getHeight() / density);
-        }
-
-        private int shownThicknessPx(int viewId) {
-            View view = findViewById(viewId);
-            if (view == null || !view.isShown()) return -1;
-            return Math.min(view.getWidth(), view.getHeight());
         }
     }
 
@@ -22459,10 +22317,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAppearance.open();
             }
 
-            @Override public void onOpenLayout() {
-                mAppearance.open();
-            }
-
             @Override public void onOpenIcons() {
                 mAppearance.open();
             }
@@ -25293,9 +25147,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void openSurfaceEditor() {
                 TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
             }
-            @Override public void openLayoutEditor() {
-                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
-            }
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
             }
@@ -25670,9 +25521,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
                 TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
-            }
-            @Override public void openLayoutEditor() {
-                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
             }
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
@@ -31532,9 +31380,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
         }
 
-        @Override public void openLayoutEditor() {
-            TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.TERMINAL);
-        }
 
         @Override public void openSettings() {
             TermuxActivity.this.openSettings();

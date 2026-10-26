@@ -136,9 +136,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         /** The Look shortcut: the surface shows the editor in its Look mode. */
         void onOpenLook();
 
-        /** The Layout shortcut: the surface shows the editor in its Layout mode. */
-        void onOpenLayout();
-
         /** The Icon pack shortcut: the surface shows the Icons page. */
         void onOpenIcons();
     }
@@ -633,7 +630,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mListener.onPickPhoto(slot, back);
     }
 
-    /** Where the page is now, for {@link Listener#onOpenLook} and {@link Listener#onOpenLayout}. */
+    /** Where the page is now, for {@link Listener#onOpenLook}. */
     @NonNull
     ReturnState returnState() {
         return new ReturnState(mCentred, mPending[WallpaperSlots.Slot.HOME.ordinal()],

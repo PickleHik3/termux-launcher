@@ -502,7 +502,17 @@ Each wave gets emulator before and after shots on a `~/reports` page. Pong only 
 - Wave 0, branch, spec and glyph set: not started
 - Wave 1, layout model: not started
 - Wave 2, card skeleton and cards: not started
-- Wave 3, retire Layout mode: not started
+- Wave 3, retire Layout mode: built 2026-10-26 on feat/editor-redesign (worker branch), device
+  checks owed. The layout canvas, its drags, handles and other-orientation drawing are deleted
+  with `EXTRA_LAYOUT_EDITOR`, `openLayoutEditor()` and the `layout-editor` door (it had no live
+  caller). Homes: Position rows (Dock card per bar, Status bar card), Columns and Rows (Home
+  card), Bottom padding and Height (Keyboard card), dock Height (Dock card), the Strip type's row
+  height (new Strip height stepper under the Dock card's Dock type, the only bar height Layout
+  mode itself set), rotate to edit (turning the phone keeps the editor open; the chip names the
+  orientation, a tap says to turn the phone), the hidden stack (tap opens the card, drag onto the
+  frame brings the bar back). Not given a home: an extra-keys Height (§2 Dock, Extra keys) was
+  never a Layout-mode control; the bar's height is still termux.properties
+  `terminal-toolbar-height`. Holding a surface in the frame no longer drags it.
 - Wave 4, Use as and welcome page (with 4b, unify): not started
 - Wave 5, long-press popup and A–Z: not started
 - Wave 6, new settings: not started

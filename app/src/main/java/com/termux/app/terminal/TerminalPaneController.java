@@ -213,8 +213,6 @@ public class TerminalPaneController {
         default void onPaneControlsDismissed() {}
         /** The lone pane's corner asked for "Appearance": the editor on the terminal's card. */
         default void openSurfaceEditor() {}
-        /** The pane corner's old Layout door; no tab carries it now, the picker leads there. */
-        default void openLayoutEditor() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
