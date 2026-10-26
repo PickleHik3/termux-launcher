@@ -232,8 +232,17 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSetupHost = host;
     }
 
+    /**
+     * Whether a build offers the first-run tour on its own: pre-release builds ("-pre" in the
+     * version name, with or without a "+dev.sha" suffix) never do; stable builds do.
+     */
+    public static boolean offeredOnBuild(@Nullable String versionName) {
+        return versionName == null || !versionName.contains("-pre");
+    }
+
     /** Offers the run to someone who has never been through one. */
     public void startIfNeeded() {
+        if (!offeredOnBuild(com.termux.BuildConfig.VERSION_NAME)) return;
         if (!mController.isOffered() || mController.isRunning()) return;
         if (waitForHelpToClose(this::startIfNeeded)) return;
         rebuildRunForThisPhone();
@@ -245,7 +254,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
      * of its own up on the way in holds off while this is true, so the two never talk at once.
      */
     public boolean isRunPending() {
-        return mController.isOffered() || mController.isRunning();
+        return (offeredOnBuild(com.termux.BuildConfig.VERSION_NAME) && mController.isOffered())
+            || mController.isRunning();
     }
 
     /** Starts the run from the setup sheet, whatever came before: what Replay asks for. */
