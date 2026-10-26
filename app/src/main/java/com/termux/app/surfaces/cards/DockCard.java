@@ -19,7 +19,7 @@ public final class DockCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
             .tier(1, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS, Row.MARGIN,
-                Row.APP_ICONS, Row.REFLECTION, Row.VISIBLE)
+                Row.APP_ICONS, Row.REFLECTION)
             .tier(2, Row.STYLE, Row.DESIGN)
             .tier(3, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_DOCK_ITEMS)
             .build();

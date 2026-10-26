@@ -18,7 +18,7 @@ public final class StatusBarCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN, Row.VISIBLE)
+            .tier(1, Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN)
             .tier(2, Row.CLOCK_12H, Row.CLOCK_FACE)
             .tier(3, Row.LINK_INDICATORS)
             .build();

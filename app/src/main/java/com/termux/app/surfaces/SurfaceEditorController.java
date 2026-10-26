@@ -943,8 +943,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mCard = card;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
-        sheet.show(card, EditorRows.rows(card, offers()), copyLabel(card), resetLabel(card),
-            animate);
+        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate);
         if (mBar != null)
             mBar.setBarShown(false, animate);
         layoutSheet();
@@ -972,15 +971,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available());
     }
 
-    /** The menu's copy item for a card held per half: the other half's name; null otherwise. */
-    @Nullable
-    private String copyLabel(@NonNull EditorCard card) {
-        if (!card.perHalf())
-            return null;
-        return getString(mHalf == WallHalf.HOME ? R.string.appearance_copy_to_workspace
-            : R.string.appearance_copy_to_home);
-    }
-
     @NonNull
     private String resetLabel(@NonNull EditorCard card) {
         switch (card) {
@@ -995,13 +985,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** The card's rows read again, the copy label with them (the half may have moved). */
+    /** The card's rows read again (the half may have moved). */
     private void restateCard() {
         EditorCardSheet sheet = mSheet;
         EditorCard card = mCard;
         if (sheet == null || card == null || !sheet.isShown())
             return;
-        sheet.show(card, EditorRows.rows(card, offers()), copyLabel(card), resetLabel(card), false);
+        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), false);
         sheet.restate();
     }
 
@@ -1014,10 +1004,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             resetCard();
         }
 
-        @Override public void onCopyToOtherHalf() {
-            copyCard();
-        }
-
         @Override public void onSheetMoved(int detent, float topPx) {
             onCardMoved(detent, topPx);
         }
@@ -1027,7 +1013,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** Reset in the card's menu: the object back on the half's Look (Home: back as it shipped). */
+    /**
+     * The card header's reset, with no question asked: the object back on the half's Look (Home:
+     * back as it shipped).
+     */
     private void resetCard() {
         TermuxAppSharedPreferences prefs = prefs();
         EditorCard card = mCard;
@@ -1078,19 +1067,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style", null);
         settingsWritten();
         mHost.applyHomeSettings();
-    }
-
-    /** Copy in the card's menu: the other half made to look as this one does. */
-    private void copyCard() {
-        TermuxAppSharedPreferences prefs = prefs();
-        EditorCard card = mCard;
-        if (prefs == null || card == null || !card.perHalf())
-            return;
-        if (card == EditorCard.APPEARANCE)
-            prefs.copyLookToOtherHalf(mHalf);
-        else if (card.slot != null)
-            prefs.copySurfaceToOtherHalf(card.slot, mHalf);
-        syncAfterBulkWrite();
     }
 
     // ----------------------------------------------------------------------------- the frame

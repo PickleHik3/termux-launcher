@@ -22,7 +22,7 @@ public final class KeyboardCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
             .tier(1, Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT, Row.KEY_CORNERS,
-                Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN, Row.VISIBLE)
+                Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN)
             .tier(2, Row.KEYBOARD_THEME)
             .tier(3, Row.FORM, Row.LINK_KEYBOARD_SIZE, Row.LINK_LAYOUTS)
             .build();

@@ -43,7 +43,7 @@
     <string name="appearance_theme_hint">Theme, colours and glass</string>
     <string name="appearance_card_appearance">Appearance</string>
     <string name="appearance_card_close">Close</string>
-    <string name="appearance_card_menu">More options</string>
+    <string name="appearance_card_reset">Reset</string>
 
     <!-- The card menu: back on the Look, or the same look on the other half. -->
     <string name="appearance_reset_home">Reset Home</string>
@@ -53,8 +53,6 @@
     <string name="appearance_reset_dock">Reset dock</string>
     <string name="appearance_reset_keyboard">Reset keyboard</string>
     <string name="appearance_reset_look">Reset surfaces</string>
-    <string name="appearance_copy_to_home">Copy to Home</string>
-    <string name="appearance_copy_to_workspace">Copy to Workspace</string>
 
     <!-- Card rows: a label of one or two words each. -->
     <string name="appearance_row_opacity">Opacity</string>
