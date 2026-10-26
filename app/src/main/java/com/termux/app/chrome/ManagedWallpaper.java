@@ -15,6 +15,7 @@ import androidx.annotation.Nullable;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -27,7 +28,8 @@ import java.io.InputStream;
  * the main thread and touches no view, so the picker page's Apply and {@code POST /v1/wallpaper}
  * (both through {@code WallpaperSlots.applyPhotoNow}, and the generated backgrounds through
  * {@code GeneratedWallpaperApplier}) share it and a wallpaper set any way is the same wallpaper to
- * the glass.
+ * the glass. A picture for the launcher alone ({@link #applyAppOnly}) keeps only the copy, and any
+ * Home set to the phone ends it.
  */
 public final class ManagedWallpaper {
 
@@ -98,6 +100,8 @@ public final class ManagedWallpaper {
                 promoteTempFile(context);
                 int wallpaperId = currentSystemWallpaperId(context);
                 if (preferences != null) {
+                    // The exact copy is the phone's picture again: no longer the launcher's alone.
+                    preferences.setWallpaperAppOnly(false);
                     preferences.setManagedWallpaperSystemId(wallpaperId);
                 }
             }
@@ -107,6 +111,40 @@ public final class ManagedWallpaper {
             return true;
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper", e);
+            return false;
+        }
+    }
+
+    /**
+     * The launcher's own picture only: {@code source} (a picture {@link #stageSource} staged)
+     * becomes the exact copy and the exported copy, exactly as a Home set makes them, and is
+     * marked app-only. Android's home and lock wallpapers are not touched. The stored system id is
+     * cleared, since the exact copy is no longer the phone's picture, and the picture's Material
+     * seed is stored; the mark is written last, so a reader that sees it finds the copy (and the
+     * seed) already there. Blocking; call it off the main thread.
+     *
+     * @return false when the staged picture could not become the exact copy
+     */
+    public static boolean applyAppOnly(@NonNull Context context, @NonNull Uri source,
+                                       @NonNull TermuxAppSharedPreferences preferences) {
+        try {
+            if (fullImageBounds(context, source) == null) return false;
+            exportCopyToBackgroundDirectory(context, source);
+            promoteTempFile(context);
+            if (tempFile(context).isFile()
+                || !WallpaperPictureReader.managedWallpaperExactFile(context).isFile()) {
+                Logger.logError(LOG_TAG, "The app-only picture did not become the exact copy");
+                return false;
+            }
+            preferences.setManagedWallpaperSystemId(TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID);
+            // The picture's Material seed, taken here on the worker from a small decode so no
+            // activity creation ever decodes it; before the mark, so a theme that sees the mark
+            // finds the seed beside it.
+            com.termux.app.theme.AppOnlyWallpaperColors.takeAndStoreSeed(context, preferences);
+            preferences.setWallpaperAppOnly(true);
+            return true;
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to keep the app-only wallpaper", e);
             return false;
         }
     }

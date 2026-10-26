@@ -19,6 +19,13 @@ public class TermuxAPIPreferencesFragment extends MaterialPreferenceFragment {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TermuxAPIPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_api_preferences, rootKey);
+        androidx.preference.Preference logs = findPreference("termux_api_logs");
+        if (logs != null) {
+            // Diagnostics, landed on Termux:API's log level.
+            logs.setFragment("com.termux.app.fragments.settings.termux.AdvancedDiagnosticsPreferencesFragment");
+            logs.getExtras().putString(com.termux.app.activities.SettingsActivity.EXTRA_SCROLL_TO_KEY,
+                "termux_api_log_level");
+        }
     }
 }
 

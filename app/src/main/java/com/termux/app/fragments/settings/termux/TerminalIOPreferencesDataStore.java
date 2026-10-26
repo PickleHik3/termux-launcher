@@ -72,6 +72,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "pane_agent_api":
                 mPreferences.setAgentPanesEnabled(value);
                 break;
+            case "terminal_body_swipe":
+                mPreferences.setTerminalBodySwipeEnabled(value);
+                break;
             case "status_widget_cpu":
                 mPreferences.setStatusWidgetCpuEnabled(value);
                 break;
@@ -123,6 +126,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isFocusedPaneGrowsEnabled();
             case "pane_agent_api":
                 return mPreferences.isAgentPanesEnabled();
+            case "terminal_body_swipe":
+                return mPreferences.isTerminalBodySwipeEnabled();
             case "status_widget_cpu":
                 return mPreferences.isStatusWidgetCpuEnabled();
             case "status_widget_ram":
@@ -149,6 +154,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             mPreferences.setTopPaneClockStyle(value);
         } else if ("top_pane_clock_alignment".equals(key)) {
             mPreferences.setTopPaneClockAlignment(value);
+        } else if ("status_bar_cutout_mode".equals(key)) {
+            mPreferences.setStatusBarCutoutMode(value);
         }
     }
 
@@ -160,6 +167,31 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
         }
         if ("top_pane_clock_alignment".equals(key)) {
             return mPreferences.getTopPaneClockAlignment();
+        }
+        if ("status_bar_cutout_mode".equals(key)) {
+            return mPreferences.getStatusBarCutoutMode();
+        }
+        return defValue;
+    }
+
+    @Override
+    public void putInt(String key, int value) {
+        if (mPreferences == null || key == null) return;
+        if ("status_bar_cutout_center".equals(key)) {
+            mPreferences.setStatusBarCutoutCenter(value);
+        } else if ("status_bar_cutout_width".equals(key)) {
+            mPreferences.setStatusBarCutoutWidth(value);
+        }
+    }
+
+    @Override
+    public int getInt(String key, int defValue) {
+        if (mPreferences == null || key == null) return defValue;
+        if ("status_bar_cutout_center".equals(key)) {
+            return mPreferences.getStatusBarCutoutCenter();
+        }
+        if ("status_bar_cutout_width".equals(key)) {
+            return mPreferences.getStatusBarCutoutWidth();
         }
         return defValue;
     }

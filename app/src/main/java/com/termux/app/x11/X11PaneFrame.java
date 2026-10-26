@@ -3,18 +3,20 @@ package com.termux.app.x11;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
-import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
+import com.termux.app.fragments.settings.termux.GuiAppsSetupGuideFragment;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
@@ -30,7 +32,7 @@ import com.termux.view.HoldTiming;
 import com.termux.x11.LorieView;
 
 /**
- * The wall's Display page: the embedded X server's surface, wearing a terminal pane's rim, radius
+ * The wall's display window: the embedded X server's surface, wearing a terminal pane's rim, radius
  * and gap.
  *
  * <p>It carries the same glass slab the panes and the Widgets page do, taken from the same
@@ -67,11 +69,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * since that is where the doc actually lives.
      */
     private static final String KEYBOARD_DATA_GUIDE_URL =
-        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#turn-it-on";
+        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#set-it-up";
 
     private static final int ACTION_HELP = 2;
-    /** "Appearance", which opens the wallpaper picker; package-private so a test can find it. */
-    @androidx.annotation.VisibleForTesting static final int ACTION_WALLPAPER = 5;
+    /** "Appearance", which opens the Appearance editor; package-private so a test can find it. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_APPEARANCE = 5;
     /** Minimal mode on or off for the Display place; the glyph shows which. */
     @androidx.annotation.VisibleForTesting static final int ACTION_MINIMAL = 6;
 
@@ -93,10 +95,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         default void showHelpOverlay() {}
         /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
-        /** The grid: open the Layout editor on this place, as every corner tab does. */
-        default void openLayoutEditor() {}
-        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
-        default void openWallpaperPicker() {}
         /** Whether the Display place is in minimal mode, which the tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** The minimal-mode glyph: turn the Display place's minimal mode on or off. */
@@ -173,6 +171,10 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private boolean mEnabled = true;
     /** The display's size while the frame around it animates; unset when it follows the frame. */
     private int mFrozenWidth = -1, mFrozenHeight = -1;
+    /** Lets go of a {@link #holdHostSizeOverNextLayout} hold; null while there is none. */
+    @Nullable private Runnable mNextLayoutRelease;
+    /** Watches for the frame's new height under that hold; null along with it. */
+    @Nullable private View.OnLayoutChangeListener mNextLayoutFollower;
     /** When the still copy stands in for the surface ({@link SurfaceStandIn}). */
     private final SurfaceStandIn mStill = new SurfaceStandIn();
     /** The copy's view, just above the display and below the corner mask; drawn only while up. */
@@ -271,7 +273,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                         : R.string.pane_controls_enter_minimal_mode)),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS,
                 getContext().getString(R.string.pane_controls_open_settings)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
+            PaneControlsView.Action.glyph(ACTION_APPEARANCE, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
@@ -280,7 +282,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             // Help first, the tab second: help reads the ? it was opened from while it is still
             // out, and puts the tab away itself.
             if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-            else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
+            else if (id == ACTION_APPEARANCE) { dismissControls(); mHost.openSurfaceEditor(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
@@ -677,7 +679,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     @NonNull
     public LorieView display() {
-        if (mDisplay == null) throw new IllegalStateException("Display page is not inflated");
+        if (mDisplay == null) throw new IllegalStateException("display window is not inflated");
         return mDisplay;
     }
 
@@ -781,7 +783,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     private void openDistroSetup() {
         try {
-            getContext().startActivity(GuiAppsSetupPreferencesFragment.intent(getContext())
+            getContext().startActivity(GuiAppsSetupGuideFragment.intent(getContext())
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (RuntimeException e) {
             // A home screen's empty state is not worth a crash; the row in Settings is still there.
@@ -876,27 +878,135 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * folding). The display keeps the size it has, pinned to the page's bottom edge, so the X
      * screen is resized once at the end instead of on every frame; until then the bar simply
      * covers it.
+     *
+     * <p>A {@link #holdHostSizeOverNextLayout} hold still waiting for its layout is taken over:
+     * the size stays held, and from here on it is this caller's {@link #finishHostResize} that
+     * lets it go, not the hold's own release.
      */
     public void beginHostResize() {
-        if (mDisplay == null || mDisplay.getWidth() <= 0 || mDisplay.getHeight() <= 0) return;
+        if (mDisplay == null) return;
+        beginHostResize(mDisplay.getWidth(), mDisplay.getHeight());
+    }
+
+    /** {@link #beginHostResize()} for a display of this size; the seam the tests hold through. */
+    @VisibleForTesting
+    void beginHostResize(int width, int height) {
+        if (width <= 0 || height <= 0) return;
+        dropNextLayoutHold();
         if (mFrozenWidth < 0) {
-            mFrozenWidth = mDisplay.getWidth();
-            mFrozenHeight = mDisplay.getHeight();
+            mFrozenWidth = width;
+            mFrozenHeight = height;
         }
     }
 
     /** The frame has its final height: the display takes it, in one resize. */
     public void finishHostResize() {
+        dropNextLayoutHold();
         if (mFrozenWidth < 0) return;
         mFrozenWidth = -1;
         mFrozenHeight = -1;
         requestLayout();
     }
 
+    /** True while the display keeps a size of its own rather than following the frame. */
+    @VisibleForTesting
+    boolean isHostSizeHeld() {
+        return mFrozenWidth >= 0;
+    }
+
+    /**
+     * Holds the display's size over a change of the frame's height that lands in a pass or two
+     * rather than over many frames — the keyboard mode switched under the touchpad. Taken now,
+     * and let go once the frame's height has held still for {@link #NEXT_LAYOUT_SETTLE_MS} after
+     * its last move, so whatever the passes after the first still move lands before the X screen
+     * is resized, once. A frame whose height
+     * never moves lets go after {@link #NEXT_LAYOUT_BACKSTOP_MS}; the caller leaves the hold out
+     * altogether when it knows the height cannot move. A hold that is already taken — the status
+     * bar folding — is left to whoever took it, and one that begins while this waits takes it
+     * over ({@link #beginHostResize()}).
+     */
+    public void holdHostSizeOverNextLayout() {
+        if (mDisplay == null) return;
+        holdHostSizeOverNextLayout(mDisplay.getWidth(), mDisplay.getHeight());
+    }
+
+    /** {@link #holdHostSizeOverNextLayout()} for a display of this size; the tests' seam. */
+    @VisibleForTesting
+    void holdHostSizeOverNextLayout(int width, int height) {
+        if (mFrozenWidth >= 0) return;
+        beginHostResize(width, height);
+        if (mFrozenWidth < 0) return;
+        final int heldHeight = getHeight();
+        final Runnable release = new Runnable() {
+            @Override
+            public void run() {
+                // Only its own hold: one that was taken over or finished meanwhile is not this.
+                if (mNextLayoutRelease != this) return;
+                finishHostResize();
+            }
+        };
+        final long backstopAt = SystemClock.uptimeMillis() + NEXT_LAYOUT_BACKSTOP_MS;
+        final int[] last = {heldHeight};
+        View.OnLayoutChangeListener follower = (v, l, t, r, b, ol, ot, or, ob) -> {
+            int now = b - t;
+            if (now == last[0]) return;
+            last[0] = now;
+            // A docked keyboard moves the height once; the wait is for a height that takes more
+            // than one pass to land (the pad's host, the accessory stack, the overlay decision),
+            // each its own layout. Every one that moves it starts the wait again, so the release
+            // falls after the last, never between two.
+            removeCallbacks(release);
+            postDelayed(release, Math.max(0L,
+                Math.min(NEXT_LAYOUT_SETTLE_MS, backstopAt - SystemClock.uptimeMillis())));
+        };
+        mNextLayoutRelease = release;
+        mNextLayoutFollower = follower;
+        addOnLayoutChangeListener(follower);
+        postDelayed(release, NEXT_LAYOUT_BACKSTOP_MS);
+    }
+
+    /**
+     * How long a {@link #holdHostSizeOverNextLayout} hold waits for a height that never comes —
+     * the keyboard reveal gate's backstop, for the same reason: a layout that never comes must
+     * not keep the display frozen.
+     */
+    private static final long NEXT_LAYOUT_BACKSTOP_MS = 160L;
+
+    /** How long the frame's height must hold still, after its last move, before the hold lets go. */
+    private static final long NEXT_LAYOUT_SETTLE_MS = 48L;
+
+    private void dropNextLayoutHold() {
+        if (mNextLayoutRelease != null) removeCallbacks(mNextLayoutRelease);
+        if (mNextLayoutFollower != null) removeOnLayoutChangeListener(mNextLayoutFollower);
+        mNextLayoutRelease = null;
+        mNextLayoutFollower = null;
+    }
+
+    /**
+     * A held display is measured at its held size and never at the frame's. The display sends the
+     * X server every size it is measured at, so measuring it at the frame's new height first and
+     * putting the held one back after resized the X screen there and back on every held pass.
+     */
+    @Override
+    protected void measureChildWithMargins(View child, int parentWidthMeasureSpec, int widthUsed,
+                                           int parentHeightMeasureSpec, int heightUsed) {
+        if (mFrozenWidth > 0 && child.getId() == R.id.x11_display_view) {
+            child.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
+            return;
+        }
+        super.measureChildWithMargins(child, parentWidthMeasureSpec, widthUsed,
+            parentHeightMeasureSpec, heightUsed);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        if (mFrozenWidth > 0 && mDisplay != null) {
+        // A frame measured other than exactly re-measures its match-parent children directly,
+        // past measureChildWithMargins; the wall measures its pages exactly, so this is a guard.
+        if (mFrozenWidth > 0 && mDisplay != null
+            && (mDisplay.getMeasuredWidth() != mFrozenWidth
+                || mDisplay.getMeasuredHeight() != mFrozenHeight)) {
             mDisplay.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
         }
@@ -1188,7 +1298,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /**
      * Dress the page from the surface style — the same values the panes beside it read, so the
-     * Display page follows the Canvas surface with the rest of the wall.
+     * display window follows the Canvas surface with the rest of the wall.
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
@@ -1266,6 +1376,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         cancelHold();
+        // A frame taken off the window lets go of the display rather than leave it frozen.
+        if (mNextLayoutRelease != null) {
+            dropNextLayoutHold();
+            finishHostResize();
+        }
         mRim.cancel();
         // A surface-sized bitmap is not carried out of the window.
         resetStill();

@@ -278,7 +278,7 @@ public class TermuxActivityEdgeStackLayoutTest {
         int glassHeightPx = activity.offDockPlankGlassHeightPx();
         assertTrue("both bands are on the sheet", glassHeightPx > 0);
         float density = activity.getResources().getDisplayMetrics().density;
-        if (activity.isRoundedDockStyle()) {
+        if (activity.arrangement().floating()) {
             assertEquals("Floating: the plank is a card at Corners, clamped to the whole plank",
                 activity.resolveDockCapsuleCornerRadiusPx(glassHeightPx), outline.radiusPx(), 0.01f);
             assertTrue("rounder than a half-capsule of one bar",
@@ -432,6 +432,8 @@ public class TermuxActivityEdgeStackLayoutTest {
     /** A bar holding enough to stand anywhere, where the activity's own setup would have put it. */
     private static SuggestionBarView lendBar(TermuxActivity activity) {
         SuggestionBarView bar = new SuggestionBarView(activity, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         List<PinnedItem> pinned = new ArrayList<>();
         for (int i = 0; i < 6; i++)
             pinned.add(new PinnedAppItem(new AppRef("com.example.app" + i, "Main")));

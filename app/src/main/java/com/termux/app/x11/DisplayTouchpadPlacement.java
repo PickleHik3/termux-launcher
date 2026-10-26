@@ -8,6 +8,11 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayout.KeyboardMode;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+
 /**
  * Where the touchpad stands inside the keyboard frame it borrows in mouse mode.
  *
@@ -16,6 +21,10 @@ import androidx.annotation.Nullable;
  * take — and both runs keep typing. A parting too narrow to point in is no use, so under
  * {@link #MIN_GAP_DP} the pad takes the whole frame again — which a keyboard wide enough to part
  * never reaches, because it is asked for {@link #minimumGapPx} while the pad is up.
+ *
+ * <p>Standing in the keyboard's frame, the pad also follows the keyboard mode: under Overlay it
+ * floats over the display window and the X screen keeps its size, under Resize the display
+ * shrinks to what is left above it. Its own switch flips that mode ({@link #switchKeyboardMode}).
  */
 public final class DisplayTouchpadPlacement {
 
@@ -75,5 +84,31 @@ public final class DisplayTouchpadPlacement {
         return params.width == wanted.width && params.height == wanted.height
             && params.leftMargin == wanted.leftMargin && params.topMargin == wanted.topMargin
             && params.gravity == wanted.gravity;
+    }
+
+    // ---- The keyboard mode switch ----------------------------------------------------------
+
+    /**
+     * Whether the pad offers its keyboard mode switch over a keyboard of this [form]. The pad
+     * stands in the keyboard's frame, so it floats over the display or takes its room exactly as
+     * the keyboard would; a floating keyboard floats whatever is stored, so over one there is
+     * nothing for the switch to change and it is not shown.
+     */
+    public static boolean offersModeSwitch(@NonNull KeyboardForm form) {
+        return form != KeyboardForm.FLOATING;
+    }
+
+    /**
+     * The switch was pressed: this orientation's keyboard mode turns to the other one and is
+     * saved where the Layout editor reads it, so there is one value and two places to set it.
+     * Answers the mode now stored.
+     */
+    @NonNull
+    public static KeyboardMode switchKeyboardMode(@NonNull PlaceLayoutStore store,
+                                                  @NonNull PlaceOrientation orientation) {
+        KeyboardMode next = store.keyboardMode(orientation) == KeyboardMode.OVERLAY
+            ? KeyboardMode.RESIZE : KeyboardMode.OVERLAY;
+        store.setKeyboardMode(orientation, next);
+        return next;
     }
 }

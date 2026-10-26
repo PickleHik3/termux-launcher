@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Elements list at the end of the Home and Workspace cards. -->
+    <string name="editor_section_elements">Elements</string>
+    <string name="editor_elements_status_bar">Status bar</string>
+    <string name="editor_elements_apps_row">Apps row</string>
+    <string name="editor_elements_az">A–Z</string>
+    <string name="editor_elements_extra_keys">Extra keys</string>
+    <string name="editor_elements_keyboard">Keyboard</string>
+    <string name="editor_elements_search_field">Search field</string>
+    <string name="editor_elements_drawer_icon">Drawer icon</string>
+    <string name="editor_elements_command_palette">Command palette</string>
+    <string name="editor_elements_terminal">Terminal</string>
+    <string name="editor_elements_widgets">Widgets</string>
+    <string name="editor_elements_open">%1$s settings</string>
+    <string name="editor_elements_show">Show %1$s</string>
+    <string name="editor_elements_hide">Hide %1$s</string>
+</resources>

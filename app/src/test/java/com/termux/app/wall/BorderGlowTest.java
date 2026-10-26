@@ -186,24 +186,40 @@ public class BorderGlowTest {
     // ---- Where it is drawn -----------------------------------------------------------------------
 
     @Test
-    public void itLiesAlongTheWholeHeldEdgeFromTheClearanceOutIntoTheAir() {
+    public void itLiesAlongTheWholeHeldEdgeInsideTheFrameAndNeverOutsideIt() {
         RectF band = new RectF();
-        float inset = BorderGlow.INSET_DP * DENSITY;
-        float spread = BorderGlow.SPREAD_DP * DENSITY;
+        float depth = BorderGlow.DEPTH_DP * DENSITY;
         assertTrue(BorderGlow.band(band, BorderDrag.Border.BOTTOM, 100f, 200f, 1000f, 1800f, 1f,
             DENSITY));
-        assertEquals(new RectF(100f, 1800f - inset, 1000f, 1800f + spread), band);
+        assertEquals(new RectF(100f, 1800f - depth, 1000f, 1800f), band);
         assertTrue(BorderGlow.band(band, BorderDrag.Border.TOP, 100f, 200f, 1000f, 1800f, 1f,
             DENSITY));
-        assertEquals(new RectF(100f, 200f - spread, 1000f, 200f + inset), band);
+        assertEquals(new RectF(100f, 200f, 1000f, 200f + depth), band);
         assertTrue(BorderGlow.band(band, BorderDrag.Border.LEFT, 100f, 200f, 1000f, 1800f, 1f,
             DENSITY));
-        assertEquals(new RectF(100f - spread, 200f, 100f + inset, 1800f), band);
+        assertEquals(new RectF(100f, 200f, 100f + depth, 1800f), band);
         assertTrue(BorderGlow.band(band, BorderDrag.Border.RIGHT, 100f, 200f, 1000f, 1800f, 1f,
             DENSITY));
-        assertEquals(new RectF(1000f - inset, 200f, 1000f + spread, 1800f), band);
+        assertEquals(new RectF(1000f - depth, 200f, 1000f, 1800f), band);
         assertFalse(BorderGlow.band(band, BorderDrag.Border.NONE, 100f, 200f, 1000f, 1800f, 1f,
             DENSITY));
+        // Every side, at every scale: inside the frame.
+        BorderDrag.Border[] sides = {BorderDrag.Border.TOP, BorderDrag.Border.BOTTOM,
+            BorderDrag.Border.LEFT, BorderDrag.Border.RIGHT};
+        float[] scales = {PageSink.SCALE, 1f, 2f};
+        for (BorderDrag.Border side : sides) {
+            for (float scale : scales) {
+                assertTrue(BorderGlow.band(band, side, 100f, 200f, 1000f, 1800f, scale, DENSITY));
+                assertTrue(side + " at " + scale, band.left >= 100f && band.top >= 200f
+                    && band.right <= 1000f && band.bottom <= 1800f);
+            }
+        }
+        // A frame thinner than two depths: never past its middle.
+        assertTrue(BorderGlow.band(band, BorderDrag.Border.BOTTOM, 0f, 0f, 500f, 20f, 1f,
+            DENSITY));
+        assertEquals(new RectF(0f, 10f, 500f, 20f), band);
+        assertTrue("lit through the clearance before it fades",
+            BorderGlow.INSET_DP < BorderGlow.DEPTH_DP);
     }
 
     @Test
@@ -212,10 +228,68 @@ public class BorderGlowTest {
         float scale = PageSink.SCALE;
         assertTrue(BorderGlow.band(band, BorderDrag.Border.LEFT, 100f, 200f, 1000f, 1800f, scale,
             DENSITY));
-        assertEquals(100f - BorderGlow.SPREAD_DP * DENSITY * scale, band.left, EPS);
-        assertEquals(100f + BorderGlow.INSET_DP * DENSITY * scale, band.right, EPS);
+        assertEquals(100f, band.left, EPS);
+        assertEquals(100f + BorderGlow.DEPTH_DP * DENSITY * scale, band.right, EPS);
         assertEquals(200f, band.top, EPS);
         assertEquals(1800f, band.bottom, EPS);
+    }
+
+    /**
+     * The bottom border pressed on a page that then grows under the dock and the keyboard: the
+     * glow keeps the frame the press found, so it stays on the edge the finger was on rather than
+     * following the page's new bottom down the screen. A page that shrinks keeps it inside itself.
+     */
+    @Test
+    public void itStaysOnTheEdgeThePressFound() {
+        assertEquals("grown since the press: the frame at the press", 1500f,
+            BorderGlow.heldExtent(1500f, 2200f), EPS);
+        assertEquals("shrunk since the press: the frame now", 900f,
+            BorderGlow.heldExtent(1500f, 900f), EPS);
+        assertEquals(1500f, BorderGlow.heldExtent(1500f, 1500f), EPS);
+        assertEquals("nothing recorded: the frame now", 1500f,
+            BorderGlow.heldExtent(0f, 1500f), EPS);
+        RectF band = new RectF();
+        assertTrue(BorderGlow.band(band, BorderDrag.Border.BOTTOM, 0f, 0f, 1000f,
+            BorderGlow.heldExtent(1500f, 2200f), 1f, DENSITY));
+        assertEquals(1500f, band.bottom, EPS);
+        assertEquals(1500f - BorderGlow.DEPTH_DP * DENSITY, band.top, EPS);
+    }
+
+    /**
+     * The regression: the bottom border's glow lit a band inside the terminal, over its last
+     * rows. It lies below the pane pressed instead, in the gap before the dock, the keyboard or
+     * the screen's edge: from the pane's bottom edge down, across that pane only, never inside it
+     * and never past the air.
+     */
+    @Test
+    public void theBottomBordersGlowLiesInTheAirBelowThePanePressed() {
+        RectF band = new RectF();
+        float depth = BorderGlow.DEPTH_DP * DENSITY;
+        // The right half of a side-by-side split, its bottom edge at 1500, air down to 1560.
+        assertTrue(BorderGlow.belowBand(band, 500f, 1000f, 1500f, 1560f, 1f, DENSITY));
+        assertEquals("starts at the pane's edge, nothing of it inside the pane", 1500f, band.top,
+            EPS);
+        assertEquals(1500f + depth, band.bottom, EPS);
+        assertEquals("under the pane pressed only", 500f, band.left, EPS);
+        assertEquals(1000f, band.right, EPS);
+        // Less air than its depth (the keyboard close under the pane): it ends at the keyboard.
+        assertTrue(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1510f, 1f, DENSITY));
+        assertEquals(1500f, band.top, EPS);
+        assertEquals("never past the air", 1510f, band.bottom, EPS);
+        // Sunk with its page, it is shallower.
+        assertTrue(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1600f, PageSink.SCALE, DENSITY));
+        assertEquals(1500f + depth * PageSink.SCALE, band.bottom, EPS);
+    }
+
+    /** A page flush with what is below it has no air to light: the glow keeps its frame's band. */
+    @Test
+    public void withNoAirBelowTheBottomBordersGlowHasNoBandThere() {
+        RectF band = new RectF(1f, 2f, 3f, 4f);
+        assertFalse(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1500f, 1f, DENSITY));
+        assertFalse(BorderGlow.belowBand(band, 0f, 1000f, 1500f, 1400f, 1f, DENSITY));
+        assertFalse("no span", BorderGlow.belowBand(band, 1000f, 1000f, 1500f, 1560f, 1f,
+            DENSITY));
+        assertEquals("untouched", new RectF(1f, 2f, 3f, 4f), band);
     }
 
     @Test

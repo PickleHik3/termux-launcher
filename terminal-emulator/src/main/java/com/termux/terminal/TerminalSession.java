@@ -33,8 +33,7 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Per-session instrumentation seam; returning true consumes native resizing in tests. */
     public interface SizeUpdateObserver {
-        boolean onUpdateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                             boolean keepCursorAtBottom);
+        boolean onUpdateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels);
     }
 
     private SizeUpdateObserver mSizeUpdateObserver;
@@ -99,6 +98,12 @@ public final class TerminalSession extends TerminalOutput {
     private boolean mBoldWithBright;
 
     /**
+     * Whether the session writes "[Process completed … - press Enter]" when its process ends.
+     * Off for a read-only session that says how it ended elsewhere and takes no Enter.
+     */
+    public boolean mShowsExitLine = true;
+
+    /**
      * The file descriptor referencing the master half of a pseudo-terminal pair, resulting from calling
      * {@link JNI#createSubprocess(String, String, String[], String[], int[], int, int, int, int)}.
      */
@@ -149,22 +154,15 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Inform the attached pty of the new size and reflow or initialize the emulator. */
     public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
-        updateSize(columns, rows, cellWidthPixels, cellHeightPixels, false);
-    }
-
-    /** Inform the pty of a new size with an optional bottom-anchored row expansion. */
-    public void updateSize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
-                           boolean keepCursorAtBottom) {
         if (mSizeUpdateObserver != null && mSizeUpdateObserver.onUpdateSize(columns, rows,
-            cellWidthPixels, cellHeightPixels, keepCursorAtBottom)) return;
+            cellWidthPixels, cellHeightPixels)) return;
         if (mEmulator == null) {
             initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels);
         } else {
             Trace.beginSection("Terminal.resize");
             try {
                 JNI.setPtyWindowSize(mTerminalFileDescriptor, rows, columns, cellWidthPixels, cellHeightPixels);
-                mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels,
-                    keepCursorAtBottom);
+                mEmulator.resize(columns, rows, cellWidthPixels, cellHeightPixels);
             } finally {
                 Trace.endSection();
             }
@@ -256,9 +254,14 @@ public final class TerminalSession extends TerminalOutput {
     @Override
     public void write(byte[] data, int offset, int count) {
         if (mShellPid > 0) {
-            synchronized (mWriteLock) {
-                mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
-                mTerminalToProcessIOQueue.write(data, offset, count);
+            Trace.beginSection("Terminal.write");
+            try {
+                synchronized (mWriteLock) {
+                    mLastWriteUptimeMs = android.os.SystemClock.uptimeMillis();
+                    mTerminalToProcessIOQueue.write(data, offset, count);
+                }
+            } finally {
+                Trace.endSection();
             }
         }
     }
@@ -628,6 +631,7 @@ public final class TerminalSession extends TerminalOutput {
             mAppendingProcessOutput = false;
             Trace.endSection();
         }
+        LatencyProbe.outputArrived();
         notifyScreenUpdate();
         return bytesRead == mReceiveBuffer.length;
     }
@@ -662,8 +666,10 @@ public final class TerminalSession extends TerminalOutput {
                     exitDescription += " (signal " + (-exitCode) + ")";
                 }
                 exitDescription += " - press Enter]";
-                byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
-                mEmulator.append(bytesToWrite, bytesToWrite.length);
+                if (mShowsExitLine) {
+                    byte[] bytesToWrite = exitDescription.getBytes(StandardCharsets.UTF_8);
+                    mEmulator.append(bytesToWrite, bytesToWrite.length);
+                }
                 notifyScreenUpdate();
                 mClient.onSessionFinished(TerminalSession.this);
             } else if (drainProcessOutputSlice() && !hasMessages(MSG_NEW_INPUT)) {

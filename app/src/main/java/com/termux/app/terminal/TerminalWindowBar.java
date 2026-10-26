@@ -85,6 +85,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         void onWindowChipTapped(int index);
     }
 
+    /**
+     * A window's chip was lifted by a long press, dragged along the bar and dropped at another
+     * place in the row. The bar has already let go of it; the host moves the window and hands the
+     * row back through {@link #setWindows}. Never called for a drop where the chip was picked up.
+     */
+    public interface OnWindowChipMovedListener {
+        void onWindowChipMoved(int from, int to);
+    }
+
     /** Visual label plus a spoken label that does not expose Nerd Font private-use glyphs. */
     public static final class WindowItem {
         @NonNull public final String label;
@@ -133,7 +142,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
          */
         @Nullable public final Bitmap icon;
 
+        /** Whether this is a Home float's chip while the float is minimised (#91). */
+        public final boolean minimised;
+
         public static final int NO_PERCENTAGE = -1;
+        /** A minimised float's chip, as an alpha: reduced emphasis against an open window's. */
+        public static final float MINIMISED_ALPHA = 0.75f;
+        /** The dot a minimised float's chip wears, its diameter. */
+        public static final float MINIMISED_DOT_DP = 4f;
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel) {
             this(label, spokenLabel, false, false);
@@ -176,6 +192,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                           boolean attention, int progress, boolean progressError, boolean done,
                           boolean doneFailed, @Nullable AgentStatus.State agentState,
                           @Nullable Bitmap icon) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                agentState, icon, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState,
+                          @Nullable Bitmap icon, boolean minimised) {
+            this.minimised = minimised;
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
@@ -197,14 +222,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         @NonNull
@@ -217,7 +242,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withDone(boolean done, boolean failed) {
             return done == this.done && failed == this.doneFailed ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    failed, agentState, icon);
+                    failed, agentState, icon, minimised);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
@@ -225,7 +250,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /** The rolled-up agent reading for this window's panes; null leaves it to the shell. */
@@ -233,7 +258,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
             return agentState == this.agentState ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
         }
 
         /**
@@ -245,7 +270,35 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withIcon(@Nullable Bitmap icon) {
             return icon == this.icon ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon);
+                    doneFailed, agentState, icon, minimised);
+        }
+
+        /**
+         * The chip of a Home float: the label carries the float's page, as the page dots count it,
+         * and the spoken label says what it is ({@code spokenMark}, such as "Home float, page 2").
+         */
+        @NonNull
+        public WindowItem withHomeFloat(int page, @NonNull String spokenMark) {
+            return new WindowItem(label + HomeFloatPolicy.chipPageMark(page),
+                spokenLabel + ", " + spokenMark, busy, attention, progress, progressError, done,
+                doneFailed, agentState, icon, minimised);
+        }
+
+        /**
+         * A minimised Home float's chip (#91): drawn at {@link #MINIMISED_ALPHA} with a small dot
+         * ({@link #MINIMISED_DOT_DP}), the way the old run strip marked a parked float. The
+         * spoken label already says it, so this is the sighted reading only.
+         */
+        @NonNull
+        public WindowItem withMinimised(boolean minimised) {
+            return minimised == this.minimised ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon, minimised);
+        }
+
+        /** The alpha this chip rests at: dimmed while it is a minimised float's. */
+        public float restAlpha() {
+            return minimised ? MINIMISED_ALPHA : 1f;
         }
 
         /** Whether the two would draw the same marks. Labels are compared separately. */
@@ -253,7 +306,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return busy == other.busy && attention == other.attention && done == other.done
                 && doneFailed == other.doneFailed
                 && progress == other.progress && progressError == other.progressError
-                && agentState == other.agentState && icon == other.icon;
+                && agentState == other.agentState && icon == other.icon
+                && minimised == other.minimised;
         }
 
         /**
@@ -286,6 +340,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             hash = 31 * hash + (attention ? 1 : 0);
             hash = 31 * hash + (done ? 1 : 0);
             hash = 31 * hash + (doneFailed ? 1 : 0);
+            hash = 31 * hash + (minimised ? 1 : 0);
             hash = 31 * hash + progress;
             hash = 31 * hash + (progressError ? 1 : 0);
             hash = 31 * hash + (agentState == null ? 0 : agentState.hashCode());
@@ -347,6 +402,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /** The DOWN time of the stream being tracked, so a DOWN seen twice is set up once. */
     private long mStreamDownTime = -1L;
     private int mSelectedIndex = -1;
+    /** See {@link #setSelectedChipOffersClose}; true off Home. */
+    private boolean mSelectedChipOffersClose = true;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private Typeface mTerminalTypeface = Typeface.MONOSPACE;
     /** The terminal's symbol_map ranges, so a tab label's icon is drawn by the face that has it. */
@@ -408,6 +465,41 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     static final float OVERFLOW_FADE_DP = 16f;
     private boolean mAttached;
 
+    // --- Reordering: a long press lifts a window's chip, a drag along the bar moves it. ---
+
+    /** How far past a neighbour's centre the lifted chip's centre goes before they swap. */
+    private static final float REORDER_MARGIN_DP = 6f;
+    /** The lifted chip grows by this much and stands this far above the row. */
+    private static final float LIFT_SCALE = 1.06f;
+    private static final float LIFT_ELEVATION_DP = 4f;
+    /** The other chips parting, and the lifted one settling into its slot on release. */
+    private static final long PART_MS = 160L;
+    /** The scrolling zone at each end of an overflowing bar, and its fastest step per frame. */
+    private static final float AUTO_SCROLL_EDGE_DP = 32f;
+    private static final float AUTO_SCROLL_STEP_DP = 6f;
+
+    @Nullable private OnWindowChipMovedListener mMoveListener;
+    /** How many chips, from the first, stand for the Workspace's windows and so can be moved. */
+    private int mMovableChipCount;
+    /** The long press that lifts {@link #mPendingLiftIndex}, armed at DOWN on a movable chip. */
+    @Nullable private Runnable mPendingLift;
+    private int mPendingLiftIndex = -1;
+    /** The chip being dragged, or -1. */
+    private int mLiftedIndex = -1;
+    /** The index the lifted chip would drop at now. */
+    private int mLiftHover = -1;
+    /** Swallow the rest of a stream whose chip was lifted, even after the chip went back. */
+    private boolean mLiftOwnsStream;
+    /** The finger's last x in this bar's own coordinates, while a stream is live. */
+    private float mLastTouchX;
+    /** The finger's x in the strip minus the lifted chip's resting left, so the chip never jumps. */
+    private float mLiftGrab;
+    /** Every chip's resting edges at the lift, in row order (mirrored for a right-to-left bar). */
+    @NonNull private int[] mRestLefts = new int[0];
+    @NonNull private int[] mRestRights = new int[0];
+    @Nullable private ValueAnimator mPartAnimator;
+    @Nullable private Runnable mAutoScrollTick;
+
     public TerminalWindowBar(Context context, AttributeSet attrs) {
         super(context, attrs);
         setHorizontalScrollBarEnabled(false);
@@ -441,9 +533,76 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * again.
      */
     public boolean setTrailingGapPx(int px) {
-        int gap = Math.max(0, px);
-        if (getPaddingEnd() == gap) return false;
-        setPaddingRelative(getPaddingStart(), getPaddingTop(), gap, getPaddingBottom());
+        mTrailingGapPx = Math.max(0, px);
+        return applySidePadding();
+    }
+
+    /** The status row's trailing gap, before the screen's corners are added to it. */
+    private int mTrailingGapPx;
+    /** The window's camera box and corners while Full screen; null outside it. */
+    @Nullable private com.termux.app.statusbar.StatusRowKeepOut.Screen mScreenKeepOut;
+    /** The answer the bar's padding was last made for. */
+    @NonNull private com.termux.app.statusbar.StatusRowKeepOut.Answer mKeepOut =
+        com.termux.app.statusbar.StatusRowKeepOut.Answer.NONE;
+
+    /**
+     * The window's camera box and corner radii, handed over only while Full screen (null outside
+     * it, which leaves the bar as it always was). Where the bar stands in that window's top band,
+     * its ends step in from the screen's corners. Compared first, so the host may hand it over on
+     * every insets pass.
+     */
+    public void setScreenKeepOut(@Nullable com.termux.app.statusbar.StatusRowKeepOut.Screen screen) {
+        if (mScreenKeepOut == null ? screen == null : mScreenKeepOut.equals(screen)) return;
+        mScreenKeepOut = screen;
+        if (onWindowLaidOutForKeepOut()) requestLayout();
+    }
+
+    /** For tests: the answer the bar's padding is made for now. */
+    @NonNull
+    com.termux.app.statusbar.StatusRowKeepOut.Answer keepOut() {
+        return mKeepOut;
+    }
+
+    /**
+     * Re-reads the answer for where the bar stands at rest (translations left out) and pads the
+     * bar for it. A pane that moves under the bar (Full screen lifting it to the top) leaves the
+     * bar's own frame as it was, so this is asked after every window layout as well.
+     *
+     * @return whether the padding changed
+     */
+    private boolean onWindowLaidOutForKeepOut() {
+        int x = 0;
+        int y = 0;
+        View view = this;
+        while (true) {
+            x += view.getLeft();
+            y += view.getTop();
+            android.view.ViewParent parent = view.getParent();
+            if (!(parent instanceof View)) break;
+            View up = (View) parent;
+            x -= up.getScrollX();
+            y -= up.getScrollY();
+            view = up;
+        }
+        com.termux.app.statusbar.StatusRowKeepOut.Answer answer = getWidth() <= 0
+            ? com.termux.app.statusbar.StatusRowKeepOut.Answer.NONE
+            : WindowBarKeepOut.answer(mScreenKeepOut, view.getWidth(), view.getHeight(), x, y,
+                x + getWidth(), y + getHeight());
+        if (answer.equals(mKeepOut)) return false;
+        mKeepOut = answer;
+        return applySidePadding();
+    }
+
+    private final android.view.ViewTreeObserver.OnGlobalLayoutListener mKeepOutLaidOut = () -> {
+        if (onWindowLaidOutForKeepOut()) requestLayout();
+    };
+
+    /** Pads the bar's sides for the corners plus the trailing gap; whether anything changed. */
+    private boolean applySidePadding() {
+        int[] sides = WindowBarKeepOut.sidePaddingPx(mKeepOut, mTrailingGapPx,
+            getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        if (getPaddingLeft() == sides[0] && getPaddingRight() == sides[1]) return false;
+        setPadding(sides[0], getPaddingTop(), sides[1], getPaddingBottom());
         return true;
     }
 
@@ -453,6 +612,20 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     public int restingContentWidthPx() {
         return Math.max(0, mTabs.getMeasuredWidth() - mTabs.closeExtentPx());
+    }
+
+    /**
+     * Whether a tap on the selected chip offers its ×: on the Workspace, where that window is on
+     * screen. On Home the same chip stands for the window in front of the row, which a tap brings
+     * on screen instead (the selected chip could not be reached from Home at all, #90).
+     */
+    public void setSelectedChipOffersClose(boolean offers) {
+        if (mSelectedChipOffersClose == offers) return;
+        mSelectedChipOffersClose = offers;
+        if (!offers) {
+            mReveal.onTouchElsewhere();
+            applyReveal();
+        }
     }
 
     public void setOnWindowSelectedListener(@Nullable OnWindowSelectedListener listener) {
@@ -497,6 +670,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // A finger that lands on a pill gives the pill its DOWN; the strip only meets the stream
         // when it intercepts a sideways move. Its bookkeeping has to start at the DOWN either way.
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) beginStream(event);
+        // A lifted chip takes the stream from the chip view itself: it gets its CANCEL, so the
+        // long press never also lands as a tap, and every event from here on is the drag's.
+        // Handled here as well as in onTouchEvent, since the event that is intercepted is the one
+        // onTouchEvent never sees — and it can be the release.
+        if (mLiftOwnsStream) {
+            onLiftedStreamEvent(event);
+            return true;
+        }
+        trackPendingLift(event);
         return super.onInterceptTouchEvent(event);
     }
 
@@ -506,8 +688,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mStreamDownTime = event.getDownTime();
         mTouchDownX = event.getX();
         mTouchDownY = event.getY();
+        mLastTouchX = event.getX();
         mGestureHorizontal = false;
         mGestureRejected = false;
+        // A chip still settling from the last drop lands now, before anything reads the row.
+        if (mPartAnimator != null && mLiftedIndex < 0) mPartAnimator.end();
+        mLiftOwnsStream = false;
+        cancelPendingLift();
+        armPendingLift(event);
         cancelScrollAnimation();
         mReveal.onTouchDown();
         // A finger that lands anywhere but on the chip offering its × puts it away — including the
@@ -527,6 +715,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             beginStream(event);
             return super.onTouchEvent(event);
         }
+        if (mLiftOwnsStream) {
+            onLiftedStreamEvent(event);
+            return true;
+        }
+        trackPendingLift(event);
         if (action == MotionEvent.ACTION_MOVE) {
             float totalX = event.getX() - mTouchDownX;
             float totalY = event.getY() - mTouchDownY;
@@ -579,6 +772,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
             && sameActivity(mItems, items)) return;
         int previousSelected = mSelectedIndex;
+        if (previousSelected >= 0 && selectedIndex != previousSelected) {
+            // Diagnostic for the chip highlight jumping on its own (2026-10-22): who refreshed
+            // the bar with a different current window. Remove once the cause is known.
+            android.util.Log.w("TermuxWindowBar", "selection " + previousSelected + " -> "
+                + selectedIndex + " items=" + items.size(), new Throwable("window bar selection"));
+        }
         // A × belongs to one window of one list. A different list, or the same list with the
         // selection somewhere else, is no longer the row it was revealed on.
         if (!sameItems(mItems, items)) mReveal.onItemsChanged();
@@ -609,6 +808,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
 
         cancelSelectionAnimation();
+        // The chip views are about to be replaced: a chip in the finger or settling into its slot
+        // belongs to the row that is going away, so it is let go without a move.
+        abandonLift();
         mTabs.removeAllViews();
         for (int i = 0; i < items.size(); i++) {
             final int index = i;
@@ -616,6 +818,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             boolean selected = i == selectedIndex;
             TextView tab = createTab(item, selected);
             tab.setOnClickListener(v -> onChipTapped(index));
+            // A long press on any chip is the bar's. One that cannot lift (a Home float's, the
+            // Display's) is swallowed here, so it never reaches the terminal's text selection.
+            tab.setOnLongClickListener(v -> !canLiftChip(index));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
             if (i > 0) params.setMarginStart(dp(3));
@@ -637,11 +842,354 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     private void onChipTapped(int index) {
         if (mChipTapListener != null) mChipTapListener.onWindowChipTapped(index);
-        boolean spentOnTheClose =
-            mReveal.onChipTap(index, mSelectedIndex, SystemClock.uptimeMillis());
+        // On Home the selected chip is the row's front window, which is not on screen: a tap on
+        // it travels to the window rather than offering its ×, so the selection is passed as
+        // "none" and the reveal only puts away whatever it was showing.
+        boolean spentOnTheClose = mReveal.onChipTap(index,
+            mSelectedChipOffersClose ? mSelectedIndex : -1, SystemClock.uptimeMillis());
         applyReveal();
         if (spentOnTheClose) return;
         if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
+    }
+
+    // --- Reordering ---------------------------------------------------------------------------
+    //
+    // A long press on a window's chip lifts it; the finger then carries it along the bar, the
+    // other chips part to show where it would land, and the release drops it there. Where things
+    // go is WindowReorderPolicy's to say; this only measures the chips and moves their views, by
+    // translation, so nothing above the bar is laid out again while the finger moves.
+
+    /** The window chips, which are the strip's first children: the plus and the × come after. */
+    private int chipCount() {
+        return Math.min(mItems.size(), mTabs.getChildCount());
+    }
+
+    /** Which chips may move, as the policy reads it: the first {@link #mMovableChipCount}. */
+    @NonNull
+    private boolean[] movableMask(int count) {
+        boolean[] mask = new boolean[count];
+        for (int i = 0; i < count && i < mMovableChipCount; i++) mask[i] = true;
+        return mask;
+    }
+
+    private boolean isRtl() {
+        return getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+    }
+
+    /** {@code barX}, in this bar's own coordinates, in the strip's. */
+    private float stripX(float barX) {
+        return barX + getScrollX() - mTabs.getLeft();
+    }
+
+    /** The window chip under {@code barX}, or -1. */
+    private int chipIndexAt(float barX) {
+        float x = stripX(barX);
+        int count = chipCount();
+        for (int i = 0; i < count; i++) {
+            View chip = mTabs.getChildAt(i);
+            if (x >= chip.getLeft() && x < chip.getRight()) return i;
+        }
+        return -1;
+    }
+
+    /** Whether a long press on chip {@code index} would lift it, as the policy reads it. */
+    private boolean canLiftChip(int index) {
+        int count = chipCount();
+        return mMoveListener != null
+            && WindowReorderPolicy.canLift(index, count, movableMask(count));
+    }
+
+    /** A DOWN on a chip that can move starts the long press that lifts it. */
+    private void armPendingLift(@NonNull MotionEvent event) {
+        if (mMoveListener == null || mLiftedIndex >= 0) return;
+        int count = chipCount();
+        int index = chipIndexAt(event.getX());
+        if (!WindowReorderPolicy.canLift(index, count, movableMask(count))) return;
+        mPendingLiftIndex = index;
+        mPendingLift = () -> {
+            mPendingLift = null;
+            int lift = mPendingLiftIndex;
+            mPendingLiftIndex = -1;
+            liftChip(lift);
+        };
+        postDelayed(mPendingLift, ViewConfiguration.getLongPressTimeout());
+    }
+
+    private void cancelPendingLift() {
+        if (mPendingLift != null) removeCallbacks(mPendingLift);
+        mPendingLift = null;
+        mPendingLiftIndex = -1;
+    }
+
+    /** A finger that travels before the long press lands is a scroll or a pull, never a lift. */
+    private void trackPendingLift(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_MOVE) {
+            mLastTouchX = event.getX();
+            if (mPendingLift != null && (Math.abs(event.getX() - mTouchDownX) > mTouchSlop
+                || Math.abs(event.getY() - mTouchDownY) > mTouchSlop)) {
+                cancelPendingLift();
+            }
+        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL
+            || action == MotionEvent.ACTION_POINTER_DOWN) {
+            cancelPendingLift();
+        }
+    }
+
+    /** The long press landed: the chip rises into the finger and the stream is the drag's. */
+    private void liftChip(int index) {
+        int count = chipCount();
+        if (mLiftedIndex >= 0 || mStreamDownTime < 0
+            || !WindowReorderPolicy.canLift(index, count, movableMask(count))) return;
+        // The row has to stand at rest to be measured: the × folds away (it pushes the chips
+        // after it along) and an easing scroll stops where it is.
+        mReveal.hide();
+        applyReveal();
+        cancelScrollAnimation();
+        if (mPartAnimator != null) mPartAnimator.end();
+        int width = mTabs.getWidth();
+        boolean rtl = isRtl();
+        mRestLefts = new int[count];
+        mRestRights = new int[count];
+        for (int i = 0; i < count; i++) {
+            View chip = mTabs.getChildAt(i);
+            mRestLefts[i] = rtl ? width - chip.getRight() : chip.getLeft();
+            mRestRights[i] = rtl ? width - chip.getLeft() : chip.getRight();
+        }
+        View chip = mTabs.getChildAt(index);
+        mLiftedIndex = index;
+        mLiftHover = index;
+        mLiftOwnsStream = true;
+        mLiftGrab = stripX(mLastTouchX) - chip.getLeft();
+        chip.setPressed(false);
+        chip.setScaleX(LIFT_SCALE);
+        chip.setScaleY(LIFT_SCALE);
+        chip.setTranslationZ(dpF(LIFT_ELEVATION_DP));
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        yieldStatusBarFold();
+        mTabs.invalidate();
+    }
+
+    /**
+     * The status bar folds from a drag across it that starts anywhere, a chip included. Once a
+     * chip is in the finger the stream is the drag's, so the fold is told to stand down.
+     */
+    private void yieldStatusBarFold() {
+        android.view.ViewParent parent = getParent();
+        while (parent != null) {
+            if (parent instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+                ((com.termux.app.statusbar.StatusBarSwipeLayout) parent).yieldStreamToChild();
+                return;
+            }
+            parent = parent.getParent();
+        }
+    }
+
+    /** Every event of a stream whose chip was lifted, from the lift to the release. */
+    private void onLiftedStreamEvent(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                mLastTouchX = event.getX();
+                if (mLiftedIndex < 0) return;
+                if (WindowReorderPolicy.leavesRow(event.getX() - mTouchDownX,
+                    event.getY() - mTouchDownY, getHeight())) {
+                    // Off the row rather than along it: the chip goes back, and the rest of the
+                    // stream is still swallowed so the strip does not start scrolling mid-way.
+                    dropLifted(false);
+                    return;
+                }
+                followFinger();
+                startAutoScrollIfNeeded();
+                return;
+            case MotionEvent.ACTION_UP:
+                if (mLiftedIndex >= 0) dropLifted(true);
+                endLiftedStream();
+                return;
+            case MotionEvent.ACTION_CANCEL:
+                if (mLiftedIndex >= 0) dropLifted(false);
+                endLiftedStream();
+                return;
+            default:
+        }
+    }
+
+    private void endLiftedStream() {
+        mLiftOwnsStream = false;
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+        mStreamDownTime = -1L;
+        mGestureHorizontal = false;
+        mGestureRejected = false;
+    }
+
+    /** The lifted chip under the finger, kept inside the window chips, and the others parted. */
+    private void followFinger() {
+        int from = mLiftedIndex;
+        int count = mRestLefts.length;
+        if (from < 0 || from >= count || from >= mTabs.getChildCount()) return;
+        View chip = mTabs.getChildAt(from);
+        int width = mRestRights[from] - mRestLefts[from];
+        int stripWidth = mTabs.getWidth();
+        boolean rtl = isRtl();
+        float stripLeft = stripX(mLastTouchX) - mLiftGrab;
+        float fingerLeft = rtl ? stripWidth - (stripLeft + width) : stripLeft;
+        // The chip is drawn inside the window chips' span, but where it lands is read from the
+        // finger: a chip as wide as the last one could otherwise never get its centre past it.
+        int last = Math.min(mMovableChipCount, count) - 1;
+        float rowLeft = Math.max(mRestLefts[0], Math.min(fingerLeft, mRestRights[last] - width));
+        stripLeft = rtl ? stripWidth - rowLeft - width : rowLeft;
+        chip.setTranslationX(stripLeft - chip.getLeft());
+        int hover = WindowReorderPolicy.dropIndex(mRestLefts, mRestRights, from,
+            fingerLeft + width / 2f, mLiftHover, dpF(REORDER_MARGIN_DP), movableMask(count));
+        if (hover != mLiftHover) {
+            mLiftHover = hover;
+            animateChips(translationsFor(from, hover), from, -1, null);
+        }
+        // The selection's surface is drawn by the strip under the chip it belongs to.
+        mTabs.invalidate();
+    }
+
+    /** Each chip's translation while the chip lifted from {@code from} hovers at {@code to}. */
+    @NonNull
+    private float[] translationsFor(int from, int to) {
+        int count = Math.min(mRestLefts.length, mTabs.getChildCount());
+        int[] lefts = WindowReorderPolicy.shiftedLefts(mRestLefts, mRestRights, from, to,
+            movableMask(mRestLefts.length));
+        int stripWidth = mTabs.getWidth();
+        boolean rtl = isRtl();
+        float[] out = new float[count];
+        for (int i = 0; i < count; i++) {
+            int width = mRestRights[i] - mRestLefts[i];
+            int stripLeft = rtl ? stripWidth - lefts[i] - width : lefts[i];
+            out[i] = stripLeft - mTabs.getChildAt(i).getLeft();
+        }
+        return out;
+    }
+
+    /**
+     * Lets go of the lifted chip: into the slot it hovers at when {@code keep}, back where it
+     * came from otherwise. The move is reported once the chip has settled, with every chip back
+     * at rest, so the row the host hands back replaces a row standing still.
+     */
+    private void dropLifted(boolean keep) {
+        stopAutoScroll();
+        int from = mLiftedIndex;
+        if (from < 0) return;
+        int to = keep ? mLiftHover : from;
+        mLiftedIndex = -1;
+        mLiftHover = -1;
+        animateChips(translationsFor(from, to), -1, from, () -> {
+            resetChipTransforms();
+            if (to != from && mMoveListener != null) mMoveListener.onWindowChipMoved(from, to);
+        });
+    }
+
+    /** Lets go of everything without a move: the row is being replaced, or the bar is leaving. */
+    private void abandonLift() {
+        boolean moving = mLiftedIndex >= 0 || mPartAnimator != null;
+        cancelPendingLift();
+        stopAutoScroll();
+        if (mPartAnimator != null) {
+            ValueAnimator animator = mPartAnimator;
+            mPartAnimator = null;
+            animator.cancel();
+        }
+        if (moving) resetChipTransforms();
+        mLiftedIndex = -1;
+        mLiftHover = -1;
+    }
+
+    private void resetChipTransforms() {
+        for (int i = 0; i < mTabs.getChildCount(); i++) {
+            View child = mTabs.getChildAt(i);
+            child.setTranslationX(0f);
+            child.setScaleX(1f);
+            child.setScaleY(1f);
+            child.setTranslationZ(0f);
+        }
+        mTabs.invalidate();
+    }
+
+    /**
+     * Eases each chip's translation to {@code targets}, leaving {@code skip} (the chip in the
+     * finger) alone and bringing {@code settling} (the chip let go of) back to its resting size
+     * and height on the way. Straight to the end while nobody can see the bar.
+     */
+    private void animateChips(@NonNull float[] targets, int skip, int settling,
+                              @Nullable Runnable onEnd) {
+        if (mPartAnimator != null) {
+            ValueAnimator previous = mPartAnimator;
+            mPartAnimator = null;
+            previous.cancel();
+        }
+        int count = Math.min(targets.length, mTabs.getChildCount());
+        float[] starts = new float[count];
+        for (int i = 0; i < count; i++) starts[i] = mTabs.getChildAt(i).getTranslationX();
+        View settled = settling >= 0 && settling < count ? mTabs.getChildAt(settling) : null;
+        float startScale = settled == null ? 1f : settled.getScaleX();
+        float startZ = settled == null ? 0f : settled.getTranslationZ();
+        ValueAnimator.AnimatorUpdateListener step = value -> {
+            float t = value.getAnimatedFraction();
+            for (int i = 0; i < count && i < mTabs.getChildCount(); i++) {
+                if (i == skip) continue;
+                mTabs.getChildAt(i).setTranslationX(starts[i] + (targets[i] - starts[i]) * t);
+            }
+            if (settled != null) {
+                float scale = startScale + (1f - startScale) * t;
+                settled.setScaleX(scale);
+                settled.setScaleY(scale);
+                settled.setTranslationZ(startZ * (1f - t));
+            }
+            mTabs.invalidate();
+        };
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(PART_MS);
+        animator.setInterpolator(settleInterpolator());
+        animator.addUpdateListener(step);
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mPartAnimator != animation) return;
+                mPartAnimator = null;
+                if (onEnd != null) onEnd.run();
+            }
+        });
+        mPartAnimator = animator;
+        if (!mAttached || !mWindowVisible) {
+            animator.end();
+            return;
+        }
+        animator.start();
+    }
+
+    /** Near an end of an overflowing bar the strip scrolls under the held chip, frame by frame. */
+    private void startAutoScrollIfNeeded() {
+        if (mAutoScrollTick != null || mLiftedIndex < 0 || autoScrollStep() == 0) return;
+        mAutoScrollTick = new Runnable() {
+            @Override public void run() {
+                int step = mLiftedIndex < 0 ? 0 : autoScrollStep();
+                if (step == 0) {
+                    mAutoScrollTick = null;
+                    return;
+                }
+                scrollBy(step, 0);
+                followFinger();
+                postOnAnimation(this);
+            }
+        };
+        postOnAnimation(mAutoScrollTick);
+    }
+
+    private int autoScrollStep() {
+        int viewport = getWidth() - getPaddingLeft() - getPaddingRight();
+        int maxScroll = Math.max(0,
+            mTabs.getWidth() + getPaddingLeft() + getPaddingRight() - getWidth());
+        return WindowReorderPolicy.autoScrollStep(mLastTouchX - getPaddingLeft(), viewport,
+            dp(AUTO_SCROLL_EDGE_DP), dp(AUTO_SCROLL_STEP_DP), getScrollX(), maxScroll);
+    }
+
+    private void stopAutoScroll() {
+        if (mAutoScrollTick != null) removeCallbacks(mAutoScrollTick);
+        mAutoScrollTick = null;
     }
 
     /** Whether the × is currently a child of the strip, revealed or waiting hidden. */
@@ -875,7 +1423,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
                 setTitle((TextView) child, item);
             }
+            MinimisedDotDrawable.wear((TextView) child, item.minimised);
             applyChipWatermark((TextView) child, item, i == mSelectedIndex ? 1f : 0f);
+            child.setAlpha(item.restAlpha());
             child.setTag(R.id.terminal_window_tab_state, item);
         }
         updateBusyAnimator();
@@ -1172,12 +1722,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         mAttached = true;
+        getViewTreeObserver().addOnGlobalLayoutListener(mKeepOutLaidOut);
         updateBusyAnimator();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         mAttached = false;
+        getViewTreeObserver().removeOnGlobalLayoutListener(mKeepOutLaidOut);
+        abandonLift();
         cancelScrollAnimation();
         if (mBreathTick != null) {
             removeCallbacks(mBreathTick);
@@ -1215,9 +1768,59 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return mCloseButton != null && mCloseButton.getVisibility() == VISIBLE ? mCloseButton : null;
     }
 
+    /**
+     * Where the chip at {@code index} stands on screen, cut to the part the bar shows: false while
+     * the bar is not on screen, the chip is not laid out, or it is scrolled out of sight. Asked
+     * once per minimise, for the float's flight into its chip.
+     */
+    public boolean chipBoundsOnScreen(int index, @NonNull android.graphics.Rect out) {
+        return chipBoundsOnScreen(this, mTabs, index, mItems.size(), out);
+    }
+
+    /**
+     * Where {@code chips}' child at {@code index} stands on screen, cut to the part {@code host}
+     * shows: false while the host is not on screen, {@code index} is not one of its
+     * {@code itemCount} chips, the chip is not laid out, or it is scrolled out of sight. The bar's
+     * row and the status bar's window column ask it alike.
+     */
+    public static boolean chipBoundsOnScreen(@NonNull View host,
+                                             @NonNull android.view.ViewGroup chips,
+                                             int index, int itemCount,
+                                             @NonNull android.graphics.Rect out) {
+        if (!host.isShown() || index < 0 || index >= itemCount || index >= chips.getChildCount())
+            return false;
+        View chip = chips.getChildAt(index);
+        if (chip.getWidth() <= 0 || chip.getHeight() <= 0) return false;
+        int[] at = new int[2];
+        chip.getLocationOnScreen(at);
+        out.set(at[0], at[1], at[0] + chip.getWidth(), at[1] + chip.getHeight());
+        host.getLocationOnScreen(at);
+        return out.intersect(at[0], at[1], at[0] + host.getWidth(), at[1] + host.getHeight());
+    }
+
     /** Told about every chip tap, including the one spent on revealing the close button. */
     public void setOnChipTappedListener(@Nullable OnChipTappedListener listener) {
         mChipTapListener = listener;
+    }
+
+    /** Told where a dragged chip was dropped; without one no chip lifts. */
+    public void setOnWindowChipMovedListener(@Nullable OnWindowChipMovedListener listener) {
+        mMoveListener = listener;
+    }
+
+    /**
+     * How many chips, counted from the first, stand for the Workspace's windows and may be dragged
+     * to reorder them. The chips after them — the display's, the Home floats' — and every chip of
+     * a place whose row is not the Workspace's (Home, Display) pass 0 and never lift.
+     */
+    public void setMovableChipCount(int count) {
+        mMovableChipCount = Math.max(0, count);
+    }
+
+    /** For tests: the chip being dragged right now, or -1. */
+    @androidx.annotation.VisibleForTesting
+    int liftedChipIndex() {
+        return mLiftedIndex;
     }
 
     /** For tests: the surface the selected chip is standing on, × segment included. */
@@ -1258,6 +1861,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setMinWidth(dp(ChipWatermarkGeometry.GLYPH_SIZE_DP)
             + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP) + dp(3.5f) * 2);
         applyChipWatermark(tab, item, selected ? 1f : 0f);
+        // A minimised float's mark: the same dot the status column's chips wear, in the title's ink.
+        MinimisedDotDrawable.wear(tab, item.minimised);
         tab.setSelected(selected);
         tab.setFocusable(true);
         return tab;
@@ -1308,7 +1913,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         applyAnimatedTabSelection(previousSelected, selectedIndex, 0f);
         mTabs.setAnimatedHighlight(start);
         mSelectionAnimator = ValueAnimator.ofFloat(0f, 1f);
-        mSelectionAnimator.setDuration(WINDOW_SWITCH_ANIMATION_DURATION_MS);
+        mSelectionAnimator.setDuration(
+            com.termux.app.AnimationSpeed.scale(getContext(), WINDOW_SWITCH_ANIMATION_DURATION_MS));
         mSelectionAnimator.setInterpolator(settleInterpolator());
         mSelectionAnimator.addUpdateListener(animation -> {
             float progress = (Float) animation.getAnimatedValue();
@@ -1396,7 +2002,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private void animateScrollTo(int target) {
         cancelScrollAnimation();
         ValueAnimator animator = ValueAnimator.ofInt(getScrollX(), target);
-        animator.setDuration(WINDOW_SWITCH_ANIMATION_DURATION_MS);
+        animator.setDuration(
+            com.termux.app.AnimationSpeed.scale(getContext(), WINDOW_SWITCH_ANIMATION_DURATION_MS));
         animator.setInterpolator(settleInterpolator());
         animator.addUpdateListener(value -> scrollTo((Integer) value.getAnimatedValue(), 0));
         animator.addListener(new AnimatorListenerAdapter() {
@@ -1434,7 +2041,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             applyTitleHalo(tab, selected ? 1f : 0f);
             ChipWatermarkDrawable chip = chipWatermarkAt(i);
             if (chip != null) chip.setSelection(selected ? 1f : 0f);
-            tab.setAlpha(1f);
+            tab.setAlpha(mItems.get(i).restAlpha());
             tab.setTranslationX(0f);
         }
     }
@@ -1462,7 +2069,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 applyTitleHalo(tab, 0f);
                 if (chip != null) chip.setSelection(0f);
             }
-            tab.setAlpha(1f);
+            tab.setAlpha(mItems.get(i).restAlpha());
             tab.setTranslationX(0f);
         }
     }
@@ -1915,6 +2522,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             View child = getChildAt(index);
             if (child.getWidth() <= 0 || child.getHeight() <= 0) return false;
             output.set(child.getLeft(), child.getTop(), child.getRight(), child.getBottom());
+            // A chip carried along the row by a reorder drag takes its surface with it.
+            output.offset(child.getTranslationX(), 0f);
             if (index == mCloseIndex && hasCloseSegment()) {
                 int shift = currentShiftPx();
                 if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) output.left -= shift;
@@ -1994,6 +2603,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             if (!a.label.equals(b.label) || !a.spokenLabel.equals(b.spokenLabel)) return false;
         }
         return true;
+    }
+
+    /**
+     * The chip at {@code index}, so a surface can find where a window's chip stands (a Home
+     * float's Minimise flies into it). Null before the row is populated or past its end.
+     */
+    @Nullable
+    public View chipViewAt(int index) {
+        if (index < 0 || index >= mItems.size() || index >= mTabs.getChildCount()) return null;
+        return mTabs.getChildAt(index);
     }
 
     /**

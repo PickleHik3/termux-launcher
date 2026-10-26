@@ -302,16 +302,14 @@ public final class AzScrubRowView extends AppCompatTextView {
 
     /**
      * The x a letter's glyph is centred on. A row centres it on its slot along the width; a column
-     * centres it across the visible band and lets the wave carry it away from the edge, which is
-     * sideways there rather than up.
+     * centres it across the whole bar, so the letters stand on the pill's middle line, and lets the
+     * wave carry it away from the edge, which is sideways there rather than up.
      */
     private float letterDrawX(float alongCenterPx, float waveLiftPx) {
         if (!isVerticalBar())
             return alongCenterPx;
-        float band = Math.max(1f, getWidth() - getPaddingLeft() - getPaddingRight());
-        return barEdge == Edge.LEFT
-            ? getPaddingLeft() + (band * 0.5f) + waveLiftPx
-            : getWidth() - getPaddingRight() - (band * 0.5f) - waveLiftPx;
+        return com.termux.app.launcher.az.AzBarHostGeometry.columnLetterCentrePx(getWidth(),
+            waveLiftPx, barEdge == Edge.LEFT);
     }
 
     /**
@@ -678,9 +676,45 @@ public final class AzScrubRowView extends AppCompatTextView {
         return true;
     }
 
+    /** The letters' opacity while no finger is on them: the Dock card's Faint, else full. */
+    private float restingAlpha = 1f;
+    private static final long LETTERS_FADE_IN_MS = 120L;
+    private static final long LETTERS_FADE_OUT_MS = 240L;
+
+    /**
+     * The letters' opacity at rest ({@code AzShowMode#restingAlpha}): Faint keeps them at about
+     * a third, still scrubbable, and a finger on them brings them to full for the scrub.
+     */
+    public void setRestingAlpha(float alpha) {
+        float clamped = Float.isNaN(alpha) ? 1f : Math.max(0f, Math.min(1f, alpha));
+        if (restingAlpha == clamped) return;
+        restingAlpha = clamped;
+        if (activeLetterIndex < 0) {
+            animate().cancel();
+            setAlpha(clamped);
+        }
+    }
+
+    private void fadeLettersTo(float alpha, long durationMs) {
+        if (getAlpha() == alpha) return;
+        animate().cancel();
+        if (!isAttachedToWindow()) {
+            setAlpha(alpha);
+            return;
+        }
+        animate().alpha(alpha).setDuration(durationMs).start();
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (callback == null) return super.onTouchEvent(event);
+        int fadeAction = event.getActionMasked();
+        if (fadeAction == MotionEvent.ACTION_DOWN) {
+            fadeLettersTo(1f, LETTERS_FADE_IN_MS);
+        } else if (fadeAction == MotionEvent.ACTION_UP
+            || fadeAction == MotionEvent.ACTION_CANCEL) {
+            fadeLettersTo(restingAlpha, LETTERS_FADE_OUT_MS);
+        }
         // Read in the canonical frame the gesture is written in: "along" the letters, and "away"
         // from the bar, whichever screen axes those are on this edge. A bottom bar is the frame
         // itself, so this is the identity there.

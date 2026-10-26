@@ -1,5 +1,11 @@
 # Pane wall, home-screen pane and X11 pane — feasibility study
 
+> **Superseded in part by [ADR 0008](../../../docs/adr/0008-one-wall-two-halves.md) (2026-10-17).**
+> The three places described here (Home, Terminal, Display) and the usage mode that chose among
+> them are gone: the wall is now Home pages, then the Workspace's windows, and a display is a
+> display window started on demand. The X server findings below still stand. The spec is
+> [`wall-rework-2026-10-17.md`](../../active/wall-rework-2026-10-17.md).
+
 Status: built. The wall is `PaneWallPage` and `PaneWallController` in `app/.../wall/`; the embedded X11
 server is the `x11-server/` module. This document is kept as the decision record.
 

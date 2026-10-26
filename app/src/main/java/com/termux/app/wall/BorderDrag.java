@@ -2,13 +2,15 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.terminal.TerminalBodySwipe;
+
 /**
- * A press on a pane's border that pages the wall: slid sideways off the top or bottom border, or
+ * A press on a pane's border that pages the wall: slid sideways off any of its four borders, or
  * held on any border and then dragged. The one gesture every place has for moving to the places
  * beside it, in every mode.
  *
  * <p>The border lives outside the page. Its zone ({@link Zone}) is the strip between each edge of
- * the page — the terminal, the Widgets page, the Display page — and the wall's own edge on that
+ * the page — the terminal, the Widgets page, the display window — and the wall's own edge on that
  * side: the frame line drawn there and the air beyond it, up to whatever stands next to the wall
  * (the status bar, the dock or the keyboard, the screen's edge). Which border a press is on is
  * which page edge it lies beyond. The page's text is never the zone, so a tap, a long press or a
@@ -27,15 +29,22 @@ import androidx.annotation.NonNull;
  * as a pinch. What a finger that sets off sideways before the hold does depends on where it
  * landed:
  * <ul>
- *   <li>On the top or bottom border, out in the air beyond the page, with another place to go
- *       ({@link #slidePages}): the wall is claimed at once, the same drag a hold would have begun,
- *       measured from where the claim was made. Nothing there is the content's, and the phone's
- *       back swipe is on the side edges, not these.</li>
- *   <li>Anywhere else — the left and right borders, which share their edge with the phone's back
- *       swipe and reach over the page's edge, the minimum band where it reaches into the page, the
- *       boxes by the pills, and the phone's own strip at the top of the screen: the gesture is
- *       given up, so a scroll, a selection or a TUI's drag inside the page stays the content's.
- *       Only the hold pages from there.</li>
+ *   <li>On a border outside the page's text, with another place to go ({@link #slidePages}):
+ *       the top or bottom border out in the air beyond the page, or the left or right border in
+ *       the air beside it and its {@link #SIDE_REACH_DP} of clearance. The wall is claimed at
+ *       once, the same drag a hold would have begun, measured from where the claim was made.
+ *       Nothing there is the content's. The phone's back swipe still takes the side edges outside
+ *       the stretch the wall asks it to leave (its gesture exclusion), before this sees them.</li>
+ *   <li>On the page's text, where the terminal there gives a sideways swipe away (the owner
+ *       asks {@link TerminalBodySwipe#yieldsSideways} as the finger lands): only a start that is
+ *       clearly sideways ({@link TerminalBodySwipe#isSideways}) claims the wall, the same drag
+ *       again; a vertical or diagonal one stays the terminal's scroll, and the hold never pages
+ *       from the text, so a still finger is the terminal's long press.</li>
+ *   <li>Anywhere else — the minimum band where it reaches past the clearance into the page (a
+ *       page almost flush with the wall), the boxes by the pills, and the phone's own strip at the
+ *       top of the screen, wherever the text does not give the swipe away: the gesture is given
+ *       up, so a scroll, a selection or a TUI's drag inside the page stays the content's. Only the
+ *       hold pages from the band.</li>
  * </ul>
  *
  * <p>The bottom border carries one more gesture, the keyboard's: a clear vertical swipe that
@@ -56,6 +65,21 @@ import androidx.annotation.NonNull;
  * the keyboard and from its top edge for the status bar ({@link #pillAt}). Only the vertical swipe
  * is taken there. The hold never pages from it, so a still finger is the content's long press, and
  * a tap, a mouse click or a sideways drag in it reach the content as anywhere else on the page.
+ *
+ * <p>The bottom border is where paging between windows starts most, and its air is only the
+ * Margin tall, so the seam there is a band a fingertip tall ({@link SeamSwipe}, set by {@link
+ * Zone#seam}): the air, the window's last row above it and the dock's top below it. From the last
+ * row a clearly sideways start pages where the terminal there gives the swipe away (asked as the
+ * finger lands, whatever the body swipe's setting), and from the dock's top too ({@link
+ * #downOnDock}: the dock has the finger, and its owner hands the wall the stream). In both a still
+ * finger and a steeper start stay the content's.
+ *
+ * <p>A page whose content owns everything inside its edges — the display window, whose picture
+ * is a Linux app's to its rim — keeps every zone out of it ({@link Zone#ownContent}): no side
+ * reach, no boxes by the pills, no seam band in its last row, no body swipe. Its borders are the
+ * air around it, and only where that air is thinner than {@link #MIN_BAND_DP} does a border
+ * reach in, by the frame line alone ({@link BorderReach#FRAME_STRIP_DP}). The dock's top keeps
+ * its part of the seam band, which lies outside the page.
  *
  * <p>The hold is timed by whoever owns the finger; this class only says whether a hold that has
  * elapsed may claim ({@link #holdElapsed}). Pure, so the zone, the hold and the drag can be
@@ -96,6 +120,18 @@ public final class BorderDrag {
 
     /** How fast a shorter keyboard swipe has to be flicked to count, in dp per second. */
     public static final float KEYBOARD_FLING_DP_PER_SEC = 500f;
+
+    /**
+     * How tall the box a Home page's grabber is found in is, in dp: a finger's height, standing on
+     * the dock's top edge ({@link #homeGrabber}).
+     */
+    public static final float HOME_GRABBER_HIT_DP = 48f;
+
+    /** How far above the dock's top edge a Home page's grabber's lower edge sits, in dp. */
+    public static final float HOME_GRABBER_LIFT_DP = 4f;
+
+    /** A Home page's grabber's thickness, in dp: a little bolder than a window's. */
+    public static final float HOME_GRABBER_THICKNESS_DP = 4f;
 
     /** Which border a finger is on. */
     public enum Border { NONE, TOP, BOTTOM, LEFT, RIGHT }
@@ -150,8 +186,35 @@ public final class BorderDrag {
         float mPillCentreX;
         float mPillWidth;
         float mPillReach;
+        /**
+         * Where the bottom pill's box stands when it is not by the page's bottom edge (a Home
+         * page's grabber, over the dock): set by {@link #bottomPill}, and only while
+         * {@link #mBottomPillSet}.
+         */
+        private final float[] mBottomPill = new float[4];
+        private boolean mBottomPillSet;
         /** Scratch for {@link #inPill}, so a press allocates nothing. */
         private final float[] mPillBox = new float[4];
+        /**
+         * The seam band's reach above the bottom air into the page ({@link #seam}); 0, the
+         * default, leaves the bottom border its air alone.
+         */
+        float mSeamReach;
+        /** The seam band's reach below the bottom air into the dock's top. */
+        float mSeamDockReach;
+        /** Where the bottom air ends: the dock's top, or NaN for the wall's edge. */
+        float mSeamAirBottom = Float.NaN;
+        /** Whether the dock stands below the air, so the band reaches into its top. */
+        boolean mSeamDock;
+        /** Whether a seam band is set at all ({@link #seam}); its last row's reach may be 0. */
+        boolean mSeamSet;
+        /**
+         * Whether the page's content owns everything inside its edges ({@link #ownContent}): no
+         * zone reaches past {@link #mFrameStrip} into it.
+         */
+        boolean mOwnsContent;
+        /** How far a border may reach into a page that owns its content: its frame line. */
+        float mFrameStrip;
 
         /** The page's edges, as it stands now (its slide applied). */
         @NonNull
@@ -212,10 +275,126 @@ public final class BorderDrag {
         }
 
         /**
+         * The bottom pill's box where it is not by the page's bottom edge: a Home page's grabber
+         * stands over the dock ({@link BorderDrag#homeGrabber}), and its swipe starts by it. An
+         * empty box is no override.
+         */
+        @NonNull
+        public Zone bottomPill(float left, float top, float right, float bottom) {
+            mBottomPill[0] = left;
+            mBottomPill[1] = top;
+            mBottomPill[2] = right;
+            mBottomPill[3] = bottom;
+            mBottomPillSet = right > left && bottom > top;
+            return this;
+        }
+
+        /**
+         * The seam band along the bottom border ({@link SeamSwipe}): reaching {@code paneReachPx}
+         * into the page's last row and, where {@code dockTop} is a number, {@code dockReachPx}
+         * into the dock whose top it is. The air between ends at the dock's top, or at the wall's
+         * edge with no dock ({@code dockTop} NaN).
+         */
+        @NonNull
+        public Zone seam(float dockTop, float paneReachPx, float dockReachPx) {
+            mSeamReach = Math.max(0f, paneReachPx);
+            mSeamDockReach = Math.max(0f, dockReachPx);
+            mSeamAirBottom = dockTop;
+            mSeamDock = !Float.isNaN(dockTop);
+            mSeamSet = true;
+            return this;
+        }
+
+        /** No seam band: the bottom border is its air alone. */
+        @NonNull
+        public Zone clearSeam() {
+            mSeamReach = 0f;
+            mSeamDockReach = 0f;
+            mSeamAirBottom = Float.NaN;
+            mSeamDock = false;
+            mSeamSet = false;
+            return this;
+        }
+
+        /**
+         * The page's content owns everything inside its edges (the display window): every border
+         * stops at the page's edge, and only where a side's air is thinner than the minimum band
+         * does it reach in, by {@code frameStripPx} at most — the frame line, never the content.
+         * The boxes by the pills and the seam band's last row are gone; the seam band's part on
+         * the dock's top, outside the page, stays.
+         */
+        @NonNull
+        public Zone ownContent(float frameStripPx) {
+            mOwnsContent = true;
+            mFrameStrip = Math.max(0f, frameStripPx);
+            return this;
+        }
+
+        /** The page shares its edges with the borders again, as a terminal does (the default). */
+        @NonNull
+        public Zone shareContent() {
+            mOwnsContent = false;
+            mFrameStrip = 0f;
+            return this;
+        }
+
+        /**
+         * How far the seam band reaches above the bottom air into the page: none on a page that
+         * owns its content, and never past the middle of the page.
+         */
+        float seamPaneReach() {
+            if (mOwnsContent) return 0f;
+            return Math.max(0f, Math.min(mSeamReach, (mBottom - mTop) / 2f));
+        }
+
+        /**
+         * The seam band's part inside the page, its last row, as {@code left, top, right, bottom}
+         * in {@code out}, between the corner squares. False, with {@code out} untouched, where
+         * there is none.
+         */
+        public boolean seamPaneBounds(@NonNull float[] out) {
+            if (!mSeamSet || mRight <= mLeft || mBottom <= mTop) return false;
+            float corner = cornerSize();
+            float l = mLeft + corner;
+            float r = mRight - corner;
+            float t = mBottom - seamPaneReach();
+            if (r <= l || !(mBottom > t) || seamAirBottom() < mBottom) return false;
+            out[0] = l;
+            out[1] = t;
+            out[2] = r;
+            out[3] = mBottom;
+            return true;
+        }
+
+        /** Where the bottom air ends: the dock's top where one is set, else the wall's edge. */
+        public float seamAirBottom() {
+            float wallEdge = mBottom + mGapBottom;
+            return Float.isNaN(mSeamAirBottom) ? wallEdge : Math.min(wallEdge, mSeamAirBottom);
+        }
+
+        /** Where {@code (x, y)} lies on the seam band ({@link SeamSwipe#startAt}). */
+        @NonNull
+        public SeamSwipe.Start seamAt(float x, float y) {
+            if (!mSeamSet || mRight <= mLeft || mBottom <= mTop) {
+                return SeamSwipe.Start.NONE;
+            }
+            return SeamSwipe.startAt(x, y, mLeft, mRight, cornerSize(), mBottom, seamAirBottom(),
+                seamPaneReach(), mSeamDockReach, mSeamDock);
+        }
+
+        /** The bottom pill's box by the page's bottom edge again, as {@link #pills} puts it. */
+        @NonNull
+        public Zone clearBottomPill() {
+            mBottomPillSet = false;
+            return this;
+        }
+
+        /**
          * How far inside the page's edge on {@code side} its zone reaches: the shortfall of that
          * side's air against the minimum band, or on the left and right the side reach where that
          * is further; 0 on the top and bottom wherever the air is at least the band, and never
-         * past the middle of the page.
+         * past the middle of the page. On a page that owns its content ({@link #ownContent}), 0
+         * wherever the air is at least the band, and the frame line at most where it is not.
          */
         public float inside(@NonNull Border side) {
             float gap;
@@ -228,7 +407,9 @@ public final class BorderDrag {
                 case BOTTOM: gap = mGapBottom; half = (mBottom - mTop) / 2f; break;
                 default: return 0f;
             }
-            return Math.max(0f, Math.min(Math.max(mMinBand - gap, reach), half));
+            float in = Math.max(0f, Math.min(Math.max(mMinBand - gap, reach), half));
+            if (!mOwnsContent) return in;
+            return gap >= mMinBand ? 0f : Math.min(in, mFrameStrip);
         }
 
         /**
@@ -277,6 +458,12 @@ public final class BorderDrag {
          */
         public boolean pillBounds(@NonNull Border side, @NonNull float[] out) {
             if (mRight <= mLeft || mBottom <= mTop) return false;
+            if (side == Border.BOTTOM && mBottomPillSet) {
+                System.arraycopy(mBottomPill, 0, out, 0, 4);
+                return true;
+            }
+            // A page that owns its content keeps the pills' swipes on its border's air.
+            if (mOwnsContent) return false;
             if (!(mPillWidth > 0f) || !(mPillReach > 0f)) return false;
             float corner = cornerSize();
             float l = Math.max(mLeft + corner, mPillCentreX - mPillWidth / 2f);
@@ -297,6 +484,14 @@ public final class BorderDrag {
             return true;
         }
 
+        /**
+         * Whether {@code (x, y)} lies on the page itself: from its left and top edges to just
+         * short of its right and bottom ones.
+         */
+        boolean holds(float x, float y) {
+            return x >= mLeft && x < mRight && y >= mTop && y < mBottom;
+        }
+
         /** Whether {@code (x, y)} lies in the box by the pill on {@code side}. */
         boolean inPill(@NonNull Border side, float x, float y) {
             float[] box = mPillBox;
@@ -315,11 +510,16 @@ public final class BorderDrag {
     private float mDownX;
     private float mDownY;
     private float mSlop;
+    /**
+     * Whether the finger has gone past the plain slop: it is not holding, though a diagonal
+     * start may still be short of the damped slop a page asks for ({@link PagePolicy#pastSlop}).
+     */
+    private boolean mSetOff;
     /** Whether the hold may page: the wall has another place to go. */
     private boolean mHoldPages;
     /**
-     * Whether a sideways start pages at once, without the hold: the top or bottom border, out in
-     * the air beyond the page and below the phone's own strip, on a wall that can page.
+     * Whether a sideways start pages at once, without the hold: a border outside the page's text
+     * ({@link #slidesFrom}) and below the phone's own strip, on a wall that can page.
      */
     private boolean mSlidePages;
     /** Where the wall's drag is measured from: the DOWN, or where a sideways start claimed it. */
@@ -328,6 +528,26 @@ public final class BorderDrag {
     private boolean mKeyboardEligible;
     /** Whether this press may become the status bar's swipe: it landed in the top zone. */
     private boolean mStatusEligible;
+    /**
+     * Whether a sideways start pages from inside the page, on its text: the terminal there gives
+     * the swipe away ({@link TerminalBodySwipe}), and the finger has to set off clearly sideways
+     * ({@link TerminalBodySwipe#isSideways}).
+     */
+    private boolean mBodySlides;
+    /**
+     * Whether a clearly sideways start pages from the seam band beyond the border's air
+     * ({@link SeamSwipe}): the window's last row, where the terminal gives the swipe away, or the
+     * dock's top ({@link #downOnDock}).
+     */
+    private boolean mSeamSlides;
+    /** Where on the seam band the finger landed; NONE off it. */
+    @NonNull private SeamSwipe.Start mSeamStart = SeamSwipe.Start.NONE;
+    /**
+     * How far the finger had already gone sideways when a start claimed the wall, positive to the
+     * right; 0 for a hold. The wall is dragged from the claim, so this is travel the drag never
+     * saw, and a short flick counts it ({@link #claimLead}).
+     */
+    private float mClaimLeadX;
 
     /**
      * Which border the point {@code (x, y)} presses in {@code zone}: the page edge it lies beyond,
@@ -359,6 +579,61 @@ public final class BorderDrag {
     }
 
     /**
+     * Whether a sideways start from {@code (x, y)} on {@code side} pages at once: the point lies
+     * outside the page's text. On the top and bottom that is the air beyond the page's edge; on
+     * the left and right, the air beside it and the clearance the side reach takes over the edge
+     * ({@link #SIDE_REACH_DP}), which never holds a character. Where the minimum band reaches
+     * further in than that (a page almost flush with the wall), the rest of it may be text, and
+     * only the hold pages from there.
+     */
+    static boolean slidesFrom(@NonNull Border side, float x, float y, @NonNull Zone zone) {
+        switch (side) {
+            case TOP: return y < zone.mTop;
+            case BOTTOM: return y >= zone.mBottom;
+            case LEFT:
+                return x < zone.mLeft + Math.min(zone.mSideReach, zone.inside(Border.LEFT));
+            case RIGHT:
+                return x >= zone.mRight - Math.min(zone.mSideReach, zone.inside(Border.RIGHT));
+            default: return false;
+        }
+    }
+
+    /**
+     * Where a Home page's grabber stands, and the box its swipe (the palette gesture) starts in.
+     * A Home page has no border, and the dock floats over its foot, so the grabber is not on the
+     * page's edge as a window's is: it stands centred on the screen's width — the wall's width
+     * and the insets beside it ({@code leftInset}, {@code rightInset}: a side stack, say) — with
+     * its lower edge {@link #HOME_GRABBER_LIFT_DP} above the dock's top, wherever the dock is (up
+     * with the keyboard too). Its box is {@link #PILL_SWIPE_WIDTH_DP} wide on the same centre
+     * and {@link #HOME_GRABBER_HIT_DP} tall, standing on the dock's top edge, never over the dock.
+     * With no dock ({@code dockTop} NaN) the page's bottom edge stands in for it. All in the
+     * wall's coordinates, at rest.
+     *
+     * @param pillOut the grabber at rest, {@code left, top, right, bottom}: {@link
+     *                BorderGrabber#WIDTH_DP} by {@link #HOME_GRABBER_THICKNESS_DP}
+     * @param hitOut  the box its swipe starts in, inside the wall's width
+     */
+    public static void homeGrabber(float wallWidth, float leftInset, float rightInset,
+                                   float pageBottom, float dockTop, float density,
+                                   @NonNull float[] pillOut, @NonNull float[] hitOut) {
+        float left = Math.max(0f, leftInset);
+        float right = Math.max(0f, rightInset);
+        float centreX = (left + Math.max(0f, wallWidth) + right) / 2f - left;
+        float anchor = Float.isNaN(dockTop) ? pageBottom : dockTop;
+        float halfWidth = BorderGrabber.WIDTH_DP * density / 2f;
+        float pillBottom = anchor - HOME_GRABBER_LIFT_DP * density;
+        pillOut[0] = centreX - halfWidth;
+        pillOut[1] = pillBottom - HOME_GRABBER_THICKNESS_DP * density;
+        pillOut[2] = centreX + halfWidth;
+        pillOut[3] = pillBottom;
+        float halfBox = PILL_SWIPE_WIDTH_DP * density / 2f;
+        hitOut[0] = Math.max(0f, centreX - halfBox);
+        hitOut[1] = anchor - HOME_GRABBER_HIT_DP * density;
+        hitOut[2] = Math.min(Math.max(0f, wallWidth), centreX + halfBox);
+        hitOut[3] = anchor;
+    }
+
+    /**
      * Which pill's box ({@link Zone#pills}) the point {@code (x, y)} lies in, inside the page:
      * {@link Border#BOTTOM} for the keyboard's, {@link Border#TOP} for the status bar's, and
      * {@link Border#NONE} anywhere else. Like the page itself, a box holds its left and top edges
@@ -376,9 +651,8 @@ public final class BorderDrag {
      * {@code zone} (see {@link #borderAt}) that the press can do something on, or lies in a pill's
      * box ({@link #pillAt}) whose swipe is on; otherwise the gesture is not this one and every
      * later call is a no-op. A press in a pill's box may only become that pill's swipe: its hold
-     * never pages, so a still finger there is given up to the content at the hold. A press on the
-     * top or bottom border outside the page may also page by setting off sideways
-     * ({@link #slidePages}).
+     * never pages, so a still finger there is given up to the content at the hold. A press on a
+     * border outside the page's text may also page by setting off sideways ({@link #slidePages}).
      *
      * @param canPage whether the hold may page the wall: it has another place to go
      * @param keyboardSwipe whether a vertical swipe from the bottom border is the keyboard's
@@ -390,31 +664,95 @@ public final class BorderDrag {
      */
     public boolean down(float x, float y, @NonNull Zone zone, float slopPx, boolean canPage,
                         boolean keyboardSwipe, boolean statusSwipe, float statusTopLimit) {
+        return down(x, y, zone, slopPx, canPage, keyboardSwipe, statusSwipe, statusTopLimit,
+            false);
+    }
+
+    /**
+     * {@link #down}, for a press that may also land on the page's text with a terminal there that
+     * gives a sideways swipe away ({@code bodySwipe}). Inside the page, below the phone's strip,
+     * on a wall with another place to go, a finger that sets off clearly sideways
+     * ({@link TerminalBodySwipe#isSideways}) before the hold pages at once, as from a border
+     * outside the text. Its hold never pages — a still finger is the terminal's long press — and
+     * a start that is not clearly sideways stays the terminal's scroll, or is the keyboard's or the
+     * status bar's swipe where it landed in a pill's box.
+     */
+    public boolean down(float x, float y, @NonNull Zone zone, float slopPx, boolean canPage,
+                        boolean keyboardSwipe, boolean statusSwipe, float statusTopLimit,
+                        boolean bodySwipe) {
+        return down(x, y, zone, slopPx, canPage, keyboardSwipe, statusSwipe, statusTopLimit,
+            bodySwipe, false);
+    }
+
+    /**
+     * {@link #down}, for a press that may also land in the window's last row of the seam band
+     * ({@link Zone#seam}) with a terminal there that gives a sideways swipe away ({@code
+     * seamSwipe}, asked whatever the body swipe's setting). From there a clearly sideways start
+     * pages as from the border's air; a still finger or a steeper start stay the terminal's, or
+     * the keyboard's swipe where the press is in the pill's box.
+     */
+    public boolean down(float x, float y, @NonNull Zone zone, float slopPx, boolean canPage,
+                        boolean keyboardSwipe, boolean statusSwipe, float statusTopLimit,
+                        boolean bodySwipe, boolean seamSwipe) {
         mDownX = x;
         mDownY = y;
         mDragOriginX = x;
         mSlop = Math.max(0f, slopPx);
         mBorder = borderAt(x, y, zone);
         mHoldPages = canPage && mBorder != Border.NONE;
-        // Out in the air only: where the band reaches into the page, the content keeps its drags.
-        boolean beyondPage = mBorder == Border.TOP ? y < zone.mTop
-            : mBorder == Border.BOTTOM && y >= zone.mBottom;
-        mSlidePages = mHoldPages && beyondPage && !(y < statusTopLimit);
+        mSlidePages = mHoldPages && slidesFrom(mBorder, x, y, zone) && !(y < statusTopLimit);
         // Off the border, the pills' boxes inside the page carry the vertical swipes alone.
         Border swipeSide = mBorder != Border.NONE ? mBorder : pillAt(x, y, zone);
         mKeyboardEligible = keyboardSwipe && swipeSide == Border.BOTTOM;
         mStatusEligible = statusSwipe && swipeSide == Border.TOP && !(y < statusTopLimit);
-        boolean armed = mHoldPages || mKeyboardEligible || mStatusEligible;
-        mBorder = !armed ? Border.NONE : mHoldPages ? mBorder : swipeSide;
+        mBodySlides = bodySwipe && canPage && !mSlidePages && !zone.mOwnsContent
+            && zone.holds(x, y) && !(y < statusTopLimit);
+        mSeamStart = zone.seamAt(x, y);
+        // The dock's part of the band is never this view's press: its owner calls downOnDock.
+        if (mSeamStart == SeamSwipe.Start.DOCK) mSeamStart = SeamSwipe.Start.NONE;
+        mSeamSlides = mSeamStart == SeamSwipe.Start.PANE && seamSwipe && canPage && !mSlidePages
+            && !(y < statusTopLimit);
+        mClaimLeadX = 0f;
+        mSetOff = false;
+        boolean armed = mHoldPages || mKeyboardEligible || mStatusEligible || mBodySlides
+            || mSeamSlides;
+        mBorder = !armed ? Border.NONE : mHoldPages ? mBorder
+            : swipeSide == Border.NONE && mSeamSlides ? Border.BOTTOM : swipeSide;
         mClaim = armed ? Claim.PENDING : Claim.NONE;
         return armed;
+    }
+
+    /**
+     * The finger landed at {@code (x, y)} on the dock, which has it: arms the drag only where the
+     * point lies on the dock's top in the seam band ({@link Zone#seamAt}) and the wall has another
+     * place to go. Only a clearly sideways start then pages ({@link SeamSwipe#decide}); a tap, a
+     * still finger, a steeper start or a second finger are the dock's, and the hold never pages.
+     *
+     * @return whether the press is armed
+     */
+    public boolean downOnDock(float x, float y, @NonNull Zone zone, float slopPx,
+                              boolean canPage) {
+        reset();
+        mDownX = x;
+        mDownY = y;
+        mDragOriginX = x;
+        mSlop = Math.max(0f, slopPx);
+        SeamSwipe.Start start = zone.seamAt(x, y);
+        if (!canPage || start != SeamSwipe.Start.DOCK) return false;
+        mSeamStart = start;
+        mSeamSlides = true;
+        mBorder = Border.BOTTOM;
+        mClaim = Claim.PENDING;
+        return true;
     }
 
     /**
      * One move of the finger. Before the hold, travel past the slop decides: a finger that sets
      * off is not holding. Up or down from the bottom zone it is the keyboard's, and from the top
      * zone the status bar's; sideways from where a slide pages ({@link #slidePages}) it is the
-     * wall's at once, its drag measured from here so the wall does not jump by the slop. Any other
+     * wall's at once, its drag measured from here so the wall does not jump by the slop. A
+     * sideways start more than 30 degrees off the axis waits for the page's damped slop
+     * ({@link PagePolicy#pastSlop}), so a diagonal thumb is not a turn by accident. Any other
      * start is given up. After a claim the move is the claimant's, and the claim never changes.
      */
     @NonNull
@@ -423,13 +761,18 @@ public final class BorderDrag {
         float dx = x - mDownX;
         float dy = y - mDownY;
         if (dx * dx + dy * dy <= mSlop * mSlop) return mClaim;
+        mSetOff = true;
         boolean vertical = Math.abs(dy) > Math.abs(dx);
         if (vertical) {
             mClaim = mKeyboardEligible ? Claim.KEYBOARD
                 : mStatusEligible ? Claim.STATUS : Claim.ABANDONED;
-        } else if (mSlidePages) {
+        } else if (mSlidePages || (mBodySlides && TerminalBodySwipe.isSideways(dx, dy))
+            || (mSeamSlides && SeamSwipe.decide(mSeamStart, dx, dy, mSlop, true, false)
+                == SeamSwipe.Decision.BORDER_DRAG)) {
+            if (!PagePolicy.pastSlop(dx, dy, mSlop)) return mClaim;
             mClaim = Claim.PAGING;
             mDragOriginX = x;
+            mClaimLeadX = dx;
         } else {
             mClaim = Claim.ABANDONED;
         }
@@ -438,15 +781,16 @@ public final class BorderDrag {
 
     /**
      * The hold time passed. A finger that travelled or was joined has already given the gesture
-     * up through {@link #move} or {@link #secondPointer}, so a still pending press is a still one.
-     * Where the hold may not page — a wall of one place, or a press in a pill's box — a still
-     * finger is given up, and inside the page it is the content's long press. A later vertical
-     * move can then no longer turn into the keyboard's or the status bar's swipe.
+     * up through {@link #move} or {@link #secondPointer}, or is a diagonal start still short of
+     * the page's damped slop, which its travel goes on deciding; any other pending press is a
+     * still one. Where the hold may not page — a wall of one place, or a press in a pill's box — a
+     * still finger is given up, and inside the page it is the content's long press. A later
+     * vertical move can then no longer turn into the keyboard's or the status bar's swipe.
      *
      * @return true when the wall just claimed the finger, and the content is owed a cancel
      */
     public boolean holdElapsed() {
-        if (mClaim != Claim.PENDING) return false;
+        if (mClaim != Claim.PENDING || mSetOff) return false;
         if (!mHoldPages) {
             mClaim = Claim.ABANDONED;
             return false;
@@ -488,6 +832,11 @@ public final class BorderDrag {
         mSlidePages = false;
         mKeyboardEligible = false;
         mStatusEligible = false;
+        mBodySlides = false;
+        mSeamSlides = false;
+        mSeamStart = SeamSwipe.Start.NONE;
+        mClaimLeadX = 0f;
+        mSetOff = false;
     }
 
     @NonNull
@@ -515,12 +864,45 @@ public final class BorderDrag {
     }
 
     /**
-     * True from a DOWN whose sideways start pages at once — the top or bottom border, beyond the
-     * page, below the phone's strip, with another place to go — until the lift, whichever way the
-     * claim went. Every such press also {@link #holdPages}.
+     * True from a DOWN whose sideways start pages at once — a border outside the page's text
+     * ({@link #slidesFrom}), below the phone's strip, with another place to go — until the lift,
+     * whichever way the claim went. Every such press also {@link #holdPages}.
      */
     public boolean slidePages() {
         return mSlidePages;
+    }
+
+    /**
+     * True from a DOWN on the page's text whose clearly sideways start pages ({@link #down} with
+     * {@code bodySwipe}) until the lift, whichever way the claim went.
+     */
+    public boolean bodySlides() {
+        return mBodySlides;
+    }
+
+    /**
+     * True from a DOWN on the seam band beyond the border's air — the window's last row, or the
+     * dock's top ({@link #downOnDock}) — whose clearly sideways start pages, until the lift.
+     */
+    public boolean seamSlides() {
+        return mSeamSlides;
+    }
+
+    /** Where on the seam band the finger landed, from the DOWN to the lift; NONE off it. */
+    @NonNull
+    public SeamSwipe.Start seamStart() {
+        return mSeamStart;
+    }
+
+    /**
+     * How far the finger had gone sideways before a sideways start claimed the wall, positive to
+     * the right; 0 for a claim by the hold, or no claim. The drag is measured from the claim so
+     * the wall does not jump by the slop, and this is the travel it left out: a release adds it
+     * back for the flick's least distance ({@link PaneWallPolicy#settle}), so a short fast flick
+     * pages rather than springing back for the slop it spent.
+     */
+    public float claimLead() {
+        return mClaim == Claim.PAGING ? mClaimLeadX : 0f;
     }
 
     /** True while the wall owns the finger. */

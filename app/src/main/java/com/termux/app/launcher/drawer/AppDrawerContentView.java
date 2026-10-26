@@ -167,6 +167,15 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private LauncherAppDataProvider mProvider;
     @Nullable private AppDrawerSearchController mSearch;
     @Nullable private Runnable mRevealListener;
+    /** Settings › App search › Open the only match; read once per open. */
+    private boolean mOpenOnlyMatch;
+    private boolean mRememberPosition;
+    private boolean mLowerStart;
+    @NonNull private AppDrawerAzSide mAzSide = AppDrawerAzSide.RIGHT;
+    private int mLowerStartPx;
+    private int mSavedPosition;
+    private int mSavedOffsetPx;
+    private final Runnable mAutoOpenOnlyMatch = this::autoOpenOnlyMatch;
     @Nullable private Runnable mKeyboardRequestListener;
     @Nullable private Runnable mFrameRequestListener;
     /** Rebuilt once per submitted list; the column's letters and the scrub's scroll targets. */
@@ -201,6 +210,16 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private RecyclerView mGestureRecycler;
     @Nullable private View mOverpullSurface;
     private boolean mSearchRevealRequested;
+    /**
+     * The user scrolled the search keyboard away. It stays away, query or not, until the search is
+     * asked for again (a pill tap) or the search is reset.
+     */
+    private boolean mKeyboardDismissedByScroll;
+    /** True from the finger starting to drag the list until the list comes to rest. */
+    private boolean mGridUserScrolling;
+    /** Whether that drag began with somewhere to scroll down, and so may send the keyboard away. */
+    private boolean mGridDragHidesKeyboard;
+    @Nullable private KeyboardScrollListener mKeyboardScrollListener;
     /** True while the Android-keyboard search's text field, not the key stream, owns the query. */
     private boolean mTextFieldSearch;
     private float mDownRawY;
@@ -290,7 +309,12 @@ public final class AppDrawerContentView extends FrameLayout
             }
 
             @Override public void onSearchAction() {
-                launchFirstResult();
+                launchHighlightedResult();
+            }
+
+            @Override public boolean onArrowKey(int keyCode) {
+                AppDrawerSearchController search = mSearch;
+                return search != null && mTextFieldSearch && search.handleHighlightKey(keyCode);
             }
 
             @Override public void onDismissAction() {
@@ -330,6 +354,29 @@ public final class AppDrawerContentView extends FrameLayout
                 // A context menu is anchored to a cell view. Scroll far enough and that view is
                 // recycled under a menu still floating where it used to be.
                 if (dx != 0 || dy != 0) dismissContextPopups();
+                // Only the finger's scroll (and the fling it throws) sends the keyboard away; a
+                // scrub or a query's jump to the top is the launcher moving the list, not the user.
+                KeyboardScrollListener keyboard = mKeyboardScrollListener;
+                if (keyboard != null && mGridUserScrolling && mGridDragHidesKeyboard && dy > 0)
+                    keyboard.onListScrolledDown(dy);
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    if (!mGridUserScrolling) {
+                        // Decided once, as the drag starts: a list that fits has no scroll to give.
+                        mGridDragHidesKeyboard = AppDrawerKeyboardScrollHide.armsOnDrag(
+                            recyclerView.computeVerticalScrollRange(),
+                            recyclerView.computeVerticalScrollExtent(),
+                            recyclerView.computeVerticalScrollOffset());
+                    }
+                    mGridUserScrolling = true;
+                } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mGridUserScrolling) {
+                    mGridUserScrolling = false;
+                    KeyboardScrollListener keyboard = mKeyboardScrollListener;
+                    if (keyboard != null) keyboard.onListScrollIdle();
+                }
             }
         });
         mColumnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
@@ -431,12 +478,22 @@ public final class AppDrawerContentView extends FrameLayout
 
         setOnDragListener((view, event) -> {
             AppDrawerDragController controller = mDragController;
+            if (controller != null && controller.handedToHome(event.getLocalState())) {
+                // Home's now; the drawer is on its way out and only passes the finger on.
+                getLocationOnScreen(mDragLocation);
+                return controller.forwardToHome(event, mDragLocation[0] + event.getX(),
+                    mDragLocation[1] + event.getY());
+            }
             if (controller == null || !controller.owns(event.getLocalState()))
                 return handleFolderEntryDragEvent(event);
             switch (event.getAction()) {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return true;
                 case DragEvent.ACTION_DRAG_LOCATION:
+                    getLocationOnScreen(mDragLocation);
+                    controller.onDragMoved(mDragLocation[0] + event.getX(),
+                        mDragLocation[1] + event.getY());
+                    if (!controller.isDragging()) return true;
                     onContentDragLocation(event.getX(), event.getY());
                     return true;
                 case DragEvent.ACTION_DROP:
@@ -623,6 +680,28 @@ public final class AppDrawerContentView extends FrameLayout
         mKeyboardRequestListener = onKeyboardRequested;
     }
 
+    /** The list's scroll, as far as the search keyboard is concerned. */
+    public interface KeyboardScrollListener {
+        /** The finger scrolled the list {@code dy} pixels further down (its fling included). */
+        void onListScrolledDown(int dy);
+        /** That scroll has come to rest. */
+        void onListScrollIdle();
+    }
+
+    public void setKeyboardScrollListener(@Nullable KeyboardScrollListener listener) {
+        mKeyboardScrollListener = listener;
+    }
+
+    /**
+     * The list's scroll took the search keyboard away: the reveal target drops to 0 and stays
+     * there, whatever is typed, until the search is asked for again.
+     */
+    public void dismissSearchKeyboardByScroll() {
+        if (mKeyboardDismissedByScroll) return;
+        mKeyboardDismissedByScroll = true;
+        notifyRevealTarget();
+    }
+
     /**
      * Run when the drawer's effects need frames the controller's loop is not currently running.
      *
@@ -648,6 +727,7 @@ public final class AppDrawerContentView extends FrameLayout
     public void setInteractive(boolean interactive) {
         if (mInteractive == interactive) return;
         mInteractive = interactive;
+        if (!interactive) removeCallbacks(mAutoOpenOnlyMatch);
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
@@ -791,16 +871,83 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     private void applyViewType() {
+        applyViewTypeLayout();
+        applyLowerStart();
+    }
+
+    /** Settings › A–Z strip; read once per open. */
+    public void setAzSide(@NonNull AppDrawerAzSide side) {
+        if (mAzSide == side) return;
+        mAzSide = side;
+        applyViewType();
+        applyColumnLetters();
+    }
+
+    /** Puts the strip on its edge, mirrored on the left, or takes it away. */
+    private void applyAzColumn() {
+        if (!mAzSide.shown()) {
+            hideColumn();
+            return;
+        }
+        mColumn.setMirrored(mAzSide.mirrored());
+        LayoutParams columnParams = (LayoutParams) mColumn.getLayoutParams();
+        int gravity = mAzSide.mirrored() ? Gravity.START : Gravity.END;
+        if (columnParams.gravity != gravity) {
+            columnParams.gravity = gravity;
+            mColumn.setLayoutParams(columnParams);
+        }
+        mColumn.setVisibility(VISIBLE);
+    }
+
+    /** Settings › Start in the lower half; read once per open. */
+    public void setLowerStart(boolean enabled) {
+        if (mLowerStart == enabled) return;
+        mLowerStart = enabled;
+        applyLowerStart();
+    }
+
+    private int gridTopMargin() {
+        return mGridBaseTopMarginPx + (mCategorySearchPresentation ? dp(RESULTS_LABEL_BAND_DP) : 0)
+            + mLowerStartPx;
+    }
+
+    /**
+     * Lowers the vertical list (and its letter strip) to the lower half, and puts it back while a
+     * search is typed or being asked for. Compared before it is set; called from the paths that
+     * change those inputs, never from measure, layout or draw.
+     */
+    private void applyLowerStart() {
+        boolean searching = hasQuery() || mSearchRevealRequested;
+        boolean portrait = getResources().getConfiguration().orientation
+            != android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        mLowerStartPx = mViewType != AppDrawerViewType.VERTICAL ? 0
+            : AppDrawerLowerStartPolicy.offsetPx(mLowerStart, portrait, searching, getHeight(),
+                mGridBaseTopMarginPx);
+        int top = gridTopMargin();
+        LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
+        if (gridParams.topMargin != top) {
+            gridParams.topMargin = top;
+            mGrid.setLayoutParams(gridParams);
+        }
+        LayoutParams columnParams = (LayoutParams) mColumn.getLayoutParams();
+        if (columnParams.topMargin != top) {
+            columnParams.topMargin = top;
+            mColumn.setLayoutParams(columnParams);
+        }
+    }
+
+    private void applyViewTypeLayout() {
         LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
         switch (mViewType) {
             case VERTICAL:
                 applyCategorySearchPresentation(false);
-                gridParams.rightMargin = Math.round(mColumnWidthPx);
+                gridParams.leftMargin = mAzSide.leftInsetPx(Math.round(mColumnWidthPx));
+                gridParams.rightMargin = mAzSide.rightInsetPx(Math.round(mColumnWidthPx));
                 mGrid.setLayoutParams(gridParams);
                 mGrid.setVisibility(VISIBLE);
                 mHorizontalPager.setVisibility(GONE);
                 mCategoryView.setVisibility(GONE);
-                mColumn.setVisibility(VISIBLE);
+                applyAzColumn();
                 applyColumnLetters();
                 mPageIndicator.setVisibility(GONE);
                 break;
@@ -813,6 +960,7 @@ public final class AppDrawerContentView extends FrameLayout
                 updatePageIndicator();
                 break;
             case CATEGORIES:
+                gridParams.leftMargin = 0;
                 gridParams.rightMargin = 0;
                 mGrid.setLayoutParams(gridParams);
                 boolean search = hasQuery();
@@ -835,8 +983,7 @@ public final class AppDrawerContentView extends FrameLayout
             mCategorySearchPresentation = active;
             mAdapter.setSearchRowPresentation(active, active ? this::categoryLabelFor : null);
             LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
-            gridParams.topMargin = mGridBaseTopMarginPx
-                + (active ? dp(RESULTS_LABEL_BAND_DP) : 0);
+            gridParams.topMargin = gridTopMargin();
             mGrid.setLayoutParams(gridParams);
         }
         mLayoutManager.setSpanCount(active ? 1 : mVerticalColumns);
@@ -953,10 +1100,54 @@ public final class AppDrawerContentView extends FrameLayout
         if (categoryTilesShown()) mCategoryView.submitBuckets(mCategoryBuckets);
     }
 
+    /** Settings › Remember position; read once per open. */
+    public void setRememberPosition(boolean enabled) {
+        mRememberPosition = enabled;
+    }
+
+    /**
+     * The first visible position (list) or page (pager) of the full list, with the list's pixel
+     * offset; zeros for a search, a category view or a drawer never scrolled.
+     */
+    private void captureReopenPosition() {
+        mSavedPosition = 0;
+        mSavedOffsetPx = 0;
+        if (!mRememberPosition || hasQuery()) return;
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            int first = mLayoutManager.findFirstVisibleItemPosition();
+            View view = first < 0 ? null : mLayoutManager.findViewByPosition(first);
+            mSavedPosition = Math.max(0, first);
+            mSavedOffsetPx = view == null ? 0 : view.getTop() - mGrid.getPaddingTop();
+        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mSavedPosition = mHorizontalPager.getSelectedPage();
+        }
+    }
+
+    private void restoreReopenPosition() {
+        if (!mRememberPosition) return;
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            int position = AppDrawerReopenPolicy.startPosition(true, mSavedPosition,
+                mAdapter.getItemCount());
+            if (position > 0) mLayoutManager.scrollToPositionWithOffset(position, mSavedOffsetPx);
+        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            int page = AppDrawerReopenPolicy.startPosition(true, mSavedPosition,
+                mHorizontalAdapter.getItemCount());
+            if (page > 0) mHorizontalPager.setSelectedPage(page, false);
+        }
+    }
+
     /** Empties the query and puts the grid back to the top. For a drawer that has closed. */
     public void resetSearch() {
+        captureReopenPosition();
+        resetSearchToTop();
+        restoreReopenPosition();
+    }
+
+    private void resetSearchToTop() {
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
+        mKeyboardDismissedByScroll = false;
+        removeCallbacks(mAutoOpenOnlyMatch);
         if (search != null) {
             search.reset();
         } else {
@@ -1003,30 +1194,35 @@ public final class AppDrawerContentView extends FrameLayout
      * otherwise. The controller owns the spring that chases it; this is only the target.
      */
     public float getRevealFraction() {
+        if (mKeyboardDismissedByScroll) return 0f;
         return mSearchRevealRequested || hasQuery() ? 1f : 0f;
     }
 
-    /** Launches the first ranked result, as Enter on any of the three intake channels does. */
-    public boolean launchFirstResult() {
+    /**
+     * Launches the highlighted result, or the first when nothing is highlighted: what Enter does on
+     * any of the three intake channels.
+     */
+    public boolean launchHighlightedResult() {
         AppDrawerSearchController search = mSearch;
         SuggestionBarView dock = mDock;
-        LauncherAppEntry first = search == null ? null : search.firstResult();
-        if (dock == null || first == null) return false;
-        return dock.launchEntryFromDrawer(firstCellView(), first);
+        LauncherAppEntry target = search == null ? null : search.commitTarget();
+        if (dock == null || target == null) return false;
+        int index = search.highlightedIndex();
+        return dock.launchEntryFromDrawer(cellViewAt(Math.max(0, index)), target);
     }
 
     @Nullable
-    private View firstCellView() {
+    private View cellViewAt(int position) {
         switch (mViewType) {
             case HORIZONTAL:
-                return mHorizontalAdapter.pageZeroIcon(mHorizontalPager);
+                return mHorizontalAdapter.iconAt(mHorizontalPager, position);
             case CATEGORIES:
                 if (!hasQuery()) return null;
                 break;
             case VERTICAL:
                 break;
         }
-        RecyclerView.ViewHolder holder = mGrid.findViewHolderForAdapterPosition(0);
+        RecyclerView.ViewHolder holder = mGrid.findViewHolderForAdapterPosition(position);
         if (holder instanceof AppDrawerAppsAdapter.Cell) {
             return ((AppDrawerAppsAdapter.Cell) holder).icon;
         }
@@ -1041,8 +1237,40 @@ public final class AppDrawerContentView extends FrameLayout
         applyResults(results, queryChanged);
     }
 
+    @Override
+    public void onSearchHighlightChanged(int oldIndex, int newIndex) {
+        if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mHorizontalAdapter.moveHighlight(newIndex);
+            int page = mHorizontalAdapter.pageOf(newIndex);
+            if (page >= 0 && page != mHorizontalPager.getSelectedPage()) {
+                mHorizontalPager.setSelectedPage(page, true);
+                updatePageIndicator();
+            }
+        } else {
+            mAdapter.moveHighlight(newIndex);
+            if (newIndex >= 0) mGrid.scrollToPosition(newIndex);
+        }
+    }
+
+    @Override
+    public int searchColumns() {
+        switch (mViewType) {
+            case HORIZONTAL:
+                AppDrawerHorizontalGridMetrics metrics = mHorizontalAdapter.getMetrics();
+                return metrics == null ? 1 : Math.max(1, metrics.columns);
+            case VERTICAL:
+                return mCategorySearchPresentation ? 1 : mVerticalColumns;
+            case CATEGORIES:
+            default:
+                return 1;
+        }
+    }
+
     private void applyResults(@NonNull List<LauncherAppEntry> results, boolean queryChanged) {
         AppDrawerSearchController search = mSearch;
+        int highlight = search == null ? AppDrawerSearchSelection.NONE : search.highlightedIndex();
+        mAdapter.presetHighlight(highlight);
+        mHorizontalAdapter.presetHighlight(highlight);
         mPill.setQuery(search == null ? "" : search.query(), search == null ? 0 : search.caret());
         if (mTextFieldSearch) {
             mInput.mirror(search == null ? "" : search.query(), search == null ? 0 : search.caret());
@@ -1084,7 +1312,35 @@ public final class AppDrawerContentView extends FrameLayout
         // typed arrives here too — the provider's warm-up callback lands a beat after every open —
         // and a keyboard asked for on the open, or by a pill tap, must survive it.
         if (queryChanged && !hasQuery()) mSearchRevealRequested = false;
+        scheduleOnlyMatchOpen(results.size());
+        applyLowerStart();
         notifyRevealTarget();
+    }
+
+    /** Sets whether a search that narrows to one app opens it after a pause. */
+    public void setOpenOnlyMatch(boolean enabled) {
+        if (mOpenOnlyMatch == enabled) return;
+        mOpenOnlyMatch = enabled;
+        if (!enabled) removeCallbacks(mAutoOpenOnlyMatch);
+    }
+
+    /** Every result list restarts the pause, so typing on keeps the lone match from opening. */
+    private void scheduleOnlyMatchOpen(int resultCount) {
+        removeCallbacks(mAutoOpenOnlyMatch);
+        AppDrawerSearchController search = mSearch;
+        if (search == null || !mInteractive) return;
+        if (AppDrawerOnlyMatchPolicy.shouldAutoOpen(mOpenOnlyMatch, search.query(), resultCount)) {
+            postDelayed(mAutoOpenOnlyMatch, AppDrawerOnlyMatchPolicy.AUTO_OPEN_DELAY_MS);
+        }
+    }
+
+    private void autoOpenOnlyMatch() {
+        AppDrawerSearchController search = mSearch;
+        if (!mInteractive || search == null) return;
+        if (AppDrawerOnlyMatchPolicy.shouldAutoOpen(mOpenOnlyMatch, search.query(),
+            search.results().size())) {
+            launchHighlightedResult();
+        }
     }
 
     private void submitVisibleResults(boolean resetPosition) {
@@ -1247,7 +1503,7 @@ public final class AppDrawerContentView extends FrameLayout
             letters[i] = mSectionIndex.letterAt(i);
         }
         mColumn.setLetters(letters);
-        mColumn.setActive(mViewType == AppDrawerViewType.VERTICAL
+        mColumn.setActive(mViewType == AppDrawerViewType.VERTICAL && mAzSide.shown()
             && !hasQuery() && letterCount >= 2);
     }
 
@@ -1425,6 +1681,8 @@ public final class AppDrawerContentView extends FrameLayout
      */
     public void requestSearchKeyboard() {
         mSearchRevealRequested = true;
+        mKeyboardDismissedByScroll = false;
+        applyLowerStart();
         notifyRevealTarget();
         Runnable request = mKeyboardRequestListener;
         if (request != null) request.run();
@@ -1539,6 +1797,12 @@ public final class AppDrawerContentView extends FrameLayout
         // scroll from inside this dispatch, and that end has to know it is a cancellation rather
         // than a release, or a stream taken away by another window would report as a decision.
         if (action == MotionEvent.ACTION_CANCEL) mStreamCancelled = true;
+        // The highlight is a keyboard affordance: a touch on the results puts it away (the pill is
+        // the one place a finger lands while typing).
+        if (action == MotionEvent.ACTION_DOWN && mSearch != null
+            && mSearch.highlightedIndex() >= 0 && ev.getY() > mPill.getBottom()) {
+            mSearch.clearHighlight();
+        }
         boolean handled = super.dispatchTouchEvent(ev);
         if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
             mStreamCancelled = false;
@@ -1687,6 +1951,30 @@ public final class AppDrawerContentView extends FrameLayout
                 if (mPendingDockConfigRefresh) onDockConfigChanged();
             });
         }
+    }
+
+    /** Home, for an app picked up here to be carried to; null while there is none. */
+    @Nullable private com.termux.app.launcher.widget.HomeAppDrop.Target mHomeAppDropTarget;
+
+    public void setHomeAppDropTarget(
+            @Nullable com.termux.app.launcher.widget.HomeAppDrop.Target target) {
+        mHomeAppDropTarget = target;
+    }
+
+    @Nullable @Override
+    public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+        return mHomeAppDropTarget;
+    }
+
+    /**
+     * The drawer's top edge for a carried app: the top of its app area, just under the search
+     * pill, where the list starts when it is not lowered. Not the glass sheet's own top, which in
+     * the default style is the screen's edge and cannot be crossed.
+     */
+    @Override public float handOverTopRawY() {
+        if (!isAttachedToWindow()) return Float.NaN;
+        getLocationOnScreen(mDragLocation);
+        return mDragLocation[1] + mGridBaseTopMarginPx;
     }
 
     @NonNull @Override public AppDrawerViewType frozenSourceViewType() {
@@ -2012,7 +2300,8 @@ public final class AppDrawerContentView extends FrameLayout
 
     private boolean isCategoryDetailGesture() {
         return mGestureViewType == AppDrawerViewType.CATEGORIES && !mGestureCategorySearch
-            && mGestureCategoryPart == AppDrawerCategoryTouchRegions.Part.DETAIL_LIST;
+            && (mGestureCategoryPart == AppDrawerCategoryTouchRegions.Part.DETAIL_LIST
+            || mGestureCategoryPart == AppDrawerCategoryTouchRegions.Part.DETAIL_EMPTY);
     }
 
     // ------------------------------------------------------------------ overpull

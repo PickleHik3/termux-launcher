@@ -192,11 +192,9 @@ public class X11LinuxAppRunnerRelaunchTest {
         boolean startSucceeds = true;
         int shown;
 
-        @Override public boolean isDisplayEnabled() { return true; }
-        @Override public void turnOnDisplay() { }
         @Override public boolean isDisplayRunning() { return true; }
         @Override public void startDisplay() { }
-        @Override public void showDisplayPlace() { shown++; }
+        @Override public void showDisplayWindow() { shown++; }
         @Override public void showNotice(@NonNull String message) { notices.add(message); }
 
         @Override public boolean runScript(@NonNull String script,

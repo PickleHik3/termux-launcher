@@ -113,6 +113,8 @@ public final class AppDrawerRopeColumnView extends View {
     private int mInkCacheBase;
 
     private boolean mActive;
+    /** 1 on the right edge, where the rope leans outward to the right; -1 on the left. */
+    private float mSide = 1f;
     private boolean mScrubbing;
     private int mActiveIndex = -1;
     private int mHapticIndex = -1;
@@ -265,6 +267,14 @@ public final class AppDrawerRopeColumnView extends View {
      * back to the top; a column that faded out over 200ms while the list underneath it changed
      * identity would be the only thing on the surface pretending the two lists were related.
      */
+    /** Mirrors the lean and tilt for a strip on the left edge. */
+    public void setMirrored(boolean mirrored) {
+        float side = mirrored ? -1f : 1f;
+        if (side == mSide) return;
+        mSide = side;
+        invalidate();
+    }
+
     public void setActive(boolean active) {
         if (mActive == active) return;
         mActive = active;
@@ -397,13 +407,13 @@ public final class AppDrawerRopeColumnView extends View {
     /** One glyph through the currently configured paints. */
     private void drawGlyph(@NonNull Canvas canvas, @NonNull AppDrawerRopeMetrics metrics, int i,
                            float centerX, float halfSpan) {
-        float x = centerX + mModel.offsetPx(i);
+        float x = centerX + mSide * mModel.offsetPx(i);
         float y = metrics.centerYForIndex(i);
         // Centred on the slot rather than sat on a baseline: the slot centre is what indexForY
         // maps a finger to, so the glyph the finger is over has to be the glyph drawn there.
         float baseline = y - halfSpan;
         String glyph = mGlyphs[i];
-        float tilt = mModel.tiltDeg(i);
+        float tilt = mSide * mModel.tiltDeg(i);
         int saved = canvas.save();
         // About the glyph's own centre, so a tilted letter stays in its slot instead of
         // swinging away from the finger that is holding it.

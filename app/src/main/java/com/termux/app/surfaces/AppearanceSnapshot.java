@@ -45,6 +45,8 @@ final class AppearanceSnapshot {
     private final String mMotion;
     private final String mTintHue;
     private final int mVibrancy;
+    /** The shared Text size, in percent. */
+    private final int mTextSize;
     /** Where Base's Glass slider and each surface's were left; -1 for none stored. */
     private final int[] mGlassPositions;
     private final int mBend;
@@ -55,6 +57,8 @@ final class AppearanceSnapshot {
     private final int mClarity;
     private final int mKeyboardBlurRaw;
     private final int mKeyOpacity;
+    /** Whether the keyboard's key and background opacity move together. */
+    private final boolean mOpacityLinked;
     /** The stored radius, or NaN when the key is absent and the style's default applies. */
     private final float mKeyRadiusRaw;
     /** The stored key spacing, or NaN when the key is absent and the Style's default applies. */
@@ -69,6 +73,16 @@ final class AppearanceSnapshot {
     private final String mRetroEffect;
     private final String mClockStyle;
     private final String mClockAlignment;
+    /**
+     * The status bar's switches the Status bar card writes, in {@link #statusSwitches} order:
+     * 12-hour, seconds, °F weather, and the CPU, RAM, weather, media and notifications indicators.
+     */
+    private final boolean[] mStatusSwitches;
+    /**
+     * Every half's own key as stored (ADR 0013): a key absent here is absent in the store, so a
+     * half that followed the shared value at open follows it again after a restore.
+     */
+    private final java.util.TreeMap<String, Object> mHalfKeys;
 
     private AppearanceSnapshot(@NonNull TermuxAppSharedPreferences prefs) {
         mLinks = linkSignature(prefs);
@@ -97,6 +111,7 @@ final class AppearanceSnapshot {
         mMotion = prefs.getSurfaceGlassMotion();
         mTintHue = prefs.getSurfaceGlassTintHue();
         mVibrancy = prefs.getSurfaceGlassVibrancy();
+        mTextSize = prefs.getTextSizePercent();
         SurfaceSlot[] slots = SurfaceSlot.values();
         mGlassPositions = new int[slots.length + 1];
         mGlassPositions[0] = prefs.getSurfaceGlassPosition(null);
@@ -110,6 +125,7 @@ final class AppearanceSnapshot {
         mClarity = prefs.getFancierGlassClarityPercent();
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
+        mOpacityLinked = prefs.isInAppKeyboardOpacityLinked();
         mKeyRadiusRaw = rawKeyRadius(prefs);
         mKeySpacingRaw = rawFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
         mDockButtonCount = prefs.getAppLauncherButtonCount();
@@ -121,6 +137,31 @@ final class AppearanceSnapshot {
         mRetroEffect = prefs.getTerminalRetroEffect();
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
+        mStatusSwitches = statusSwitches(prefs);
+        mHalfKeys = halfKeys(prefs);
+    }
+
+    /** The status bar's switches, as {@link #mStatusSwitches} keeps them. */
+    @NonNull
+    private static boolean[] statusSwitches(@NonNull TermuxAppSharedPreferences prefs) {
+        return new boolean[] {prefs.isTopPaneClockAmPmEnabled(), prefs.isStatusClockSecondsEnabled(),
+            prefs.isStatusWidgetWeatherFahrenheit(), prefs.isStatusWidgetCpuEnabled(),
+            prefs.isStatusWidgetRamEnabled(), prefs.isStatusWidgetWeatherEnabled(),
+            prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled()};
+    }
+
+    /** Writes back the status bar's switches that differ from the store's now. */
+    private static void restoreStatusSwitches(@NonNull TermuxAppSharedPreferences prefs,
+                                              @NonNull boolean[] kept) {
+        boolean[] now = statusSwitches(prefs);
+        if (now[0] != kept[0]) prefs.setTopPaneClockAmPmEnabled(kept[0]);
+        if (now[1] != kept[1]) prefs.setStatusClockSecondsEnabled(kept[1]);
+        if (now[2] != kept[2]) prefs.setStatusWidgetWeatherFahrenheit(kept[2]);
+        if (now[3] != kept[3]) prefs.setStatusWidgetCpuEnabled(kept[3]);
+        if (now[4] != kept[4]) prefs.setStatusWidgetRamEnabled(kept[4]);
+        if (now[5] != kept[5]) prefs.setStatusWidgetWeatherEnabled(kept[5]);
+        if (now[6] != kept[6]) prefs.setStatusWidgetMediaEnabled(kept[6]);
+        if (now[7] != kept[7]) prefs.setStatusWidgetNotificationsEnabled(kept[7]);
     }
 
     private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {
@@ -154,6 +195,7 @@ final class AppearanceSnapshot {
         prefs.setSurfaceGlassMotion(mMotion);
         prefs.setSurfaceGlassTintHue(mTintHue);
         prefs.setSurfaceGlassVibrancy(mVibrancy);
+        prefs.setTextSizePercent(mTextSize);
         prefs.setSurfaceGlassPosition(null, mGlassPositions[0]);
         for (SurfaceSlot slot : SurfaceSlot.values())
             prefs.setSurfaceGlassPosition(slot, mGlassPositions[slot.ordinal() + 1]);
@@ -165,6 +207,7 @@ final class AppearanceSnapshot {
         prefs.setFancierGlassClarityPercent(mClarity);
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
+        prefs.setInAppKeyboardOpacityLinked(mOpacityLinked);
         restoreKeyRadius(prefs, mKeyRadiusRaw);
         restoreFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE, mKeySpacingRaw);
         prefs.setAppLauncherButtonCount(mDockButtonCount);
@@ -176,6 +219,9 @@ final class AppearanceSnapshot {
         prefs.setTerminalRetroEffect(mRetroEffect);
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
+        restoreStatusSwitches(prefs, mStatusSwitches);
+        // Last: every shared write above dropped the halves' own keys.
+        restoreHalfKeys(prefs, mHalfKeys);
     }
 
     /** The captured state as one string; equal strings mean nothing to save or put back. */
@@ -191,16 +237,20 @@ final class AppearanceSnapshot {
             .append('|').append(mWallpaperTerminalOpacity)
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
             .append('|').append(mTintHue).append('|').append(mVibrancy)
+            .append('|').append(mTextSize)
             .append('|').append(java.util.Arrays.toString(mGlassPositions))
             .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
             .append('|').append(mSpecular).append('|').append(mDispersion)
             .append('|').append(mClarity)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
+            .append('|').append(mOpacityLinked)
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
             .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
             .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
+            .append('|').append(java.util.Arrays.toString(mStatusSwitches))
+            .append('|').append(mHalfKeys)
             .toString();
     }
 
@@ -211,6 +261,99 @@ final class AppearanceSnapshot {
     }
 
     // ------------------------------------------------------------------------------ helpers
+
+    /**
+     * The shared keys a half may hold its own copy of: the per-half Base numbers, every per-half
+     * surface cell and its link, the material point, and the keyboard's backdrop fade.
+     */
+    @NonNull
+    static List<String> halfAbleKeys() {
+        List<String> keys = new java.util.ArrayList<>();
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (TermuxAppSharedPreferences.isPerHalfProperty(property))
+                keys.add(property.baseKey);
+        }
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!TermuxAppSharedPreferences.isPerHalf(slot, property))
+                    continue;
+                String own = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+                if (own != null) keys.add(own);
+                keys.add(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key);
+            }
+        }
+        keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL);
+        keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY);
+        keys.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+        return keys;
+    }
+
+    /** Each half's own key that the store holds, by name, with its value. */
+    @NonNull
+    private static java.util.TreeMap<String, Object> halfKeys(
+            @NonNull TermuxAppSharedPreferences prefs) {
+        java.util.TreeMap<String, Object> out = new java.util.TreeMap<>();
+        SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
+        if (store == null)
+            return out;
+        java.util.Map<String, ?> all = store.getAll();
+        for (String key : halfAbleKeys()) {
+            for (TermuxAppSharedPreferences.WallHalf half
+                    : TermuxAppSharedPreferences.WallHalf.values()) {
+                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+                Object value = all.get(halfKey);
+                if (value != null)
+                    out.put(halfKey, value);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Puts one half's Base back as captured for {@code properties}: the half's own value written
+     * as it was, or dropped where the half followed the shared value then. Home's Reset uses it
+     * to put Home's glass back on the Look it wore when the editor opened.
+     */
+    void restoreHalfBase(@NonNull TermuxAppSharedPreferences prefs,
+                         @NonNull TermuxAppSharedPreferences.WallHalf half,
+                         @NonNull SurfaceProperty... properties) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        SharedPreferences.Editor editor = store.edit();
+        for (SurfaceProperty property : properties) {
+            if (!TermuxAppSharedPreferences.isPerHalfProperty(property))
+                continue;
+            String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(property.baseKey, half);
+            Object value = mHalfKeys.get(halfKey);
+            if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
+            else if (store.contains(halfKey)) editor.remove(halfKey);
+        }
+        editor.apply();
+    }
+
+    /** Puts every half's own key back as it was, and drops the ones that were absent. */
+    private static void restoreHalfKeys(@NonNull TermuxAppSharedPreferences prefs,
+                                        @NonNull java.util.Map<String, Object> halfKeys) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        SharedPreferences.Editor editor = store.edit();
+        for (String key : halfAbleKeys()) {
+            for (TermuxAppSharedPreferences.WallHalf half
+                    : TermuxAppSharedPreferences.WallHalf.values()) {
+                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+                Object value = halfKeys.get(halfKey);
+                if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
+                else if (value instanceof Boolean) editor.putBoolean(halfKey, (Boolean) value);
+                else if (value instanceof String) editor.putString(halfKey, (String) value);
+                else if (value instanceof Float) editor.putFloat(halfKey, (Float) value);
+                else if (value instanceof Long) editor.putLong(halfKey, (Long) value);
+                else if (store.contains(halfKey)) editor.remove(halfKey);
+            }
+        }
+        editor.apply();
+    }
 
     @NonNull
     private static String linkSignature(@NonNull TermuxAppSharedPreferences prefs) {

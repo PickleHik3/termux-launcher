@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Termux Extra Keys — UX Wireframes & DP Specifications</title>
+  <style>
+    :root{color-scheme:light;--ink:#182234;--muted:#627087;--line:#d7dde7;--canvas:#f3f5f8;--blue:#2766a8;--accent:#aab9ff;--s-bg:#10131b;--s-panel:#1e222e;--s-card:#242835;--s-border:#454a5c;--s-text:#eef0fc;--s-muted:#b4b9cc;--s-chip:#35394b;--device-w:393px;--device-h:812px;}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--canvas);font-family:Inter,Roboto,'Segoe UI',Arial,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+    button,input{font:inherit}
+    button{cursor:pointer}
+    .site-header{background:#fff;border-bottom:1px solid var(--line);padding:30px clamp(18px,4vw,68px) 25px}
+    .eyebrow{font-size:11px;letter-spacing:1.6px;font-weight:750;color:var(--blue);text-transform:uppercase;margin-bottom:8px}
+    h1{font-size:clamp(27px,3vw,38px);line-height:1.13;letter-spacing:-1.2px;margin:0 0 9px;font-weight:760}
+    .lede{color:var(--muted);max-width:820px;font-size:15px;line-height:1.55;margin:0}
+    .bar{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:23px}
+    .spec-strip{display:flex;gap:9px;flex-wrap:wrap}
+    .spec-pill{font-size:12px;font-weight:650;color:#405068;background:#f2f5f9;border:1px solid #dce3ec;border-radius:7px;padding:9px 12px;white-space:nowrap}
+    .spec-pill b{color:#162f58}
+    .site-actions{display:flex;align-items:center;gap:9px}
+    .site-button{background:#fff;color:#1f334f;border:1px solid #c5cedc;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700}
+    .site-button:hover{background:#edf2fa}
+    .site-button.primary{background:#213756;color:#fff;border-color:#213756}
+    .intro{padding:20px clamp(18px,4vw,68px) 0;color:#5a677d;font-size:12px}
+    .frames{display:grid;grid-template-columns:repeat(auto-fit,minmax(452px,1fr));gap:34px 26px;max-width:1680px;margin:0 auto;padding:24px 22px 48px;align-items:start}
+    .frame-card{background:#fff;border:1px solid #dce1e9;border-radius:16px;padding:20px 16px 18px;box-shadow:0 8px 30px rgba(33,49,73,.045);min-width:0}
+    .frame-title{display:flex;align-items:center;gap:12px;min-height:43px;margin:0 4px 4px}
+    .frame-number{background:#e7edf7;color:#2d5588;border:1px solid #cbd9e8;display:grid;place-items:center;border-radius:7px;width:34px;height:34px;font-weight:800;font-size:12px;flex-shrink:0}
+    .frame-title h2{font-size:16px;line-height:1.25;margin:0;letter-spacing:-.2px}
+    .frame-caption{font-size:12px;color:#617088;line-height:1.45;min-height:36px;margin:0 4px 23px}
+    .phone-wrap{position:relative;width:max-content;max-width:100%;margin:10px auto 0}
+    .width-rail{position:absolute;top:-17px;left:9px;width:calc(var(--device-w) - 18px);border-top:1px solid #4e86ba;height:8px;pointer-events:none}
+    .width-rail:before,.width-rail:after{content:"";height:8px;position:absolute;top:-4px;border-left:1px solid #4e86ba}
+    .width-rail:before{left:0}.width-rail:after{right:0}
+    .width-rail span{position:absolute;top:-12px;left:50%;transform:translate(-50%,-30%);padding:0 7px;background:#fff;color:var(--blue);font-size:10px;font-weight:800;white-space:nowrap}
+    .device{width:var(--device-w);height:var(--device-h);background:var(--s-bg);color:var(--s-text);border:6px solid #252b3a;border-radius:29px;overflow:hidden;box-shadow:0 8px 18px rgba(28,44,68,.18);position:relative;isolation:isolate}
+    .device *{box-sizing:border-box}
+    .device button{border:0;color:inherit;background:transparent;padding:0}
+    .device button:focus-visible,.device input:focus-visible{outline:2px solid #b6c7ff;outline-offset:2px}
+    .app{height:100%;display:flex;flex-direction:column;position:relative}
+    .status{height:24px;min-height:24px;padding:3px 17px;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:750;letter-spacing:.2px;color:#eef1fa}
+    .status .icons{font-size:11px;letter-spacing:.7px}
+    .topbar{height:56px;min-height:56px;display:flex;align-items:center;gap:13px;padding:0 16px}
+    .icon-button{width:40px;height:40px;display:grid;place-items:center;border-radius:12px!important;font-size:23px!important;line-height:1}
+    .icon-button:hover{background:#2b3040!important}
+    .topbar-title{font-size:20px;font-weight:710;letter-spacing:-.35px;flex:1}
+    .top-reset{font-size:12px!important;font-weight:650!important;color:#bdc6eb!important;padding:8px!important}
+    .main-scroll{min-height:0;flex:1;overflow-y:auto;overflow-x:hidden;padding:8px 16px 18px;scrollbar-width:thin;scrollbar-color:#535a6f transparent}
+    .tabs-row{display:flex;align-items:center;gap:6px;margin-bottom:14px;min-height:48px}
+    .page-tabs{display:flex;gap:6px;min-width:0;flex:1;overflow-x:auto;scrollbar-width:none}.page-tabs::-webkit-scrollbar{display:none}
+    .page-pill{height:42px;min-width:92px;border:1px solid #686e83!important;background:transparent!important;border-radius:11px!important;padding:0 14px!important;font-size:14px!important;font-weight:650!important;white-space:nowrap}
+    .page-pill.active{background:#494564!important;border-color:#494564!important}
+    .more-page{font-size:22px!important;color:#aeb5c7!important;height:48px;width:40px;flex-shrink:0;display:grid;place-items:center}
+    .page-plus{width:48px;height:48px;flex-shrink:0;border:1px solid #646a80!important;border-radius:10px!important;font-size:24px!important;display:grid;place-items:center}
+    .helper{display:flex;align-items:center;justify-content:space-between;color:#abb1c3;gap:7px;font-size:11px;line-height:18px;margin:1px 0 17px}
+    .helper span:last-child{font-weight:600;white-space:nowrap}
+    .row-card{border:1px solid #53586b;border-radius:14px;background:#1c202a;padding:12px;margin:0 0 12px}
+    .row-card-head{height:40px;display:flex;align-items:center;gap:8px;margin-bottom:11px}
+    .grip{font-size:17px;color:#858ea7;line-height:1;width:16px;cursor:grab}
+    .row-title{font-size:13px;font-weight:700;flex:1}
+    .row-more{font-size:22px!important;color:#c3c7d6!important;letter-spacing:1px;width:40px;height:40px;border-radius:7px!important}
+    .row-more:hover{background:#363d4d!important}
+    .key-row{display:flex;align-items:center;gap:7px;min-width:0}
+    .key-strip{display:flex;align-items:center;gap:7px;overflow-x:auto;scrollbar-width:none;padding:1px 0 2px;min-height:50px;min-width:0;flex:1}
+    .key-strip::-webkit-scrollbar{display:none}
+    .key-chip{height:48px;min-width:48px;padding:0 11px!important;background:#363a4d!important;border:1px solid #545970!important;color:#f0f1ff!important;border-radius:10px!important;font-size:13px!important;font-weight:690!important;white-space:nowrap;display:flex!important;align-items:center;justify-content:center;flex-shrink:0;user-select:none;cursor:grab!important}
+    .key-chip.symbol{font-size:21px!important;min-width:48px;padding:0 8px!important}
+    .key-chip:hover{background:#51566f!important;border-color:#8991b1!important}
+    .key-chip[draggable="true"]:active{cursor:grabbing!important}
+    .key-add{height:48px;width:48px;min-width:48px;display:grid!important;place-items:center;border:1px dashed #8995b6!important;color:#b8c8fc!important;border-radius:10px!important;font-size:24px!important;flex-shrink:0}
+    .key-add:hover{background:#303747!important}
+    .add-row{height:48px;width:100%;border:1px dashed #6d7894!important;color:#c5ceeb!important;border-radius:12px!important;font-size:14px!important;font-weight:640!important;margin-top:3px;display:flex!important;gap:8px;justify-content:center;align-items:center}
+    .add-row span{font-size:22px}
+    .inline-note{margin-top:17px;color:#7e879d;font-size:11px;line-height:1.4}
+    .app-footer{flex-shrink:0;min-height:72px;background:#141720;border-top:1px solid #303544;display:flex;gap:8px;align-items:center;padding:11px 16px}
+    .footer-cancel,.footer-save{height:48px;border-radius:24px!important;font-size:14px!important;font-weight:700!important}
+    .footer-cancel{width:32%;border:1px solid #4d5468!important;color:#c1c7d9!important}
+    .footer-save{flex:1;background:#abb7fb!important;color:#16203a!important}
+    .footer-save:hover{background:#c3cdff!important}
+    .nav{height:24px;flex-shrink:0;display:grid;place-items:center;background:#11141c;position:relative;z-index:8}
+    .nav span{height:4px;width:108px;background:#e4e6ed;border-radius:10px}
+    .scrim{position:absolute;top:24px;left:0;right:0;bottom:24px;background:rgba(3,6,14,.66);z-index:5}
+    .sheet{position:absolute;bottom:24px;left:0;right:0;background:#222632;border-radius:22px 22px 0 0;z-index:6;padding:0 16px 16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 36px rgba(0,0,0,.25)}
+    .sheet.edit{height:477px}.sheet.picker{height:600px}.sheet.row-actions{height:330px}.sheet.page-actions{height:387px}
+    .sheet-handle{height:4px;width:34px;background:#70778b;border-radius:4px;align-self:center;margin:10px 0 14px;flex-shrink:0}
+    .sheet-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0}
+    .sheet-title{font-size:20px;font-weight:740;letter-spacing:-.3px}
+    .sheet-close{font-size:22px!important;color:#c3c9d8!important;width:40px;height:40px;border-radius:8px!important;display:grid!important;place-items:center}
+    .sheet-caption{font-size:11px;color:#a7adbe;margin:-7px 0 15px}
+    .field-label{font-size:11px;color:#b5bdd2;font-weight:700;margin-bottom:7px;display:block}
+    .field-row{height:60px;background:#313643;border:1px solid #4a5061!important;border-radius:10px!important;width:100%;padding:0 12px!important;display:flex!important;align-items:center;gap:10px;text-align:left;margin-bottom:12px}
+    .field-row.slim{height:52px}
+    .field-token{min-width:44px;height:36px;border-radius:8px;background:#575e75;color:#fff;display:grid;place-items:center;padding:0 9px;font-weight:750;font-size:12px}
+    .field-text{font-size:13px;font-weight:650;flex:1}
+    .field-chevron{color:#bdc5d8;font-size:22px}
+    .sheet-input{height:48px;border:1px solid #666d83;background:#151923;color:#fff;border-radius:9px;width:100%;padding:0 12px;outline:none;font-size:14px;margin-bottom:4px}
+    .field-help{font-size:10px;color:#9ba4b9;line-height:1.35}
+    .sheet-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;padding-top:12px;border-top:1px solid #414657}
+    .sheet-button{height:48px;padding:0 18px!important;border-radius:11px!important;font-size:13px!important;font-weight:740!important}
+    .sheet-button.primary{background:#abb7fb!important;color:#10182c!important;min-width:96px}
+    .sheet-button.tertiary{color:#cfd4e4!important;border:1px solid #596176!important}
+    .sheet-button.danger{color:#ffa7aa!important}
+    .sheet-button:disabled{opacity:.38;cursor:not-allowed}
+    .move-key{display:flex;gap:8px;align-items:center;margin-top:9px}
+    .move-key span{color:#aeb6ca;font-size:11px;flex:1}
+    .small-move{width:48px;height:40px;border:1px solid #585e71!important;border-radius:7px!important;font-size:16px!important}
+    .picker-search{height:48px;border:1px solid #5c6479;border-radius:10px;background:#151924;display:flex;align-items:center;padding:0 12px;gap:10px;flex-shrink:0}
+    .picker-search input{background:transparent;color:#f4f4ff;border:none;outline:none;width:100%;height:100%;font-size:13px}
+    .picker-search input::placeholder{color:#9ea8bf}
+    .categories{display:flex;gap:6px;overflow-x:auto;margin:13px 0 13px;flex-shrink:0;scrollbar-width:none}
+    .category{border:1px solid #5b6277!important;border-radius:16px!important;padding:8px 12px!important;font-size:12px!important;color:#cfd3e1!important;white-space:nowrap}
+    .category.active{background:#51577a!important;color:#fff!important;border-color:#6b76a9!important}
+    .picker-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-content:start;overflow-y:auto;min-height:0;flex:1;padding-bottom:8px}
+    .picker-choice{min-height:56px;padding:7px 4px!important;border:1px solid #4c5369!important;background:#303544!important;border-radius:10px!important;color:#f3f4fd!important;font-size:12px!important;font-weight:700!important;overflow-wrap:anywhere}
+    .picker-choice.selected{background:#555d86!important;border:2px solid #afc0ff!important}
+    .picker-choice:focus-visible{outline-offset:-3px}
+    .picker-empty{grid-column:1/-1;color:#aeb6ca;font-size:12px;padding:22px 8px}
+    .sheet-list{display:flex;flex-direction:column;gap:5px;min-height:0}
+    .sheet-list button{min-height:49px;padding:0 12px!important;display:flex!important;align-items:center;gap:14px;border-radius:9px!important;text-align:left;font-size:14px!important}
+    .sheet-list button:hover{background:#343948!important}
+    .sheet-list button:disabled{opacity:.36;cursor:not-allowed}
+    .sheet-list .opt-icon{width:22px;font-size:20px;text-align:center;color:#bfc8df}
+    .sheet-list .destructive{color:#ffadb1!important}
+    .page-help{font-size:11px;color:#a7afc0;margin:7px 0 10px;line-height:1.4}
+    .toast{position:absolute;bottom:107px;left:26px;right:26px;background:#3c4358;color:#f0f4ff;z-index:7;min-height:44px;border-radius:9px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;box-shadow:0 5px 20px rgba(0,0,0,.3);font-size:12px}
+    .toast button{color:#bfd0ff!important;font-size:12px!important;font-weight:750!important}
+    .dimensions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:21px 4px 0;border:1px solid #dde4ef;border-radius:9px;overflow:hidden}
+    .dim{padding:10px 10px;background:#f8fafc;border-right:1px solid #dde4ef}
+    .dim:last-child{border-right:0}
+    .dim b{display:block;font-size:13px;line-height:1.3;color:#2f5d90;font-weight:800}
+    .dim span{display:block;font-size:10px;color:#687991;line-height:1.35;margin-top:3px}
+    .behavior{font-size:12px;line-height:1.48;color:#586780;margin:12px 5px 1px;min-height:34px}
+    .bottom-note{border-top:1px solid var(--line);padding:28px clamp(18px,4vw,68px) 45px;background:#fff}
+    .bottom-note h2{font-size:18px;letter-spacing:-.3px;margin:0 0 12px}
+    .notes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:1400px}
+    .note-box{border-left:3px solid #aac0d8;padding:2px 12px;color:#5a6880;font-size:12px;line-height:1.55}
+    .note-box b{display:block;color:#26374e;font-size:12px;margin-bottom:3px}
+    .foot-credit{font-size:11px;color:#74819a;margin-top:20px}
+    .no-guides .width-rail,.no-guides .dimensions{display:none}
+    .no-guides .phone-wrap{margin-top:0}
+    @media(max-width:500px){.frames{grid-template-columns:1fr;padding:16px 4px 30px;gap:18px}.frame-card{border-radius:10px;padding:18px 3px}.frame-title,.frame-caption,.dimensions,.behavior{margin-left:12px;margin-right:12px}.phone-wrap{transform:scale(.91);transform-origin:top center;margin-bottom:-72px}.site-header{padding:23px 17px}.intro{padding-left:18px;padding-right:18px}.dim{padding:9px 7px}}
+    @media print{body{background:#fff}.site-actions{display:none}.frames{grid-template-columns:repeat(2,minmax(452px,1fr));gap:20px}.frame-card{break-inside:avoid;box-shadow:none}.device{box-shadow:none}.site-header{padding:12px 28px}}
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="eyebrow">UX / Interaction wireframes / v1.0</div>
+    <h1>Termux Extra Keys Editor</h1>
+    <p class="lede">One-page wireframe set for the agreed <strong>Page → Row → Key</strong> model. The extra-keys surface is edited on its own—no simulated Android keyboard or terminal. Click controls inside any phone to explore the flow.</p>
+    <div class="bar">
+      <div class="spec-strip">
+        <div class="spec-pill"><b>393 × 812 dp</b> reference viewport</div>
+        <div class="spec-pill"><b>1 CSS px = 1 dp</b> at 100% mockup scale</div>
+        <div class="spec-pill"><b>8 dp</b> spacing grid</div>
+        <div class="spec-pill"><b>48 dp</b> minimum target</div>
+      </div>
+      <div class="site-actions">
+        <button id="guidesToggle" class="site-button" aria-pressed="true">Hide dp labels</button>
+        <button id="resetAll" class="site-button primary">Reset demos</button>
+      </div>
+    </div>
+  </header>
+  <div class="intro">Annotated dimensions are design targets in Android dp. The phone mockups use a 393 dp logical-width reference; actual physical pixel density varies by device.</div>
+  <main id="frames" class="frames">
+    <section class="frame-card" aria-label="Main editor wireframe">
+      <div class="frame-title"><span class="frame-number">01</span><h2>Page editor — default view</h2></div>
+      <p class="frame-caption">Pages at top, editable rows below. Tap a chip or +; row and page actions are contextual.</p>
+      <div class="phone-wrap"><div class="width-rail"><span>393 dp</span></div><div class="device" id="device-editor"></div></div>
+      <div class="dimensions"><div class="dim"><b>56 dp</b><span>App bar</span></div><div class="dim"><b>16 dp</b><span>Screen side inset</span></div><div class="dim"><b>48 dp</b><span>Bottom actions</span></div></div>
+      <p class="behavior"><b>Try:</b> Tap <b>CTRL</b> to edit, <b>+</b> to add a key, or <b>···</b> for row/page actions.</p>
+    </section>
+    <section class="frame-card" aria-label="Edit key wireframe">
+      <div class="frame-title"><span class="frame-number">02</span><h2>Edit key — bottom sheet</h2></div>
+      <p class="frame-caption">A key has a tap action, optional swipe-up action, and independent display label.</p>
+      <div class="phone-wrap"><div class="width-rail"><span>393 dp</span></div><div class="device" id="device-edit"></div></div>
+      <div class="dimensions"><div class="dim"><b>477 dp</b><span>Sheet height</span></div><div class="dim"><b>48 dp</b><span>Text input / CTA</span></div><div class="dim"><b>16 dp</b><span>Sheet side inset</span></div></div>
+      <p class="behavior"><b>Try:</b> Change On tap, choose a swipe action, edit the label, or remove the key.</p>
+    </section>
+    <section class="frame-card" aria-label="Key picker wireframe">
+      <div class="frame-title"><span class="frame-number">03</span><h2>Add / choose key — picker</h2></div>
+      <p class="frame-caption">Searchable categories replace the always-visible key catalog on the old screen.</p>
+      <div class="phone-wrap"><div class="width-rail"><span>393 dp</span></div><div class="device" id="device-picker"></div></div>
+      <div class="dimensions"><div class="dim"><b>600 dp</b><span>Sheet height</span></div><div class="dim"><b>56 dp</b><span>Choice tile min height</span></div><div class="dim"><b>8 dp</b><span>Choice grid gap</span></div></div>
+      <p class="behavior"><b>Try:</b> Search, change categories, select a key, then tap Add to row.</p>
+    </section>
+    <section class="frame-card" aria-label="Row actions wireframe">
+      <div class="frame-title"><span class="frame-number">04</span><h2>Row actions — bottom sheet</h2></div>
+      <p class="frame-caption">Reorder or remove an entire row without confusing row actions with key actions.</p>
+      <div class="phone-wrap"><div class="width-rail"><span>393 dp</span></div><div class="device" id="device-row"></div></div>
+      <div class="dimensions"><div class="dim"><b>330 dp</b><span>Sheet height</span></div><div class="dim"><b>49 dp</b><span>Action row minimum</span></div><div class="dim"><b>12 dp</b><span>Row card padding</span></div></div>
+      <p class="behavior"><b>Try:</b> Move Row 2 up, delete it, or dismiss the sheet.</p>
+    </section>
+    <section class="frame-card" aria-label="Page actions wireframe">
+      <div class="frame-title"><span class="frame-number">05</span><h2>Page actions — bottom sheet</h2></div>
+      <p class="frame-caption">Rename, move, or remove the current page. Page creation uses the + beside the page tabs.</p>
+      <div class="phone-wrap"><div class="width-rail"><span>393 dp</span></div><div class="device" id="device-page"></div></div>
+      <div class="dimensions"><div class="dim"><b>387 dp</b><span>Sheet height</span></div><div class="dim"><b>42 dp</b><span>Page tab height</span></div><div class="dim"><b>24 dp</b><span>System gesture zone</span></div></div>
+      <p class="behavior"><b>Try:</b> Rename Page 1, move its position, or add another page after closing the sheet.</p>
+    </section>
+  </main>
+  <footer class="bottom-note">
+    <h2>Shared measurement / behavior rules</h2>
+    <div class="notes-grid">
+      <div class="note-box"><b>Layout</b>Logical 393 × 812 dp reference viewport; 24 dp status strip; 56 dp app bar; 24 dp gesture inset. All mockup coordinates use CSS px as dp.</div>
+      <div class="note-box"><b>Tap targets</b>Prefer 48 × 48 dp or larger interactive hit areas. Key caps are 48 dp high; use at least 48 dp hit targets for other controls too. Gaps 7–8 dp.</div>
+      <div class="note-box"><b>Editing / persistence</b>Editing happens on a draft. Done closes a sheet and updates that draft; Save changes commits globally; Cancel discards the draft; removal offers Undo.</div>
+      <div class="note-box"><b>Reordering</b>Long-press then drag keys; reorder rows/pages using handles or menu actions. Key editor also provides accessible Move left / right buttons.</div>
+      <div class="note-box"><b>Overflow</b>Row representation should match real Termux overflow/wrapping behavior. Editor keys scroll horizontally while Add stays pinned; runtime overflow or wrapping must be verified against Termux.</div>
+      <div class="note-box"><b>Actions</b>Terminal keys, app controls and custom actions share one picker but are grouped distinctly. Swipe-up is optional; labels can differ from actions.</div>
+    </div>
+    <div class="foot-credit">Standalone HTML · No external assets or dependencies · Five self-contained interactive examples</div>
+  </footer>
+<script>
+(() => {
+  const catalog = {
+    Common:['ESC','TAB','CTRL','ALT','SHIFT','ENTER','BKSP','DEL'],
+    Navigation:['↑','↓','←','→','HOME','END','PGUP','PGDN'],
+    Symbols:['-','_','/','|','~'],
+    Other:['Keyboard','Mouse mode','Custom key']
+  };
+  const defaultPages=()=>[
+    {name:'Page 1',rows:[
+      [{label:'⌨',action:'Keyboard',swipe:'Next keyboard'},{label:'◉',action:'Mouse mode',swipe:''},{label:'⌂',action:'Home',swipe:''},{label:'>_',action:'Terminal',swipe:''},{label:'▣',action:'Display',swipe:''}],
+      ['ESC','CTRL','ALT','TAB','←','→'].map(label=>({label,action:label,swipe:''}))
+    ]},
+    {name:'Page 2',rows:[['ESC','TAB','↑','↓','←','→'].map(label=>({label,action:label,swipe:''}))]}
+  ];
+  const modes = ['editor','edit','picker','row','page'];
+  const states = {};
+  function fresh(mode){return {mode,page:0,row:mode==='row'?1:1,index:1,pages:defaultPages(),labelDraft:'CTRL',pageNameDraft:'Page 1',actionDraft:'CTRL',swipeDraft:'',pickerGroup:'Common',pickerTerm:'',pickerSelected:mode==='picker'?'ESC':null,pickerPurpose:'add',toast:'',undo:null,dirty:mode==='editor',drag:null};}
+  modes.forEach(mode=>{states[mode]=fresh(mode)});
+  const esc=str=>String(str ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const attr=esc;
+  const currentRow=s=>(s.pages[s.page]?.rows[s.row]||[]);
+  const selectedKey=s=>(currentRow(s)[s.index]||{label:'CTRL',action:'CTRL',swipe:''});
+  const isSymbol=s=>['↑','↓','←','→','⌂','⌨','◉','▣','>_'].includes(s);
+  function keysView(s,row,ri){return `<div class="key-row"><div class="key-strip" role="group" aria-label="Row ${ri+1} keys">${row.map((key,ki)=>`<button class="key-chip ${isSymbol(key.label)?'symbol':''}" data-act="edit" data-row="${ri}" data-index="${ki}" title="Edit ${attr(key.action)}; drag to reorder" draggable="true" data-drag="key">${esc(key.label)}</button>`).join('')}</div><button class="key-add" data-act="add-key" data-row="${ri}" title="Add a key to row ${ri+1}" aria-label="Add key to row ${ri+1}">+</button></div>`;}
+  function appBase(s){return `<div class="app"><div class="status"><span>8:17</span><span class="icons">◆ ▣ ▥ &nbsp;5G ▮▮▮ 64%</span></div>
+   <div class="topbar"><button class="icon-button" data-act="back" aria-label="Back">‹</button><div class="topbar-title">Extra keys</div><button class="top-reset" data-act="reset">Reset</button></div>
+   <div class="main-scroll"><div class="tabs-row"><div class="page-tabs">${s.pages.map((p,i)=>`<button class="page-pill ${i===s.page?'active':''}" data-act="switch-page" data-page="${i}">${esc(p.name)}</button>`).join('')}</div><button class="more-page" data-act="page-menu" title="Page options" aria-label="Page options">⋮</button><button class="page-plus" data-act="add-page" title="Add page" aria-label="Add page">+</button></div>
+    <div class="helper"><span>Tap to edit · Hold to reorder</span><span>${s.pages[s.page].rows.length} ${s.pages[s.page].rows.length===1?'row':'rows'}</span></div>
+    ${s.pages[s.page].rows.map((row,ri)=>`<section class="row-card"><div class="row-card-head"><span class="grip" title="Reorder row">⠿</span><span class="row-title">Row ${ri+1}</span><button class="row-more" data-act="row-menu" data-row="${ri}" aria-label="Row ${ri+1} options">⋮</button></div>${keysView(s,row,ri)}</section>`).join('')}
+    <button class="add-row" data-act="add-row"><span>+</span> Add row</button><p class="inline-note">Swipe actions and labels are configured per key.</p>
+   </div><div class="app-footer"><button class="footer-cancel" data-act="cancel">Cancel</button><button class="footer-save" data-act="save">Save changes</button></div><div class="nav"><span></span></div>`;}
+  function sheetBase(kind,title,contents,subtitle=''){return `<div class="scrim" data-act="dismiss"></div><div class="sheet ${kind}" role="dialog" aria-modal="true" aria-label="${attr(title)}"><div class="sheet-handle"></div><div class="sheet-title-row"><div class="sheet-title">${esc(title)}</div><button class="sheet-close" data-act="dismiss" aria-label="Close">×</button></div>${subtitle?`<p class="sheet-caption">${esc(subtitle)}</p>`:''}${contents}</div>`;}
+  function editSheet(s){return sheetBase('edit','Edit key',`
+    <label class="field-label">On tap</label><button class="field-row" data-act="pick-tap"><span class="field-token">${esc(s.actionDraft)}</span><span class="field-text">${esc(s.actionDraft)}</span><span class="field-chevron">›</span></button>
+    <label class="field-label">On swipe up <span style="font-weight:400;color:#a4adbe">(optional)</span></label><button class="field-row slim" data-act="pick-swipe"><span class="field-text" style="color:${s.swipeDraft?'#f4f5fa':'#b2b8c8'}">${esc(s.swipeDraft||'None')}</span><span class="field-chevron">›</span></button>
+    <label class="field-label" for="label-${s.mode}">Display label</label><input class="sheet-input" id="label-${s.mode}" data-input="key-label" value="${attr(s.labelDraft)}" aria-label="Display label"/><div class="field-help">Changes appearance only, not the terminal action.</div>
+    <div class="move-key"><span>Move key</span><button class="small-move" data-act="key-left" aria-label="Move key left">←</button><button class="small-move" data-act="key-right" aria-label="Move key right">→</button></div>
+    <div class="sheet-actions"><button class="sheet-button danger" data-act="delete-key">Remove key</button><button class="sheet-button primary" data-act="done-edit">Done</button></div>`);}
+  function pickerResults(s){const all= s.pickerTerm.trim()? Object.values(catalog).flat():catalog[s.pickerGroup];const filtered=[...new Set(all)].filter(k=>k.toLowerCase().includes(s.pickerTerm.toLowerCase()));if(s.pickerPurpose==='swipe'&&(!s.pickerTerm||'none'.includes(s.pickerTerm.toLowerCase())))filtered.unshift('None');return filtered.map(k=>`<button class="picker-choice ${s.pickerSelected===k?'selected':''}" data-act="choose-key" data-value="${attr(k)}" aria-pressed="${s.pickerSelected===k}">${esc(k)}</button>`).join('') || '<div class="picker-empty">No matching keys. Try another search.</div>';}
+  function pickerSheet(s){const actionText=s.pickerPurpose==='tap'?'Set tap action':s.pickerPurpose==='swipe'?'Set swipe action':'Add to row';return sheetBase('picker','Choose a key',`
+    <div class="picker-search"><span aria-hidden="true">⌕</span><input aria-label="Search keys" placeholder="Search keys or actions" value="${attr(s.pickerTerm)}" data-input="search"/></div>
+    <div class="categories" role="tablist">${Object.keys(catalog).map(g=>`<button class="category ${s.pickerGroup===g?'active':''}" data-act="category" data-group="${attr(g)}" role="tab" aria-selected="${s.pickerGroup===g}">${esc(g)}</button>`).join('')}</div>
+    <div class="picker-grid" id="picker-grid-${s.mode}">${pickerResults(s)}</div>
+    <div class="sheet-actions"><button class="sheet-button tertiary" data-act="picker-cancel">Cancel</button><button class="sheet-button primary" data-act="picker-apply" ${!s.pickerSelected?'disabled':''}>${s.pickerSelected?`${esc(actionText)}: ${esc(s.pickerSelected)}`:'Select a key'}</button></div>`,s.pickerPurpose==='add'?`Adding to Row ${s.row+1}`:'Choose the action for this key');}
+  function rowSheet(s){const ri=s.row;return sheetBase('row-actions',`Row ${ri+1} options`,`
+    <div class="sheet-list"><button data-act="move-row-up" ${ri===0?'disabled':''}><span class="opt-icon">↑</span>Move row up</button><button data-act="move-row-down" ${ri>=s.pages[s.page].rows.length-1?'disabled':''}><span class="opt-icon">↓</span>Move row down</button><button class="destructive" data-act="delete-row"><span class="opt-icon">×</span>Delete row</button></div>
+    <div class="sheet-actions"><span style="color:#aeb6c9;font-size:11px">Changes remain unsaved</span><button class="sheet-button primary" data-act="dismiss">Done</button></div>`, 'Organize rows within this page');}
+  function pageSheet(s){return sheetBase('page-actions','Page options',`
+   <label class="field-label" for="pagename-${s.mode}">Page name</label><input class="sheet-input" id="pagename-${s.mode}" data-input="page-name" value="${attr(s.pageNameDraft)}"/>
+   <p class="page-help">Change the name of the selected page.</p>
+   <div class="sheet-list"><button data-act="move-page-left" ${s.page===0?'disabled':''}><span class="opt-icon">←</span>Move page left</button><button data-act="move-page-right" ${s.page===s.pages.length-1?'disabled':''}><span class="opt-icon">→</span>Move page right</button><button class="destructive" data-act="delete-page" ${s.pages.length===1?'disabled':''}><span class="opt-icon">×</span>Delete page</button></div>
+   <div class="sheet-actions"><span style="color:#aeb6c9;font-size:11px">Applies to this page</span><button class="sheet-button primary" data-act="done-page">Done</button></div>`);}
+  function render(mode){const s=states[mode];const device=document.getElementById('device-'+mode);let overlay='';if(s.mode==='edit') overlay=editSheet(s);if(s.mode==='picker') overlay=pickerSheet(s);if(s.mode==='row') overlay=rowSheet(s);if(s.mode==='page') overlay=pageSheet(s);
+    device.innerHTML=appBase(s)+overlay+(s.toast?`<div class="toast"><span>${esc(s.toast)}</span>${s.undo?'<button data-act="undo">Undo</button>':''}</div>`:'')+'</div>';
+  }
+  function mark(s,notification){s.dirty=true;s.toast=notification||''}
+  function takeUndo(s){const snapshot=JSON.stringify({pages:s.pages,page:s.page});s.undo=()=>{const old=JSON.parse(snapshot);s.pages=old.pages;s.page=old.page;s.toast='Restored';s.undo=null;}}
+  function startEdit(s,ri,ki){s.row=ri;s.index=ki;const k=selectedKey(s);s.labelDraft=k.label;s.actionDraft=k.action;s.swipeDraft=k.swipe||'';s.mode='edit';s.toast=''}
+  function openPicker(s,purpose){s.pickerPurpose=purpose;s.pickerTerm='';s.pickerGroup='Common';s.pickerSelected=purpose==='swipe'?'None':purpose==='tap'?s.actionDraft:null;s.mode='picker'}
+  function applyPicker(s){if(!s.pickerSelected)return;const value=s.pickerSelected;if(s.pickerPurpose==='add'){takeUndo(s);currentRow(s).push({label:value,action:value,swipe:''});mark(s,`${value} added`);s.mode='editor';}else{if(s.pickerPurpose==='tap'){s.actionDraft=value;if(s.labelDraft===selectedKey(s).action)s.labelDraft=value;}else{s.swipeDraft=value==='None'?'':value;}s.mode='edit';s.toast='';}}
+  function dropToast(s){s.toast='';s.undo=null}
+  function action(mode,act,el){const s=states[mode];if(!s)return;const ri=Number(el?.dataset?.row??s.row);const ki=Number(el?.dataset?.index??s.index);
+    switch(act){
+      case 'back': case 'dismiss': s.mode='editor';break;
+      case 'reset':case 'cancel':{const reset=fresh('editor');Object.assign(s,reset);s.toast=act==='reset'?'Restored default layout':'Edits discarded';break;}
+      case 'save':s.dirty=false;s.mode='editor';s.toast='Changes saved in this demo';s.undo=null;break;
+      case 'switch-page':s.page=Number(el.dataset.page);s.mode='editor';dropToast(s);break;
+      case 'add-page':takeUndo(s);s.pages.push({name:`Page ${s.pages.length+1}`,rows:[[]]});s.page=s.pages.length-1;s.mode='editor';mark(s,'Page added');break;
+      case 'page-menu':s.pageNameDraft=s.pages[s.page].name;s.mode='page';break;
+      case 'add-row':takeUndo(s);s.pages[s.page].rows.push([]);s.mode='editor';mark(s,'Row added');break;
+      case 'row-menu':s.row=ri;s.mode='row';break;
+      case 'edit':startEdit(s,ri,ki);break;
+      case 'add-key':s.row=ri;openPicker(s,'add');break;
+      case 'pick-tap':openPicker(s,'tap');break;
+      case 'pick-swipe':openPicker(s,'swipe');break;
+      case 'category':s.pickerGroup=el.dataset.group;s.pickerSelected=null;break;
+      case 'choose-key':s.pickerSelected=el.dataset.value;break;
+      case 'picker-apply':applyPicker(s);break;
+      case 'picker-cancel':s.mode=s.pickerPurpose==='add'?'editor':'edit';break;
+      case 'done-edit':{takeUndo(s);const k=selectedKey(s);k.label=s.labelDraft.trim()||s.actionDraft;k.action=s.actionDraft;k.swipe=s.swipeDraft;mark(s,'Key updated');s.mode='editor';break;}
+      case 'delete-key':takeUndo(s);currentRow(s).splice(s.index,1);mark(s,'Key removed');s.mode='editor';break;
+      case 'key-left':case 'key-right':{const row=currentRow(s);const dest=s.index+(act==='key-left'?-1:1);if(dest>=0&&dest<row.length){takeUndo(s);[row[s.index],row[dest]]=[row[dest],row[s.index]];s.index=dest;mark(s,'Key moved');}break;}
+      case 'move-row-up':case 'move-row-down':{const rows=s.pages[s.page].rows;const dest=s.row+(act==='move-row-up'?-1:1);if(dest>=0&&dest<rows.length){takeUndo(s);[rows[s.row],rows[dest]]=[rows[dest],rows[s.row]];s.row=dest;mark(s,'Row reordered');}s.mode='editor';break;}
+      case 'delete-row':takeUndo(s);s.pages[s.page].rows.splice(s.row,1);if(!s.pages[s.page].rows.length)s.pages[s.page].rows.push([]);mark(s,'Row deleted');s.mode='editor';break;
+      case 'move-page-left':case 'move-page-right':{const dest=s.page+(act==='move-page-left'?-1:1);if(dest>=0&&dest<s.pages.length){takeUndo(s);[s.pages[s.page],s.pages[dest]]=[s.pages[dest],s.pages[s.page]];s.page=dest;mark(s,'Page reordered');}s.mode='editor';break;}
+      case 'delete-page':if(s.pages.length>1){takeUndo(s);s.pages.splice(s.page,1);s.page=Math.max(0,s.page-1);mark(s,'Page deleted');s.mode='editor';}break;
+      case 'done-page':s.pages[s.page].name=s.pageNameDraft.trim()||s.pages[s.page].name;s.mode='editor';mark(s,'Page settings updated');break;
+      case 'undo':if(s.undo)s.undo();break;
+    }
+    render(mode);
+  }
+  modes.forEach(mode=>{
+    const device=document.getElementById('device-'+mode);
+    device.addEventListener('click',event=>{const button=event.target.closest('[data-act]');if(button&&device.contains(button))action(mode,button.dataset.act,button);});
+    device.addEventListener('input',event=>{
+      const s=states[mode],field=event.target.dataset.input;
+      if(field==='key-label')s.labelDraft=event.target.value;
+      if(field==='page-name')s.pageNameDraft=event.target.value;
+      if(field==='search'){
+        s.pickerTerm=event.target.value;s.pickerSelected=null;
+        const grid=device.querySelector('.picker-grid');if(grid)grid.innerHTML=pickerResults(s);
+        const apply=device.querySelector('[data-act="picker-apply"]');if(apply){apply.disabled=true;apply.textContent='Select a key';}
+      }
+    });
+    device.addEventListener('dragstart',event=>{const target=event.target.closest('[data-drag="key"]');if(!target)return;states[mode].drag={row:Number(target.dataset.row),index:Number(target.dataset.index)};event.dataTransfer.effectAllowed='move';});
+    device.addEventListener('dragover',event=>{if(event.target.closest('[data-drag="key"]'))event.preventDefault();});
+    device.addEventListener('drop',event=>{const target=event.target.closest('[data-drag="key"]');if(!target)return;event.preventDefault();const s=states[mode],from=s.drag;if(!from)return;const destRow=Number(target.dataset.row),destIdx=Number(target.dataset.index);if(destRow!==from.row||destIdx===from.index)return;takeUndo(s);const key=s.pages[s.page].rows[from.row].splice(from.index,1)[0];s.pages[s.page].rows[destRow].splice(destIdx,0,key);s.drag=null;mark(s,'Key reordered');render(mode);});
+    render(mode);
+  });
+  document.getElementById('guidesToggle').addEventListener('click',e=>{const off=document.body.classList.toggle('no-guides');e.currentTarget.textContent=off?'Show dp labels':'Hide dp labels';e.currentTarget.setAttribute('aria-pressed',String(!off));});
+  document.getElementById('resetAll').addEventListener('click',()=>modes.forEach(mode=>{states[mode]=fresh(mode);render(mode);}));
+})();
+</script>
+</body>
+</html>

@@ -406,4 +406,38 @@ public class PlaceChromeTravelTest {
         assertEquals(chrome(0.3f), PlaceChromeTravel.progressToward(minimal, PaneWallPage.DISPLAY),
             EPSILON);
     }
+
+    /**
+     * Moved from the Home chrome policy's test. The dock rides the keyboard as a transform: the
+     * stack is laid out once with the keyboard in it, and while the keyboard is part way up the
+     * whole stack, dock included, is slid down by the share of the keyboard not yet revealed.
+     * Nothing is laid out per frame.
+     */
+    @Test
+    public void theDockRidesTheKeyboardsRevealAsATranslation() {
+        Rest down = new Rest(false, false, false);
+        Rest up = new Rest(true, false, false);
+        int keyboard = 600;
+        int dock = 128;
+        assertEquals(keyboard, PlaceChromeTravel.stackTranslationPx(
+            PlaceChromeTravel.rest(PaneWallPage.WIDGETS, down), keyboard, dock), 0f);
+        assertEquals(0f, PlaceChromeTravel.stackTranslationPx(
+            PlaceChromeTravel.rest(PaneWallPage.WIDGETS, up), keyboard, dock), 0f);
+    }
+
+    /** The window's status bar fades on the way to Home, and arrives with the window. */
+    @Test
+    public void theStatusBarFadesOutTowardHomeAndArrivesWithTheWindow() {
+        List<PaneWallPage> row = Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        PlaceChromeTravel.States states = page -> new Rest(false, false,
+            page != PaneWallPage.WIDGETS);
+        // Resting on the window, the wall half way back toward Home.
+        Frame halfway = PlaceChromeTravel.at(row, PaneWallPage.TERMINAL, 500f, 1000, states);
+        assertEquals(0.5f, halfway.statusReveal, 1e-4f);
+        assertEquals("the dock is on both halves", 1f, halfway.dockReveal, 0f);
+        Frame home = PlaceChromeTravel.at(row, PaneWallPage.WIDGETS, 0f, 1000, states);
+        assertEquals(0f, home.statusReveal, 0f);
+        Frame window = PlaceChromeTravel.at(row, PaneWallPage.TERMINAL, 0f, 1000, states);
+        assertEquals(1f, window.statusReveal, 0f);
+    }
 }

@@ -2,6 +2,7 @@
 <resources>
     <!-- Notifications widget. -->
     <string name="bw_signals_notifications_caption">Notifications</string>
+    <string name="bw_signals_notifications_header_messages">Messages</string>
     <string name="bw_signals_notifications_pane_short">notifs</string>
     <string name="bw_signals_notifications_pane">notifications</string>
     <string name="bw_signals_notifications_allow">Allow notification access</string>

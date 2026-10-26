@@ -43,6 +43,8 @@ public class SuggestionBarLostRenderTest {
         FrameLayout host = new FrameLayout(activity);
         activity.setContentView(host, new ViewGroup.LayoutParams(1058, 0));
         SuggestionBarView bar = new SuggestionBarView(host.getContext(), null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         host.addView(bar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         layoutHost(host, 0);

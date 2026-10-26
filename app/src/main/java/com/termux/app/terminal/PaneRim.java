@@ -75,6 +75,9 @@ public final class PaneRim {
     /** The slab whose own edge the resting rim yields to, or null; see {@link #slabEdgeOf}. */
     @Nullable private SlabEdge mSlab;
     private float mRadiusPx;
+    /** Frame-source counter for the idle audit: paneRim. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("paneRim");
+
     private ValueAnimator mAnimator;
     /** The alpha the kind asks for, before the wall's travel takes its share. */
     private int mBaseAlpha = 255;
@@ -282,7 +285,10 @@ public final class PaneRim {
         ValueAnimator animator = ValueAnimator.ofInt(0, 255);
         animator.setDuration(FADE_MS);
         animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
-        animator.addUpdateListener(a -> setBaseAlpha((int) a.getAnimatedValue()));
+        animator.addUpdateListener(a -> {
+            FRAMES.tick();
+            setBaseAlpha((int) a.getAnimatedValue());
+        });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(android.animation.Animator animation) {

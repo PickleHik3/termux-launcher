@@ -52,7 +52,7 @@ android {
 
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
         // One plain X.Y.Z for every edition; nightlies get +dev.<sha> from CI (see docs/agents/releasing.md). Keep the line bare: CI greps it.
-        versionName "1.2.1"
+        versionName "1.3.0-pre.4"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -497,14 +497,50 @@ def sha256Hex(File file) {
     hex.toString()
 }
 
+// Settings > General > About > What's new shows this build's release notes. They ship as two small
+// text files: the newest few releases from project-docs/release-notes.md, and the pre-release
+// channel's rolling list with its HTML comments dropped. WhatsNewNotes picks the right part at run
+// time from the build's versionName.
+tasks.register("bundleReleaseNotes") {
+    description = "Copies the newest release notes into build/generated/whatsnew/assets/whatsnew."
+    group = "build setup"
+
+    def stableFile = rootProject.file("project-docs/release-notes.md")
+    def rollingFile = rootProject.file("project-docs/prerelease-notes.md")
+    def outDir = file("$buildDir/generated/whatsnew/assets/whatsnew")
+    inputs.files(stableFile, rollingFile).optional()
+    outputs.dir(outDir)
+
+    doLast {
+        outDir.mkdirs()
+        def kept = []
+        def sections = 0
+        if (stableFile.isFile()) {
+            for (line in stableFile.readLines("UTF-8")) {
+                if (line.startsWith("## v")) sections++
+                if (sections > 4) break
+                if (sections > 0) kept << line
+            }
+        }
+        new File(outDir, "release-notes.md").setText(kept.join("\n") + "\n", "UTF-8")
+        def rolling = rollingFile.isFile() ? rollingFile.getText("UTF-8") : ""
+        new File(outDir, "prerelease-notes.md")
+            .setText(rolling.replaceAll(/(?s)<!--.*?-->/, "").trim() + "\n", "UTF-8")
+    }
+}
+
 android.sourceSets.all { sourceSet ->
     sourceSet.assets.srcDir("$buildDir/generated/tlstore/assets")
+    sourceSet.assets.srcDir("$buildDir/generated/whatsnew/assets")
 }
 
 afterEvaluate {
     tasks.matching {
         it.name ==~ /merge.*Assets/ || it.name.toLowerCase(java.util.Locale.ROOT).contains("lint")
-    }.configureEach { it.dependsOn(tasks.named("fetchTlstore")) }
+    }.configureEach {
+        it.dependsOn(tasks.named("fetchTlstore"))
+        it.dependsOn(tasks.named("bundleReleaseNotes"))
+    }
 }
 
 def validateVersionName(String versionName) {

@@ -3,7 +3,8 @@
   Pinned section navigation: "All" plus one chip per visible PreferenceCategory with content, in
   one horizontally scrollable line with a fading edge as the "more to the side" cue. Sits above
   the preference RecyclerView (added by MaterialPreferenceFragment) and does not scroll with the
-  list. Hidden entirely (GONE) on a page with fewer than three qualifying sections;
+  list. The chips are dressed as filled segments (settings_section_chip). Hidden entirely (GONE)
+  on a page with fewer than three qualifying sections;
   SettingsSectionChips.bind() controls that. No divider: spacing separates it from the list.
 -->
 <HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
@@ -26,7 +27,7 @@
         android:paddingTop="@dimen/settings_space_s"
         android:paddingEnd="@dimen/settings_gutter"
         android:paddingBottom="@dimen/settings_space_s"
-        app:chipSpacingHorizontal="@dimen/settings_space_s"
+        app:chipSpacingHorizontal="@dimen/settings_space_xs"
         app:chipSpacingVertical="0dp"
         app:singleLine="true"
         app:singleSelection="true" />

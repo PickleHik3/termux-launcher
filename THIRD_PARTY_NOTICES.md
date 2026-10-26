@@ -89,6 +89,12 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   licenses; the upstream license audit and glyph notices are reproduced in THIRD_PARTY_LICENSES.txt.
   The glyph names in
   `app/src/main/res/raw/nerd_font_glyphs.csv` are generated from that font's own name table.
+- **[Libron](https://github.com/nicoverbruggen/libron)** — SIL OFL 1.1, with Reserved Font Name
+  "Libron" — Copyright 2026 Nico Verbruggen; Libron is a modified version of Readerly (Copyright
+  2026 Nico Verbruggen), itself based on Newsreader (Copyright 2020 The Newsreader Project
+  Authors). Version 0.31. The Bold face is shipped unmodified and under its own name as
+  `app/src/main/assets/fonts/Libron-Bold.ttf`, drawn by the Clock widget's Analog and Numerals
+  faces. The license text is reproduced in THIRD_PARTY_LICENSES.txt.
 - **[Meteocons](https://github.com/basmilius/meteocons)** — MIT — Copyright 2020-present Bas
   Milius. The weather animations in `app/src/main/assets/weather/` are the fill style of
   `@meteocons/lottie`, unmodified apart from compact re-serialization; the license text ships beside
