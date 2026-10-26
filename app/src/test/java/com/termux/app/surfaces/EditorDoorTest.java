@@ -55,13 +55,46 @@ public class EditorDoorTest {
 
     @Test
     public void thePageLedDoorsAreUnchanged() {
-        for (EditorDoor door : new EditorDoor[] {EditorDoor.PANE_CONTROLS, EditorDoor.LAUNCHERCTL,
+        for (EditorDoor door : new EditorDoor[] {EditorDoor.LAUNCHERCTL,
                 EditorDoor.TERMINAL_CONTEXT_MENU}) {
             assertEquals(EditorCard.HOME, door.cardFor(PaneWallPage.WIDGETS, null));
             assertEquals(EditorCard.TERMINAL, door.cardFor(PaneWallPage.TERMINAL, null));
             assertNull("at rest over the display", door.cardFor(PaneWallPage.DISPLAY, null));
             assertNull(door.cardFor(null, EditorCard.DOCK));
         }
+    }
+
+    @Test
+    public void paneControlsOpenTheCardOfTheScreenTheyAreOn() {
+        assertEquals(EditorCard.HOME, EditorDoor.PANE_CONTROLS.cardFor(PaneWallPage.WIDGETS, null));
+        assertEquals(EditorCard.WORKSPACE,
+            EditorDoor.PANE_CONTROLS.cardFor(PaneWallPage.TERMINAL, null));
+        assertEquals(EditorCard.WORKSPACE,
+            EditorDoor.PANE_CONTROLS.cardFor(PaneWallPage.DISPLAY, null));
+        assertNull(EditorDoor.PANE_CONTROLS.cardFor(null, null));
+    }
+
+    @Test
+    public void aHomeDoorFromTheWorkspacePageEndsOnHomeWithTheHomeCard() {
+        EditorCard card = EditorDoor.SETTINGS_HOME.cardFor(null, null);
+        assertEquals(EditorCard.HOME, card);
+        assertEquals(PaneWallPage.WIDGETS,
+            EditorDoor.placeFor(card, null, PaneWallPage.TERMINAL));
+        assertEquals(PaneWallPage.WIDGETS,
+            EditorDoor.placeFor(card, null, PaneWallPage.DISPLAY));
+        assertNull(EditorDoor.placeFor(card, null, PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void aWorkspaceCardFromHomeEndsOnTheWorkspacePage() {
+        assertEquals(PaneWallPage.TERMINAL,
+            EditorDoor.placeFor(EditorCard.WORKSPACE, null, PaneWallPage.WIDGETS));
+        assertNull("the display stays", EditorDoor.placeFor(EditorCard.WORKSPACE, null,
+            PaneWallPage.DISPLAY));
+        assertEquals("an explicit place wins", PaneWallPage.DISPLAY,
+            EditorDoor.placeFor(EditorCard.HOME, PaneWallPage.DISPLAY, PaneWallPage.TERMINAL));
+        assertNull(EditorDoor.placeFor(EditorCard.APPEARANCE, null, PaneWallPage.TERMINAL));
+        assertNull(EditorDoor.placeFor(null, null, PaneWallPage.TERMINAL));
     }
 
     @Test

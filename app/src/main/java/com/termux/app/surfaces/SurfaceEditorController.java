@@ -493,6 +493,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         beginSession();
         if (!mSession)
             return;
+        // A card that stands on one screen opens on it: Home's card over a Workspace left on
+        // screen would be refused by cardRefusal, leaving the editor with no card.
+        place = EditorDoor.placeFor(card, place, mHost.pageOnScreen());
         if (mOpen) {
             if (place != null)
                 switchHalf(SeamDress.halfOf(place), true);
@@ -1782,12 +1785,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 wallpaper = null;
             }
             final Drawable picture = wallpaper;
+            final int backdrop = picture == null ? 0 : sampleFootInk(picture);
             rootContainer.post(() -> {
                 if (!mSession || token != mWallpaperToken)
                     return;
                 if (picture != null) {
                     mEditorWallpaper = picture;
                     showEditorWallpaper(picture);
+                    if (mBar != null) {
+                        int[] inks = mBar.halfNameInks();
+                        mBar.setHalfNameInk(EditorLabelInk.pick(backdrop, inks[0], inks[1]));
+                    }
                 } else if (mPageListener != null) {
                     mPageListener.onFrameWallpaperMissing();
                 }
@@ -1796,6 +1804,28 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }, "appearance-editor-wallpaper");
         reader.setDaemon(true);
         reader.start();
+    }
+
+    /**
+     * The colour the page label stands on: the foot of the wallpaper, averaged, under the root's
+     * dim. Read off the main thread; the drawable is drawn into a small bitmap and not kept.
+     */
+    private int sampleFootInk(@NonNull Drawable picture) {
+        try {
+            final int w = 16, h = 16;
+            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(w, h,
+                android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Rect old = picture.copyBounds();
+            picture.setBounds(0, 0, w, h);
+            picture.draw(new android.graphics.Canvas(bmp));
+            picture.setBounds(old);
+            int[] px = new int[w * 4];
+            bmp.getPixels(px, 0, w, 0, h - 4, w, 4);
+            bmp.recycle();
+            return EditorLabelInk.average(px, px.length, mHost.editorWallpaperDimColor());
+        } catch (RuntimeException e) {
+            return 0xFF808080;
+        }
     }
 
     private void showEditorWallpaper(@NonNull Drawable picture) {
@@ -2826,6 +2856,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
         WallHalf half = readHalf(Row.FROST);
+        if (isScreenCard(card) && half != null) {
+            Integer held = mScreenFrostPosition.get(half);
+            return GlassControls.readBack(held == null ? -1 : held,
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+        }
         if (card.slot == null)
             return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
                 prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
@@ -2835,12 +2871,29 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             prefs.getSurfaceValue(card.slot, SurfaceProperty.GRAIN, half));
     }
 
+    /** Where Frost was left on a screen card this session, per half ({@link #writeFrost}). */
+    private final java.util.EnumMap<WallHalf, Integer> mScreenFrostPosition =
+        new java.util.EnumMap<>(WallHalf.class);
+
     /**
      * Frost: blur and grain together along {@link GlassControls}' curve, and the position it was
      * left at. On the Appearance card it is the shared glass of the frame's half, every surface on
      * that half put back on it ({@link GlobalGlass}); on a surface's card, that surface's own
      * pair on the half, as the previous editor's Frost wrote it for a tapped element.
      */
+    /**
+     * A screen card's Frost: that half's Base alone. A surface that holds its own value there
+     * keeps it, and neither the other half nor the shared glass position is touched.
+     */
+    @VisibleForTesting
+    static void writeScreenFrost(@NonNull TermuxAppSharedPreferences prefs, @NonNull WallHalf half,
+                                 int glass) {
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half,
+            AppearanceLooks.blurDp(GlassControls.blurForGlass(glass)));
+        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
+            AppearanceLooks.grainPercent(GlassControls.grainForGlass(glass)));
+    }
+
     private void writeFrost(@NonNull EditorCard card, int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2849,12 +2902,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int blur = GlassControls.blurForGlass(glass);
         int grain = GlassControls.grainForGlass(glass);
         WallHalf half = writeHalf(Row.FROST);
-        prefs.setSurfaceGlassPosition(card.slot, glass);
+        // The position key is one for every card that holds none of its own (the Appearance
+        // card's); a screen card keeps its position for the session, per half, and writes its
+        // own half's Base only.
+        if (isScreenCard(card) && half != null)
+            mScreenFrostPosition.put(half, glass);
+        else
+            prefs.setSurfaceGlassPosition(card.slot, glass);
         if (isScreenCard(card) && half != null) {
-            // The screen's Base alone: a surface that holds its own value there keeps it.
-            prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half, AppearanceLooks.blurDp(blur));
-            prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
-                AppearanceLooks.grainPercent(grain));
+            writeScreenFrost(prefs, half, glass);
         } else if (card.slot == null) {
             GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
             GlobalGlass.write(prefs, SurfaceProperty.GRAIN, half, grain);

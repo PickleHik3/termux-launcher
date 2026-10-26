@@ -249,6 +249,16 @@ final class EditorBar {
         return mLandscape;
     }
 
+    /** The page label's ink, chosen from the wallpaper it stands on ({@link EditorLabelInk}). */
+    void setHalfNameInk(@androidx.annotation.ColorInt int ink) {
+        mHalfName.setTextColor(ink);
+    }
+
+    /** The two inks the label chooses between: dark and pale. */
+    @androidx.annotation.ColorInt int[] halfNameInks() {
+        return new int[] {0xFF1B1B1F, 0xFFE3E2E6};
+    }
+
     /** The half the frame shows: its dot is the long one, and its name stands beside them. */
     void setHalf(@NonNull WallHalf half) {
         if (half == mHalf)
