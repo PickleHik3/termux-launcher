@@ -408,6 +408,11 @@ public final class WallStripRowView extends ViewGroup implements TextScale.Follo
         mClock.setLazyMode(lazy);
     }
 
+    /** Whether the clock draws its seconds, as the bar's own clock does ({@code status_clock_seconds}). */
+    public void setClockSeconds(boolean seconds) {
+        mClock.setSeconds(seconds);
+    }
+
     /** The clock, for tests. */
     @NonNull View clockView() {
         return mClock;

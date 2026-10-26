@@ -936,6 +936,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, value, false);
     }
 
+    public boolean isStatusWidgetNotificationsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
+    }
+
+    public void setStatusWidgetNotificationsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, value, false);
+    }
+
+    public boolean isStatusClockSecondsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, TERMUX_APP.DEFAULT_STATUS_CLOCK_SECONDS);
+    }
+
+    public void setStatusClockSecondsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, value, false);
+    }
+
     /** Whose box the status row's camera gap follows: auto, custom or off; unknown reads as auto. */
     @NonNull
     public String getStatusBarCutoutMode() {
