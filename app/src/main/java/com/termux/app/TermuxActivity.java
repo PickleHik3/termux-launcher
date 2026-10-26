@@ -24850,7 +24850,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallOutlineAlphaChanged(float alpha) {
                     // The terminal page's outline is its panes' rims; they fade with the other
-                    // pages' so one edge shows while the wall moves.
+                    // pages' so one edge shows while the wall moves, or with their own page while
+                    // the transition fades it (PaneWallPolicy.terminalRimAlpha).
                     if (mPaneController != null) mPaneController.setRimTravelAlpha(alpha);
                 }
                 @Override public void onWallPageChanged(
@@ -24920,24 +24921,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The share of the terminal's frame line last drawn; 1 at rest on the terminal. */
     private float mTerminalFrameLineAlpha = 1f;
+    /** Whether the frame line was last drawn where the fading page is posed. */
+    private boolean mTerminalFrameLineRides;
 
     /**
      * The terminal's own frame line ({@code terminal_border_overlay}, the plain border around a
-     * lone pane) is chrome laid over the wall rather than a rim the page carries, so it cannot
-     * move with the page: it fades as the terminal page leaves its rest, over the same stretch the
-     * pages' rims fade, and stays away while another place rests in the frame — the Widgets and
-     * display windows wear a line of their own ({@code PaneWallPolicy.pageOutlineAlpha}). Per frame
-     * of a slide, so nothing here but a comparison and an alpha.
+     * lone pane, or the glass edge) is chrome laid over the wall rather than a rim the page
+     * carries. While the page only moves, the line stays put and fades as the page leaves its
+     * rest, over the same stretch the pages' rims fade, and stays away while another place rests
+     * in the frame — the Widgets and display windows wear a line of their own
+     * ({@code PaneWallPolicy.pageOutlineAlpha}). While the page transition fades the page instead
+     * (Stack, Depth, Fade), the line is drawn where the page is posed — its translation and its
+     * scale, about the centre the two share (onPageSinkChanged) — at the page's own alpha, so the
+     * glass edge and the text it frames come and go together
+     * ({@code PaneWallPolicy.terminalFrameLineAlpha}). Per frame of a slide, so nothing here but
+     * comparisons and view properties.
      */
     private void syncTerminalFrameLineTravel() {
         if (mPaneWallController == null) return;
         View borderView = hotView(R.id.terminal_border_overlay);
         View paneHost = hotView(R.id.terminal_pane_host);
         if (borderView == null || paneHost == null) return;
-        // Where the page's slide puts it: an effect may pose it elsewhere, but the line fades on
-        // the page's way out, as the rims do.
-        float alpha = com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(
-            mPaneWallController.wall().slidePx(paneHost), mPaneWallController.wall().getWidth());
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+        float pageAlpha = paneHost.getAlpha();
+        boolean rides = com.termux.app.wall.PaneWallPolicy.fadesWithPage(pageAlpha);
+        // A page parked at 0 shows nothing to follow; one fading on screen is followed, and the
+        // line is put back on the frame the ride ends.
+        if ((rides && pageAlpha > 0f) || (!rides && mTerminalFrameLineRides)) {
+            float x = rides ? paneHost.getTranslationX() : 0f;
+            if (borderView.getTranslationX() != x) borderView.setTranslationX(x);
+            float scale = paneHost.getScaleX();
+            if (borderView.getScaleX() != scale || borderView.getScaleY() != scale) {
+                borderView.setPivotX(borderView.getWidth() / 2f);
+                borderView.setPivotY(borderView.getHeight() / 2f);
+                borderView.setScaleX(scale);
+                borderView.setScaleY(scale);
+            }
+        }
+        mTerminalFrameLineRides = rides;
+        // Where the page's slide puts it: an effect may pose it elsewhere, but a line that does
+        // not ride fades on the page's way out, as the rims do.
+        float alpha = com.termux.app.wall.PaneWallPolicy.terminalFrameLineAlpha(
+            com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(wall.slidePx(paneHost),
+                wall.getWidth()), pageAlpha);
         if (alpha == mTerminalFrameLineAlpha) return;
         mTerminalFrameLineAlpha = alpha;
         borderView.setAlpha(alpha);

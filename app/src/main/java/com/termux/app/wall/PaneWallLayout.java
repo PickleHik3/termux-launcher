@@ -495,6 +495,14 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
+     * The terminal page's alpha as the wall last placed it ({@link #placePage}): its pose's while
+     * a transition fades it, 0 while it is parked off screen, 1 otherwise and before it is added.
+     */
+    public float terminalPageAlpha() {
+        return mTerminalHost == null ? 1f : mTerminalHost.getAlpha();
+    }
+
+    /**
      * A window is about to be pictured as it leaves ({@code DepartureCard}): the Workspace's page
      * drops its pose for the capture and stands flat at
      * {@link WallPageTransition#departureCaptureSlidePx}, so the card can be posed from there and

@@ -85,9 +85,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          *  {@link PaneWallLayout.Listener#onTerminalOffScreenChanged}. */
         default void onTerminalOffScreenChanged(boolean offScreen) { }
         /**
-         * How much of the pages' outlines the slide leaves showing changed
-         * ({@link PaneWallPolicy#outlineAlpha}). The wall's own pages take it themselves; the
-         * terminal's panes draw their rims through their controller, which the host owns.
+         * How much of the terminal's rims the slide leaves showing changed
+         * ({@link PaneWallPolicy#terminalRimAlpha}): the wall's outline fade, or all of them while
+         * the transition fades the terminal's page. The wall's own pages take the outline fade
+         * themselves; the terminal's panes draw their rims through their controller, which the
+         * host owns.
          */
         default void onWallOutlineAlphaChanged(float alpha) { }
         /**
@@ -180,6 +182,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
+    /** How much of the terminal's rims the last frame left showing; 1 at rest. */
+    private float mTerminalRimAlpha = 1f;
     /**
      * The Workspace was asked for — by Start in or by restored state — before the row had a
      * window: the wall goes there as soon as one arrives, unless something else moved it first.
@@ -789,11 +793,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private void syncOutlineAlpha(float offsetPx) {
         float alpha = PaneWallPolicy.blendsPlaces(mWall.pages(), mWall.currentPage(), offsetPx)
             ? PaneWallPolicy.outlineAlpha(offsetPx, mWall.getWidth()) : 1f;
-        if (alpha == mOutlineAlpha) return;
-        mOutlineAlpha = alpha;
-        if (mWidgetsPage != null) mWidgetsPage.setOutlineTravelAlpha(alpha);
-        if (mDisplayWindow != null) mDisplayWindow.setOutlineTravelAlpha(alpha);
-        mHost.onWallOutlineAlphaChanged(alpha);
+        if (alpha != mOutlineAlpha) {
+            mOutlineAlpha = alpha;
+            if (mWidgetsPage != null) mWidgetsPage.setOutlineTravelAlpha(alpha);
+            if (mDisplayWindow != null) mDisplayWindow.setOutlineTravelAlpha(alpha);
+        }
+        // The terminal's rims are drawn in its page: while the transition fades that page they
+        // go with its fade, not ahead of it (PaneWallPolicy#terminalRimAlpha).
+        float rims = PaneWallPolicy.terminalRimAlpha(alpha, mWall.terminalPageAlpha());
+        if (rims == mTerminalRimAlpha) return;
+        mTerminalRimAlpha = rims;
+        mHost.onWallOutlineAlphaChanged(rims);
     }
 
     @Override
