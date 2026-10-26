@@ -310,10 +310,12 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
 - **Negative / concave corner radius was proposed and fully dropped.** Do not reintroduce it.
 - **The Sessions sidebar is legacy.** It loses its purpose with split tabs and its edge-swipe
   fights the keyboard's. No Sessions tab in the editor, no dot tab badges.
-- **The Appearance editor commits only on Done.** It rests as the outlines plus a floating
-  palette/✓ pill; the card is raised by the palette (shared layer) or by touching a surface, and its
-  ✕ only puts the card down. Back puts an open card down first; from the resting state it routes
-  through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken on entry.
+- **The Appearance editor commits only on Done.** Its card sheet is always present at one of
+  three detents, peek (handle plus header), half or full; there is no ✕. A drag or a tap on the
+  header moves between detents, touching a surface or a chip swaps the card at the current detent,
+  and the page swipe swaps Home ⇄ Workspace cards. Back above peek collapses to peek; at peek it
+  routes through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken
+  on entry.
 - **A stored `-1` corner radius is the "follow the style" sentinel**, resolved in one place
   (`resolveAutoCornerRadiusDp`). Never set `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
   `DEFAULT_STATUS_BAR_CORNER_RADIUS` to a real number — the shipped default rides on
