@@ -514,5 +514,11 @@ Each wave gets emulator before and after shots on a `~/reports` page. Pong only 
   never a Layout-mode control; the bar's height is still termux.properties
   `terminal-toolbar-height`. Holding a surface in the frame no longer drags it.
 - Wave 4, Use as and welcome page (with 4b, unify): not started
-- Wave 5, long-press popup and A–Z: not started
+- Wave 5, long-press popup and A–Z: built 2026-10-26 on a worker branch off feat/editor-redesign,
+  device checks owed. The popup is one window-level watcher (`SurfaceLongPress`, policy in
+  `SurfaceLongPressRoute`) fed before any view; owners of their own long-press are found under the
+  finger (anything long-clickable, the A–Z letters, keyboard keys, extra keys, pinned
+  notifications). The A–Z letters keep the scrub on any press, since it starts on the touch: the
+  A–Z popup opens from its host's margin. A hold between dock icons no longer opens the pin
+  editor (Settings › Default apps still does). Hide writes through the editor's own plan.
 - Wave 6, new settings: not started

@@ -20,6 +20,22 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-26 · editor redesign wave 5 (commit "feat(launcher): long-press popup on the dock,
+  status bar and keyboard") · hold still on bare dock (between icons, an empty slot, the A–Z
+  host's margin, between extra keys), on the status bar (clock, bare bar) and on the keyboard's
+  frame above the keys: a card in the App menu's style opens beside it, the pressed bar outlined,
+  captioned Apps row / A–Z / Extra keys / Dock / Status bar / Keyboard, rows Edit · Hide, the
+  keyboard's adding Docked · Floating; nothing under the finger fires on release · emulator,
+  Workspace and Home, keyboard up and down, Docked and Floating Style.
+- 2026-10-26 · wave 5 (same commit) · the old holds still win: an app icon opens the App menu
+  (now ending on Edit dock), an extra key its alternates, the A–Z letters scrub at once, a
+  keyboard key its alternates, a window chip lifts, a pinned notification its menu; a swipe on
+  the dock, a fold of the status bar and a scrub never open the card · emulator.
+- 2026-10-26 · wave 5 (same commit) · Edit opens the right card (the Dock card on the bar pressed,
+  expanded) and logcat shows `EditorDoor: popup-dock -> DOCK`, `popup-status -> STATUS`,
+  `popup-keyboard -> KEYBOARD`, `app-menu-edit-dock -> DOCK`; Hide puts the bar or status bar in
+  the editor's tray (the keyboard: switched off, back by its card's eye); Docked · Floating moves
+  the keyboard at once · emulator, `adb logcat -s EditorDoor`.
 - 2026-10-26 · editor redesign wave 3 (commit "feat(editor): Strip height moves onto the Dock
   card") · Dock card, Dock type Strip → a Strip height row under the type tiles (84 dp); + and −
   step 4 dp between 56 and 128 and the live Strip row follows at once; Undo puts it back; the

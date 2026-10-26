@@ -1028,6 +1028,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final SurfaceEditorController mSurfaceEditor =
         new SurfaceEditorController(new SurfaceEditorHost());
 
+    /** The long-press popup on the dock, the status bar and the keyboard (editor-redesign §3). */
+    private final com.termux.app.surfaces.SurfaceLongPress mSurfaceLongPress =
+        new com.termux.app.surfaces.SurfaceLongPress(new SurfaceLongPressHost());
+
     /**
      * The one Appearance surface (appearance-round-2026-10-04.md): Overview, Look, Layout and Icons
      * as pages of a host view in the content, with the editor above lent to it. Every door opens
@@ -2371,6 +2375,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
+            if (mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
         } finally {
@@ -10540,6 +10545,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        mSurfaceLongPress.dismiss();
         com.termux.app.terminal.TouchDownHint.detach(this);
         if (mScene != null) mScene.detach();
         mHomePress.onStop();
@@ -11404,6 +11410,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
         });
+        mSuggestionBarView.setEditDockListener(mSurfaceLongPress::editDock);
         // The app menu's Add to Home, offered while there are Home pages to take the icon.
         mSuggestionBarView.setAddToHomeListener(new SuggestionBarView.AddToHomeListener() {
             @Override public boolean canAddToHome() { return mWidgetPaneController != null; }
@@ -13804,6 +13811,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             else
                 mPaneWallController.goTo(place, true);
             mPaneWallController.setGesturesEnabled(false);
+        }
+    }
+
+    /** The activity's half of the long-press popup's seam: its views, its doors, its place. */
+    private final class SurfaceLongPressHost
+            implements com.termux.app.surfaces.SurfaceLongPress.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
+        }
+
+        @NonNull @Override public View root() {
+            View root = findViewById(R.id.activity_termux_root_view);
+            return root != null ? root : getWindow().getDecorView();
+        }
+
+        @Nullable @Override public View findView(int id) {
+            return findViewById(id);
+        }
+
+        @Override public boolean pressBlocked(float rawX, float rawY) {
+            return mSurfaceEditor.isActive() || isAppDrawerOpen()
+                || (mAzTabLayer != null && mAzTabLayer.isOnTab(rawX, rawY));
+        }
+
+        @Override public void cancelViewStream(@NonNull MotionEvent cancel) {
+            dispatchTouchToViews(cancel);
+        }
+
+        @Override public void openCard(@NonNull com.termux.app.surfaces.EditorDoor door,
+                                       @Nullable Element bar) {
+            if (door.cardFor(null, null) == com.termux.app.surfaces.EditorCard.DOCK)
+                mSurfaceEditor.expandDockBar(bar);
+            openSurfaceEditor(door.route(currentWallPlace(), null));
+        }
+
+        @Nullable @Override public PlaceLayoutStore places() {
+            return placeLayoutStore();
+        }
+
+        @NonNull @Override public com.termux.app.wall.PaneWallPage page() {
+            return currentWallPlace();
+        }
+
+        @NonNull @Override public PlaceOrientation orientation() {
+            return currentPlaceOrientation();
+        }
+
+        @Override public void applyArrangement() {
+            syncPlaceLayout();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        }
+
+        @Override public void hideKeyboard() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.hide(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
         }
     }
 

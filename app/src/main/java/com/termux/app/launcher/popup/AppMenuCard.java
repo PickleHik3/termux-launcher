@@ -6,11 +6,13 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.view.AccessibilityDelegateCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
@@ -34,6 +36,10 @@ public final class AppMenuCard {
         @DrawableRes final int glyph;
         @NonNull final Runnable action;
         final boolean opensSubmenu;
+        /** A group's caption: a shorter slab with no action, never highlighted. */
+        final boolean header;
+        /** A row the host draws itself (a segmented choice), in the group's shade; no action. */
+        @Nullable final View custom;
 
         public Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action) {
             this(label, glyph, action, false);
@@ -41,10 +47,29 @@ public final class AppMenuCard {
 
         public Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action,
                     boolean opensSubmenu) {
+            this(label, glyph, action, opensSubmenu, false, null);
+        }
+
+        private Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action,
+                     boolean opensSubmenu, boolean header, @Nullable View custom) {
             this.label = label;
             this.glyph = glyph;
             this.action = action;
             this.opensSubmenu = opensSubmenu;
+            this.header = header;
+            this.custom = custom;
+        }
+
+        /** A caption over the group it leads, such as the name of what was pressed. */
+        @NonNull
+        public static Item header(@NonNull String label) {
+            return new Item(label, 0, () -> { }, false, true, null);
+        }
+
+        /** {@code view} as a row of its own, a row's height, in the group's shade. */
+        @NonNull
+        public static Item custom(@NonNull View view) {
+            return new Item("", 0, () -> { }, false, false, view);
         }
     }
 
@@ -86,6 +111,7 @@ public final class AppMenuCard {
         float density = context.getResources().getDisplayMetrics().density;
         int width = dp(density, AppMenuGeometry.ROW_WIDTH_DP);
         int height = dp(density, AppMenuGeometry.ROW_HEIGHT_DP);
+        int headerHeight = dp(density, AppMenuGeometry.HEADER_HEIGHT_DP);
         int padding = dp(density, AppMenuGeometry.ROW_PADDING_DP);
         int glyphSize = dp(density, AppMenuGeometry.GLYPH_DP);
         int glyphGap = dp(density, AppMenuGeometry.GLYPH_GAP_DP);
@@ -115,6 +141,18 @@ public final class AppMenuCard {
             for (int i = 0; i < group.size(); i++) {
                 Item item = group.get(i);
                 AppMenuGeometry.rowRadii(i, group.size(), outer, join, pill, radii);
+                if (item.header || item.custom != null) {
+                    View slab = item.header
+                        ? headerView(context, item.label, glyphInk, padding)
+                        : customSlab(context, item.custom, padding);
+                    slab.setBackground(new AppMenuRowDrawable(shade, 0, radii[0], radii[1]));
+                    slab.setElevation(elevation);
+                    LinearLayout.LayoutParams slabLp = new LinearLayout.LayoutParams(width,
+                        item.header ? headerHeight : height);
+                    if (i == 0 && groupIndex > 0) slabLp.topMargin = gap;
+                    column.addView(slab, slabLp);
+                    continue;
+                }
                 TextView row = new TextView(context);
                 M3.textAppearance(row, com.google.android.material.R.attr.textAppearanceBodyMedium);
                 row.setTextSize(TypedValue.COMPLEX_UNIT_SP, AppMenuGeometry.LABEL_SP);
@@ -150,6 +188,35 @@ public final class AppMenuCard {
         int[] groupShades = new int[usedShades.size()];
         for (int i = 0; i < groupShades.length; i++) groupShades[i] = usedShades.get(i);
         return new AppMenuCard(new AppMenuCardView(context, column), rows, groupShades, width);
+    }
+
+    /** A group's caption: the label style, in the glyphs' ink, sitting on the slab's foot. */
+    @NonNull
+    private static TextView headerView(@NonNull Context context, @NonNull String label,
+                                       int ink, int padding) {
+        TextView header = new TextView(context);
+        M3.textAppearance(header, com.google.android.material.R.attr.textAppearanceLabelMedium);
+        header.setTextColor(ink);
+        header.setText(label);
+        header.setSingleLine(true);
+        header.setEllipsize(TextUtils.TruncateAt.END);
+        header.setGravity(Gravity.START | Gravity.BOTTOM);
+        header.setPaddingRelative(padding, 0, padding, padding / 4);
+        ViewCompat.setAccessibilityHeading(header, true);
+        return header;
+    }
+
+    /** The host's own row, centred in a row-sized slab with the rows' side padding. */
+    @NonNull
+    private static View customSlab(@NonNull Context context, @NonNull View custom, int padding) {
+        FrameLayout slab = new FrameLayout(context);
+        slab.setPaddingRelative(padding, 0, padding, 0);
+        if (custom.getParent() instanceof android.view.ViewGroup)
+            ((android.view.ViewGroup) custom.getParent()).removeView(custom);
+        slab.addView(custom, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_VERTICAL));
+        return slab;
     }
 
     /** The rows' total height at {@code width}, before any placement clamps it. */

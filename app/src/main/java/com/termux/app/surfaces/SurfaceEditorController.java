@@ -4377,6 +4377,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return mDockCard;
     }
 
+    /**
+     * The Dock card opens next on {@code bar}'s settings, or with every bar's closed for null: a
+     * door from outside the editor that names the bar pressed (the long-press popup's Edit).
+     */
+    public void expandDockBar(@Nullable Element bar) {
+        dockCard().expand(bar);
+    }
+
     /** The bar a tap at a raw screen point landed on: the A–Z strip, the extra keys, or neither. */
     @Nullable
     private Element dockBarAt(float rawX, float rawY) {
