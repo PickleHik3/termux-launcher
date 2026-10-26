@@ -489,21 +489,65 @@ Risks to handle:
 
 Each wave gets emulator before and after shots on a `~/reports` page. Pong only when asked.
 
-## Open points carried from the review
+## Decisions made during the build
 
-- The Dock card's Appearance section is annotated "Global" in the drawing, though the strips are the
-  dock's own. Read it as a drawing slip; confirm when the card is built.
-- The layouts page listed corners, margin, dock height and the keyboard's height as shared between
-  screens; the spec stores glass per screen and keeps corners and margin as strips on each card. This
-  spec follows the later statement (§1).
+- Pane controls open the Workspace card on the Workspace: the approved flow wins over the door table.
+- Edge sizes (corners, margin) stay shared between the two screens, as the layouts page has it.
+- Reset means the shipped defaults; Undo restores the as-opened state. Two different promises, two words.
+- Stored defaults were kept over the mockup's selections: Apps above the keyboard, A–Z rides the apps
+  row, Notification dots off, Most used off. Changing them would change every upgrader's launcher.
+- No dock icon-size stepper: the dock's Height is its icon size, so a second control would lie.
+- No extra-keys Height stepper: only a termux.properties scale exists. Strip height got a stepper
+  instead (the Dock card's Strip type).
+- Icon presets are Small 48 / Default 54 / Large 60 dp; unset and "100" both read as 48 dp, so
+  nothing changes on upgrade.
+- Seconds defaults on, because the bar always drew them.
+- Start in moved to Settings › General › Launcher, beside Use as, since the two depend on each other.
+- Settings search ranks an exact title first.
+- The A–Z popup opens only from its host's margin: a hold on the letters is already a scrub.
+- Glass-off A–Z under the Docked frame or a shared plank does nothing yet: the shared sheet stays.
+- Hide has no Undo snackbar: the tray and the eye bring a bar back.
+- The Camera gap tile stays a tile that never reads on, since the gap is not a setting.
+
+## Open points
+
+Carried from the review:
+
+- Resolved: the Dock card's Appearance section annotated "Global" was a drawing slip; the strips are
+  the dock's own and the card was built that way.
+- Resolved: corners and margin stay shared between screens (edge sizes, above); glass is stored per
+  screen. This spec's later statement (§1) held.
+
+Raised by the build:
+
+- The `az_show` pull tab is placed by `AzTabPolicy`: a 56 x 48 dp touch area, 48 dp from the
+  leading corner.
+- Glass-off A–Z on a shared plank (and under the Docked frame) keeps the shared sheet.
+- Minimal clock weight is no longer settable in the editor (Settings still has it).
+- The terminal corner-pill route to the editor.
+- The Dock items link is removed.
 
 ## Status
 
-- Wave 0, branch, spec and glyph set: not started
-- Wave 1, layout model: not started
-- Wave 2, card skeleton and cards: not started
-- Wave 3, retire Layout mode: built 2026-10-26 on feat/editor-redesign (worker branch), device
-  checks owed. The layout canvas, its drags, handles and other-orientation drawing are deleted
+- Wave 0, spec and glyphs: approved 2026-10-26; glyphs reused from the spec page, drawables `ic_ed_*`.
+- Wave 1, layout model, Workspace card, Match rows, doors: merged d9f9e6368; fixes e178d0335.
+- Wave 2a, skeleton, row kinds, one file per card: merged 414c3ebec; fixes af9dd69be; migration fix 3222f5f1a.
+- Wave 2b, cards: f50465bbf Status bar and Terminal; cc85be9cd Dock; 5d9dd78fd Keyboard, Home, Global;
+  review 889bd3a82; fixes d8f228463.
+- Wave 3, Layout mode retired: merged 53384d4f7.
+- Wave 4, Use as: merged c30d69792.
+- Wave 4b, unify: a3a4cbf3c icons and words; 2ce41a5a7 ink.
+- Wave 5, long-press popup and A-Z: merged 8b345e202.
+- Wave 6, palette tile: merged 24be2c8e4; pinned during page swipes 5d3c12cca.
+- Landed with the cards: seconds, the notifications indicator, Material CRT and the opacity link.
+- Full suite at 2ce41a5a7: 11735 tests, 1 failure, fixed in 40b7874c4.
+- Emulator rounds: `~/reports/editor-redesign-wave1/`, `-wave2a/`, `-wave2/`, `-waves3-6/` (running).
+- Not yet done: merge of feat/editor-redesign into v2-redesign; device checks are in
+  `project-docs/device-checks.md` under "Editor redesign (2026-10-26)".
+
+### Build notes
+
+- Wave 3, Layout mode retired. The layout canvas, its drags, handles and other-orientation drawing are deleted
   with `EXTRA_LAYOUT_EDITOR`, `openLayoutEditor()` and the `layout-editor` door (it had no live
   caller). Homes: Position rows (Dock card per bar, Status bar card), Columns and Rows (Home
   card), Bottom padding and Height (Keyboard card), dock Height (Dock card), the Strip type's row
@@ -513,9 +557,7 @@ Each wave gets emulator before and after shots on a `~/reports` page. Pong only 
   frame brings the bar back). Not given a home: an extra-keys Height (§2 Dock, Extra keys) was
   never a Layout-mode control; the bar's height is still termux.properties
   `terminal-toolbar-height`. Holding a surface in the frame no longer drags it.
-- Wave 4, Use as and welcome page (with 4b, unify): not started
-- Wave 5, long-press popup and A–Z: built 2026-10-26 on a worker branch off feat/editor-redesign,
-  device checks owed. The popup is one window-level watcher (`SurfaceLongPress`, policy in
+- Wave 5, long-press popup and A–Z. The popup is one window-level watcher (`SurfaceLongPress`, policy in
   `SurfaceLongPressRoute`) fed before any view; owners of their own long-press are found under the
   finger (anything long-clickable, the A–Z letters, keyboard keys, extra keys, pinned
   notifications). The A–Z letters keep the scrub on any press, since it starts on the touch: the
@@ -526,4 +568,3 @@ Each wave gets emulator before and after shots on a `~/reports` page. Pong only 
   letters' resting alpha; Glass background off hides the strip's own capsule and tells the ink
   there is no glass, so the existing wallpaper sampler (`GlassInk.bareBandInk`) picks the ink.
   Under the Docked frame, on the dock's row or on a shared plank the shared sheet stays.
-- Wave 6, new settings: not started
