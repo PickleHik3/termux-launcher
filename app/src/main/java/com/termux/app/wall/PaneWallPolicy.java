@@ -287,6 +287,36 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * Whether a page whose own alpha is {@code pageAlpha}, as the wall last placed it, is being
+     * faded rather than only moved: posed by a transition that fades it (Stack, Depth, Fade), or
+     * parked off screen at 0. Its outline then goes with its fade instead of ahead of it.
+     */
+    public static boolean fadesWithPage(float pageAlpha) {
+        return pageAlpha < 1f;
+    }
+
+    /**
+     * How much of the terminal page's rims show, which its panes draw inside the page: the wall's
+     * outline fade ({@link #outlineAlpha}) while the page only moves, so two outlines never show
+     * side by side; all of them while the transition fades the page ({@link #fadesWithPage}),
+     * since they then fade with the page, as its text and its glass do. Faded on the outline's
+     * curve instead, the rims were gone a few percent into the way while the rest of the pane
+     * was still on screen, and came back only on the last few percent of an arrival.
+     */
+    public static float terminalRimAlpha(float outlineAlpha, float pageAlpha) {
+        return fadesWithPage(pageAlpha) ? 1f : outlineAlpha;
+    }
+
+    /**
+     * The same for the terminal's frame line, laid over the wall rather than drawn in the page:
+     * {@link #pageOutlineAlpha} while the page only moves, and the page's own alpha while the
+     * transition fades it, so the glass edge and what it frames come and go together.
+     */
+    public static float terminalFrameLineAlpha(float pageOutlineAlpha, float pageAlpha) {
+        return fadesWithPage(pageAlpha) ? Math.max(0f, pageAlpha) : pageOutlineAlpha;
+    }
+
+    /**
      * Whether the wall standing {@code offsetPx} from {@code current}'s rest shows two places: a
      * drag into a line's outer edge shows the page alone, resisting, and its outline stays.
      */

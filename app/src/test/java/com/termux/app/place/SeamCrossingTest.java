@@ -140,6 +140,7 @@ public class SeamCrossingTest {
         float fraction, progress, dockReveal, keyboardReveal, frameKeyboardReveal, extraKeysShare;
         float beadShare;
         float stripShare, fieldShare;
+        float pictureReveal;
         boolean active, folds, rowsSink, relayout, restyle, restyleShape, bandsMoved, rides;
         boolean barRedressed;
         PaneWallPage stackDressPage;
@@ -155,6 +156,9 @@ public class SeamCrossingTest {
         final List<Step> steps = new ArrayList<>();
         int begins;
         boolean barFirst;
+        /** Whether a picture of the committed half's stack is taken when the crossing asks. */
+        boolean picture;
+        boolean askedForPicture;
 
         Drive(@NonNull SeamCrossing.Half here, @NonNull SeamCrossing.Half there,
               @NonNull SeamCrossing.Stage stage) {
@@ -180,6 +184,10 @@ public class SeamCrossingTest {
                 begins++;
                 crossing.begin(here, there, stage);
                 if (begins == 1) barFirst = crossing.barTakesWorkspaceDressFirst();
+                if (begins == 1 && crossing.wantsPicture()) {
+                    askedForPicture = true;
+                    crossing.pictured(picture);
+                }
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             if (answers.relayout()) crossing.standLayout();
@@ -193,6 +201,7 @@ public class SeamCrossingTest {
             step.frameKeyboardReveal = frame.keyboardReveal;
             step.extraKeysShare = answers.extraKeysShare();
             step.beadShare = answers.beadShare();
+            step.pictureReveal = answers.pictureReveal();
             step.folds = answers.folds();
             step.rowsSink = answers.rowsSink(100);
             step.relayout = answers.relayout();
@@ -911,6 +920,110 @@ public class SeamCrossingTest {
         }
         assertSame(PaneWallPage.WIDGETS, drive.last().stackDressPage);
         assertEquals(0f, drive.last().keyboardReveal, EPSILON);
+    }
+
+    /**
+     * A whole-stack dip whose leaving stack is pictured: the stack wears and stands the other
+     * half's rows from the crossing's first frame, and both stacks cross over the whole way in
+     * step with the wall, the picture sinking as the stack rises; nothing waits for half way.
+     */
+    @Test
+    public void aPicturedDipCrossesBothStacksInStepWithTheWall() {
+        Stored stored = new Stored();
+        stored.minimal = true;
+        Drive drive = drive(stored, PaneWallPage.TERMINAL, minimalWindow(), true,
+            PaneWallPage.WIDGETS, home(), false, false);
+        drive.picture = true;
+        drive.slow(0f, 1f);
+        assertTrue(drive.askedForPicture);
+        Step first = drive.firstActive();
+        assertTrue("dressed for Home on the first frame", first.restyle && first.relayout);
+        assertSame(PaneWallPage.WIDGETS, first.stackDressPage);
+        assertEquals(1, drive.count(s -> s.restyle));
+        for (Step step : drive.steps) {
+            if (!step.active) continue;
+            assertSame(PaneWallPage.WIDGETS, step.stackDressPage);
+            assertEquals("Home's rows rise with the wall at " + step.fraction, step.fraction,
+                step.dockReveal, EPSILON);
+            assertEquals("the stack carries no keyboard on Home, " + step.fraction, 0f,
+                step.keyboardReveal, EPSILON);
+            assertEquals("the window's stack sinks with the wall at " + step.fraction,
+                1f - step.fraction, step.pictureReveal, EPSILON);
+            assertFalse(step.rowsSink);
+        }
+        assertEquals(0f, drive.last().pictureReveal, EPSILON);
+        assertEquals(1f, drive.last().dockReveal, EPSILON);
+    }
+
+    @Test
+    public void aPicturedDipFromHomeRaisesTheWindowsKeyboardWithItsRows() {
+        Stored stored = new Stored();
+        stored.minimal = true;
+        Drive drive = drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+            minimalWindow(), true, false);
+        drive.picture = true;
+        drive.slow(0f, 1f);
+        for (Step step : drive.steps) {
+            if (!step.active) continue;
+            assertSame(PaneWallPage.TERMINAL, step.stackDressPage);
+            assertEquals(step.fraction, step.dockReveal, EPSILON);
+            assertEquals("the keyboard comes with the rows at " + step.fraction, step.fraction,
+                step.keyboardReveal, EPSILON);
+            assertEquals(1f - step.fraction, step.pictureReveal, EPSILON);
+        }
+    }
+
+    /**
+     * A pictured dip turned back keeps the other half's dress on the stack all the way: the
+     * picture comes back up as the stack goes back down, one function of position, and the
+     * settle dresses the stack back where it lands.
+     */
+    @Test
+    public void aPicturedDipTurnedBackReadsTheSameNumbersBack() {
+        Stored stored = new Stored();
+        stored.minimal = true;
+        Drive drive = drive(stored, PaneWallPage.TERMINAL, minimalWindow(), true,
+            PaneWallPage.WIDGETS, home(), false, false);
+        drive.picture = true;
+        drive.slow(0f, 0.8f).slow(0.8f, 0f);
+        assertEquals("never dressed back mid-slide", 1, drive.count(s -> s.restyle));
+        for (Step step : drive.steps) {
+            if (!step.active) continue;
+            assertEquals(1f - step.fraction, step.pictureReveal, EPSILON);
+            assertEquals(step.fraction, step.dockReveal, EPSILON);
+        }
+        assertEquals(1f, drive.last().pictureReveal, EPSILON);
+        assertEquals(0f, drive.last().dockReveal, EPSILON);
+        SeamCrossing.Landing landing = drive.crossing.land();
+        assertTrue("the settle dresses it back", landing.redressesBack(PaneWallPage.TERMINAL));
+    }
+
+    /** A picture that could not be taken leaves the dip exactly as it was. */
+    @Test
+    public void anUnpicturedDipStillSwapsWhileHidden() {
+        Stored stored = new Stored();
+        stored.minimal = true;
+        Drive drive = drive(stored, PaneWallPage.TERMINAL, minimalWindow(), true,
+            PaneWallPage.WIDGETS, home(), false, false).slow(0f, 1f);
+        assertTrue(drive.askedForPicture);
+        assertFalse(drive.crossing.pictured());
+        for (Step step : drive.steps) {
+            assertTrue(Float.isNaN(step.pictureReveal));
+            assertEquals(SeamTravel.dockReveal(SeamTravel.DockPlan.DIP, step.progress),
+                step.dockReveal, EPSILON);
+        }
+    }
+
+    /** Only a whole-stack dip asks for a picture: halves dressed alike keep the stack's travel. */
+    @Test
+    public void halvesDressedAlikeAskForNoPicture() {
+        for (PaneWallPage from : new PaneWallPage[] {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL}) {
+            Drive drive = oneLayout(from);
+            drive.picture = true;
+            drive.slow(0f, 1f);
+            assertFalse(from + " asks for no picture", drive.askedForPicture);
+            for (Step step : drive.steps) assertTrue(Float.isNaN(step.pictureReveal));
+        }
     }
 
     @Test

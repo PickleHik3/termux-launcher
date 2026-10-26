@@ -54,6 +54,21 @@ public final class Crossing {
         void fold();
         /** The status content's and the side bars' travel alpha (1 puts them back). */
         void alpha(float status, float side);
+
+        /**
+         * Pictures the stack as it is drawn now, the committed half's at rest, for a crossing that
+         * stands it in for the stack ({@link SeamCrossing#wantsPicture}). Whether it was taken;
+         * nothing is shown yet.
+         */
+        default boolean picture() {
+            return false;
+        }
+
+        /** The picture drawn with {@code reveal} of it showing, sunk below the screen by the rest. */
+        default void pictureAt(float reveal) {}
+
+        /** The picture goes, and what it held with it. */
+        default void dropPicture() {}
     }
 
     /** The status bar, riding with the Workspace's page. */
@@ -65,6 +80,13 @@ public final class Crossing {
     /** The travel cover, which the pane controller holds and applies to the window in front. */
     public interface Cover {
         void cover(int px);
+
+        /**
+         * The terminal's page laid out {@code px} shorter at its bottom than the room the content
+         * holds (0 puts it back): the room the arriving chrome will take, given to the page ahead
+         * of the settle ({@link #preSizeTerminal}).
+         */
+        default void preSize(int px) {}
     }
 
     /** The in-app keyboard, brought up for a slide. */
@@ -90,6 +112,7 @@ public final class Crossing {
         boolean contentPreRolled;
         boolean beadsMelted;
         boolean storeMoved;
+        int terminalPreSizePx;
         @Nullable GeometryScheduler.Transition gridHold;
         @NonNull SeamCrossing.Landing seam;
 
@@ -99,6 +122,11 @@ public final class Crossing {
 
         /** Whether the slide held the content: one geometry pass gives it its room now. */
         public boolean held() { return held; }
+        /**
+         * The room the terminal's page was laid out short of for the slide
+         * ({@link Crossing#preSizeTerminal}), given back in the landing's geometry pass; 0 if none.
+         */
+        public int terminalPreSizePx() { return terminalPreSizePx; }
         /** Whether the keyboard was brought up for the slide rather than by the page. */
         public boolean keyboardPreRolled() { return keyboardPreRolled; }
         /** Whether the content was given the arriving room for the slide, under a paused grid. */
@@ -147,6 +175,8 @@ public final class Crossing {
     @Nullable private PaneWallPage mRoomArriving;
     private int mRoomChangePx;
     private int mCoverPx;
+    /** How much shorter the terminal's page is laid out for the slide; 0 while it is not. */
+    private int mTerminalPreSizePx;
 
     // ---- What the frames ease ----
     private float mFoldShare = Float.NaN;
@@ -188,6 +218,10 @@ public final class Crossing {
         boolean begins = !crossing();
         mSeam.begin(here, there, stage);
         if (!begins) return;
+        // A whole-stack dip pictures the committed half's stack now, before anything of the
+        // crossing has touched it (the row's morph below included); a picture that cannot be
+        // taken leaves the dip as it was.
+        if (mSeam.wantsPicture()) mSeam.pictured(mStack.picture());
         mCommitted = here.page;
         mHome = home;
         mWorkspace = workspace;
@@ -209,10 +243,23 @@ public final class Crossing {
     @NonNull
     public SeamCrossing.Answers frame(@NonNull Frame frame, boolean dressable,
                                       boolean bandEaseRuns, boolean fieldUnderPalette) {
-        SeamCrossing.Answers answers = mSeam.frame(frame, dressable, bandEaseRuns,
+        return frame(frame, frame, dressable, bandEaseRuns, fieldUnderPalette);
+    }
+
+    /**
+     * The same, with the wall's own frame beside the chrome's, which a pictured dip moves on
+     * ({@link SeamCrossing#frame(Frame, Frame, boolean, boolean, boolean)}). The row a pictured
+     * dip stands is the other half's from the first frame, so its dress is the arriving rest
+     * throughout.
+     */
+    @NonNull
+    public SeamCrossing.Answers frame(@NonNull Frame frame, @NonNull Frame wallFrame,
+                                      boolean dressable, boolean bandEaseRuns,
+                                      boolean fieldUnderPalette) {
+        SeamCrossing.Answers answers = mSeam.frame(frame, wallFrame, dressable, bandEaseRuns,
             fieldUnderPalette);
         if (mCommitted != null && mMorph.active()) {
-            mMorph.at(SeamTravel.otherHalfProgress(frame, mCommitted));
+            mMorph.at(mSeam.pictured() ? 1f : SeamTravel.otherHalfProgress(frame, mCommitted));
             mDock.dress(mMorph);
         }
         return answers;
@@ -244,6 +291,9 @@ public final class Crossing {
         float translation = PlaceChromeTravel.stackTranslationPx(keyboardReveal,
             rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
         mStack.translate(translation, keyboardPx * (1f - clamp01(keyboardReveal)));
+        // The committed half's stack, pictured, goes as the other half's comes.
+        float picture = seam.pictureReveal();
+        if (!Float.isNaN(picture)) mStack.pictureAt(clamp01(picture));
         return translation;
     }
 
@@ -407,10 +457,44 @@ public final class Crossing {
      * PlaceChromeTravel#coveredRoomPx}). Only while the content is held.
      */
     public void coverAt(float stackTranslationPx) {
+        coverAt(stackTranslationPx, 0);
+    }
+
+    /**
+     * The same, where a picture of the committed half's stack stands {@code pictureCoverPx} up
+     * into that room too: the higher of the two edges covers. Less what the terminal's page was
+     * laid out short of already ({@link #preSizeTerminal}), where nothing of the page stands.
+     */
+    public void coverAt(float stackTranslationPx, int pictureCoverPx) {
         if (!mHoldsContent) return;
-        int px = PlaceChromeTravel.coveredRoomPx(mHeldOverlapPx, stackTranslationPx);
+        int px = coverPx(PlaceChromeTravel.coveredRoomPx(mHeldOverlapPx, stackTranslationPx),
+            pictureCoverPx, mTerminalPreSizePx);
         mCoverPx = px;
         mCover.cover(px);
+    }
+
+    /** The cover for a stack's and a picture's edges in the room, less a pre-sized page's gap. */
+    static int coverPx(int stackCoverPx, int pictureCoverPx, int preSizePx) {
+        return Math.max(0, Math.max(stackCoverPx, pictureCoverPx) - Math.max(0, preSizePx));
+    }
+
+    /**
+     * The terminal's page is laid out {@code roomTakenPx} shorter for the rest of the slide, the
+     * room the arriving place's chrome takes from the content at rest, under the hold: its panes
+     * take their final size while the page arrives, rather than after it has landed, and the
+     * landing's geometry pass gives the content that room as it puts the page back, so the panes
+     * do not change size again. Once per slide.
+     */
+    public void preSizeTerminal(int roomTakenPx, int reservationPx) {
+        if (roomTakenPx <= 0 || mTerminalPreSizePx > 0) return;
+        hold(reservationPx);
+        mTerminalPreSizePx = roomTakenPx;
+        mCover.preSize(roomTakenPx);
+    }
+
+    /** How much shorter the terminal's page is laid out for the slide; 0 while it is not. */
+    public int terminalPreSizePx() {
+        return mTerminalPreSizePx;
     }
 
     // ---- What the frames ease ----
@@ -441,6 +525,8 @@ public final class Crossing {
      */
     @NonNull
     public Landing land(@NonNull PaneWallPage landed, int revision) {
+        // The picture goes in the frame the stack is put back at its rest, whichever half that is.
+        if (mSeam.pictured()) mStack.dropPicture();
         Landing landing = releaseInto(mLanding);
         landing.beadsMelted = !Float.isNaN(mBeadShare);
         landing.storeMoved = mCommitted != null && revision != mRevision;
@@ -485,6 +571,7 @@ public final class Crossing {
         landing.keyboardPreRolled = mKeyboardPreRolled;
         landing.contentPreRolled = mContentPreRolled;
         landing.gridHold = mGridHold;
+        landing.terminalPreSizePx = mTerminalPreSizePx;
         boolean covered = mHoldsContent || mCoverPx != 0;
         mHoldsContent = false;
         mHeldReservationPx = 0;
@@ -499,6 +586,12 @@ public final class Crossing {
         mStack.translate(0f, 0f);
         mCoverPx = 0;
         if (covered) mCover.cover(0);
+        // The page takes the content's room back in the landing's pass, which gives the content
+        // the room it was laid out short of: the panes keep their size.
+        if (mTerminalPreSizePx != 0) {
+            mTerminalPreSizePx = 0;
+            mCover.preSize(0);
+        }
         return landing;
     }
 
@@ -515,6 +608,7 @@ public final class Crossing {
         return !mHoldsContent && mHeldReservationPx == 0 && mHeldOverlapPx == 0
             && !mKeyboardPreRolled && mKeyboardPlace == null && !mContentPreRolled
             && mGridHold == null && mRoomArriving == null && mRoomChangePx == 0 && mCoverPx == 0
+            && mTerminalPreSizePx == 0
             && Float.isNaN(mFoldShare) && Float.isNaN(mBeadShare) && !mMorph.active()
             && mCommitted == null && mHome == null && mWorkspace == null
             && mHomeRest == null && mWorkspaceRest == null && mRevision == 0

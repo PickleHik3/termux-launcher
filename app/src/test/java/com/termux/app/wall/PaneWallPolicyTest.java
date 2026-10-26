@@ -245,6 +245,70 @@ public class PaneWallPolicyTest {
         assertEquals(1f, PaneWallPolicy.pageOutlineAlpha(0f, 0), EPS);
     }
 
+    /** The terminal page's alpha as the wall poses it {@code slidePx} from its rest. */
+    private static float poseAlpha(com.termux.app.launcher.home.HomePageTransition effect,
+                                   float slidePx) {
+        com.termux.app.launcher.home.HomePageTransition.Transform pose =
+            new com.termux.app.launcher.home.HomePageTransition.Transform();
+        WallPageTransition.pose(effect, slidePx, WIDTH, true, pose);
+        return pose.alpha;
+    }
+
+    /**
+     * Under a transition that fades the terminal's page (Stack, toward Home or back), its glass
+     * edge and its rims go with the page's own fade, so the text never shows without them: the
+     * frame line wears the page's alpha and the rims, drawn in the page, keep all of theirs.
+     */
+    @Test
+    public void aFadingTerminalPageCarriesItsOutlineInItsFade() {
+        com.termux.app.launcher.home.HomePageTransition stack =
+            com.termux.app.launcher.home.HomePageTransition.STACK;
+        for (float away : new float[] {0.02f, 0.12f, 0.3f, 0.5f, 0.8f, 0.97f}) {
+            float slidePx = WIDTH * away;
+            float pageAlpha = poseAlpha(stack, slidePx);
+            assertEquals("the page fades as it goes, " + away, 1f - away, pageAlpha, EPS);
+            assertTrue(PaneWallPolicy.fadesWithPage(pageAlpha));
+            assertEquals("the frame line at " + away, pageAlpha,
+                PaneWallPolicy.terminalFrameLineAlpha(
+                    PaneWallPolicy.pageOutlineAlpha(slidePx, WIDTH), pageAlpha), EPS);
+            assertEquals("the rims at " + away, 1f, PaneWallPolicy.terminalRimAlpha(
+                PaneWallPolicy.outlineAlpha(slidePx, WIDTH), pageAlpha), EPS);
+        }
+        // Continuous at rest: all of it either way.
+        assertEquals(1f, PaneWallPolicy.terminalFrameLineAlpha(
+            PaneWallPolicy.pageOutlineAlpha(0f, WIDTH), poseAlpha(stack, 0f)), EPS);
+        assertEquals(1f, PaneWallPolicy.terminalRimAlpha(
+            PaneWallPolicy.outlineAlpha(0f, WIDTH), poseAlpha(stack, 0f)), EPS);
+    }
+
+    /** A page the transition only moves keeps the outline fade, so two edges never show. */
+    @Test
+    public void aMovingTerminalPageKeepsTheOutlineFade() {
+        for (com.termux.app.launcher.home.HomePageTransition effect : new
+                com.termux.app.launcher.home.HomePageTransition[] {
+                    com.termux.app.launcher.home.HomePageTransition.SLIDE,
+                    com.termux.app.launcher.home.HomePageTransition.CAROUSEL}) {
+            for (float away : new float[] {0.05f, 0.3f, 0.7f}) {
+                float slidePx = -WIDTH * away;
+                float pageAlpha = poseAlpha(effect, slidePx);
+                assertFalse(effect + " at " + away, PaneWallPolicy.fadesWithPage(pageAlpha));
+                assertEquals(PaneWallPolicy.pageOutlineAlpha(slidePx, WIDTH),
+                    PaneWallPolicy.terminalFrameLineAlpha(
+                        PaneWallPolicy.pageOutlineAlpha(slidePx, WIDTH), pageAlpha), EPS);
+                assertEquals(PaneWallPolicy.outlineAlpha(slidePx, WIDTH),
+                    PaneWallPolicy.terminalRimAlpha(PaneWallPolicy.outlineAlpha(slidePx, WIDTH),
+                        pageAlpha), EPS);
+            }
+        }
+        // Stack moves the page on its other side, toward the next window: the outline fade.
+        float pageAlpha = poseAlpha(com.termux.app.launcher.home.HomePageTransition.STACK,
+            -WIDTH * 0.3f);
+        assertFalse(PaneWallPolicy.fadesWithPage(pageAlpha));
+        // Parked off screen at 0, nothing shows; an unknown alpha is a page at rest.
+        assertEquals(0f, PaneWallPolicy.terminalFrameLineAlpha(1f, 0f), EPS);
+        assertFalse(PaneWallPolicy.fadesWithPage(Float.NaN));
+    }
+
     @Test
     public void wallGoAcceptsTheNamesAndTheRelativeDirections() {
         List<PaneWallPage> pages = all();

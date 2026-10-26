@@ -3581,11 +3581,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int borderTopPx = borderVerticalInsetPx + mWorkspaceTopInsetPx;
             if (marginParams.leftMargin != borderHorizontalInsetPx || marginParams.rightMargin != borderHorizontalInsetPx
                 || marginParams.topMargin != borderTopPx
-                || marginParams.bottomMargin != borderVerticalInsetPx) {
+                || marginParams.bottomMargin != borderVerticalInsetPx + mTerminalPreSizePx) {
                 marginParams.leftMargin = borderHorizontalInsetPx;
                 marginParams.rightMargin = borderHorizontalInsetPx;
                 marginParams.topMargin = borderTopPx;
-                marginParams.bottomMargin = borderVerticalInsetPx;
+                // A page pre-sized for a slide ends that much higher (applyTerminalPreSize).
+                marginParams.bottomMargin = borderVerticalInsetPx + mTerminalPreSizePx;
                 borderView.setLayoutParams(marginParams);
             }
         }
@@ -23140,8 +23141,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
         readSeamTravel(frame);
         // Every answer the seam has for this frame, from what the crossing read as it began, and
-        // the dock's dress at the chrome's progress into the other half.
-        com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame,
+        // the dock's dress at the chrome's progress into the other half. A pictured dip moves on
+        // the wall's own way (SeamCrossing#pictured).
+        com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame, wallFrame,
             mPreferences != null && mChrome != null, mPromptFieldEase != null,
             mPromptFieldUnderPalette);
         // A band only one half's dock carries follows its page across the seam.
@@ -23165,6 +23167,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int givenBack = travelRoomChangePx(arriving);
             if (givenBack > 0) preRollTravelContent(givenBack);
         }
+        // Toward the terminal, whose chrome takes more room than this place's (its keyboard), its
+        // page is laid out at the size it lands at in this frame, while it is still arriving, and
+        // its panes resize now rather than after the page has landed (Crossing#preSizeTerminal).
+        if (arriving == com.termux.app.wall.PaneWallPage.TERMINAL
+            && mCrossing.terminalPreSizePx() == 0) {
+            int taken = -travelRoomChangePx(arriving);
+            if (taken > 0) mCrossing.preSizeTerminal(taken, appliedContentReservationPx());
+        }
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
         // given the other half's rows where none of them shows, and their reveal is the seam's.
         float dockReveal = syncSeamTravel(seam);
@@ -23185,8 +23195,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pane's own edge ends where the chrome's live edge begins rather than under it.
         if (mCrossing.holdsContent()) {
             syncTerminalTravelDisplacement(frame, arriving);
-            // The cover the pane controller holds for the window in front.
-            mCrossing.coverAt(translation);
+            // The cover the pane controller holds for the window in front, under whichever edge
+            // stands higher: the stack's, or the picture of the committed half's stack.
+            mCrossing.coverAt(translation, stackPictureCoverPx());
         }
         // The status bar travels with the Workspace's page wherever the frame reaches Home; it
         // fades in place only where it cannot ride (a bar on a side or the bottom edge).
@@ -23635,7 +23646,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             view.setTravelDisplacement(0, 0f);
             return;
         }
-        view.setTravelDisplacement(travelRoomChangePx(arriving),
+        // A pre-sized page has its room already; what is left of the change is the settle's.
+        int preSized = arriving == com.termux.app.wall.PaneWallPage.TERMINAL
+            ? mCrossing.terminalPreSizePx() : 0;
+        view.setTravelDisplacement(travelRoomChangePx(arriving) + preSized,
             com.termux.app.place.PlaceChromeTravel.progressToward(frame, arriving));
     }
 
@@ -23937,6 +23951,91 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setTravelAlpha(R.id.place_extra_keys_host, sideAlpha);
             setTravelAlpha(R.id.place_az_bar_host, sideAlpha);
             setTravelAlpha(R.id.place_off_dock_plank_host, sideAlpha);
+        }
+
+        // ---- The committed half's stack, pictured for a whole-stack dip (StackPicture) ----
+
+        @Override
+        public boolean picture() {
+            View stack = hotView(R.id.accessory_stack_container);
+            com.termux.app.place.StackPicture picture = stackPicture(stack);
+            return picture != null && stack != null && picture.capture(stack);
+        }
+
+        @Override
+        public void pictureAt(float reveal) {
+            if (mStackPicture != null) mStackPicture.reveal(reveal);
+        }
+
+        @Override
+        public void dropPicture() {
+            if (mStackPicture != null) mStackPicture.release();
+        }
+
+        // ---- The terminal's page laid out at its landing size ahead of the settle ----
+
+        @Override
+        public void preSize(int px) {
+            applyTerminalPreSize(px);
+        }
+    }
+
+    /**
+     * The view the committed half's stack is pictured in for a whole-stack dip, made the first
+     * time one is asked for: a sibling of the stack standing just under it, so the stack the
+     * crossing brings in is drawn over the picture of the one it takes away.
+     */
+    @Nullable private com.termux.app.place.StackPicture mStackPicture;
+
+    @Nullable
+    private com.termux.app.place.StackPicture stackPicture(@Nullable View stack) {
+        if (mStackPicture != null) return mStackPicture;
+        if (stack == null || !(stack.getParent() instanceof ViewGroup)) return null;
+        ViewGroup parent = (ViewGroup) stack.getParent();
+        com.termux.app.place.StackPicture picture = new com.termux.app.place.StackPicture(this);
+        ViewGroup.LayoutParams params = parent instanceof RelativeLayout
+            ? new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT)
+            : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
+        parent.addView(picture, parent.indexOfChild(stack), params);
+        mStackPicture = picture;
+        return picture;
+    }
+
+    /**
+     * How far the picture of the committed half's stack stands up into the room the content
+     * holds, where the wall's bottom is: what a pane on that edge is covered by. 0 while none
+     * shows.
+     */
+    private int stackPictureCoverPx() {
+        com.termux.app.place.StackPicture picture = mStackPicture;
+        if (picture == null || !picture.holds() || mPaneWallController == null) return 0;
+        return picture.coverOver(picture.bottomOf(mPaneWallController.wall()));
+    }
+
+    /** How much shorter the terminal's page is laid out for a slide (Crossing#preSizeTerminal). */
+    private int mTerminalPreSizePx;
+
+    /**
+     * The terminal's page laid out {@code px} shorter at its bottom than the wall (0 puts it
+     * back), and its plain frame line, which frames it from outside the wall, with it.
+     */
+    private void applyTerminalPreSize(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mTerminalPreSizePx) return;
+        mTerminalPreSizePx = inset;
+        if (mPaneWallController != null) mPaneWallController.wall().setTerminalBottomInsetPx(inset);
+        View borderView = hotView(R.id.terminal_border_overlay);
+        if (borderView != null
+            && borderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams params =
+                (ViewGroup.MarginLayoutParams) borderView.getLayoutParams();
+            int bottom = mTerminalBorderFrameTopPx + inset;
+            if (params.bottomMargin != bottom) {
+                params.bottomMargin = bottom;
+                borderView.setLayoutParams(params);
+            }
         }
     }
 
@@ -24854,7 +24953,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallOutlineAlphaChanged(float alpha) {
                     // The terminal page's outline is its panes' rims; they fade with the other
-                    // pages' so one edge shows while the wall moves.
+                    // pages' so one edge shows while the wall moves, or with their own page while
+                    // the transition fades it (PaneWallPolicy.terminalRimAlpha).
                     if (mPaneController != null) mPaneController.setRimTravelAlpha(alpha);
                 }
                 @Override public void onWallPageChanged(
@@ -24924,24 +25024,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The share of the terminal's frame line last drawn; 1 at rest on the terminal. */
     private float mTerminalFrameLineAlpha = 1f;
+    /** Whether the frame line was last drawn where the fading page is posed. */
+    private boolean mTerminalFrameLineRides;
 
     /**
      * The terminal's own frame line ({@code terminal_border_overlay}, the plain border around a
-     * lone pane) is chrome laid over the wall rather than a rim the page carries, so it cannot
-     * move with the page: it fades as the terminal page leaves its rest, over the same stretch the
-     * pages' rims fade, and stays away while another place rests in the frame — the Widgets and
-     * display windows wear a line of their own ({@code PaneWallPolicy.pageOutlineAlpha}). Per frame
-     * of a slide, so nothing here but a comparison and an alpha.
+     * lone pane, or the glass edge) is chrome laid over the wall rather than a rim the page
+     * carries. While the page only moves, the line stays put and fades as the page leaves its
+     * rest, over the same stretch the pages' rims fade, and stays away while another place rests
+     * in the frame — the Widgets and display windows wear a line of their own
+     * ({@code PaneWallPolicy.pageOutlineAlpha}). While the page transition fades the page instead
+     * (Stack, Depth, Fade), the line is drawn where the page is posed — its translation and its
+     * scale, about the centre the two share (onPageSinkChanged) — at the page's own alpha, so the
+     * glass edge and the text it frames come and go together
+     * ({@code PaneWallPolicy.terminalFrameLineAlpha}). Per frame of a slide, so nothing here but
+     * comparisons and view properties.
      */
     private void syncTerminalFrameLineTravel() {
         if (mPaneWallController == null) return;
         View borderView = hotView(R.id.terminal_border_overlay);
         View paneHost = hotView(R.id.terminal_pane_host);
         if (borderView == null || paneHost == null) return;
-        // Where the page's slide puts it: an effect may pose it elsewhere, but the line fades on
-        // the page's way out, as the rims do.
-        float alpha = com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(
-            mPaneWallController.wall().slidePx(paneHost), mPaneWallController.wall().getWidth());
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+        float pageAlpha = paneHost.getAlpha();
+        boolean rides = com.termux.app.wall.PaneWallPolicy.fadesWithPage(pageAlpha);
+        // A page parked at 0 shows nothing to follow; one fading on screen is followed, and the
+        // line is put back on the frame the ride ends.
+        if ((rides && pageAlpha > 0f) || (!rides && mTerminalFrameLineRides)) {
+            float x = rides ? paneHost.getTranslationX() : 0f;
+            if (borderView.getTranslationX() != x) borderView.setTranslationX(x);
+            float scale = paneHost.getScaleX();
+            if (borderView.getScaleX() != scale || borderView.getScaleY() != scale) {
+                borderView.setPivotX(borderView.getWidth() / 2f);
+                borderView.setPivotY(borderView.getHeight() / 2f);
+                borderView.setScaleX(scale);
+                borderView.setScaleY(scale);
+            }
+        }
+        mTerminalFrameLineRides = rides;
+        // Where the page's slide puts it: an effect may pose it elsewhere, but a line that does
+        // not ride fades on the page's way out, as the rims do.
+        float alpha = com.termux.app.wall.PaneWallPolicy.terminalFrameLineAlpha(
+            com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(wall.slidePx(paneHost),
+                wall.getWidth()), pageAlpha);
         if (alpha == mTerminalFrameLineAlpha) return;
         mTerminalFrameLineAlpha = alpha;
         borderView.setAlpha(alpha);
