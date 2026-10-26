@@ -14365,6 +14365,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return wallGroundColor();
         }
 
+        // Without storage permission the system's wallpaper cannot be read; its description is
+        // what the editor's page label stands on then, as Home's labels do.
+        @Override public int editorWallpaperHintColor() {
+            return resolveWallpaperHintColor();
+        }
+
         // True where the system draws the wallpaper behind a translucent window (passthrough): the
         // frame then paints a copy of it. Otherwise the container's own backdrop scales with it.
         @Override public boolean editorPaintsWallpaper() {

@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
  * The ink of the page label under the editor's frame (editor-redesign §8, "Text over the wallpaper
@@ -24,6 +25,26 @@ final class EditorLabelInk {
     @ColorInt
     static int pick(@ColorInt int backdrop, @ColorInt int darkInk, @ColorInt int paleInk) {
         return com.termux.app.chrome.WallpaperInk.bareInk(backdrop, darkInk, paleInk);
+    }
+
+    /**
+     * The colour the label stands on: the sampled picture's rows at {@code fraction}
+     * ({@link #band}) when a picture was read, else the system's description of its wallpaper
+     * ({@code hint}, opaque), else transparent: nothing is known and the label keeps the theme's
+     * ink. The launcher cannot read the system's wallpaper without storage permission (a fresh
+     * install), so there the hint is all there is.
+     */
+    @ColorInt
+    static int backdrop(@Nullable int[] picture, int width, int height, float fraction,
+                        @ColorInt int hint) {
+        if (picture != null)
+            return band(picture, width, height, fraction);
+        return isKnown(hint) ? hint | 0xFF000000 : 0;
+    }
+
+    /** Whether {@code backdrop} says anything: {@link #backdrop}'s transparent says nothing. */
+    static boolean isKnown(@ColorInt int backdrop) {
+        return (backdrop >>> 24) != 0;
     }
 
     /** The sampled picture's width in pixels; its height follows the decor's shape. */
