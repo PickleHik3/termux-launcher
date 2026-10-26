@@ -679,7 +679,8 @@ public class MaterialTerminalColorSchemeTest {
             // Bright white is a fill too: a text floor on it is what made it the darkest neutral.
             assertEquals("color15 at " + level.value, 0d,
                 MaterialTerminalColorScheme.ansiFloor(15, level), 0d);
-            assertEquals("color8 at " + level.value, 3.0d,
+            // Dim text takes the level's own ratio (TerminalContrastGreyTest holds the effect).
+            assertEquals("color8 at " + level.value, level.dimRatio,
                 MaterialTerminalColorScheme.ansiFloor(8, level), 0d);
             for (int slot : new int[] {1, 6, 9, 14}) {
                 assertEquals("color" + slot + " at " + level.value, level.ansiRatio,
