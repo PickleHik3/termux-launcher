@@ -278,8 +278,10 @@ before you hand work over. CI owns the rest.
   old dp scale.
 - **Be honest about the boundary.** Say which items you verified, on what, and which are reasoned
   from the code and still owe a device check. "Device-verified" means you saw it. Whatever still
-  owes one goes on `project-docs/device-checks.md` in the same commit, under Agent (drivable over
-  adb) or Developer (a hand on the phone); it is deleted there once seen.
+  owes one lands in the same commit: an item an agent can drive over adb goes on
+  `project-docs/device-checks.md`; one that needs the developer's hand (feel, frame timing, a
+  thumb mid-gesture, a lock screen, taste, a container they install, Perfetto) goes on
+  `project-docs/developer-checks.md`. Either is deleted once seen.
 - Do not verify with browsers or computer use unless the developer asks.
 - Compile-check any API claim before you rely on it. `UserHandle.getIdentifier` looks public and is
   `@SystemApi`; a worker asserted otherwise and was wrong.

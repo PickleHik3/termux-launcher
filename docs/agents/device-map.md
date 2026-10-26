@@ -16,8 +16,8 @@ plain `adb -s <serial>` works the same. Add what you had to find out; fix what t
 - Leases: `ad lease status` shows only the time left on a lease. Its true age is the `since=`
   epoch in `~/.local/state/ad/leases/<slot>`; read that before applying the 30-minute rule, and
   never take a lease over: a long holder is usually another session's sweep. Ask that session.
-- Owed checks: `project-docs/device-checks.md` (Agent items can run here; Developer items need
-  the developer's hand).
+- Owed checks: `project-docs/device-checks.md` (agent-drivable, can run here) and
+  `project-docs/developer-checks.md` (the developer's hand; never worked by an agent).
 
 ## Running commands inside the app
 
@@ -75,6 +75,49 @@ ad -s emu runas com.termux 'launcherctl pane list'
 | Sessions sidebar (legacy) | tap the session indicator `terminal_sessions_indicator`, the number box left of the chips | after it closes, focus stays on the indicator: tap the terminal before typing |
 | Widgets page | tl16 1080×2400: long-press a free Home cell (e.g. 540,1990) → "Add a widget" ≈806,1338 ("Edit widgets" ≈300,1633); Termux Launcher group ≈400,630; edit mode gear ≈143,195, X ≈60,195, ✓ ≈827,178; page swipe `swipe 900 2060 150 2060 250`. Wall store `shared_prefs/launcher_widget_repository.xml` (built-in ids negative; an overlap refuses the whole wall, tag `LauncherWidgets`; force-stop before seeding) | `WidgetPaneView` |
 | Voice pill | needs a microphone: pong only | — |
+
+## Routes since the editor redesign (2026-10-26)
+
+Several rows above predate the 10-26 editor redesign; where they disagree, these win.
+
+- **Settings root** is Your launcher (Home, Dock, Terminal, Linux apps), Everywhere (Appearance,
+  Keyboard, Notifications, On-device AI), System (General). Appearance opens the editor directly.
+  Pages take a few seconds to draw on the emulator: tap after the title and content are both up.
+  Back at the root leaves Settings. Settings dialogs (Use as, Animation speed, Terminal effect) are
+  not in `ad ui`: screenshot and tap coordinates.
+- **Appearance editor**: a card sheet at peek, half or full over a live frame. It opens at half;
+  Done, Undo and the Portrait/Landscape chip show only at peek (drag the handle down; Done about
+  740,2065). Back twice gives Unsaved changes. A page swipe on the frame switches Home/Workspace.
+  `am start ... --es <DOCK_TUNING_SECTION extra> dock|workspace|keyboard` opens a card on a running
+  instance. Hidden elements come back from the **Elements list** at the end of a screen's card
+  (there are no hidden pills any more). The editor drops the in-app keyboard: `launcherctl
+  keyboard show` again after.
+- **Dock card**: swipe the sheet up (540,1650→540,700) and scroll inside y 1821–2400. Style is
+  `ad find Docked` / `ad find Floating`; Dock type (Tray, Beads, Strip, Peek) below it. A–Z
+  settings (`ad find "A–Z settings"`): Position, Glass background, Show (Shown, Faint, Pull tab).
+  A–Z Position is kept per screen, per style and per orientation. Prefs: `app_launcher_dock_style`,
+  `layout.home.dock_design` (`peek_glass` for Peek).
+- **Long-presses**: on bare dock, the status bar or the keyboard's frame margin (not its strip
+  icons) a hold opens the Edit/Hide popup, which dismisses itself in a few seconds. The pinned-apps
+  sheet is no longer on a bare-dock hold. For app icons use raw input (`input motionevent DOWN x y`,
+  hold 1.2–1.4 s, `MOVE` steps, `UP`): `ad long` can launch the app. A lifted Home icon shows Remove
+  (about 245,178) and, for user apps, Uninstall (about 705,176).
+- **Home actions sheet**: long-press about 540,1200 for 1.2 s: Terminal, Add a widget, Add an app,
+  Add a page, Edit widgets, Edit pages, Lock layout switch (about 900,1862), Wallpaper, Appearance,
+  Launcher settings, Help. Home's grid is 4×5 at 420 dpi, first cell about 143,383.
+- **Drawer**: A–Z letters scrub into the dock and do not open it. Keyboard up, wait 2–3 s, swipe up
+  on the space bar for the palette, then the "open" chip (about 250,1340) or type `drawer` and tap
+  "App drawer". `adb input text` does not reach the palette field. "Open keyboard automatically"
+  is `app_launcher_drawer_search_on_open`, default off.
+- **Widget picker**: Home actions › Add a widget; dismiss by a held motionevent drag from the
+  handle (a fast `input swipe` releases at zero velocity and can leave it half open).
+- **Terminal effect**: Settings › Terminal › Text & display › Terminal effect (pref
+  `terminal_retro_effect`). Terminal Opacity is the Terminal card's second slider column (x about
+  224).
+- **Rotation**: `ad` has no settings subcommand; `ad adb shell settings put system user_rotation N`
+  with `accelerometer_rotation 0`.
+- Chrome first run: "Use without an account" about 540,2005, then More, Got it. Tapping Calendar
+  starts a Google sign-in: force-stop `com.google.android.calendar` and `com.google.android.gms`.
 
 ## Device quirks
 
