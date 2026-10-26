@@ -8205,15 +8205,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // and the keyboard's own margins are rim enough.
         int innerPadding = floating ? Math.round(dpToPx(3)) : capsule ? Math.round(dpToPx(6)) : 0;
         int innerTopPadding = floating ? 0 : innerPadding;
-        // A Docked keyboard keeps a frame above its top row a hold can find: the band its
-        // long-press popup opens on (editor-redesign §3). The capsule's gap and rim already make
-        // it; a slice of the Docked frame grows its padding to it. A floating card has its handle
-        // row for that band.
-        if (!floating) {
-            innerTopPadding = com.termux.app.surfaces.SurfaceLongPressRoute.keyboardTopPaddingPx(
-                getResources().getDisplayMetrics().density, topMargin, innerTopPadding,
-                getResources().getDimension(juloo.keyboard2.R.dimen.margin_top));
-        }
         // The user's own chin allowance, from Settings, and it lands in a different place per shape:
         // padding inside the docked slab, a taller gap under the floating capsule. In the stack the
         // capsule's gap is not this host's to carry: the stack's own bottom margin is the one edge
