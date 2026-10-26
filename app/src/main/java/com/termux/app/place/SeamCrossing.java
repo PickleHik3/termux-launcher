@@ -722,30 +722,37 @@ public final class SeamCrossing {
     }
 
     /**
-     * The Dock design the stack's slab wears on this frame: the committed half's, except on a
-     * pictured dip ({@link #pictured}), where the stack is the other half's own from the first
-     * frame — its rows, its dress and its design (Tray, Beads, Strip or Peek) — so the dock it
-     * brings in rises looking as it rests and nothing changes at the settle. Null while no
-     * crossing holds the designs.
+     * The Dock design the stack's slab wears on this frame: the half's whose dress the stack
+     * wears ({@link #stackDressPage}). Where the halves dress the stack differently it changes
+     * halves only on a frame where none of it shows — a pictured dip's first frame, a dip's swap,
+     * a slide in's first frame — and its design (Tray, Beads, Strip or Peek) goes with its dress
+     * there, so the dock a crossing brings in rises looking as it rests and nothing changes at
+     * the settle, however the slide was started. Null while no crossing holds the designs.
      */
     @Nullable
     public DockStyle stackDesign() {
-        return pictured() ? mRun.otherDesign : mRun.committedDesign;
+        return stackWearsOther() ? mRun.otherDesign : mRun.committedDesign;
     }
 
     /** The Search field the stack carries on this frame, read as {@link #stackDesign} is. */
     public boolean stackSearchField() {
-        return pictured() ? mRun.otherSearchField : mRun.committedSearchField;
+        return stackWearsOther() ? mRun.otherSearchField : mRun.committedSearchField;
     }
 
     /**
      * Whether the stack wears another Dock design or Search field than the committed half's on
-     * this frame: a pictured dip between halves whose docks differ. The stack's slab is dressed
-     * for the other half as it is laid out for it, on the crossing's first frame.
+     * this frame: dressed for the other half ({@link #stackDesign}) whose dock differs.
      */
     public boolean stackDesignApart() {
-        return pictured() && (mRun.otherDesign != mRun.committedDesign
+        return stackWearsOther() && (mRun.otherDesign != mRun.committedDesign
             || mRun.otherSearchField != mRun.committedSearchField);
+    }
+
+    /** Whether the stack is dressed for the other half on this frame, mid-slide. */
+    private boolean stackWearsOther() {
+        return mRun.dressDiffers && mRun.otherDesign != null && mRun.committed != null
+            && mRun.stackDressPage != null && SeamTravel.crosses(mRun.stackDressPage,
+                mRun.committed);
     }
 
     /**
