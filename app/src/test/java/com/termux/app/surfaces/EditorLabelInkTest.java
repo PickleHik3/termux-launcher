@@ -1,6 +1,8 @@
 package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.os.Build;
@@ -63,6 +65,31 @@ public class EditorLabelInkTest {
         // Out of range is held to the picture's edges.
         assertEquals(DARK, EditorLabelInk.pick(EditorLabelInk.band(px, w, h, 1.4f), DARK, PALE));
         assertEquals(PALE, EditorLabelInk.pick(EditorLabelInk.band(px, w, h, -1f), DARK, PALE));
+    }
+
+    @Test
+    public void withNoPictureTheSystemsDescriptionStandsIn() {
+        // A fresh install cannot read the system's wallpaper: the hint is what the label is on.
+        int light = EditorLabelInk.backdrop(null, 0, 0, Float.NaN, 0xFFF3EFE6);
+        assertTrue(EditorLabelInk.isKnown(light));
+        assertEquals(DARK, EditorLabelInk.pick(light, DARK, PALE));
+        int dark = EditorLabelInk.backdrop(null, 0, 0, Float.NaN, 0xFF202020);
+        assertEquals(PALE, EditorLabelInk.pick(dark, DARK, PALE));
+        // A hint with alpha still describes an opaque picture.
+        assertEquals(0xFFF3EFE6, EditorLabelInk.backdrop(null, 0, 0, Float.NaN, 0x80F3EFE6));
+    }
+
+    @Test
+    public void withNeitherNothingIsKnown() {
+        assertFalse(EditorLabelInk.isKnown(EditorLabelInk.backdrop(null, 0, 0, Float.NaN, 0)));
+    }
+
+    @Test
+    public void aPictureReadWinsOverTheHint() {
+        int h = EditorLabelInk.sampleHeight(1080, 2400);
+        int w = EditorLabelInk.SAMPLE_WIDTH;
+        int backdrop = EditorLabelInk.backdrop(splitPicture(), w, h, 0.2f, 0xFFF3EFE6);
+        assertEquals(PALE, EditorLabelInk.pick(backdrop, DARK, PALE));
     }
 
     @Test

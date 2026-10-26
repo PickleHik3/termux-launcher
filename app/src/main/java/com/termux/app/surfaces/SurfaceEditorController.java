@@ -175,6 +175,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Nullable Drawable readEditorWallpaper();
         /** The dim the window's root paints over the system wallpaper. */
         int editorWallpaperDimColor();
+        /**
+         * The system's description of the wallpaper the screen shows, as one colour
+         * ({@link com.termux.app.chrome.WallpaperInk#hintColor}); transparent for none. What the
+         * page label stands on when the picture itself cannot be read (no storage permission).
+         */
+        default int editorWallpaperHintColor() {
+            return 0;
+        }
         /** Whether the frame has to paint the wallpaper itself (passthrough mode). */
         boolean editorPaintsWallpaper();
         /** The icon packs for the Appearance card's Icon pack row, built once per session. */
@@ -1537,19 +1545,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private void applyLabelInk() {
         EditorBar bar = mBar;
+        if (bar == null)
+            return;
         int[] picture = mLabelPicture;
-        if (bar == null || picture == null)
+        float fraction = Float.NaN;
+        if (picture != null) {
+            View label = bar.halfRow();
+            View decor = label.getRootView();
+            if (label.getParent() == null || decor == null || decor.getHeight() <= 0)
+                return;
+            label.getLocationOnScreen(mTmpLocation);
+            float centre = mTmpLocation[1] + label.getHeight() / 2f;
+            decor.getLocationOnScreen(mTmpDecorLocation);
+            fraction = (centre - mTmpDecorLocation[1]) / decor.getHeight();
+        }
+        // No picture is what a launcher without storage permission gets for the system's
+        // wallpaper: the system's own description of it stands in, as for Home's labels.
+        int backdrop = EditorLabelInk.backdrop(picture, mLabelPictureWidth, mLabelPictureHeight,
+            fraction, mHost.editorWallpaperHintColor());
+        if (!EditorLabelInk.isKnown(backdrop))
             return;
-        View label = bar.halfRow();
-        View decor = label.getRootView();
-        if (label.getParent() == null || decor == null || decor.getHeight() <= 0)
-            return;
-        label.getLocationOnScreen(mTmpLocation);
-        float centre = mTmpLocation[1] + label.getHeight() / 2f;
-        decor.getLocationOnScreen(mTmpDecorLocation);
-        float fraction = (centre - mTmpDecorLocation[1]) / decor.getHeight();
-        int backdrop = EditorLabelInk.band(picture, mLabelPictureWidth, mLabelPictureHeight,
-            fraction);
         int[] inks = bar.halfNameInks();
         int ink = EditorLabelInk.pick(backdrop, inks[0], inks[1]);
         if (ink == mLabelInk)
