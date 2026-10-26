@@ -5660,6 +5660,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.dock.PeekGlassGeometry.Card card = resolvePeekCard();
         if (java.util.Objects.equals(card, mPeekCard)) {
             syncPeekReflection();
+            // The same card over a row laid out again: the row's slots may be other views now (a
+            // crossing stands the other half's rows on its first frame and builds their slots on
+            // the frames after), and the live reflection holds the ones it recorded, which go
+            // blank once let go. It is recorded again from the row as it now stands.
+            onDockRowContentChanged();
             return;
         }
         View host = findViewById(R.id.accessory_surface_host);
@@ -23854,6 +23859,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 morph.appsRowEdgeInsetPx(), morph.drawerTileAlpha());
             // The beads under the icons where this frame draws them.
             syncDockBeadsWithMorph();
+            // And the icons' reflection: the morph moves them by drawing alone, which the
+            // reflection, a recording of the row, does not hear of otherwise.
+            onDockRowContentChanged();
         }
 
         @Override
