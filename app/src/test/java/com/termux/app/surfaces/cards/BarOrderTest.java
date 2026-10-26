@@ -87,6 +87,15 @@ public class BarOrderTest {
         assertEquals(0, BarOrder.dropIndex(centres, 2, 10f));
     }
 
+    @Test
+    public void oneLateBatchedJumpReordersWithoutAnyIntermediateMove() {
+        // A zero-velocity injected swipe delivers a single far move: only the y matters.
+        float[] centres = {24f, 72f, 120f};
+        assertEquals(2, BarOrder.dropIndex(centres, 0, 24f + 100f));
+        assertEquals(0, BarOrder.dropIndex(centres, 2, 120f - 96f));
+        assertEquals(1, BarOrder.dropIndex(centres, 1, 72f));
+    }
+
     // -------------------------------------------------------------------------- the stacking
 
     @Test

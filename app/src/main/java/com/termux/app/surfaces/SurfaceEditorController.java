@@ -1773,7 +1773,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 wallpaper = null;
             }
             final Drawable picture = wallpaper;
-            final int backdrop = picture == null ? 0 : sampleFootInk(picture);
+            // The label stands on the wallpaper even when the editor does not paint it (a theme
+            // relaunch, a managed look): the ink follows that picture, never the theme.
+            final int backdrop = picture != null ? sampleFootInk(picture)
+                : sampleSystemFootInk(rootContainer.getContext());
             rootContainer.post(() -> {
                 if (!mSession || token != mWallpaperToken)
                     return;
@@ -1784,8 +1787,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         int[] inks = mBar.halfNameInks();
                         mBar.setHalfNameInk(EditorLabelInk.pick(backdrop, inks[0], inks[1]));
                     }
-                } else if (mPageListener != null) {
-                    mPageListener.onFrameWallpaperMissing();
+                } else {
+                    if (backdrop != 0 && mBar != null) {
+                        int[] inks = mBar.halfNameInks();
+                        mBar.setHalfNameInk(EditorLabelInk.pick(backdrop, inks[0], inks[1]));
+                    }
+                    if (mPageListener != null)
+                        mPageListener.onFrameWallpaperMissing();
                 }
                 wallpaperSettled();
             });
@@ -1798,6 +1806,29 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * The colour the page label stands on: the foot of the wallpaper, averaged, as the
      * preview draws it, with no theme dim over it (the dim pushed a dark theme's sample dark). Read off the main thread; the drawable is drawn into a small bitmap and not kept.
      */
+    /** The foot of the system's still wallpaper, averaged; 0 when there is none to read. */
+    private static int sampleSystemFootInk(@NonNull android.content.Context context) {
+        try {
+            android.app.WallpaperManager manager =
+                android.app.WallpaperManager.getInstance(context);
+            if (manager.getWallpaperInfo() != null)
+                return 0;
+            Drawable system = manager.getDrawable();
+            if (system == null)
+                return 0;
+            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(16, 16,
+                android.graphics.Bitmap.Config.ARGB_8888);
+            system.setBounds(0, 0, 16, 16);
+            system.draw(new android.graphics.Canvas(bmp));
+            int[] px = new int[16 * 4];
+            bmp.getPixels(px, 0, 16, 0, 12, 16, 4);
+            bmp.recycle();
+            return EditorLabelInk.average(px, px.length, 0);
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
     private int sampleFootInk(@NonNull Drawable picture) {
         try {
             final int w = 16, h = 16;

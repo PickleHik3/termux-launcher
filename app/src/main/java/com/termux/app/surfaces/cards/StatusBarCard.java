@@ -120,7 +120,7 @@ public final class StatusBarCard {
     public static final int OPTION_12H = 0;
     public static final int OPTION_SECONDS = 1;
     public static final int OPTION_FAHRENHEIT = 2;
-    /** A shortcut, not a switch: it reads on while the bar leaves a camera gap, and opens it. */
+    /** A shortcut, not a switch: it never reads on, and opens the cutout setting. */
     public static final int OPTION_CAMERA_GAP = 3;
     static final int OPTION_COUNT = 4;
 
@@ -285,9 +285,9 @@ public final class StatusBarCard {
         TileGrid[] grid = new TileGrid[1];
         grid[0] = TileGrid.build(context, tiles, options(host), widthPx, (index, on) -> {
             if (index == OPTION_CAMERA_GAP) {
-                // A shortcut: the tile keeps reading the stored gap and opens its setting.
+                // A shortcut, not a switch: it never reads on, and opens its setting.
                 View tile = grid[0].tiles.get(index);
-                tile.post(() -> grid[0].setOn(index, host.option(index)));
+                tile.post(() -> grid[0].setOn(index, false));
                 host.openCameraGap();
                 return;
             }
@@ -306,7 +306,7 @@ public final class StatusBarCard {
     private static boolean[] options(@NonNull Host host) {
         boolean[] on = new boolean[OPTION_COUNT];
         for (int i = 0; i < on.length; i++)
-            on[i] = host.option(i);
+            on[i] = i != OPTION_CAMERA_GAP && host.option(i);
         return on;
     }
 

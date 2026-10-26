@@ -131,6 +131,22 @@ public final class TileGrid {
             rest.setMarginStart(gap * missing);
             line.addView(new View(context), rest);
         }
+        // The estimate above can undercount a wrapped word (font scale, insets): after layout the
+        // tallest tile sets every tile's height, so the grid never reads uneven.
+        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            int tallest = 0;
+            for (MaterialButton button : buttons)
+                tallest = Math.max(tallest, button.getHeight());
+            for (MaterialButton button : buttons) {
+                if (tallest > 0 && button.getMinimumHeight() < tallest) {
+                    for (MaterialButton each : buttons) {
+                        each.setMinHeight(tallest);
+                        each.setMinimumHeight(tallest);
+                    }
+                    break;
+                }
+            }
+        });
         TileGrid grid = new TileGrid(root, buttons, columns);
         for (int i = 0; i < buttons.size(); i++)
             grid.setOn(i, i < on.length && on[i]);
