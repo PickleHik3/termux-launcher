@@ -539,3 +539,11 @@ Agent
 - 2026-10-26 · Both directions as a fling, a slow drag and a spring-back: no flash on the first frame (the leaving stack's picture takes over from the live stack) and none at landing (the picture is dropped and the stack re-dressed in one frame) · pong.
 - 2026-10-26 · Home → Workspace: no reflow or scroll jump after arrival; the terminal is laid out at its keyboard-up size before it shows · pong.
 - 2026-10-26 · Stack transition, both directions: the glass edge and the pane rims fade with the terminal text, never text without an edge · pong.
+
+## Fix batch (2026-10-26 night, after 898eaa163)
+- 2026-10-26 · 38a68469e · A pre build (versionName with "-pre") on a fresh install: the welcome choice sheet shows, no tour card ever does; Settings › Replay tour still works · emu.
+- 2026-10-26 · 5b14d637b · Font scale 1.3, light and dark: extra keys editor caps "HOME" and "CTRL" read whole; the Edit key sheet's On tap chip reads "ESC"; the Display label hint reads whole; the Home-locked notice shows two whole lines; a row of long-named caps never grows past the screen · emu.
+- 2026-10-26 · d6ee66a88 · Settings › Linux apps › Configure › Input with the guide not run: Auto keyboard is greyed with "Set up Linux apps first"; after the guide's copy and fcitx5 installed it enables · emu.
+- 2026-10-26 · d6ee66a88 · Calendar widget on dark glass: today's disc is visible and the digit reads; on light glass and a bright-primary scheme the primary disc is kept · emu, pong.
+- 2026-10-26 · 898eaa163 · Keyboard popup: a hold in a key gap, on a key's outer 4 dp, on the side margins, the bottom strip and the top band opens the popup; a hold on a key's centre still repeats or shows alternates; a quick tap on a key's outer 4 dp still types; the toolbar row and the keyboard height are unchanged; the same on the Floating keyboard · emu, pong.
+- 2026-10-26 · f8b7497f9 · Workspace, A–Z Pull tab on the right and on a bottom row: the tab rests at the same y after three drags and after a Home → Workspace swipe; it never covers `~ $` or the line ends · emu.

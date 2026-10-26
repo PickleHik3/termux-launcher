@@ -295,3 +295,7 @@ cut the developer works this list or accepts what is left (recorded as in
 - 2026-10-26 · Halves dressed alike under Slide: keyboard timing unchanged from the 09-27/28 calls · pong.
 - 2026-10-26 · Home-only swipes, Peek, the drawer, reduced motion and Animation speed off: unchanged · pong.
 - 2026-10-26 · Perfetto: first-frame cost of the stack picture (trace section Wall.stackPicture) and memory while a crossing runs; below Android 10 the old dip runs · pong.
+
+## Fix batch (2026-10-26 night)
+- 2026-10-26 · f8b7497f9 · The slimmer A–Z Pull tab (about 15 dp) is still easy to grab with a thumb · pong.
+- 2026-10-26 · 898eaa163 · Holding Backspace or a key's edge no longer repeats; is the 4 dp band the right size in the hand? · pong.
