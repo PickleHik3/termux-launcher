@@ -393,4 +393,82 @@ public class StackLayoutTest {
         assertEquals(0, StackLayout.restReservationPx(
             rest(committedTo(Side.HOME, 1f), Side.HOME)));
     }
+
+    // ---- the Peek glass card under Floating (DockPlacement) ----
+
+    /** Home in {@code design}, Floating or Docked, its apps alone along the bottom. */
+    private static Snapshot homeIn(DockStyle design, boolean floating, boolean searchField) {
+        Half home = Half.builder(HOME).floating(floating).dockHeightScale(1.95f)
+            .design(design).searchField(searchField).build();
+        return device(home, half(WINDOW, false)).rows(Side.HOME).arrangement(HOME)
+            .fieldReveal(searchField ? 1f : 0f).build();
+    }
+
+    /** A pass on Home: the dock over its grid, the keyboard and the IME's lift as given. */
+    private static StackLayout.Input home(Snapshot s, boolean keyboardShown, int imeLiftPx) {
+        StackLayout.Input in = new StackLayout.Input(s);
+        in.toolbarShown = true;
+        in.keyboardShown = keyboardShown;
+        in.keyboardHeightPx = keyboardShown ? KEYBOARD : 0;
+        in.imeLiftPx = imeLiftPx;
+        in.dockOverlays = true;
+        return in;
+    }
+
+    @Test
+    public void aFloatingPeekCardStandsFlushOnTheScreensEdge() {
+        StackLayout.Result peek = run(home(homeIn(DockStyle.PEEK_GLASS, true, false), false, 0));
+        StackLayout.Result tray = run(home(homeIn(DockStyle.GLASS_TRAY, true, false), false, 0));
+        assertTrue("the Floating tray keeps its gap", tray.stackEdgeGapPx > 0);
+        assertEquals(tray.dock.capsuleBottomGapPx, tray.stackEdgeGapPx);
+        assertEquals("the card rises from the edge, as it does Docked", 0, peek.stackEdgeGapPx);
+        assertEquals(0, peek.bottomMarginPx);
+        // Its rows are the Floating ones: only the placement is Docked.
+        assertTrue(peek.dock.capsule);
+        assertEquals(tray.dockContentHeightPx, peek.dockContentHeightPx);
+        // The grid ends above the rows alone, the gap the dock no longer keeps given back.
+        assertEquals(tray.homeGridDockReservePx - tray.stackEdgeGapPx,
+            peek.homeGridDockReservePx);
+    }
+
+    @Test
+    public void whereTheCardCannotStandTheFloatingTrayKeepsItsGap() {
+        Snapshot peek = homeIn(DockStyle.PEEK_GLASS, true, false);
+        StackLayout.Result tray = run(home(homeIn(DockStyle.GLASS_TRAY, true, false), false, 0));
+        int gap = tray.stackEdgeGapPx;
+        assertEquals("the keyboard up", gap, run(home(peek, true, 0)).stackEdgeGapPx);
+        StackLayout.Result lifted = run(home(peek, false, LIFT));
+        assertEquals("lifted over the system keyboard", gap, lifted.stackEdgeGapPx);
+        assertEquals(gap + LIFT, lifted.bottomMarginPx);
+        assertEquals("the Search field under the row", gap,
+            run(home(homeIn(DockStyle.PEEK_GLASS, true, true), false, 0)).stackEdgeGapPx);
+        StackLayout.Input away = home(peek, false, 0);
+        away.toolbarShown = false;
+        StackLayout.Result awayResult = run(away);
+        assertEquals("the dock away: the content keeps the gap the dock would", gap,
+            awayResult.contentEdgeGapPx);
+    }
+
+    @Test
+    public void dockedPeekIsFlushAsItAlwaysWas() {
+        assertEquals(0, run(home(homeIn(DockStyle.PEEK_GLASS, false, false), false, 0))
+            .stackEdgeGapPx);
+        assertEquals(0, run(home(homeIn(DockStyle.PEEK_GLASS, false, false), true, 0))
+            .stackEdgeGapPx);
+    }
+
+    @Test
+    public void aFloatingPeekHalfRestsAsAPassLaysItOut() {
+        Snapshot s = homeIn(DockStyle.PEEK_GLASS, true, false);
+        DockLayout rest = DockGeometry.compute(s.restOf(Side.HOME));
+        for (boolean keyboardShown : new boolean[] {false, true}) {
+            StackLayout.RestInput in = new StackLayout.RestInput(s, Side.HOME);
+            in.toolbarShown = true;
+            in.keyboardShown = keyboardShown;
+            in.keyboardHeightPx = keyboardShown ? KEYBOARD : 0;
+            assertEquals("keyboard " + (keyboardShown ? "up" : "down"),
+                run(home(s, keyboardShown, 0)).homeGridDockReservePx,
+                StackLayout.restGridDockReservePx(in, rest));
+        }
+    }
 }

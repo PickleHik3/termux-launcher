@@ -25,11 +25,7 @@ public final class PeekRimDrawable extends InsetDrawable {
         super(rim, Math.max(0, insetLeft), Math.max(0, insetTop), Math.max(0, insetRight), 0);
     }
 
-    /**
-     * The rim placed on {@code card} in a host {@code hostWidthPx} wide, down to the host's
-     * bottom: past it Docked (the rim handed in leaves its bottom edge open), at it Floating, where
-     * the card's lower edge is the host's and the rim handed in runs all the way round.
-     */
+    /** The rim cut to {@code card} in a host {@code hostWidthPx} wide, its bottom edge open. */
     @NonNull
     public static PeekRimDrawable forCard(@NonNull Drawable rim, @NonNull PeekGlassGeometry.Card card,
                                           int hostWidthPx) {

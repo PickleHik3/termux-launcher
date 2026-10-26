@@ -6,7 +6,9 @@ import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockGeometry.Side;
 import com.termux.app.dock.DockLayout;
+import com.termux.app.dock.DockPlacement;
 import com.termux.app.dock.DockRows;
+import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.UnderKeyboardBand;
 
 /**
@@ -122,7 +124,7 @@ public final class StackLayout {
                 : in.dock.toBuilder().squeezePx(0).build();
             DockLayout probe = geometry.layout(unsqueezed);
             // The stack wears the Style of the half whose rows it stands, from its arrangement.
-            Base base = new Base(probe, in.dock.rowsHalf().floating, in.dock.arrangement,
+            Base base = new Base(probe, in.dock.rowsHalf(), in.dock.arrangement,
                 in.toolbarShown, in.keyboardShown, in.imeLiftPx);
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
@@ -197,6 +199,13 @@ public final class StackLayout {
      * What a pass and a half's rest build the same way, from the dock they measure: the shared
      * edge gap and the IME's lift under the stack, whether bands stand under the keyboard and the
      * air they keep there, and the dock's content (its rows, the status band and that air).
+     *
+     * <p>The edge gap is the dock's placement's ({@link DockPlacement#floats}): the half's Style,
+     * except that a standing Peek glass card is flush with the screen's edge under Floating too.
+     * Whether the card stands is read off the facts the activity reads it from: the half's
+     * design, the layout the stack stands, the dock shown, the keyboard, the IME's lift and the
+     * Search field in the dock measured here. A joined Docked frame is not asked: under Floating
+     * none stands, and Docked the dock is flush whatever the card does.</p>
      */
     private static final class Base {
         final int edgeGapPx;
@@ -206,10 +215,14 @@ public final class StackLayout {
         final boolean bandsUnderKeyboard;
         final int airPx;
 
-        Base(@NonNull DockLayout dock, boolean roundedDockStyle,
+        Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
              int imeLiftPx) {
-            edgeGapPx = ChromePolicy.bottomEdgeGapPx(roundedDockStyle, dock.capsuleBottomGapPx);
+            boolean peekCardStands = DockPlacement.peekCardStands(
+                DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
+                keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0);
+            edgeGapPx = ChromePolicy.bottomEdgeGapPx(
+                DockPlacement.floats(half.floating, peekCardStands), dock.capsuleBottomGapPx);
             lifted = toolbarShown || keyboardShown;
             marginPx = (lifted ? imeLiftPx : 0) + edgeGapPx;
             bandsUnderKeyboard = toolbarShown
@@ -294,7 +307,7 @@ public final class StackLayout {
     public static int restReservationPx(@NonNull RestInput in) {
         DockGeometry.Half half = in.dock.half(in.side);
         DockLayout rest = DockGeometry.compute(in.dock.restOf(in.side));
-        Base base = new Base(rest, half.floating, half.layout, in.toolbarShown, in.keyboardShown,
+        Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
             in.imeLiftPx);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
@@ -313,7 +326,7 @@ public final class StackLayout {
      */
     public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
         DockGeometry.Half half = in.dock.half(in.side);
-        Base base = new Base(rest, half.floating, half.layout, in.toolbarShown, in.keyboardShown,
+        Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
             in.imeLiftPx);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
