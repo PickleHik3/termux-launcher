@@ -1456,6 +1456,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             normalizeLauncherStartIn(value), false);
     }
 
+    /** Use as, {@code home} or {@code terminal}; anything else (or nothing stored) is Home. */
+    @NonNull
+    public String getUseAs() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_USE_AS, TERMUX_APP.DEFAULT_USE_AS, true);
+        return TERMUX_APP.USE_AS_TERMINAL.equals(value) ? TERMUX_APP.USE_AS_TERMINAL
+            : TERMUX_APP.USE_AS_HOME;
+    }
+
+    public void setUseAs(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_USE_AS,
+            TERMUX_APP.USE_AS_TERMINAL.equals(value) ? TERMUX_APP.USE_AS_TERMINAL
+                : TERMUX_APP.USE_AS_HOME, false);
+    }
+
     @NonNull
     private static String normalizeLauncherStartIn(@Nullable String value) {
         if (TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value))

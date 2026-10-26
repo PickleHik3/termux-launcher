@@ -320,6 +320,17 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
 
         /**
+         * Use as: the launcher is the phone's Home screen ({@code home}: Home pages, widgets and
+         * the Workspace) or the terminal only ({@code terminal}: no Home page, no Home settings,
+         * no Home in Start in). Asked on the welcome sheet's first page; an install that never
+         * answered is Home screen. Independent of whether the app is the system's home app.
+         */
+        public static final String KEY_USE_AS = "use_as";
+        public static final String USE_AS_HOME = "home";
+        public static final String USE_AS_TERMINAL = "terminal";
+        public static final String DEFAULT_USE_AS = USE_AS_HOME;
+
+        /**
          * The palette gesture on Home: the keyboard swipe up from a Home page's bottom edge opens
          * the command palette with the keyboard ({@code swipe_up}, the default), or nothing
          * ({@code off}).

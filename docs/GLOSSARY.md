@@ -292,8 +292,17 @@ opens one fresh shell window, or Display, the **display window**, which holds on
 display starts with the launcher (choosing it turns that on; turning it off falls back to the
 Workspace when a terminal window is open, else Home). It is also what the page overview's home
 button sets: a Home page, the first terminal window or the display window. It replaces the usage
-mode's Terminal alone.
+mode's Terminal alone. Under **Use as** Terminal only it offers Terminal and Display, and a stored
+Home reads as the Workspace.
 _Avoid_: default place, start page, usage mode
+
+**Use as**:
+Home screen (the default) or Terminal only, asked on the welcome sheet's first page and kept in
+Settings › General › Launcher beside **Start in** (`use_as`, policy in `UseAs`). Terminal only takes
+the Home page off the wall, hides Home's settings, drops Home from Start in and removes the Home
+card and both Match rows; the home press lands on the Workspace. Whether the app is the phone's
+home app is a separate choice.
+_Avoid_: usage mode, launcher mode, terminal alone
 
 **Search field**:
 The field under the dock's apps row that opens the command palette, there when the layout turns it
