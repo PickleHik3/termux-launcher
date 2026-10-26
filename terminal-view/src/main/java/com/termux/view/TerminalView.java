@@ -136,6 +136,13 @@ public final class TerminalView extends View {
     private boolean mTerminalSizeUpdatesPaused;
     private boolean mTerminalSizeUpdatePending;
     /**
+     * Pixels at the top of this view that the text keeps clear of while the view's own bounds (and
+     * the glass behind it) still reach there: the camera's band when Full screen lifts the pane to
+     * the screen's top edge (FullScreenCornerPolicy). The rows are counted in what is left below
+     * it and the grid is centred there; zero everywhere else, which is exactly the old layout.
+     */
+    private int mTextTopInsetPx;
+    /**
      * The pane wall's slide moves the keyboard over or off this view's bottom edge while the grid
      * keeps its rows until the settle (ADR 0003). From {@link #beginTravelDisplacement} to the
      * resize that ends it, the grid is drawn from where it stood when the travel began — the
@@ -3166,7 +3173,8 @@ public final class TerminalView extends View {
         }
         // Set to 80 and 24 if you want to enable vttest.
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
-        int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
+        int newRows = rowsFor(viewHeight, mTextTopInsetPx, mRenderer.mFontLineSpacingAndAscent,
+            mRenderer.mFontLineSpacing);
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
             reflowed = true;
             logSessionResize(newColumns, newRows, cause);
@@ -3528,6 +3536,44 @@ public final class TerminalView extends View {
             new Handler(Looper.getMainLooper()).post(
                 () -> updateSize(allowZeroHeightOnResume, resumeCause));
         }
+    }
+
+    /**
+     * Keeps the text {@code px} below this view's top edge (see {@link #mTextTopInsetPx}): fewer
+     * rows, the grid centred in what is left, touches mapped through the same offset. A change
+     * resizes the session at once, or, while size updates are paused, with the pending resize the
+     * resume delivers, so a hold covering the move that asked for it lands both in one pass.
+     */
+    public void setTextTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == mTextTopInsetPx) return;
+        mTextTopInsetPx = inset;
+        retireScrollCache();
+        updateSize(false, "text-inset");
+        invalidate();
+    }
+
+    /** The text's top inset now; see {@link #setTextTopInsetPx}. */
+    public int getTextTopInsetPx() {
+        return mTextTopInsetPx;
+    }
+
+    /**
+     * The rows a view {@code heightPx} tall holds below a text inset of {@code topInsetPx}: what
+     * the session is sized to. Never fewer than four.
+     */
+    static int rowsFor(int heightPx, int topInsetPx, int spacingAndAscentPx, int lineSpacingPx) {
+        int usable = heightPx - Math.max(0, topInsetPx);
+        return Math.max(4, (usable - spacingAndAscentPx) / lineSpacingPx);
+    }
+
+    /**
+     * How far down a grid of {@code contentPx} is drawn in a view {@code heightPx} tall with a text
+     * inset of {@code topInsetPx}: past the inset, then centred in what is left below it.
+     */
+    static int verticalContentOffsetPx(int heightPx, int topInsetPx, int contentPx) {
+        int inset = Math.max(0, topInsetPx);
+        return inset + centredSlackPx(heightPx - inset, contentPx);
     }
 
     /** Resume a cached, currently hidden pane without delivering its stale detached geometry. */
@@ -4182,6 +4228,10 @@ public final class TerminalView extends View {
      * the pane down to a whole number of rows ({@code TermuxActivity}'s flush padding) the
      * leftover is zero and nothing moves at all.
      *
+     * <p>A text top inset ({@link #setTextTopInsetPx}) is added first and the leftover is split in
+     * what is left below it, so the draw offset, {@link #getCursorY} and {@link #getPointY} all
+     * keep clear of it through this one number.
+     *
      * <p>The first row's cells start a further {@code mFontLineSpacingAndAscent} down from here
      * (the renderer's ascent allowance); the frame around this view counts that as clearance the
      * top edge already has.
@@ -4192,7 +4242,7 @@ public final class TerminalView extends View {
         }
         int contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
             + mRenderer.mFontLineSpacingAndAscent;
-        return centredSlackPx(getHeight(), contentHeight);
+        return verticalContentOffsetPx(getHeight(), mTextTopInsetPx, contentHeight);
     }
 
     /**

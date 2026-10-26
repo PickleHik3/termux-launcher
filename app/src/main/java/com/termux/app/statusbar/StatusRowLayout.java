@@ -67,6 +67,34 @@ public final class StatusRowLayout extends LinearLayout {
         return mKeepOut;
     }
 
+    /**
+     * The window was laid out. The row reads where it stands only in its own layout pass, and a
+     * pane that moves under it (Full screen hiding the system bar lifts the status pane from under
+     * it to the screen's top) leaves the row's own frame as it was, so that pass never comes: the
+     * row would keep the answer it had below the bar and run into the corners and the camera.
+     * Asked after every window layout, it lays itself out again only when the answer moved.
+     */
+    private final android.view.ViewTreeObserver.OnGlobalLayoutListener mWindowLaidOut =
+        this::onWindowLaidOut;
+
+    @VisibleForTesting
+    void onWindowLaidOut() {
+        if (!mHaveSpecs || isLayoutRequested()) return;
+        if (!currentKeepOut().equals(mKeepOut)) requestLayout();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnGlobalLayoutListener(mWindowLaidOut);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        getViewTreeObserver().removeOnGlobalLayoutListener(mWindowLaidOut);
+        super.onDetachedFromWindow();
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         mWidthSpec = widthMeasureSpec;

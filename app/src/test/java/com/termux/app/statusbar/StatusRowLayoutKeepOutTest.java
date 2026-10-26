@@ -107,4 +107,42 @@ public class StatusRowLayoutKeepOutTest {
         assertEquals(mStrip.getRight(), mReading.getLeft());
         assertEquals(W - 57 - 30, mReading.getRight());
     }
+
+    /**
+     * Full screen on the developer's phone (pong, 1080 × 2412, corners 115px, camera box
+     * 454..540 × 0..126, 4dp at 2.625 = 11px air): the system bar hides and the pane holding the
+     * row moves up from under it to the screen's top. The row's own frame inside the pane does not
+     * change, so nothing lays the row out again; it must still find the corners it now runs into.
+     */
+    @Test public void aRowWhosePaneMovesUpUnderTheCornersStepsItsEndsIn() {
+        int w = 1080;
+        int h = 2412;
+        FrameLayout pane = new FrameLayout(mWindow.getContext());
+        FrameLayout.LayoutParams paneParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 90);
+        paneParams.topMargin = 126;
+        mWindow.addView(pane, paneParams);
+        pane.addView(mRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 90));
+        mRow.setScreenKeepOut(new StatusRowKeepOut.Screen(true, 454, 0, 540, 126, 126,
+            115f, 115f, 115f, 115f, StatusRowKeepOut.Mode.AUTO, 0, 0, 11));
+        layoutWindow(w, h);
+        assertTrue(mRow.keepOut().isNone());
+
+        // The bars hide: only the pane's place in the window changes.
+        paneParams.topMargin = 0;
+        pane.setLayoutParams(paneParams);
+        layoutWindow(w, h);
+        mRow.onWindowLaidOut();
+        layoutWindow(w, h);
+
+        assertEquals(new StatusRowKeepOut.Answer(115, 115, 454 - 11, 540 + 11), mRow.keepOut());
+        assertEquals(115, mStrip.getLeft());
+        assertEquals(w - 115 - 30, mReading.getRight());
+    }
+
+    private void layoutWindow(int w, int h) {
+        mWindow.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+        mWindow.layout(0, 0, w, h);
+    }
 }

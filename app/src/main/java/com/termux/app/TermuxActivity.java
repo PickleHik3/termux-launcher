@@ -3666,8 +3666,97 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshAzTabTextInsets();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            applyPaneHostOutline(paneHost, innerRadiusPx);
+        }
+    }
+
+    /** The pane host's inner radius the frame last asked for; negative until it has. */
+    private float mPaneHostInnerRadiusPx = -1f;
+    /** The pane host's outline while Full screen raises its top corners to the screen's. */
+    private final com.termux.app.chrome.ChromeShapeOutlineProvider mPaneHostScreenTopOutline =
+        new com.termux.app.chrome.ChromeShapeOutlineProvider();
+
+    /**
+     * The pane host's outline: its own rounded rect, or, when Full screen leaves its top inside
+     * the screen's top corners' band ({@link #fullScreenPaneTopRadiusPx}), the same card with its
+     * top corners curving with the screen's, as the keyboard's bottom does. Only the outline;
+     * a per-corner clip needs a path outline, so Android 13 and later.
+     */
+    private void applyPaneHostOutline(@NonNull View paneHost, float innerRadiusPx) {
+        mPaneHostInnerRadiusPx = innerRadiusPx;
+        float top = fullScreenPaneTopRadiusPx(paneHost);
+        if (Build.VERSION.SDK_INT < 33 || top <= innerRadiusPx) {
             setOutlineIfChanged(paneHost, innerRadiusPx > 0f
                 ? paneHostRoundedOutlineProvider(innerRadiusPx) : ViewOutlineProvider.BOUNDS, true);
+            return;
+        }
+        boolean changed = mPaneHostScreenTopOutline.setClip(
+            com.termux.app.chrome.LiveChromeShape.atLeast(
+                com.termux.app.chrome.LiveChromeShape.cardClip(innerRadiusPx), top, 0f));
+        if (paneHost.getOutlineProvider() != mPaneHostScreenTopOutline)
+            paneHost.setOutlineProvider(mPaneHostScreenTopOutline);
+        else if (changed)
+            paneHost.invalidateOutline();
+        mPaneHostScreenTopOutline.follow(paneHost);
+        if (!paneHost.getClipToOutline()) paneHost.setClipToOutline(true);
+    }
+
+    /**
+     * The screen's top radius the pane host's top corners take, or 0: only in Full screen with
+     * the status row hidden, when the host's top stands inside the top corners' band.
+     */
+    private float fullScreenPaneTopRadiusPx(@NonNull View paneHost) {
+        if (!panesReachScreenTop() || paneHost.getHeight() <= 0) return 0f;
+        float screen = Math.max(mDisplayCornerRadiiPx[0], mDisplayCornerRadiiPx[1]);
+        int[] origin = new int[2];
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(paneHost, origin, new int[2]);
+        return com.termux.app.chrome.FullScreenCornerPolicy.topCornerRadiusPx(true, 0f,
+            origin[1], screen);
+    }
+
+    /** Whether Full screen may lift the panes to the screen's top: the status row hidden. */
+    private boolean panesReachScreenTop() {
+        if (mProperties == null || !mProperties.isUsingFullScreen()) return false;
+        View row = findViewById(R.id.terminal_status_row);
+        return row == null || !row.isShown();
+    }
+
+    /** The top edge's camera box (window px) and its safe top inset; null / 0 with none. */
+    @Nullable private Rect mTopCutoutHole;
+    private int mTopCutoutSafeTopPx;
+    /** Whether {@link #syncPanesForScreenTop} follows every window layout yet; installed once. */
+    private boolean mPanesScreenTopFollowed;
+
+    /**
+     * Keeps each visible pane's text clear of the camera ({@link
+     * com.termux.app.chrome.FullScreenCornerPolicy#paneTextTopInsetPx}) and the pane host's top
+     * corners with the screen's, after every window layout, so a pane Full screen lifts to the
+     * top reads the band on the pass that moved it. Outside Full screen every inset is 0 and the
+     * outline is the host's own. Compares first: a pane at rest costs a walk up its parents.
+     */
+    private void syncPanesForScreenTop() {
+        boolean active = panesReachScreenTop() && mTopCutoutHole != null
+            && mTopCutoutSafeTopPx > 0;
+        java.util.List<TerminalView> panes = mPaneController != null
+            ? mPaneController.getVisiblePaneViews()
+            : (mTerminalView == null ? java.util.Collections.emptyList()
+                : java.util.Collections.singletonList(mTerminalView));
+        int[] origin = new int[2];
+        int[] scratch = new int[2];
+        for (TerminalView pane : panes) {
+            if (pane == null) continue;
+            int inset = 0;
+            if (active && pane.getWidth() > 0) {
+                com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(pane, origin, scratch);
+                inset = com.termux.app.chrome.FullScreenCornerPolicy.paneTextTopInsetPx(true,
+                    origin[0], origin[1], origin[0] + pane.getWidth(), mTopCutoutHole.left,
+                    mTopCutoutHole.right, mTopCutoutSafeTopPx);
+            }
+            pane.setTextTopInsetPx(inset);
+        }
+        if (mPaneHostInnerRadiusPx >= 0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            View paneHost = findViewById(R.id.terminal_pane_host);
+            if (paneHost != null) applyPaneHostOutline(paneHost, mPaneHostInnerRadiusPx);
         }
     }
 
@@ -8473,11 +8562,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Clips the keyboard host to its shape. A card (Floating, or a floating keyboard under either
      * Style) is its own bounds rounded to Corners; a Docked keyboard is its slice of the frame.
      */
+    /**
+     * The keyboard's clip with its bottom corners curving with the screen's when Full screen puts
+     * the frame's bottom inside the bottom corners' band (FullScreenCornerPolicy); the clip as
+     * given otherwise. Only the outline: keys, chin and height stay where they are. Needs a path
+     * outline to clip, so Android 13 and later.
+     */
+    @Nullable
+    private com.termux.app.chrome.LiveChromeShape.Clip fullScreenKeyboardClip(
+            @NonNull View surfaceHost, @Nullable com.termux.app.chrome.LiveChromeShape.Clip clip) {
+        if (Build.VERSION.SDK_INT < 33 || mProperties == null || !mProperties.isUsingFullScreen()
+            || surfaceHost.getHeight() <= 0) return clip;
+        int windowHeight = getWindow().getDecorView().getHeight();
+        int[] origin = new int[2];
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
+        int bottom = origin[1] + surfaceHost.getHeight() + (clip == null ? 0 : clip.reachBottom);
+        float screen = Math.max(mDisplayCornerRadiiPx[2], mDisplayCornerRadiiPx[3]);
+        float own = clip == null ? 0f : Math.min(clip.bottomLeft, clip.bottomRight);
+        float raised = com.termux.app.chrome.FullScreenCornerPolicy.bottomCornerRadiusPx(true,
+            own, bottom, windowHeight, screen);
+        if (raised <= own) return clip;
+        return com.termux.app.chrome.LiveChromeShape.atLeast(clip == null
+            ? com.termux.app.chrome.LiveChromeShape.cardClip(0f) : clip, 0f, raised);
+    }
+
+    /** The keyboard's clip before Full screen raised its bottom corners. */
+    @Nullable private com.termux.app.chrome.LiveChromeShape.Clip mKeyboardBaseClip;
+    /** The window-layout listener that re-reads the raise as the keyboard moves; once per host. */
+    @Nullable private View mKeyboardCornerFollowed;
+
+    /**
+     * Re-reads the Full screen raise after every window layout, so a keyboard that moved (its
+     * stack, the chin, a rise) curves with the screen on that pass rather than the next material
+     * pass. Compares before it touches the outline, so a keyboard at rest costs one walk up.
+     */
+    private void followKeyboardForScreenCorners(@NonNull View surfaceHost) {
+        if (mKeyboardCornerFollowed == surfaceHost) return;
+        mKeyboardCornerFollowed = surfaceHost;
+        surfaceHost.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (surfaceHost.getOutlineProvider() != mKeyboardOutline) return;
+            if (mKeyboardOutline.setClip(fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip)))
+                surfaceHost.invalidateOutline();
+        });
+    }
+
     private void applyInAppKeyboardSurfaceClip(@NonNull View surfaceHost, boolean capsule,
                                                float cornerRadiusPx) {
-        boolean changed = mKeyboardOutline.setClip(capsule
+        mKeyboardBaseClip = capsule
             ? com.termux.app.chrome.LiveChromeShape.cardClip(cornerRadiusPx)
-            : chromeClipOf(KEYBOARD_PIECES));
+            : chromeClipOf(KEYBOARD_PIECES);
+        boolean changed = mKeyboardOutline.setClip(
+            fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip));
+        followKeyboardForScreenCorners(surfaceHost);
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
         else if (changed)
@@ -10044,9 +10180,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ({@link com.termux.app.statusbar.StatusRowKeepOut}); these insets are the window's, since
      * the content view they arrive on starts at the window's origin.
      */
+    /** The screen's corner radii, top-left, top-right, bottom-left, bottom-right; 0 unknown. */
+    @NonNull private float[] mDisplayCornerRadiiPx = new float[4];
+
     private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
         View row = findViewById(R.id.terminal_status_row);
-        if (!(row instanceof com.termux.app.statusbar.StatusRowLayout)) return;
         // The top edge's box: Android's rects that touch it, joined. A side cutout in landscape
         // stands off the top edge, so it is never one.
         Rect hole = null;
@@ -10072,6 +10210,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         }
+        // Kept for the frames Full screen brings to the screen's edges (FullScreenCornerPolicy).
+        mDisplayCornerRadiiPx = radii;
+        mTopCutoutHole = hole;
+        mTopCutoutSafeTopPx = cutout == null ? 0 : cutout.getSafeInsetTop();
+        if (!mPanesScreenTopFollowed) {
+            mPanesScreenTopFollowed = true;
+            getWindow().getDecorView().getViewTreeObserver()
+                .addOnGlobalLayoutListener(this::syncPanesForScreenTop);
+        }
+        syncPanesForScreenTop();
         int topBand = insetsCompat.getInsetsIgnoringVisibility(Type.statusBars()).top;
         com.termux.app.statusbar.StatusRowKeepOut.Mode mode = mPreferences == null
             ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
@@ -10081,12 +10229,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : Math.round(dpToPx(mPreferences.getStatusBarCutoutCenter()));
         int customWidth = mPreferences == null ? 0
             : Math.round(dpToPx(mPreferences.getStatusBarCutoutWidth()));
-        ((com.termux.app.statusbar.StatusRowLayout) row).setScreenKeepOut(
+        com.termux.app.statusbar.StatusRowKeepOut.Screen screen =
             new com.termux.app.statusbar.StatusRowKeepOut.Screen(hole != null,
                 hole == null ? 0 : hole.left, hole == null ? 0 : hole.top,
                 hole == null ? 0 : hole.right, hole == null ? 0 : hole.bottom, topBand,
                 radii[0], radii[1], radii[2], radii[3], mode, customCentre, customWidth,
-                Math.round(dpToPx(com.termux.app.statusbar.StatusRowKeepOut.GAP_MARGIN_DP))));
+                Math.round(dpToPx(com.termux.app.statusbar.StatusRowKeepOut.GAP_MARGIN_DP)));
+        // The window bar reads the same answer for where it stands, but only in Full screen: with
+        // the system bar showing it never reaches the camera's band, and stays as it always was.
+        View windowBar = findViewById(R.id.terminal_window_bar);
+        if (windowBar instanceof com.termux.app.terminal.TerminalWindowBar)
+            ((com.termux.app.terminal.TerminalWindowBar) windowBar).setScreenKeepOut(
+                mProperties != null && mProperties.isUsingFullScreen() ? screen : null);
+        if (!(row instanceof com.termux.app.statusbar.StatusRowLayout)) return;
+        ((com.termux.app.statusbar.StatusRowLayout) row).setScreenKeepOut(screen);
     }
 
     /**
