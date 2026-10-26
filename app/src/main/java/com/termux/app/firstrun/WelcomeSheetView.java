@@ -37,15 +37,17 @@ import com.termux.app.notice.TerminalDress;
 import com.termux.app.statusbar.WeatherGeocoder;
 import com.termux.app.statusbar.WeatherPlaceSearchView;
 import com.termux.app.tour.CoachButtons;
+import com.termux.app.wall.UseAs;
 
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The first-run setup sheet: a bottom sheet over the live home screen with a switch per thing the
- * launcher can turn on, the city search the weather switch reveals, the models the offline voice
- * and AI switch downloads, and the two ways into the run.
+ * The first-run setup sheet: a bottom sheet over the live home screen. Its first page asks how the
+ * launcher is used (Home screen or Terminal only, two choices and Continue); its second has a
+ * switch per thing the launcher can turn on, the city search the weather switch reveals, the
+ * models the offline voice and AI switch downloads, and the two ways into the run.
  *
  * <p>It decides nothing — {@link WelcomeSheet} does — and it is built once and then only bound, so
  * a switch keeps its own motion and a city half typed keeps its text and its keyboard while
@@ -58,6 +60,12 @@ public final class WelcomeSheetView extends FrameLayout {
 
     /** What the sheet's controls mean; the host applies them. */
     public interface Callbacks {
+        /** A choice on the first page was tapped. */
+        void onUseAsChosen(@NonNull UseAs useAs);
+
+        /** The first page's Continue. */
+        void onUseAsContinue();
+
         void onRowSwitched(@NonNull WelcomeSheet.Row row, boolean on);
 
         void onChooseModelsTapped();
@@ -107,6 +115,11 @@ public final class WelcomeSheetView extends FrameLayout {
     private static final int DIVIDER_ALPHA = 24;
     /** Every link holds a thumb's height even when its words are small. */
     private static final float LINK_TOUCH_DP = 48f;
+    /** A Use as choice's corner: the pill of the app's segment controls, on a two-line card. */
+    private static final float CHOICE_RADIUS_DP = 20f;
+    /** A Use as choice's outline, of the ink, and the accent's wash on the chosen one. */
+    private static final int CHOICE_OUTLINE_ALPHA = 60;
+    private static final int CHOICE_WASH_ALPHA = 28;
 
     private final float mDensity;
     private final TerminalDress mDress;
@@ -114,6 +127,13 @@ public final class WelcomeSheetView extends FrameLayout {
     private final LinearLayout mSheet;
     private final ScrollView mScroll;
     private final LinearLayout mRows;
+    /** The first page: the question and its two choices. */
+    private final LinearLayout mUseAsPage;
+    /** The second page: the title, the sentence and the rows. */
+    private final LinearLayout mSetupPage;
+    private final ActionButtonRow mUseAsButtons;
+    private final ActionButtonRow mSetupButtons;
+    private final Map<UseAs, LinearLayout> mChoices = new EnumMap<>(UseAs.class);
     private final Map<WelcomeSheet.Row, MaterialSwitch> mSwitches =
         new EnumMap<>(WelcomeSheet.Row.class);
     private final Map<WelcomeSheet.Row, TextView> mSubtitles =
@@ -165,23 +185,39 @@ public final class WelcomeSheetView extends FrameLayout {
         kicker.setText(R.string.tour_card_kicker);
         singleLine(kicker);
         content.addView(kicker, matchWrap(0));
+
+        mUseAsPage = new LinearLayout(context);
+        mUseAsPage.setOrientation(LinearLayout.VERTICAL);
+        TextView question = text(context, 22f, true, mDress.textColor);
+        question.setText(R.string.use_as_question);
+        mUseAsPage.addView(question, matchWrap(dp(4)));
+        mUseAsPage.addView(choice(context, UseAs.HOME, R.string.use_as_home,
+            R.string.use_as_home_summary), matchWrap(dp(16)));
+        mUseAsPage.addView(choice(context, UseAs.TERMINAL, R.string.use_as_terminal,
+            R.string.use_as_terminal_summary), matchWrap(dp(10)));
+        content.addView(mUseAsPage, matchWrap(0));
+
+        mSetupPage = new LinearLayout(context);
+        mSetupPage.setOrientation(LinearLayout.VERTICAL);
         TextView title = text(context, 22f, true, mDress.textColor);
         title.setText(R.string.welcome_sheet_title);
-        content.addView(title, matchWrap(dp(4)));
+        mSetupPage.addView(title, matchWrap(dp(4)));
         TextView intro = text(context, 13f, false,
             ColorUtils.setAlphaComponent(mDress.textColor, BODY_ALPHA));
         intro.setLineSpacing(0f, 1.25f);
         intro.setText(R.string.welcome_sheet_intro);
-        content.addView(intro, matchWrap(dp(4)));
+        mSetupPage.addView(intro, matchWrap(dp(4)));
         View divider = new View(context);
         divider.setBackgroundColor(ColorUtils.setAlphaComponent(mDress.textColor, DIVIDER_ALPHA));
         LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, Math.round(mDensity)));
         dividerParams.topMargin = dp(14);
-        content.addView(divider, dividerParams);
+        mSetupPage.addView(divider, dividerParams);
         mRows = new LinearLayout(context);
         mRows.setOrientation(LinearLayout.VERTICAL);
-        content.addView(mRows, matchWrap(dp(4)));
+        mSetupPage.addView(mRows, matchWrap(dp(4)));
+        mSetupPage.setVisibility(GONE);
+        content.addView(mSetupPage, matchWrap(0));
 
         // The rows scroll inside the sheet rather than pushing its buttons off a short screen, a
         // large font scale, or a screen the city search's keyboard has taken half of.
@@ -195,15 +231,23 @@ public final class WelcomeSheetView extends FrameLayout {
         mSheet.addView(mScroll, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        ActionButtonRow buttons = new ActionButtonRow(context);
-        buttons.setPadding(dp(20), dp(8), dp(20), 0);
+        mUseAsButtons = new ActionButtonRow(context);
+        mUseAsButtons.setPadding(dp(20), dp(8), dp(20), 0);
+        mUseAsButtons.addView(CoachButtons.primary(context, R.string.use_as_continue, mAccent,
+            onAccent(), view -> { if (mCallbacks != null) mCallbacks.onUseAsContinue(); }));
+        mSheet.addView(mUseAsButtons, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        mSetupButtons = new ActionButtonRow(context);
+        mSetupButtons.setPadding(dp(20), dp(8), dp(20), 0);
         TextView skip = link(context, R.string.welcome_sheet_skip_tour,
             view -> { if (mCallbacks != null) mCallbacks.onSkipTheTour(); });
-        buttons.setLeading(skip);
+        mSetupButtons.setLeading(skip);
         TextView showMe = CoachButtons.primary(context, R.string.welcome_sheet_show_me_around,
             mAccent, onAccent(), view -> { if (mCallbacks != null) mCallbacks.onShowMeAround(); });
-        buttons.addView(showMe);
-        mSheet.addView(buttons, new LinearLayout.LayoutParams(
+        mSetupButtons.addView(showMe);
+        mSetupButtons.setVisibility(GONE);
+        mSheet.addView(mSetupButtons, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         mSheetBottomPadding = dp(18);
         mSheet.setPadding(0, 0, 0, mSheetBottomPadding);
@@ -245,6 +289,7 @@ public final class WelcomeSheetView extends FrameLayout {
         }
         mBinding = true;
         try {
+            bindPage(sheet);
             for (WelcomeSheet.Row row : sheet.rows()) {
                 MaterialSwitch toggle = mSwitches.get(row);
                 if (toggle != null && toggle.isChecked() != sheet.isOn(row))
@@ -312,6 +357,60 @@ public final class WelcomeSheetView extends FrameLayout {
         int sheetBottom = bottom - top;
         mSheet.layout(sheetLeft, sheetBottom - mSheet.getMeasuredHeight(),
             sheetLeft + sheetWidth, sheetBottom);
+    }
+
+    // ---- the first page ------------------------------------------------------------------------
+
+    /**
+     * One of the first page's two choices: its name over its sentence, on a card that wears the
+     * accent's outline and wash while chosen. The whole card is the target.
+     */
+    @NonNull
+    private View choice(@NonNull Context context, @NonNull UseAs useAs, @StringRes int titleRes,
+                        @StringRes int summaryRes) {
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(12), dp(16), dp(12));
+        card.setMinimumHeight(dp(LINK_TOUCH_DP));
+        TextView name = text(context, 15f, true, mDress.textColor);
+        name.setText(titleRes);
+        singleLine(name);
+        card.addView(name, matchWrap(0));
+        TextView sentence = text(context, 12.5f, false, mDress.subTextColor);
+        sentence.setLineSpacing(0f, 1.2f);
+        sentence.setText(summaryRes);
+        card.addView(sentence, matchWrap(dp(2)));
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setOnClickListener(view -> { if (mCallbacks != null) mCallbacks.onUseAsChosen(useAs); });
+        dressChoice(card, false);
+        mChoices.put(useAs, card);
+        return card;
+    }
+
+    /** A choice's card, chosen or not; the chosen one is announced as selected. */
+    private void dressChoice(@NonNull LinearLayout card, boolean chosen) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(CHOICE_RADIUS_DP));
+        shape.setColor(chosen ? ColorUtils.setAlphaComponent(mAccent, CHOICE_WASH_ALPHA)
+            : Color.TRANSPARENT);
+        shape.setStroke(Math.max(1, Math.round(mDensity * (chosen ? 2f : 1f))), chosen ? mAccent
+            : ColorUtils.setAlphaComponent(mDress.textColor, CHOICE_OUTLINE_ALPHA));
+        card.setBackground(shape);
+        card.setSelected(chosen);
+    }
+
+    /** Shows the page the sheet is on, and which choice the first page holds. */
+    private void bindPage(@NonNull WelcomeSheet sheet) {
+        boolean first = sheet.page() == WelcomeSheet.Page.USE_AS;
+        setShown(mUseAsPage, first);
+        setShown(mUseAsButtons, first);
+        setShown(mSetupPage, !first);
+        setShown(mSetupButtons, !first);
+        for (Map.Entry<UseAs, LinearLayout> entry : mChoices.entrySet()) {
+            boolean chosen = entry.getKey() == sheet.useAs();
+            if (entry.getValue().isSelected() != chosen) dressChoice(entry.getValue(), chosen);
+        }
     }
 
     // ---- the rows ------------------------------------------------------------------------------
