@@ -233,6 +233,12 @@ compatible with AGP 8.13.2; the code targets Java 11.
 Smallest proof that the change works, then stop. Run the tests you touched; run the module suite
 before you hand work over. CI owns the rest.
 
+- **Reproduce before you fix.** A bug fix starts from the failing state reproduced in your tree:
+  a failing test, a measured value, a log line, a screenshot. No reproduction, no fix; report what
+  you tried instead. A fix on a plausible cause ships a regression test for the wrong cause
+  (2026-10-26: one ink bug was "fixed" four times before a reproduction showed a missing
+  permission).
+
 - **Unit tests.** JUnit 4, Robolectric where Android behaviour is needed, AndroidX Test for
   instrumentation. Tests sit beside their module in `src/test/java` / `src/androidTest/java`,
   mirror the production package, and end in `Test`. Bug fixes ship with a focused regression test.
@@ -241,15 +247,24 @@ before you hand work over. CI owns the rest.
   test *name lists* against a clean worktree**, never counts.
   `TerminalIOPreferencesDataStoreLazyModeTest` is a known order-dependent flake (static singleton
   in `TerminalIOPreferencesFragment`) — it passes alone.
-- **Emulator first, for anything visual.** The Android emulator is the test platform. If your
-  host has an emulator skill or driver, use it rather than re-deriving the setup; drive the app
-  through Mobilerun Portal where the host provides it. The non-negotiables: an AVD such as
+- **The developer's phone is the truth for layout and motion; the emulator is for throwaway
+  shots.** Width, font scale, wallpaper and permissions differ on the phone, and the emulator
+  cannot judge motion. When the developer has allowed the phone for a named piece of work, a build
+  goes on it after the skeleton and after each wave, not at the end (2026-10-26: six waves were
+  emulator-checked before the first phone build; the phone showed clipped tiles and wrong ink the
+  emulator never did). The emulator stays the platform for screenshots and drivable checks when
+  the phone is not offered. If your host has an emulator skill or driver, use it rather than
+  re-deriving the setup; drive the app through Mobilerun Portal where the host provides it. The
+  non-negotiables: an AVD such as
   `tl16`, `-gpu angle_indirect` (the default swiftshader segfaults on this app's blur), stop the
   Gradle daemon first on a small host, install the **x86_64** split, and always pass
   `-s emulator-5554` — if qemu dies, adb silently falls back to the phone.
-- **Device checks run through the `device-checker` agent** where the host has one: it gets the
-  user-facing summary and the `device-checks.md` items, never the diff, and reports pass or fail
-  with crops. Take the device's lease for the whole session, and batch pong items into one ask.
+- **Batched functional checks run through the `device-checker` agent** where the host has one:
+  it gets the user-facing summary and the `device-checks.md` items, never the diff, and reports
+  pass or fail with crops. **Visual work is seen by whoever read the diff:** the session that
+  merges opens the before/after shots itself and says so in the merge; a checker's "passed" is a
+  claim, not a check. Take the device's lease for the whole session, and batch pong items into one
+  ask.
   This launcher becomes the emulator's home screen when installed: set the stock launcher back
   as home before you hand the emulator over. Swap checks (stable → drop → stable) still need
   release builds of both, which install over each other because every build shares one signing key.
