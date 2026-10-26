@@ -14,6 +14,9 @@ The kitty source links point to commit
 are relative to the repo root. Anything marked **(inference)** is my reading and has no source.
 Anything marked **(unverified)** was not checked.
 
+Community side (shader collections, r/KittyTerminal threads, reported problems):
+[kitty-shaders-community-research.md](kitty-shaders-community-research.md).
+
 ## 0. Answer in brief
 
 - **The feature exists and is named what you'd expect.** kitty 0.49.0 (2026-09-21) shipped

@@ -80,6 +80,19 @@ public class KeyboardOverlayPolicyTest {
 
     /** The widget grid is laid against fixed cells; a keyboard that took room would re-cut it. */
     @Test
+    public void leavingTheDisplayForATerminalWindowChangesTheContentsRoom() {
+        PlaceLayout layout = layout(KeyboardMode.OVERLAY);
+        // The display window going off the Workspace without a slide: the terminal must get
+        // its room back from the floating keyboard, and the way back must float it again.
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PaneWallPage.DISPLAY,
+            PaneWallPage.TERMINAL, layout));
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PaneWallPage.TERMINAL,
+            PaneWallPage.DISPLAY, layout));
+        assertFalse(KeyboardOverlayPolicy.changesBetween(PaneWallPage.DISPLAY,
+            PaneWallPage.WIDGETS, layout));
+    }
+
+    @Test
     public void theHomePlaceFloatsTheKeyboardWhateverIsStored() {
         PlaceLayoutStore store = store();
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
@@ -280,5 +293,42 @@ public class KeyboardOverlayPolicyTest {
         int stackPx = dockPx + (keyboardShown ? keyboardPx : 0);
         return KeyboardOverlayPolicy.contentHeightPx(availablePx,
             KeyboardOverlayPolicy.contentReservationPx(stackPx, marginPx, overlapPx));
+    }
+
+    /**
+     * Moved from the Home chrome policy's test: the dock and the keyboard take no room from the
+     * grid on Home (its dock overlays the page), up or down.
+     */
+    @Test
+    public void onAHomePageTheChromeTakesNoRoomWithTheKeyboardUpOrDown() {
+        int dock = 120;
+        int keyboard = 600;
+        int margin = 8;
+        assertEquals(0, KeyboardOverlayPolicy.restReservationPx(true, dock, 0, false, true,
+            keyboard, margin));
+        assertEquals(0, KeyboardOverlayPolicy.restReservationPx(true, dock, 0, true, true,
+            keyboard, margin));
+        // A window's dock takes its room; its keyboard takes room too unless it floats.
+        assertEquals(dock + margin, KeyboardOverlayPolicy.restReservationPx(false, dock, 0, false,
+            false, keyboard, margin));
+        assertEquals(dock + keyboard + margin, KeyboardOverlayPolicy.restReservationPx(false,
+            dock, 0, true, false, keyboard, margin));
+        assertEquals("the old signature is a window's", dock + margin,
+            KeyboardOverlayPolicy.restReservationPx(dock, 0, true, true, keyboard, margin));
+    }
+
+    /** The geometry pass's overlap: the whole stack on Home, the keyboard's share elsewhere. */
+    @Test
+    public void theContentReachesUnderTheWholeStackOnAHomePage() {
+        int stack = 720;
+        int margin = 8;
+        int overlap = KeyboardOverlayPolicy.overlapPx(true, stack, margin, 600);
+        assertEquals(stack + margin, overlap);
+        assertEquals("nothing is reserved", 0,
+            KeyboardOverlayPolicy.contentReservationPx(stack, margin, overlap));
+        assertEquals("with the keyboard down too", 0, KeyboardOverlayPolicy.contentReservationPx(
+            120, margin, KeyboardOverlayPolicy.overlapPx(true, 120, margin, 0)));
+        assertEquals(600, KeyboardOverlayPolicy.overlapPx(false, stack, margin, 600));
+        assertEquals(0, KeyboardOverlayPolicy.overlapPx(false, stack, margin, 0));
     }
 }

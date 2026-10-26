@@ -72,11 +72,15 @@ done <<EOF
 $rows
 EOF
 
-# Side by side when it fits, stacked when it does not, and no box on a sliver of a pane.
+# Side by side when it fits, stacked when it does not, and no box on a sliver of a pane. The
+# stacked box spans the terminal, so a narrow pane or a Home widget is not left with an empty
+# strip on the right; it never grows past the side-by-side box, which takes over from there.
 wide=$((2 + cw + 3 + dw + 2))
 tall=$((2 + dw + 4))
 if [ $((wide + 2)) -le "$cols" ]; then inner=$wide
-elif [ $((tall + 2)) -le "$cols" ]; then inner=$tall
+elif [ $((tall + 2)) -le "$cols" ]; then
+  inner=$((cols - 2))
+  [ $inner -gt $wide ] && inner=$wide
 else inner=0
 fi
 

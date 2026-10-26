@@ -52,6 +52,16 @@ public final class LauncherNotificationBadgeStore {
         return packageName != null && activePackages.contains(packageName);
     }
 
+    /** Active badgeable notifications across {@code packages}, for a count badge. */
+    public static int countFor(@NonNull Set<String> packages) {
+        if (packages.isEmpty()) return 0;
+        int count = 0;
+        for (String packageName : ACTIVE_BADGE_KEYS.values()) {
+            if (packages.contains(packageName)) count++;
+        }
+        return count;
+    }
+
     @NonNull
     public static Set<String> getActivePackages() {
         return activePackages;

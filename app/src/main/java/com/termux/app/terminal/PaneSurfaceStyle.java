@@ -17,7 +17,7 @@ public interface PaneSurfaceStyle {
     /**
      * True while the border preference is on: every place's frame wears a line — the slab's lit
      * rim on glass, the plain stroke otherwise — in every mode, so the border drag that pages the
-     * wall ({@code wall/BorderDrag}) has the same target on the Widgets and Display pages as on
+     * wall ({@code wall/BorderDrag}) has the same target on the Widgets page and the display window as on
      * the terminal. Off, the pages wear a rim only as part of their glass.
      */
     default boolean paneBorderEnabled() { return false; }
@@ -138,4 +138,12 @@ public interface PaneSurfaceStyle {
      * recycled while a slab holds it, as for the frame itself.
      */
     @Nullable default android.graphics.Bitmap paneGlassClearFrame() { return null; }
+
+    /**
+     * The Look's own glass, Base's values rather than this surface's, which Home's widgets wear
+     * whatever a detached surface does; null where nothing supplies one. Carried here so it rides
+     * the pass that dresses the wall's pages, and so a Look change re-dresses them
+     * ({@link PaneStyleKey}).
+     */
+    @Nullable default com.termux.app.chrome.LookGlassStyle lookGlass() { return null; }
 }

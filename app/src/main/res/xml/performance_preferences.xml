@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Battery & performance: what makes the launcher lighter on a weak phone. Every key is the one it
-     always was. The Terminal page keeps its own Terminal effect row; both write the same
-     preference. Summaries here are the rows' normal ones: the fragment says why a row is greyed. -->
+     always was. Terminal's Text & display page keeps its own Terminal effect row and Home its own
+     Wallpaper parallax row; each pair writes the same preference. Summaries here are the rows'
+     normal ones: the fragment says why a row is greyed. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 

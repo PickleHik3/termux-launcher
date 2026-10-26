@@ -1,23 +1,23 @@
 # The Linux display
 
-The launcher can show a Linux desktop or any X11 app beside the terminal, as the **Display**
-place of the pane wall. Reach it by swiping left along the terminal's top or bottom border, or by
-tapping the screen glyph at the status bar's right edge. The display server
-runs in your shell like any other command, so everything you know from Termux:X11 (its flags, its
-preferences, `pkill termux-x11`) works the same way. This page is the short route from switching it
-on to running a desktop in a proot.
+The launcher can show a Linux desktop or any X11 app in a **display window**: a window of the
+Workspace, in the row with your terminal windows, that shows one X display whole. The display's own window
+manager arranges the apps inside it. The display server runs in your shell like any other command,
+so everything you know from Termux:X11 (its flags, its preferences, `pkill termux-x11`) works the
+same way. This page is the short route from installing the pieces to running a desktop in a proot.
 
-## Turn it on
+There is nothing to switch on. The display starts when something asks for it: a Linux app tapped in
+the app drawer, the **Display** entry under **Linux apps**, or `termux-x11` run from a shell. Its
+window joins the end of your row, like a new window, and leaves when the display stops. There is
+one display window at most. (Older versions had a Display place on the wall, a Display switch in
+Settings, and a screen mark at the status bar's edge; the display window replaces all three.)
 
-1. Switch the display on. The Display place exists only while the display is on, so do it in one
-   of three ways:
-   - **Settings → Display → Display**;
-   - **Settings → Launcher mode → Terminal + Home + Display** ("Also run Linux desktop apps");
-   - the card on first run that asks how you will use the launcher.
+## Set it up
 
-   The Display place appears at once, and the `termux-x11` and `termux-x11-preference` commands
-   are put in your `$PREFIX/bin` so a display can be started from any shell.
-2. Install the keyboard layouts the server needs:
+The launcher puts the `termux-x11` and `termux-x11-preference` commands in your `$PREFIX/bin`, so a
+display can be started from any shell.
+
+1. Install the keyboard layouts the server needs:
 
    ```sh
    pkg install x11-repo
@@ -26,21 +26,16 @@ on to running a desktop in a proot.
 
    On a pacman-based install the X11 repository is already configured, so `pacman -S
    xkeyboard-config` is all it takes; on the VAJ edition skip the first line, its repository has
-   the package directly. Until the layouts are installed the Display place says so and the Start
-   button is hidden.
-3. Start a display from any shell:
+   the package directly. Until the layouts are installed the display window says so.
+2. Open the bare display with **Display** under **Linux apps** in the app drawer, or start one from
+   any shell:
 
    ```sh
    termux-x11 :0 &
    export DISPLAY=:0
    ```
 
-   or tap **Start display** on the Display place, which runs the same command.
-4. Run something: `pkg install xorg-xeyes && xeyes`. Drag to the Display place to see it.
-
-Switching the display off takes the Display place off the wall and the two commands back out of
-`$PREFIX/bin`. If a display is running you are asked first: **Stop** closes its apps and the
-server, **Leave it running** only takes the place away.
+3. Run something: `pkg install xorg-xeyes && xeyes`. It shows in the display window.
 
 If you already have the `termux-x11-nightly` package installed, the launcher leaves its
 `termux-x11` alone and tells you so. That package can only talk to the separate Termux:X11 app;
@@ -48,51 +43,56 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 
 ## Every day
 
-- **Move between places** by swiping left or right anywhere on the status bar, or by tapping the
-  place icons peeking in from its edges. Where the wall rests is where the home screen comes back
-  to. **Go to Widgets**, **Go to Terminal** and **Go to Display** are actions like any other:
-  put one on the extra-keys row from its editor, on the in-app keyboard as a `tool:wall.display`
-  key, or bind it in your keybinds file (`map ctrl+alt+shift+d wall.display`); see
-  [Custom keybindings](Custom_Keybindings.md). Scripts keep `wall.go page=…`.
+- **Get to it** like any window: drag along the Workspace from a window's border, or tap its chip
+  in the status bar. Hold its chip and drag it to move the display window to another place in the
+  row, as you would any window. Opening a Linux app or **Display** again brings it in front, and
+  moves it into the session you are in if another session's row holds it. In the sessions drawer,
+  **Displays** lists each
+  display with the apps open on it; tap an app to bring it to the front. **Go to Display** is an
+  action like any other: put it on the extra-keys row from its editor, on the in-app keyboard as a
+  `tool:wall.display` key, or bind it in your keybinds file
+  (`map ctrl+alt+shift+d wall.display`); see [Custom keybindings](Custom_Keybindings.md).
 - **Typing.** The launcher's keyboard and its extra-keys row type into the display while it is
   showing, and a hardware keyboard is the display's entirely: every key and every chord goes to
   X, and the launcher's shortcuts and their hints stay out of the way. Leave the display by
-  touch, by the place icons, or with Home.
+  touch, by a window chip, or with the home button.
 - **One clipboard.** Copy in an app on the display and the text is on the phone's clipboard,
   ready to paste anywhere; copy anywhere on the phone and it is there for the display's apps.
   The keyboard's copy, cut, paste, select all, undo and redo keys do on the display what they do
   on a desktop, the paste key on the extra-keys row pastes into the display rather than behind
   it, and **Fn** with the paste key types the text out instead, for an app that has its own idea
-  of what Ctrl+V means. The two sides share by default; **Settings → Display → Input → Share the
+  of what Ctrl+V means. The two sides share by default; **Settings → Linux apps → Input → Share the
   clipboard** keeps them apart.
-- **Switching apps.** The keyboard's window actions work on the display's apps: swipe the space
-  bar from its top corners (**Next window** at the top right, **Previous window** at the top
-  left) to step through the apps the status bar lists, in the same order as its chips. The same
-  actions on the extra-keys row, a key chord or `launcherctl` do the same while the Display place
-  is up.
+- **Switching.** The display window is one of your windows, so **Next window** and **Previous
+  window** (the space bar's top corners, the extra-keys row, a key chord, `launcherctl`) step from
+  it to the windows beside it and back, as from any window. Over the display the status bar keeps
+  your windows' chips, with the display's own selected and wearing its front app's icon. To bring
+  one of the display's apps forward, tap it under **Displays** in the sessions drawer, or use the
+  display's own window manager.
 - **The keyboard follows text fields.** Tapping a text field on the
   display brings the keyboard up and tapping elsewhere puts it down; see
   [The keyboard follows text fields](#the-keyboard-follows-text-fields).
-- **The keyboard floats.** In either orientation the keyboard comes up over the display instead of
-  squeezing it, so the picture keeps the size it was given and nothing on it moves as you type,
-  whether the keyboard came up from a text field or by hand. The touchpad's keyboard mode button,
-  shown on the pad while the keyboard is docked, switches the orientation you are in to making room
-  for the keyboard instead, and back. **Settings → Display → Input → Keyboard over display** makes
-  the same choice for both orientations at once. An older build could have saved Resize for portrait
-  without your choosing it; this release puts Overlay back once, and the button or that setting
-  switches it again.
+- **The keyboard floats.** In either orientation the keyboard comes up over the display instead
+  of squeezing it, so the picture keeps the size it was given and nothing on it moves as you type,
+  whether the keyboard came up from a text field or by hand. To make room for the keyboard
+  instead, press the keyboard mode button on the touchpad (shown on the pad while the keyboard is
+  docked); it switches the orientation the phone is in, and each orientation keeps its own. If an
+  older version left the display making room in portrait without you choosing it, the update
+  puts it back to floating once; the same button switches it back.
+  Settings → Linux apps → Input → Keyboard over the window switches both orientations
+  at once.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
-  terminal pane: power starts, stops or turns on the display, and the cog opens its settings. A
+  terminal pane: power starts or stops the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
   anywhere else to put them away.
-- **Touch.** **Settings → Display → Input → Touch** says what a finger on the display does.
-  **Touchscreen** is the tablet: fingers are touches, so a page scrolls, pinches, drags and
+- **Touch.** **Settings → Linux apps → Input → Touch** says what a finger on the display does.
+  **Touch** is the tablet (taps land where you touch): fingers are touches, so a page scrolls, pinches, drags and
   long-presses where you put them, and an app written for a touchscreen behaves as it would on
   one. Apps that only understand a mouse still get taps and drags as clicks. The keyboard follows
   text fields in this mode, and pinching zooms what is on the display rather than the picture of
-  it; use the scale rail for that. **Trackpad** turns the whole display into a laptop touchpad
-  for apps that want a pointer and nothing else. **Direct touch** sends the same touches as
-  Touchscreen, without the launcher's keyboard and pinch behaviour on top. Apps started from the
+  it; use the scale rail for that. **Trackpad** (drag to move the pointer, tap to click) turns the whole display into a laptop touchpad
+  for apps that want a pointer and nothing else. **Direct** (every touch goes straight to the app) sends the same touches as
+  Touch, without the launcher's keyboard and pinch behaviour on top. Apps started from the
   drawer are told to take touch, so Firefox needs no setup.
 - **Mouse mode.** The **Mouse mode** action (on the extra-keys row, the in-app keyboard as a
   `tool:mouse.toggle` key, or a chord) swaps the keyboard for a touchpad of the same size while
@@ -115,25 +115,28 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   or in front of mouse mode's touchpad. With no such keyboard up it goes back inside the app on
   the display instead, the way the button does everywhere else on the phone. A keyboard you opened
   yourself stays where it is.
-- **Stop** from the long-press menu on the display. Every app on it is asked to close itself first,
-  the way it would when you close its window, and the display goes once they have. `pkill
+- **Stop** from the long-press menu on the display, or close the display window from its chip's
+  ×. Every app on it is asked to close itself first, the way it would when you close its window,
+  and the display and its window go once they have; with an app open you are asked before that.
+  A display that has not started yet simply closes. `pkill
   termux-x11` stops it outright instead, without giving apps that chance. The display never starts
   on its own unless you turn on **Start with the launcher**.
-- **The display survives switching away.** Your X apps keep running while you are on the
-  terminal or the widget grid; only the picture is put away.
-- **Options.** **Settings → Display** holds the **Display** switch and five pages. A running
-  display picks a change up at once.
-  - **Input**: **Touch**, **Use Android keyboard**, **OSK auto-show** and **Share the clipboard**.
+- **The display survives switching away.** Your X apps keep running while you are in a
+  terminal window or on Home; only the picture is put away.
+- **Options.** **Settings → Linux apps** holds them: its own rows, then four pages. A
+  running display picks a change up at once.
+  - On the page itself: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux
+    apps** and **Window manager**.
+  - **Input**: **Touch**, **Use Android keyboard**, **Keyboard pops up** and **Share the clipboard**.
   - **Resolution and scaling**: **Resolution**, **Scale**, **Fixed size** or **Custom size**,
     **Scaling** (filtering) and **Display density**.
-  - **Linux apps**: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux apps**,
-    **Window manager** and **Display badge**.
   - **Startup**: **Start with the launcher**, **Start command**, and **Connect new shells**
     (`DISPLAY` set in every new shell while a display runs).
-  - **Troubleshooting**: **Compatibility drawing** and **Swap colour channels**.
+  - **Fixes**: **Compatibility drawing** and **Swap colour channels**.
 
   Where the extra keys stand while the display is showing (along the bottom, or in a column on the
-  left or right edge) is in the Layout editor, opened on the display.
+  left or right edge) is the extra keys' **Position** on the Dock card, in Appearance opened on a
+  display window.
 - **Preferences from a shell.** `termux-x11-preference list` shows every setting;
   `termux-x11-preference touchMode:2` sets one, exactly as in Termux:X11, and the running
   display follows.
@@ -144,9 +147,9 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## The keyboard follows text fields
 
 Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
-again. It is on by default (**Settings → Display → Input → OSK auto-show**) and it works in every
-touch mode. A tap counts where its click lands: under your finger in Touchscreen and Direct touch,
-at the pointer in Trackpad.
+again. It is on by default (**Settings → Linux apps → Input → Keyboard pops up**) and it
+works in every touch mode. A tap counts where its click lands: under your finger in Touch and
+Direct, at the pointer in Trackpad.
 
 A keyboard you opened yourself is yours: it stays until you close it, and taps on the desktop
 never take it away. Only a keyboard that came up for a text field is put away for one.
@@ -170,14 +173,15 @@ inherits it).
 
 **Your input method's own focus.** Exact, and on by itself once fcitx5 is installed. fcitx5 knows
 when a text field takes focus and when it loses it, whether you tapped, pressed Tab, or a dialog
-put the cursor in its entry, and the launcher listens to it:
+put the cursor in its entry, and the launcher listens to it. **Set up Linux apps** installs it with
+the rest; by hand it is:
 
 ```sh
 pkg install fcitx5 fcitx5-gtk3 fcitx5-qt
 ```
 
-(`fcitx5-gtk4` and `fcitx5-gtk2` are there too, for apps on those toolkits.) Then turn the
-display off and on again. From then on, whenever the display starts:
+(`fcitx5-gtk4` and `fcitx5-gtk2` are there too, for apps on those toolkits.) Then stop the display
+and start it again. From then on, whenever the display starts:
 
 - a small helper, `termux-x11-im`, starts beside it, with a session bus of the display's own and
   fcitx5 on it. The helper stands in for fcitx5's virtual keyboard, so fcitx5 tells it when a
@@ -192,11 +196,8 @@ display's), and apps inside a proot container keep the pointer's shape for now. 
 what it did to `$PREFIX/tmp/termux-x11-im-bus-0.log`; it says `focus in` and `focus out` as it
 passes them on. This is not yet device-verified.
 
-This section is for the Termux edition. On the Nix edition the helper is not started yet; see
-[Exact text-field focus](Nix_Package_Management.md#exact-text-field-focus).
-
 **Once focus is heard, it decides.** From the first `focus in` or `focus out` that reaches the
-launcher while you are on the display, until you leave it or switch the setting off:
+launcher while you are on the display window, until you leave it or switch the setting off:
 
 - a field taking focus brings the keyboard up, tap or no tap;
 - a field losing focus puts it away 150 ms later, unless another field takes focus first, so
@@ -211,6 +212,9 @@ over taps. Under `adb logcat -s X11TextFocus` every decision names the signal be
 `focus in -> show`, `focus out -> hide in 150 ms`, `hide cancelled: focus in`,
 `tap over xterm ignored: no focus`.
 
+This section is for the Termux edition. On the Nix edition the helper is not started yet; see
+[Exact text-field focus](Nix_Package_Management.md#exact-text-field-focus).
+
 The helper sends the same two commands you can send from a shell yourself, so anything else that
 knows when a field takes focus can drive the keyboard too:
 
@@ -222,6 +226,46 @@ launcherctl keyboard hide --source focus
 They are read as a signal, not an order: on the display they go through the rules above, and
 elsewhere they simply open or close the keyboard. `--source manual` (the default) is you
 asking, which pins the keyboard until you put it down again.
+
+## Sound for Linux apps
+
+The launcher runs one PulseAudio server for everything: terminal sessions, Linux apps from the
+drawer and proot distros. It needs `pulseaudio`, which "Set up Linux apps" installs
+(`pkg install pulseaudio` does too), and two switches under **Settings › Terminal › Linux apps ›
+Audio** control it, both on by default.
+
+- **Sound.** The server starts with your first terminal or Linux app and keeps running when you
+  close them; it suspends its output when idle, so it costs next to nothing. It plays through
+  AAudio, or OpenSL ES on a phone where AAudio will not open. If it stops, it starts again at
+  once; after three stops within a minute it stays off and the page says so, until your next
+  terminal or Linux app.
+- **Media controls.** A Linux player that speaks MPRIS (kew, Firefox, VLC, mpv with its MPRIS
+  plugin and most desktop players) shows in Android's media controls: the notification, the lock
+  screen, Bluetooth buttons, and the launcher's own media widgets, with its title, artist and
+  local cover art. Play/pause, previous, next and seeking work when the player offers them. While
+  anything plays through the server, the launcher holds Android's audio focus: when another app
+  starts playing, Linux players pause (and resume after a short interruption such as a navigation
+  prompt), and sound from apps without MPRIS is muted, or lowered where Android allows it.
+
+How apps find the server: every terminal session and Linux app gets `PULSE_SERVER`; anything
+else in Termux (ssh, Termux:Widget, services) reads
+`$PREFIX/etc/pulse/client.conf.d/termux-launcher.conf`; and each proot distro gets
+`/etc/pulse/client.conf.d/termux-launcher.conf`, which points at `127.0.0.1:4713` with a copy of
+the server's cookie, so other apps on the phone cannot use it. The setup guide also installs
+ALSA's PulseAudio plugin in the distro and writes `/etc/asound.conf` (unless you have your own).
+Terminal sessions and Linux apps also get a session bus (`DBUS_SESSION_BUS_ADDRESS`) when the
+`dbus` package is installed; that bus is what media players announce themselves on.
+
+**Your own setup comes first.** If `~/.config/pulse` holds a configuration of yours
+(`client.conf`, `default.pa`, `daemon.conf` and the like), or a PulseAudio you started with options
+of your own is running, the launcher starts nothing and writes nothing, and the page says it is
+using your own setup. A server that an app merely started for itself, with no configuration, is
+replaced by the launcher's. You no longer need `pulseaudio --start` in your shell's startup files;
+with the launcher's server running it only prints that it refuses to start a second one.
+
+Turning **Sound** off stops the server and the bus at once and removes the launcher's drop-ins.
+With `fcitx5` installed, apps opened from the drawer in the Termux prefix join the display's own
+bus (it carries text-field focus), so a player among them does not show in the media controls.
 
 ## GPU acceleration for your apps
 
@@ -241,21 +285,25 @@ the proot's login shell). The launcher never sets these for you.
 
 The launcher can pick for you: `launcherctl x11 gpu` says which row fits this phone and what is
 installed, and `launcherctl x11 gpu --env` prints the exports to paste or `eval` (see
-[launcherctl](LauncherCtl.md#x11-gpu)). The same answer is under **Settings → Display → Linux apps
-→ Set up Linux apps → Graphics**: **Graphics acceleration** shows what the phone can do, and **Copy
-the graphics command** puts the install line and the exports for this phone on the clipboard.
+[launcherctl](LauncherCtl.md#x11-gpu)). You choose on **Settings → Linux apps → Set up
+Linux apps → Graphics acceleration**: the page lists every row that fits this phone with whether it
+is installed and its last benchmark score, and you pick one (**Automatic** follows the ranking
+above) or switch single apps to **Draw in software**. Where a chip is known to freeze with virgl
+(a Mali-G52 so far), the page says so and software is ranked first.
 
-Or let the phone decide by trying: **Benchmark graphics** on the same screen copies
-`termux-x11-gpu-setup`, which you paste into the terminal and run. It installs the drivers for
-every row that fits this phone, runs a short 3D test with each on a private display, keeps the one
-that really uses the GPU and is clearly faster than software, and removes the rest again. It explains each
+To let the phone decide by trying, tap **Run benchmark** on that page: it opens the terminal and
+runs `termux-x11-gpu-setup` (you can also run it yourself). It installs the drivers for every row
+that fits this phone, runs a short 3D test with each on a private display, keeps the fastest that
+really uses the GPU and is clearly faster than software, removes the rest again, and leaves every
+row's result for the page. The list of rows comes from the launcher (`launcherctl x11 gpu
+--table`), so the script and the page always agree. It explains each
 step as it goes, asks before installing anything, and writes what it decided to
 `~/.config/termux-launcher/x11-gpu.env`. With a Debian proot installed it repeats the test inside
 the container. `--keep` leaves every package in place, `--skip-proot` skips the container,
 `--yes` skips the question, and `--display=N` runs the tests on display `:N` (`:7` by default).
 
 Check what you got with `glmark2-es2` (from `x11-repo`): its first lines name the renderer, and
-the score with the Display place *showing* is the one that means anything; hidden, the server has
+the score with the display window *showing* is the one that means anything; hidden, the server has
 no surface and the number is meaningless.
 
 Mesa 26 picks its own path unless all three of `LIBGL_ALWAYS_SOFTWARE`, `GALLIUM_DRIVER` and
@@ -263,32 +311,36 @@ Mesa 26 picks its own path unless all three of `LIBGL_ALWAYS_SOFTWARE`, `GALLIUM
 
 ## Apps on the display
 
-With the display switched on, the Linux apps installed in your prefix appear in the app drawer
-beside your Android apps, with their own icons. Tapping one starts the display if it is not
-running, opens the app on it full size, and takes you to the Display place. Nothing to type.
-They can be pinned and searched like any other app. `pkg install firefox`, and Firefox is in the
+The Linux apps installed in your prefix appear in the app drawer under **Linux apps**, beside your
+Android apps, with their own icons. Tapping one starts the display if it is not running, opens the
+app on it full size, and opens or brings up the display window. Nothing to type. **Display**, in
+the same list, opens the bare display. They can be pinned and searched like any other app. `pkg install firefox`, and Firefox is in the
 drawer the next time you return to the launcher.
 
-Apps installed inside a distro are listed the same way, under **Linux Apps** in the drawer, and
+Apps installed inside a distro are listed the same way, under **Linux apps** in the drawer, and
 the launcher can set a distro up for you; see [Linux apps from a distro](Linux_Apps_From_A_Distro.md).
-An app whose menu entry asks for a terminal opens in a terminal pane rather than on the display.
+An app whose menu entry asks for a terminal opens in a new terminal window, right after the current
+one, rather than on the display.
 
 Two things make this work:
 
 - **The window manager.** The launcher starts `openbox` with the display (install it with
   `pkg install openbox`) for single apps, with a launcher-owned rule that maximises every window,
-  so windows open full size and dialogs stay on screen. **Settings → Display → Linux apps →
+  so windows open full size and dialogs stay on screen. **Settings → Linux apps →
   Window manager** is where another command goes, or an empty box for none. A whole desktop session brings its own
   window manager instead: openbox steps aside while the desktop runs and comes back once it closes.
   Windows fill the display to its rounded corners, as on any rounded desktop, so a terminal that
   wants its first and last cells clear of the arcs pads its own window (`window_padding_width` in
   kitty, `window.padding` in alacritty).
-- **Show Linux apps in drawer**, in **Settings → Display → Linux apps**, can be switched off if
+- **Show Linux apps in drawer**, in **Settings → Linux apps**, can be switched off if
   you would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table
-above for the profile whose packages are installed (other than `software`), so a GPU app is
-accelerated without any setup. After `termux-x11-gpu-setup`, only the winner's packages remain. The first time the display is turned on, the text size and touch mode are set to values
+above for the profile you picked, or on **Automatic** for the best profile whose packages are
+installed (other than `software`, except on a chip known to freeze), so a GPU app is accelerated
+without any setup. A profile that needs a helper (virgl's `virgl_test_server_android`) gets it
+started before the app, once, unless one is already running. A picked profile that is not
+installed draws in software, and you are told. After `termux-x11-gpu-setup`, only the winner's packages remain. The first time the display is used, the text size and touch mode are set to values
 that suit a phone; both can be changed afterwards.
 
 ## A desktop in a proot
@@ -301,6 +353,8 @@ proot-distro install archlinux
 termux-x11 :0 &
 proot-distro login archlinux --shared-x11 -e DISPLAY=:0
 ```
+
+On arm64 phones the Docker `archlinux` image is amd64-only; install Arch Linux ARM from the `menci/archlinuxarm` image instead (`proot-distro install menci/archlinuxarm --name archlinux`). The Linux apps setup does this for you.
 
 `--shared-x11` hands the container the socket directory and nothing else; `--shared-tmp` shares
 the whole temporary directory and works too. Neither is on by default. `DISPLAY` has to be passed

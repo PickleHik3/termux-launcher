@@ -393,7 +393,7 @@ nix-on-droid rollback
 Graphical Linux apps work on this edition, and they arrive the same way
 everything else does: name them in the config and switch. There is no
 `pkg install`, no extra repository, and nothing to copy from the
-launcher's **Setup GUI Apps** screen — that screen builds a command for the
+launcher's **Set up Linux apps** screen — that screen builds a command for the
 Termux edition's two routes, neither of which exists here.
 
 Add the app, and `xkeyboard-config` alongside it:
@@ -501,8 +501,8 @@ running types nothing.
 
 A few notes:
 
-- **Enable the display first.** **Settings → Display → Linux display**
-  turns it on. The Display place is where the apps open.
+- **Start the display first.** The display window is where the apps open; see
+  [The Linux display](X11_Display.md).
 - **Every switch is picked up on its own.** The store path changes each
   time; return to the launcher and the drawer is already right.
 - **Terminal programs with a menu entry** — `vim`, for instance, ships

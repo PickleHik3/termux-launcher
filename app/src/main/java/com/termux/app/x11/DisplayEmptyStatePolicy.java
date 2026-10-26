@@ -7,7 +7,7 @@ import com.termux.R;
 import com.termux.app.tour.TourEdition;
 
 /**
- * What the Display page's empty state says while no server is running: the plain "nothing
+ * What the display window's empty state says while no server is running: the plain "nothing
  * running" message, unless the setting is off or the server cannot even start yet, and whether
  * the start control is worth showing while that is true.
  *

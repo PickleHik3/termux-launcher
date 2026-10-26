@@ -444,9 +444,9 @@ public class GlassTiltTest {
         assertTrue(agsl.contains("bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;"));
         // Every tilt term sits behind its gate, and the resting expressions are untouched.
         int gate = agsl.indexOf("bool tilted =");
-        assertTrue(agsl.indexOf("tiltLean = clamp(-kTiltLean * dot(n, uTilt), -1.0, 1.0);") > gate);
+        assertTrue(agsl.indexOf("tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);") > gate);
         assertTrue(agsl.contains("        if (tilted) {\n"
-            + "            tiltLean = clamp(-kTiltLean * dot(n, uTilt), -1.0, 1.0);\n"
+            + "            tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n"
             + "            lean = lean + tiltLean;\n"
             + "        }\n"
             + "        lean = clamp(lean, -1.0, 1.0);\n"));
@@ -457,7 +457,7 @@ public class GlassTiltTest {
             + "            k = k * (1.0 + kTiltLight * tiltLean);\n"
             + "        }\n"));
         assertTrue(agsl.contains("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
-        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - n * pull;"));
+        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
         assertTrue(agsl.contains(
             "float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;"));
         // The face is moved before the finger's light, and takes one sample: no new eval.

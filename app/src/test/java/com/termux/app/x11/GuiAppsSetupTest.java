@@ -62,15 +62,57 @@ public class GuiAppsSetupTest {
     @Test public void termuxsX11RouteInstallsFcitx5ForTextFieldFocusAndVajsDoesNot() {
         for (Set<StarterApp> starters : java.util.Arrays.asList(ALL, NONE)) {
             String termux = command(Route.X11_REPO, Distro.DEBIAN, starters);
-            assertTrue(termux.contains(" fcitx5 fcitx5-gtk3 fcitx5-qt"));
+            assertTrue(termux.contains(" fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio"));
             assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
                 TourEdition.VAJ).contains("fcitx5"));
             assertFalse(command(Route.DISTRO, Distro.DEBIAN, starters).contains("fcitx5"));
         }
     }
 
+    @Test public void termuxsX11RouteInstallsPulseaudioForSoundAndVajsDoesNot() {
+        for (Set<StarterApp> starters : java.util.Arrays.asList(ALL, NONE)) {
+            assertTrue(command(Route.X11_REPO, Distro.DEBIAN, starters).contains(" pulseaudio"));
+            assertFalse(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
+                TourEdition.VAJ).contains("pulseaudio"));
+        }
+    }
+
+    @Test public void theDistroRouteAsksForTheSoundServerOnTheTermuxSideWithoutStoppingForIt() {
+        for (Distro distro : Distro.values()) {
+            String command = command(Route.DISTRO, distro, NONE);
+
+            assertTrue(distro.name(), command.contains(
+                "command -v pulseaudio >/dev/null 2>&1 || pkg install -y pulseaudio || true\n"));
+            assertTrue(command.indexOf("pkg install -y pulseaudio")
+                < command.indexOf("proot-distro login"));
+        }
+    }
+
+    @Test public void aDistroGetsAlsasPulseaudioPluginAndAnAsoundConfOnlyWhereNoneIsTheUsers() {
+        assertEquals("libasound2-plugins", Distro.DEBIAN.alsaPackages);
+        assertEquals("libasound2-plugins", Distro.UBUNTU.alsaPackages);
+        assertEquals("alsa-plugins libpulse", Distro.ARCH.alsaPackages);
+        for (Distro distro : Distro.values()) {
+            String inside = GuiAppsSetup.insideScript(distro, NONE);
+
+            for (String name : distro.alsaPackages.split(" ")) {
+                assertTrue(distro.name() + " " + name, inside.contains(" " + name));
+            }
+            assertTrue(inside.endsWith("if [ ! -e /etc/asound.conf ] || grep -q 'written by "
+                + "termux-launcher' /etc/asound.conf; then printf '%s' "
+                + GuiAppsSetup.singleQuote(GuiAppsSetup.ASOUND_CONF) + " > /etc/asound.conf; fi"));
+            assertTrue(inside.indexOf(distro.alsaPackages.split(" ")[0])
+                < inside.indexOf("/etc/asound.conf"));
+        }
+        assertTrue(GuiAppsSetup.ASOUND_CONF.startsWith("# written by termux-launcher"));
+        assertTrue(GuiAppsSetup.ASOUND_CONF.contains("\npcm.!default { type pulse }\n"));
+        assertTrue(GuiAppsSetup.ASOUND_CONF.contains("\nctl.!default { type pulse }\n"));
+        // It rides inside the single-quoted container script, so it must hold no quote itself.
+        assertFalse(GuiAppsSetup.ASOUND_CONF.contains("'"));
+    }
+
     @Test public void theX11RouteWithNothingTickedIsJustTheRepository() {
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio",
             command(Route.X11_REPO, Distro.DEBIAN, NONE));
     }
 
@@ -78,7 +120,7 @@ public class GuiAppsSetupTest {
         String command = command(Route.X11_REPO, Distro.DEBIAN,
             EnumSet.of(StarterApp.TEXT_EDITOR));
 
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt mousepad",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio mousepad",
             command);
     }
 
@@ -103,8 +145,18 @@ public class GuiAppsSetupTest {
             assertTrue(command.contains("pkg install -y openbox; }"));
             assertTrue(distro.name(), command.contains(
                 "[ -d \"$PREFIX/var/lib/proot-distro/containers/" + distro.alias
-                    + "/rootfs\" ] || proot-distro install " + distro.alias));
+                    + "/rootfs\" ] || " + GuiAppsSetup.installStep(distro)));
         }
+        assertEquals("proot-distro install debian", GuiAppsSetup.installStep(Distro.DEBIAN));
+        assertEquals("proot-distro install ubuntu", GuiAppsSetup.installStep(Distro.UBUNTU));
+    }
+
+    @Test public void archOnArm64ComesFromTheArchLinuxArmImageUnderTheSameName() {
+        String step = GuiAppsSetup.installStep(Distro.ARCH);
+
+        assertTrue(step.contains("if [ \"$(uname -m)\" = aarch64 ]; then\n"
+            + "proot-distro install menci/archlinuxarm --name archlinux\n"
+            + "else\nproot-distro install archlinux\nfi"));
     }
 
     @Test public void theDistroRouteAsksForANameAndWillNotTakeABadOne() {
@@ -326,7 +378,7 @@ public class GuiAppsSetupTest {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
         assertEquals("pkg install -y x11-repo && pkg install -y "
-                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt firefox pcmanfm mousepad xfce4-terminal",
+                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal",
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
     }
 

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The settings root, by the wall's halves (project-docs/active/settings-restructure-2026-10-19.md,
+     refiled by project-docs/active/appearance-and-settings-rework-2026-10-24.md §4): what you see on
+     Home and on the Terminal, then what holds everywhere, then the app itself. Every destination
+     row's page and section are mirrored in SettingsTree. Appearance is a door, not a page: its row
+     opens the Appearance editor (RootPreferencesFragment). -->
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <com.termux.app.fragments.settings.SettingsSearchPreference
@@ -6,122 +11,79 @@
         app:title="@string/settings_search_hint"
         app:persistent="false" />
 
-    <ListPreference
-        app:key="app_launcher_use_case_mode"
-        app:icon="@drawable/ic_symbol_stacks"
-        app:title="@string/settings_use_as_title"
-        app:dialogTitle="@string/settings_use_as_dialog_title" />
-
-    <PreferenceCategory app:key="root_personalization" app:title="@string/settings_root_personalization_header">
-
-        <!-- The Appearance page: fonts, theme, icons and keyboard look, with a row on top that
-             opens the live Appearance surface (wallpaper, Look, Layout) over the launcher. -->
-        <Preference
-            app:key="wallpaper_style"
-            app:icon="@drawable/ic_symbol_palette"
-            app:persistent="false"
-            app:title="@string/settings_destination_wallpaper_style"
-            app:summary="@string/settings_destination_wallpaper_style_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
+    <PreferenceCategory app:key="root_your_launcher" app:title="@string/settings_root_your_launcher_header">
 
         <Preference
-            app:key="launcher_apps"
+            app:key="home"
+            app:icon="@drawable/ic_symbol_home"
+            app:title="@string/settings_section_home"
+            app:summary="@string/settings_section_home_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.HomePreferencesFragment" />
+
+        <Preference
+            app:key="dock_drawer"
             app:icon="@drawable/ic_symbol_apps"
-            app:title="@string/settings_destination_launcher_apps"
-            app:summary="@string/settings_destination_launcher_apps_summary"
+            app:title="@string/settings_section_dock_drawer"
+            app:summary="@string/settings_section_dock_drawer_summary"
             app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
-
-        <Preference
-            app:key="status_bar"
-            app:icon="@drawable/ic_symbol_notifications"
-            app:title="@string/settings_destination_status_bar"
-            app:summary="@string/settings_destination_status_bar_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment" />
-
-        <Preference
-            app:key="notifications"
-            app:icon="@drawable/ic_symbol_notification_settings"
-            app:title="@string/settings_destination_notifications"
-            app:summary="@string/settings_destination_notifications_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="root_workspace" app:title="@string/settings_root_workspace_header">
 
         <Preference
             app:key="terminal"
             app:icon="@drawable/ic_symbol_terminal"
             app:title="@string/settings_destination_terminal"
-            app:summary="@string/settings_destination_terminal_summary"
+            app:summary="@string/settings_section_terminal_summary"
             app:fragment="com.termux.app.fragments.settings.termux.TerminalPreferencesFragment" />
+
+        <!-- Hidden in a build made without the X server (RootPreferencesFragment). -->
+        <Preference
+            app:key="linux_apps"
+            app:icon="@drawable/ic_symbol_desktop_windows"
+            app:title="@string/settings_terminal_sub_linux_apps_title"
+            app:summary="@string/settings_terminal_sub_linux_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="root_shared" app:title="@string/settings_root_shared_header">
+
+        <Preference
+            app:key="look"
+            app:icon="@drawable/ic_symbol_palette"
+            app:title="@string/settings_section_look"
+            app:summary="@string/settings_section_look_summary"
+            app:persistent="false" />
 
         <Preference
             app:key="keyboard_input"
             app:icon="@drawable/ic_symbol_keyboard"
             app:title="@string/settings_destination_keyboard_input"
-            app:summary="@string/settings_destination_keyboard_input_summary"
+            app:summary="@string/settings_section_keyboard_summary"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
 
         <Preference
-            app:key="display"
-            app:icon="@drawable/ic_symbol_desktop_windows"
-            app:title="@string/settings_destination_display"
-            app:summary="@string/settings_destination_display_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
+            app:key="notifications"
+            app:icon="@drawable/ic_symbol_notification_settings"
+            app:title="@string/settings_destination_notifications"
+            app:summary="@string/settings_section_notifications_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
 
         <Preference
             app:key="on_device_ai"
             app:icon="@drawable/ic_symbol_smart_toy"
             app:title="@string/settings_tai_service_title"
-            app:summary="@string/settings_destination_on_device_ai_summary"
+            app:summary="@string/settings_section_ai_summary"
             app:fragment="com.termux.app.fragments.settings.termux.TaiPreferencesFragment" />
 
     </PreferenceCategory>
 
-    <PreferenceCategory app:key="root_app" app:title="@string/settings_root_app_header">
+    <PreferenceCategory app:key="root_system" app:title="@string/settings_root_system_header">
 
         <Preference
-            app:key="performance"
-            app:icon="@drawable/ic_symbol_battery_saver"
-            app:title="@string/settings_destination_performance"
-            app:summary="@string/settings_destination_performance_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.PerformancePreferencesFragment" />
-
-        <Preference
-            app:key="app_behavior"
+            app:key="general"
             app:icon="@drawable/ic_symbol_tune"
-            app:title="@string/settings_destination_app_behavior"
-            app:summary="@string/settings_destination_app_behavior_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
-
-        <Preference
-            app:key="backup_restore"
-            app:icon="@drawable/ic_symbol_settings_backup_restore"
-            app:title="@string/settings_destination_backup_restore"
-            app:summary="@string/settings_destination_backup_restore_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.BackupRestorePreferencesFragment" />
-
-        <Preference
-            app:key="services_permissions"
-            app:icon="@drawable/ic_symbol_admin_panel_settings"
-            app:title="@string/settings_destination_services_permissions"
-            app:summary="@string/settings_destination_services_permissions_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.ServicesPermissionsPreferencesFragment" />
-
-        <Preference
-            app:key="advanced_diagnostics"
-            app:icon="@drawable/ic_symbol_bug_report"
-            app:title="@string/settings_destination_advanced_diagnostics"
-            app:summary="@string/settings_destination_advanced_diagnostics_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.AdvancedDiagnosticsPreferencesFragment" />
-
-        <Preference
-            app:key="about_support"
-            app:icon="@drawable/ic_symbol_info"
-            app:title="@string/settings_destination_about_support"
-            app:summary="@string/settings_destination_about_support_summary"
-            app:fragment="com.termux.app.fragments.settings.AboutSupportPreferencesFragment" />
+            app:title="@string/settings_section_general"
+            app:summary="@string/settings_section_general_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.GeneralPreferencesFragment" />
 
     </PreferenceCategory>
 

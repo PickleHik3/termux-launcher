@@ -270,3 +270,23 @@ acts, and the launcher answers.
   `dispatchKeyEventPreIme` reaches `handleKey` first and, for Back, `TouchInputHandler`'s
   `backButtonAction` would consume it before the page — so both routes now go through the same
   launcher method.
+
+## A headless server never announces itself (2026-10-24)
+
+Java only. `CmdEntryPoint.HEADLESS` is `TERMUX_X11_HEADLESS=1` in the server's environment (the
+generated `termux-x11` passes its environment straight to `app_process`). With it set, the
+instance `sendBroadcast()` the native knock listener calls, `sendBroadcastDelayed()` (which the
+native side calls once at start and which re-arms itself every second while unconnected), and the
+static `sendBroadcast(Intent)` for `ACTION_START` all return without broadcasting. The launcher
+adopts any server that announces itself, so the GPU benchmark's throwaway display used to take
+over the display window and tear it down when the benchmark stopped it.
+
+Nothing on the native start path waits for an activity: `start` spawns the server thread and
+returns, the screen starts at lorie's default 1280x1024 at 96 dpi, the root pixmap is allocated
+without a surface, DRI3 and GLX are on regardless, and `lorieRedraw` simply skips drawing while no
+surface is attached. X clients — glmark2 `--off-screen` among them — render as usual.
+
+One leftover: the native knock listener still binds its TCP port with `SO_REUSEPORT`, beside the
+user's own server, so a knock from the launcher's view can be delivered to the headless server and
+go unanswered. The user's server re-announces itself every second while unconnected anyway, so a
+lost knock only delays a connection. A merge must keep the three early returns.

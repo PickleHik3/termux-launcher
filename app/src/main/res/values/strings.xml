@@ -10,8 +10,47 @@
 <resources>
     <string name="widget_add">Add widget</string>
     <string name="widget_empty_hint">Long-press to add widgets</string>
-    <string name="widget_menu_edit_widgets">Edit widgets</string>
-    <string name="widget_menu_remove_page">Remove page</string>
+    <!-- Home's long-press sheet (HomeActionsSheet). -->
+    <string name="home_actions_title">Termux Launcher</string>
+    <string name="home_actions_close">Close</string>
+    <string name="home_actions_terminal">Terminal</string>
+    <string name="home_actions_add_widget">Add a widget</string>
+    <string name="home_actions_add_app">Add an app</string>
+    <!-- An app icon on a Home page: the drawer's long-press row, and the toast after either way in. -->
+    <string name="home_add_to_home">Add to home</string>
+    <string name="home_app_added">Added to Home page %1$d</string>
+    <!-- The card an app's "Add to home screen" or "Add widget" opens: what is being added, then
+         the one sentence that says what happens. -->
+    <string name="home_pin_title">Add to Home</string>
+    <string name="home_pin_add">Add to Home</string>
+    <string name="home_pin_size">%1$d × %2$d</string>
+    <string name="home_pin_locked">Home layout is locked.</string>
+    <string name="home_pin_unlock">Unlock and add</string>
+    <string name="home_pin_too_big">This widget is larger than Home.</string>
+    <string name="home_pin_added">Added to Home</string>
+    <string name="home_pin_added_new_page">Added to a new page</string>
+    <string name="home_pin_failed">Couldn’t add that to Home.</string>
+    <string name="home_pin_widget_added">Widget added</string>
+    <!-- The targets at the top of the screen while a Home icon or folder is dragged, the Home
+         icon's App menu row that does the same, and the notice after either, whose tap puts the
+         item back. -->
+    <string name="home_drop_remove">Remove</string>
+    <string name="home_remove_from_home">Remove from Home</string>
+    <string name="home_item_removed">Removed from Home</string>
+    <string name="home_item_removed_undo_hint">Tap to undo</string>
+    <string name="home_item_restore_failed">Couldn’t put it back</string>
+    <!-- A folder on a Home page: the name it takes when its first app has no label, and the row a
+         long press on one of its apps offers. -->
+    <string name="home_folder_default_name">Folder</string>
+    <string name="home_folder_remove_app">Remove from folder</string>
+    <string name="home_actions_add_page">Add a page</string>
+    <string name="home_actions_edit_pages">Edit pages</string>
+    <string name="home_actions_remove_page">Remove page</string>
+    <string name="home_actions_wallpaper">Wallpaper</string>
+    <string name="home_actions_appearance">Appearance</string>
+    <string name="home_actions_launcher_settings">Launcher settings</string>
+    <string name="home_actions_set_default_home">Set as default home app</string>
+    <string name="home_actions_help">Help</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
     <string name="widget_add_busy">Finish adding the current widget first</string>
@@ -37,28 +76,6 @@
     <string name="launcher_widget_error">Widget couldn\'t load</string>
     <string name="settings_search_hint">Search settings</string>
     <string name="settings_search_contains">Contains: %1$s</string>
-    <string name="settings_layout_tab_home">Home</string>
-    <string name="settings_layout_tab_terminal">Terminal</string>
-    <string name="settings_layout_tab_display">Display</string>
-    <string name="settings_layout_orientation_portrait">Portrait</string>
-    <string name="settings_layout_orientation_landscape">Landscape</string>
-    <string name="settings_layout_edge_top">Top</string>
-    <string name="settings_layout_edge_under_keyboard">Under the keyboard</string>
-    <string name="settings_layout_row_hidden">Hidden</string>
-    <string name="settings_layout_row_shown">Shown</string>
-    <string name="settings_layout_az_on">On</string>
-    <string name="settings_layout_az_off">Off</string>
-    <string name="settings_layout_keyboard_title">Keyboard</string>
-    <string name="settings_layout_keyboard_switch_title">Keyboard on/off</string>
-    <string name="settings_layout_keyboard_on">On</string>
-    <string name="settings_layout_keyboard_off">Off</string>
-    <string name="settings_layout_widget_grid_title">Widget grid</string>
-    <string name="settings_layout_chooser_group_format">%1$s · %2$s</string>
-    <string name="settings_layout_status_bar_title">Status bar</string>
-    <string name="settings_layout_alphabets_edge_title">Position</string>
-    <string name="settings_layout_keyboard_mode_title">Keyboard mode</string>
-    <string name="settings_layout_keyboard_mode_resize">Resizes</string>
-    <string name="settings_layout_keyboard_mode_overlay">Floats over</string>
     <string name="settings_layout_keyboard_form_docked">Docked</string>
     <string name="settings_layout_keyboard_form_floating">Floating</string>
     <string name="settings_layout_keyboard_form_split">Split</string>
@@ -66,34 +83,14 @@
     <string name="settings_layout_miniature_apps">Pinned apps</string>
     <string name="settings_layout_miniature_alphabets">A–Z index</string>
     <string name="settings_layout_miniature_keys">Extra keys</string>
-    <string name="settings_layout_miniature_grid_format">Widgets %1$d×%2$d</string>
-    <string name="settings_layout_miniature_terminal">Terminal</string>
-    <string name="settings_layout_miniature_display">Display</string>
-    <string name="settings_layout_miniature_display_overlay">Display, keyboard floats</string>
-    <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
-    <string name="settings_destination_wallpaper_style">Appearance</string>
-    <string name="settings_destination_wallpaper_style_summary">Wallpaper, theme, fonts and icons</string>
     <string name="settings_appearance_surface_title">Wallpaper, look and layout</string>
     <string name="settings_appearance_surface_summary">Edit them live on your home screen</string>
-    <string name="settings_destination_appearance">Theme &amp; fonts</string>
-    <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
-    <string name="settings_destination_terminal_summary">Panes, clipboard and effects</string>
     <string name="settings_destination_status_bar">Status bar</string>
-    <string name="settings_destination_status_bar_summary">Clock, indicators and weather</string>
     <string name="settings_destination_notifications">Notifications</string>
-    <string name="settings_destination_notifications_summary">Dots, pinned alerts and history</string>
-    <string name="settings_notifications_link_summary">Dots, pinned alerts and history</string>
-    <string name="settings_status_bar_notifications_link_summary">Media and pinned alerts</string>
     <string name="settings_destination_keyboard_input">Keyboard</string>
-    <string name="settings_destination_keyboard_input_summary">Layouts, typing and voice input</string>
-    <string name="settings_destination_display">Display</string>
-    <string name="settings_destination_display_summary">Desktop apps and touch controls</string>
-    <string name="settings_destination_launcher_apps">Apps</string>
-    <string name="settings_destination_launcher_apps_summary">Dock, drawer and search</string>
-    <string name="settings_destination_on_device_ai_summary">Models, voice and local API</string>
     <string name="settings_destination_services_permissions">Permissions &amp; services</string>
     <string name="settings_destination_services_permissions_summary">Access and connected services</string>
     <string name="settings_destination_advanced_diagnostics">Diagnostics</string>
@@ -105,11 +102,9 @@
     <string name="settings_adjust_keyboard_title">Keyboard resize workaround</string>
     <string name="settings_adjust_keyboard_summary">Try if the Android keyboard covers terminal content. Turn off if it causes gaps or jumpy resizing.</string>
     <string name="settings_show_recents_title">Show in Recents when not the default launcher</string>
-    <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active.</string>
+    <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active</string>
     <string name="settings_terminal_cursor_trail_style_title">Cursor trail</string>
     <string name="settings_terminal_retro_effect_title">Terminal effect</string>
-    <string name="settings_terminal_padding_fill_title">Extend edge colors</string>
-    <string name="settings_terminal_padding_fill_summary">Match pane padding to nearby terminal colors.</string>
     <string name="settings_clipboard_header">Clipboard</string>
     <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
     <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>
@@ -126,6 +121,8 @@
     <string name="settings_pane_focus_grows_summary">Enlarge the active pane and shrink the others.</string>
     <string name="settings_pane_agent_api_title">Let programs and agents control panes</string>
     <string name="settings_pane_agent_api_summary">Programs you run can open, switch and close panes on their own.</string>
+    <string name="settings_terminal_body_swipe_title">Swipe on the terminal to switch windows</string>
+    <string name="settings_terminal_body_swipe_summary">Swipe sideways across the text to move between windows and Home</string>
     <string name="settings_clock_status_header">Clock and status</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>
     <string name="settings_clock_alignment_left">Left</string>
@@ -144,6 +141,15 @@
     <string name="settings_weather_fahrenheit_summary">Show °F instead of °C.</string>
     <string name="settings_weather_location_title">Location</string>
     <string name="settings_weather_location_summary_device">Uses your device location</string>
+    <string name="settings_status_cutout_header">Camera cutout</string>
+    <string name="settings_status_cutout_title">Keep icons clear of the camera</string>
+    <string name="settings_status_cutout_auto">Auto</string>
+    <string name="settings_status_cutout_custom">Custom</string>
+    <string name="settings_status_cutout_off">Off</string>
+    <string name="settings_status_cutout_center_title">Position</string>
+    <string name="settings_status_cutout_center_summary">Slide the gap left or right to line it up with the camera.</string>
+    <string name="settings_status_cutout_width_title">Width</string>
+    <string name="settings_status_cutout_width_summary">Make the gap as wide as the camera.</string>
     <string name="settings_weather_location_current">Now: %1$s</string>
     <string name="settings_weather_location_search_hint">Search for a city</string>
     <string name="settings_weather_location_type_more">Keep typing a city name</string>
@@ -153,6 +159,8 @@
     <string name="settings_weather_location_use_device">Use device location</string>
     <string name="settings_theme_header">Theme</string>
     <string name="settings_color_mode_title">App theme</string>
+    <string name="settings_widgets_on_glass_title">Widgets on glass</string>
+    <string name="settings_widgets_on_glass_summary">Widgets wear the Look\'s glass. A widget\'s own Glass setting overrides it.</string>
     <string name="settings_wallpaper_colors_title">Wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Match the launcher and terminal to the wallpaper.</string>
     <string name="settings_wallpaper_colors_hint">Overrides manual terminal colors. Turn off, or apply a Termux:Styling scheme, to use your own. Single tokens in ~/.termux/launcher-theme.properties still apply on top.</string>
@@ -184,32 +192,17 @@
         <item>harder</item>
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
-    <string name="settings_wallpaper_parallax_title">Wallpaper parallax</string>
-    <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
-    <string name="settings_wallpaper_alignment_summary">Line up the wallpaper behind the launcher surfaces with the one on your screen.</string>
+    <string name="settings_wallpaper_parallax_title">Wallpaper scrolls with pages</string>
+    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the pages and windows of the wall slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
     <string name="settings_keyboard_look_header">Keyboard look</string>
-    <string name="settings_extra_keys_preview_empty">No keys on this page</string>
     <string name="settings_extra_keys_page">Page %1$d</string>
-    <string name="settings_extra_keys_page_hint_tap">Tap a key to change what it does.</string>
-    <string name="settings_extra_keys_page_hint_swipe">Swipe the row sideways to switch pages.</string>
-    <string name="settings_extra_keys_page_hint_empty">This page appears in the row once it has keys.</string>
-    <string name="settings_extra_keys_page_hint_first_empty">With no keys, the row stays hidden.</string>
-    <string name="settings_extra_keys_add_header">Add a key</string>
-    <string name="settings_extra_keys_add_more">More</string>
-    <string name="settings_extra_keys_keys_header">Keys on this page</string>
     <string name="settings_extra_keys_add_row">Add row</string>
     <string name="settings_extra_keys_row">Row %1$d</string>
-    <string name="settings_extra_keys_remove_row_title">Remove row %1$d?</string>
-    <string name="settings_extra_keys_remove_row_message">Its keys are removed with it.</string>
-    <string name="settings_extra_keys_remove">Remove</string>
-    <string name="settings_extra_keys_empty_row">No keys yet. Drag a key here or add one above.</string>
     <string name="settings_extra_keys_drag_handle">Drag to reorder</string>
-    <string name="settings_extra_keys_swipe_up_summary">Swipe up: %1$s</string>
-    <string name="settings_extra_keys_presets_header">Presets</string>
     <string name="settings_extra_keys_preset_previous">Before the update</string>
     <string name="settings_extra_keys_preset_launcher">Launcher default</string>
     <string name="settings_extra_keys_preset_classic">Classic Termux</string>
@@ -222,16 +215,15 @@
     <string name="extra_keys_default_offer_switch">Switch</string>
     <string name="extra_keys_default_offer_keep">Keep mine</string>
     <string name="extra_keys_default_offer_switched">New key row in place</string>
-    <string name="settings_extra_keys_save">Save</string>
     <string name="settings_extra_keys_discard">Discard</string>
     <string name="settings_extra_keys_discard_title">Discard changes?</string>
     <string name="settings_extra_keys_discard_message">Your edits to the key row will be lost.</string>
     <string name="settings_extra_keys_keep_editing">Keep editing</string>
     <string name="settings_extra_keys_saved">Key row saved</string>
-    <string name="settings_extra_keys_sheet_tap">Tap</string>
-    <string name="settings_extra_keys_sheet_swipe_up">Swipe up</string>
-    <string name="settings_extra_keys_sheet_none">Nothing</string>
-    <string name="settings_extra_keys_sheet_label">Label</string>
+    <string name="settings_extra_keys_sheet_tap">On tap</string>
+    <string name="settings_extra_keys_sheet_swipe_up">On swipe up (optional)</string>
+    <string name="settings_extra_keys_sheet_none">None</string>
+    <string name="settings_extra_keys_sheet_label">Display label</string>
     <string name="settings_extra_keys_sheet_label_hint">Blank shows the key name</string>
     <string name="settings_extra_keys_sheet_swipe_label">Swipe-up label</string>
     <string name="settings_extra_keys_sheet_swipe_label_hint">Small label above the key</string>
@@ -256,10 +248,8 @@
     <string name="settings_extra_keys_sheet_done">Done</string>
     <string name="settings_extra_keys_action_macro_title">Macro: %1$s</string>
     <string name="settings_extra_keys_action_types_title">Types \"%1$s\"</string>
-    <string name="settings_extra_keys_action_modifiers">Modifiers</string>
-    <string name="settings_extra_keys_action_row_keys">Row controls</string>
-    <string name="settings_extra_keys_action_picker_title">Choose action</string>
-    <string name="settings_extra_keys_action_search_hint">Search actions</string>
+    <string name="settings_extra_keys_action_picker_title">Choose a key</string>
+    <string name="settings_extra_keys_action_search_hint">Search keys or actions</string>
     <string name="settings_extra_keys_action_send_text">Send \"%1$s\" as text</string>
     <string name="settings_extra_keys_action_macro_summary">Send as a macro (keys separated by spaces)</string>
     <string name="settings_extra_keys_action_keys">Terminal keys</string>
@@ -280,11 +270,50 @@
     <string name="settings_extra_keys_glyph_category_nerd_font">Nerd Font icons</string>
     <string name="settings_extra_keys_glyph_more_results">%1$d more — search by name, e.g. \"keyboard\" or \"nf-md-folder\"</string>
     <string name="settings_extra_keys_glyph_paste_hint">Nerd Font icons are bundled: search them above, or paste any icon straight into a key label.</string>
+    <string name="settings_extra_keys_reset">Reset</string>
+    <string name="settings_extra_keys_add_page_cd">Add page</string>
+    <string name="settings_extra_keys_page_options_cd">Page options</string>
+    <string name="settings_extra_keys_row_options_cd">Row options</string>
+    <string name="settings_extra_keys_add_key_cd">Add key</string>
+    <string name="settings_extra_keys_hint">Tap to edit · Hold the handle to reorder</string>
+    <plurals name="settings_extra_keys_row_count">
+        <item quantity="one">%d row</item>
+        <item quantity="other">%d rows</item>
+    </plurals>
+    <string name="settings_extra_keys_save_changes">Save changes</string>
+    <string name="settings_extra_keys_undo">Undo</string>
+    <string name="settings_extra_keys_key_removed">Key removed</string>
+    <string name="settings_extra_keys_row_deleted">Row %1$d deleted</string>
+    <string name="settings_extra_keys_page_removed">Page %1$d removed</string>
+    <string name="settings_extra_keys_page_reset">Page %1$d changed</string>
+    <string name="settings_extra_keys_sheet_title">Edit key</string>
+    <string name="settings_extra_keys_sheet_label_note">Changes how the key looks, not what it does.</string>
+    <string name="settings_extra_keys_sheet_move">Move key</string>
+    <string name="settings_extra_keys_sheet_move_left">Move key left</string>
+    <string name="settings_extra_keys_sheet_move_right">Move key right</string>
+    <string name="settings_extra_keys_row_options_title">Row %1$d options</string>
+    <string name="settings_extra_keys_row_options_subtitle">Organise the rows on this page</string>
+    <string name="settings_extra_keys_row_move_up">Move row up</string>
+    <string name="settings_extra_keys_row_move_down">Move row down</string>
+    <string name="settings_extra_keys_row_delete">Delete row</string>
+    <string name="settings_extra_keys_page_options_title">Page options</string>
+    <string name="settings_extra_keys_page_move_left">Move page left</string>
+    <string name="settings_extra_keys_page_move_right">Move page right</string>
+    <string name="settings_extra_keys_page_remove">Remove page</string>
+    <string name="settings_extra_keys_picker_adding_to">Adding to Row %1$d</string>
+    <string name="settings_extra_keys_picker_confirm_add">Add to row: %1$s</string>
+    <string name="settings_extra_keys_picker_confirm_use">Use: %1$s</string>
+    <string name="settings_extra_keys_picker_confirm_none">Choose a key</string>
+    <string name="settings_extra_keys_picker_common">Common</string>
+    <string name="settings_extra_keys_picker_navigation">Navigation</string>
+    <string name="settings_extra_keys_picker_symbols">Symbols</string>
+    <string name="settings_extra_keys_picker_other">Other</string>
+    <string name="settings_extra_keys_picker_actions">App actions</string>
     <string name="settings_edit_extra_keys_title">Terminal extra keys</string>
     <string name="settings_edit_extra_keys_summary">Keys and swipe actions</string>
     <string name="settings_terminal_key_row_header">Terminal extra keys</string>
     <string name="settings_extra_keys_all_caps_title">Uppercase key labels</string>
-    <string name="settings_extra_keys_all_caps_summary">Show ESC, TAB and other labels in capitals.</string>
+    <string name="settings_extra_keys_all_caps_summary">Show ESC, TAB and other labels in capitals</string>
     <string name="settings_use_as_title">Launcher mode</string>
     <string name="settings_use_as_dialog_title">How will you use it?</string>
     <string name="settings_use_as_terminal">Terminal</string>
@@ -294,13 +323,38 @@
     <string name="settings_use_as_display">Terminal + Home + Display</string>
     <string name="settings_use_as_display_description">Also run Linux desktop apps</string>
     <string name="settings_use_as_custom">Custom</string>
+    <string name="settings_start_in_title">Start in</string>
+    <string name="settings_start_in_home">Home</string>
+    <string name="settings_start_in_workspace">Terminal</string>
+    <string name="settings_start_in_display">Display</string>
+    <string-array name="settings_start_in_entries" translatable="false">
+        <item>@string/settings_start_in_home</item>
+        <item>@string/settings_start_in_workspace</item>
+        <item>@string/settings_start_in_display</item>
+    </string-array>
+    <string-array name="settings_start_in_values" translatable="false">
+        <item>home</item>
+        <item>workspace</item>
+        <item>display</item>
+    </string-array>
+    <string name="settings_home_palette_gesture_title">Palette gesture on Home</string>
+    <string name="settings_home_palette_gesture_swipe_up">Swipe up</string>
+    <string name="settings_home_palette_gesture_off">Off</string>
+    <string-array name="settings_home_palette_gesture_entries" translatable="false">
+        <item>@string/settings_home_palette_gesture_swipe_up</item>
+        <item>@string/settings_home_palette_gesture_off</item>
+    </string-array>
+    <string-array name="settings_home_palette_gesture_values" translatable="false">
+        <item>swipe_up</item>
+        <item>off</item>
+    </string-array>
     <string name="settings_use_as_still_home_title">Termux Launcher is still your home screen</string>
     <string name="settings_use_as_still_home_message">Pressing Home keeps opening the terminal. You can choose another home app now, or keep it this way.</string>
     <string name="settings_use_as_choose_home">Choose another home app</string>
     <string name="settings_use_as_keep_home">Keep</string>
     <string name="settings_home_widgets_header">Home widgets</string>
     <string name="settings_widget_pane_enabled_title">Home widgets</string>
-    <string name="settings_widget_pane_enabled_summary">Show a widget page beside the terminal.</string>
+    <string name="settings_widget_pane_enabled_summary">Show a widget page beside the terminal</string>
     <string name="settings_widget_grid_columns_title">Grid columns</string>
     <string name="settings_widget_grid_rows_title">Grid rows</string>
     <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
@@ -317,43 +371,72 @@
     <string name="termux_x11_command_taken">Another app\'s display command is installed, so the launcher left its own out; the Linux display guide shows how to switch.</string>
     <string name="distro_setup_offer">Get GUI apps</string>
     <string name="settings_gui_apps_title">Set up Linux apps</string>
-    <string name="settings_gui_apps_row_summary">Select apps and copy the install command.</string>
-    <string name="settings_gui_apps_hint">Make your choices below, then copy the command and paste it into the terminal.</string>
-    <string name="settings_gui_apps_intro_distro_only">Install a Linux system with a few apps to start with, then copy the command.</string>
-    <string name="settings_gui_apps_route_title">Source</string>
-    <string name="settings_gui_apps_route_summary">Termux\'s own apps install in a minute or two. A full Linux takes longer and offers far more.</string>
-    <string name="settings_gui_apps_distro_title">Linux Distro</string>
-    <string name="settings_gui_apps_distro_summary">Debian is the one to pick unless you already prefer another.</string>
-    <string name="settings_gui_apps_starters_title">Starter Apps</string>
+    <string name="settings_gui_apps_row_summary">Not set up yet</string>
+    <string name="settings_gui_apps_row_summary_nix">Add apps with nix</string>
+    <string name="settings_gui_apps_row_with_both">%1$s with a browser and a file manager</string>
+    <string name="settings_gui_apps_row_with_browser">%1$s with a browser</string>
+    <string name="settings_gui_apps_row_with_files">%1$s with a file manager</string>
     <string name="settings_gui_apps_starter_browser">Browser</string>
     <string name="settings_gui_apps_starter_files">File manager</string>
     <string name="settings_gui_apps_starter_editor">Text editor</string>
     <string name="settings_gui_apps_starter_terminal">Terminal</string>
-    <string name="settings_gui_apps_copy_title">Copy the command</string>
-    <string name="settings_gui_apps_copy_summary">Then paste it into the terminal and press Enter.</string>
+    <string name="settings_gui_apps_step_source">Source</string>
+    <string name="settings_gui_apps_step_linux">Linux</string>
+    <string name="settings_gui_apps_step_apps">Apps</string>
+    <string name="settings_gui_apps_step_command">Command</string>
+    <string name="settings_gui_apps_step_graphics">Graphics</string>
+    <string name="settings_gui_apps_step_pill">Step %1$d of %2$d, %3$s</string>
+    <string name="settings_gui_apps_step_pill_done">Step %1$d of %2$d, %3$s, done</string>
+    <string name="settings_gui_apps_source_headline">Where should the apps come from?</string>
+    <string name="settings_gui_apps_source_sentence">You can change this later by running the guide again.</string>
+    <string name="settings_gui_apps_source_termux">Termux\'s own apps</string>
+    <string name="settings_gui_apps_source_termux_summary">Installs in a minute or two, with a smaller choice of apps.</string>
+    <string name="settings_gui_apps_source_linux">A full Linux</string>
+    <string name="settings_gui_apps_source_linux_summary">Takes longer to set up and runs far more apps.</string>
+    <string name="settings_gui_apps_linux_headline">Pick a Linux</string>
+    <string name="settings_gui_apps_linux_sentence">Debian runs the most apps. Pick another only if you already use it.</string>
+    <string name="settings_gui_apps_distro_debian">Debian</string>
+    <string name="settings_gui_apps_distro_debian_summary">Runs the most apps.</string>
+    <string name="settings_gui_apps_distro_ubuntu">Ubuntu</string>
+    <string name="settings_gui_apps_distro_ubuntu_summary">Familiar, with newer packages.</string>
+    <string name="settings_gui_apps_distro_arch">Arch Linux</string>
+    <string name="settings_gui_apps_distro_arch_summary">The newest packages, and more upkeep.</string>
+    <string name="settings_gui_apps_recommended">Recommended</string>
+    <string name="settings_gui_apps_apps_headline">Pick your starter apps</string>
+    <string name="settings_gui_apps_apps_sentence">You can add more apps later from the terminal.</string>
+    <string name="settings_gui_apps_command_headline">Copy the command</string>
+    <string name="settings_gui_apps_command_sentence">Paste it in the terminal and press Enter.</string>
+    <string name="settings_gui_apps_copy_button">Copy</string>
+    <string name="settings_gui_apps_copy_button_done">Copied</string>
+    <string name="settings_gui_apps_graphics_headline">Graphics</string>
+    <string name="settings_gui_apps_graphics_sentence">Choose how apps draw on this phone. You can skip this and change it any time.</string>
+    <string name="settings_gui_apps_graphics_open">Choose graphics</string>
+    <string name="settings_gui_apps_back">Back</string>
+    <string name="settings_gui_apps_next">Next</string>
+    <string name="settings_gui_apps_done">Done</string>
+    <string name="settings_gui_apps_skip">Skip</string>
+    <string name="settings_gui_apps_nix_headline">Linux apps with nix</string>
     <string name="settings_gui_apps_clipboard_label">Get GUI apps</string>
     <string name="settings_gui_apps_copied">Command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_gui_apps_nix_card">Add an app such as xfce.mousepad and xkeyboard-config to home.nix, run nix-on-droid switch, and it appears in the app drawer.</string>
     <string name="settings_gui_apps_nix_docs">Read the docs</string>
-    <string name="settings_gui_apps_gpu_copy_title">Copy the graphics command</string>
-    <string name="settings_gui_apps_gpu_copy_summary">Paste it into the terminal to let your apps draw with this phone\'s graphics.</string>
-    <string name="settings_gui_apps_gpu_clipboard_label">Graphics setup</string>
-    <string name="settings_gui_apps_gpu_copied">Graphics command copied. Paste it into the terminal and press Enter.</string>
-    <string name="settings_gui_apps_gpu_benchmark_title">Benchmark graphics</string>
-    <string name="settings_gui_apps_gpu_benchmark_summary">Tries every option and keeps the fastest. Takes a few minutes.</string>
-    <string name="settings_gui_apps_gpu_benchmark_clipboard_label">Graphics benchmark</string>
-    <string name="settings_gui_apps_gpu_benchmark_copied">Benchmark command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="settings_x11_category_display">Display</string>
-    <string name="settings_x11_touch_mode_title">Touch</string>
+    <string name="settings_x11_touch_mode_title">Touch mode</string>
+    <string name="settings_x11_touch_mode_trackpad">Drag to move the pointer, tap to click.</string>
+    <string name="settings_x11_touch_mode_touch">Taps land where you touch.</string>
+    <string name="settings_x11_touch_mode_direct">Every touch goes straight to the app.</string>
     <string name="settings_x11_android_keyboard_title">Use Android keyboard</string>
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
-    <string name="settings_x11_keyboard_follows_text_title">OSK auto-show</string>
-    <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
-    <string name="settings_x11_keyboard_over_display_title">Keyboard over display</string>
-    <string name="settings_x11_keyboard_over_display_split">Portrait: %1$s · Landscape: %2$s</string>
+    <string name="settings_x11_keyboard_follows_text_title">Auto keyboard</string>
+    <string name="settings_x11_keyboard_follows_text_summary">Automatic Keyboard show &amp; hide when you tap text input field</string>
+    <string name="settings_x11_keyboard_follows_text_needs_setup">Set up Linux apps first</string>
+    <string name="settings_x11_keyboard_over_display_title">Keyboard over the window</string>
+    <string name="settings_x11_keyboard_over_display_overlay">Covers the app</string>
+    <string name="settings_x11_keyboard_over_display_resize">Shrinks the app</string>
+    <string name="settings_x11_keyboard_over_display_differs">Portrait: %1$s · Landscape: %2$s</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
     <string name="settings_x11_filtering_title">Scaling</string>
@@ -365,24 +448,44 @@
     <string name="settings_x11_clipboard_title">Share the clipboard</string>
     <string name="settings_x11_clipboard_summary">Copy and paste between the display and Android.</string>
     <string name="settings_x11_category_starting">Starting</string>
-    <string name="settings_x11_extra_keys_side_bottom">Bottom</string>
     <string name="settings_x11_category_apps">Apps</string>
     <string name="settings_x11_drawer_apps_title">Show Linux apps in drawer</string>
-    <string name="settings_x11_drawer_apps_summary">Tapping one opens it on the display.</string>
+    <string name="settings_x11_drawer_apps_summary">Tapping one opens it on the display</string>
     <string name="settings_x11_hidden_apps_title">Hidden Linux apps</string>
-    <string name="settings_x11_hidden_apps_summary">Choose which apps stay out of the drawer.</string>
+    <string name="settings_x11_hidden_apps_summary">Choose which apps stay out of the drawer</string>
     <string name="settings_x11_hidden_apps_hint">Uncheck an app to hide it from the app drawer.</string>
     <string name="settings_x11_hidden_apps_loading">Loading your GUI apps…</string>
     <string name="settings_x11_hidden_apps_empty">No GUI apps to show yet.</string>
-    <string name="settings_x11_runtime_badge_title">Display badge</string>
-    <string name="settings_x11_runtime_badge_summary">The mark on the Display place\'s badge in the status bar.</string>
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
-    <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead.</string>
+    <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead</string>
+    <string name="settings_x11_group_sound">Audio</string>
+    <string name="settings_launcher_sound_title">Sound</string>
+    <string name="settings_launcher_sound_summary">Play sound from the terminal and Linux apps</string>
+    <string name="settings_launcher_media_controls_title">Media controls</string>
+    <string name="settings_launcher_media_controls_summary">Show what\'s playing and control it from notifications</string>
+    <string name="settings_launcher_sound_user_setup">Using your own sound setup</string>
+    <string name="settings_launcher_sound_gave_up">Sound kept stopping, so it is off for now. It starts again with your next terminal or Linux app.</string>
+    <string name="launcher_media_channel_name">Media controls</string>
+    <string name="launcher_media_play">Play</string>
+    <string name="launcher_media_pause">Pause</string>
+    <string name="launcher_media_next">Next</string>
+    <string name="launcher_media_previous">Previous</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
     <string name="termux_x11_app_command_missing">%1$s could not start: its command %2$s is not installed.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
+    <string name="termux_x11_gpu_pick_missing">Your graphics choice isn\'t installed, so this app draws in software.</string>
+    <!-- The launcher's own drawer entries, listed with the Linux apps (ADR 0008). -->
+    <string name="launcher_entry_terminal">Terminal</string>
+    <string name="launcher_entry_display">Display</string>
+    <string name="launcher_entry_new_float">New float here</string>
+    <string name="window_chip_home_float">Home float, page %1$d</string>
+    <!-- A minimised Home float's window chip in the bar, spoken after its label: it is folded into the chip. -->
+    <string name="window_chip_home_float_minimised">Home float, minimised on page %1$d</string>
+    <!-- What a screen reader says for the display window's chip: the app in front, then Display. -->
+    <string name="display_window_spoken_label">%1$s, %2$s</string>
+    <string name="launcher_entry_new_window">New window</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
     <string name="termux_x11_session_replace_confirm">Open</string>
@@ -398,9 +501,69 @@
     <string name="settings_x11_force_bgra_summary">Try this if colours look wrong on the display.</string>
     <string name="settings_x11_category_graphics">Graphics</string>
     <string name="settings_x11_gpu_title">Graphics acceleration</string>
+    <string name="settings_x11_gpu_entry_summary">Test and choose the fastest graphics for Linux apps</string>
     <string name="settings_x11_gpu_probing">Checking what this phone can do…</string>
-    <string name="settings_x11_gpu_summary">%1$s.</string>
-    <string name="settings_x11_gpu_none">Linux apps will draw in software on this phone</string>
+    <!-- The Graphics acceleration page (GraphicsAccelerationFragment) and its entry row. -->
+    <string name="settings_x11_gpu_row_summary">%1$s · %2$s</string>
+    <string name="settings_x11_gpu_auto_named">Automatic (%1$s)</string>
+    <string name="settings_x11_gpu_device_title">This phone\'s graphics</string>
+    <string name="settings_x11_gpu_device_reading">Checking what this phone can do…</string>
+    <string name="settings_x11_gpu_last_run">Last benchmark %1$s</string>
+    <string name="settings_x11_gpu_hint_title">Apps have frozen phones with this chip</string>
+    <string name="settings_x11_gpu_hint_body">On this graphics chip, apps drawing through the phone\'s OpenGL have frozen the whole phone until it was restarted. Software is the safe choice here, and the benchmark tries only that.</string>
+    <string name="settings_x11_gpu_hint_pill">Froze phones like this one</string>
+    <string name="settings_x11_gpu_untested_pill">Untested on phones like this one</string>
+    <string name="settings_x11_gpu_section_advanced">Advanced</string>
+    <string name="settings_x11_gpu_section_profiles">Draw Linux apps with</string>
+    <string name="settings_x11_gpu_auto_title">Automatic</string>
+    <string name="settings_x11_gpu_auto_summary">The best choice installed on this phone, now %1$s.</string>
+    <string name="settings_x11_gpu_profile_turnip_zink">Adreno driver</string>
+    <string name="settings_x11_gpu_profile_turnip_zink_summary">The open driver for Qualcomm graphics. Usually the fastest on these phones.</string>
+    <string name="settings_x11_gpu_profile_virgl">Phone\'s OpenGL</string>
+    <string name="settings_x11_gpu_profile_virgl_summary">Hands drawing to the phone\'s own graphics driver.</string>
+    <string name="settings_x11_gpu_profile_virgl_angle">Phone\'s OpenGL, compatible</string>
+    <string name="settings_x11_gpu_profile_virgl_angle_summary">The same, through a compatibility layer for chips whose driver misbehaves.</string>
+    <string name="settings_x11_gpu_profile_vulkan_wrapper">Phone\'s Vulkan</string>
+    <string name="settings_x11_gpu_profile_vulkan_wrapper_summary">The phone\'s Vulkan driver, adapted for Linux apps.</string>
+    <string name="settings_x11_gpu_profile_software">Software</string>
+    <string name="settings_x11_gpu_profile_software_summary">Draws with the processor. Slower, and always works.</string>
+    <string name="settings_x11_gpu_installed">Installed</string>
+    <string name="settings_x11_gpu_needs">Needs %1$s</string>
+    <string name="settings_x11_gpu_score">Score %1$d</string>
+    <string name="settings_x11_gpu_outcome_crashed">Didn\'t finish</string>
+    <string name="settings_x11_gpu_outcome_timed_out">Took too long</string>
+    <string name="settings_x11_gpu_outcome_not_accelerated">Ran without the graphics chip</string>
+    <string name="settings_x11_gpu_driver_too_old">Needs a newer graphics driver than this phone has</string>
+    <string name="settings_x11_gpu_outcome_skipped">Not tried on this chip</string>
+    <string name="settings_x11_gpu_outcome_unavailable">Not available to install here</string>
+    <string name="settings_x11_gpu_not_measured">Not measured yet</string>
+    <string name="settings_x11_gpu_note_software">Software always works. If one app shows a black window or freezes, switch just that app to software below.</string>
+    <string name="settings_x11_gpu_apps_title">Draw in software</string>
+    <string name="settings_x11_gpu_apps_summary">These apps skip the graphics chip, whatever you pick above.</string>
+    <string name="settings_x11_gpu_run_action">Run benchmark</string>
+    <string name="settings_x11_gpu_run_summary">Tests each choice on this phone. Takes about 5 minutes.</string>
+    <string name="settings_x11_gpu_run_needs_display">Turn on the Linux display first to run the benchmark.</string>
+    <string name="settings_x11_gpu_run_label">Graphics benchmark</string>
+    <string name="settings_x11_gpu_run_outdated">The benchmark needs an update. Restart the launcher, then try again.</string>
+    <!-- The confirmation Run benchmark asks first, and the run's panel on the page. -->
+    <string name="settings_x11_gpu_confirm_title">Run the benchmark?</string>
+    <string name="settings_x11_gpu_confirm_working">Working out the sizes…</string>
+    <string name="settings_x11_gpu_confirm_download">Downloads about %1$s</string>
+    <string name="settings_x11_gpu_confirm_space">Space used about %1$s while it runs</string>
+    <string name="settings_x11_gpu_confirm_given_back">Given back up to %1$s afterwards</string>
+    <string name="settings_x11_gpu_confirm_unknown">The sizes could not be worked out.</string>
+    <string name="settings_x11_gpu_confirm_partial">Some sizes could not be worked out.</string>
+    <string name="settings_x11_gpu_confirm_note">Updates your installed packages first. Takes about 5 minutes.</string>
+    <string name="settings_x11_gpu_confirm_run">Run</string>
+    <string name="settings_x11_gpu_run_starting">Starting…</string>
+    <string name="settings_x11_gpu_run_step">Step %1$d of %2$d · %3$s</string>
+    <string name="settings_x11_gpu_run_stopping">Stopping and putting things back…</string>
+    <string name="settings_x11_gpu_run_finished">Finished. Each choice now shows its result.</string>
+    <string name="settings_x11_gpu_run_stopped">Stopped.</string>
+    <string name="settings_x11_gpu_run_failed">Did not finish. The output shows why.</string>
+    <string name="settings_x11_gpu_run_stop">Stop</string>
+    <string name="settings_x11_gpu_run_close">Close</string>
+    <string name="settings_x11_gpu_run_output">Benchmark output</string>
     <string name="permission_x11_display_description">Lets the display server started from your shell show its screen in the launcher.</string>
     <string name="termux_wall_tile_widgets">Widgets</string>
     <string name="termux_wall_tile_display">Display</string>
@@ -423,7 +586,6 @@
     <string name="settings_typeface_title">Typeface</string>
     <string name="settings_keyboard_bottom_padding_title">Bottom padding</string>
     <string name="settings_keyboard_bottom_padding_summary">Lift the bottom key row away from the edge of the screen.</string>
-    <string name="settings_layout_header">Layout</string>
     <string name="settings_extra_keys_title">Keyboard extra keys</string>
     <string name="settings_extra_keys_summary">Add keys to the in-app keyboard\'s own layout.</string>
     <string name="settings_layout_documentation_title">Layout documentation</string>
@@ -491,6 +653,14 @@
     <string name="settings_send_feedback_title">Send feedback</string>
     <string name="settings_source_code_title">Source code</string>
     <string name="settings_source_code_summary">GitHub</string>
+    <string name="settings_restart_launcher_title">Restart launcher</string>
+    <string name="settings_restart_launcher_summary">Reload the launcher\'s screens. Terminal sessions keep running</string>
+    <string name="settings_restart_launcher_confirm">Reload the launcher? It comes back in a moment, and your terminal sessions keep running.</string>
+    <string name="settings_restart_launcher_action">Restart</string>
+    <string name="settings_whats_new_title">What\'s new</string>
+    <string name="settings_whats_new_summary">The changes in this version.</string>
+    <string name="whats_new_full_notes">Full release notes online</string>
+    <string name="whats_new_none">The notes for this version are not bundled with the app.</string>
     <string name="settings_version_build_title">Version and build</string>
     <string name="settings_diagnostics_header">Diagnostics</string>
     <string name="settings_log_terminal_keys_title">Log keyboard input</string>
@@ -517,28 +687,39 @@
     <string name="settings_clear_logs_action">Clear</string>
     <string name="settings_logs_cleared">Logs cleared</string>
     <string name="settings_clear_logs_failed">Could not clear logs</string>
-    <string name="settings_pinned_apps_header">Dock rows</string>
     <string name="settings_show_pinned_apps_title">Pinned apps</string>
-    <string name="settings_dock_rail_side_left">Left</string>
-    <string name="settings_dock_rail_side_right">Right</string>
     <string name="settings_edit_pinned_apps_title">Pinned apps</string>
-    <string name="settings_edit_pinned_apps_summary">Choose and reorder dock apps.</string>
+    <string name="settings_edit_pinned_apps_summary">Choose and reorder dock apps</string>
     <string name="settings_app_browsing_header">App browsing</string>
     <string name="settings_app_haptics_summary">Master control. Turn off to silence all launcher and keyboard vibration.</string>
     <string name="settings_app_index_haptics_title">Launcher haptics</string>
     <string name="settings_app_index_haptics_summary">Dock and app-index feedback.</string>
+    <string name="settings_notification_badge_style_title">Badge style</string>
+    <string name="settings_notification_badge_style_summary">A dot, or how many notifications an app has</string>
+    <string name="settings_notification_badge_style_dot">Dot</string>
+    <string name="settings_notification_badge_style_count">Count</string>
     <string name="settings_notification_dots_title">Notification dots</string>
     <string name="settings_notification_history_title">Save notification history</string>
     <string name="settings_notification_history_summary">Writes notification titles and text — including message bodies and one-time codes — into ~/.launcherctl, where any command or script you run in Termux can read them. Dots, the status bar and the top pane do not need this.</string>
     <string name="settings_most_used_page_title">Most-used apps page</string>
-    <string name="settings_most_used_page_summary">Adds a page ranked by launcher usage.</string>
+    <string name="settings_most_used_page_summary">Adds a page ranked by launcher usage</string>
     <string name="settings_app_drawer_header">App drawer</string>
-    <string name="settings_app_drawer_enabled_title">Swipe down for app drawer</string>
-    <string name="settings_app_drawer_enabled_summary">Swipe down on the apps row to open the full-screen app drawer.</string>
+    <string name="settings_quick_reply_swipe_title">Swipe up on app icons for quick reply</string>
+    <string name="settings_quick_reply_swipe_summary">Swipe up on an app icon with a notification dot to reply from the dock</string>
     <string name="settings_app_drawer_view_type_title">Drawer layout</string>
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
-    <string name="settings_app_drawer_view_type_horizontal">Horizontal pages</string>
+    <string name="settings_app_drawer_view_type_horizontal">Pages</string>
     <string name="settings_app_drawer_view_type_categories">Categories</string>
+    <string name="settings_open_only_match_title">Open the only match</string>
+    <string name="settings_open_only_match_summary">Opens the app by itself when a search finds just one.</string>
+    <string name="settings_drawer_remember_position_title">Remember position</string>
+    <string name="settings_drawer_remember_position_summary">Reopen the drawer where you left it.</string>
+    <string name="settings_drawer_lower_start_title">Start in the lower half</string>
+    <string name="settings_drawer_lower_start_summary">Apps begin lower on the screen, closer to your thumb.</string>
+    <string name="settings_drawer_az_side_title">A–Z strip</string>
+    <string name="settings_drawer_az_side_left">Left</string>
+    <string name="settings_drawer_az_side_right">Right</string>
+    <string name="settings_drawer_az_side_off">Off</string>
     <string name="settings_app_drawer_search_on_open_title">Open keyboard automatically</string>
     <string name="settings_app_drawer_search_on_open_summary">When the app drawer opens.</string>
     <string name="settings_app_drawer_search_android_keyboard_title">Use system keyboard</string>
@@ -598,7 +779,7 @@
     <string name="folder_capacity_reached">Folder is full</string>
     <string name="folder_already_contains_app">App is already in this folder</string>
     <string name="app_drawer_category_suggestions">Suggestions</string>
-    <string name="app_drawer_category_recently_added">Recently Added</string>
+    <string name="app_drawer_category_recently_added">Recently added</string>
     <string name="app_drawer_category_social">Communication &amp; Social</string>
     <string name="app_drawer_category_productivity">Work &amp; School</string>
     <string name="app_drawer_category_utilities">Utilities</string>
@@ -611,10 +792,25 @@
     <string name="app_drawer_category_travel">Travel &amp; Local</string>
     <string name="app_drawer_category_information_reading">News &amp; Reading</string>
     <string name="app_drawer_category_desktops">Desktops</string>
-    <string name="app_drawer_category_linux_apps">Linux Apps</string>
+    <string name="app_drawer_category_linux_apps">Linux apps</string>
     <string name="app_drawer_category_other">Other</string>
     <string name="app_drawer_category_automatic">Automatic (suggested)</string>
-    <string name="app_drawer_category_menu_entry">Category</string>
+
+    <!-- The App menu: the card a long press on an app icon opens. -->
+    <plurals name="app_menu_notifications">
+        <item quantity="one">%d notification</item>
+        <item quantity="other">%d notifications</item>
+    </plurals>
+    <string name="app_menu_more_shortcuts">More shortcuts</string>
+    <string name="app_menu_widgets">Widgets</string>
+    <string name="app_menu_app_info">App info</string>
+    <string name="app_menu_pin">Pin</string>
+    <string name="app_menu_unpin">Unpin</string>
+    <string name="app_menu_move_to_dock">Move to dock</string>
+    <string name="app_menu_remove_from_folder">Remove from folder</string>
+    <string name="app_menu_change_icon">Change icon</string>
+    <string name="app_menu_reset_icon">Reset icon</string>
+    <string name="app_menu_uninstall">Uninstall</string>
     <string name="app_drawer_category_open">Open %1$s</string>
     <string name="app_drawer_category_collapse">Collapse %1$s</string>
     <string name="app_drawer_category_empty_title">Nothing here yet</string>
@@ -639,7 +835,7 @@
     <string name="settings_reset_usage_ranking_summary">Clears learned app-use ranking without changing pinned apps.</string>
     <string name="settings_home_behavior_header">Home behavior</string>
     <string name="settings_set_default_launcher_title">Set as default launcher</string>
-    <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings.</string>
+    <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings</string>
     <string name="settings_double_tap_action_title">Double tap A–Z Row to lock screen</string>
     <string name="settings_double_tap_action_summary">Shizuku keeps the normal screen-off animation. Accessibility is optional and may flicker.</string>
 
@@ -688,7 +884,7 @@
     <string name="settings_lazy_mode_header">Battery</string>
     <string name="settings_lazy_mode_title">Lazy mode</string>
     <string name="settings_lazy_mode_summary">Stops idle animations and slows status sampling so nothing repaints while you look.</string>
-    <string name="settings_fancier_glass_title">Fancier Glass</string>
+    <string name="settings_fancier_glass_title">Fancier glass</string>
     <string name="settings_fancier_glass_summary">Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker.</string>
     <string name="settings_motion_light_title">Living glass</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
@@ -703,8 +899,8 @@
 
     <string name="action_toggle_soft_keyboard">Keyboard</string>
 
-    <string name="msg_enabling_terminal_toolbar">Enabling Terminal Toolbar</string>
-    <string name="msg_disabling_terminal_toolbar">Disabling Terminal Toolbar</string>
+    <string name="msg_enabling_terminal_toolbar">Enabling terminal toolbar</string>
+    <string name="msg_disabling_terminal_toolbar">Disabling terminal toolbar</string>
 
 
     <!-- Terminal Extra Keys -->
@@ -725,7 +921,7 @@
     <string name="title_share_transcript">Terminal transcript</string>
     <string name="title_share_transcript_with">Send transcript to:</string>
 
-    <string name="title_share_selected_text">Terminal Text</string>
+    <string name="title_share_selected_text">Terminal text</string>
     <string name="title_share_selected_text_with">Send selected text to:</string>
 
     <string name="action_reset_terminal">Reset</string>
@@ -741,12 +937,12 @@
     <string name="action_kill_process">Kill process (%d)</string>
     <string name="title_confirm_kill_process">Really kill this session?</string>
 
-    <string name="action_set_background_image">Set Wallpaper</string>
+    <string name="action_set_background_image">Set wallpaper</string>
     <string name="action_apply">Apply</string>
-    <string name="action_enable_background_image">Enable Wallpaper</string>
-    <string name="action_disable_background_image">Disable Wallpaper</string>
-    <string name="wallpaper_target_home_screen">Home Screen</string>
-    <string name="wallpaper_target_lock_screen">Lock Screen</string>
+    <string name="action_enable_background_image">Enable wallpaper</string>
+    <string name="action_disable_background_image">Disable wallpaper</string>
+    <string name="wallpaper_target_home_screen">Home screen</string>
+    <string name="wallpaper_target_lock_screen">Lock screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
     <string name="title_wallpaper_read_permission">Allow wallpaper access</string>
     <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
@@ -768,7 +964,7 @@
     <string name="action_open_settings">Settings</string>
     <string name="action_wallpaper_style">Appearance</string>
     <string name="action_layout_editor">Layout</string>
-    <string name="msg_generating_report">Generating Report</string>
+    <string name="msg_generating_report">Generating report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
 
@@ -821,7 +1017,6 @@
     <string name="title_activity_termux_settings">Settings</string>
 
     <!-- Termux App Preferences -->
-    <string name="settings_root_launcher_header">Launcher</string>
 
     <!-- Notifications page -->
     <string name="settings_notifications_access_header">Access</string>
@@ -861,7 +1056,6 @@
     <string name="essential_rules_section_add">Add a rule</string>
     <string name="essential_rules_remove">Remove</string>
     <string name="essential_rules_clears_pill">Clears</string>
-    <string name="settings_root_system_info_header">System &amp; Info</string>
 
 
 
@@ -873,7 +1067,6 @@
 
 
 
-    <string name="termux_launcher_preferences_title">Apps &amp; Access</string>
     <string name="termux_app_launcher_empty_pinned_hint">Long-press here to pin your apps</string>
 
         <!-- Debugging Preferences -->
@@ -931,7 +1124,7 @@
                 <string name="termux_top_pane_notification_access_title">Media and pinned notifications</string>
                 <string name="termux_top_pane_notification_access_summary">Grant notification access so the status bar can show the active media session and rule-matched notifications.</string>
                 <string name="settings_essential_notifications_title">Pinned notifications</string>
-                <string name="settings_essential_notifications_summary">Pin matching notifications to the top pane. Match an app package, keywords, or both.</string>
+                <string name="settings_essential_notifications_summary">Pin matching notifications to the top pane. Match an app package, keywords, or both</string>
                 <string name="essential_rules_empty">No rules yet. A rule needs an app package, keywords, or both.</string>
                 <string name="essential_rules_package_hint">App package (e.g. com.whatsapp)</string>
                 <string name="essential_rules_keywords_hint">Keywords in title or text</string>
@@ -976,6 +1169,8 @@
                 <string name="termux_top_pane_clock_style_flip">Flip</string>
                 <string name="termux_top_pane_clock_style_lcd">LCD</string>
                 <string name="termux_top_pane_clock_style_minimal">Minimal</string>
+                <!-- Minimal in its heavier weight, as the settings list names it. -->
+                <string name="termux_top_pane_clock_style_minimal_medium">Minimal, medium</string>
                 <string name="termux_top_pane_clock_style_led">LED matrix</string>
                 <string name="termux_top_pane_clock_style_tape">Tape</string>
                 <string name="termux_top_pane_clock_style_slab">Slab</string>
@@ -1168,7 +1363,6 @@
 
 
         <!-- Termux Style Preferences -->
-        <string name="termux_style_preferences_title">Theme &amp; fonts</string>
 
 
         <string name="termux_theme_mode_system">System</string>
@@ -1796,7 +1990,7 @@
         <string name="termux_ai_dialog_enable">Enable</string>
 
             <string name="termux_privileged_access_overview_title">Backend status</string>
-            <string name="termux_privileged_backend_status_title">Backend Status</string>
+            <string name="termux_privileged_backend_status_title">Backend status</string>
             <string name="termux_privileged_backend_status_summary">Current backend state and permission status</string>
 
             <string name="termux_privileged_access_backend_title">Backend policy</string>
@@ -1891,9 +2085,6 @@
                      window pills. Content inside the bar, not a surface, so it has its own knob. -->
                 <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
                 <string name="termux_surface_tuning_clock_open">Change the clock face or position</string>
-                <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
-                <string name="termux_surface_tuning_clock_position_description">%1$s clock position</string>
-                <string name="termux_surface_tuning_clock_selected">✓</string>
                 <string name="termux_surface_tuning_dock">Dock</string>
                 <string name="termux_surface_tuning_keyboard">Keyboard</string>
                 <string name="termux_surface_tuning_status">Status</string>
@@ -1923,49 +2114,12 @@
                 <string name="termux_surface_tuning_unsaved_save">Save</string>
                 <string name="termux_surface_tuning_unsaved_keep_editing">Keep editing</string>
 
-                <!-- The Layout editor: the miniature of the place on screen, and the way out of it. -->
-                <string name="termux_layout_editor_title">Layout</string>
-                <string name="termux_layout_editor_title_minimal">Minimal layout</string>
-                <!-- The chooser above the miniature. The header already says what is edited, so
-                     this row only has to say which of its two layouts is on the picture. -->
-                <string name="termux_layout_editor_orientation">Orientation</string>
-                <string name="termux_layout_editor_revert">Undo changes</string>
+                <!-- The editor's unsaved-changes question. -->
                 <string name="termux_layout_editor_unsaved_message">Discard your changes, or save them?</string>
-                <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>
-                <string name="termux_layout_editor_side_status_notice">A status bar on the side stays compact.</string>
-                <string name="termux_layout_editor_other_orientation_notice">This is the layout for the other orientation; it appears when you turn the phone.</string>
-                <!-- The line over the header's title: which editor this is. The title under it
-                     says which layout, so the two never say the same word twice. -->
-                <string name="termux_layout_editor_eyebrow">Layout editor</string>
-                <!-- Eye-off in the Layout editor's sheet (layout editor v2), read aloud only: no
-                     visible hint names it. Nothing hidden, or how many are; a bar lifted onto it
-                     is hidden, and a tap opens the hidden tiles. -->
-                <string name="layout_editor_hidden_none">Hidden elements: none</string>
-                <plurals name="layout_editor_hidden_count">
-                    <item quantity="one">%1$d hidden element</item>
-                    <item quantity="other">%1$d hidden elements</item>
-                </plurals>
-                <string name="layout_editor_hidden_tiles_description">Hidden elements</string>
-                <!-- One hidden-element tile, read aloud: a tap brings the element back. -->
-                <string name="layout_editor_restore_tile">Restore %1$s</string>
-                <!-- The move control outside a selected bar, read aloud; its menu lists where the
-                     bar can go. -->
-                <string name="layout_editor_move_description">Move</string>
-                <string name="layout_editor_move_element">Move %1$s</string>
-                <string name="layout_editor_key_radius_description">Key radius</string>
-                <string name="layout_editor_keyboard">Keyboard</string>
-                <string name="layout_editor_keyboard_forms">Keyboard type</string>
-                <!-- What a resize handle shows while it is dragged, in the store's real units. The
-                     dp forms are the live launcher measured after the write; the × forms are for
-                     the orientation the phone is not in, where there is nothing live to measure. -->
-                <string name="layout_editor_readout_dock_dp">Dock %1$d dp</string>
-                <string name="layout_editor_readout_dock_scale">Dock ×%1$s</string>
-                <string name="layout_editor_readout_keyboard_dp">Keyboard %1$d dp</string>
-                <string name="layout_editor_readout_keyboard_scale">Keyboard ×%1$s</string>
-                <string name="layout_editor_readout_chin">Bottom padding %1$d dp</string>
-                <string name="layout_editor_readout_grid">%1$d × %2$d cells</string>
-                <!-- The sheet's handle, read aloud: it is pulled or tapped to grow the card. -->
-                <string name="termux_layout_editor_sheet_handle">Expand or collapse the editor</string>
+                <!-- The Dock types, on the Dock card's Dock type tiles. -->
+                <string name="layout_editor_dock_style_glass_tray">Tray</string>
+                <string name="layout_editor_dock_style_lens_beads">Beads</string>
+                <string name="layout_editor_dock_style_wall_strip">Strip</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
 
@@ -1974,7 +2128,7 @@
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
                 <string name="termux_app_launcher_icon_pack_summary">Use icons from an installed launcher icon pack.</string>
                 <string name="termux_app_launcher_pinned_icon_pack_summary">Optional override for pinned apps. Otherwise they use the global icon pack.</string>
-                <string name="termux_app_launcher_notification_dots_summary">Show a dot on apps with active notifications.</string>
+                <string name="termux_app_launcher_notification_dots_summary">Show a dot on apps with active notifications</string>
                 <string name="termux_app_launcher_notification_dots_summary_needs_access">Enable notification access to show dots on apps with active notifications.</string>
                 <string name="termux_app_launcher_notification_access_title">Enable notification access?</string>
                 <string name="termux_app_launcher_notification_access_message">Notification dots use Android notification access to detect which apps currently have clearable notifications. Content is not used for launcher dots.</string>
@@ -1989,7 +2143,7 @@
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
-                <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
+                <string name="termux_app_launcher_accessibility_lock_prompt_message">Lets the launcher lock the screen and open notifications or quick settings from your gestures.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
                 <string name="termux_app_launcher_dock_style_default">Docked</string>
                 <string name="termux_app_launcher_dock_style_rounded">Floating</string>
@@ -2054,7 +2208,7 @@
     <string name="palette_category_pane">Pane</string>
     <string name="settings_keyboard_shapes_header">Floating and split</string>
     <string name="settings_keyboard_form_title">Keyboard type</string>
-    <string name="settings_keyboard_form_summary">Docked, floating or split, on every place.</string>
+    <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Workspace.</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
     <string name="settings_keyboard_floating_width_summary">Percent of the screen width. Set separately for portrait and landscape.</string>
     <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>
@@ -2094,6 +2248,36 @@
     <string name="palette_contacts_allow">Search contacts too</string>
     <string name="palette_contacts_allow_hint">Allow contact access to find people by name or number</string>
     <string name="palette_category_contacts">Contacts</string>
+    <string name="palette_category_home">Home</string>
+    <string name="palette_category_linux_apps">Linux apps</string>
+    <string name="palette_category_windows">Windows</string>
+    <string name="palette_home_open_terminal">Open terminal here</string>
+    <string name="palette_home_open_terminal_hint">A terminal floating over this page</string>
+    <string name="palette_home_go_to_workspace">Go to Workspace</string>
+    <string name="palette_home_go_to_workspace_hint">Slide over to your windows</string>
+    <string name="palette_home_new_window">New window</string>
+    <!-- The dock's Search field and the Wall strip's tiles. -->
+    <string name="dock_prompt_line_hint">Search apps, commands, settings</string>
+    <string name="dock_run_strip_attention">%1$s, needs attention</string>
+    <string name="dock_wall_strip_new_terminal">New terminal</string>
+    <!-- The Drawer tile (#97), spoken: it opens the app drawer; hold to move it. -->
+    <string name="dock_drawer_tile">All apps</string>
+    <string name="dock_command_palette_tile">Command palette</string>
+    <string name="palette_home_minimise_floats">Minimise all floats</string>
+    <string name="palette_home_minimise_floats_hint">Tuck every floating terminal into its chip</string>
+    <string name="palette_home_restore_floats">Restore floats</string>
+    <string name="palette_home_restore_floats_hint">Bring back every minimised floating terminal</string>
+    <string name="palette_home_add_widget_hint">Place a widget on this page</string>
+    <string name="palette_home_wallpaper">Wallpaper</string>
+    <string name="palette_home_appearance">Appearance</string>
+    <string name="palette_home_settings">Settings</string>
+    <string name="palette_jump_window_unnamed">Window %1$d</string>
+    <string name="palette_jump_window">Window %1$d</string>
+    <string name="palette_jump_window_current">Window %1$d · current</string>
+    <string name="palette_jump_float">Float</string>
+    <string name="palette_jump_float_page">Float · page %1$d</string>
+    <string name="palette_linux_app_row_subtitle">Linux app · hold to bind a key</string>
+    <string name="palette_launcher_entry_row_subtitle">Hold to bind a key</string>
     <string name="palette_contact_open_failed">Couldn\'t open this contact</string>
     <string name="palette_contact_call_failed">Couldn\'t dial this number</string>
     <string name="palette_argument_notice">TYPE A VALUE FOR %1$s, ⏎ TO APPLY</string>
@@ -2153,6 +2337,8 @@
     <string name="tool_keyboard_hide">Hide keyboard</string>
     <string name="tool_keyboard_clipboard">Clipboard history</string>
     <string name="tool_keyboard_toggle_enabled">Keyboard on/off</string>
+    <string name="tool_minimal_toggle">Minimal on/off</string>
+    <string name="tool_desc_minimal_toggle">Turn minimal mode on or off. Only the windows wear it; Home keeps its layout.</string>
     <string name="tool_voice_dictate">Dictate</string>
     <string name="tool_desc_voice_dictate">Start dictating, or stop. The text waits in the panel until you insert or copy it.</string>
     <string name="tool_desc_keyboard_clipboard">Open or close the list of things you copied.</string>
@@ -2170,6 +2356,11 @@
     <string name="tool_terminal_share_transcript">Share transcript</string>
     <string name="tool_clipboard_paste">Paste</string>
     <string name="tool_window_select">Switch to window</string>
+    <string name="tool_window_move">Move window to…</string>
+    <string name="tool_window_move_left">Move window left</string>
+    <string name="tool_window_move_right">Move window right</string>
+    <string name="tool_pane_consume">Consume next window into this pane</string>
+    <string name="tool_pane_expel">Expel pane to its own window</string>
     <string name="tool_window_rename">Rename window</string>
     <string name="tool_session_rename">Rename session</string>
     <string name="tool_pane_rename">Rename pane</string>
@@ -2181,7 +2372,7 @@
     <string name="tool_app_key_inspector">Key inspector</string>
     <string name="tool_terminal_jump_previous_prompt">Jump to previous prompt</string>
     <string name="tool_terminal_jump_next_prompt">Jump to next prompt</string>
-    <string name="tool_appearance_surface_editor">Surface editor</string>
+    <string name="tool_appearance_surface_editor">Appearance</string>
     <string name="tool_app_open_settings">Open settings</string>
     <string name="tool_app_open_look_and_feel">Look and feel settings</string>
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
@@ -2214,14 +2405,14 @@
     <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
     <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
     <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
-    <string name="workspace_delete_description">Delete workspace %1$s</string>
-    <string name="workspace_delete_message">The saved workspace file is removed. Running sessions are not affected.</string>
+    <string name="workspace_delete_description">Delete %1$s</string>
+    <string name="workspace_delete_message">These saved sessions are removed. Running sessions are not affected.</string>
     <string name="workspace_delete_confirm">Delete</string>
     <string name="workspace_deleted">Deleted “%1$s”</string>
-    <string name="workspace_picker_empty">No saved workspaces</string>
+    <string name="workspace_picker_empty">No saved sessions</string>
     <string name="workspace_picker_replace">Replace</string>
-    <string name="workspace_picker_loaded">Workspace “%1$s” loaded</string>
-    <string name="workspace_picker_failed">Could not load workspace: %1$s</string>
+    <string name="workspace_picker_loaded">Loaded “%1$s”</string>
+    <string name="workspace_picker_failed">Could not load saved sessions: %1$s</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
     <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
     <string name="tool_desc_window_next">Switch to the next window, or the next app on the display.</string>
@@ -2289,7 +2480,7 @@
     <string name="tool_desc_appearance_surface_editor">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
     <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
     <string name="tool_app_open_help">Help</string>
-    <string name="tool_desc_app_open_help">Open help for the place you are on.</string>
+    <string name="tool_desc_app_open_help">Open help for where you are: Home or the Workspace.</string>
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
@@ -2468,11 +2659,11 @@
     <string name="session_browser_close">Close</string>
     <string name="session_browser_close_title">Close %1$s?</string>
     <string name="termux_window_close_running_message">Something is still running in this window.</string>
-    <string name="session_browser_workspace_name">Workspace name</string>
+    <string name="session_browser_workspace_name">Name</string>
     <string name="workspace_save_capture_commands">Also save what is running</string>
-    <string name="session_browser_workspace_saved">Saved workspace %1$s</string>
+    <string name="session_browser_workspace_saved">Saved “%1$s”</string>
     <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
-    <string name="session_browser_workspace_overwrite_message">A workspace with this name already exists.</string>
+    <string name="session_browser_workspace_overwrite_message">Saved sessions with this name already exist.</string>
     <string name="session_browser_overwrite">Replace</string>
     <string name="session_browser_action_failed">Could not complete the session action</string>
 
@@ -2480,13 +2671,21 @@
     <string name="sessions_panel_empty">No sessions</string>
     <string name="sessions_panel_new">New session</string>
     <string name="sessions_drawer_live">Live</string>
-    <string name="sessions_drawer_saved">Saved</string>
+    <string name="sessions_drawer_saved">Saved sessions</string>
     <string name="sessions_drawer_done">Done</string>
     <string name="sessions_drawer_keep">Keep</string>
     <string name="sessions_drawer_end">End</string>
     <string name="sessions_drawer_close_question">End this session?</string>
     <string name="sessions_drawer_add_to_current">Add to current</string>
-    <string name="sessions_drawer_save_workspace">Save as workspace…</string>
+    <string name="sessions_drawer_save_workspace">Save sessions…</string>
+    <string name="sessions_drawer_home">Home</string>
+    <string name="sessions_drawer_displays">Displays</string>
+    <string name="sessions_drawer_float">Float</string>
+    <string name="sessions_drawer_float_page">Float · page %1$d</string>
+    <plurals name="sessions_drawer_toplevel_count">
+        <item quantity="one">%1$d app window</item>
+        <item quantity="other">%1$d app windows</item>
+    </plurals>
     <string name="sessions_drawer_run_commands">Also start what was running</string>
     <string name="sessions_drawer_session_name">Session name</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
@@ -2593,42 +2792,47 @@
     <string name="weather_card_unavailable_location">Weather needs a location fix</string>
     <string name="weather_card_unavailable_place">Can\'t find %1$s. Check Settings → Status bar.</string>
 
-    <!-- First-boot tour: six gestures in three chapters, taught on the real home screen -->
+    <!-- First-boot tour: six gestures in three chapters, taught on the wall itself -->
     <string name="tour_skip">Skip</string>
     <string name="tour_end_practice">End practice</string>
     <string name="tour_close_description">End the tour</string>
     <string name="tour_got_it">Got it</string>
     <string name="tour_card_kicker">Termux Launcher</string>
-    <!-- The chapter label, shown in capitals: "1 of 3 · Getting around". -->
+    <!-- The chapter label, shown in capitals: "1 of 3 · Home". -->
     <string name="tour_chapter_label">%1$d of %2$d · %3$s</string>
-    <string name="tour_chapter_getting_around">Getting around</string>
-    <string name="tour_chapter_status_and_apps">Status bar and apps</string>
-    <string name="tour_chapter_commands_and_help">Commands and help</string>
-    <string name="tour_title_places">Slide between places</string>
-    <string name="tour_body_places">Hold the top or bottom border, then swipe left or right to switch places.</string>
+    <string name="tour_chapter_home">Home</string>
+    <string name="tour_chapter_workspace">The Workspace</string>
+    <string name="tour_chapter_anywhere">Anywhere</string>
+    <string name="tour_title_to_workspace">Swipe to the Workspace</string>
+    <string name="tour_body_to_workspace">Swipe left on an empty spot of Home. Past your last Home page, your first window slides in.</string>
+    <string name="tour_title_border_drag">Border drag back</string>
+    <string name="tour_body_border_drag">Swipe right along the window\'s bottom border, below the text, to slide back to Home.</string>
     <string name="tour_title_keyboard_away">Put the keyboard away</string>
-    <string name="tour_body_keyboard_away">Swipe down from the bottom edge of the page.</string>
+    <string name="tour_body_keyboard_away">Swipe down from the window\'s bottom border, at the grabber.</string>
     <string name="tour_title_keyboard_back">Bring it back</string>
-    <string name="tour_body_keyboard_back">Swipe up from the same edge.</string>
+    <string name="tour_body_keyboard_back">Swipe up from the same border. The Workspace remembers which you chose.</string>
     <string name="tour_title_status">Pull down the status bar</string>
-    <string name="tour_body_status">Swipe down from the top edge for the clock, weather and notifications.</string>
-    <string name="tour_title_status_compact">Make it compact again</string>
-    <string name="tour_body_status_compact">Swipe up from the same edge.</string>
+    <string name="tour_body_status">Pull down from the window\'s top border to open the full bar.</string>
+    <string name="tour_title_status_fold">Fold it back</string>
+    <string name="tour_body_status_fold">Swipe up from the same border to fold it.</string>
     <string name="tour_title_apps">Open your apps</string>
-    <string name="tour_body_apps">Swipe down on the apps row to open the drawer.</string>
-    <string name="tour_body_apps_left_rail">Swipe right on the apps rail to open the drawer.</string>
-    <string name="tour_body_apps_right_rail">Swipe left on the apps rail to open the drawer.</string>
+    <string name="tour_body_apps">Your pinned apps and the A–Z index float over Home. Swipe down on the apps row for all of them.</string>
+    <string name="tour_body_apps_left_rail">Your pinned apps and the A–Z index float over Home. Swipe right on the apps rail for all of them.</string>
+    <string name="tour_body_apps_right_rail">Your pinned apps and the A–Z index float over Home. Swipe left on the apps rail for all of them.</string>
     <string name="tour_title_palette">Run anything</string>
-    <string name="tour_body_palette">Swipe up on the space bar to search apps, settings and commands.</string>
+    <string name="tour_body_palette">Swipe up on an empty spot of Home for the command palette: apps, settings and commands. On a window, it\'s in the corner tab.</string>
     <string name="tour_title_corner">Hold a corner</string>
-    <string name="tour_body_corner">Every pane keeps a menu in its corners. Press and hold the top-left one.</string>
+    <string name="tour_body_corner">Every window keeps a corner tab. Press and hold a corner of this window.</string>
     <string name="tour_title_help">Tap ?</string>
-    <string name="tour_body_help">Help mode explains whatever you touch next. It lives in every corner menu.</string>
-    <string name="tour_card_return_to_terminal">Hold the top or bottom border, then swipe left or right to get back to the terminal and continue.</string>
+    <string name="tour_body_help">Help explains whatever you touch next. Every corner tab has it, Home\'s too.</string>
+    <!-- A card taught on a window, read while the wall rests on Home. -->
+    <string name="tour_card_go_to_workspace">Swipe left past your last Home page to reach your window and continue.</string>
+    <!-- A card taught on Home, read while the wall rests on a window. -->
+    <string name="tour_card_go_home">Swipe right along the window\'s bottom border, or press Home, to get back to Home and continue.</string>
     <string name="tour_closing_title">You\'re set</string>
     <string name="tour_tip_help">Hold any corner and tap ? to learn what something does.</string>
-    <string name="tour_tip_wallpaper">Set your wallpaper: hold any corner and tap Appearance.</string>
-    <string name="tour_tip_shortcuts">Tap Ctrl, then Alt, to see every shortcut.</string>
+    <string name="tour_tip_float">Hold an empty spot on Home and tap Terminal for a Home float.</string>
+    <string name="tour_tip_layout">Tap Layout in the same menu to arrange the dock.</string>
     <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
     <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->
     <string name="tour_models_progress">Offline models · %1$s of %2$s</string>
@@ -2698,7 +2902,7 @@
     <string name="help_az_title">A–Z index</string>
     <string name="help_space_title">Space bar</string>
     <string name="help_launcher_settings_title">Termux Launcher settings</string>
-    <string name="help_display_apps_title">Display apps</string>
+    <string name="help_display_apps_title">Display window</string>
     <string name="help_scale_title">Scale</string>
     <string name="help_pad_title">Touchpad</string>
     <string name="help_pad_one">One finger moves and taps.</string>
@@ -2722,7 +2926,7 @@
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
     <string name="help_topic_az_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
-    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows which place you are on.</string>
+    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows whether you are on Home or in the Workspace.</string>
     <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to expand it.</string>
     <string name="help_topic_status_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
@@ -2750,9 +2954,9 @@
     <string name="help_topic_divider_reveal">Split a pane to get a divider.</string>
     <string name="help_topic_shortcuts_purpose">Ctrl and Alt turn the other keys into launcher shortcuts.</string>
     <string name="help_topic_shortcuts_action">Then press the key for the shortcut you want.</string>
-    <string name="help_topic_display_apps_purpose">These chips are the apps running on the display.</string>
-    <string name="help_topic_display_apps_action">Tap one to bring it forward, then tap × to close it.</string>
-    <string name="help_topic_display_apps_reveal">Start the display and open an app to see its chip.</string>
+    <string name="help_topic_display_apps_purpose">The display window has a chip among your windows, with the front app\'s icon.</string>
+    <string name="help_topic_display_apps_action">Tap its chip to bring it forward, hold and drag it to move it, or tap × to stop the display.</string>
+    <string name="help_topic_display_apps_reveal">Open a Linux app or Display to see the display window\'s chip.</string>
     <string name="help_topic_scale_purpose">The scale rail sets how large the display is.</string>
     <string name="help_topic_scale_action">Drag it to resize the display.</string>
     <string name="help_topic_scale_reveal">Start the display to see the rail.</string>
@@ -2768,7 +2972,7 @@
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
     <string name="help_settings_title">Help</string>
-    <string name="help_settings_summary">Open help for the place you are on.</string>
+    <string name="help_settings_summary">Open help for where you are: Home or the Workspace.</string>
     <string name="help_topic_stats_title">Status widgets</string>
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
@@ -2787,9 +2991,9 @@
 
     <!-- Help centre: Find your way. -->
     <string name="help_topic_places_title">Places</string>
-    <string name="help_topic_places_summary">The launcher has up to three places: Home, Terminal and Display, as your Mode allows.</string>
-    <string name="help_topic_places_action">Hold the top or bottom border, then swipe left or right to switch places.</string>
-    <string name="help_topic_places_step1">Home holds your widgets, Terminal your shells, and Display runs Linux apps.</string>
+    <string name="help_topic_places_summary">The launcher has two halves: Home, and your windows, the display window among them.</string>
+    <string name="help_topic_places_action">Hold the top or bottom border, then swipe left or right to move between windows and Home.</string>
+    <string name="help_topic_places_step1">Home holds your widgets; your windows hold your shells, and the display window your Linux apps.</string>
     <string name="help_topic_places_back">Swipe back the other way to return to where you were.</string>
     <string name="help_topic_places_aliases">places, switch place, home, terminal, widgets, display, border, top border, bottom border, swipe, drag, mode</string>
     <string name="help_topic_corners_back">Tap away from the controls to put them away.</string>
@@ -2937,14 +3141,14 @@
     <string name="help_topic_workspace_aliases">workspace, save layout, load layout, restore, arrangement</string>
 
     <!-- Help centre: Make it yours. -->
-    <string name="help_topic_layout_title">Layout editor</string>
-    <string name="help_topic_layout_summary">The Layout editor moves, resizes and puts away the launcher\'s own controls.</string>
-    <string name="help_topic_layout_action">Hold a corner, tap Appearance, then Layout.</string>
-    <string name="help_topic_layout_step1">Drag a bar to another edge, or drop it on the eye-off button to hide it. Tap a bar to see where it can go, then use its move button or its handle.</string>
-    <string name="help_topic_layout_step2">Tap the eye-off button to see what is hidden, then tap one to bring it back, or drag it to an edge.</string>
-    <string name="help_topic_layout_step3">Docked or Floating: Docked joins the bars into one frame of glass; Floating gives each piece its own card. Portrait, landscape and minimal mode each keep their own layout.</string>
+    <string name="help_topic_layout_title">Move and hide bars</string>
+    <string name="help_topic_layout_summary">Each bar\'s card in the Appearance editor says where it sits, how big it is and whether it shows.</string>
+    <string name="help_topic_layout_action">Hold a corner, tap Appearance, then tap a bar.</string>
+    <string name="help_topic_layout_step1">Tap a bar in the editor to open its card. Position moves it to another edge. On the Dock card each bar has its own Position, and the order of the Bars list stacks bars that share an edge.</string>
+    <string name="help_topic_layout_step2">The eye on a card hides a bar. Hidden bars wait at the side of the editor: tap one to open its card, or drag it onto the screen to bring it back.</string>
+    <string name="help_topic_layout_step3">Docked or Floating: Docked joins the bars into one frame of glass; Floating gives each piece its own card. Portrait, landscape and minimal mode each keep their own layout; turn the phone to edit the other orientation.</string>
     <string name="help_topic_layout_back">Undo steps back and Done keeps your changes. Back asks before it drops them.</string>
-    <string name="help_topic_layout_aliases">layout, move controls, hide controls, hidden elements, eye-off, restore, arrange, docked, floating, corners, margin, key radius, editor</string>
+    <string name="help_topic_layout_aliases">layout, move controls, hide controls, hidden elements, eye, restore, arrange, position, docked, floating, corners, margin, key radius, editor</string>
     <string name="help_topic_appearance_title">Appearance editor</string>
     <string name="help_topic_appearance_summary">The Appearance editor changes how the launcher looks, with one Look for the whole of it.</string>
     <string name="help_topic_appearance_action">Hold a corner, tap Appearance, then Look.</string>
@@ -2953,8 +3157,8 @@
     <string name="help_topic_appearance_back">Undo returns to how it was; Done keeps it.</string>
     <string name="help_topic_appearance_aliases">appearance, look, clear, mist, tint, solid, custom, glass, blur, colours, colors, editor</string>
     <string name="help_topic_themes_title">Colours, fonts and wallpaper</string>
-    <string name="help_topic_themes_summary">Colour mode, fonts and icons are in Settings; the wallpaper is picked from the corner tab.</string>
-    <string name="help_topic_themes_action">Open Settings, under Look, for colours, fonts and icons; hold a corner and tap Appearance to pick a wallpaper.</string>
+    <string name="help_topic_themes_summary">Theme, wallpaper and icons are in Appearance; fonts are in Settings, under Terminal.</string>
+    <string name="help_topic_themes_action">Open Appearance in Settings for colours, wallpaper and icons; fonts are under Terminal. Or hold a corner and tap Appearance.</string>
     <string name="help_topic_themes_aliases">theme, wallpaper, font, colour scheme, color scheme, material you, icons</string>
 
     <!-- Help centre: Linux display. -->
@@ -2977,7 +3181,7 @@
     <string name="help_topic_pinned_reveal">A card appears when a notification matches one of your rules.</string>
     <string name="help_topic_pinned_aliases">pinned notification, essential notifications, notification card, card, mute, dismiss, rule</string>
     <string name="help_topic_kswipe_title">Keyboard swipe</string>
-    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on every place.</string>
+    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on Home and in the Workspace.</string>
     <string name="help_topic_kswipe_action">Swipe up from the bottom border to open the keyboard, and down to put it away.</string>
     <string name="help_topic_kswipe_step1">It turns a keyboard that was switched off back on.</string>
     <string name="help_topic_kswipe_step2">The small pill on the border marks where to start.</string>
@@ -3008,11 +3212,11 @@
     <string name="help_topic_ai_step2">The Model centre lists what is downloaded and what is loaded.</string>
     <string name="help_topic_ai_aliases">ai, on-device ai, model, llm, tai, local, endpoint, gemma</string>
     <string name="help_topic_gui_apps_title">GUI apps</string>
-    <string name="help_topic_gui_apps_summary">Graphical apps from the termux-x11 repository open as windows on the Display.</string>
-    <string name="help_topic_gui_apps_action">Install one in a terminal, then start it: it appears on the Display.</string>
+    <string name="help_topic_gui_apps_summary">Graphical apps from the termux-x11 repository open in the display window.</string>
+    <string name="help_topic_gui_apps_action">Install one in a terminal, then start it: it appears in the display window.</string>
     <string name="help_topic_gui_apps_step1">Add the repository once with pkg install x11-repo.</string>
     <string name="help_topic_gui_apps_step2">Install an app from it with pkg install, and start the Display.</string>
-    <string name="help_topic_gui_apps_step3">Setup GUI Apps, in Settings under Display, installs a few to start with.</string>
+    <string name="help_topic_gui_apps_step3">Set up Linux apps, in Settings › Linux apps, guides you through installing a few to start with.</string>
     <string name="help_topic_gui_apps_aliases">gui, x11, x11-repo, termux-x11, desktop app, linux app, install app, graphical</string>
 
     <!-- Help centre: Something missing? Each one names a symptom in the user's words. -->
@@ -3034,20 +3238,20 @@
     <string name="help_fix_shortcuts_aliases">shortcut wrong, chord, clash, ctrl, unexpected</string>
     <string name="help_fix_stats_title">CPU, memory or weather are missing</string>
     <string name="help_fix_stats_summary">Status widgets stay off until you turn them on, and some need a permission.</string>
-    <string name="help_fix_stats_action">Turn the widget on in Settings, under Status bar.</string>
+    <string name="help_fix_stats_action">Turn the widget on in Settings, under Terminal, Status bar.</string>
     <string name="help_fix_stats_aliases">cpu missing, memory missing, weather missing, status widget</string>
     <string name="help_fix_display_title">The display will not start</string>
     <string name="help_fix_display_summary">The display needs its packages installed and its server running.</string>
-    <string name="help_fix_display_action">Tap Set up on the Display page, or open Settings, under Display, and follow what it lists.</string>
+    <string name="help_fix_display_action">Tap Set up in the display window, or open Settings, under Linux apps, and follow what it lists.</string>
     <string name="help_fix_display_aliases">display will not start, x11 fails, black screen, no display</string>
     <string name="help_fix_support_title">Still stuck?</string>
     <string name="help_fix_support_summary">The full documentation and the support page go further than help does.</string>
-    <string name="help_fix_support_action">Open Settings, under About and support, for diagnostics and where to ask.</string>
+    <string name="help_fix_support_action">Open Settings, under General, for Diagnostics and for About &amp; help, where to ask.</string>
     <string name="help_fix_support_aliases">support, bug, report, diagnostics, logs, contact</string>
 
     <!-- Help centre: glossary. -->
     <string name="help_term_place_title">Place</string>
-    <string name="help_term_place_definition">One of the launcher\'s pages: Home, Terminal or Display, as your Mode allows.</string>
+    <string name="help_term_place_definition">One of the launcher\'s two halves: Home, or your windows.</string>
     <string name="help_term_session_title">Session</string>
     <string name="help_term_session_definition">A group of terminal windows.</string>
     <string name="help_term_window_title">Window</string>
@@ -3067,9 +3271,9 @@
     <string name="help_term_form_title">Keyboard form</string>
     <string name="help_term_form_definition">The keyboard sits docked at the bottom, floats above everything or splits in two.</string>
     <string name="help_term_mouse_title">Mouse mode</string>
-    <string name="help_term_mouse_definition">Sends your touches to the program as mouse input. On Display it opens the touchpad.</string>
-    <string name="help_term_editors_title">Layout and Appearance editors</string>
-    <string name="help_term_editors_definition">Open Appearance, then Look to change how the launcher looks or Layout to arrange its parts.</string>
+    <string name="help_term_mouse_definition">Sends your touches to the program as mouse input. In the display window it opens the touchpad.</string>
+    <string name="help_term_editors_title">Appearance editor</string>
+    <string name="help_term_editors_definition">Open Appearance, then tap a part of the launcher to change how it looks and where it sits.</string>
     <string name="help_term_border_drag_title">Border drag</string>
     <string name="help_term_border_drag_definition">Hold the top or bottom border, then swipe left or right to switch places.</string>
     <string name="help_term_keyboard_swipe_title">Keyboard swipe</string>
@@ -3085,7 +3289,7 @@
     <string name="help_term_style_title">Docked or Floating</string>
     <string name="help_term_style_definition">Docked joins the bars into one frame of glass; Floating gives each its own card.</string>
     <string name="help_term_tray_title">Hidden elements</string>
-    <string name="help_term_tray_definition">What you hid in the Layout editor; tap the eye-off button, then tap one to put it back.</string>
+    <string name="help_term_tray_definition">Bars hidden with the eye wait at the side of the editor; tap one to open its card and bring it back.</string>
     <string name="help_term_pinned_title">Pinned notification</string>
     <string name="help_term_pinned_definition">A notification card beside the clock, kept there by one of your rules.</string>
     <string name="help_term_dictation_title">Dictation</string>
@@ -3116,8 +3320,8 @@
     <string name="help_practice_start">Start</string>
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
-    <string name="help_lesson_border_drag_title">Change place</string>
-    <string name="help_lesson_border_drag_summary">Hold the top or bottom border, then swipe left or right to the next place.</string>
+    <string name="help_lesson_border_drag_title">Reach the Workspace</string>
+    <string name="help_lesson_border_drag_summary">Swipe left on an empty spot of Home to reach your first window, then swipe right along its bottom border to come back.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
     <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
     <string name="help_lesson_find_apps_title">Open your apps</string>
@@ -3142,6 +3346,28 @@
     <string name="pane_corner_tab_close_description">Close pane</string>
     <string name="pane_corner_tab_move_description">Move pane</string>
     <string name="pane_corner_tab_maximise_description">Maximise pane</string>
+
+    <!-- A float's titlebar: its buttons, read by TalkBack. -->
+    <string name="titlebar_minimise_description">Minimise</string>
+    <string name="titlebar_maximise_description">Maximise</string>
+    <string name="titlebar_restore_description">Restore size</string>
+    <string name="titlebar_close_description">Close</string>
+    <!-- The titlebar's drag handle, read by TalkBack, and the menu a long press on it opens. -->
+    <string name="titlebar_handle_description">Move window</string>
+    <string name="titlebar_handle_menu_action">Window menu</string>
+    <string name="titlebar_menu_dock">Dock</string>
+
+    <!-- Always on (the Home keyboard): the notice when the grid gives the keyboard its rows. Keep
+         each short enough for one line of the notice on a 360dp phone. -->
+    <string name="home_always_on_nothing_moved">Keyboard always on. Nothing moved.</string>
+    <string name="home_always_on_no_rows">Keyboard always on. No room on Home.</string>
+    <plurals name="home_always_on_moved">
+        <item quantity="one">Keyboard always on. %1$d widget moved.</item>
+        <item quantity="other">Keyboard always on. %1$d widgets moved.</item>
+    </plurals>
+
+    <!-- A cold start rebuilt the windows and Home floats autosaved before the app was killed. -->
+    <string name="notice_windows_restored">Windows restored from before the restart</string>
 
     <!-- On-device AI: the diagnostics share row. -->
     <string name="termux_ai_share_diagnostics_title">Share diagnostics log</string>

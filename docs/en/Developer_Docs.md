@@ -224,7 +224,7 @@ The files in `docs/en/examples/` are not bundled in the APK. `tlstore`'s catalog
 them (pinned to a tag in this repository); the app seeds the rest into place directly. Fish,
 zoxide, eza, and the showcase binaries (sigye, fastfetch, kitten) come from `tlstore install` — see
 `docs/en/Tlstore.md`. The Oh My Posh prompt theme and the Neovim colour scheme instead come from
-Settings › Look's template pack (`app/src/main/assets/theme-templates`), which renders and seeds
+the Appearance template pack (Tools that follow the terminal colours) (`app/src/main/assets/theme-templates`), which renders and seeds
 them directly.
 
 Files:

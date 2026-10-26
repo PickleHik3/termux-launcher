@@ -113,7 +113,6 @@ public final class StatusBarLensView extends View {
     /** Where the clock puts the home icon in the expanded bar: its time line and band height. */
     private float mHomeCenterYPx = -1f;
     private float mHomeSizePx = -1f;
-    private boolean mDisplayRunning;
     /** The status row's chip corner; the icons take it so they and the badge are one kit. */
     private float mChipRadiusPx = -1f;
     /** The bar stands in a column, so the icons travel down its length instead of across it. */
@@ -123,7 +122,6 @@ public final class StatusBarLensView extends View {
     private int mAlongEndPx;
     /** The bar stands along the bottom: the clock, and the line the icons share, are at its foot. */
     private boolean mBottom;
-    @NonNull private String mDisplayGlyph = "";
     @Nullable private Listener mListener;
     @Nullable private PaneWallPage mPressed;
     /** The last bar the marks were laid out in, and where they are written, kept across draws. */
@@ -224,13 +222,6 @@ public final class StatusBarLensView extends View {
         invalidate();
     }
 
-    /** The Display icon reads quieter until a display runs. */
-    public void setDisplayRunning(boolean running) {
-        if (mDisplayRunning == running) return;
-        mDisplayRunning = running;
-        invalidate();
-    }
-
     /**
      * What the chrome measured the bar's band to be, so a place's colour can be toned onto it.
      *
@@ -296,14 +287,11 @@ public final class StatusBarLensView extends View {
         return mTonedAccents[page.ordinal()];
     }
 
-    /** The Display place's mark: Termux X11's prompt, or the distribution the display serves. */
-    public void setDisplayGlyph(@NonNull String glyph) {
-        if (mDisplayGlyph.equals(glyph)) return;
-        mDisplayGlyph = glyph;
-        invalidate();
-    }
-
-    /** The place's accent: the same three roles the badge and chips take. */
+    /**
+     * The place's accent: the same roles the badge and chips take. The display's place keeps its
+     * own for what is the display's alone — its touchpad and its help — while the bar over the
+     * display window wears the Workspace's, as over any of its windows.
+     */
     public static int accentFor(@NonNull Context context, @NonNull PaneWallPage page) {
         switch (page) {
             case WIDGETS:
@@ -320,17 +308,13 @@ public final class StatusBarLensView extends View {
         }
     }
 
-    /** The place's mark: a grid, a prompt, a screen. */
+    /** The place's mark: a prompt. Never drawn since the bar wears no marks (#90). */
     @NonNull
     private String glyphFor(@NonNull PaneWallPage page) {
-        switch (page) {
-            case WIDGETS: return "\uf015";
-            case DISPLAY: return mDisplayGlyph;
-            default: return "\uf120";
-        }
+        return "\uf120";
     }
 
-    /** What the slot keeps clear at its start, from the bar's edge: the home icon and its gap. */
+    /** What the slot keeps clear at its start for a mark beside the clock: none since #90. */
     public static int leadingCellWidthPx(@NonNull Context context) {
         return StatusBarLensMetrics.leadingCellWidthPx(
             context.getResources().getDisplayMetrics().density);
@@ -361,7 +345,7 @@ public final class StatusBarLensView extends View {
         if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
 
         List<StatusBarLensMetrics.Mark> marks = StatusBarLensMetrics.marks(bar(width, height),
-            mPages, mCurrent, mOffsetPx, mWallWidthPx, mDisplayRunning, mMarks);
+            mPages, mCurrent, mOffsetPx, mWallWidthPx, mMarks);
         for (int index = 0; index < marks.size(); index++) {
             StatusBarLensMetrics.Mark mark = marks.get(index);
             mTile.set(mark.tile.left, mark.tile.top, mark.tile.right, mark.tile.bottom);

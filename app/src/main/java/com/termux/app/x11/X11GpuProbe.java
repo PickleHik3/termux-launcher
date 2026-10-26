@@ -1,6 +1,8 @@
 package com.termux.app.x11;
 
 import android.content.Context;
+import android.content.pm.FeatureInfo;
+import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,8 +24,9 @@ import java.util.Locale;
  * What this phone's GPU can do for Linux apps on the display, and the exact environment that
  * asks for it. The display server itself always draws in software — X apps render into their own
  * buffers and hand pixels over — so what can be accelerated is the client side, through one of
- * the profiles below. The launcher detects and recommends; it never writes any of this into a
- * shell.
+ * the profiles below. The launcher detects and ranks; the user picks on the Graphics
+ * acceleration page ({@link X11GpuProfileStore}), and the benchmark script tests this class's
+ * table ({@link Result#toTable}) rather than keeping one of its own.
  *
  * <p>{@link #evaluate} is pure and fixture-tested; {@link #probe} gathers the inputs from the
  * device and the prefix, once, off the main thread.
@@ -41,6 +44,13 @@ public final class X11GpuProbe {
         public final String id;
 
         Profile(String id) { this.id = id; }
+
+        /** The profile named {@code id}, or null. */
+        @Nullable
+        public static Profile of(@Nullable String id) {
+            for (Profile profile : values()) if (profile.id.equals(id)) return profile;
+            return null;
+        }
     }
 
     /** Everything the decision reads. Built by {@link #probe} or by a test. */
@@ -63,6 +73,18 @@ public final class X11GpuProbe {
         @NonNull public List<String> icdFiles = Collections.emptyList();
         /** {@code $PREFIX/lib/dri/} exists — Mesa's client drivers are installed. */
         public boolean mesaDri;
+        /**
+         * {@code ro.board.platform} and {@code ro.hardware}, e.g. "mt6768": the chip by its SoC
+         * name, which {@link #knownFreeze} reads too, so a GL context that could not be made
+         * (no renderer string) does not hide a known-freeze phone.
+         */
+        @NonNull public String platform = "";
+        /**
+         * The system Vulkan driver's API version as Android encodes it
+         * ({@code FEATURE_VULKAN_HARDWARE_VERSION}), 0 when unknown. Below {@link X11GpuProbe#VULKAN_1_3}
+         * the wrapper's Zink cannot run on it.
+         */
+        public int vulkanApiVersion;
 
         boolean hasIcd(@NonNull String needle) {
             for (String name : icdFiles) if (name.contains(needle)) return true;
@@ -96,10 +118,19 @@ public final class X11GpuProbe {
         @NonNull public final List<String> env;
         /** A helper process to keep running in Termux, or null. */
         @Nullable public final String serverCommand;
+        /** Why the benchmark must not try this profile on this phone, or null: it becomes a SKIP. */
+        @Nullable public final String notTriedReason;
 
         Recommendation(@NonNull Profile profile, @NonNull String reason, boolean installed,
                        @NonNull List<String> packages, @NonNull List<String> env,
                        @Nullable String serverCommand) {
+            this(profile, reason, installed, packages, env, serverCommand, null);
+        }
+
+        Recommendation(@NonNull Profile profile, @NonNull String reason, boolean installed,
+                       @NonNull List<String> packages, @NonNull List<String> env,
+                       @Nullable String serverCommand, @Nullable String notTriedReason) {
+            this.notTriedReason = notTriedReason;
             this.profile = profile;
             this.reason = reason;
             this.installed = installed;
@@ -113,66 +144,51 @@ public final class X11GpuProbe {
     public static final class Result {
         @NonNull public final String gpu;
         @NonNull public final List<Recommendation> ranked;
+        /** The GPU is one {@link #knownFreeze} names: the virgl profiles have frozen such phones. */
+        public final boolean knownFreeze;
 
         Result(@NonNull String gpu, @NonNull List<Recommendation> ranked) {
+            this(gpu, ranked, false);
+        }
+
+        Result(@NonNull String gpu, @NonNull List<Recommendation> ranked, boolean knownFreeze) {
             this.gpu = gpu;
             this.ranked = Collections.unmodifiableList(ranked);
+            this.knownFreeze = knownFreeze;
+        }
+
+        /** {@code profile}'s row, or null when it does not fit this GPU. */
+        @Nullable
+        public Recommendation find(@NonNull Profile profile) {
+            for (Recommendation r : ranked) if (r.profile == profile) return r;
+            return null;
+        }
+
+        /** The software row, which every result has. */
+        @NonNull
+        public Recommendation software() {
+            Recommendation software = find(Profile.SOFTWARE);
+            return software != null ? software : ranked.get(ranked.size() - 1);
         }
 
         /** The best profile for this GPU, installed or not; null only when nothing applies. */
         @Nullable
         public Recommendation recommended() {
+            // Software ranked first is the recommendation (a known-freeze GPU): nothing on the GPU.
+            if (!ranked.isEmpty() && ranked.get(0).profile == Profile.SOFTWARE) return null;
             for (Recommendation r : ranked) if (r.profile != Profile.SOFTWARE) return r;
             return null;
-        }
-
-        /** One sentence for the settings row. */
-        @NonNull
-        public String headline() {
-            Recommendation best = recommended();
-            if (best == null) return gpu + " draws Linux apps in software";
-            String line = gpu + " can run Linux apps on the GPU with the " + best.profile.id + " profile";
-            if (!best.installed) line += " once " + String.join(", ", best.packages) + " are installed";
-            return line;
-        }
-
-        /**
-         * What to paste into the terminal to give Linux apps this phone's graphics: the packages
-         * the top profile needs, and its exports for a shell the user drives by hand.
-         *
-         * <p>The exports are a convenience, not the point. Apps opened from the app drawer get
-         * them already - {@code X11LinuxAppRunner} probes and exports the best <em>installed</em>
-         * profile every time it starts one - so the install line above them is what actually
-         * changes anything, and the comment says so rather than leaving the user to wonder.
-         *
-         * <p>Ends without a newline, like the setup command on the same screen, so the user's own
-         * Enter is what runs the last line.
-         */
-        @NonNull
-        public String toCommand() {
-            Recommendation best = recommended() != null ? recommended() : ranked.get(ranked.size() - 1);
-            StringBuilder out = new StringBuilder();
-            out.append("# ").append(gpu).append(": ").append(best.profile.id).append('\n');
-            out.append("pkg install -y ").append(String.join(" ", best.packages)).append('\n');
-            if (best.serverCommand != null) {
-                out.append("# then keep this running in Termux: ")
-                    .append(best.serverCommand).append('\n');
-            }
-            out.append("# Apps opened from the app drawer already use this."
-                + " To start one from a terminal yourself:");
-            for (String line : best.env) out.append('\n').append("export ").append(line);
-            return out.toString();
         }
 
         /** Shell-sourceable: the top profile's exports, then its helper as a comment. */
         @NonNull
         public String toEnv() {
-            Recommendation best = recommended() != null ? recommended() : ranked.get(ranked.size() - 1);
+            Recommendation best = recommended() != null ? recommended() : software();
             StringBuilder out = new StringBuilder();
             out.append("# ").append(gpu).append(": ").append(best.profile.id).append(" — ")
                 .append(best.reason).append('\n');
-            if (!best.installed) out.append("# install first: pkg install ")
-                .append(String.join(" ", best.packages)).append('\n');
+            if (!best.installed) out.append("# install first: ").append(installCommand(best.packages))
+                .append('\n');
             for (String line : best.env) out.append("export ").append(line).append('\n');
             if (best.serverCommand != null) out.append("# keep running in Termux: ")
                 .append(best.serverCommand).append('\n');
@@ -199,16 +215,96 @@ public final class X11GpuProbe {
                 }
                 json.put("profiles", profiles);
                 json.put("env_text", toEnv());
+                json.put("known_freeze", knownFreeze);
             } catch (JSONException ignored) {
                 // Nothing above can throw for these types.
             }
             return json;
         }
+
+        /**
+         * The profile table {@code termux-x11-gpu-setup} benchmarks, as bash it {@code eval}s
+         * after declaring {@code PKGS ENV HELPER WHY SKIP} associative: this class is the one
+         * owner of which profiles fit, what they need and what selects them, and the script only
+         * measures. {@code CANDIDATES} is the ranking without software, which the script always
+         * tests first as its baseline. On a {@link #knownFreeze} GPU the virgl profiles carry a
+         * {@code SKIP} reason, so the benchmark never opens the GL path that froze such phones.
+         */
+        @NonNull
+        public String toTable() {
+            StringBuilder out = new StringBuilder();
+            out.append("# The graphics profiles that fit ").append(gpu)
+                .append(", best first; written by the launcher.\n");
+            out.append("GPU_NAME=").append(ProotDistro.singleQuote(gpu)).append('\n');
+            StringBuilder candidates = new StringBuilder();
+            for (Recommendation r : ranked) {
+                if (r.profile == Profile.SOFTWARE) continue;
+                candidates.append(candidates.length() == 0 ? "" : " ").append(ProotDistro.singleQuote(r.profile.id));
+            }
+            out.append("CANDIDATES=(").append(candidates).append(")\n");
+            for (Recommendation r : ranked) {
+                String key = "[" + ProotDistro.singleQuote(r.profile.id) + "]=";
+                String helper = r.serverCommand == null ? "-"
+                    : r.serverCommand.replaceAll("\\s*&\\s*$", "");
+                out.append("PKGS").append(key).append(ProotDistro.singleQuote(String.join(" ", r.packages))).append('\n');
+                out.append("ENV").append(key).append(ProotDistro.singleQuote(String.join(" ", r.env))).append('\n');
+                out.append("HELPER").append(key).append(ProotDistro.singleQuote(helper)).append('\n');
+                out.append("WHY").append(key).append(ProotDistro.singleQuote(r.reason)).append('\n');
+                if (knownFreeze && r.profile != Profile.SOFTWARE) {
+                    out.append("SKIP").append(key).append(ProotDistro.singleQuote(isVirgl(r.profile)
+                        ? "it has frozen phones with this graphics chip"
+                        : "it is untested on phones with this graphics chip, where virgl froze them"))
+                        .append('\n');
+                } else if (r.notTriedReason != null) {
+                    out.append("SKIP").append(key).append(ProotDistro.singleQuote(r.notTriedReason))
+                        .append('\n');
+                }
+            }
+            return out.toString();
+        }
     }
+
+    /** {@code FEATURE_VULKAN_HARDWARE_VERSION} for Vulkan 1.3, the least Zink on the wrapper runs on. */
+    static final int VULKAN_1_3 = 0x403000;
 
     private static final String ICD_DIR = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/share/vulkan/icd.d/";
 
     private X11GpuProbe() {}
+
+    /**
+     * GPUs on which a Linux app opening a GL context through the virgl server has hung the whole
+     * phone, needing a forced restart (#162: Mali-G52 on a Moto G15 / MT6768, 2026-10-24, with
+     * Code-OSS and fcitx). Matched against the GL renderer string, lower-cased, and against the
+     * SoC name in {@link #KNOWN_FREEZE_PLATFORMS}, for when no GL context could be made to name
+     * the renderer. Software rendering worked on the same phone, so it is ranked first there;
+     * every GPU profile carries a warning and the benchmark tries none of them.
+     */
+    static final String[] KNOWN_FREEZE_RENDERERS = {"mali-g52"};
+    /** The same phones by {@code ro.board.platform} / {@code ro.hardware}: the MT6768 (Helio G85). */
+    static final String[] KNOWN_FREEZE_PLATFORMS = {"mt6768"};
+
+    /** Whether {@code in} names a GPU on which the virgl profiles are known to freeze the phone. */
+    static boolean knownFreeze(@NonNull Inputs in) {
+        String renderer = in.glRenderer.toLowerCase(Locale.ROOT);
+        for (String bad : KNOWN_FREEZE_RENDERERS) if (renderer.contains(bad)) return true;
+        String platform = in.platform.toLowerCase(Locale.ROOT);
+        for (String bad : KNOWN_FREEZE_PLATFORMS) if (platform.contains(bad)) return true;
+        return false;
+    }
+
+    /** Whether {@code profile} draws through the virgl server, the path that froze (#162). */
+    public static boolean isVirgl(@NonNull Profile profile) {
+        return profile == Profile.VIRGL || profile == Profile.VIRGL_ANGLE;
+    }
+
+    /** The warning a virgl profile carries on a {@link #knownFreeze} GPU. */
+    static final String FREEZE_WARNING =
+        "; on this GPU it has frozen the whole phone when an app opened OpenGL (a forced restart"
+        + " was the only way out), so software rendering is the safe pick";
+    /** The warning every other GPU profile carries there: nobody has shown it is safe. */
+    static final String UNTESTED_WARNING =
+        "; untested on this GPU, where the virgl profiles have frozen the whole phone, so software"
+        + " rendering is the safe pick";
 
     /** The pure decision. */
     @NonNull
@@ -241,6 +337,23 @@ public final class X11GpuProbe {
             ranked.add(virgl(in, false));
             if (vulkanDriver) ranked.add(vulkanWrapper(in, false));
         }
+        if (knownFreeze(in)) {
+            // Software first, and every GPU profile after it with its warning: the user can
+            // still choose them, told what happened on this GPU.
+            List<Recommendation> warned = new ArrayList<>();
+            for (Recommendation r : ranked) {
+                warned.add(new Recommendation(r.profile,
+                    r.reason + (isVirgl(r.profile) ? FREEZE_WARNING : UNTESTED_WARNING), r.installed,
+                    r.packages, r.env, r.serverCommand));
+            }
+            ranked = new ArrayList<>();
+            ranked.add(new Recommendation(Profile.SOFTWARE,
+                "the virgl profiles have frozen phones with this GPU: software rendering is the safe path",
+                true, Collections.singletonList("mesa"),
+                Arrays.asList("LIBGL_ALWAYS_SOFTWARE=1", "GALLIUM_DRIVER=llvmpipe"), null));
+            ranked.addAll(warned);
+            return new Result(in.gpuName(), ranked, true);
+        }
         ranked.add(new Recommendation(Profile.SOFTWARE,
             emulated ? "an emulated GPU: software rendering is the dependable path"
                 : "works everywhere; the floor",
@@ -266,8 +379,10 @@ public final class X11GpuProbe {
     }
 
     private static Recommendation virgl(Inputs in, boolean angle) {
+        // Without LIBGL_KOPPER_DISABLE, Mesa draws through Zink on any Vulkan driver it finds and
+        // never reads GALLIUM_DRIVER: on an Adreno with Turnip installed, "virgl" was Turnip.
         List<String> env = Arrays.asList("GALLIUM_DRIVER=virpipe", "MESA_GL_VERSION_OVERRIDE=4.3COMPAT",
-            "MESA_GLES_VERSION_OVERRIDE=3.2", "MESA_NO_ERROR=1", "LIBGL_DRI3_DISABLE=1");
+            "MESA_GLES_VERSION_OVERRIDE=3.2", "MESA_NO_ERROR=1", "LIBGL_DRI3_DISABLE=1", "LIBGL_KOPPER_DISABLE=1");
         if (angle) {
             return new Recommendation(Profile.VIRGL_ANGLE,
                 "this GPU's own OpenGL driver is unreliable for Linux apps; virgl through ANGLE is the safe path",
@@ -281,6 +396,24 @@ public final class X11GpuProbe {
             "virgl_test_server_android &");
     }
 
+    /**
+     * The Vulkan wrapper's package. It is in no Termux repository: the benchmark script downloads
+     * a pinned build and checks it ({@code termux-x11-gpu-setup --install-wrapper}), and that
+     * script is the one place its address and checksums are kept.
+     */
+    static final String WRAPPER_PACKAGE = "vulkan-wrapper-android";
+
+    /** What a shell runs to install {@code packages}: the wrapper through the script, the rest by name. */
+    @NonNull
+    static String installCommand(@NonNull List<String> packages) {
+        List<String> fromRepo = new ArrayList<>(packages);
+        boolean wrapper = fromRepo.remove(WRAPPER_PACKAGE);
+        String repo = fromRepo.isEmpty() ? "" : "pkg install " + String.join(" ", fromRepo);
+        if (!wrapper) return repo;
+        String own = "termux-x11-gpu-setup --install-wrapper";
+        return repo.isEmpty() ? own : own + " && " + repo;
+    }
+
     private static Recommendation vulkanWrapper(Inputs in, boolean mali) {
         List<String> env = new ArrayList<>(Arrays.asList(
             "VK_ICD_FILENAMES=" + ICD_DIR + "wrapper_icd.aarch64.json",
@@ -288,8 +421,9 @@ public final class X11GpuProbe {
         if (mali) env.addAll(Arrays.asList("MESA_VK_WSI_PRESENT_MODE=mailbox", "MESA_VK_WSI_DEBUG=blit"));
         return new Recommendation(Profile.VULKAN_WRAPPER,
             "the phone's Vulkan driver, wrapped for Zink",
-            in.hasIcd("wrapper") && in.mesaDri, Arrays.asList("vulkan-wrapper-android", "mesa"),
-            env, null);
+            in.hasIcd("wrapper") && in.mesaDri, Arrays.asList(WRAPPER_PACKAGE, "mesa"),
+            env, null, in.vulkanApiVersion > 0 && in.vulkanApiVersion < VULKAN_1_3
+                ? "the phone's graphics driver is too old for it" : null);
     }
 
     // ---- Gathering ----------------------------------------------------------------------------
@@ -307,6 +441,7 @@ public final class X11GpuProbe {
         Inputs in = new Inputs();
         in.eglVendor = systemProperty("ro.hardware.egl");
         in.vulkanVendor = systemProperty("ro.hardware.vulkan");
+        in.platform = (systemProperty("ro.board.platform") + " " + systemProperty("ro.hardware")).trim();
         in.kgsl = new File("/dev/kgsl-3d0").exists();
         in.kgslModel = readFirstLine(new File("/sys/class/kgsl/kgsl-3d0/gpu_model"));
         String renderer = cachedRenderer;
@@ -315,6 +450,7 @@ public final class X11GpuProbe {
             cachedRenderer = renderer;
         }
         in.glRenderer = renderer;
+        in.vulkanApiVersion = vulkanApiVersion(context);
         String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
         in.virglServer = new File(prefix + "/bin/virgl_test_server_android").canExecute();
         in.angle = new File(prefix + "/lib/libGLESv2_angle.so").exists()
@@ -323,6 +459,18 @@ public final class X11GpuProbe {
         in.icdFiles = icds == null ? Collections.emptyList() : Arrays.asList(icds);
         in.mesaDri = new File(prefix + "/lib/dri").isDirectory();
         return evaluate(in);
+    }
+
+    /** The system Vulkan version from the hardware feature, or 0 when the phone does not say. */
+    private static int vulkanApiVersion(@NonNull Context context) {
+        try {
+            for (FeatureInfo feature : context.getPackageManager().getSystemAvailableFeatures()) {
+                if (PackageManager.FEATURE_VULKAN_HARDWARE_VERSION.equals(feature.name)) return feature.version;
+            }
+        } catch (Exception ignored) {
+            // Unknown is the safe answer: the wrapper is tried as before.
+        }
+        return 0;
     }
 
     @NonNull

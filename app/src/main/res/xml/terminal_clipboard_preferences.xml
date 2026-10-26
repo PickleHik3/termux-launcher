@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terminal › Clipboard & compatibility: the old Terminal page's clipboard and compatibility
+     groups, keys unchanged. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory app:title="@string/settings_clipboard_header">
+        <SwitchPreferenceCompat
+            app:key="terminal_osc52_clipboard_read_enabled"
+            app:title="@string/settings_osc52_clipboard_read_title"
+            app:summary="@string/settings_osc52_clipboard_read_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_clipboard_cleanup"
+            app:title="@string/settings_clipboard_cleanup_title"
+            app:summary="@string/settings_clipboard_cleanup_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/settings_terminal_compat_header">
+        <SwitchPreferenceCompat
+            app:key="terminal_margin_adjustment"
+            app:title="@string/settings_adjust_keyboard_title"
+            app:summary="@string/settings_adjust_keyboard_summary" />
+    </PreferenceCategory>
+</PreferenceScreen>

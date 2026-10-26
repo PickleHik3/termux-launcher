@@ -11,10 +11,10 @@ import static org.junit.Assert.assertTrue;
 /** The CPU/RAM/weather cluster's order, centring and dot visibility. */
 public class StatusStatsClusterPolicyTest {
 
-    @Test public void onlyTheWidgetsPlaceCentresAndReverses() {
-        assertTrue(StatusStatsClusterPolicy.centeredReversed(PaneWallPage.WIDGETS));
-        assertFalse(StatusStatsClusterPolicy.centeredReversed(PaneWallPage.TERMINAL));
-        assertFalse(StatusStatsClusterPolicy.centeredReversed(PaneWallPage.DISPLAY));
+    /** One bar across the wall (#90): the readings keep the row's end on every page. */
+    @Test public void noPlaceCentresOrReverses() {
+        for (PaneWallPage page : PaneWallPage.values())
+            assertFalse(page.name(), StatusStatsClusterPolicy.centeredReversed(page));
     }
 
     @Test public void theWeatherSaysAsMuchAsTheRoomHolds() {

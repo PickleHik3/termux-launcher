@@ -16,7 +16,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
-import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
+import com.termux.app.fragments.settings.termux.GuiAppsSetupGuideFragment;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
@@ -32,7 +32,7 @@ import com.termux.view.HoldTiming;
 import com.termux.x11.LorieView;
 
 /**
- * The wall's Display page: the embedded X server's surface, wearing a terminal pane's rim, radius
+ * The wall's display window: the embedded X server's surface, wearing a terminal pane's rim, radius
  * and gap.
  *
  * <p>It carries the same glass slab the panes and the Widgets page do, taken from the same
@@ -69,11 +69,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * since that is where the doc actually lives.
      */
     private static final String KEYBOARD_DATA_GUIDE_URL =
-        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#turn-it-on";
+        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#set-it-up";
 
     private static final int ACTION_HELP = 2;
-    /** "Appearance", which opens the wallpaper picker; package-private so a test can find it. */
-    @androidx.annotation.VisibleForTesting static final int ACTION_WALLPAPER = 5;
+    /** "Appearance", which opens the Appearance editor; package-private so a test can find it. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_APPEARANCE = 5;
     /** Minimal mode on or off for the Display place; the glyph shows which. */
     @androidx.annotation.VisibleForTesting static final int ACTION_MINIMAL = 6;
 
@@ -95,10 +95,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         default void showHelpOverlay() {}
         /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
-        /** The grid: open the Layout editor on this place, as every corner tab does. */
-        default void openLayoutEditor() {}
-        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
-        default void openWallpaperPicker() {}
         /** Whether the Display place is in minimal mode, which the tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** The minimal-mode glyph: turn the Display place's minimal mode on or off. */
@@ -277,7 +273,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                         : R.string.pane_controls_enter_minimal_mode)),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS,
                 getContext().getString(R.string.pane_controls_open_settings)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
+            PaneControlsView.Action.glyph(ACTION_APPEARANCE, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
@@ -286,7 +282,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             // Help first, the tab second: help reads the ? it was opened from while it is still
             // out, and puts the tab away itself.
             if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-            else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
+            else if (id == ACTION_APPEARANCE) { dismissControls(); mHost.openSurfaceEditor(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
@@ -683,7 +679,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     @NonNull
     public LorieView display() {
-        if (mDisplay == null) throw new IllegalStateException("Display page is not inflated");
+        if (mDisplay == null) throw new IllegalStateException("display window is not inflated");
         return mDisplay;
     }
 
@@ -787,7 +783,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     private void openDistroSetup() {
         try {
-            getContext().startActivity(GuiAppsSetupPreferencesFragment.intent(getContext())
+            getContext().startActivity(GuiAppsSetupGuideFragment.intent(getContext())
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (RuntimeException e) {
             // A home screen's empty state is not worth a crash; the row in Settings is still there.
@@ -1302,7 +1298,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /**
      * Dress the page from the surface style — the same values the panes beside it read, so the
-     * Display page follows the Canvas surface with the rest of the wall.
+     * display window follows the Canvas surface with the rest of the wall.
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;

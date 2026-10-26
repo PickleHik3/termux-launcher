@@ -43,7 +43,7 @@ public class LauncherCtlCliScriptTest {
 
     private static final String[] GROUPS = {"launch", "pane", "window", "agent", "notify", "progress",
         "clipboard", "notifications", "keyboard", "vibrate", "torch", "battery", "volume", "toast",
-        "wallpaper", "x11"};
+        "wallpaper", "x11", "media"};
 
     @Rule public final TemporaryFolder folder = new TemporaryFolder();
 
@@ -94,7 +94,7 @@ public class LauncherCtlCliScriptTest {
     @Test
     public void aGroupThatNeedsACommandExplainsItselfInsteadOfActing() throws Exception {
         for (String group : new String[]{"launch", "pane", "window", "agent", "progress", "clipboard",
-                "keyboard", "torch", "wallpaper", "x11"}) {
+                "keyboard", "torch", "wallpaper", "x11", "media"}) {
             Run bare = run(null, group);
             assertEquals(group, 2, bare.code);
             assertEquals(group, "", bare.out);
@@ -131,6 +131,15 @@ public class LauncherCtlCliScriptTest {
             {"window", "open", "--title"},
             {"window", "focus"},
             {"pane", "nonsense"},
+            {"media", "nonsense"},
+            {"media", "gone"},
+            {"media", "gone", "org.example.NotAPlayer"},
+            {"media", "gone", "org.mpris.MediaPlayer2.x&y=1"},
+            {"media", "seeked", "org.mpris.MediaPlayer2.kew"},
+            {"media", "seeked", "org.mpris.MediaPlayer2.kew", "soon"},
+            {"media", "streams"},
+            {"media", "streams", "-1"},
+            {"media", "player", "org.mpris.MediaPlayer2.kew/../x"},
         };
         for (String[] mistake : mistakes) {
             Run result = run(null, mistake);

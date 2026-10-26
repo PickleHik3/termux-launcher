@@ -28,7 +28,7 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 /**
  * Battery &amp; performance: the two presets, and the motion a weak phone can do without. It adds
  * no preference of its own: every row writes the key it always wrote, through the store that
- * already owned it, so a value set here, on Appearance or on Terminal is the same value.
+ * already owned it, so a value set here, on Look, Home or Terminal is the same value.
  *
  * <p>A row a preset owns, or that the phone or the wallpaper cannot use, is greyed with the reason
  * under it ({@link PerformanceRowPolicy}). Idle reduction shows the glass off without writing it:
@@ -89,7 +89,7 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) getActivity().setTitle(R.string.settings_destination_performance);
-        // The wallpaper and wallpaper mode are chosen on Appearance; the effect on Terminal.
+        // The wallpaper and wallpaper mode are chosen on Look; parallax on Home, the effect on Terminal.
         refreshRows();
     }
 

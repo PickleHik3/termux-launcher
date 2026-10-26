@@ -263,6 +263,7 @@ public final class LauncherToolRegistry {
                 TOOL_PANE_SPLIT_VERTICAL, TOOL_PANE_SPLIT_HORIZONTAL,
                 TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
                 TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,
+                TOOL_PANE_CONSUME, TOOL_PANE_EXPEL,
                 TOOL_WALL_GO,
                 TOOL_PANE_FOCUS_DIRECTION,
                 TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
@@ -270,6 +271,34 @@ public final class LauncherToolRegistry {
                 TOOL_SESSION_CLOSE_CURRENT,
                 // The pill says it: listening, then what became of the text.
                 TOOL_VOICE_DICTATE));
+
+        /**
+         * Categories whose every tool acts on the focused pane: its text, selection, URLs,
+         * transcript, splits and float, its font, the clipboard it pastes into. Home has no focused
+         * pane, so the Home palette leaves these sections out whole.
+         */
+        public static final Set<String> TERMINAL_ONLY_CATEGORIES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+                CATEGORY_PANE, CATEGORY_TERMINAL, CATEGORY_CLIPBOARD)));
+
+        /**
+         * The terminal-only tools filed under another category: the pane's mouse mode, and the
+         * actions on the current Workspace window, which Home replaces with a jump row per window.
+         * One table beside the categories, so the Home rule reads in one place.
+         */
+        private static final Set<String> TERMINAL_ONLY_TOOLS =
+            new HashSet<>(Arrays.asList(
+                TOOL_MOUSE_TOGGLE,
+                TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
+                TOOL_WINDOW_RENAME, TOOL_WINDOW_RENAME_PROMPT, TOOL_WINDOW_SELECT,
+                TOOL_WINDOW_MOVE, TOOL_WINDOW_MOVE_LEFT, TOOL_WINDOW_MOVE_RIGHT));
+
+        /**
+         * Whether the action only means something with a terminal pane in front of the user, so
+         * the Home palette leaves it out. Derived from the category first and the short tool table
+         * second; see {@link #TERMINAL_ONLY_CATEGORIES}.
+         */
+        public final boolean terminalOnly;
 
         /** Agent-only tool: no UI metadata. */
         public ToolMetadata(
@@ -326,6 +355,8 @@ public final class LauncherToolRegistry {
                 ? Collections.<Binding>emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(defaultBindings));
             this.selfEvident = SELF_EVIDENT_TOOLS.contains(name);
+            this.terminalOnly = (category != null && TERMINAL_ONLY_CATEGORIES.contains(category))
+                || TERMINAL_ONLY_TOOLS.contains(name);
         }
 
         /** Whether this tool carries enough metadata to appear in the command palette. */
@@ -430,6 +461,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
     /** Starts or stops a dictation on any place; the text waits in the panel for ✓ or Copy. */
     public static final String TOOL_VOICE_DICTATE = "voice.dictate";
+    public static final String TOOL_MINIMAL_TOGGLE = "minimal.toggle";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -442,6 +474,14 @@ public final class LauncherToolRegistry {
     public static final String TOOL_CLIPBOARD_PASTE = "clipboard.paste";
     public static final String TOOL_WINDOW_SELECT = "window.select";
     public static final String TOOL_WINDOW_RENAME = "window.rename";
+    /** Moves the current window to another place in the row; the window stays current. */
+    public static final String TOOL_WINDOW_MOVE = "window.move";
+    public static final String TOOL_WINDOW_MOVE_LEFT = "window.move_left";
+    public static final String TOOL_WINDOW_MOVE_RIGHT = "window.move_right";
+    /** Niri's consume: the neighbour window in the row joins the current one as panes. */
+    public static final String TOOL_PANE_CONSUME = "pane.consume";
+    /** Niri's expel: the focused pane leaves into a new window of its own beside the current. */
+    public static final String TOOL_PANE_EXPEL = "pane.expel";
     public static final String TOOL_SESSION_RENAME = "session.rename";
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
     public static final String TOOL_PANE_RENAME = "pane.rename";
@@ -957,7 +997,10 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
             CATEGORY_CLIPBOARD, R.string.tool_clipboard_paste, R.string.tool_desc_clipboard_paste,
-            Collections.singletonList(Binding.of("ctrl+alt+v", BindingCondition.SPLITS_OFF)),
+            // Ctrl+Shift+V is what every desktop terminal pastes with, so a hardware keyboard
+            // gets it too; it never collides with the pane split that owns Ctrl+Alt+V.
+            Arrays.asList(Binding.of("ctrl+alt+v", BindingCondition.SPLITS_OFF),
+                Binding.of("ctrl+shift+v")),
             REQUIRES_SESSION);
 
         // Actions carrying a required argument. The palette skips these because it
@@ -979,6 +1022,57 @@ public final class LauncherToolRegistry {
                 Binding.of("ctrl+alt+7", BindingCondition.SPLITS_ON),
                 Binding.of("ctrl+alt+8", BindingCondition.SPLITS_ON),
                 Binding.of("ctrl+alt+9", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
+        // Reordering the row: the keyboard's and the agent's form of dragging a chip along the
+        // window bar. window.move carries its place: its one free-text argument makes it the
+        // palette's "Move window to…" row, which asks for left, right or a place, and it names
+        // itself the same way in the keybind picker; the two one-step forms are the plain rows.
+        // No default stroke: every free one near the window keys is one a shell or an editor
+        // also wants.
+        addUi(map, TOOL_WINDOW_MOVE,
+            "Move the current window to another place in the current session's row: 'left' or"
+                + " 'right' one place, or a place counted from 1. The window stays current.",
+            schemaObject()
+                .withString("to", "left, right, or the place in the row counted from 1", true)
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_move, 0, null, REQUIRES_SPLITS);
+        addUi(map, TOOL_WINDOW_MOVE_LEFT,
+            "Move the current window one place left in the current session's row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_move_left, 0, null, REQUIRES_SPLITS);
+        addUi(map, TOOL_WINDOW_MOVE_RIGHT,
+            "Move the current window one place right in the current session's row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_move_right, 0, null, REQUIRES_SPLITS);
+        // Consume and expel, Niri's column moves on the row (ColumnPolicy), on Niri's own keys:
+        // Mod+Comma consumes the window on the right into the focused column, Mod+Period expels
+        // the focused window from it. Ctrl+Alt+, and Ctrl+Alt+. were free beside the window keys,
+        // whose [ and ] already step between windows. The side is an optional argument with the
+        // right as its default, so each is one plain palette row.
+        addUi(map, TOOL_PANE_CONSUME,
+            "Pull the window next to the current one in the row into the current window, as panes"
+                + " beside its focused pane; that window leaves the row. 'from' picks the"
+                + " neighbour: right (default) or left. No session closes.",
+            schemaObject()
+                .withEnum("from", new String[]{"right", "left"}, false, "right")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_consume, 0,
+            Collections.singletonList(Binding.of("ctrl+alt+,", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
+        addUi(map, TOOL_PANE_EXPEL,
+            "Push the focused pane out of the current window into a new window of its own, right"
+                + " after the current one in the row ('to': right, the default) or right before"
+                + " it (left). The new window becomes current. No session closes.",
+            schemaObject()
+                .withEnum("to", new String[]{"right", "left"}, false, "right")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_expel, 0,
+            Collections.singletonList(Binding.of("ctrl+alt+.", BindingCondition.SPLITS_ON)),
+            REQUIRES_SPLITS);
         // The three rename tools name the three things the UI names, and nothing else:
         // session.rename a drawer row, window.rename a window-bar tab, pane.rename one shell. The
         // ids used to be rotated one step — window.rename renamed the session and session.rename
@@ -1197,6 +1291,13 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_open_apps_bar, R.string.tool_desc_app_open_apps_bar, null);
+        // The corner tab's minimal button, for any page: on and off, Home included, though only
+        // the windows wear minimal mode.
+        addUi(map, TOOL_MINIMAL_TOGGLE,
+            "Turn minimal mode on or off: the windows show only their content, or come back.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_minimal_toggle, R.string.tool_desc_minimal_toggle, null);
         addUi(map, TOOL_TERMINAL_RESET,
             "Reset the terminal emulator state for the focused shell.",
             schemaEmpty(),

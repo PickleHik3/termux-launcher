@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), the notification history routes, the device routes (vibrate, torch, battery, volume, toast, wallpaper), agent status and the display's GPU probe. There are no media, resource, event, MCP or restart routes.
+The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), the notification history routes, the device routes (vibrate, torch, battery, volume, toast, wallpaper), agent status, the display's GPU probe and the media helper's reports. There are no resource, event, MCP or restart routes.
 
 ### Health and discovery
 
@@ -476,7 +476,7 @@ answer with their own codes rather than a generic one:
   write from a pane keeps the on-screen rule, since any program printing to a pane can emit one.
 - Reading needs the launcher on screen. Off screen, `GET /v1/clipboard` answers 409
   `launcher_not_visible` — Android only lets the focused app read the clipboard anyway.
-- Reading also needs **Settings → Terminal → Let programs read the clipboard** (on by default), the
+- Reading also needs **Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard** (on by default), the
   same switch that gates `OSC 52` queries. Off, `GET /v1/clipboard` is 403 `clipboard_read_disabled`.
 
 There is no separate clipboard history to keep in step: the Android clipboard is the one clipboard
@@ -645,6 +645,21 @@ launcherctl wallpaper get
 | GET | `/v1/x11/gpu` | Which graphics profile fits this phone for Linux apps: `gpu`, `recommended`, every `profiles` entry with `reason`, `installed`, `packages`, `env` and `server`, and `env_text`. `?format=env` answers the exports as shell lines (`launcherctl x11 gpu [--env]`) |
 
 See [Agent status](Agent_Status.md) and [The Linux display](X11_Display.md#gpu-acceleration-for-your-apps).
+
+### The media helper's reports
+
+The launcher's media helper reports what Linux media players and sound streams are doing through
+these; nothing else needs them. Background-safe, and ignored while Media controls is off.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/media/player?name=N&pid=P` | Body: what `dbus-send --print-reply` printed for the MPRIS player's `Properties.GetAll`; `pid` owns the name (`launcherctl media player`) |
+| POST | `/v1/media/gone?name=N` | The player left the bus (`launcherctl media gone`) |
+| POST | `/v1/media/seeked?name=N&position=US` | The player jumped to `US` microseconds (`launcherctl media seeked`) |
+| POST | `/v1/media/streams?playing=COUNT` | How many streams play through the launcher's sound server (`launcherctl media streams`) |
+
+`name` must be an MPRIS bus name (`org.mpris.MediaPlayer2.*`); anything else is `400 bad_request`.
+See [Sound for Linux apps](X11_Display.md#sound-for-linux-apps).
 
 ### OpenAI-compatible
 

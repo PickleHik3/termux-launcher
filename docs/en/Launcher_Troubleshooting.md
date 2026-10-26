@@ -39,7 +39,7 @@ Run:
 termux-setup-storage
 ```
 
-Approve Android's prompt, then check `~/storage`. Also open **Settings → Permissions & services →
+Approve Android's prompt, then check `~/storage`. Also open **Settings → General → Permissions & services →
 Files and media** and resolve its status if needed. Android shared storage is separate from Termux's
 private home directory.
 
@@ -53,7 +53,7 @@ Also check:
   hardware keyboard is connected;
 - whether the keyboard was switched off with the **Keyboard on/off** action, so a tap no longer
   raises it;
-- **Settings → Terminal → Compatibility → Keyboard resize workaround** for Android-keyboard overlap;
+- **Settings → Terminal → Clipboard & compatibility → Keyboard resize workaround** for Android-keyboard overlap;
   and
 - the independently remembered portrait and landscape keyboard heights.
 
@@ -69,7 +69,7 @@ More in [Keyboard](Keyboard.md).
 
 ## Pane or window actions are unavailable
 
-Open **Settings → Terminal → Split-pane controls**. Native pane and window actions are
+Open **Settings → Terminal → Windows & panes → Split-pane controls**. Native pane and window actions are
 disabled in single-pane compatibility behaviour.
 
 Remember that some actions have structural safeguards:
@@ -113,7 +113,7 @@ important. Deleting a saved workspace removes its JSON definition but does not c
 
 ## App search does not start
 
-Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Apps →
+Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Dock →
 App search → App search prefix**; `%` is the default. If the prefix conflicts with shell input,
 choose a different single character.
 
@@ -122,10 +122,10 @@ For browsing without terminal input, use the A-Z row, or turn it on in the **Lay
 
 ## CPU, memory, weather, media, or notifications are missing
 
-Open **Settings → Status bar** and turn on the card you want. Then check **Settings → Permissions &
-services**:
+Open **Settings → Terminal → Status bar** and turn on the card you want. Then check **Settings → General →
+Permissions & services**:
 
-- weather needs either a city picked under **Settings → Status bar → Weather → Location**, or
+- weather needs either a city picked under **Settings → Terminal → Status bar → Weather → Location**, or
   location access;
 - pinned notifications need **Notification access** and a matching rule under **Settings →
   Notifications → Pinned notifications**;
@@ -137,7 +137,7 @@ Weather data is provided by Open-Meteo. See [Status bar](Status_Bar.md) and
 
 ## The launcher uses CPU or battery while it sits idle
 
-Turn on **Settings → App behavior → Reduce idle activity** ("Lazy mode"), then leave the launcher on
+Turn on **Settings → General → Reduce idle activity** ("Lazy mode"), then leave the launcher on
 screen and check again.
 
 By default the clock folds its seconds, which means the launcher redraws continuously for as long
@@ -155,8 +155,8 @@ Open **Settings → Appearance** and test against the real home screen.
 
 - Live wallpapers can limit or disable dock blur.
 - GPU blur requires Android 12 or later; older Android versions use a simpler surface.
-- Without **Wallpaper access** (Settings → Permissions & services) the glass bars render flat.
-- **Wallpaper colors**, in **Settings → Appearance**, changes the generated palette, while the
+- Without **Wallpaper access** (Settings → General → Permissions & services) the glass bars render flat.
+- **Wallpaper colors**, in the Appearance editor, changes the generated palette, while the
   opacity controls decide how much wallpaper remains visible.
 - Full-screen TUIs may need a resize after font or surface geometry changes.
 
@@ -170,7 +170,7 @@ The terminal resolves font configuration in this order:
 2. `~/.termux/fonts.d/*.conf`, including the picker-managed `10-launcher.conf`; and
 3. `~/.termux/font.ttf`, Termux:Styling, or Android monospace.
 
-A higher item can override the picker. Open **Terminal fonts** (**Settings → Appearance → Terminal
+A higher item can override the picker. Open **Terminal fonts** (**Settings → Terminal → Text & display → Terminal
 fonts**, or run **Terminal fonts** from the command palette) to see the managed state.
 **Use font.ttf / Termux:Styling** removes only `10-launcher.conf`.
 
@@ -184,7 +184,7 @@ The terminal reports configuration errors and uses safe fallbacks instead of ref
 
 ## Shizuku features do not work
 
-Shizuku is optional. Start its service, then open **Settings → Permissions & services → Shizuku**
+Shizuku is optional. Start its service, then open **Settings → General → Permissions & services → Shizuku**
 and grant the requested connection. If you use `rish`, its `RISH_APPLICATION_ID` must match the
 installed edition: `com.termux`, `com.termux.launcher.nix` or `io.vaj.tl`.
 
@@ -284,7 +284,7 @@ frame of an animated logo.
 
 ## The Linux display will not start, or apps cannot reach it
 
-The Display place exists only while **Settings → Display → Display** is on, and it hides its
+The display window hides its
 **Start display** button until the keyboard layouts are installed:
 `pkg install x11-repo xkeyboard-config` (on pacman, `pacman -S xkeyboard-config`).
 
@@ -296,15 +296,25 @@ The Display place exists only while **Settings → Display → Display** is on, 
   from that shell puts its socket there and no program finds it; start the server with
   `TMPDIR=$PREFIX/tmp termux-x11 :0`, or leave `TMPDIR` alone. A socket left behind by a server that
   has exited causes the same symptom; remove it from `$PREFIX/tmp/.X11-unix/`.
-- **A black display.** Turn on **Settings → Display → Troubleshooting → Compatibility drawing**
+- **A black display.** Turn on **Settings → Linux apps → Fixes → Compatibility drawing**
   (the server's `-legacy-drawing`).
 - **Apps cannot open the display from a proot.** Log in with `--shared-x11`, and check
   `echo $DISPLAY` inside.
+- **The whole phone freezes when a Linux app opens.** On some GPUs (reported on a Mali-G52, the
+  Moto G15) an app opening OpenGL through the virgl server hangs the phone; only a forced restart
+  (hold the power button) brings it back. The launcher ranks software rendering first on those
+  phones and says so in **Graphics acceleration**, and the benchmark tries only software there;
+  the other profiles stay under **Advanced**, with the warning. To keep acceleration for everything else and run one app in software, turn that
+  app on under **Draw in software** on the same page (from a terminal:
+  `env -u GALLIUM_DRIVER code-oss`). Electron apps (Code-OSS among them) started from the app
+  drawer under a virgl profile get `--disable-gpu` on their own.
 - **Nothing is accelerated.** `glmark2-es2` names the renderer in its first lines; `llvmpipe`
-  means a profile variable is missing or the profile does not fit this GPU. Tap
-  **Benchmark graphics** under Settings → Display → Linux apps → Set up Linux apps → Graphics, or run
-  `termux-x11-gpu-setup` in the terminal: it tries every graphics profile that fits the phone
-  and keeps the best. `launcherctl x11 gpu` says which profile fits.
+  means a profile variable is missing or the profile does not fit this GPU. Open
+  **Settings → Linux apps → Set up Linux apps → Graphics acceleration** and tap
+  **Run benchmark**: it tries every graphics profile that fits the phone in the terminal and keeps
+  the best, and the page then shows each profile's result and lets you pick one (Automatic follows
+  the launcher's ranking). `launcherctl x11 gpu` says which profile fits, which one you picked
+  and what apps are started with.
 - **`termux-x11-gpu-setup` says even software rendering did not finish.** The test could not talk
   to a display at all; the first two causes above are the usual ones, and the full log it names
   shows the test program's own message.
@@ -316,7 +326,7 @@ More in [The Linux display](X11_Display.md).
 
 ## Linux apps from a distro do not show or do not open
 
-- **No Linux apps in the drawer at all.** Either nothing is installed yet (use **Settings → Display
+- **No Linux apps in the drawer at all.** Either nothing is installed yet (use **Settings
   → Linux apps → Set up Linux apps**), or **Show Linux apps in drawer** is off. Check too that the
   distro was installed by `proot-distro` 5.x.
 - **One app is missing.** Look in **Hidden Linux apps** first. Otherwise the app has no menu entry
@@ -333,7 +343,7 @@ More in [The Linux display](X11_Display.md).
 
 ## Collect useful diagnostics
 
-Open **Settings → Diagnostics**:
+Open **Settings → General → Diagnostics**:
 
 1. reproduce the issue;
 2. choose **Copy diagnostics** for a short environment summary or **Export logs** for a report;
@@ -342,4 +352,4 @@ Open **Settings → Diagnostics**:
 
 For On-device AI problems, **Settings → On-device AI → Share diagnostics log** adds the runtime's
 own log. Include the Termux Launcher version, edition, Android version, device architecture, and
-exact steps. The version is under **Settings → About & help → Version and build**.
+exact steps. The version is under **Settings → General → About & help → Version and build**.

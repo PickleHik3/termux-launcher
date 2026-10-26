@@ -103,6 +103,15 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
 
     /**
+     * A child took the live stream for a gesture of its own — a window chip lifted to be dragged
+     * along the row — so the fold stands down for the rest of it. A fold already under way is
+     * left alone: it claimed first.
+     */
+    public void yieldStreamToChild() {
+        if (mGesture != null) mGesture.nestedScrollStarted();
+    }
+
+    /**
      * The edge the bar stands on. It decides which way a drag folds the bar; a live stream is
      * dropped rather than reinterpreted mid-gesture.
      */

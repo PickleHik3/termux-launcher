@@ -61,7 +61,7 @@ public class X11DisplayKeyboardOverDisplayTest {
         assertNotNull(row);
         assertFalse(row.isPersistent());
         assertEquals("overlay", row.getValue());
-        assertEquals("Overlay", String.valueOf(row.getSummary()));
+        assertEquals("Covers the app", String.valueOf(row.getSummary()));
     }
 
     @Test
@@ -73,7 +73,7 @@ public class X11DisplayKeyboardOverDisplayTest {
         assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.PORTRAIT));
         assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.LANDSCAPE));
         assertEquals("resize", row.getValue());
-        assertEquals("Resize display", String.valueOf(row.getSummary()));
+        assertEquals("Shrinks the app", String.valueOf(row.getSummary()));
     }
 
     @Test
@@ -82,7 +82,7 @@ public class X11DisplayKeyboardOverDisplayTest {
         store().setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.OVERLAY);
         ListPreference row = launch().findPreference(KEY);
         assertNotNull(row);
-        assertEquals("Portrait: Overlay · Landscape: Resize display",
+        assertEquals("Portrait: Covers the app · Landscape: Shrinks the app",
             String.valueOf(row.getSummary()));
     }
 }

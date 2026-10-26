@@ -4,6 +4,17 @@
     <!-- The Model centre's list, built in code; an id so its scroll position survives recreation. -->
     <item name="tai_centre_list" type="id" />
 
+    <!-- The Graphics acceleration page, built in code like the benchmark's Home. -->
+    <item name="x11_gpu_list" type="id" />
+    <item name="x11_gpu_text" type="id" />
+    <item name="x11_gpu_action" type="id" />
+    <item name="x11_gpu_title" type="id" />
+    <item name="x11_gpu_status" type="id" />
+    <item name="x11_gpu_detail" type="id" />
+    <item name="x11_gpu_radio" type="id" />
+    <item name="x11_gpu_pill" type="id" />
+    <item name="x11_gpu_rows" type="id" />
+
     <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
          views a row binds by id. -->
     <item name="tai_bench_list" type="id" />

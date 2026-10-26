@@ -25,8 +25,8 @@ public final class TourCardVisibility {
     /** Not drawn at all. */
     public static final int HIDDEN = 2;
     /**
-     * At the top of the screen, saying how to get back to the terminal and glowing nothing: the
-     * card is taught on the terminal place and the wall is resting on another one.
+     * At the top of the screen, saying the way to the other half of the wall and glowing nothing:
+     * the stage is taught on Home and the wall rests on the Workspace, or the other way round.
      */
     public static final int AWAY = 3;
     /** Where it stood, saying "Got it", over whatever the gesture opened. */
@@ -34,23 +34,28 @@ public final class TourCardVisibility {
 
     /**
      * @param chromeUp the full-plane surfaces in front of the user right now
-     * @param taughtOnTerminal whether the card's control lives on the terminal place
-     * @param onTerminal whether the wall is resting on the terminal place
+     * @param onItsSide whether the wall rests on the half the stage's control stands on
      * @param completing whether the card is saying "Got it"
      */
-    public static int decide(@Nullable Set<TourChrome> chromeUp, boolean taughtOnTerminal,
-                             boolean onTerminal, boolean completing) {
+    public static int decide(@Nullable Set<TourChrome> chromeUp, boolean onItsSide,
+                             boolean completing) {
         if (completing) return COMPLETED;
         if (chromeUp != null && !chromeUp.isEmpty()) return HIDDEN;
-        if (taughtOnTerminal && !onTerminal) return AWAY;
+        if (!onItsSide) return AWAY;
         return NORMAL;
     }
 
-    /** The same question for the card that is up. The closing card is never sent away. */
-    public static int decide(@Nullable TourStep step, @Nullable Set<TourChrome> chromeUp,
-                             boolean onTerminal, boolean completing) {
+    /**
+     * The same question for the card that is up, at its stage. The closing card is never sent
+     * away.
+     *
+     * @param wallSide the half of the wall it rests on, or null while it has not said
+     */
+    public static int decide(@Nullable TourStep step, int stage,
+                             @Nullable Set<TourChrome> chromeUp, @Nullable TourStep.Side wallSide,
+                             boolean completing) {
         if (step == null) return HIDDEN;
-        return decide(chromeUp, step.taughtOnTheTerminal(), onTerminal, completing);
+        return decide(chromeUp, step.isTaughtOn(stage, wallSide), completing);
     }
 
     private TourCardVisibility() {}

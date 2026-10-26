@@ -13,8 +13,29 @@ Latest stable: v1.2.0.
 ## New in this drop
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
 
-- The keyboard floats over the Linux display in portrait again on installs where an older Layout editor visit had switched it to making room.
-- Keyboard over display, in Settings → Display → Input, switches the keyboard between floating over the Linux display and making the display resize.
+- Look › Custom's Tint adds your accent colour from any Look, Clear and Mist included, and Hue picks primary, secondary or tertiary.
+- Look › Custom's Frost slider runs the glass from clear to frosted in one move, in place of Blur and Grain; a new Vibrancy slider makes what shows through the glass more or less colourful, and Edge runs the glass edge from no fringe to a bold coloured edge. Margin and Corner radius are on the Layout page only.
+- Look › Custom's keyboard card has a Keys slider for how solid the keys are, from clear to opaque; the key labels stay readable at every setting.
+- Glass edges show the same outline on frosted and solid glass as on clear glass.
+- Clear, Mist and Tint sit on the Frost slider's curve now, so Clear is a touch blurrier with finer grain and Tint has much less grain; an install on a Look keeps that Look.
+- Glass edges catch the wallpaper's own light instead of a white line, brightest at the top left, and keep the wallpaper's colour over a pale sky; each surface wears one edge, not a line on top of it.
+- Changing the wallpaper keeps the Appearance editor open on the page you were on, and the X11 display keeps showing its apps; new terminals still find the display (#83).
+- Changing the wallpaper or switching dark mode no longer crashes the launcher when app widgets are on Home (#83).
+- The herdr theme template goes see-through over the launcher glass, with its sidebar, text and accents in your wallpaper's colours.
+- Settings › Keyboard › Adaptive touch accuracy now learns the space bar too: aim for space and land at the bottom of the row above, and it types a space once it has learned your taps. Swipes and Ctrl or Alt shortcuts always keep the key under your finger, and Settings shows whether it is learning, active or paused.
+- Settings › Keyboard › Layouts lets you edit, reset and create keyboard layouts; a layout's row slides its buttons open beneath it, and a new layout shows at once on its first swap.
+- Terminal programs that ask for touch events receive your taps, long presses and swipes.
+- The Appearance editor's Cursor trail menu has an Off entry, so you can turn the trail off without going to Settings.
+- The Mouse mode key reads out the state it switched to: Mouse mode on, Mouse mode off.
+- Editing a cleaned-up dictation keeps the words the cleanup fixed or added highlighted while you type.
+- Starting a dictation no longer freezes the screen for a few seconds: when the cleanup model is not loaded yet, it loads after you stop speaking.
+- Round icons in icon packs stay whole circles now that pack icons draw bigger.
+- The window bar names terminal-browser in full, with a globe.
+- The command palette's key strip under the search field has solid keys, and its last row stays readable above the rounded bottom.
+- The welcome message in a new session is a rounded card in your wallpaper's colours, with a tap-to-open link to the guide; it lays itself out to fit narrow panes.
+- Fixes that also shipped in v1.0.6: the Low-memory preset switch, smoother transcript scrolling, symbol icons in larger program text, kitty playback without flicker, icon packs that stay applied, the sessions drawer at large font sizes, and a wallpaper change that keeps your Look's blur.
+- The welcome message in a new terminal is a rounded card in your wallpaper's colours, with Apps, Packages and Setup sections that fit the pane's width and a tap-to-open link to the guide.
+- Settings › Linux apps › Arch Linux installs on arm64 phones again, from the Arch Linux ARM image; Debian and Ubuntu are unchanged.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,

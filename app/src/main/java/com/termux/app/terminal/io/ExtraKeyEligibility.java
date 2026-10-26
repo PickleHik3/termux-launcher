@@ -126,6 +126,8 @@ public final class ExtraKeyEligibility {
         // Dictation types wherever the keyboard would, a Home search or a display as much as a
         // shell, and copies where nothing takes typing.
         tools.put(LauncherToolRegistry.TOOL_VOICE_DICTATE, Band.LAUNCHER);
+        // Minimal mode is the windows', but the switch is the launcher's, on every page.
+        tools.put(LauncherToolRegistry.TOOL_MINIMAL_TOGGLE, Band.LAUNCHER);
         // The dock and the key row are chrome every place wears.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_EXTRA_KEYS_EDIT, Band.LAUNCHER);
@@ -174,6 +176,11 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_NEW, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_CLOSE, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_SELECT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_PANE_CONSUME, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_PANE_EXPEL, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME_PROMPT, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_SESSION_NEW, Band.MULTIPLEX);

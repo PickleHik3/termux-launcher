@@ -537,6 +537,7 @@ public final class TermuxInAppKeyboard {
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
                 applyKeyCornerRadiusDp(mPreferences.getInAppKeyboardKeyCornerRadiusDp());
                 applyKeyOpacity(mPreferences.getInAppKeyboardKeyOpacity());
+                applyTextScale();
                 // The gap slider is global and lands on the next resume, like the rows above.
                 if (mForm == PlaceLayout.KeyboardForm.SPLIT)
                     applyKeyboardForm();
@@ -863,6 +864,16 @@ public final class TermuxInAppKeyboard {
 
     private void applyKeyMarginScale(float keyMarginScale) {
         applyKeyMarginScale(keyMarginScale, false);
+    }
+
+    /**
+     * The key legends at the shared Text size. Only the legends move, never the keys, so this
+     * asks the keyboard for one measure and nothing of the geometry around it; the same size
+     * again asks for nothing.
+     */
+    public void applyTextScale() {
+        if (mKeyboardView != null)
+            mKeyboardView.setLabelScale(mPreferences.getTextSizeScale());
     }
 
     private void applyKeyMarginScale(float keyMarginScale, boolean livePreview) {
@@ -1491,6 +1502,7 @@ public final class TermuxInAppKeyboard {
             requireContainer().getContext());
         mKeyboardView.setHeightScale(effectiveHeightScale());
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
+        mKeyboardView.setLabelScale(mPreferences.getTextSizeScale());
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
         mTapCorrection.setLayoutId(tapLayoutKey(mSelectedLayoutId));

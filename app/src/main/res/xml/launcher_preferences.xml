@@ -1,43 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Dock (was Dock & drawer, then Apps & dock). The dock's own page folded in here (pinned apps and the
+     usage-ranked page); Home's rows moved to Home and Set as default launcher to General. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_apps_home_header">
-        <Preference
-            app:key="app_launcher_set_home"
-            app:title="@string/settings_set_default_launcher_title"
-            app:summary="@string/settings_set_default_launcher_summary" />
+    <PreferenceCategory app:key="dock_drawer_dock" app:title="@string/settings_dock_header">
         <Preference
             app:key="app_launcher_default_buttons"
             app:title="@string/settings_edit_pinned_apps_title"
             app:summary="@string/settings_edit_pinned_apps_summary" />
         <SwitchPreferenceCompat
-            app:key="app_launcher_drawer_enabled"
-            app:title="@string/settings_app_drawer_enabled_title"
-            app:summary="@string/settings_app_drawer_enabled_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="app_launcher_widget_pane_enabled"
-            app:title="@string/settings_widget_pane_enabled_title"
-            app:summary="@string/settings_widget_pane_enabled_summary"
-            android:defaultValue="true" />
-        <ListPreference
-            app:key="app_launcher_builtin_widget_style"
-            app:title="@string/settings_builtin_widget_style_title"
-            app:summary="@string/settings_builtin_widget_style_summary"
-            app:entries="@array/settings_builtin_widget_style_entries"
-            app:entryValues="@array/settings_builtin_widget_style_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="tonal" />
+            app:key="app_launcher_most_used_page"
+            app:title="@string/settings_most_used_page_title"
+            app:summary="@string/settings_most_used_page_summary"
+            android:defaultValue="false" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_apps_customize_header">
-        <Preference
-            app:key="app_launcher_sub_dock"
-            app:persistent="false"
-            app:title="@string/settings_apps_sub_dock_title"
-            app:summary="@string/settings_apps_sub_dock_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.LauncherDockPreferencesFragment" />
+    <!-- Swipe down for app drawer and Double-tap to lock moved to Home › Gestures. -->
+    <PreferenceCategory app:key="dock_drawer_drawer" app:title="@string/settings_drawer_header">
         <Preference
             app:key="app_launcher_drawer_layout"
             app:title="@string/settings_app_drawer_view_type_title"
@@ -48,28 +28,12 @@
             app:title="@string/settings_apps_sub_search_title"
             app:summary="@string/settings_apps_sub_search_summary"
             app:fragment="com.termux.app.fragments.settings.termux.LauncherSearchPreferencesFragment" />
+        <!-- Opens the Linux apps section; hidden in a build made without the X server. -->
         <Preference
-            app:key="app_launcher_sub_lock"
+            app:key="linux_apps_in_drawer"
             app:persistent="false"
-            app:title="@string/settings_apps_sub_lock_title"
-            app:summary="@string/settings_apps_sub_lock_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.LauncherLockPreferencesFragment" />
-        <Preference
-            app:key="app_launcher_notifications_link"
-            app:persistent="false"
-            app:title="@string/settings_destination_notifications"
-            app:summary="@string/settings_notifications_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
-        <Preference
-            app:key="app_launcher_behavior_link"
-            app:persistent="false"
-            app:title="@string/settings_destination_app_behavior"
-            app:summary="@string/settings_apps_behavior_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
-        <Preference
-            app:key="app_launcher_help"
-            app:title="@string/help_settings_title"
-            app:summary="@string/help_settings_summary" />
+            app:title="@string/settings_apps_linux_apps_link_title"
+            app:summary="@string/settings_apps_linux_apps_link_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
     </PreferenceCategory>
-
 </PreferenceScreen>

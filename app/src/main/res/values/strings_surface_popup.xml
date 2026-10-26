@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The long-press popup on the dock, the status bar and the keyboard (editor-redesign §3). -->
+<resources>
+    <string name="surface_popup_edit">Edit</string>
+    <string name="surface_popup_hide">Hide</string>
+    <string name="surface_popup_apps_row">Apps row</string>
+    <!-- Spoken when the popup opens; %1$s is what was pressed, such as "Status bar". -->
+    <string name="surface_popup_a11y_pane">%1$s menu</string>
+    <string name="app_menu_edit_dock">Edit dock</string>
+</resources>

@@ -55,6 +55,11 @@ public final class TourViewTargets implements TourTargets {
     /** Room round a grabber's pill, so a glow drawn on it reads as a target and not a hairline. */
     private static final float GRABBER_AIR_DP = 10f;
 
+    /** How much of the Home page's height the free-area band takes, centred on the page. */
+    private static final float HOME_BAND_SHARE = 1f / 3f;
+    /** How far in from each side of the Home page the band starts, as a share of its width. */
+    private static final float HOME_BAND_SIDE_INSET = 0.1f;
+
     /** The seams the tour needs into the activity's view tree. */
     public interface ViewFinder {
         @Nullable
@@ -152,6 +157,8 @@ public final class TourViewTargets implements TourTargets {
             // The row lives in the dock, above the content or down a side column, one at a time.
             case AZ_ROW:
                 return rectInOverlay(azRowView(), "the A-Z index is put away or not on screen");
+            case HOME_PAGE:
+                return homePageBand();
             case PAGE_BORDER:
                 return pageBorderRect();
             // A layout that draws no pill still takes the swipe off its border, so the card stands
@@ -324,6 +331,27 @@ public final class TourViewTargets implements TourTargets {
             if (fallback == null) fallback = host;
         }
         return fallback;
+    }
+
+    /**
+     * A band across the middle of the Home page in front, a third of its height and inset from its
+     * sides: free area on a fresh Home, clear of the dock rows that float over its foot and of the
+     * system bar over its head, and wide enough for a sideways or an upward trace.
+     *
+     * <p>The page stays laid out while the wall rests on a window, slid aside rather than hidden,
+     * so a page standing mostly outside the overlay is not on screen.
+     */
+    @Nullable
+    private Rect homePageBand() {
+        Rect page = rectInOverlay(mFinder.findTourView(R.id.widget_pane), "Home is not on the wall");
+        if (page == null) return null;
+        int slack = page.width() / 4;
+        if (page.left < -slack || page.right > mOverlay.getWidth() + slack)
+            return miss("Home is slid aside: the wall rests on the Workspace");
+        int band = Math.round(page.height() * HOME_BAND_SHARE);
+        int top = page.top + (page.height() - band) / 2;
+        int inset = Math.round(page.width() * HOME_BAND_SIDE_INSET);
+        return new Rect(page.left + inset, top, page.right - inset, top + band);
     }
 
     /**

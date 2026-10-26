@@ -44,7 +44,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 16;
+    @VisibleForTesting static final int VERSION = 21;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -167,7 +167,7 @@ public final class X11CliInstaller {
      * Whether the XKB keyboard data the server needs is in the prefix. It comes from the
      * {@code xkeyboard-config} package; without it the server exits before it opens a port.
      *
-     * <p>A filesystem probe: cheap, but never call it from a hot path — the Display page re-runs
+     * <p>A filesystem probe: cheap, but never call it from a hot path — the display window re-runs
      * it only on arrival and on a running-state change, never on every frame.
      */
     public static boolean hasKeyboardData() {
@@ -542,7 +542,7 @@ public final class X11CliInstaller {
             + "fi\n"
             // The server refuses to start without the XKB data and only knows how to find it in
             // com.termux's own prefix, so point it at this edition's. It is the xkeyboard-config
-            // package's; the Display page says so when it is missing.
+            // package's; the display window says so when it is missing.
             + "if [ -z \"${XKB_CONFIG_ROOT+x}\" ]; then\n"
             + "  for dir in " + PREFIX + "/share/X11/xkb "
             + PREFIX + "/share/xkeyboard-config-2; do\n"

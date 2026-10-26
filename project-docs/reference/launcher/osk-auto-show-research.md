@@ -2,6 +2,11 @@
 
 **Date:** 2026-10-21 · **Branch:** worktree of `dev` · Nothing implemented; nothing here is a decision.
 
+**On v2-redesign (ported 2026-10-23):** written on pre, where the display was the Display place.
+On v2 it is the **display window** in the Workspace; read "the Display place" as "the display
+window", and the setting is under Settings → Terminal → Linux apps → Input. Line references are to
+pre's code at the time and are not updated.
+
 **Question.** How do modern Linux desktops make the on-screen keyboard (OSK) appear when the
 user taps a text field and disappear when they tap elsewhere, and how does termux-launcher do the
 same for X11 apps on the Display place? What could the launcher learn or adopt on an X11-only

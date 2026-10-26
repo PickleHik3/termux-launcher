@@ -17,7 +17,8 @@ import static org.junit.Assert.*;
 /**
  * A widget carried across pages keeps its cell through the page turn's render: the gesture is
  * delivered through that view, and removing it cancelled the drag mid-air and crashed the flip
- * (2026-10-21). The launcher's own widgets have negative ids, the first of them -1.
+ * (2026-10-21, on pre). The launcher's own widgets have negative ids, the first of them -1, so the
+ * pin's "none" is 0.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
@@ -52,7 +53,7 @@ public class WidgetGridDragPinTest {
         grid.setDragPinned(-1);
         grid.refresh(repository.gridDefinition(), Collections.emptyList());
 
-        grid.setDragPinned(WidgetGridView.NO_DRAG_PIN);
+        grid.setDragPinned(0);
 
         assertNull(grid.cellForId(-1));
     }

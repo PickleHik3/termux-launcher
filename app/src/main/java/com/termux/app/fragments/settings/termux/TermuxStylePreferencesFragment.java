@@ -16,7 +16,6 @@ import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
@@ -43,6 +42,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * The old Look page. Settings no longer lists it: its rows belong to the Appearance editor's pill
+ * card (project-docs/active/appearance-and-settings-rework-2026-10-24.md §3), the root's Appearance
+ * row opens the editor, and SettingsTree keeps this class name as the Appearance door, so an old
+ * link or a search hit still resolves. The page stays for the links that still name it (the
+ * command palette's Look and feel settings, Termux:Styling's fallback, an older saved stack) and
+ * for its controllers (icon packs, theme templates, wallpaper alignment), until the pill card
+ * takes them over.
+ */
 @Keep
 public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
 
@@ -75,35 +83,21 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         LauncherIconPackPreferenceController.configure(this, context);
         Preference appearanceSurface = findPreference("appearance_surface");
         if (appearanceSurface != null) appearanceSurface.setOnPreferenceClickListener(preference -> {
-            // The launcher comes forward with the Appearance surface open; Back returns here.
-            Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
-            intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-            return true;
-        });
-        Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
-        if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
-            Intent intent = new Intent(context, TermuxActivity.class);
-            // The one Appearance editor; nothing is preselected (SPEC §3.1).
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
+            // The launcher comes forward on the Global card; Back returns here.
+            SettingsEditorDoors.openEditor(this, preference,
+                com.termux.app.surfaces.EditorDoor.SETTINGS_LOOK);
             return true;
         });
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        updateKeyboardLookEnabled(context);
-        configureWallpaperAlignment(context);
     }
 
     @Override
     public void onResume() {
         super.onResume();
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_appearance);
+            getActivity().setTitle(R.string.settings_section_look);
         }
         Context context = getContext();
         if (context != null) {
@@ -112,53 +106,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         configureTerminalContrastPreference();
         configureThemeTemplatesPreference();
         configureDynamicColorsHint();
-        if (context != null) updateKeyboardLookEnabled(context);
-        if (context != null) updateWallpaperAlignmentVisibility(context);
-    }
-
-    /**
-     * The keyboard-look rows only matter for the built-in keyboard, so they grey out together
-     * when the Keyboard page's input-method choice is something else. That choice lives on a
-     * different page, so this is re-read on every resume rather than pushed as a live event.
-     */
-    private void updateKeyboardLookEnabled(@NonNull Context context) {
-        Preference category = findPreference("keyboard_appearance");
-        if (category == null) return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        category.setEnabled(preferences != null && preferences.isInAppKeyboardEnabled());
-    }
-
-    /**
-     * Wallpaper alignment only has something to correct while the system is the one drawing the
-     * wallpaper. With a still wallpaper the launcher draws it itself from the frame its own
-     * surfaces are cut from, so the row is put away rather than left as a knob that does nothing;
-     * a picture the launcher cannot be sure of (or the switch being off) brings it back. The switch
-     * above it is on the same page, so it re-checks on the spot as well as on every resume.
-     */
-    private void configureWallpaperAlignment(@NonNull Context context) {
-        updateWallpaperAlignmentVisibility(context);
-        SwitchPreferenceCompat wallpaperSwitch = findPreference("use_system_wallpaper");
-        if (wallpaperSwitch == null) return;
-        wallpaperSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-            Preference alignment = findPreference("wallpaper_render_zoom");
-            if (alignment != null) {
-                alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
-                    WallpaperBackdropPolicy.mode(Boolean.TRUE.equals(newValue),
-                        WallpaperPictureReader.read(context,
-                            TermuxAppSharedPreferences.build(context, true)), true)));
-            }
-            return true;
-        });
-    }
-
-    private void updateWallpaperAlignmentVisibility(@NonNull Context context) {
-        Preference alignment = findPreference("wallpaper_render_zoom");
-        if (alignment == null) return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
-        alignment.setVisible(WallpaperBackdropPolicy.alignmentSliderApplies(
-            WallpaperBackdropPolicy.mode(wallpaperMode,
-                WallpaperPictureReader.read(context, preferences), true)));
     }
 
     /**
@@ -396,9 +343,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
-    /** Lazy mode and Fancier Glass are stored by the terminal I/O store, whoever asks this one. */
+    /**
+     * Lazy mode, Fancier Glass and the terminal swipe (on Home › Gestures) are stored by the
+     * terminal I/O store, whoever asks this one.
+     */
     private static boolean isTerminalIoToggle(String key) {
-        return "lazy_mode".equals(key) || "fancier_glass".equals(key);
+        return "lazy_mode".equals(key) || "fancier_glass".equals(key) || "terminal_body_swipe".equals(key);
     }
 
     @Override
@@ -409,6 +359,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             return;
         if (isTerminalIoToggle(key)) {
             TerminalIOPreferencesDataStore.getInstance(mContext).putBoolean(key, value);
+            return;
+        }
+        if (com.termux.app.launcher.home.HomeSettings.owns(key)) {
+            com.termux.app.launcher.home.HomeSettings.putBoolean(mContext, key, value);
             return;
         }
         switch(key) {
@@ -430,6 +384,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 LauncherSchemeTheme.invalidate();
                 scheduleTermuxActivityStylingSync(true);
                 break;
+            case "widgets_on_glass":
+                // Each widget page re-dresses its widgets on the styling pass.
+                mPreferences.setWidgetsOnGlassEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case KEY_MOTION_LIGHT:
                 // Read by each pane as a motion starts: nothing to restyle.
                 mPreferences.setFancierGlassMotionLightEnabled(value);
@@ -449,12 +408,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherNotificationDotsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_most_used_page":
-                mPreferences.setAppLauncherMostUsedPageEnabled(value);
+            case "app_launcher_quick_reply_swipe":
+                mPreferences.setAppLauncherQuickReplySwipeEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_drawer_enabled":
-                mPreferences.setAppLauncherDrawerEnabled(value);
+            case "app_launcher_most_used_page":
+                mPreferences.setAppLauncherMostUsedPageEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_drawer_search_on_open":
@@ -469,13 +428,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherWidgetPaneEnabled(value);
                 // The pane is built once per activity, so it has to come back on a recreate.
                 scheduleTermuxActivityStylingSync(true);
-                break;
-            case "x11_display_enabled":
-                // The Display page's own store routes here too, so this is the one path. The
-                // launcher attaches or tears the page down itself when it comes back to the
-                // front — and asks before a running server is stopped — so no recreate.
-                if (com.termux.app.x11.X11DisplaySwitch.write(mContext, mPreferences, value))
-                    scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_haptics_enabled":
                 mPreferences.setAppHapticsEnabled(value);
@@ -498,6 +450,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             return defValue;
         if (isTerminalIoToggle(key))
             return TerminalIOPreferencesDataStore.getInstance(mContext).getBoolean(key, defValue);
+        if (com.termux.app.launcher.home.HomeSettings.owns(key))
+            return com.termux.app.launcher.home.HomeSettings.getBoolean(mContext, key, defValue);
         switch(key) {
             case "use_system_wallpaper":
                 return mPreferences.isUseSystemWallpaperEnabled();
@@ -505,6 +459,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isWallpaperParallaxEnabled();
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
+            case "widgets_on_glass":
+                return mPreferences.isWidgetsOnGlassEnabled();
             case KEY_MOTION_LIGHT:
                 return mPreferences.isFancierGlassMotionLightEnabled();
             case "app_launcher_bw_icons":
@@ -515,18 +471,16 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherDisplayAppNamesEnabled();
             case "app_launcher_notification_dots":
                 return mPreferences.isAppLauncherNotificationDotsEnabled();
+            case "app_launcher_quick_reply_swipe":
+                return mPreferences.isAppLauncherQuickReplySwipeEnabled();
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
-            case "app_launcher_drawer_enabled":
-                return mPreferences.isAppLauncherDrawerEnabled();
             case "app_launcher_drawer_search_on_open":
                 return mPreferences.isAppLauncherDrawerSearchOnOpenEnabled();
             case "app_launcher_drawer_search_android_keyboard":
                 return mPreferences.isAppLauncherDrawerSearchAndroidKeyboardEnabled();
             case "app_launcher_widget_pane_enabled":
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
-            case "x11_display_enabled":
-                return mPreferences.isX11DisplayEnabled();
             case "app_haptics_enabled":
                 return mPreferences.isAppHapticsEnabled();
             case "app_launcher_row_haptics":
@@ -563,10 +517,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return;
         switch (key) {
-            case "wallpaper_render_zoom":
-                mPreferences.setWallpaperRenderZoom(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
             default:
                 break;
         }
@@ -579,8 +529,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return defValue;
         switch (key) {
-            case "wallpaper_render_zoom":
-                return mPreferences.getWallpaperRenderZoom();
             default:
                 return defValue;
         }
@@ -592,6 +540,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             return;
         if (key == null)
             return;
+        // Settings › Home's newer rows keep their own store; the launcher reads them on return.
+        if (com.termux.app.launcher.home.HomeSettings.owns(key)) {
+            com.termux.app.launcher.home.HomeSettings.putString(mContext, key, value);
+            return;
+        }
         switch (key) {
             case "terminal_contrast_level":
                 mPreferences.setTerminalContrastLevel(value);
@@ -609,8 +562,22 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_az_lock_method":
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
-            case "app_launcher_use_case_mode":
-                applyUseCaseMode(value);
+            case "use_as":
+                // The launcher re-reads its wall as this lands (its Start in listener).
+                mPreferences.setUseAs(value);
+                break;
+            case "app_launcher_start_in": {
+                // Read at the next cold start only; nothing on screen changes. Display also turns
+                // on the display's start with the launcher, without which it would not hold.
+                com.termux.app.wall.StartInPolicy.Choice choice =
+                    com.termux.app.wall.StartInPolicy.choose(value);
+                if (choice.startsDisplay) mPreferences.setX11DisplayAutostartEnabled(true);
+                mPreferences.setLauncherStartIn(choice.startIn);
+                break;
+            }
+            case "app_launcher_home_palette_gesture":
+                // Read at each swipe; nothing on screen changes.
+                mPreferences.setHomePaletteGesture(value);
                 break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
@@ -652,6 +619,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             return defValue;
         if (key == null)
             return defValue;
+        if (com.termux.app.launcher.home.HomeSettings.owns(key))
+            return com.termux.app.launcher.home.HomeSettings.getString(mContext, key, defValue);
         switch (key) {
             case "terminal_contrast_level":
                 return mPreferences.getTerminalContrastLevel().value;
@@ -663,8 +632,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherAzLockMethod();
             case "in_app_keyboard_theme":
                 return mKeyboardLook.getString(key, defValue);
-            case "app_launcher_use_case_mode":
-                return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
+            case "use_as":
+                return mPreferences.getUseAs();
+            case "app_launcher_start_in":
+                // As the launcher reads it: Home is the Workspace under Terminal only.
+                return com.termux.app.wall.UseAs.read(mPreferences.getUseAs())
+                    .startIn(mPreferences.getLauncherStartIn());
+            case "app_launcher_home_palette_gesture":
+                return mPreferences.getHomePaletteGesture();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
             case "app_launcher_builtin_widget_style":
@@ -678,27 +653,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             default:
                 return defValue;
         }
-    }
-
-    /**
-     * The usage mode preset. It flips the drawer, both dock rows, the widget pane and the display
-     * at once, so every surface is rebuilt against the new state by a recreate rather than
-     * restyled in place; the display's own follow-ups run here because the preset wrote its
-     * switch directly, and a terminal-only install lets go of the app catalogue it no longer
-     * draws from.
-     */
-    private void applyUseCaseMode(String mode) {
-        boolean displayBefore = mPreferences.isX11DisplayEnabled();
-        if (!com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, mode)) return;
-        boolean displayAfter = mPreferences.isX11DisplayEnabled();
-        if (displayBefore != displayAfter) {
-            com.termux.app.x11.X11DisplaySwitch.onWritten(mContext, mPreferences, displayAfter);
-        }
-        if (com.termux.app.launcher.LauncherUseCaseMode.MODE_TERMINAL.equals(mode)) {
-            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext)
-                .invalidateIconArtwork();
-        }
-        scheduleTermuxActivityStylingSync(true);
     }
 
     private void writeTermuxPropertyToProperties(@NonNull String propertyKey, @NonNull String propertyValue) {

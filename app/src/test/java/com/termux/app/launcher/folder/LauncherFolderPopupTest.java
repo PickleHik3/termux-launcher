@@ -3,6 +3,7 @@ package com.termux.app.launcher.folder;
 import static org.junit.Assert.*;
 import android.app.Application;
 import android.os.Build;
+import android.view.MotionEvent;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.PopupWindow;
@@ -38,6 +39,31 @@ public class LauncherFolderPopupTest {
         controller.dismissImmediate();
         assertEquals(1, dismisses.get());
         assertNull(controller.folderId());
+    }
+
+    /**
+     * A key of the keyboard a rename is typed with lies outside the popup: the guard keeps the
+     * popup (and with it the rename) open for that touch, and only for an outside touch it claims.
+     */
+    @Test public void outsideTouchGuardKeepsThePopupOpenOnlyForTheTouchesItClaims() {
+        LauncherFolderPopupController controller = new LauncherFolderPopupController();
+        MotionEvent onKey = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_OUTSIDE, 50f, 900f, 0);
+        MotionEvent elsewhere = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_OUTSIDE, 50f, 100f, 0);
+        MotionEvent inside = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 50f, 900f, 0);
+        // No guard: every outside touch closes it, as before.
+        assertFalse(controller.keepsOpenOn(onKey));
+
+        controller.setOutsideTouchGuard((x, y) -> y >= 800f);
+        assertTrue(controller.keepsOpenOn(onKey));
+        assertFalse(controller.keepsOpenOn(elsewhere));
+        // A touch on the popup itself is never the guard's to take.
+        assertFalse(controller.keepsOpenOn(inside));
+
+        controller.setOutsideTouchGuard(null);
+        assertFalse(controller.keepsOpenOn(onKey));
+        onKey.recycle();
+        elsewhere.recycle();
+        inside.recycle();
     }
 
     @Test public void hideForDragKeepsWindowAliveButUntouchableUntilDismissed() {

@@ -165,14 +165,24 @@ public final class GlassStack {
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
+        return keyboard(preferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE, dockAlpha,
+            cornerRadiusPx, fancierLook);
+    }
+
+    /** The keyboard's glass on one half of the wall, which may hold its own values (ADR 0013). */
+    @NonNull
+    public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences,
+                                @NonNull TermuxAppSharedPreferences.WallHalf half, float dockAlpha,
+                                float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
-        float tint = linked ? dockAlpha : preferences.getInAppKeyboardBackgroundOpacity() / 100f;
-        return Spec.of(preferences.getInAppKeyboardBlurRadius(), tint,
-            preferences.getInAppKeyboardGrain(), cornerRadiusPx, fancierLook)
-            .withTintStrength(preferences.getInAppKeyboardTintStrength())
-            .withStackAlpha(keyboardStackAlphaPercent(preferences));
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+        float tint = linked ? dockAlpha
+            : preferences.getInAppKeyboardBackgroundOpacity(half) / 100f;
+        return Spec.of(preferences.getInAppKeyboardBlurRadius(half), tint,
+            preferences.getInAppKeyboardGrain(half), cornerRadiusPx, fancierLook)
+            .withTintStrength(preferences.getInAppKeyboardTintStrength(half))
+            .withStackAlpha(keyboardStackAlphaPercent(preferences, half));
     }
 
     /**
@@ -183,10 +193,17 @@ public final class GlassStack {
      * Opacity row applies. The under-keyboard strip asks here too, so both fade together.
      */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences) {
+        return keyboardStackAlphaPercent(preferences,
+            TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+    }
+
+    /** {@link #keyboardStackAlphaPercent(TermuxAppSharedPreferences)} on one half of the wall. */
+    public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences,
+                                                @NonNull TermuxAppSharedPreferences.WallHalf half) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
-        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity();
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(half);
     }
 
     /**
@@ -221,7 +238,20 @@ public final class GlassStack {
         boolean programEdge = false;
         // The frame the band's face is: its own blur when it draws one, the sharp wallpaper when
         // it has none, so its rows are measured where its content really stands.
+        // Glass 0 with Opacity 0 (blur, tint and grain all 0) is no material at all: no backdrop,
+        // tint or grain, only the rim the spec asks for. Without this the unblurred wallpaper copy
+        // under the frost filter still reads as a faint wash.
+        boolean bare = spec.blurRadiusDp <= 0 && spec.tintAlpha <= 0f && spec.grainPercent <= 0
+            && spec.tintColor == null;
+        if (bare) backdrop = null;
         glass.noteBandBlur(spec.band, backdrop != null ? spec.blurRadiusDp : 0);
+        if (bare) {
+            Drawable rimOnly = spec.rim ? glass.rimDrawable(spec.cornerRadiusPx)
+                : new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
+            if (spec.stackAlphaPercent < 100)
+                applyStackAlpha(rimOnly, Math.round(255f * spec.stackAlphaPercent / 100f));
+            return rimOnly;
+        }
         if (backdrop != null) {
             // The content-aware light scatter every glass surface's frame wears.
             backdrop.setColorFilter(GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));

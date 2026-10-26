@@ -493,10 +493,6 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     }
 
     /**
-     * The horizontal padding the root should carry: the system bars (a side navigation bar in
-     * landscape) and the keyboard, never the display cutout.
-     */
-    /**
      * The top padding the root should carry: the status bar while it shows, and the top cutout only
      * then (the bar is normally at least as tall). With the bar hidden the window claims the whole
      * top edge, cutout included, as fullscreen asks.
@@ -507,6 +503,10 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         return Math.max(statusBar, insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top);
     }
 
+    /**
+     * The horizontal padding the root should carry: the system bars (a side navigation bar in
+     * landscape) and the keyboard, never the display cutout.
+     */
     @NonNull
     static androidx.core.graphics.Insets horizontalRootInsets(@NonNull WindowInsetsCompat insets) {
         androidx.core.graphics.Insets bars = insets.getInsets(

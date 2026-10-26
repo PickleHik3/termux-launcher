@@ -58,6 +58,10 @@ public final class AppNotice {
      * callback can still find a chip to land in. Called once, from the application object.
      */
     public static void install(@NonNull Application application) {
+        // A new application has no activity in front yet. Once per process on a phone; under
+        // Robolectric each test brings a new application, and the last test's activity (never
+        // paused) would otherwise take this test's notices and lay out a window nobody drives.
+        sForegroundActivity = null;
         application.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             @Override public void onActivityResumed(@NonNull Activity activity) {
                 sForegroundActivity = new WeakReference<>(activity);
@@ -140,8 +144,14 @@ public final class AppNotice {
      */
     public static void undoable(@Nullable Context context, @Nullable CharSequence title,
                                 @Nullable CharSequence hint, @NonNull Runnable undo) {
-        raise(context, AppNoticeItem.Kind.SUCCESS, title, hint, "↺",
-            AppNoticeHostView.HOLD_UNDO_MS, undo, false, hint);
+        undoable(context, title, hint, undo, AppNoticeHostView.HOLD_UNDO_MS);
+    }
+
+    /** {@link #undoable(Context, CharSequence, CharSequence, Runnable)}, on offer for {@code holdMs}. */
+    public static void undoable(@Nullable Context context, @Nullable CharSequence title,
+                                @Nullable CharSequence hint, @NonNull Runnable undo,
+                                long holdMs) {
+        raise(context, AppNoticeItem.Kind.SUCCESS, title, hint, "↺", holdMs, undo, false, hint);
     }
 
     /**

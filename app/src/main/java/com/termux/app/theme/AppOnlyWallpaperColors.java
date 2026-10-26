@@ -32,7 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The launcher's Material colours from its app-only picture (ADR 0009) instead of Android's
+ * The launcher's Material colours from its app-only picture (ADR 0011) instead of Android's
  * wallpaper, while that picture is on screen.
  *
  * <p>The picture's seed is taken once, off the main thread, when the picture is set

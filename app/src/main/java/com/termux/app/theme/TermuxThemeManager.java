@@ -31,7 +31,7 @@ public final class TermuxThemeManager {
      * <p>Dynamic Material remains the default path. When the user has handed the chrome to the
      * terminal colour scheme, the scheme's palette is layered on top here — after {@code setTheme},
      * because that is what discards previously applied overlays. Otherwise, while the launcher
-     * wears an app-only picture (ADR 0009), that picture's colours stand in for Android's
+     * wears an app-only picture (ADR 0011), that picture's colours stand in for Android's
      * wallpaper's the same way.
      */
     public static void applyThemeOverlays(@NonNull Activity activity) {

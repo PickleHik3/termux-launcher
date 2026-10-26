@@ -13,7 +13,7 @@ tlstore install fish-shell
 
 installs the whole fish setup in one go and makes fish the shell new sessions start in
 (`tlstore remove fish-shell` puts the default shell back). The prompt follows your wallpaper once
-Oh My Posh is ticked under Settings → Appearance → Look → Tools that follow the terminal colours.
+Oh My Posh is ticked under Tools that follow the terminal colours (search Settings for it).
 Then:
 
 ```sh
@@ -47,7 +47,7 @@ endpoint** in the [Model centre](On_Device_AI.md#functions), and finds notes by 
 **Dawn notes integration** function.
 
 The wallpaper-matching prompt theme and the Neovim colour scheme are not tlstore items: they are
-set up from **Tools that follow the terminal colours** in **Settings → Appearance** (or run
+set up from **Tools that follow the terminal colours** in Appearance (or run
 **Look and feel settings** from the command palette). See
 [Look and themes](Look_And_Themes.md).
 

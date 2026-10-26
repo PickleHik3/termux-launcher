@@ -70,6 +70,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
+
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
@@ -280,22 +281,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
         mTerminalScreenUpdatePending = true;
-        Runnable redraw = () -> {
-            mPendingScreenUpdateSessions.remove(changedSession);
-            mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
-            if (!mHost.isVisible())
-                return;
-            // The wall left for another place between the post and this frame: hand the pane to
-            // the deferred set rather than drawing it, so the one redraw happens on return.
-            com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
-            if (view == null)
-                return;
-            if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
-                mDeferredScreenUpdateSessions.add(changedSession);
-                return;
-            }
-            drawScreen(view);
-        };
+        Runnable redraw = () -> redrawChangedSession(changedSession);
         // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
         // posted decides how it interleaves with that parsing. Measured over four configurations:
         //
@@ -315,6 +301,24 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         } else {
             mUiHandler.post(redraw);
         }
+    }
+
+    /** Draws the pane a pending screen update was for, if it is still there to be seen. */
+    private void redrawChangedSession(@NonNull TerminalSession changedSession) {
+        mPendingScreenUpdateSessions.remove(changedSession);
+        mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
+        if (!mHost.isVisible())
+            return;
+        // The wall left for another place between the post and this frame: hand the pane to
+        // the deferred set rather than drawing it, so the one redraw happens on return.
+        com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
+        if (view == null)
+            return;
+        if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
+            mDeferredScreenUpdateSessions.add(changedSession);
+            return;
+        }
+        drawScreen(view);
     }
 
     /**
@@ -899,6 +903,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         return service.getTerminalSessionForHandle(sessionHandle);
     }
 
+    /**
+     * Whether the service keeps running once it holds no shell: Home stays on screen after the
+     * Workspace's last shell, so the activity must outlive it, and the activity finishes when its
+     * service stops. See {@link TerminalHost#staysWhenWorkspaceEmpty()}.
+     */
+    public boolean keepsServiceWhenEmpty() {
+        return mHost.staysWhenWorkspaceEmpty();
+    }
+
     public void removeFinishedSession(TerminalSession finishedSession) {
         // Return pressed with finished session - remove it.
         TermuxService service = mHost.service();
@@ -907,7 +920,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
-            mHost.finishActivityIfNotFinishing();
+            // The home screen does not close with its last shell: the Workspace is simply empty.
+            mHost.rebuildDrawerSessions();
         } else {
             if (index >= size) {
                 index = size - 1;
@@ -972,7 +986,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // opaque, the measured glass ground while it is translucent.
                 int ground = mHost.terminalTextGround();
                 props = MaterialTerminalColorScheme.create(mContext, level, ground,
-                    mTerminalInkPolarity);
+                    inkLeaning(ground));
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
                 MaterialTerminalColorScheme.rememberGround(mContext, ground, mTerminalInkPolarity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
@@ -1010,6 +1024,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // output. The row cache sees the palette move and re-records each row.
             for (com.termux.view.TerminalView view : mHost.paneViews())
                 view.invalidate();
+            applyTextBackdropToPanes();
             updateBackgroundColor();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
@@ -1177,16 +1192,60 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     public void refreshMaterialTerminalColorsIfNeeded() {
         if (mHost.preferences() == null) return;
+        // Cheap and on every door here, the settled ground included: the panes' text floor
+        // follows the measured backdrop whether or not the palette is rebuilt.
+        applyTextBackdropToPanes();
         if (!mHost.preferences().isTerminalDynamicColorsEnabled()) {
             // A custom colors.properties is followed: re-read it only when it changed.
             if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
             return;
         }
+        int ground = mHost.terminalTextGround();
         int signature = MaterialTerminalColorScheme.signature(mContext,
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
-            mHost.terminalTextGround(), mTerminalInkPolarity);
+            ground, inkLeaning(ground));
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
+    }
+
+    /**
+     * The ink the palette is built leaning to on {@code ground}: the glass's, not the theme's
+     * ({@link TerminalSurfacePolicy#inkLeaning}). The build and the signature both ask here, so an
+     * opacity that crosses the line rebuilds the palette, and one that does not leaves it alone.
+     */
+    @Nullable
+    private com.termux.app.chrome.ChromeInk.Polarity inkLeaning(int ground) {
+        int opacity = mHost.preferences() != null
+            ? mHost.preferences().getTerminalBackgroundOpacity() : 100;
+        return TerminalSurfacePolicy.inkLeaning(android.graphics.Color.alpha(ground) != 0,
+            opacity, mTerminalInkPolarity);
+    }
+
+    /**
+     * Hand every pane what its default-background text really stands on, so the renderer holds it
+     * to its contrast floor there ({@code TerminalRenderer#setContrastBackdrop}). A pane re-records
+     * its rows only when the backdrop moved.
+     */
+    private void applyTextBackdropToPanes() {
+        int backdrop = mHost.terminalTextSurface();
+        double floor = terminalContrastFloor(mHost.preferences());
+        for (com.termux.view.TerminalView view : mHost.paneViews()) {
+            if (view == null) continue;
+            view.setContrastBackdrop(backdrop);
+            view.setContrastFloor(floor);
+        }
+    }
+
+    /**
+     * The contrast the user's Terminal contrast level asks normal text to hold: Softer 3:1,
+     * Default 4.5:1, Harder 7:1. The level is only offered with wallpaper colours on, so without
+     * them the default holds.
+     */
+    public static double terminalContrastFloor(
+            @Nullable com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences) {
+        if (preferences == null || !preferences.isTerminalDynamicColorsEnabled())
+            return com.termux.view.ContrastFloor.TEXT;
+        return preferences.getTerminalContrastLevel().bodyTarget;
     }
 
     private void onTerminalTextGroundSettled() {

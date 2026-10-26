@@ -136,9 +136,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         /** The Look shortcut: the surface shows the editor in its Look mode. */
         void onOpenLook();
 
-        /** The Layout shortcut: the surface shows the editor in its Layout mode. */
-        void onOpenLayout();
-
         /** The Icon pack shortcut: the surface shows the Icons page. */
         void onOpenIcons();
     }
@@ -536,7 +533,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
      * thousandth of its size; null then, and the frame grows from full size instead.
      */
     @Nullable
-    @Override
     public View sharedCard() {
         WallpaperPreviewView card = card(mCentred);
         if (card == null) card = card(WallpaperSlots.Slot.HOME);
@@ -589,18 +585,15 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     }
 
     @NonNull
-    @Override
     public List<View> leavingViews() {
         return Collections.singletonList(mStripCard);
     }
 
     @NonNull
-    @Override
     public List<View> fadingViews() {
         return Arrays.asList(mProgress, mPager);
     }
 
-    @Override
     public void setBackgroundAlpha(float alpha) {
         if (mBackground == null) {
             Drawable background = mRoot.getBackground();
@@ -637,7 +630,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mListener.onPickPhoto(slot, back);
     }
 
-    /** Where the page is now, for {@link Listener#onOpenLook} and {@link Listener#onOpenLayout}. */
+    /** Where the page is now, for {@link Listener#onOpenLook}. */
     @NonNull
     ReturnState returnState() {
         return new ReturnState(mCentred, mPending[WallpaperSlots.Slot.HOME.ordinal()],

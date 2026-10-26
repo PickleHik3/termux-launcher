@@ -307,6 +307,8 @@ public class AzStandaloneStripEmptyPinnedTest {
         ReflectionHelpers.setField(screen, "mPreferences", preferences);
 
         SuggestionBarView bar = new SuggestionBarView(screen, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         ViewGroup plank = screen.findViewById(R.id.apps_bar_plank_layer);
         plank.addView(bar, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));

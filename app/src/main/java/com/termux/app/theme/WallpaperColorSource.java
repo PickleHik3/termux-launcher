@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 /**
  * Where "the wallpaper's colours" come from: Android's wallpaper, or the launcher's app-only
- * picture (ADR 0009) through the seed captured from it.
+ * picture (ADR 0011) through the seed captured from it.
  *
  * <p>Pure, so the rule is pinned by tests: the activity and settings themes, the terminal's
  * Wallpaper colours and the exported palettes all ask {@link AppOnlyWallpaperColors}, which reads

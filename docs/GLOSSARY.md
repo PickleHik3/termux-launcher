@@ -1,7 +1,7 @@
 # Glossary
 
 The language the code, the docs and the developer use. One file: the product model (the wall, chrome,
-editors, voice, local AI) and the words the project uses about itself (editions, releases, pong,
+editors, widgets, voice, local AI) and the words the project uses about itself (editions, releases, pong,
 the seams). AGENTS.md carries the rules; this carries the names. Terms are alphabetical within
 each section. `_Avoid_` lines list the words not to use for a term.
 
@@ -13,8 +13,9 @@ Related: [`CONTEXT.md`](../CONTEXT.md) (a pointer to this file), [`docs/adr/`](a
 ### The wall and its chrome
 
 The wall rework (ADR 0008, agreed 2026-10-17, spec `project-docs/active/wall-rework-2026-10-17.md`)
-is not built yet. The entries here give the agreed words; the code still has three places until the
-rework lands, and the retired words are kept under _Avoid_ so the old prose can be read.
+is built on `feat/wall-rework-phase2`, and the entries here are its words. Some code names still
+say place, Widgets and Terminal (`PaneWallPage`); the retired words are kept under _Avoid_ so the
+old prose can be read.
 
 **A–Z index**:
 The row or column of letters along an edge that jumps the app list to the apps beginning with a
@@ -22,37 +23,125 @@ letter: scrub across it and the matches show. One of the Layout editor's element
 put away in the tray. See `docs/en/Launcher_Usage.md`.
 _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fast scroller
 
+**Body swipe**:
+A clearly sideways swipe that starts on a terminal's text and moves the place the terminal stands
+in, exactly as the **border drag** does: on a terminal **window** it pages the wall's row (between
+windows, the display window among them, and from the first window back to the last **Home page**);
+on a **Home float** it pages Home. Clearly sideways means at least 1.5 times as far across as up or
+down at the touch slop; anything steeper stays the terminal's scroll. The terminal keeps the swipe
+while it is selecting text, a program is tracking the mouse or asked for touch reports, or mouse
+mode is on; taps, the long press, vertical scrolls and pinches are always the terminal's. Any pane
+of a split pages the row, never between panes. Not on the display window's picture. On by default:
+Settings › Home › Gestures › Swipe on the terminal to switch windows (the Home float's
+is always on). One rule, `TerminalBodySwipe`.
+_Avoid_: terminal swipe, text swipe, rule B
+
 **Border drag**:
 The one-finger gesture that pages the wall from a **window**, in every mode. It starts on the
 current window's border: the frame line on any of its four sides and the air between it and the next
-thing out, less the corner squares. On the top and bottom air it is a plain sideways swipe. On the
-side borders, and wherever the border reaches into the window, it is a hold and then a sideways drag.
-The edge lights in the accent colour where a finger can page. A **Home page** has no border: it pages
+thing out, less the corner squares. Anywhere on it outside the window's text (the air on all four
+sides, and the side borders' 2 dp of clearance inside the frame) it is a plain sideways swipe that
+pages at once, past the touch slop, with no hold. A hold there still starts it too. Where the border
+reaches further into the window (a window almost flush with the wall) it is a hold and then a
+sideways drag. The bottom border reaches a little further, a fingertip tall: a clearly sideways
+swipe from the window's last row or the dock's top air pages too. A drag that starts in the
+terminal's text is the terminal's, unless it is a **body swipe**, which pages the same way. On the
+**display window** the border stops at the window's edge: its picture is the Linux app's to the rim,
+so neither the side clearance, the boxes by the grabbers nor the last row's band reach into it, and
+only where the air is thinner than the least band does the frame line itself page. The edge lights in
+the accent colour inside the frame where a finger can page. A **Home page** has no border: it pages
 by a plain swipe anywhere on it, as any launcher does. Reach, hold, glow and tilt are
 specified in `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: edge swipe, status bar swipe, page swipe
 
 **Chrome**:
 Everything the launcher draws around a page: the status bar, dock, keyboard, borders and corner
-tabs. The **Workspace** wears all of it; a **Home page** wears only the dock (without the extra
-keys) and the keyboard, both as overlays that take no room from the grid, under Android's own
-system bar, and the status bar only while a **Home float** exists.
+tabs. The **Workspace** wears all of it; a **Home page** wears the same status bar, starting below
+it as a window's page does, and the same dock (without the extra keys) and the keyboard, as
+overlays that take no room from the grid. The dock and
+status bar are one each across both halves and stay put while the wall moves (decided 2026-10-21,
+replacing the 2026-10-19 Home without a launcher status bar).
 _Avoid_: UI (too wide), decoration
+
+**Crossing**:
+One slide of the wall between Home and the Workspace, from the first frame the wall moves to the
+frame it lands. During a crossing the dock morphs from the leaving half's **Dress** to the arriving
+one in step with the wall's offset (icon size, row width, bands, Search field and Drawer tile), so
+nothing changes at the landing. The keyboard travels with the half that has it open, and a reversal
+or a chip tapped mid-slide retargets from where the wall is. A crossing is over only when the wall
+lands.
+_Avoid_: travel (the code's older word for the same motion), transition, page swipe
 
 **Display**, **display window**:
 One X display, shown whole by the embedded X server (`x11-server/`) as a **window** in the
 **Workspace**: a Linux desktop or the X11 apps on it, managed inside by the display's own window
 manager. It appears when something asks for it (a **Linux app** tapped in the drawer, the Display
-entry under Linux Apps) and leaves when the display stops. There is no switch and no mode for it.
+entry under Linux Apps), joining the end of the current session's row, and leaves when the display
+stops. It is an ordinary window of the row (2026-10-19): it has a chip among the windows' chips,
+can be dragged to another place in the row, and its chip's × closes it, which stops the display.
+There is one at most, no Display page, and no switch or mode for it. Settings has a root entry
+named **Linux apps** (2026-10-24), never Display: set-up, drawer visibility and the window's input,
+resolution, start-up and fixes.
 See `docs/en/X11_Display.md`.
 _Avoid_: Display place, Display page, the third place, X11 page, Termux:X11 (the server is our fork
 of it, but the window is the display)
 
 **Dock**:
 The band of chrome that carries the pinned-apps row, the A–Z index and the extra keys, along the
-bottom by default. Its shape follows the **Style**. Its rows may stand under the keyboard instead of
-over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
+bottom by default. There is one dock for both halves of the wall, dressed by one **Dock design**;
+only the Workspace's carries the extra keys. Its shape follows the **Style**. Its rows may stand under
+the keyboard instead of over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
 _Avoid_: taskbar, nav bar, hotseat
+
+**Dock geometry**:
+The pure module that answers every measurement of the dock: one snapshot of both halves in, one DockLayout out, down to the final per-slot icon. A slide is an input to it, never a path of its own (ADR 0011).
+_Avoid_: dock sizing, dock policy (the internal arithmetic only), per-caller measuring, travel icon size
+
+**Dock rows**:
+The one adapter that writes the dock's accessory views (the pinned-apps row, the A–Z index, the extra keys and the bands under the keyboard) from the applied DockLayout, and announces which Elements are on screen. Not the rows themselves.
+_Avoid_: dock controller, row visibility code
+
+**Dock design**:
+Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
+**Home layout**): #1 Tray (the default), #2 Beads (each pinned app its own round glass bead floating
+on the background with air between, no shared card, in both Styles) or #3 Strip (a big clock and a
+tile per terminal over the apps; the clock slides out at 3+ terminals). The extra keys are not part
+of any design: the Workspace shows them under every design and Style. Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
+the **Drawer tile**, which any design can carry.
+_Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
+Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
+
+**Stack layout**:
+The pure module that answers the whole bottom stack from one snapshot: heights, margins, overlap, reservation and the DockLayout from **Dock geometry**. Travel asks it for a half's rest.
+_Avoid_: bottom-stack assembly, stack caches, inset math
+
+**Dress**:
+Everything a page wears: the layout it follows and the elements it leaves out, the **Dock design**,
+the **Search field** and **Drawer tile**, the **Style**, Corners and Margin. The keyboard's shape
+comes from the layout the dress names; the dress itself does not carry the numbers. Home's dress equals a window's, less the extra keys, unless Home holds a **Home layout**.
+Whether the keyboard is open is not dress; each half remembers that.
+_Avoid_: outfit, chrome plan, place chrome
+
+**Dock item**:
+A launcher action standing in the dock's apps row beside the pinned apps, added, removed and
+reordered like a pin (decided 2026-10-23): the **Drawer tile**, New terminal (a new window),
+New float terminal (a **Home float** on the page you are on) and Command palette. One list per
+layout, so a **Home layout** may hold its own. Each has its own glyph; the drawer's is the universal one.
+_Avoid_: launcher shortcut, system tile, anchored tile
+
+**Drawer tile**:
+The **Dock item** that opens the app drawer, with any **Dock design**. Until 2026-10-23 the
+layout turned it on and anchored it at the start, middle or end of the apps row; now it stands
+where the dock items put it. Once the Taskbar design's (until 2026-10-21).
+_Avoid_: Home tile (it does not go Home), Taskbar
+
+**App menu**:
+The card a long press on an app icon opens, on the dock, on Home or in the drawer: grouped rows
+with a small arrow to the icon, in the system palette's shades (decided 2026-10-23). Rows, in
+order: notifications when badged, the app's shortcuts, Widgets, App info, Add to home, Pin or
+Unpin, Change icon (with Reset icon once one is set), Uninstall. Home's own long press is
+a sheet, not a menu: it has more to show.
+_Avoid_: context popup, anchored menu (the class), popup, context menu
 
 **Grabber**:
 The small pill on a page's bottom or top border that marks the **keyboard swipe** or the **status
@@ -63,8 +152,7 @@ _Avoid_: handle (the Layout editor's size control), pull tab
 **Home**:
 The launcher half of the wall: the **Home pages**, left of the **Workspace**. It is always there,
 and it is where the home press lands. Its chrome is the dock with the pinned-apps row and the A–Z
-index, and the keyboard; it has no borders, and the launcher status bar only while a **Home
-float** exists.
+index, the launcher status bar it shares with the Workspace, and the keyboard; it has no borders.
 _Avoid_: home screen (as a name for the whole launcher), the widgets place, Widgets page
 
 **Home page**:
@@ -76,10 +164,16 @@ _Avoid_: place, widgets page, desktop
 
 **Home float**:
 A **window** of the current session drawn floating over one Home page instead of in the Workspace's
-row: born full-size, moved by its **titlebar**, resized at its bottom-right corner, minimised into
-its chip in the status bar and docked into the row by the titlebar's Dock. It is what Terminal from
-Home opens. Chips, the drawer and the shortcuts see it like any window.
+row: born full-size, moved only by its **titlebar** (a **body swipe** on its terminal pages Home as
+a swipe beside it does), resized at its bottom-right corner, minimised into
+its **window chip** in the status bar and docked into the row by the titlebar's Dock. It is what
+Terminal from Home opens. The bar's chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
+
+**Float chip**:
+Retired 2026-10-21: a minimised **Home float** is a **window chip** in the status bar on both
+halves, and Minimise flies the float into that chip. There is no row of chips above the dock.
+_Avoid_: float chip (for the bar's chip, say window chip), Home pills, minimised pill
 
 **Keyboard swipe**:
 The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
@@ -106,6 +200,16 @@ off puts things back if nothing was edited meanwhile. With it on, a typed key op
 palette with that key, after the bound keys have had their turn.
 _Avoid_: persistent keyboard, keyboard lock
 
+**Commit** (a key):
+The moment a key press is sent: on release, never on finger-down, so a swipe legend, a long press or
+tap correction can still decide which key it was.
+_Avoid_: send, key-down
+
+**Echo**:
+What the shell writes back for a committed key, drawn in the terminal; the typed character appearing
+is the echo, not the key press.
+_Avoid_: local echo (the app never draws a character before the shell sends it)
+
 **Layer**, **open layer**:
 Launcher UI that opens over a page and closes again: the app drawer, the command palette, a sheet,
 help, the widget editor. While a layer is open it takes Back and the keys first, over the
@@ -129,7 +233,9 @@ _Avoid_: custom wallpaper, in-app wallpaper
 A second saved **Workspace** layout, and nothing more. It starts with only each window's content, so
 by default the bars, the A–Z index, the extra keys and the keyboard go away, and it changes no
 behaviour. It is one mode for every window, turned on and off only from the corner tab's minimal
-button, and stays on until turned off; Home has no minimal mode. The Layout editor opened while it
+button or the command palette's Minimal action, and stays on until turned off. Home ignores it:
+Home wears the normal shared layout (or its **Home layout**) whatever minimal says (decided
+2026-10-21, after a day of Minimal on both halves left Home with no way out). The Layout editor opened while it
 is on edits the **minimal layout**. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: full screen, focus mode, zen mode, zen view
@@ -140,8 +246,8 @@ see Minimal mode); appearance is never per orientation.
 
 **Page**:
 One full-screen stop on the **wall**: a **Home page** or a **window**. Appearance is one look for
-every page. Layout is per half: the Home layout for Home pages, the Workspace layout (normal or
-minimal) for windows.
+every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
+only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
 
 **Pane**:
@@ -181,15 +287,32 @@ code's word for a pane's shell, not for a session. See `project-docs/reference/t
 _Avoid_: tab (for a window), terminal (for a pane), column (Niri's word; in prose say window)
 
 **Start in**:
-The one setting that says where a cold start lands: Home (the default) or the Workspace, which
-opens one fresh shell window. It replaces the usage mode's Terminal alone.
+The one setting that says where a cold start lands: Home (the default), the Workspace, which
+opens one fresh shell window, or Display, the **display window**, which holds only while the
+display starts with the launcher (choosing it turns that on; turning it off falls back to the
+Workspace when a terminal window is open, else Home). It is also what the page overview's home
+button sets: a Home page, the first terminal window or the display window. It replaces the usage
+mode's Terminal alone. Under **Use as** Terminal only it offers Terminal and Display, and a stored
+Home reads as the Workspace.
 _Avoid_: default place, start page, usage mode
 
+**Use as**:
+Home screen (the default) or Terminal only, asked on the welcome sheet's first page and kept in
+Settings › General › Launcher beside **Start in** (`use_as`, policy in `UseAs`). Terminal only takes
+the Home page off the wall, hides Home's settings, drops Home from Start in and removes the Home
+card and both Match rows; the home press lands on the Workspace. Whether the app is the phone's
+home app is a separate choice.
+_Avoid_: usage mode, launcher mode, terminal alone
+
+**Search field**:
+The field under the dock's apps row that opens the command palette, there when the layout turns it
+on, with any **Dock design**. It was once a design of its own, Prompt line (until 2026-10-21).
+_Avoid_: Prompt line, Ask, omnibar, search bar
+
 **Status swipe**:
-The keyboard swipe's mirror on the top border: down unfolds the status bar, up folds it. It is there
-only while the status bar stands along the top and can unfold. A third, smaller form, the
-**capsule** at the top centre, is agreed for later (`project-docs/active/wall-rework-2026-10-17.md`
-§12). A press in Android's own strip at
+The keyboard swipe's mirror on the top border: down unfolds the status bar, up folds it, on Home as
+in the Workspace. It is there only while the status bar stands along the top and can unfold. The bar has these two forms only (a
+third, the capsule, was tried in phase two and removed). A press in Android's own strip at
 the top of the screen is never taken, so the notification shade still pulls down. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
@@ -197,7 +320,8 @@ _Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
 **Style**:
 How the chrome is shaped as a whole: **Docked** or **Floating**. In Floating each piece is a rounded
 card with air around it. In Docked the bars join flush into one frame of glass, and the pane is a
-rounded insert over it. Corners and Margin mean the same in both: the radius, and the air or the
+rounded insert over it; under a **Beads** dock the frame ends above the beads, which float on the
+background as they do in Floating, with no glass under the gesture pill. Corners and Margin mean the same in both: the radius, and the air or the
 gutter of glass around the pane. One Style holds for both orientations and the minimal layout. It
 never changes a floating or split keyboard's own shape.
 Full behaviour in `project-docs/reference/launcher/gestures-and-style.md`.
@@ -206,9 +330,9 @@ capsule, rounded
 
 **Surface**:
 One piece of glass whose look can be set: the dock, the keyboard, the status bar or the canvas
-(the terminal pane). In code it is a `SurfaceSlot`. Each surface carries some of blur, opacity,
-grain, tint, corner radius and side gap, and each of those either follows **Base** or holds an
-override of its own. AGENTS.md's "Hit every surface" uses the word more broadly, for every path a
+(the terminal pane). In code it is a `SurfaceSlot`. The user sets its **Frost**, opacity, tint,
+corner radius and side gap (Frost is stored as the blur and grain properties), and each of those
+either follows **Base** or holds an override of its own. AGENTS.md's "Hit every surface" uses the word more broadly, for every path a
 change has to cover.
 _Avoid_: panel, layer, widget
 
@@ -220,16 +344,22 @@ _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 
 **Titlebar**:
 The translucent glass strip along the top of every floating pane, Home float and the scratchpad:
-the drag handle and Minimise, Maximise, Close and Dock. It replaces the floating pane's move corner
-and pill; resizing stays at the bottom-right corner.
+the drag handle and Minimise, Maximise and Close; Dock is in the menu a long press on the handle
+opens. It carries no readings: the status bar shows them on both halves (2026-10-21). It replaces
+the floating pane's move corner and pill; resizing stays at the bottom-right corner.
 _Avoid_: pill (the retired control; the dictation pill is another thing), header, handle bar
 
 **Wall**:
 The one horizontal row the launcher pages along: the **Home pages**, then the **Workspace**. Swiping
-past the last Home page reaches the first window; dragging back before the first window returns to
-the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
+past the last Home page reaches the first window, opening a fresh one when the Workspace has none;
+dragging back before the first window returns to the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
+
+**Window chip**:
+The status bar's chip for one window, the display window or a **Home float**, the same chips in the
+same order on both halves of the wall. #3 Strip's tiles show the same window chips at tile size.
+_Avoid_: pill (the dictation control), window pill, run strip entry, float chip
 
 **Workspace**:
 The terminal half of the wall, right of Home: the current session's windows, then the display
@@ -242,24 +372,39 @@ sessions**)
 
 ### Look and motion
 
+**Ambient effect**:
+A built-in shader effect that animates continuously rather than in answer to something. It is off
+unless chosen, is labelled as a battery cost, and stops drawing under **Lazy mode**, when its page or
+pane is not visible, and after about ten seconds without input, resuming on the next touch.
+_Avoid_: animated background, live wallpaper (removed), animation
+
 **Base**:
-The shared value of a surface property (blur, opacity, grain, tint, corner radius, side gap) that
-every surface follows until it is given its own. A surface that follows Base is **inherited**; one
+The shared value of a surface property (Frost, opacity, tint, corner radius, side gap; Frost is
+stored as blur and grain) that every surface follows until it is given its own. The Appearance
+card's All surfaces strip sets it. A surface that follows Base is **inherited**; one
 with its own value is **detached**, holding an override. The resolution happens in
 `TermuxAppSharedPreferences`, so every getter returns the resolved value. Setters write through the
 link, so a slider or the wallpaper mode leaves a surface inherited.
 _Avoid_: global, default (the shipped value is the default; Base is what the user set)
 
+**Event effect**:
+A built-in shader effect that draws only in answer to something happening (a keystroke, a cursor
+move, the bell, a pane taking focus) and stops when its motion ends, so it costs nothing at rest.
+Every effect is an event effect unless it is an **Ambient effect**. Effects are built in; there are
+no user-supplied shaders.
+_Avoid_: animation, custom shader (users cannot load their own)
+
 **Fancier Glass**:
 The extra glass: refraction at glass edges on every glass surface and the
-tilting page motions. It has no switch any more (it left Settings › Look with the Looks): it is on
+tilting page motions. It has no switch any more (it left the old Settings › Look page with the Looks): it is on
 wherever the device supports it — Android 13 and later, with a managed wallpaper — and each Look
 sets how deep the bend is. Lazy mode, battery saver and reduced motion override it. See ADR 0005
 and `project-docs/active/fancier-glass/SPEC.md`.
 _Avoid_: glass mode, refraction mode
 
 **Frost** (the slider):
-Look › Custom's first slider, clear to frosted: it moves a surface's blur and grain together along
+The glass strip's first slider on every card with glass (and All surfaces' on the Appearance
+card), clear to frosted: it moves a surface's blur and grain together along
 one curve (`surfaces/GlassControls`; the code still calls it Glass, `GLASS`, `surface_glass_position`).
 Clear sits at 20, Tint at 40, Mist at 75; Solid has no frost and sits off it. Storage keeps blur and
 grain; the slider reads them back. Not the frost layer itself (the blurred picture a surface draws).
@@ -286,6 +431,14 @@ Look › Custom's saturation of what the glass shows, 0.7x to 1.5x: baked once i
 the glass samples, never into the bare wallpaper. 1.0x in every Look.
 _Avoid_: saturation of the wallpaper
 
+**Text size**:
+Look › Custom's last global slider, 80% to 150%: one size for the type the launcher draws itself,
+the terminal font, the keyboard's key legends and the chrome labels (status bar figures, window
+chips, the dock strip's titles, Home's app labels). Each is drawn at its own size times it, so a
+surface's own size stays an offset: pane zoom and the terminal font setting, Home's label size.
+100% is every install's sizes as they were (`text_size_percent`, unset until moved).
+_Avoid_: font scale (Android's own, which still applies on top), zoom (the terminal's pinch)
+
 **Lazy mode**:
 The Battery setting that stops the launcher animating while nobody is watching: the clock swaps its
 digits instead of folding them, a working window's rim holds lit, and the status readings are sampled
@@ -293,9 +446,10 @@ less often. It is meant to become the default. See `docs/en/Launcher_Settings.md
 _Avoid_: battery saver (Android's own), low-power mode
 
 **Look**:
-The one appearance the launcher has, set by the Appearance editor's slider. The slider has five
-stops: Clear, Mist, Tint, Solid and Custom. Only Custom shows controls for each surface. One look
-covers every page and both orientations.
+The appearance of one half of the wall, set by the Appearance editor's slider. The slider has five
+stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Look to Custom by
+itself; Custom is never a gate. Home and the Workspace each hold their own Look and own surface
+values, equal until one is edited (ADR 0013); one look covers both orientations.
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
 
 **Material palette**:
@@ -335,12 +489,17 @@ _Avoid_: screenshot, freeze frame
 ### Editing
 
 **Appearance editor**:
-The editor for how the launcher looks: a **Look** slider with the stops Clear, Mist, Tint, Solid and
-Custom, over the launcher scaled into a frame. At Custom a tap on an element shows Darkness,
-Legibility, Blur, Key corners and Soft wallpaper with Dim. Entered from the corner tab; exits
-straight back to the live page. There is one look, so what it edits lands on every page. Undo
-steps back and Done keeps the changes.
-_Avoid_: surface editor (legacy umbrella name), look editor, style editor, full editor
+The one editor for how the launcher looks and sits, over the launcher scaled into a frame that
+slides between Home and the Workspace. Its rule is **tap the thing**: tap a surface (Home, Status
+bar, Terminal, Dock, Keyboard) and its **card** rises with everything about it, ordered by how
+often it is touched, rare controls under **More**; drag a surface to move it; tap the **pill** for
+what has no surface (the Look slider, wallpaper, theme, icon pack, text size, full screen, minimal,
+orientation, Undo, Done; that bar is the **editor bar**, never the Pill, which is the dictation
+card). It edits the half the frame shows. Users never meet Base, inherit or
+follow: a moved slider is the surface's own value, marked by a dot, and **Reset** in the card menu
+puts it back on the Look. Undo steps back and Done keeps the changes. Every door to it is named
+Appearance and opens on that door's object.
+_Avoid_: surface editor, look editor, Look page, Layout page (the 2026-10-24 merge removed the pages), style editor
 
 **Corner tab**:
 The small control strip revealed by holding a page's corner. On a Home page it carries Appearance,
@@ -360,31 +519,74 @@ palette's **Keyboard on/off** flips (`keyboard_turned_off`), shared by both orie
 page; the last write wins, whichever door it came through.
 _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
 
+**Home layout**:
+An opt-in layout of Home's own, for a user who wants Home laid out unlike the Workspace. Off by
+default, when Home wears the one shared layout. While on, Home holds its own copy of which rows show
+(the apps row, the A–Z row, the status bar), their order, edge and under-keyboard placement, the
+**Dock design**, and the Search field and Drawer tile toggles (with the tile's position). The sizes
+stay **linked** to the shared layout either way: the apps row's height, the #3 Strip row's height,
+the keyboard's height and chin, and **Style**, Corners and Margin are one value on both halves,
+edited from either, so nothing resizes on the swipe (decided 2026-10-21, #84). The keyboard's form
+stays Home's own. It is the Layout editor's "Layout: One layout | Home's own" line; the row's house
+segment previews Home. It is to the layout what a surface's override is to **Base**.
+_Avoid_: Home variant, Home place
+
 **Layout editor**:
-The editor for where the elements sit and how big they are: bars, dock, keyboard, widget grid,
-hidden or shown. It has no rows of controls (spec `project-docs/reference/launcher/appearance-layout-editor/SPEC.md`
-§3.5): a bar moves by pressing it anywhere and dragging, anything is put away by dropping it in the **restore tray** and
-brought back by its chip there, and a tap selects an element and shows its **handle** — the dock's
-height, the keyboard's height and chin, Home's grid cells — with a readout in real units while it
-is held. The selected keyboard shows its type chips (docked, floating, split). There is one layout
-per half of the wall: opened on a window it edits the Workspace layout (normal or minimal variant),
-opened on a Home page it edits the Home layout, whose elements are the dock's rows and the keyboard
-only; the layout canvas shows the page it was opened on, one orientation at a time with a glyph
-toggle to the other. Entered from the corner tab's Layout glyph, the long-press menu, or the Layout
-row in Settings.
-_Avoid_: arrange mode, surface editor, place editor
+Legacy name for the Appearance editor's move and size controls (2026-10-24: there is one editor,
+see **Appearance editor**). Its shrunken Layout mode, the **layout canvas** with its drags and
+handles, was retired on 2026-10-26 (editor-redesign §1): a bar moves by its card's **Position**
+row, sizes are rows on the cards, a hidden bar waits in the stack beside the frame, and the
+editor edits the orientation the phone is in (turn the phone for the other). The session
+underneath keeps the name in code (`LayoutEditorController`, `LayoutEditorPlan`).
+_Avoid_: Layout page, Layout tab, Layout mode, Layout (as the name of a door; the door is Appearance)
 
 **Layout canvas**:
-The scaled model of a page's layout that the user drags elements around on, in the Layout
-editor; there is no second one. Code still calls it the miniature (`LayoutCanvasView`) until
-it is redrawn from the layout element pack.
-_Avoid_: miniature (in new prose), preview, thumbnail, overview
+Retired 2026-10-26 with Layout mode: the scaled model of a page's layout (`LayoutCanvasView`,
+once called the miniature) that elements were dragged around on. Nothing draws it now.
+_Avoid_: miniature, preview, thumbnail, overview
 
 **Restore tray**:
-The strip under the layout canvas: one chip, with a struck-through eye, per hidden element, which
-brings the element back to the edge it was put away from; one short line when nothing is hidden;
-"Drop here to hide" while something is lifted.
+Retired with the layout canvas. Hidden bars now wait as cards in the stack beside the editor's
+frame: a tap opens the bar's card, a drag onto the frame brings it back.
 _Avoid_: Hidden box, shelf
+
+### Widgets
+
+The launcher's own Home widgets after the redesign (ADR 0010, decided 2026-10-21, research
+`project-docs/active/widget-redesign-research.md`). None of it is built yet: until it is, the code
+and the picker still have the twelve older kinds, whose names are kept under _Avoid_.
+
+**Bare**:
+A widget drawn without its card: its ink sits straight on the wallpaper, dimmed only where it would
+not read. It is an opt-in per widget, offered by the Clock, **Glance** and Weather. The **Look**'s
+Clear stop does not turn it on.
+_Avoid_: Clear (that is a Look stop), transparent, no card
+
+**Clock face**:
+One of the designs a clock is drawn in: Analog, Numerals, Slab, Flip, LCD, LED matrix, Tape and
+Minimal, the same designs in the status bar and on the Clock widget. A new Clock widget starts on the
+bar's current face, and from then on each is chosen on its own.
+_Avoid_: clock style (the setting's old name), skin, Analog clock and Digital clock (the two widgets
+the Clock replaces)
+
+**Device**:
+The widget for the phone's own state: battery first, then storage, memory and temperature as it
+grows, and the processor only where the launcher has privileged access.
+_Avoid_: Battery widget, System widget (the two it replaces), stats
+
+**Glance**:
+The one-row widget for the first look of the day: the date, the next event, the weather, the next
+alarm and, when low and not charging, the battery. It draws **Bare**. It never shows the time, which is the Clock's.
+_Avoid_: At a Glance (Pixel's), summary, today
+
+**Notes**:
+The widget that shows a markdown file from the home folder, opening it in the editor on a tap.
+_Avoid_: Scratchpad (as the widget's name; the scratchpad is the toggled floating terminal), memo
+
+**Widgets on glass**:
+The **Look**'s one switch for whether the launcher's widgets wear its glass, following **Base**. A
+widget's own Glass switch can still set it apart.
+_Avoid_: widget glass (for the per-widget switch alone), glass mode
 
 ### Tlstore
 

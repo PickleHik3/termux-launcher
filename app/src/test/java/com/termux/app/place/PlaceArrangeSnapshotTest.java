@@ -12,6 +12,7 @@ import android.os.Build;
 
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -64,25 +65,45 @@ public class PlaceArrangeSnapshotTest {
         places.setWidgetColumns(LANDSCAPE, 6);
     }
 
+    /**
+     * The Dock card's Bars list is something to lose even when no slot moves (bars on edges of
+     * their own), and Discard puts it back, absent where it was absent.
+     */
     @Test
-    public void restoreLeavesNoKeyboardModeWhereNoneWasStored() {
+    public void theBarsListOrderIsSomethingToLose() {
         PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
-        places.setKeyboardMode(PORTRAIT, PlaceLayout.KeyboardMode.RESIZE);
+        String entrySignature = entry.signature();
+        places.setBarOrder(PORTRAIT, "az_bar,apps_row,extra_keys");
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+
         entry.restore(places);
-        assertFalse(places.hasStoredKeyboardMode(PORTRAIT));
-        assertFalse(places.hasStoredKeyboardMode(LANDSCAPE));
-        assertEquals(PlaceLayout.KeyboardMode.OVERLAY, places.keyboardMode(PORTRAIT));
+
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertEquals(null, places.barOrder(PORTRAIT));
+
+        places.setBarOrder(LANDSCAPE, "extra_keys,apps_row,az_bar");
+        PlaceArrangeSnapshot stored = PlaceArrangeSnapshot.capture(places);
+        places.setBarOrder(LANDSCAPE, "apps_row,az_bar,extra_keys");
+        stored.restore(places);
+        assertEquals("extra_keys,apps_row,az_bar", places.barOrder(LANDSCAPE));
     }
 
+    /** The Wall strip's row height is as unsaved as the dock's, and Discard puts it back. */
     @Test
-    public void restorePutsBackAKeyboardModeThatWasStored() {
-        places.setKeyboardMode(PORTRAIT, PlaceLayout.KeyboardMode.RESIZE);
+    public void theWallStripsRowHeightIsSomethingToLose() {
+        places.setWallStripHeightDp(PORTRAIT, 96);
         PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
-        places.clearKeyboardMode(PORTRAIT);
+        String entrySignature = entry.signature();
+        places.setWallStripHeightDp(PORTRAIT, 120);
+        places.setWallStripHeightDp(LANDSCAPE, 64);
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+
         entry.restore(places);
-        assertTrue(places.hasStoredKeyboardMode(PORTRAIT));
-        assertEquals(PlaceLayout.KeyboardMode.RESIZE, places.keyboardMode(PORTRAIT));
-        assertFalse(places.hasStoredKeyboardMode(LANDSCAPE));
+
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertEquals(96, places.wallStripHeightDp(PORTRAIT));
+        assertEquals(com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP,
+            places.wallStripHeightDp(LANDSCAPE));
     }
 
     /** A band moved under the keyboard is as unsaved as any move, and Discard takes it back. */
@@ -326,5 +347,43 @@ public class PlaceArrangeSnapshotTest {
         places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         assertEquals(normalEntry,
             PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature());
+    }
+
+    /**
+     * A keyboard mode the layout never stored is put back absent, not pinned at the default it
+     * read: pinning is how portrait kept Resize after Overlay became its default.
+     */
+    @Test
+    public void aRestoreLeavesAnAbsentKeyboardModeAbsent() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+        assertFalse(places.hasStoredKeyboardMode(PORTRAIT));
+
+        entry.restore(places);
+        assertFalse(prefs.contains("layout.portrait.keyboard_mode"));
+        assertFalse(prefs.contains("layout.landscape.keyboard_mode"));
+
+        // And a mode switched mid-session goes away again, rather than being reverted to a key.
+        places.setKeyboardMode(PORTRAIT, KeyboardMode.RESIZE);
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        entry.restore(places);
+        assertFalse(prefs.contains("layout.portrait.keyboard_mode"));
+        assertEquals(KeyboardMode.OVERLAY, places.keyboardMode(PORTRAIT));
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+    }
+
+    /** A keyboard mode the layout did store comes back as stored. */
+    @Test
+    public void aRestorePutsAStoredKeyboardModeBack() {
+        places.setKeyboardMode(PORTRAIT, KeyboardMode.RESIZE);
+        places.setKeyboardMode(LANDSCAPE, KeyboardMode.OVERLAY);
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+
+        places.clearKeyboardMode(PORTRAIT);
+        places.setKeyboardMode(LANDSCAPE, KeyboardMode.RESIZE);
+        entry.restore(places);
+
+        assertEquals("resize", prefs.getString("layout.portrait.keyboard_mode", null));
+        assertEquals("overlay", prefs.getString("layout.landscape.keyboard_mode", null));
     }
 }

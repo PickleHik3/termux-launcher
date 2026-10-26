@@ -228,7 +228,7 @@ full neovim toolchain, a few packages are missing — see
 [Neovim / LazyVim](Nix_Package_Management.md#neovim--lazyvim) for the exact lines to add.
 
 **The glass bars are not blurred.** Unrelated to Nix: the launcher needs permission to read your
-wallpaper. **Settings › Services & permissions › Wallpaper access**, or set a wallpaper from inside
+wallpaper. **Settings › General › Permissions & services › Wallpaper access**, or set a wallpaper from inside
 the launcher, which needs no permission at all.
 
 ## Words you will keep seeing
