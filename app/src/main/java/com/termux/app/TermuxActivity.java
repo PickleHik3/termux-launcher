@@ -8497,11 +8497,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? com.termux.app.chrome.LiveChromeShape.cardClip(0f) : clip, 0f, raised);
     }
 
+    /** The keyboard's clip before Full screen raised its bottom corners. */
+    @Nullable private com.termux.app.chrome.LiveChromeShape.Clip mKeyboardBaseClip;
+    /** The window-layout listener that re-reads the raise as the keyboard moves; once per host. */
+    @Nullable private View mKeyboardCornerFollowed;
+
+    /**
+     * Re-reads the Full screen raise after every window layout, so a keyboard that moved (its
+     * stack, the chin, a rise) curves with the screen on that pass rather than the next material
+     * pass. Compares before it touches the outline, so a keyboard at rest costs one walk up.
+     */
+    private void followKeyboardForScreenCorners(@NonNull View surfaceHost) {
+        if (mKeyboardCornerFollowed == surfaceHost) return;
+        mKeyboardCornerFollowed = surfaceHost;
+        surfaceHost.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (surfaceHost.getOutlineProvider() != mKeyboardOutline) return;
+            if (mKeyboardOutline.setClip(fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip)))
+                surfaceHost.invalidateOutline();
+        });
+    }
+
     private void applyInAppKeyboardSurfaceClip(@NonNull View surfaceHost, boolean capsule,
                                                float cornerRadiusPx) {
-        boolean changed = mKeyboardOutline.setClip(fullScreenKeyboardClip(surfaceHost, capsule
+        mKeyboardBaseClip = capsule
             ? com.termux.app.chrome.LiveChromeShape.cardClip(cornerRadiusPx)
-            : chromeClipOf(KEYBOARD_PIECES)));
+            : chromeClipOf(KEYBOARD_PIECES);
+        boolean changed = mKeyboardOutline.setClip(
+            fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip));
+        followKeyboardForScreenCorners(surfaceHost);
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
         else if (changed)
