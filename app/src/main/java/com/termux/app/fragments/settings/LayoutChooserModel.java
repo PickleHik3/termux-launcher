@@ -2,9 +2,7 @@ package com.termux.app.fragments.settings;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
 
-import com.termux.R;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
@@ -14,13 +12,9 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
 
 /**
- * What a bar dropped on the miniature writes, and the word each of its positions goes by. Pure: a
- * store in, a write out, nothing drawn, so the picture and the Layout editor's drops are testable
- * on their own.
- *
- * <p>What the layout offers that no bar can be dragged into — the keyboard's height, chin and
- * type, the grid's cells — is a handle or a chip on the layout canvas, written through
- * {@link com.termux.app.layouteditor.LayoutEditorPlan} one orientation at a time.
+ * What moving a bar writes: the Position rows on the editor's cards and the hidden stack land
+ * here through {@link com.termux.app.layouteditor.LayoutEditorPlan}. Pure: a store in, a write
+ * out, nothing drawn, so every move is testable on its own.
  */
 public final class LayoutChooserModel {
 
@@ -88,17 +82,5 @@ public final class LayoutChooserModel {
                                     @NonNull PlaceOrientation orientation,
                                     @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge) {
         return applyDrop(places, orientation, bar, edge, -1);
-    }
-
-    /** The word for an edge. Shared with the miniature, which names the same positions. */
-    @StringRes
-    static int edgeLabel(@NonNull Edge edge) {
-        switch (edge) {
-            case BOTTOM: return R.string.settings_x11_extra_keys_side_bottom;
-            case LEFT: return R.string.settings_dock_rail_side_left;
-            case RIGHT: return R.string.settings_dock_rail_side_right;
-            case TOP:
-            default: return R.string.settings_layout_edge_top;
-        }
     }
 }

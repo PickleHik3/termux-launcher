@@ -13834,52 +13834,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentWallPlace();
         }
 
-        @Override public int extraKeyCount() {
-            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
-                return -1;
-            }
-            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
-                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
-            return matrix.length == 0 ? -1 : matrix[0].length;
-        }
-
-        @NonNull @Override
-        public java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> extraKeySlots() {
-            java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> slots =
-                new java.util.ArrayList<>();
-            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
-                return slots;
-            }
-            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
-                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
-            if (matrix.length == 0) return slots;
-            // The real bar draws an icon key as a Nerd Font code point on the bundled symbols
-            // face (ExtraKeysView.setKeyCapText), so an icon key here is that glyph on that face.
-            android.graphics.Typeface symbols =
-                com.termux.shared.termux.font.NerdFontSpans.typeface(TermuxActivity.this);
-            for (com.termux.shared.termux.extrakeys.ExtraKeyButton button : matrix[0]) {
-                String display = button == null ? null : button.getDisplay();
-                if (display == null) display = "";
-                if (symbols != null && isAllNerdSymbols(display)) {
-                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofIcon(
-                        new com.termux.app.fragments.settings.LayoutCanvasKeyGlyph(display, symbols)));
-                } else {
-                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofText(display));
-                }
-            }
-            return slots;
-        }
-
-        private boolean isAllNerdSymbols(@NonNull String display) {
-            if (display.isEmpty()) return false;
-            for (int i = 0; i < display.length(); ) {
-                int codePoint = display.codePointAt(i);
-                if (!com.termux.shared.termux.font.NerdFontSpans.isNerdSymbol(codePoint)) return false;
-                i += Character.charCount(codePoint);
-            }
-            return true;
-        }
-
         @NonNull @Override public PlaceOrientation placeOrientation() {
             return currentPlaceOrientation();
         }
@@ -13899,10 +13853,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.setGesturesEnabled(!held);
         }
 
-        @Override public int themeColor(int attr, int fallbackRes) {
-            return getTermuxThemeColor(attr, fallbackRes);
-        }
-
         // The editor's half slide: the wall slides inside the scaled container, gestures held.
         @Override public void slidePaneWallToPlace(@NonNull com.termux.app.wall.PaneWallPage place) {
             if (mPaneWallController == null) return;
@@ -13912,40 +13862,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             else
                 mPaneWallController.goTo(place, true);
             mPaneWallController.setGesturesEnabled(false);
-        }
-
-        // The pinned apps as laid out: the dock's row, or the rail or off-dock row where the
-        // place stands them. Their thickness is the short side either way, which is what the
-        // dock's height scale sizes.
-        @Override public int measuredDockHeightDp() {
-            int px = shownThicknessPx(R.id.apps_bar_row_host);
-            // The Search field shares the row's host; the size scale is the row's own.
-            if (px > 0 && mPromptLineField != null
-                && mPromptLineField.getVisibility() == View.VISIBLE
-                && mPromptLineField.getParent() == findViewById(R.id.apps_bar_row_host))
-                px = Math.max(0, px - mAppliedPromptFieldBandPx);
-            // So does the Wall strip's first row.
-            if (px > 0 && mWallStripRow != null
-                && mWallStripRow.getVisibility() == View.VISIBLE
-                && mWallStripRow.getParent() == findViewById(R.id.apps_bar_row_host))
-                px = Math.max(0, px - mAppliedWallStripBandPx);
-            if (px <= 0) px = shownThicknessPx(R.id.place_apps_bar_host);
-            float density = getResources().getDisplayMetrics().density;
-            return px <= 0 || density <= 0f ? -1 : Math.round(px / density);
-        }
-
-        @Override public int measuredKeyboardHeightDp() {
-            View keys = findViewById(R.id.inapp_keyboard_view_host);
-            float density = getResources().getDisplayMetrics().density;
-            if (keys == null || !keys.isShown() || keys.getHeight() <= 0 || density <= 0f)
-                return -1;
-            return Math.round(keys.getHeight() / density);
-        }
-
-        private int shownThicknessPx(int viewId) {
-            View view = findViewById(viewId);
-            if (view == null || !view.isShown()) return -1;
-            return Math.min(view.getWidth(), view.getHeight());
         }
     }
 

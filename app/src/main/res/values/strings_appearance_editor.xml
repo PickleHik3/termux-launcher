@@ -24,6 +24,8 @@
     <!-- The editor bar: the orientation chip names the orientation the frame shows. -->
     <string name="appearance_bar_portrait">Portrait</string>
     <string name="appearance_bar_landscape">Landscape</string>
+    <string name="appearance_bar_turn_for_landscape">Turn the phone to edit landscape</string>
+    <string name="appearance_bar_turn_for_portrait">Turn the phone to edit portrait</string>
     <!-- Under the frame: which half of the wall the frame shows, and what a card changes. -->
     <string name="appearance_half_home">Home</string>
     <string name="appearance_half_workspace">Workspace</string>
@@ -117,7 +119,6 @@
     <!-- The dot after a row's label, as accessibility reads it. -->
     <string name="appearance_row_own_value">Set here</string>
     <!-- Under Visible while the frame shows the other orientation. -->
-    <string name="appearance_other_orientation_note">Changes the other orientation. You see them when you turn the phone.</string>
     <string name="appearance_wallpaper_change">Change</string>
     <string name="appearance_wallpaper_shown">Show wallpaper</string>
 
