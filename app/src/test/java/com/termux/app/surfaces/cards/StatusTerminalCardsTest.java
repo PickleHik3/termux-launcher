@@ -225,7 +225,7 @@ public class StatusTerminalCardsTest {
         optionTiles.get(StatusBarCard.OPTION_CAMERA_GAP).performClick();
         ShadowLooper.idleMainLooper();
         assertEquals("Camera gap opens its setting", 1, host.cameraGapOpened);
-        assertTrue("and keeps reading the stored gap",
+        assertFalse("and never reads on: it is a shortcut, not a switch",
             optionTiles.get(StatusBarCard.OPTION_CAMERA_GAP).isChecked());
 
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);

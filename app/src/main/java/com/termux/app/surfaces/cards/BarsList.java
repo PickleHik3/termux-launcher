@@ -328,9 +328,13 @@ public final class BarsList {
         handle.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    // No long-press: the handle lifts the row on touch, and the sheet's scroller
+                    // may not take the gesture from it.
+                    claimTouch(v);
                     startDrag(item, event.getRawY());
                     return true;
                 case MotionEvent.ACTION_MOVE:
+                    claimTouch(v);
                     moveDrag(event.getRawY());
                     return true;
                 case MotionEvent.ACTION_UP:
@@ -398,6 +402,13 @@ public final class BarsList {
     }
 
     // ------------------------------------------------------------------------------- the drag
+
+    /** Keeps every ancestor scroller from intercepting the touch {@code view} is handling. */
+    private static void claimTouch(@NonNull View view) {
+        ViewParent parent = view.getParent();
+        if (parent != null)
+            parent.requestDisallowInterceptTouchEvent(true);
+    }
 
     private void startDrag(@NonNull Item item, float rawY) {
         if (mDragged != null)
