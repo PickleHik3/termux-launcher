@@ -10,9 +10,11 @@ import com.termux.app.surfaces.EditorRows.Spec;
 import java.util.List;
 
 /**
- * The palette's card (editor-redesign §2, Global; still titled Appearance until its own wave): the
- * shared glass, the glass edge where it is drawn, and the shared text size, in the order the Look
- * page's Custom row had them.
+ * The Global card's rows (editor-redesign §1 "Global is one card", §2 Global): what both screens
+ * share. Wallpaper first (Change, Show wallpaper, Wallpaper colours); then the colour (Theme,
+ * Contrast, Tint colour); the glass material (Vibrancy, and Edge and Depth where the phone draws
+ * the glass edge); Full screen and Minimal; and the Icon pack and Tool colours chips. Look and the
+ * glass amounts live on each screen's card, Text size on the Terminal's.
  */
 public final class GlobalCard {
 
@@ -22,17 +24,22 @@ public final class GlobalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT);
+            .tier(1, Row.SECTION_WALLPAPER, Row.WALLPAPER, Row.SHOW_WALLPAPER,
+                Row.WALLPAPER_COLOURS, Row.SECTION_COLOUR, Row.THEME, Row.CONTRAST, Row.TINT_HUE)
+            .tier(2, Row.SECTION_GLASS_MATERIAL, Row.VIBRANCY);
         if (offers.glassEdge)
-            rows.tier(1, Row.GLASS_EDGE);
-        rows.tier(1, Row.VIBRANCY);
-        if (offers.glassEdge)
-            rows.tier(1, Row.DEPTH);
+            rows.tier(2, Row.GLASS_EDGE, Row.DEPTH);
         return rows
-            .tier(1, Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME)
-            .tier(2, Row.ICON_PACK, Row.MONOCHROME, Row.WALLPAPER_COLOURS, Row.CONTRAST,
-                Row.FULL_SCREEN, Row.MINIMAL)
-            .tier(3, Row.TINT_HUE, Row.TOOL_COLOURS)
+            .tier(2, Row.HINT_GLASS_MATERIAL, Row.SECTION_OPTIONS, Row.FULL_SCREEN, Row.MINIMAL)
+            .tier(3, Row.SECTION_MORE, Row.ICON_PACK, Row.TOOL_COLOURS)
             .build();
+    }
+
+    /**
+     * Whether {@code row} is one of the glass material strips, which stand on the card at any
+     * Look (the screens' Looks live on their own cards).
+     */
+    public static boolean isGlassMaterial(@NonNull Row row) {
+        return row == Row.VIBRANCY || row == Row.GLASS_EDGE || row == Row.DEPTH;
     }
 }

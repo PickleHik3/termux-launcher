@@ -108,7 +108,9 @@ final class EditorCardSheet {
         /**
          * A row the card draws itself from the row kinds under {@code surfaces/rows} (a section
          * with its header, preview tiles, a tile grid, glyph segments), {@code widthPx} wide; or
-         * null for the sheet's own row of the row's {@link Kind}. Asked once per card open.
+         * null for the sheet's own row of the row's {@link Kind}. Asked once per card open, for
+         * every row before its Kind is looked at, a strip's columns too; a card that draws several
+         * rows as one (a strip run, a grid of tiles) gives the rest an empty view.
          */
         @Nullable
         default View rowView(@NonNull Row row, int widthPx) {
@@ -687,7 +689,8 @@ final class EditorCardSheet {
         int tier = 0;
         Strip strip = null;
         for (EditorRows.Spec spec : specs) {
-            if (spec.row.kind == Kind.STRIP) {
+            RowViews own = ownRow(spec.row);
+            if (own == null && spec.row.kind == Kind.STRIP) {
                 if (strip == null) {
                     if (tier != 0 && spec.tier != tier)
                         mRows.addView(divider());
@@ -706,7 +709,7 @@ final class EditorCardSheet {
             if (tier != 0 && spec.tier != tier)
                 mRows.addView(divider());
             tier = spec.tier;
-            RowViews row = buildRow(spec.row);
+            RowViews row = own != null ? own : buildRow(spec.row);
             mRowViews.put(spec.row, row);
             if (spec.tier == 1)
                 row.root.setTag(TIER_ONE_TAG);
@@ -857,17 +860,22 @@ final class EditorCardSheet {
         return views;
     }
 
-    @NonNull
-    private RowViews buildRow(@NonNull Row row) {
+    /** The row the card draws itself ({@link Model#rowView}), or null for the sheet's own. */
+    @Nullable
+    private RowViews ownRow(@NonNull Row row) {
         // The row kinds take the card's whole width and keep their own 16dp gutter.
         View own = mModel.rowView(row, availableWidthPx() + dp(ICON_COLUMN_DP) + dp(EDGE_DP));
-        if (own != null) {
-            if (own.getParent() instanceof ViewGroup)
-                ((ViewGroup) own.getParent()).removeView(own);
-            RowViews views = new RowViews(row, own);
-            views.own = true;
-            return views;
-        }
+        if (own == null)
+            return null;
+        if (own.getParent() instanceof ViewGroup)
+            ((ViewGroup) own.getParent()).removeView(own);
+        RowViews views = new RowViews(row, own);
+        views.own = true;
+        return views;
+    }
+
+    @NonNull
+    private RowViews buildRow(@NonNull Row row) {
         switch (row.kind) {
             case SWITCH: return switchRow(row);
             case SEGMENTS: return segmentsRow(row);

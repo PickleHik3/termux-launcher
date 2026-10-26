@@ -110,6 +110,7 @@ public final class SegmentRow {
         List<MaterialButton> buttons = new ArrayList<>(segments.size());
         int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         int controlPx = 0;
+        int widestPx = 0;
         for (Segment segment : segments) {
             MaterialButton button = (MaterialButton) inflater.inflate(R.layout.segment_button,
                 null, false);
@@ -149,6 +150,7 @@ public final class SegmentRow {
             GlyphNames.name(button, segment.name);
             button.measure(unspecified, unspecified);
             controlPx += button.getMeasuredWidth();
+            widestPx = Math.max(widestPx, button.getMeasuredWidth());
             buttons.add(button);
         }
         controlPx += RowKit.dp(context, GAP_DP) * Math.max(0, segments.size() - 1);
@@ -175,7 +177,19 @@ public final class SegmentRow {
         group.setSelectionRequired(true);
         group.setSpacing(RowKit.dp(context, GAP_DP));
         group.setContentDescription(title);
+        // Under the title, the pills share the width; where a word would not fit its share
+        // (a large text size), they stand one under another instead, so no word is cut.
+        boolean vertical = !inline && stacksVertically(widthPx,
+            RowKit.dp(context, RowKit.ICON_COLUMN_DP), RowKit.dp(context, RowKit.EDGE_DP),
+            RowKit.dp(context, GAP_DP), segments.size(), widestPx);
+        if (vertical)
+            group.setOrientation(LinearLayout.VERTICAL);
         for (MaterialButton button : buttons) {
+            if (vertical) {
+                group.addView(button, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                continue;
+            }
             group.addView(button, inline
                 ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -247,5 +261,18 @@ public final class SegmentRow {
     static boolean fitsInline(int rowPx, int leadPx, int edgePx, float titlePx, int gapPx,
                               int controlPx) {
         return leadPx + titlePx + gapPx + controlPx + edgePx <= rowPx;
+    }
+
+    /**
+     * Whether {@code count} pills under the title stand one under another: the widest
+     * ({@code widestPx}) is wider than its share of the row from the lead column to the
+     * {@code edgePx} gutter, {@code gapPx} between pills.
+     */
+    static boolean stacksVertically(int rowPx, int leadPx, int edgePx, int gapPx, int count,
+                                    int widestPx) {
+        if (count <= 1)
+            return false;
+        int share = (rowPx - leadPx - edgePx - gapPx * (count - 1)) / count;
+        return widestPx > share;
     }
 }

@@ -170,7 +170,35 @@ public final class EditorRows {
         /** The Dock type tiles, one chosen at a time. */
         DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_symbol_dock_glass_tray),
         /** The dock's Options tiles. */
-        DOCK_OPTIONS(Kind.SWITCH, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune);
+        DOCK_OPTIONS(Kind.SWITCH, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune),
+        // The Keyboard, Home, Global and Workspace cards' own rows (editor-redesign §2), drawn by
+        // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
+        // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
+        /** The air under the keyboard's last key row (the layout's chin), in dp. */
+        BOTTOM_PADDING(Kind.STRIP, R.string.editor_row_bottom_padding,
+            R.drawable.ic_ed_bottom_padding),
+        /** The keyboard's two opacities move together, keeping their difference. */
+        OPACITY_LINK(Kind.SWITCH, R.string.editor_row_opacity_link, R.drawable.ic_ms_link),
+        /** Home's widget grid, in cells, each a stepper (− value +). */
+        HOME_COLUMNS(Kind.MENU, R.string.editor_row_columns, R.drawable.ic_ed_grid_columns),
+        HOME_ROWS(Kind.MENU, R.string.editor_row_rows, R.drawable.ic_ed_grid_rows),
+        /** Home's icon size: Small, Default or Large ({@code HomeIconSize}). */
+        HOME_ICON_SIZE(Kind.SEGMENTS, R.string.editor_row_home_icon_size, R.drawable.ic_ms_apps),
+        /** The wallpaper behind both screens, shown or not (the Wallpaper row keeps Change). */
+        SHOW_WALLPAPER(Kind.SWITCH, R.string.editor_row_show_wallpaper, R.drawable.ic_ms_image),
+        /** A section's header: its name, and the model's summary as the note at its end. */
+        SECTION_GLASS(Kind.MENU, R.string.editor_section_glass, 0),
+        SECTION_SHAPE(Kind.MENU, R.string.editor_section_shape, 0),
+        SECTION_MORE(Kind.MENU, R.string.editor_section_more, 0),
+        SECTION_GRID(Kind.MENU, R.string.editor_section_grid, 0),
+        SECTION_LOOK(Kind.MENU, R.string.editor_section_look, 0),
+        SECTION_LABELS_FOLDERS(Kind.MENU, R.string.editor_section_labels_folders, 0),
+        SECTION_OPTIONS(Kind.MENU, R.string.editor_section_options, 0),
+        SECTION_WALLPAPER(Kind.MENU, R.string.editor_section_wallpaper, 0),
+        SECTION_COLOUR(Kind.MENU, R.string.editor_section_colour, 0),
+        SECTION_GLASS_MATERIAL(Kind.MENU, R.string.editor_section_glass_material, 0),
+        /** Small print under the glass material strips, where Edge and Depth show: the name. */
+        HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;

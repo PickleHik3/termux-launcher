@@ -542,6 +542,39 @@ public final class LayoutEditorController {
         afterWrite(drop);
     }
 
+    /** The air under the keyboard's last key row in the shown orientation, or -1 with no session. */
+    public int keyboardChinDp() {
+        return mPlan == null ? -1 : mPlan.keyboardChinDp();
+    }
+
+    /**
+     * The keyboard's bottom padding (its chin), as its canvas handle writes it; {@code held} while
+     * a finger is still on the card's strip.
+     */
+    public void setKeyboardChinDp(int dp, boolean held) {
+        if (mPlan == null)
+            return;
+        LayoutEditorPlan.Drop drop = mPlan.setKeyboardChinDp(dp);
+        if (held) {
+            if (drop == LayoutEditorPlan.Drop.LIVE) mRelayHeld = true;
+            if (drop != LayoutEditorPlan.Drop.NONE) mSyncHeld = true;
+            return;
+        }
+        afterWrite(drop);
+    }
+
+    /** Home's widget grid in the shown orientation, as {columns, rows}; null with no session. */
+    @Nullable
+    public int[] widgetGrid() {
+        return mPlan == null ? null : new int[] {mPlan.widgetColumns(), mPlan.widgetRows()};
+    }
+
+    /** Home's widget grid, as its corner handle writes it. */
+    public void setWidgetGrid(int columns, int rows) {
+        if (mPlan != null)
+            afterWrite(mPlan.setWidgetGrid(columns, rows));
+    }
+
     /** The held writes' one re-lay and restatement; nothing when none are held. */
     public void relayHeldWrites() {
         boolean relay = mRelayHeld;

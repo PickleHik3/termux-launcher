@@ -64,13 +64,22 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theStatusBarAndKeyboardCardsOpenOnTheirStripAndPlace() {
+    public void theStatusBarCardOpensOnItsPlaceAndStrip() {
         assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.GLASS_SECTION, Row.FROST, Row.OPACITY,
             Row.TINT, Row.CORNERS, Row.MARGIN), EditorRows.tier(EditorCard.STATUS, ALL, 1));
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT,
-            Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN),
-            EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
-        assertTrue(EditorRows.tier(EditorCard.KEYBOARD, ALL, 2).contains(Row.KEYBOARD_THEME));
+    }
+
+    @Test
+    public void theKeyboardCardOpensOnItsTypeThenItsGlassWithTheOpacityLink() {
+        assertEquals(Arrays.asList(Row.FORM, Row.SECTION_GLASS, Row.FROST, Row.TINT, Row.OPACITY,
+            Row.OPACITY_LINK, Row.KEY_OPACITY), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
+        assertEquals(Arrays.asList(Row.SECTION_SHAPE, Row.KEY_CORNERS, Row.KEY_SPACING,
+            Row.HEIGHT, Row.CORNERS, Row.MARGIN, Row.BOTTOM_PADDING),
+            EditorRows.tier(EditorCard.KEYBOARD, ALL, 2));
+        assertEquals(Arrays.asList(Row.SECTION_MORE, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
+            EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
+        assertFalse("the floating keyboard is sized on the keyboard itself",
+            rowsOf(EditorCard.KEYBOARD, ALL).contains(Row.LINK_KEYBOARD_SIZE));
     }
 
     @Test
@@ -93,9 +102,18 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theHomeCardOpensOnHomesGlassAndItIsAlwaysTheHomeHalfs() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.ICON_SIZE,
-            Row.LABEL_SIZE, Row.GLASS_WIDGETS), EditorRows.tier(EditorCard.HOME, ALL, 1));
+    public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
+        assertEquals(Arrays.asList(Row.SECTION_GRID, Row.HOME_COLUMNS, Row.HOME_ROWS,
+            Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY, Row.TINT),
+            EditorRows.tier(EditorCard.HOME, ALL, 1));
+        assertEquals(Arrays.asList(Row.SECTION_LABELS_FOLDERS, Row.LABEL_SIZE,
+            Row.HOME_ICON_SIZE, Row.FOLDERS, Row.NUMERALS, Row.SECTION_OPTIONS,
+            Row.GLASS_WIDGETS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
+            Row.WALLPAPER_SCROLL), EditorRows.tier(EditorCard.HOME, ALL, 2));
+        assertEquals(Arrays.asList(Row.MATCH_WORKSPACE, Row.SECTION_MORE, Row.LINK_GLOBAL,
+            Row.LINK_GESTURES, Row.LINK_PAGES), EditorRows.tier(EditorCard.HOME, ALL, 3));
+        assertFalse("the dock sizes its own icons on its card",
+            rowsOf(EditorCard.HOME, ALL).contains(Row.ICON_SIZE));
         for (WallHalf frame : WallHalf.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
                 assertEquals(row + " with the frame on " + frame, WallHalf.HOME,
@@ -105,21 +123,29 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theAppearanceCardOpensOnTheLookAllSurfacesTheWallpaperAndTheTheme() {
-        assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.GLASS_EDGE,
-            Row.VIBRANCY, Row.DEPTH, Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME),
+    public void theGlobalCardOpensOnTheWallpaperThenTheColourAndKeepsTheGlassMaterial() {
+        assertEquals(Arrays.asList(Row.SECTION_WALLPAPER, Row.WALLPAPER, Row.SHOW_WALLPAPER,
+            Row.WALLPAPER_COLOURS, Row.SECTION_COLOUR, Row.THEME, Row.CONTRAST, Row.TINT_HUE),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
-        assertEquals(Arrays.asList(Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.VIBRANCY,
-            Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME),
-            EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
-        List<Row> two = EditorRows.tier(EditorCard.APPEARANCE, ALL, 2);
-        assertTrue(two.containsAll(Arrays.asList(Row.ICON_PACK, Row.MONOCHROME,
-            Row.WALLPAPER_COLOURS, Row.CONTRAST, Row.FULL_SCREEN, Row.MINIMAL)));
+        assertEquals(Arrays.asList(Row.SECTION_GLASS_MATERIAL, Row.VIBRANCY, Row.GLASS_EDGE,
+            Row.DEPTH, Row.HINT_GLASS_MATERIAL, Row.SECTION_OPTIONS, Row.FULL_SCREEN,
+            Row.MINIMAL), EditorRows.tier(EditorCard.APPEARANCE, ALL, 2));
+        assertEquals(Arrays.asList(Row.SECTION_GLASS_MATERIAL, Row.VIBRANCY,
+            Row.HINT_GLASS_MATERIAL, Row.SECTION_OPTIONS, Row.FULL_SCREEN, Row.MINIMAL),
+            EditorRows.tier(EditorCard.APPEARANCE, NONE, 2));
+        assertEquals(Arrays.asList(Row.SECTION_MORE, Row.ICON_PACK, Row.TOOL_COLOURS),
+            EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
+        List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
+        for (Row gone : new Row[] {Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE})
+            assertFalse(gone + " lives on a screen's card or the Terminal's", rows.contains(gone));
     }
 
     @Test
     public void frostIsTheOneGlassSliderOnEveryCardWithGlass() {
         for (EditorCard card : EditorCard.values()) {
+            // Global holds the glass material alone: each screen stores its own glass.
+            if (card == EditorCard.APPEARANCE)
+                continue;
             List<Row> rows = rowsOf(card, ALL);
             assertTrue(card + " has Frost", rows.contains(Row.FROST));
         }
@@ -153,18 +179,33 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void aCardsSlidersStandInOneStrip() {
+    public void aSectionsSlidersStandInOneStrip() {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
             int runs = 0;
+            int sections = 0;
             boolean inRun = false;
             for (Row row : rows) {
-                boolean strip = row.kind == Kind.STRIP;
+                if (CardBody.shape(row) == CardBody.Shape.SECTION) {
+                    sections++;
+                    inRun = false;
+                    continue;
+                }
+                boolean strip = row.kind == Kind.STRIP
+                    || CardBody.shape(row) == CardBody.Shape.STRIP_LINK;
                 if (strip && !inRun)
                     runs++;
                 inRun = strip;
             }
-            assertEquals(card + "'s sliders stand together", 1, runs);
+            assertTrue(card + "'s sliders stand together, one strip to a section",
+                runs >= 1 && runs <= Math.max(1, sections));
+            for (int i = 0; i < rows.size(); i++) {
+                if (CardBody.shape(rows.get(i)) != CardBody.Shape.STRIP_LINK)
+                    continue;
+                assertTrue(card + ": a link stands between two strips", i > 0
+                    && i < rows.size() - 1 && rows.get(i - 1).kind == Kind.STRIP
+                    && rows.get(i + 1).kind == Kind.STRIP);
+            }
         }
     }
 

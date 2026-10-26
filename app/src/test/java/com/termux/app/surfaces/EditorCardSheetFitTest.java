@@ -95,27 +95,37 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void aSlidersThumbAtEitherEndStaysInsideTheMargins() {
-        Fixture fixture = new Fixture(EditorCard.APPEARANCE, 1f);
-        fixture.layOut();
-        int width = fixture.parent.getWidth();
         int checked = 0;
-        for (com.google.android.material.slider.Slider slider : sliders(fixture.sheet.rows())) {
-            if (slider.getWidth() <= 0)
+        boolean anyLook = false;
+        for (EditorCard card : EditorCard.values()) {
+            // The Look slider stands only on a card the sheet still draws itself; the redesigned
+            // cards show the Look as tiles (EditorCardBodyTest).
+            if (CardBody.redesigned(card))
                 continue;
-            int[] at = new int[2];
-            slider.getLocationInWindow(at);
-            int[] parentAt = new int[2];
-            fixture.parent.getLocationInWindow(parentAt);
-            int left = at[0] - parentAt[0];
-            int trackStart = left + slider.getTrackSidePadding();
-            int trackEnd = left + slider.getWidth() - slider.getTrackSidePadding();
-            int radius = slider.getThumbWidth() / 2;
-            assertTrue("the thumb at the end clears the 16dp margin: " + (trackEnd + radius)
-                + " vs " + (width - fixture.dp(16)), trackEnd + radius <= width - fixture.dp(16) + 1);
-            assertEquals("the track starts at the text column", fixture.dp(56), trackStart, 1);
-            checked++;
+            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true)))
+                anyLook |= spec.row == EditorRows.Row.LOOK;
+            Fixture fixture = new Fixture(card, 1f);
+            fixture.layOut();
+            int width = fixture.parent.getWidth();
+            for (com.google.android.material.slider.Slider slider : sliders(fixture.sheet.rows())) {
+                if (slider.getWidth() <= 0)
+                    continue;
+                int[] at = new int[2];
+                slider.getLocationInWindow(at);
+                int[] parentAt = new int[2];
+                fixture.parent.getLocationInWindow(parentAt);
+                int left = at[0] - parentAt[0];
+                int trackStart = left + slider.getTrackSidePadding();
+                int trackEnd = left + slider.getWidth() - slider.getTrackSidePadding();
+                int radius = slider.getThumbWidth() / 2;
+                assertTrue("the thumb at the end clears the 16dp margin: " + (trackEnd + radius)
+                    + " vs " + (width - fixture.dp(16)),
+                    trackEnd + radius <= width - fixture.dp(16) + 1);
+                assertEquals("the track starts at the text column", fixture.dp(56), trackStart, 1);
+                checked++;
+            }
         }
-        assertTrue(checked > 0);
+        assertTrue(!anyLook || checked > 0);
     }
 
     @Test
@@ -200,6 +210,8 @@ public class EditorCardSheetFitTest {
     @Test
     public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
         for (EditorCard card : EditorCard.values()) {
+            if (CardBody.redesigned(card))
+                continue;
             Fixture fixture = new Fixture(card, 1f);
             fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
             fixture.layOut();
@@ -235,6 +247,8 @@ public class EditorCardSheetFitTest {
     public void everyStripStandsOnOneLineWhenItsColumnsFit() {
         for (float scale : new float[] {1f, 1.3f}) {
             for (EditorCard card : EditorCard.values()) {
+                if (CardBody.redesigned(card))
+                    continue;
                 Fixture fixture = new Fixture(card, scale);
                 fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
                 fixture.layOut();
@@ -283,6 +297,8 @@ public class EditorCardSheetFitTest {
     public void everyGlassStripsLegendsStandWholeInTheirColumnsAtAnyTextSize() {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
             for (EditorCard card : EditorCard.values()) {
+                if (CardBody.redesigned(card))
+                    continue;
                 Fixture fixture = new Fixture(card, scale);
                 fixture.layOut();
                 List<LegendSlider> legends = legends(fixture.sheet.rows());
@@ -307,6 +323,8 @@ public class EditorCardSheetFitTest {
     @Test
     public void everySliderButTheLooksIsAStripColumnAndEveryRowIsThere() {
         for (EditorCard card : EditorCard.values()) {
+            if (CardBody.redesigned(card))
+                continue;
             Fixture fixture = new Fixture(card, 1f);
             fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
             fixture.layOut();
@@ -382,7 +400,7 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void theSetHereDotRidesOnTheRotatedLegend() {
-        Fixture fixture = new Fixture(EditorCard.KEYBOARD, 1f);
+        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
         fixture.layOut();
         int marked = 0;
         for (LegendSlider slider : legends(fixture.sheet.rows())) {

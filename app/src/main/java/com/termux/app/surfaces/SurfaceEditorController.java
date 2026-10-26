@@ -73,6 +73,7 @@ import com.termux.app.surfaces.AppearanceLooks.Control;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.PaneRetroEffect;
+import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
@@ -2062,7 +2063,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** Every card's values and writes, row by row. */
-    private final class CardModel implements EditorCardSheet.Model {
+    private final class CardModel implements EditorCardSheet.Model, CardBody.Looks {
 
         @Override public int value(@NonNull Row row) {
             TermuxAppSharedPreferences prefs = prefs();
@@ -2179,7 +2180,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
                         ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
                 case GLASS_EDGE: return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
-                default: return 0;
+                default: return cardRowValue(row);
             }
         }
 
@@ -2200,7 +2201,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case LOOK: return 0;
                 case VIBRANCY: return Control.VIBRANCY.min;
                 case GLASS_EDGE: return Control.EDGE.min;
-                default: return 0;
+                default: return cardRowFrom(row);
             }
         }
 
@@ -2229,7 +2230,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case LOOK: return AppearanceLooks.CUSTOM_STOP;
                 case VIBRANCY: return Control.VIBRANCY.max;
                 case GLASS_EDGE: return Control.EDGE.max;
-                default: return 1;
+                default: return cardRowTo(row);
             }
         }
 
@@ -2277,7 +2278,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return getString(value != 0 ? R.string.appearance_match_undo
                         : R.string.appearance_match_copy);
                 default:
-                    return String.valueOf(value);
+                    return cardRowReadout(row, value);
             }
         }
 
@@ -2329,7 +2330,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return null;
                 }
                 default:
-                    return null;
+                    return cardRowSummary(row);
             }
         }
 
@@ -2363,12 +2364,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return out;
                 }
                 default:
-                    return new String[0];
+                    return cardRowChoices(row);
             }
         }
 
         @Nullable @Override public int[] chipIcons(@NonNull Row row) {
-            return row == Row.DESIGN ? DESIGN_ICONS.clone() : null;
+            return row == Row.DESIGN ? DESIGN_ICONS.clone() : cardRowGlyphs(row);
         }
 
         @Nullable @Override public View expanderContent(@NonNull Row row) {
@@ -2386,7 +2387,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onReleased(@NonNull Row row) {
             mLinkAnchor = null;
             endDrag();
-            if (row == Row.HEIGHT && mCard == EditorCard.KEYBOARD) {
+            if ((row == Row.HEIGHT || row == Row.BOTTOM_PADDING) && mCard == EditorCard.KEYBOARD) {
                 LayoutEditorController layout = mHost.layoutEditor();
                 if (layout != null) layout.relayHeldWrites();
             }
@@ -2399,7 +2400,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public boolean shown(@NonNull Row row) {
             // All surfaces is the Custom stop's, as the Look page's Custom row was.
-            if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row))
+            if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row)
+                && !com.termux.app.surfaces.cards.GlobalCard.isGlassMaterial(row))
                 return AppearanceLooks.isCustomStop(lookStop(mHalf));
             // Reflection is Peek glass's own knob: it stands only while that is the design.
             if (row == Row.REFLECTION) {
@@ -2417,16 +2419,40 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
-            if (mCard == EditorCard.DOCK)
+            EditorCard card = mCard;
+            if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
+            if (card != null && CardBody.redesigned(card))
+                return cardBody(card).rowView(row, widthPx);
             return statusTerminalRowView(row, widthPx);
         }
 
         @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
-            if (mCard == EditorCard.DOCK)
+            EditorCard card = mCard;
+            if (card == EditorCard.DOCK)
                 dockCard().restate(row);
-            else
+            else if (card != null && CardBody.redesigned(card)) {
+                CardBody body = mCardBody;
+                if (body != null) body.restate(row, view);
+            } else
                 restateStatusTerminalRow(row, view);
+        }
+
+        @Nullable @Override public CharSequence name(@NonNull Row row) {
+            return cardRowName(row);
+        }
+
+        @Override public int glyph(@NonNull Row row) {
+            return cardRowGlyph(row);
+        }
+
+        @Nullable @Override public int[] swatches(@NonNull Row row) {
+            return cardRowSwatches(row);
+        }
+
+        @Nullable @Override public android.graphics.Typeface choiceTypeface(@NonNull Row row,
+                                                                          int index) {
+            return cardRowTypeface(row, index);
         }
     }
 
@@ -2623,6 +2649,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case VIBRANCY: writeVibrancy(value); break;
             case GLASS_EDGE: writeGlassEdge(value); break;
             default:
+                writeCardRow(row, value, dragging);
                 break;
         }
     }
@@ -2684,13 +2711,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             }
             case TOOL_COLOURS:
-                openSettingsPage(TermuxStylePreferencesFragment.class, R.string.appearance_row_tool_colours);
+                openSettingsFromEditor(TermuxStylePreferencesFragment.class,
+                    R.string.appearance_row_tool_colours, null, TOOL_COLOURS_KEY);
                 break;
             case LINK_GESTURES:
-                openSettingsPage(HomePreferencesFragment.class, R.string.appearance_row_gestures);
+                openSettingsFromEditor(HomePreferencesFragment.class,
+                    R.string.settings_section_home, HOME_GESTURES_SECTION, null);
                 break;
             case LINK_PAGES:
-                openSettingsPage(HomePreferencesFragment.class, R.string.appearance_row_pages);
+                openSettingsFromEditor(HomePreferencesFragment.class,
+                    R.string.settings_section_home, null, HOME_PAGES_SECTION);
                 break;
             case LINK_INDICATORS:
                 openSettingsPage(StatusBarPreferencesFragment.class, R.string.appearance_row_indicators);
@@ -5207,6 +5237,28 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return built.view;
     }
 
+    /**
+     * The Keyboard, Home, Global or Workspace card's rows ({@link CardBody}), for the card being
+     * built. Asked only while the sheet builds a card (through {@link EditorCardSheet.Model#rowView}),
+     * so a restatement keeps reading the views it built; a card whose rows changed (the glass edge
+     * came or went) gets a body of its own.
+     */
+    @Nullable private CardBody mCardBody;
+
+    @NonNull
+    private CardBody cardBody(@NonNull EditorCard card) {
+        java.util.List<EditorRows.Spec> specs = EditorRows.rows(card, offers());
+        CardBody body = mCardBody;
+        if (body == null || !body.drawsFor(card, specs)) {
+            body = new CardBody(mHost.context(), mModel, mModel, card, specs, () -> {
+                EditorCardSheet sheet = mSheet;
+                if (sheet != null) sheet.setDetent(EditorCardSheet.DETENT_FULL, true);
+            });
+            mCardBody = body;
+        }
+        return body;
+    }
+
     /** Reads a row {@link #statusTerminalRowView} built again from the values. */
     private void restateStatusTerminalRow(@NonNull Row row, @NonNull View view) {
         com.termux.app.surfaces.cards.CardRowView built = mOwnRows.get(row);
@@ -5752,5 +5804,291 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    // Keyboard, Home and Global cards ---------------------------------------------------------
+    //
+    // The rows those cards added (editor-redesign §2): read, ranged, named and written here, so
+    // the card model's switches only hand their default case on.
+
+    /** Settings › Home's Gestures section, which the Home card's Gestures chip opens on. */
+    private static final String HOME_GESTURES_SECTION = "home_gestures";
+    /** Settings › Home's Pages section, which the Home card's Edit pages chip scrolls to. */
+    private static final String HOME_PAGES_SECTION = "home_pages";
+    /** The tools that follow the terminal's colours, on the page the Tool colours chip opens. */
+    private static final String TOOL_COLOURS_KEY = "theme_templates_enabled";
+
+    /** The Tint colour swatches' stored values, in order. */
+    private String[] tintHueValues() {
+        return getResources().getStringArray(R.array.appearance_editor_tint_hue_values);
+    }
+
+    /** A value for a row the card model's own switch does not name; 0 for none. */
+    private int cardRowValue(@NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        Context context = mHost.context();
+        if (prefs == null)
+            return 0;
+        switch (row) {
+            case BOTTOM_PADDING: {
+                int chin = layout == null ? -1 : layout.keyboardChinDp();
+                return chin >= 0 ? chin : prefs.getSharedInAppKeyboardBottomPadding();
+            }
+            case OPACITY_LINK:
+                return prefs.isInAppKeyboardOpacityLinked() ? 1 : 0;
+            case HOME_COLUMNS:
+            case HOME_ROWS: {
+                int[] grid = layout == null ? null : layout.widgetGrid();
+                if (grid == null)
+                    return row == Row.HOME_COLUMNS ? prefs.getAppLauncherWidgetGridColumns()
+                        : prefs.getAppLauncherWidgetGridRows();
+                return row == Row.HOME_COLUMNS ? grid[0] : grid[1];
+            }
+            case HOME_ICON_SIZE:
+                return com.termux.app.launcher.widget.HomeIconSize.fromStored(
+                    AppearanceSettingsStore.getString(context, HomeSettings.KEY_ICON_SCALE, null))
+                    .ordinal();
+            case SHOW_WALLPAPER:
+                return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
+                    ? 1 : 0;
+            case TINT_HUE:
+                return indexOf(tintHueValues(), prefs.getSurfaceGlassTintHue(), 0);
+            default:
+                return 0;
+        }
+    }
+
+    private int cardRowFrom(@NonNull Row row) {
+        switch (row) {
+            case BOTTOM_PADDING:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING;
+            case HOME_COLUMNS:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
+            case HOME_ROWS:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            default:
+                return 0;
+        }
+    }
+
+    private int cardRowTo(@NonNull Row row) {
+        switch (row) {
+            case BOTTOM_PADDING:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
+            case HOME_COLUMNS:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
+            case HOME_ROWS:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            case HOME_ICON_SIZE:
+            case TINT_HUE:
+                return 2;
+            default:
+                return 1;
+        }
+    }
+
+    @NonNull
+    private String cardRowReadout(@NonNull Row row, int value) {
+        if (row == Row.BOTTOM_PADDING)
+            return getString(R.string.appearance_readout_dp, value);
+        return String.valueOf(value);
+    }
+
+    /** A section's note, Glass widgets' explanation; null for the rest. */
+    @Nullable
+    private CharSequence cardRowSummary(@NonNull Row row) {
+        EditorCard card = mCard;
+        switch (row) {
+            case SECTION_LOOK:
+                if (card == EditorCard.HOME) return getString(R.string.editor_note_home_only);
+                if (card == EditorCard.WORKSPACE)
+                    return getString(R.string.editor_note_workspace_only);
+                return null;
+            case SECTION_GLASS:
+                if (card == EditorCard.HOME) return getString(R.string.editor_note_home_glass);
+                if (card == EditorCard.WORKSPACE)
+                    return getString(R.string.editor_note_workspace_glass);
+                return null;
+            case SECTION_GLASS_MATERIAL:
+                return getString(R.string.editor_note_both_screens);
+            default:
+                return null;
+        }
+    }
+
+    @NonNull
+    private String[] cardRowChoices(@NonNull Row row) {
+        switch (row) {
+            case HOME_ICON_SIZE:
+                return strings(R.string.editor_home_icon_small, R.string.editor_home_icon_default,
+                    R.string.editor_home_icon_large);
+            case TINT_HUE:
+                return getResources().getStringArray(R.array.appearance_editor_tint_hue_entries);
+            default:
+                return new String[0];
+        }
+    }
+
+    /** The glyphs a choice row shows instead of its words; null for words. */
+    @Nullable
+    private int[] cardRowGlyphs(@NonNull Row row) {
+        switch (row) {
+            case FORM:
+                return new int[] {EditorGlyphs.KB_DOCKED, EditorGlyphs.KB_FLOATING,
+                    EditorGlyphs.KB_SPLIT};
+            case LABEL_SIZE:
+                return new int[] {EditorGlyphs.LABEL_SMALL, EditorGlyphs.LABEL_MEDIUM,
+                    EditorGlyphs.LABEL_LARGE};
+            case HOME_ICON_SIZE:
+                return new int[] {EditorGlyphs.ICON_SMALL, EditorGlyphs.ICON_DEFAULT,
+                    EditorGlyphs.ICON_LARGE};
+            case FOLDERS:
+                return new int[] {EditorGlyphs.FOLDER_COMPACT, EditorGlyphs.FOLDER_DEFAULT,
+                    EditorGlyphs.FOLDER_ROOMY};
+            case THEME:
+                return new int[] {R.drawable.ic_ed_theme_system, R.drawable.ic_ed_theme_light,
+                    R.drawable.ic_ms_dark_mode};
+            default:
+                return null;
+        }
+    }
+
+    /** The name a redesigned card gives a row where it is not the row's own. */
+    @Nullable
+    private CharSequence cardRowName(@NonNull Row row) {
+        if (row == Row.OPACITY && mCard == EditorCard.KEYBOARD)
+            return getString(R.string.editor_row_background_opacity);
+        if (row == Row.KEYBOARD_THEME)
+            return getString(R.string.editor_chip_keyboard_theme);
+        if (row == Row.LINK_PAGES)
+            return getString(R.string.editor_chip_edit_pages);
+        return null;
+    }
+
+    /**
+     * The glyph a redesigned card gives a row (editor-redesign §8, one icon per idea: the palette
+     * is Global's alone, Wallpaper colours has its own); 0 keeps the row's own.
+     */
+    private int cardRowGlyph(@NonNull Row row) {
+        switch (row) {
+            case OPACITY:
+                return mCard == EditorCard.KEYBOARD ? EditorGlyphs.KB_BACKGROUND_OPACITY : 0;
+            case KEY_OPACITY: return EditorGlyphs.KB_KEY_OPACITY;
+            case KEY_SPACING: return R.drawable.ic_ms_space_bar;
+            case KEYBOARD_THEME: return R.drawable.ic_ms_brush;
+            case LINK_LAYOUTS: return R.drawable.ic_ms_keyboard_alt;
+            case LABEL_SIZE: return R.drawable.ic_ms_text_fields;
+            case NUMERALS: return R.drawable.ic_ms_tag;
+            case GLASS_WIDGETS: return R.drawable.ic_ms_widgets;
+            case TWO_LINE: return R.drawable.ic_ms_wrap_text;
+            case LABEL_SHADOW: return R.drawable.ic_ms_blur_on;
+            case PAGE_DOTS: return R.drawable.ic_ms_more_horiz;
+            case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
+            case LINK_GESTURES: return R.drawable.ic_ms_swipe;
+            case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
+            case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
+            case TINT_HUE: return R.drawable.ic_ms_format_color_fill;
+            case VIBRANCY: return R.drawable.ic_ms_auto_awesome;
+            case DEPTH: return R.drawable.ic_ms_layers;
+            case FULL_SCREEN: return R.drawable.ic_ms_fullscreen;
+            case MINIMAL: return R.drawable.ic_ms_crop_free;
+            case TOOL_COLOURS: return R.drawable.ic_ms_format_paint;
+            default: return 0;
+        }
+    }
+
+    /** Tint colour's three swatches: the theme's primary, secondary and tertiary. */
+    @Nullable
+    private int[] cardRowSwatches(@NonNull Row row) {
+        if (row != Row.TINT_HUE)
+            return null;
+        Context context = mHost.context();
+        return new int[] {
+            EditorViews.color(context, androidx.appcompat.R.attr.colorPrimary),
+            EditorViews.color(context, com.google.android.material.R.attr.colorSecondary),
+            EditorViews.color(context, com.google.android.material.R.attr.colorTertiary)};
+    }
+
+    /** Numerals' words, each written in its own font. */
+    @Nullable
+    private android.graphics.Typeface cardRowTypeface(@NonNull Row row, int index) {
+        if (row != Row.NUMERALS)
+            return null;
+        return index == 1 ? android.graphics.Typeface.MONOSPACE
+            : android.graphics.Typeface.SANS_SERIF;
+    }
+
+    /** A write for a row the card model's own switch does not name. */
+    private void writeCardRow(@NonNull Row row, int value, boolean dragging) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        Context context = mHost.context();
+        if (prefs == null)
+            return;
+        switch (row) {
+            case BOTTOM_PADDING:
+                if (layout != null) layout.setKeyboardChinDp(value, dragging);
+                syncDirty();
+                break;
+            case OPACITY_LINK:
+                if (prefs.isInAppKeyboardOpacityLinked() != (value != 0)) {
+                    prefs.setInAppKeyboardOpacityLinked(value != 0);
+                    mLinkAnchor = null;
+                    syncDirty();
+                }
+                break;
+            case HOME_COLUMNS:
+            case HOME_ROWS: {
+                int[] grid = layout == null ? null : layout.widgetGrid();
+                if (grid == null)
+                    break;
+                if (row == Row.HOME_COLUMNS) grid[0] = value;
+                else grid[1] = value;
+                layout.setWidgetGrid(grid[0], grid[1]);
+                syncDirty();
+                break;
+            }
+            case HOME_ICON_SIZE: {
+                com.termux.app.launcher.widget.HomeIconSize[] sizes =
+                    com.termux.app.launcher.widget.HomeIconSize.values();
+                writeHomeString(HomeSettings.KEY_ICON_SCALE,
+                    sizes[clamp(value, 0, sizes.length - 1)].value);
+                break;
+            }
+            case SHOW_WALLPAPER:
+                AppearanceSettingsStore.putBoolean(context, "use_system_wallpaper", value != 0);
+                settingsWritten();
+                break;
+            case TINT_HUE: {
+                String[] values = tintHueValues();
+                String id = values[clamp(value, 0, values.length - 1)];
+                if (!id.equals(prefs.getSurfaceGlassTintHue()))
+                    writeTintHue(id);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    /**
+     * A Settings page over the editor, opened on one of its sections or scrolled to a row, and
+     * told the editor is under it (so its own door back into the editor returns here instead).
+     */
+    private void openSettingsFromEditor(@NonNull Class<? extends androidx.fragment.app.Fragment> page,
+                                        @StringRes int title, @Nullable String section,
+                                        @Nullable String scrollToKey) {
+        Context context = mHost.context();
+        try {
+            android.content.Intent intent = SettingsActivity.createFragmentIntent(context, page,
+                title, null, scrollToKey);
+            intent.putExtra(SettingsActivity.EXTRA_FROM_EDITOR, true);
+            if (section != null)
+                intent.putExtra(SettingsActivity.EXTRA_SECTION_KEY, section);
+            context.startActivity(intent);
+        } catch (RuntimeException e) {
+            // No Settings to open (a stripped build): the editor stays as it is.
+        }
     }
 }
