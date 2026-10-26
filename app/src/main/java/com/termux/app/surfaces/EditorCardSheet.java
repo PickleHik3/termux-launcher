@@ -12,11 +12,9 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ListPopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -34,6 +32,7 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.surfaces.EditorRows.Kind;
 import com.termux.app.surfaces.EditorRows.Row;
+import com.termux.app.surfaces.rows.ActionRow;
 import com.termux.app.terminal.Motion;
 
 import java.util.ArrayList;
@@ -43,8 +42,9 @@ import java.util.Map;
 
 /**
  * One card of the Appearance editor (appearance-and-settings-rework §3, §7, §8; wireframes 02–04):
- * a bottom sheet with a 64dp header (the object's icon and name, ⋮ and ✕) over its rows, tier by
- * tier, every row always shown; the rows scroll. Views only: every value is read from {@link Model} and every
+ * a bottom sheet with a 64dp header (the object's icon and name, then its eye where the object can
+ * be hidden, reset and ✕; editor-redesign §1) over its rows, tier by tier, every row always shown;
+ * the rows scroll. Views only: every value is read from {@link Model} and every
  * touch reported to it, so the same sheet is every card.
  *
  * <p><b>Detents.</b> The sheet is laid out once at the full detent's height and stands at the
@@ -109,8 +109,8 @@ final class EditorCardSheet {
     /** What the header and the sheet itself report. */
     interface Listener {
         void onClose();
+        /** The header's reset: the card's keys back as they were, with no question asked. */
         void onReset();
-        void onCopyToOtherHalf();
         /** The sheet stands at a new top edge: every frame of its motion, and while dragged. */
         void onSheetMoved(int detent, float topPx);
 
@@ -136,7 +136,9 @@ final class EditorCardSheet {
     private static final int SEGMENT_PAD_DP = 8;
     /** The room between a label and the control beside it, its own-value dot's too. */
     private static final int ROW_GAP_DP = 28;
-    private static final int MENU_WIDTH_DP = 200;
+    /** A header button's touch target, and the gap the last one keeps from the edge. */
+    private static final int HEADER_BUTTON_DP = 48;
+    private static final int HEADER_END_DP = 8;
     private static final long MOVE_MS = 240L;
 
     @NonNull private final Context mContext;
@@ -147,14 +149,15 @@ final class EditorCardSheet {
     @NonNull private final FrameLayout mHeader;
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
-    @NonNull private final View mMenuButton;
+    /** Shows or hides the card's object; gone on a card whose object cannot be hidden. */
+    @NonNull private final MaterialButton mEye;
+    @NonNull private final MaterialButton mReset;
+    /** The glyph the eye shows now: open or struck through. */
+    private int mEyeIcon = R.drawable.ic_ms_visibility;
     @NonNull private final ScrollView mScroll;
     @NonNull private final LinearLayout mRows;
     @NonNull private final Map<Row, RowViews> mRowViews = new EnumMap<>(Row.class);
-    @Nullable private ListPopupWindow mMenu;
     @Nullable private EditorCard mCard;
-    @Nullable private String mCopyLabel;
-    @Nullable private String mResetLabel;
     private boolean mRestating;
     private int mDetent = DETENT_HALF;
     private int mHalfPx;
@@ -217,25 +220,31 @@ final class EditorCardSheet {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.START | Gravity.CENTER_VERTICAL);
         titleParams.setMarginStart(dp(ICON_COLUMN_DP));
-        titleParams.setMarginEnd(dp(96 + 8));
+        titleParams.setMarginEnd(headerButtonsDp(true));
         mHeader.addView(mTitle, titleParams);
 
+        // From the end: ✕, reset where the ⋮ menu sat (it only held Reset and Copy to, and the
+        // Match rows replaced Copy to), then the eye where the card has one.
         MaterialButton close = headerButton(R.drawable.ic_symbol_close,
             R.string.appearance_card_close);
         close.setOnClickListener(v -> mListener.onClose());
-        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dp(48), dp(48),
-            Gravity.END | Gravity.CENTER_VERTICAL);
-        closeParams.setMarginEnd(dp(8));
-        mHeader.addView(close, closeParams);
+        mHeader.addView(close, headerButtonParams(0));
 
-        MaterialButton menu = headerButton(R.drawable.ic_editor_more_vert,
-            R.string.appearance_card_menu);
-        menu.setOnClickListener(this::showMenu);
-        FrameLayout.LayoutParams menuParams = new FrameLayout.LayoutParams(dp(48), dp(48),
-            Gravity.END | Gravity.CENTER_VERTICAL);
-        menuParams.setMarginEnd(dp(8 + 48));
-        mHeader.addView(menu, menuParams);
-        mMenuButton = menu;
+        mReset = headerButton(R.drawable.ic_ms_restart_alt, R.string.appearance_card_reset);
+        mReset.setOnClickListener(v -> mListener.onReset());
+        mHeader.addView(mReset, headerButtonParams(1));
+
+        mEye = headerButton(R.drawable.ic_ms_visibility, R.string.appearance_row_visible);
+        mEye.setCheckable(true);
+        mEye.setOnClickListener(v -> {
+            if (mRestating)
+                return;
+            boolean shown = mModel.value(Row.VISIBLE) != 0;
+            mModel.onValue(Row.VISIBLE, shown ? 0 : 1, false);
+            restateEye();
+        });
+        mEye.setVisibility(View.GONE);
+        mHeader.addView(mEye, headerButtonParams(2));
         bindHeaderDrag();
 
         mScroll = new ScrollView(context);
@@ -266,7 +275,6 @@ final class EditorCardSheet {
     }
 
     void detach() {
-        dismissMenu();
         if (mSheet.getParent() instanceof ViewGroup)
             ((ViewGroup) mSheet.getParent()).removeView(mSheet);
     }
@@ -367,20 +375,29 @@ final class EditorCardSheet {
     // ----------------------------------------------------------------------------------- cards
 
     /**
-     * Builds {@code card}'s rows and raises the sheet to its half detent. {@code copyLabel} names
-     * the menu's copy item ("Copy to Home"), or null for a card held on one half only.
+     * Builds {@code card}'s rows and raises the sheet to its half detent. {@code resetLabel} names
+     * the header's reset button for accessibility and its long-press ("Reset dock").
      */
     void show(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> rows,
-              @Nullable String copyLabel, @NonNull String resetLabel, boolean animate) {
-        dismissMenu();
+              @NonNull String resetLabel, boolean animate) {
         boolean sameCard = mShown && card == mCard;
         mCard = card;
-        mCopyLabel = copyLabel;
-        mResetLabel = resetLabel;
+        mReset.setContentDescription(resetLabel);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(mReset, resetLabel);
+        EditorViews.setVisible(mEye, card.hasEye());
+        ViewGroup.LayoutParams titleParams = mTitle.getLayoutParams();
+        if (titleParams instanceof FrameLayout.LayoutParams) {
+            int end = headerButtonsDp(card.hasEye());
+            if (((FrameLayout.LayoutParams) titleParams).getMarginEnd() != end) {
+                ((FrameLayout.LayoutParams) titleParams).setMarginEnd(end);
+                mTitle.setLayoutParams(titleParams);
+            }
+        }
         if (!sameCard) {
             build(card, rows);
             mScroll.scrollTo(0, 0);
         }
+        restateEye();
         EditorViews.setText(mTitle, mContext.getString(card.titleRes));
         mHeaderIcon.setImageResource(card.iconRes);
         mSheet.setContentDescription(mContext.getString(card.titleRes));
@@ -405,7 +422,6 @@ final class EditorCardSheet {
 
     /** Takes the sheet down; {@code done} runs once it is off screen. */
     void hide(boolean animate, @Nullable Runnable done) {
-        dismissMenu();
         if (!mShown) {
             if (done != null) done.run();
             return;
@@ -605,45 +621,6 @@ final class EditorCardSheet {
         if (velocityPxPerS >= flingPxPerS)
             return atPx > halfTranslationPx ? -1 : DETENT_HALF;
         return Math.abs(atPx) < Math.abs(atPx - halfTranslationPx) ? DETENT_FULL : DETENT_HALF;
-    }
-
-    // ------------------------------------------------------------------------------------ menu
-
-    private void showMenu(@NonNull View anchor) {
-        dismissMenu();
-        List<String> items = new ArrayList<>(2);
-        if (mResetLabel != null) items.add(mResetLabel);
-        if (mCopyLabel != null) items.add(mCopyLabel);
-        if (items.isEmpty())
-            return;
-        ListPopupWindow menu = new ListPopupWindow(mContext);
-        menu.setAnchorView(anchor);
-        menu.setModal(true);
-        menu.setWidth(dp(MENU_WIDTH_DP));
-        menu.setDropDownGravity(Gravity.END);
-        // Upward, over the frame: a menu dropped over the rows would cover a slider's value.
-        int height = items.size() * dp(48) + dp(16);
-        menu.setHeight(height);
-        menu.setVerticalOffset(-(anchor.getHeight() + height));
-        menu.setAdapter(new ArrayAdapter<>(mContext, android.R.layout.simple_list_item_1, items));
-        menu.setOnItemClickListener((parent, view, position, id) -> {
-            String picked = items.get(position);
-            menu.dismiss();
-            if (picked.equals(mResetLabel)) mListener.onReset();
-            else mListener.onCopyToOtherHalf();
-        });
-        menu.setOnDismissListener(() -> {
-            if (mMenu == menu) mMenu = null;
-        });
-        mMenu = menu;
-        menu.show();
-    }
-
-    private void dismissMenu() {
-        ListPopupWindow menu = mMenu;
-        mMenu = null;
-        if (menu != null)
-            menu.dismiss();
     }
 
     // ------------------------------------------------------------------------------------ rows
@@ -1259,28 +1236,72 @@ final class EditorCardSheet {
      */
     @NonNull
     private RowViews commandRow(@NonNull Row row) {
-        LinearLayout root = horizontalRow(SWITCH_ROW_MIN_DP);
-        RowViews views = new RowViews(row, root);
-        root.addView(iconView(row.iconRes));
-        root.addView(labelColumn(row, views),
-            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        MaterialButton command = new MaterialButton(mContext, null,
-            androidx.appcompat.R.attr.borderlessButtonStyle);
-        command.setSingleLine(true);
-        command.setOnClickListener(v -> mModel.onAction(row, v));
-        root.addView(command, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            dp(48)));
-        root.setOnClickListener(v -> mModel.onAction(row, v));
-        views.value = command;
+        ActionRow action = ActionRow.build(mContext, row.iconRes,
+            mContext.getString(row.labelRes), null, v -> mModel.onAction(row, v));
+        RowViews views = new RowViews(row, action.root);
+        views.label = action.title;
+        views.value = action.action;
         return views;
     }
 
     // ------------------------------------------------------------------------------ restating
 
-    /** Every row read again from the model. */
+    /** Every row read again from the model, the header's eye with them. */
     void restate() {
         for (RowViews views : mRowViews.values())
             restate(views);
+        restateEye();
+    }
+
+    /**
+     * The eye read again: open while the object shows, struck through while it is hidden. Its
+     * long-press names it, or says why it reads as it does (the other orientation's note).
+     */
+    private void restateEye() {
+        EditorCard card = mCard;
+        if (card == null || !card.hasEye())
+            return;
+        boolean shown = mModel.value(Row.VISIBLE) != 0;
+        boolean enabled = mModel.enabled(Row.VISIBLE);
+        mRestating = true;
+        try {
+            if (mEye.isChecked() != shown)
+                mEye.setChecked(shown);
+            int icon = shown ? R.drawable.ic_ms_visibility : R.drawable.ic_ms_visibility_off;
+            if (mEyeIcon != icon) {
+                mEyeIcon = icon;
+                mEye.setIconResource(icon);
+            }
+            if (mEye.isEnabled() != enabled)
+                mEye.setEnabled(enabled);
+            int container = shown ? EditorViews.color(mContext,
+                com.google.android.material.R.attr.colorSecondaryContainer) : 0;
+            int content = EditorViews.color(mContext, shown
+                ? androidx.appcompat.R.attr.colorPrimary
+                : com.google.android.material.R.attr.colorOnSurfaceVariant);
+            mEye.setBackgroundTintList(ColorStateList.valueOf(container));
+            mEye.setIconTint(ColorStateList.valueOf(content));
+            CharSequence note = mModel.summary(Row.VISIBLE);
+            androidx.appcompat.widget.TooltipCompat.setTooltipText(mEye,
+                note != null && note.length() > 0 ? note
+                    : mContext.getString(R.string.appearance_row_visible));
+        } finally {
+            mRestating = false;
+        }
+    }
+
+    /** The eye, for a test. */
+    @VisibleForTesting
+    @NonNull
+    MaterialButton eyeButton() {
+        return mEye;
+    }
+
+    /** The reset button, for a test. */
+    @VisibleForTesting
+    @NonNull
+    MaterialButton resetButton() {
+        return mReset;
     }
 
     /** A strip's line stands while any of its columns does, and the strip while any line does. */
@@ -1553,6 +1574,20 @@ final class EditorCardSheet {
         line.setLayoutParams(params);
         line.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         return line;
+    }
+
+    /** The room the header's buttons take at its end: ✕ and reset, and the eye with it. */
+    private int headerButtonsDp(boolean withEye) {
+        return dp(HEADER_END_DP + HEADER_BUTTON_DP * (withEye ? 3 : 2) + 8);
+    }
+
+    /** The {@code index}th header button from the end. */
+    @NonNull
+    private FrameLayout.LayoutParams headerButtonParams(int index) {
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(HEADER_BUTTON_DP),
+            dp(HEADER_BUTTON_DP), Gravity.END | Gravity.CENTER_VERTICAL);
+        params.setMarginEnd(dp(HEADER_END_DP + HEADER_BUTTON_DP * index));
+        return params;
     }
 
     @NonNull

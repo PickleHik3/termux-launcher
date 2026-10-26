@@ -26,6 +26,7 @@ import androidx.annotation.Nullable;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.slider.LabelFormatter;
 import com.termux.R;
+import com.termux.app.surfaces.rows.StripTouchPolicy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +85,7 @@ public final class LegendSlider extends View {
      * gesture from the card's scroll. Before then a scroll is the likelier intent; a finger that
      * has not left the slop by then means the slider.
      */
-    static final long HOLD_TO_CLAIM_MS = 150L;
+    static final long HOLD_TO_CLAIM_MS = StripTouchPolicy.HOLD_TO_CLAIM_MS;
     /** The handle's touch target along the track: M3's 48dp minimum, centred on the handle. */
     private static final float HANDLE_TOUCH_DP = 48f;
     private static final int DISABLED_ALPHA = 97;
@@ -96,6 +97,8 @@ public final class LegendSlider extends View {
     private float mValue = 0f;
 
     @Nullable private LabelFormatter mLegend;
+    /** What accessibility reads as the value, when it is not the legend ({@link #setSpokenValue}). */
+    @Nullable private LabelFormatter mSpoken;
     private final List<OnChangeListener> mChangeListeners = new ArrayList<>();
     private final List<OnSliderTouchListener> mTouchListeners = new ArrayList<>();
 
@@ -142,6 +145,8 @@ public final class LegendSlider extends View {
     private float mLastY;
     private final float mTouchSlopPx;
     private final float mHandleTouchHalfPx;
+    /** A touch on the handle drags at once ({@link #setHandleGrabs}). */
+    private boolean mHandleGrabs = true;
     private final Runnable mHoldClaim = () -> {
         if (mClaimPending)
             claimGesture(mLastY);
@@ -173,13 +178,28 @@ public final class LegendSlider extends View {
     @NonNull
     static Claim claim(boolean onHandle, boolean inScroller, float movedPx, float slopPx,
                        long heldMs) {
-        if (onHandle || !inScroller)
-            return Claim.CLAIM;
-        if (movedPx > slopPx && heldMs < HOLD_TO_CLAIM_MS)
-            return Claim.SCROLL;
-        if (heldMs >= HOLD_TO_CLAIM_MS)
-            return Claim.CLAIM;
-        return Claim.WAIT;
+        return claim(onHandle, true, inScroller, movedPx, slopPx, heldMs);
+    }
+
+    /** {@link StripTouchPolicy#decide}, in this view's terms. */
+    @NonNull
+    static Claim claim(boolean onHandle, boolean handleGrabs, boolean inScroller, float movedPx,
+                       float slopPx, long heldMs) {
+        switch (StripTouchPolicy.decide(onHandle, handleGrabs, inScroller, movedPx, slopPx,
+            heldMs)) {
+            case CLAIM: return Claim.CLAIM;
+            case SCROLL: return Claim.SCROLL;
+            default: return Claim.WAIT;
+        }
+    }
+
+    /**
+     * Whether a touch on the handle drags at once (true, today's glass strips) or waits for the
+     * hold like the rest of the column, so a swipe that starts on it scrolls the card
+     * ({@link com.termux.app.surfaces.rows.StripRow}).
+     */
+    public void setHandleGrabs(boolean grabs) {
+        mHandleGrabs = grabs;
     }
 
     /** Whether a touch at {@code y} lands on the handle's touch target. */
@@ -297,6 +317,14 @@ public final class LegendSlider extends View {
     public void setLegend(@Nullable LabelFormatter legend) {
         mLegend = legend;
         invalidate();
+    }
+
+    /**
+     * What accessibility reads as the value, for a slider whose legend is not its value (a strip
+     * whose legend is its name, and only while dragged). Null reads the legend.
+     */
+    public void setSpokenValue(@Nullable LabelFormatter spoken) {
+        mSpoken = spoken;
     }
 
     /**
@@ -421,8 +449,11 @@ public final class LegendSlider extends View {
         return Math.max(mHandleOverhangPx, (getWidth() - group) / 2f + mHandleOverhangPx);
     }
 
-    /** The track's centre across this view, as it is drawn: what a leader line points at. */
-    float trackCentreX() {
+    /**
+     * The track's centre across this view, as it is drawn: what a leader line points at, and what
+     * a strip's glyph and value stand centred on.
+     */
+    public float trackCentreX() {
         float trackWidth = trackWidthPx();
         return trackLeftPx(trackWidth) + trackWidth / 2f;
     }
@@ -615,7 +646,7 @@ public final class LegendSlider extends View {
                 mLastY = mDownY;
                 mDownTimeMs = event.getEventTime();
                 Claim decision = claim(onHandle(mDownY, handleCentreY(), mHandleTouchHalfPx),
-                    isInScrollingContainer(), 0f, mTouchSlopPx, 0L);
+                    mHandleGrabs, isInScrollingContainer(), 0f, mTouchSlopPx, 0L);
                 if (decision == Claim.CLAIM) {
                     claimGesture(mDownY);
                 } else {
@@ -733,8 +764,9 @@ public final class LegendSlider extends View {
         super.onInitializeAccessibilityNodeInfo(info);
         info.setRangeInfo(AccessibilityNodeInfo.RangeInfo.obtain(
             AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_FLOAT, mValueFrom, mValueTo, mValue));
-        if (mLegend != null) {
-            CharSequence value = mLegend.getFormattedValue(mValue);
+        LabelFormatter spoken = mSpoken != null ? mSpoken : mLegend;
+        if (spoken != null) {
+            CharSequence value = spoken.getFormattedValue(mValue);
             CharSequence state = mMarked ? value + ", "
                 + getContext().getString(R.string.appearance_row_own_value) : value;
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)

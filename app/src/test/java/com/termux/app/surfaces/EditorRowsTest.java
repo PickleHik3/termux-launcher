@@ -52,7 +52,7 @@ public class EditorRowsTest {
     @Test
     public void theDockCardOpensOnItsStripThenItsPlace() {
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-            Row.MARGIN, Row.APP_ICONS, Row.REFLECTION, Row.VISIBLE),
+            Row.MARGIN, Row.APP_ICONS, Row.REFLECTION),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         assertEquals(Arrays.asList(Row.STYLE, Row.DESIGN),
             EditorRows.tier(EditorCard.DOCK, ALL, 2));
@@ -62,12 +62,22 @@ public class EditorRowsTest {
 
     @Test
     public void theStatusBarAndKeyboardCardsOpenOnTheirStripAndPlace() {
-        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN,
-            Row.VISIBLE), EditorRows.tier(EditorCard.STATUS, ALL, 1));
+        assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN),
+            EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT,
-            Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN, Row.VISIBLE),
+            Row.KEY_CORNERS, Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
         assertTrue(EditorRows.tier(EditorCard.KEYBOARD, ALL, 2).contains(Row.KEYBOARD_THEME));
+    }
+
+    @Test
+    public void theEyeStandsInTheHeaderOfTheCardsWhoseObjectCanBeHidden() {
+        for (EditorCard card : EditorCard.values()) {
+            boolean eye = card == EditorCard.STATUS || card == EditorCard.DOCK
+                || card == EditorCard.KEYBOARD;
+            assertEquals(card + " has an eye", eye, card.hasEye());
+            assertFalse(card + ": the eye is not a row", rowsOf(card, ALL).contains(Row.VISIBLE));
+        }
     }
 
     @Test

@@ -6,6 +6,13 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
+import com.termux.app.surfaces.cards.DockCard;
+import com.termux.app.surfaces.cards.GlobalCard;
+import com.termux.app.surfaces.cards.HomeCard;
+import com.termux.app.surfaces.cards.KeyboardCard;
+import com.termux.app.surfaces.cards.StatusBarCard;
+import com.termux.app.surfaces.cards.TerminalCard;
+import com.termux.app.surfaces.cards.WorkspaceCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
@@ -205,69 +212,45 @@ public final class EditorRows {
         }
     }
 
-    /** Every row of {@code card}, tier by tier, in the order the card shows them. */
+    /**
+     * Every row of {@code card}, tier by tier, in the order the card shows them. Each card's list
+     * is its own file under {@code surfaces/cards} (editor-redesign §10, wave 2), so a wave that
+     * reshapes one card edits one file.
+     */
     @NonNull
     public static List<Spec> rows(@NonNull EditorCard card, @NonNull Offers offers) {
-        List<Spec> out = new ArrayList<>();
         switch (card) {
-            case HOME:
-                // Home's glass first: the Home half's Base, which the widgets, the status bar
-                // and the dock on Home wear while they follow it.
-                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.ICON_SIZE, Row.LABEL_SIZE,
-                    Row.GLASS_WIDGETS);
-                add(out, 2, Row.TWO_LINE, Row.LABEL_SHADOW, Row.FOLDERS, Row.NUMERALS,
-                    Row.PAGE_DOTS);
-                add(out, 3, Row.WALLPAPER_SCROLL, Row.MATCH_WORKSPACE, Row.LINK_GESTURES,
-                    Row.LINK_PAGES);
-                break;
-            case WORKSPACE:
-                // Home's twin (editor-redesign §2): the Workspace half's Look and Base, which the
-                // bars on the Workspace wear while they follow it.
-                add(out, 1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT);
-                add(out, 3, Row.MATCH_HOME, Row.LINK_GLOBAL);
-                break;
-            case STATUS:
-                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS, Row.MARGIN,
-                    Row.VISIBLE);
-                add(out, 2, Row.CLOCK_12H, Row.CLOCK_FACE);
-                add(out, 3, Row.LINK_INDICATORS);
-                break;
-            case TERMINAL:
-                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE, Row.CORNERS,
-                    Row.MARGIN, Row.SPLIT_GAP);
-                add(out, 2, Row.CONTRAST);
-                add(out, 3, Row.CURSOR_TRAIL);
-                if (offers.terminalEffect) add(out, 3, Row.EFFECT);
-                add(out, 3, Row.LINK_FONT);
-                break;
-            case DOCK:
-                add(out, 1, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
-                    Row.MARGIN, Row.APP_ICONS, Row.REFLECTION, Row.VISIBLE);
-                add(out, 2, Row.STYLE, Row.DESIGN);
-                add(out, 3, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_DOCK_ITEMS);
-                break;
-            case KEYBOARD:
-                // Key opacity stands beside Opacity, the pair the opacity link moves together.
-                add(out, 1, Row.FROST, Row.OPACITY, Row.KEY_OPACITY, Row.TINT, Row.KEY_CORNERS,
-                    Row.KEY_SPACING, Row.HEIGHT, Row.CORNERS, Row.MARGIN, Row.VISIBLE);
-                add(out, 2, Row.KEYBOARD_THEME);
-                add(out, 3, Row.FORM, Row.LINK_KEYBOARD_SIZE, Row.LINK_LAYOUTS);
-                break;
+            case HOME: return HomeCard.rows(offers);
+            case WORKSPACE: return WorkspaceCard.rows(offers);
+            case STATUS: return StatusBarCard.rows(offers);
+            case TERMINAL: return TerminalCard.rows(offers);
+            case DOCK: return DockCard.rows(offers);
+            case KEYBOARD: return KeyboardCard.rows(offers);
             case APPEARANCE:
             default:
-                // All surfaces: the shared glass, the glass edge where it is drawn, and the
-                // shared text size, in the order the Look page's Custom row had them.
-                add(out, 1, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT);
-                if (offers.glassEdge) add(out, 1, Row.GLASS_EDGE);
-                add(out, 1, Row.VIBRANCY);
-                if (offers.glassEdge) add(out, 1, Row.DEPTH);
-                add(out, 1, Row.TEXT_SIZE, Row.WALLPAPER, Row.THEME);
-                add(out, 2, Row.ICON_PACK, Row.MONOCHROME, Row.WALLPAPER_COLOURS, Row.CONTRAST,
-                    Row.FULL_SCREEN, Row.MINIMAL);
-                add(out, 3, Row.TINT_HUE, Row.TOOL_COLOURS);
-                break;
+                return GlobalCard.rows(offers);
         }
-        return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * How a card file lists its rows: tier by tier, in the order the card shows them. The list
+     * it builds is unmodifiable.
+     */
+    public static final class CardRows {
+        @NonNull private final List<Spec> mOut = new ArrayList<>();
+
+        /** Appends {@code rows} to {@code tier} (1, 2 or 3). */
+        @NonNull
+        public CardRows tier(int tier, @NonNull Row... rows) {
+            for (Row row : rows)
+                mOut.add(new Spec(row, tier));
+            return this;
+        }
+
+        @NonNull
+        public List<Spec> build() {
+            return Collections.unmodifiableList(new ArrayList<>(mOut));
+        }
     }
 
     /** The rows of one tier of {@code card}. */
@@ -279,11 +262,6 @@ public final class EditorRows {
                 out.add(spec.row);
         }
         return out;
-    }
-
-    private static void add(@NonNull List<Spec> out, int tier, @NonNull Row... rows) {
-        for (Row row : rows)
-            out.add(new Spec(row, tier));
     }
 
     /**

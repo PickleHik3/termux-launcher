@@ -95,23 +95,6 @@ public class SurfaceEditorCardsTest {
     }
 
     @Test
-    public void copyMakesTheOtherHalfLookTheSame() {
-        SurfaceEditorController editor = open(EditorCard.KEYBOARD, null);
-        int blur = GlassControls.blurForGlass(60);
-        model(editor).onValue(Row.FROST, 60, false);
-        model(editor).onReleased(Row.FROST);
-        assertNotEquals(blur, preferences.getSurfaceValue(SurfaceSlot.KEYBOARD,
-            SurfaceProperty.BLUR, WallHalf.HOME));
-
-        ReflectionHelpers.callInstanceMethod(editor, "copyCard");
-
-        assertEquals(blur, preferences.getSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
-            WallHalf.HOME));
-        assertEquals(GlassControls.grainForGlass(60), preferences.getSurfaceValue(
-            SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN, WallHalf.HOME));
-    }
-
-    @Test
     public void oneDirtyStateCoversBothHalvesAndUndoPutsBothBack() {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
         SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.WIDGETS);

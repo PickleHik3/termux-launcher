@@ -54,13 +54,22 @@ public enum EditorCard {
     }
 
     /**
-     * Whether the card's values are held per half, so its menu offers a copy to the other half:
-     * the dock, the status bar and the keyboard (their glass), and the Appearance card (the half's
+     * Whether the card's values are held per half: the dock, the status bar and the keyboard (their glass), and the Appearance card (the half's
      * Look). The terminal stands only on the Workspace and Home only on Home; the two screens'
      * cards meet through their Match rows instead.
      */
     public boolean perHalf() {
         return this == STATUS || this == DOCK || this == KEYBOARD || this == APPEARANCE;
+    }
+
+    /**
+     * Whether the card's header carries the eye that shows or hides its object (editor-redesign
+     * §2): the status bar, the dock and the keyboard. The terminal, the two screens and the
+     * palette's card cannot be hidden. The eye reads and writes {@link EditorRows.Row#VISIBLE}
+     * through the card's model; it is not one of the card's rows.
+     */
+    public boolean hasEye() {
+        return this == STATUS || this == DOCK || this == KEYBOARD;
     }
 
     /**

@@ -488,14 +488,13 @@ public class EditorCardSheetFitTest {
             sheet = new EditorCardSheet(themed, new FakeModel(themed), new EditorCardSheet.Listener() {
                 @Override public void onClose() {}
                 @Override public void onReset() {}
-                @Override public void onCopyToOtherHalf() {}
                 @Override public void onSheetMoved(int detent, float topPx) {}
             });
             int full = Math.round(mHeight * 0.55f);
             sheet.attach(parent);
             sheet.setGeometry(full, full, navPx);
-            sheet.show(card, EditorRows.rows(card, new EditorRows.Offers(true, true)),
-                card.perHalf() ? "Copy to Home" : null, "Reset", false);
+            sheet.show(card, EditorRows.rows(card, new EditorRows.Offers(true, true)), "Reset",
+                false);
             layOut();
             EditorFramePose.Window window = new EditorFramePose.Window(mHeight,
                 Math.round(41 * density), navPx, density, fontScale, Math.round(41 * density),
