@@ -35,7 +35,7 @@ import java.util.ArrayList;
 
 /**
  * Edits live in the editing session until Done stores them or Discard reverts them: a screen card
- * that follows the page swipe, a card put down with its ✕, or a card raised by the page label
+ * that follows the page swipe, a card collapsed to peek, or a card raised by the page label
  * never puts a value back, and the bar keeps showing the session dirty.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -104,21 +104,23 @@ public class EditorCardSwapKeepsEditsTest {
     }
 
     @Test
-    public void theCloseButtonPutsTheCardDownAndKeepsItsEdits() {
+    public void collapsingToPeekKeepsTheCardAndItsEdits() {
         SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
 
         EditorCardSheet sheet = ReflectionHelpers.getField(editor, "mSheet");
-        EditorCardSheet.Listener listener = ReflectionHelpers.getField(sheet, "mListener");
-        listener.onClose();
+        assertTrue("Back above peek is spent on the card", editor.consumeBack());
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertNull("✕ puts the card down", editor.shownCard());
+        assertEquals("the card stays, at peek", EditorCard.WORKSPACE, editor.shownCard());
+        assertEquals(EditorCardSheet.DETENT_PEEK, sheet.detent());
         assertWorkspaceKept(editor);
 
         editor.present(EditorCard.WORKSPACE, PaneWallPage.TERMINAL, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
+        assertEquals("a door naming the card raises it from peek", EditorCardSheet.DETENT_HALF,
+            sheet.detent());
         assertEquals(70, model(editor).value(Row.FROST));
         assertEquals(65, model(editor).value(Row.OPACITY));
         assertWorkspaceKept(editor);
@@ -129,9 +131,7 @@ public class EditorCardSwapKeepsEditsTest {
         SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
-        EditorCardSheet sheet = ReflectionHelpers.getField(editor, "mSheet");
-        EditorCardSheet.Listener listener = ReflectionHelpers.getField(sheet, "mListener");
-        listener.onClose();
+        assertTrue(editor.consumeBack());
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
         EditorBar bar = ReflectionHelpers.getField(editor, "mBar");

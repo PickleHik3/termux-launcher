@@ -127,7 +127,8 @@ public class SurfaceEditorCardsTest {
     @Test
     public void theTerminalsCardIsNotOfferedOnHome() {
         SurfaceEditorController editor = open(EditorCard.TERMINAL, PaneWallPage.WIDGETS);
-        assertNull("the terminal stands on the Workspace alone", editor.shownCard());
+        assertEquals("the terminal stands on the Workspace alone: Home's card stands at peek",
+            EditorCard.HOME, editor.shownCard());
         editor.present(EditorCard.HOME, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(EditorCard.HOME, editor.shownCard());
