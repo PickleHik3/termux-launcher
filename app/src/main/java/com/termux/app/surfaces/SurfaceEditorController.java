@@ -890,7 +890,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public void onPalette() {
-            openCard(EditorCard.APPEARANCE, true);
+            EditorCard card = EditorDoor.EDITOR_PALETTE.route(null, null);
+            if (card != null) openCard(card, true);
+        }
+
+        @Override public void onPageLabel() {
+            if (!mOpen)
+                return;
+            EditorCard card = EditorDoor.EDITOR_PAGE_LABEL.route(mHalf == WallHalf.HOME
+                ? com.termux.app.wall.PaneWallPage.WIDGETS
+                : com.termux.app.wall.PaneWallPage.TERMINAL, null);
+            if (card != null) openCard(card, true);
         }
 
         @Override public void onThemeHintSeen() {
@@ -2682,9 +2692,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case MATCH_HOME:
                 toggleMatch(matchTarget(row));
                 break;
-            case LINK_GLOBAL:
-                openCard(EditorCard.APPEARANCE, true);
+            case LINK_GLOBAL: {
+                EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
+                if (global != null) openCard(global, true);
                 break;
+            }
             default:
                 break;
         }
@@ -3521,8 +3533,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             final int index = i;
             group.setOnClickListener(view -> {
                 EditorCard card = cardOfGroup(index);
-                if (card != null) openCard(card, true);
-                else closeCard(true);
+                if (card != null) {
+                    EditorDoor.EDITOR_OUTLINE.log(card);
+                    openCard(card, true);
+                } else {
+                    closeCard(true);
+                }
             });
             group.setOnTouchListener((view, event) -> {
                 if (!mOpen)

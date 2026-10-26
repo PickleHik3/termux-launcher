@@ -18,7 +18,7 @@
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
     <!-- The doors: Settings › Keyboard's row opens the editor on the Keyboard card. -->
-    <string name="settings_look_appearance_editor_title">Appearance</string>
+    <string name="settings_look_appearance_editor_title">Edit on screen</string>
     <string name="settings_look_appearance_editor_summary">The keyboard\'s glass, height and keys</string>
 
     <!-- The editor bar: the orientation chip names the orientation the frame shows. -->

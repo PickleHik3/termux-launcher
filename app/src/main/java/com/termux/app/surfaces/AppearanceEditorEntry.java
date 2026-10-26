@@ -34,13 +34,28 @@ public final class AppearanceEditorEntry {
     private AppearanceEditorEntry() {}
 
     /**
+     * The {@link EditorDoor#doorName} of the door that built the intent, so the launcher logs
+     * that door's line when the editor opens; absent is {@link EditorDoor#SECTION_INTENT}.
+     */
+    public static final String EXTRA_DOOR = "com.termux.app.extra.EDITOR_DOOR";
+
+    /**
      * The intent that brings the launcher forward with the editor open on {@code card}.
      * {@code fromSettings} marks a Settings door: closing the editor goes back there.
      */
     @NonNull
     public static Intent intent(@NonNull Context context, @Nullable EditorCard card,
                                 boolean fromSettings) {
+        return intent(context, card, fromSettings, null);
+    }
+
+    /** {@link #intent(Context, EditorCard, boolean)}, naming the {@code door} that sends it. */
+    @NonNull
+    public static Intent intent(@NonNull Context context, @Nullable EditorCard card,
+                                boolean fromSettings, @Nullable EditorDoor door) {
         Intent intent = new Intent(context, TermuxActivity.class);
+        if (door != null)
+            intent.putExtra(EXTRA_DOOR, door.doorName);
         intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
         if (card != null)
             intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, card.key);

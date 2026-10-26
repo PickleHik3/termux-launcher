@@ -122,7 +122,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
         Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
         if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
-            SettingsEditorDoors.openEditor(this, preference, com.termux.app.surfaces.EditorCard.KEYBOARD);
+            SettingsEditorDoors.openEditor(this, preference,
+                com.termux.app.surfaces.EditorDoor.SETTINGS_KEYBOARD);
             return true;
         });
 
