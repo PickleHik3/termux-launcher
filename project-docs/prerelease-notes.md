@@ -8,7 +8,7 @@ release-notes voice (one line per item, what you can now do, no mechanism).
 -->
 # Pre-release channel
 
-Latest stable: v1.0.6.
+Latest stable: v1.2.1.
 
 ## New in this drop
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
@@ -17,7 +17,7 @@ Latest stable: v1.0.6.
 - Home and Workspace are one wall of Home pages and windows: swipe from Home into the Workspace and back, and the glass edge, the dock and the keyboard cross with the page in one motion.
 - The Workspace can be empty, and Terminal and Display open on demand as windows of the row; reorder windows by dragging their chips along the window bar, and move panes between windows.
 - A shell can float over a Home page with a glass titlebar, minimise to a chip, and wait in the sessions drawer under Home and Saved sessions.
-- Settings › General › Use as picks Home screen or Terminal only, and the welcome screen asks which you want.
+- Settings › General › Launcher › Use as picks Home screen or Terminal only, and the welcome screen asks which you want.
 - Pinch a Home page, or use Edit pages, to see Home pages and windows as cards; delete with Undo, and add a page, terminal or display.
 - Long-pressing Home opens an action sheet that can lock the layout and reaches past the navigation pill.
 - Long-press an app for the App menu: grouped rows with an arrow, shortcuts you can pin to Home, and Remove or Uninstall by dragging its icon.
@@ -27,7 +27,6 @@ Latest stable: v1.0.6.
 - Screen readers can reach the command palette and the App menu, and a dock tile opens the command palette.
 - Text on glass and over the wallpaper stays readable: terminal and dock text hold a contrast floor that follows your level, and faint text fades toward its ground.
 - A one-time hint points new users to the theme; the welcome tour stays off on pre-release builds.
-- The long-press popup opens from a hold anywhere but the core of a key, and from the gaps and margins around the keys.
 - The status row flows around the camera and clears the screen's rounded corners (#163).
 - Caps, chips and the Home-locked notice fit at font scale 1.3.
 - The calendar's today disc is centred on its number, one size every day, and keeps its contrast on dark glass.
@@ -48,27 +47,22 @@ Latest stable: v1.0.6.
 - Clock widgets have Show date and Show next alarm toggles, and the flip clock stacks AM and PM; Clock and Weather can go Bare.
 - Widgets wear the Look's glass and corners, with one switch and per-widget overrides, and the widget picker names each design and stays clear of the dock.
 - Widgets resize to per-kind spans, and edit mode reaches every widget and explains refused drops.
-- Home keeps its layout when you change the wallpaper or dark mode, and the shared widget grid carries into Home's own keys.
 
 ### Dock
 - Home's dock has styles you pick: Glass tray, Lens beads, Taskbar, Prompt line, Wall strip and the new-install default, Peek, which has a live reflection under the keyboard and a Floating variant.
 - Prompt line and Taskbar are toggles (Search field, Drawer tile) that work with any dock design.
-- The dock's design dresses both halves and follows the page you cross to, from the first frame.
 - A side dock on a landscape phone holds every pin and scrolls the rest, keeping the most-used apps in view (#146).
-- App icons carry no reflection in any glass.
 - Pinned apps never run Unpin from a still long press.
 
 ### Keyboard
 - An extra keys editor (#164) lets you edit pages, rows and keys with a picker and Undo.
 - Auto keyboard waits until Linux apps have what it needs.
-- The keyboard keeps its height and shows the popup from its frame and gaps.
-- Keys fold the extra keys instead of dipping the dock on a single layout.
+- A long hold on the keyboard's frame, its key gaps or a key's edge opens the keyboard popup (Edit, Hide, Docked or Floating); the keyboard keeps its height.
 - Keyboard over display: overlay or resize, from the display's Input page.
 
 ### Terminal
 - A sideways swipe on a terminal's text pages the row.
 - A growing pane keeps the prompt at the bottom only while history fills the new rows.
-- Launcher sound works: a sound server and Linux media controls run with the launcher, and Linux apps opened from it play audio.
 
 ### Linux apps
 - Settings › Linux apps › Graphics acceleration has a benchmark that runs on its own page with one confirmation, and skips the Vulkan wrapper where the phone's driver is too old for it.
@@ -76,6 +70,7 @@ Latest stable: v1.0.6.
 - The display is a window of the row and holds the keyboard and focus only while it is on screen.
 - Settings › Linux apps › Arch Linux installs on arm64 phones again, from the Arch Linux ARM image; Debian and Ubuntu are unchanged.
 - A Set up Linux apps guide walks through the first setup.
+- Linux apps play sound: a sound server runs with the launcher, and Media controls show what is playing.
 
 ### Settings
 - Settings follow Material 3 and are regrouped by the wall's halves, with search everywhere and a Motion page for the page transition and animation speed.
