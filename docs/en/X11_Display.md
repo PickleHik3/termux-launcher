@@ -354,6 +354,8 @@ termux-x11 :0 &
 proot-distro login archlinux --shared-x11 -e DISPLAY=:0
 ```
 
+On arm64 phones the Docker `archlinux` image is amd64-only; install Arch Linux ARM from the `menci/archlinuxarm` image instead (`proot-distro install menci/archlinuxarm --name archlinux`). The Linux apps setup does this for you.
+
 `--shared-x11` hands the container the socket directory and nothing else; `--shared-tmp` shares
 the whole temporary directory and works too. Neither is on by default. `DISPLAY` has to be passed
 in with `-e`; exporting it in your Termux shell does not carry it across. The server needs no

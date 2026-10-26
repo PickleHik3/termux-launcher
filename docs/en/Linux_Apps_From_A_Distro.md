@@ -28,7 +28,7 @@ browser and a file manager").
 1. **Source.** **Termux's own apps** install in a minute or two and offer a smaller choice of apps.
    **A full Linux** takes longer and runs far more apps. Choosing Termux's own apps skips the next
    step.
-2. **Pick a Linux.** Debian, Ubuntu or Arch Linux, Debian if you are not sure.
+2. **Pick a Linux.** Debian, Ubuntu or Arch Linux, Debian if you are not sure. On arm64 phones the setup installs Arch from the `menci/archlinuxarm` image, because the Docker `archlinux` image is amd64-only.
 3. **Starter apps.** Tick a browser and a file manager; each says which app you will get.
 4. **Copy the command.** **Copy** puts it on the clipboard. Paste it in the terminal and press
    Enter. When you finish the guide, Settings closes so the terminal is in front.
