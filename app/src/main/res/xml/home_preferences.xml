@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Home: the Appearance editor first, then the rows that shape the Home half. Every key is the
-     one it always was (the old Apps page, Appearance and the root's Start in row). -->
+     one it always was (the old Apps page and Appearance). Use as Terminal only hides the whole
+     section. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -16,10 +17,10 @@
             app:key="app_launcher_home_icon_scale"
             app:title="@string/settings_home_icon_scale_title"
             app:dialogTitle="@string/settings_home_icon_scale_title"
-            app:entries="@array/settings_home_icon_scale_entries"
-            app:entryValues="@array/settings_home_icon_scale_values"
+            app:entries="@array/editor_home_icon_size_entries"
+            app:entryValues="@array/editor_home_icon_size_values"
             app:useSimpleSummaryProvider="true"
-            android:defaultValue="100" />
+            android:defaultValue="small" />
         <ListPreference
             app:key="app_launcher_home_label_size"
             app:title="@string/settings_home_label_size_title"
@@ -144,13 +145,6 @@
             app:title="@string/settings_home_layout_locked_title"
             app:summary="@string/settings_home_layout_locked_summary"
             android:defaultValue="false" />
-        <!-- Start in: the page a cold start shows (ADR 0008). -->
-        <ListPreference
-            app:key="app_launcher_start_in"
-            app:title="@string/settings_start_in_title"
-            app:dialogTitle="@string/settings_start_in_title"
-            app:entries="@array/settings_start_in_entries"
-            app:entryValues="@array/settings_start_in_values"
-            app:useSimpleSummaryProvider="true" />
+        <!-- Start in moved to General › Launcher, beside Use as. -->
     </PreferenceCategory>
 </PreferenceScreen>

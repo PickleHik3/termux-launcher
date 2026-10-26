@@ -66,7 +66,6 @@ public class TerminalPaneCornerTabTapTest {
         @Override public String defaultCwd() { return "/"; }
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
-        @Override public void openLayoutEditor() { log.add("layout"); }
         @Override public void openSettings() { log.add("settings"); }
         @Override public void onAutoTilingChanged(boolean enabled) {
             log.add(enabled ? "tiling on" : "tiling off");

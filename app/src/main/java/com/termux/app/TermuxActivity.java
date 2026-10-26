@@ -260,17 +260,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Opens Edit pages over Home: Settings › Home › Edit pages. */
     public static final String EXTRA_HOME_PAGES_EDITOR =
         "com.termux.app.extra.HOME_PAGES_EDITOR";
-    /** Opens the Layout editor over the live place, from any door that sends an intent. */
-    public static final String EXTRA_LAYOUT_EDITOR =
-        "com.termux.app.extra.LAYOUT_EDITOR";
-    /**
-     * The place the Layout editor should open on — {@code widgets}, {@code terminal} or
-     * {@code display}, as {@link com.termux.app.wall.PaneWallPage#toolName()} names them. Absent or
-     * unknown opens it on the place the user is already looking at. The layout is every place's, so
-     * this only decides which place the wall shows behind the editor and what its miniature draws.
-     */
-    public static final String EXTRA_LAYOUT_EDITOR_PLACE =
-        "com.termux.app.extra.LAYOUT_EDITOR_PLACE";
     /** Opens the extra-keys row editor over the live terminal, from Settings. */
     public static final String EXTRA_EDIT_EXTRA_KEYS =
         "com.termux.app.extra.EDIT_EXTRA_KEYS";
@@ -1039,6 +1028,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final SurfaceEditorController mSurfaceEditor =
         new SurfaceEditorController(new SurfaceEditorHost());
 
+    /** The long-press popup on the dock, the status bar and the keyboard (editor-redesign §3). */
+    private final com.termux.app.surfaces.SurfaceLongPress mSurfaceLongPress =
+        new com.termux.app.surfaces.SurfaceLongPress(new SurfaceLongPressHost());
+
     /**
      * The one Appearance surface (appearance-round-2026-10-04.md): Overview, Look, Layout and Icons
      * as pages of a host view in the content, with the editor above lent to it. Every door opens
@@ -1725,6 +1718,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return resolveWallpaperBackdropDimColor();
         }
 
+        @Override public int wallpaperHintColor() {
+            return resolveWallpaperHintColor();
+        }
+
         @Override public boolean roundedDockStyle() {
             return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
         }
@@ -1946,7 +1943,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastWallPage = com.termux.app.wall.WallRow.openingKind(
             mPendingWallState == null ? null
                 : mPendingWallState.getString(com.termux.app.wall.PaneWallController.ARG_HALF),
-            effectiveStartIn());
+            useAs().startIn(effectiveStartIn()));
+        if (!useAs().showsHomePage())
+            mLastWallPage = com.termux.app.wall.PaneWallPage.TERMINAL;
         watchStartIn();
         // Built after the preferences, and only while the Widgets place is on the wall, so a
         // terminal-only install never registers an app widget host at all — no binding, no
@@ -2047,7 +2046,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState == null) {
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
-            handleLayoutEditorIntent(getIntent());
             handleHomePagesEditorIntent(getIntent());
             handleWallpaperStyleIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
@@ -2237,7 +2235,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setIntent(intent);
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
-        handleLayoutEditorIntent(intent);
         handleHomePagesEditorIntent(intent);
         handleWallpaperStyleIntent(intent);
         handleEditExtraKeysIntent(intent);
@@ -2384,6 +2381,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
+            if (mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
         } finally {
@@ -2883,7 +2881,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override public boolean hasHome() {
-                    return mPaneWallController != null && mPaneWallController.hasWidgetsPage();
+                    return mPaneWallController != null && mPaneWallController.hasWidgetsPage()
+                        && useAs().showsHomePage();
                 }
             });
             mFirstBootTour.setSetupHost(welcomeSheet());
@@ -4604,13 +4603,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * The system's description of its wallpaper as one colour ({@code WallpaperInk#hintColor}),
+     * read when the listener registers and whenever the system reports new colours; transparent
+     * before then, below API 27, and when the system said nothing.
+     */
+    @androidx.annotation.ColorInt private int mSystemWallpaperHint = Color.TRANSPARENT;
+
+    /**
+     * What the chrome's ink assumes the wallpaper is until it has read one (editor-redesign §8):
+     * the system's description while the launcher shows the system wallpaper, which is the case
+     * where the launcher may not be able to read it; transparent otherwise, so the launcher's own
+     * picture is never described by someone else's colours.
+     */
+    @androidx.annotation.ColorInt
+    private int resolveWallpaperHintColor() {
+        return shouldUseWallpaperPassthroughMode() ? mSystemWallpaperHint : Color.TRANSPARENT;
+    }
+
+    private void readSystemWallpaperHint(@Nullable WallpaperColors colors) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1 || colors == null) {
+            mSystemWallpaperHint = Color.TRANSPARENT;
+            return;
+        }
+        boolean darkText = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && (colors.getColorHints() & WallpaperColors.HINT_SUPPORTS_DARK_TEXT) != 0;
+        int primary = colors.getPrimaryColor().toArgb();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            // No public hint before S: the primary colour's own side is the best there is.
+            darkText = androidx.core.graphics.ColorUtils.calculateLuminance(primary) > 0.5d;
+        }
+        mSystemWallpaperHint = com.termux.app.chrome.WallpaperInk.hintColor(primary, darkText);
+    }
+
     private void registerWallpaperColorsChangedListener() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1 || mWallpaperColorsChangedListener != null) {
             return;
         }
         try {
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
+            readSystemWallpaperHint(wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM));
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
+                if ((which & WallpaperManager.FLAG_SYSTEM) != 0) readSystemWallpaperHint(colors);
                 // The new id first, so nothing that runs from here on cuts a frame for the old one.
                 com.termux.app.chrome.WallpaperSourceFacts facts = refreshWallpaperSourceFacts();
                 // A wallpaper set outside the launcher is still a wallpaper change: tagged so the
@@ -4958,6 +4992,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mDockBeadsRowDy = Float.NaN;
     private float mDockBeadsBottomPx = Float.NaN;
     private float mDockBeadsSpanLeft = Float.NaN, mDockBeadsSpanRight = Float.NaN;
+    /** Scratch for the row's still tiles (Drawer, palette), whose beads a swipe holds still. */
+    private final float[] mDockBeadStills = new float[2];
     /** Scratch for the neighbouring page's icons a swipe stages. */
     private final float[] mDockBeadNeighbours =
         new float[com.termux.app.dock.LensBeadGeometry.MAX_DRAWN_BEADS];
@@ -5082,11 +5118,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (int i = 0; i < neighbours; i++) mDockBeadNeighbours[i] += mDockBeadsRowDx;
             float left = Float.isNaN(mDockBeadsSpanLeft) ? 0f : mDockBeadsSpanLeft;
             float right = Float.isNaN(mDockBeadsSpanRight) ? Float.MAX_VALUE : mDockBeadsSpanRight;
-            // The Drawer tile is no page's: its bead stands still under it (#97).
-            float tile = row.drawerTileCenterX();
+            // The Drawer tile (#97) and the palette tile are no page's: their beads stand still
+            // under them.
+            int stills = row.stillTileCentersX(mDockBeadStills);
+            for (int i = 0; i < stills; i++) mDockBeadStills[i] += mDockBeadsRowDx;
             moving = com.termux.app.dock.LensBeadGeometry.follow(rest, row.drawnPageOffsetPx(),
-                Float.isNaN(tile) ? Float.NaN : tile + mDockBeadsRowDx, mDockBeadNeighbours,
-                neighbours, left, right, row.drawnPageFade());
+                mDockBeadStills, stills, mDockBeadNeighbours, neighbours, left, right,
+                row.drawnPageFade());
         }
         if (moving == null && mDockBeadsMoving == null) return;
         if (moving != null && moving.equals(mDockBeadsMoving)) return;
@@ -9616,6 +9654,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzBarHosts();
             syncOffDockPlank(arrangement().layout());
             refreshOffDockGlass();
+            // The extra keys or the letters standing on another edge, with nothing left on the
+            // dock, still take their ink from the face under them (the plank wears the dock's
+            // glass), not from the theme they were built in.
+            syncDockGlassInks(state.barAlpha);
             applyDecorNavBarSurfaceState(state);
             applyInAppKeyboardSurfaceState(state);
             mKeyboardGeometry.completePendingOpenReveal(state);
@@ -10553,6 +10595,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        mSurfaceLongPress.dismiss();
         com.termux.app.terminal.TouchDownHint.detach(this);
         if (mScene != null) mScene.detach();
         mHomePress.onStop();
@@ -10698,6 +10741,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // on the main looper for a window that is going away.
         mGeometry.dispose();
         releasePeekReflection();
+        // The badge store is process-wide: it must not hold on to a dead activity.
+        com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.removeListener(
+            mStatusNotificationsListener);
+        mStatusNotificationsListener = null;
         // Dropped, not resumed: the panes go with the window.
         mReturnHold.cancel();
         Choreographer.getInstance().removeFrameCallback(mReturnHoldFrame);
@@ -11174,8 +11221,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private String arrangementStartIn() {
         return com.termux.app.terminal.ArrangementRecovery.effectiveStartIn(
-            mPreferences == null ? null : mPreferences.getLauncherStartIn(),
-            com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+            useAs().startIn(mPreferences == null ? null : mPreferences.getLauncherStartIn()),
+            com.termux.app.wall.WallRow.lastShellClosedShowsHome(homePagesShown(),
                 isDefaultHomeApp()));
     }
 
@@ -11413,6 +11460,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
         });
+        mSuggestionBarView.setEditDockListener(mSurfaceLongPress::editDock);
         // The app menu's Add to Home, offered while there are Home pages to take the icon.
         mSuggestionBarView.setAddToHomeListener(new SuggestionBarView.AddToHomeListener() {
             @Override public boolean canAddToHome() { return mWidgetPaneController != null; }
@@ -11687,9 +11735,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * home screen. The host, the page and the controller all follow this one answer.
      */
     private boolean isWidgetsPageWanted() {
-        // Home is always on the wall (ADR 0008): neither the usage mode nor the widget pane
-        // switch takes it off any more.
+        // Home's grid is always built (ADR 0008): neither the widget pane switch nor Use as takes
+        // it off, so switching Use as back to Home screen finds it ready. Use as only takes the
+        // page off the wall's row (homePagesShown).
         return mPreferences != null;
+    }
+
+    /** Use as, read fresh: Terminal only takes the Home page, its settings and its doors away. */
+    @NonNull
+    private com.termux.app.wall.UseAs useAs() {
+        return com.termux.app.wall.UseAs.read(mPreferences == null ? null : mPreferences.getUseAs());
+    }
+
+    /** Whether the wall's row has Home pages: built, and not taken off by Terminal only. */
+    private boolean homePagesShown() {
+        return isWidgetsPageWanted() && useAs().showsHomePage();
     }
 
     /**
@@ -11792,8 +11852,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a band of that row's plank and the glass under both of them is the plank's, so the capsule
      * this host carries everywhere else is put away.
      *
-     * <p>The minimised pull tab is gone from the arrangement (2026-09-30), so the tab's layer is
-     * only ever put away here; the layer itself is left for a later cleanup.
+     * <p>Standing as its pull tab (the Dock card's A–Z Show, editor-redesign §4), the index has
+     * no band anywhere: the dock's row and this host both go, and the letters live in the pull
+     * tab's layer over the canvas ({@link AzPullTabLayer}), which is where the one scrub callback
+     * moves to. Faint keeps the bar where it is at a third of its opacity, and the glass switch
+     * takes away the host's own capsule, leaving the letters on the wallpaper.
      *
      * @return whether a host appeared or went, which the content's edge padding is derived from
      */
@@ -11802,7 +11865,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host == null) return false;
         ResolvedArrangement arranged = arrangement();
         PlaceLayout layout = arranged.layout();
-        boolean tabShown = false;
+        boolean tabShown = mPreferences != null && arranged.azTabShown();
         boolean lettersShown = mPreferences != null && arranged.azRowShown();
         PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
@@ -11824,7 +11887,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (the canvas band's sheet), and a second sheet here drew a darker strip inset from it.
         View ownGlass = findViewById(R.id.place_az_bar_host_glass);
         if (ownGlass != null)
-            ownGlass.setVisibility(onPlank || hasDockedFrameCard() ? View.GONE : View.VISIBLE);
+            ownGlass.setVisibility(com.termux.app.launcher.az.AzShowMode.ownGlassShown(
+                azGlassBackground(), onPlank || hasDockedFrameCard())
+                ? View.VISIBLE : View.GONE);
         host.setVisibility(wantHost ? View.VISIBLE : View.GONE);
         syncAzTabLayer(tabShown, edge);
 
@@ -11847,6 +11912,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Which face of the bar the matches are on, so the drag that picks one of them is
             // measured towards the band it is picking from.
             next.setPreviewTrackOutward(azPreviewTarget().side.isOutward());
+            next.setRestingAlpha(tabShown ? 1f : azShowMode().restingAlpha());
         }
         // A host that has just appeared needs its material now; one that was already up gets it
         // on the render pass, so an insets dispatch does not build a fresh drawable for nothing.
@@ -11855,6 +11921,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (changed && mTermuxActivityRootView != null)
             ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         return changed;
+    }
+
+    /** The Dock card's A–Z Show (editor-redesign §4). */
+    @NonNull
+    private com.termux.app.launcher.az.AzShowMode azShowMode() {
+        return com.termux.app.launcher.az.AzShowMode.of(
+            mPreferences == null ? null : mPreferences.getSharedPreferences());
+    }
+
+    /** The Dock card's A–Z Glass background switch (editor-redesign §4). */
+    private boolean azGlassBackground() {
+        return com.termux.app.launcher.az.AzShowMode.glassOf(
+            mPreferences == null ? null : mPreferences.getSharedPreferences());
+    }
+
+    /**
+     * Whether the letters stand in their own capsule with its glass switched off, so on the
+     * wallpaper: their ink is then chosen on the wallpaper under them, not on a glass face.
+     */
+    private boolean azLettersOnWallpaper() {
+        return mAzScrubRowView != null && mAzScrubRowView == mAzBarHostRowView
+            && !mAzBarOnPlank && !hasDockedFrameCard() && !azGlassBackground();
     }
 
     /**
@@ -11942,7 +12030,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         View host = findViewById(R.id.place_az_bar_host);
         if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank
-                && !hasDockedFrameCard()) {
+                && !hasDockedFrameCard() && azGlassBackground()) {
             applyOffDockPlankGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
@@ -13366,10 +13454,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // home of the letters (the dock, the plank, their own capsule) wears the dock's own.
         float azOpacity = mAzScrubRowView != null && mAzScrubRowView == mAzTabRowView
             ? Math.max(dockOpacity, AzTabPolicy.MIN_GLASS_OPACITY) : dockOpacity;
+        // Glass off in their own capsule: no glass under the letters, the wallpaper is the face.
+        if (azLettersOnWallpaper()) azOpacity = 0f;
         if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
         syncPromptLineInk(dockOpacity);
+        syncDockTilesInk(dockOpacity);
         // The Wall strip's clock is the status bar's and takes its ink the bar's way, from the
         // theme's roles; its tiles are the terminal scheme's. Either redraws only if it moved.
         if (mWallStripRow != null) mWallStripRow.refreshTheme();
@@ -13392,6 +13483,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
             mPromptLineInkRect));
     }
+
+    /**
+     * The apps row's Drawer tile and Command palette tile glyphs on the dock's face as measured
+     * under the row, as the extra keys' labels are: a dark theme over a light wallpaper gets dark
+     * glyphs. The row retints only when the ink moved.
+     */
+    private void syncDockTilesInk(float dockOpacity) {
+        SuggestionBarView row = mSuggestionBarView;
+        if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0 || !row.isShown()) return;
+        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        row.getLocationOnScreen(mDockTilesInkLocation);
+        mDockTilesInkRect.set(mDockTilesInkLocation[0], mDockTilesInkLocation[1],
+            mDockTilesInkLocation[0] + row.getWidth(), mDockTilesInkLocation[1] + row.getHeight());
+        row.setTileFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mDockTilesInkRect),
+            mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
+    }
+
+    @NonNull private final Rect mDockTilesInkRect = new Rect();
+    @NonNull private final int[] mDockTilesInkLocation = new int[2];
 
     @NonNull private final Rect mPromptLineInkRect = new Rect();
     @NonNull private final int[] mPromptLineInkLocation = new int[2];
@@ -13723,11 +13833,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
+        String door = intent.getStringExtra(com.termux.app.surfaces.AppearanceEditorEntry.EXTRA_DOOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
+        intent.removeExtra(com.termux.app.surfaces.AppearanceEditorEntry.EXTRA_DOOR);
+        // The door that sent it (a Settings row) names itself; anything else is the section intent.
+        com.termux.app.surfaces.EditorDoor
+            .forName(door, com.termux.app.surfaces.EditorDoor.SECTION_INTENT)
+            .log(com.termux.app.surfaces.EditorCard.forKey(initialSection));
         openAppearanceSurface(initialSection, null, null);
-        // Keyboard's Appearance row in Settings: closing the editor goes back to Settings.
+        // A Settings row's door: closing the editor goes back to Settings.
         if (fromSettings) mAppearanceFromSettings = true;
     }
 
@@ -13738,43 +13854,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_WALLPAPER_STYLE);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
+        com.termux.app.surfaces.EditorDoor.SECTION_INTENT.log(null);
         openAppearanceSurface();
         // Settings' Appearance row: closing the surface goes back to Settings, as its old Look page did.
         mAppearanceFromSettings = fromSettings;
-    }
-
-    /**
-     * The place a Layout editor intent names, or null for none. Anything the wall does not have a
-     * place for is not an error: the editor opens on the place on screen, which is what an unnamed
-     * place means anyway.
-     */
-    @Nullable
-    @VisibleForTesting
-    static com.termux.app.wall.PaneWallPage parseLayoutEditorPlace(@Nullable String name) {
-        if (name == null) return null;
-        for (com.termux.app.wall.PaneWallPage page : com.termux.app.wall.PaneWallPage.values()) {
-            if (page.toolName().equalsIgnoreCase(name.trim())) return page;
-        }
-        return null;
-    }
-
-    /**
-     * Any door that names a place: the launcher comes forward on that
-     * place with the Layout editor over it. An unnamed place opens it on whatever is on screen.
-     */
-    private void handleLayoutEditorIntent(@Nullable Intent intent) {
-        if (intent == null || !intent.getBooleanExtra(EXTRA_LAYOUT_EDITOR, false))
-            return;
-        com.termux.app.wall.PaneWallPage place =
-            parseLayoutEditorPlace(intent.getStringExtra(EXTRA_LAYOUT_EDITOR_PLACE));
-        boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
-        intent.removeExtra(EXTRA_LAYOUT_EDITOR);
-        intent.removeExtra(EXTRA_LAYOUT_EDITOR_PLACE);
-        intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
-        openLayoutEditor(place);
-        // Settings' Layout rows (Home, Terminal): closing the editor goes back to Settings, as
-        // the Look page's Appearance row does.
-        if (fromSettings) mAppearanceFromSettings = true;
     }
 
     /**
@@ -13797,17 +13880,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else open.run();
     }
 
-    /**
-     * Opens the editor in Layout mode on one place, or on the place the user is looking at for
-     * null (SPEC §3.1: the Layout glyph and sheet item open the same screen in Layout mode).
-     */
-    void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
-        // The wall has to be built before the editor can be held on a place, and a cold start
-        // delivers the intent while the root view is still being laid out.
-        openAppearanceSurface(null, place, null);
-    }
-
-    /** The activity's half of the Layout editor's seam: its views, the places, the chrome pass. */
+    /** The activity's half of the layout session's seam: the places and the chrome pass. */
     private final class LayoutEditorHost
             implements com.termux.app.layouteditor.LayoutEditorController.Host {
         @NonNull @Override public Context context() {
@@ -13820,52 +13893,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @NonNull @Override public com.termux.app.wall.PaneWallPage placeOnScreen() {
             return currentWallPlace();
-        }
-
-        @Override public int extraKeyCount() {
-            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
-                return -1;
-            }
-            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
-                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
-            return matrix.length == 0 ? -1 : matrix[0].length;
-        }
-
-        @NonNull @Override
-        public java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> extraKeySlots() {
-            java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> slots =
-                new java.util.ArrayList<>();
-            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
-                return slots;
-            }
-            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
-                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
-            if (matrix.length == 0) return slots;
-            // The real bar draws an icon key as a Nerd Font code point on the bundled symbols
-            // face (ExtraKeysView.setKeyCapText), so an icon key here is that glyph on that face.
-            android.graphics.Typeface symbols =
-                com.termux.shared.termux.font.NerdFontSpans.typeface(TermuxActivity.this);
-            for (com.termux.shared.termux.extrakeys.ExtraKeyButton button : matrix[0]) {
-                String display = button == null ? null : button.getDisplay();
-                if (display == null) display = "";
-                if (symbols != null && isAllNerdSymbols(display)) {
-                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofIcon(
-                        new com.termux.app.fragments.settings.LayoutCanvasKeyGlyph(display, symbols)));
-                } else {
-                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofText(display));
-                }
-            }
-            return slots;
-        }
-
-        private boolean isAllNerdSymbols(@NonNull String display) {
-            if (display.isEmpty()) return false;
-            for (int i = 0; i < display.length(); ) {
-                int codePoint = display.codePointAt(i);
-                if (!com.termux.shared.termux.font.NerdFontSpans.isNerdSymbol(codePoint)) return false;
-                i += Character.charCount(codePoint);
-            }
-            return true;
         }
 
         @NonNull @Override public PlaceOrientation placeOrientation() {
@@ -13887,10 +13914,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.setGesturesEnabled(!held);
         }
 
-        @Override public int themeColor(int attr, int fallbackRes) {
-            return getTermuxThemeColor(attr, fallbackRes);
-        }
-
         // The editor's half slide: the wall slides inside the scaled container, gestures held.
         @Override public void slidePaneWallToPlace(@NonNull com.termux.app.wall.PaneWallPage place) {
             if (mPaneWallController == null) return;
@@ -13901,39 +13924,61 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPaneWallController.goTo(place, true);
             mPaneWallController.setGesturesEnabled(false);
         }
+    }
 
-        // The pinned apps as laid out: the dock's row, or the rail or off-dock row where the
-        // place stands them. Their thickness is the short side either way, which is what the
-        // dock's height scale sizes.
-        @Override public int measuredDockHeightDp() {
-            int px = shownThicknessPx(R.id.apps_bar_row_host);
-            // The Search field shares the row's host; the size scale is the row's own.
-            if (px > 0 && mPromptLineField != null
-                && mPromptLineField.getVisibility() == View.VISIBLE
-                && mPromptLineField.getParent() == findViewById(R.id.apps_bar_row_host))
-                px = Math.max(0, px - mAppliedPromptFieldBandPx);
-            // So does the Wall strip's first row.
-            if (px > 0 && mWallStripRow != null
-                && mWallStripRow.getVisibility() == View.VISIBLE
-                && mWallStripRow.getParent() == findViewById(R.id.apps_bar_row_host))
-                px = Math.max(0, px - mAppliedWallStripBandPx);
-            if (px <= 0) px = shownThicknessPx(R.id.place_apps_bar_host);
-            float density = getResources().getDisplayMetrics().density;
-            return px <= 0 || density <= 0f ? -1 : Math.round(px / density);
+    /** The activity's half of the long-press popup's seam: its views, its doors, its place. */
+    private final class SurfaceLongPressHost
+            implements com.termux.app.surfaces.SurfaceLongPress.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
         }
 
-        @Override public int measuredKeyboardHeightDp() {
-            View keys = findViewById(R.id.inapp_keyboard_view_host);
-            float density = getResources().getDisplayMetrics().density;
-            if (keys == null || !keys.isShown() || keys.getHeight() <= 0 || density <= 0f)
-                return -1;
-            return Math.round(keys.getHeight() / density);
+        @NonNull @Override public View root() {
+            View root = findViewById(R.id.activity_termux_root_view);
+            return root != null ? root : getWindow().getDecorView();
         }
 
-        private int shownThicknessPx(int viewId) {
-            View view = findViewById(viewId);
-            if (view == null || !view.isShown()) return -1;
-            return Math.min(view.getWidth(), view.getHeight());
+        @Nullable @Override public View findView(int id) {
+            return findViewById(id);
+        }
+
+        @Override public boolean pressBlocked(float rawX, float rawY) {
+            return mSurfaceEditor.isActive() || isAppDrawerOpen()
+                || (mAzTabLayer != null && mAzTabLayer.isOnTab(rawX, rawY));
+        }
+
+        @Override public void cancelViewStream(@NonNull MotionEvent cancel) {
+            dispatchTouchToViews(cancel);
+        }
+
+        @Override public void openCard(@NonNull com.termux.app.surfaces.EditorDoor door,
+                                       @Nullable Element bar) {
+            if (door.cardFor(null, null) == com.termux.app.surfaces.EditorCard.DOCK)
+                mSurfaceEditor.expandDockBar(bar);
+            openSurfaceEditor(door.route(currentWallPlace(), null));
+        }
+
+        @Nullable @Override public PlaceLayoutStore places() {
+            return placeLayoutStore();
+        }
+
+        @NonNull @Override public com.termux.app.wall.PaneWallPage page() {
+            return currentWallPlace();
+        }
+
+        @NonNull @Override public PlaceOrientation orientation() {
+            return currentPlaceOrientation();
+        }
+
+        @Override public void applyArrangement() {
+            syncPlaceLayout();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        }
+
+        @Override public void hideKeyboard() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.hide(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
         }
     }
 
@@ -14318,6 +14363,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public int editorWallpaperDimColor() {
             return wallGroundColor();
+        }
+
+        // Without storage permission the system's wallpaper cannot be read; its description is
+        // what the editor's page label stands on then, as Home's labels do.
+        @Override public int editorWallpaperHintColor() {
+            return resolveWallpaperHintColor();
         }
 
         // True where the system draws the wallpaper behind a translucent window (passthrough): the
@@ -17304,6 +17355,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setDrawerTile(on ? (store != null ? store.drawerTilePosition()
                 : com.termux.app.dock.DrawerTilePolicy.DEFAULT) : null,
             on ? mDrawerTileListener : null);
+        syncPaletteTile(bar);
+    }
+
+    // ------------------------------------------------------------------ Command palette tile
+    //
+    // The Command palette button (Dock card Options, pref dock_command_palette_button, one switch
+    // for both halves): the apps row's trailing slot (PaletteTilePolicy), with any Dock design.
+    // A tap opens the palette with the keyboard raised, as the Search field's does.
+
+    @Nullable private android.content.SharedPreferences mPaletteTileStore;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
+        mPaletteTileKnob = (preferences, key) -> {
+            if (com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON.equals(key)
+                && mSuggestionBarView != null) {
+                // The row takes or gives back the slot, and the dock is dressed again (beads).
+                restyleDockSurface();
+            }
+        };
+
+    private void syncPaletteTile(@NonNull SuggestionBarView bar) {
+        android.content.SharedPreferences store =
+            mPreferences == null ? null : mPreferences.getSharedPreferences();
+        if (store != null && mPaletteTileStore != store) {
+            if (mPaletteTileStore != null)
+                mPaletteTileStore.unregisterOnSharedPreferenceChangeListener(mPaletteTileKnob);
+            store.registerOnSharedPreferenceChangeListener(mPaletteTileKnob);
+            mPaletteTileStore = store;
+        }
+        boolean on = store == null
+            ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
+            : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+                com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
+        bar.setPaletteTile(on, on ? () -> getCommandPaletteController().openFromField(null, true)
+            : null);
     }
 
     /**
@@ -17780,6 +17865,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (row == null || mPreferences == null) return;
         row.setClockFace(mPreferences.getTopPaneClockStyle(),
             mPreferences.isTopPaneClockAmPmEnabled(), mPreferences.isLazyModeEnabled());
+        row.setClockSeconds(mPreferences.isStatusClockSecondsEnabled());
     }
 
     /**
@@ -18479,10 +18565,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxTerminalViewClient.shareSessionTranscript();
                 return true;
             case CONTEXT_MENU_APPEARANCE_ID:
-                // The editor at rest on the Workspace half, no card up: the terminal is the
-                // thing held, so its frame is what the person meets first.
-                openSurfaceEditorAtRest(com.termux.app.surfaces.AppearanceEditorEntry
-                    .terminalMenuPlace(currentWallPlace()));
+                // The Workspace's card, on the Workspace half: the terminal is the thing held.
+                openSurfaceEditorOn(com.termux.app.surfaces.EditorDoor.TERMINAL_SHEET_APPEARANCE
+                        .route(currentWallPlace(), null),
+                    com.termux.app.surfaces.AppearanceEditorEntry
+                        .terminalMenuPlace(currentWallPlace()));
                 return true;
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
@@ -18497,7 +18584,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showKillSessionDialog(session);
                 return true;
             case CONTEXT_MENU_SURFACE_EDITOR_ID:
-                openSurfaceEditor();
+                openSurfaceEditor(com.termux.app.surfaces.EditorDoor.TERMINAL_CONTEXT_MENU);
                 return true;
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 com.termux.app.terminal.TerminalCommandPalette.show(this);
@@ -22445,10 +22532,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAppearance.open();
             }
 
-            @Override public void onOpenLayout() {
-                mAppearance.open();
-            }
-
             @Override public void onOpenIcons() {
                 mAppearance.open();
             }
@@ -22593,6 +22676,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null)
             return;
         String retroEffect = mPreferences.getTerminalRetroEffect();
+        // The Material CRT glows in the theme's primary: read before any screen is built with it.
+        com.termux.app.terminal.PaneRetroStyle.setMaterialPrimary(
+            com.google.android.material.color.MaterialColors.getColor(this,
+                androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4));
         if (mChromeRetroEffect == null) {
             View root = findViewById(R.id.activity_termux_root_view);
             if (root != null) mChromeRetroEffect = new com.termux.app.chrome.ChromeRetroEffect(root);
@@ -22608,14 +22695,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController.setRetroEffectPreference(retroEffect);
     }
 
-    void openSurfaceEditor() {
-        // The page's own object: Home's card on Home, the terminal's over a window, none over the
-        // display (appearance-and-settings-rework §4: every door opens on its page's object).
-        com.termux.app.wall.PaneWallPage page = currentWallPlace();
-        openSurfaceEditor(page == com.termux.app.wall.PaneWallPage.WIDGETS
-            ? com.termux.app.surfaces.EditorCard.HOME
-            : page == com.termux.app.wall.PaneWallPage.TERMINAL
-                ? com.termux.app.surfaces.EditorCard.TERMINAL : null);
+    /**
+     * Opens the editor through {@code door}, on the card its row of the door table names (a
+     * page-led door: the page's own object), and logs the door's line.
+     */
+    void openSurfaceEditor(@NonNull com.termux.app.surfaces.EditorDoor door) {
+        openSurfaceEditor(door.route(currentWallPlace(), null));
     }
 
     /** Opens the editor with {@code card} up, or at rest for null. */
@@ -22625,12 +22710,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Opens the editor at rest on {@code place}'s half, no card up. Naming the place also skips
-     * the card a recent visit left up, which a door with neither card nor place reopens.
+     * Opens the editor on {@code place}'s half with {@code card} up, or at rest for null. Naming
+     * the place also skips the card a recent visit left up, which a door with neither card nor
+     * place reopens.
      */
-    private void openSurfaceEditorAtRest(@NonNull com.termux.app.wall.PaneWallPage place) {
+    private void openSurfaceEditorOn(@Nullable com.termux.app.surfaces.EditorCard card,
+                                     @NonNull com.termux.app.wall.PaneWallPage place) {
         mAppearanceFromSettings = false;
-        openAppearanceSurface(null, place, null);
+        openAppearanceSurface(card == null ? null : card.key, place, null);
     }
 
     void openSettings() {
@@ -24531,6 +24618,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
                 // Home is always on the row; the Workspace while there is a window to show.
                 @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+                @NonNull @Override public com.termux.app.wall.UseAs useAs() {
+                    return TermuxActivity.this.useAs();
+                }
                 // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
                 // 2026-10-19): the same fresh shell the Terminal entry starts there.
                 @Override public boolean canStartWorkspace() {
@@ -25273,10 +25363,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditor();
-            }
-            @Override public void openLayoutEditor() {
-                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
+                TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
             }
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
@@ -25651,10 +25738,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
-                TermuxActivity.this.openSurfaceEditor();
-            }
-            @Override public void openLayoutEditor() {
-                TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
+                TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
             }
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
@@ -26509,6 +26593,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences == null ? null : mPreferences.getSharedPreferences();
         if (store == null || mStartInListener != null) return;
         mStartInListener = (changed, key) -> {
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_USE_AS.equals(key)) {
+                applyUseAs();
+                return;
+            }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART.equals(key)) {
                 settleStartIn();
             } else if (!TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_START_IN.equals(key)) {
@@ -26517,6 +26605,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPageOverview != null) mPageOverview.refresh();
         };
         store.registerOnSharedPreferenceChangeListener(mStartInListener);
+    }
+
+    /**
+     * Use as changed (Settings, or the welcome sheet's first page): the wall's row is read again,
+     * so choosing Terminal only while on the Home page moves the wall to the Workspace, and Edit
+     * pages, which is Home's, goes down.
+     */
+    private void applyUseAs() {
+        if (mPaneWallController == null) return;
+        com.termux.app.wall.UseAs useAs = useAs();
+        boolean leaves = useAs.leaves(mPaneWallController.currentPage());
+        if (!useAs.showsHomePage() && mPageOverview != null) mPageOverview.closeImmediately();
+        mPaneWallController.refreshPages();
+        if (leaves) mPaneWallController.goToWorkspace(false);
     }
 
     private void unwatchStartIn() {
@@ -26539,6 +26641,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void openPageOverview(boolean fromSettings) {
         if (mWidgetPaneController == null || mPaneWallController == null) return;
         if (mPageOverview != null) return;
+        // Edit pages is Home's: Terminal only has no Home pages to edit.
+        if (!useAs().showsHomePage()) {
+            Logger.logInfo(com.termux.app.wall.UseAs.LOG_TAG, useAs().doorLine("edit-pages"));
+            return;
+        }
         if (mWidgetPaneController.refusedWhileLocked(
                 com.termux.app.launcher.home.HomeLayoutLock.Edit.EDIT_PAGES)) return;
         View root = findViewById(R.id.activity_termux_root_view);
@@ -26801,9 +26908,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case LOCK_LAYOUT: break; // a switch on the card; see onLayoutLockChanged
             case WALLPAPER:
                 // The Appearance card: its Wallpaper row is in view, and Change leads to the picker.
-                openSurfaceEditor(com.termux.app.surfaces.EditorCard.APPEARANCE);
+                openSurfaceEditor(com.termux.app.surfaces.EditorDoor.HOME_SHEET_WALLPAPER);
                 break;
-            case APPEARANCE: openSurfaceEditor(com.termux.app.surfaces.EditorCard.HOME); break;
+            case APPEARANCE:
+                openSurfaceEditor(com.termux.app.surfaces.EditorDoor.HOME_SHEET_APPEARANCE);
+                break;
             case LAUNCHER_SETTINGS: openSettings(); break;
             case SET_DEFAULT_HOME: HomeAppChooser.open(this); break;
             case HELP: showHelpOverlay(); break;
@@ -27561,6 +27670,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? View.VISIBLE : View.GONE);
         dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
         syncStatusBarInk();
+    }
+
+    /**
+     * Hears the notifications the dock badges its icons with, while the status bar's
+     * notifications indicator is on; null while it is off.
+     */
+    @Nullable private com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.Listener
+        mStatusNotificationsListener;
+
+    /**
+     * The status bar's notifications mark ({@code status_widget_notifications}): a bell and the
+     * count while notifications wait, the same ones the dock badges ({@link
+     * com.termux.app.statusbar.StatusNotificationsMark}); gone with none, or with the indicator
+     * off. Listens to the badge store only while the indicator is on.
+     */
+    private void syncStatusNotificationsMark() {
+        boolean enabled = mPreferences != null && mPreferences.isStatusWidgetNotificationsEnabled();
+        if (enabled && mStatusNotificationsListener == null) {
+            mStatusNotificationsListener = packages -> runOnUiThread(this::showStatusNotificationsMark);
+            // Adding it reports the packages at once, which draws the mark.
+            com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.addListener(
+                mStatusNotificationsListener);
+            return;
+        }
+        if (!enabled && mStatusNotificationsListener != null) {
+            com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.removeListener(
+                mStatusNotificationsListener);
+            mStatusNotificationsListener = null;
+        }
+        showStatusNotificationsMark();
+    }
+
+    private void showStatusNotificationsMark() {
+        com.termux.app.statusbar.StatusBarWidgetView mark =
+            findViewById(R.id.terminal_status_widget_notifications);
+        com.termux.app.statusbar.MaterialDotSeparatorView dot =
+            findViewById(R.id.terminal_status_dot_notifications);
+        if (mark == null || dot == null) return;
+        boolean enabled = mPreferences != null && mPreferences.isStatusWidgetNotificationsEnabled();
+        int count = enabled ? com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
+            .countFor(com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
+                .getActivePackages()) : 0;
+        boolean shown = com.termux.app.statusbar.StatusNotificationsMark.shown(enabled, count);
+        if (shown && mark.getTag() == null) {
+            mark.setTag("wired");
+            mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+            mark.setIconGlyph(com.termux.app.statusbar.StatusNotificationsMark.GLYPH);
+        }
+        if (shown)
+            mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));
+        boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
+            || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetWeatherEnabled());
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        boolean changed = mark.getVisibility() != visibility;
+        mark.setVisibility(visibility);
+        dot.setVisibility(shown && anyStatBefore ? View.VISIBLE : View.GONE);
+        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+        if (changed) syncStatusBarInk();
     }
 
     public boolean isMouseMode() {
@@ -28750,6 +28917,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clock.setStyle(mPreferences.getTopPaneClockStyle());
                 clock.setAlignment(mPreferences.getTopPaneClockAlignment());
                 clock.setUseAmPm(mPreferences.isTopPaneClockAmPmEnabled());
+                clock.setSeconds(mPreferences.isStatusClockSecondsEnabled());
             }
         }
         // The slot places the clock's cell by the same alignment the widget draws with, so the
@@ -29410,13 +29578,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The status widgets and their dots, in the order the row lays them out. */
     private static final int[] STATUS_INK_WIDGET_IDS = {
         R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
-        R.id.terminal_status_widget_weather, R.id.terminal_status_widget_ai,
-        R.id.terminal_status_widget_mouse,
+        R.id.terminal_status_widget_weather, R.id.terminal_status_widget_notifications,
+        R.id.terminal_status_widget_ai, R.id.terminal_status_widget_mouse,
     };
 
     private static final int[] STATUS_INK_DOT_IDS = {
         R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
-        R.id.terminal_status_dot_ai, R.id.terminal_status_dot_mouse,
+        R.id.terminal_status_dot_notifications, R.id.terminal_status_dot_ai,
+        R.id.terminal_status_dot_mouse,
     };
 
     /**
@@ -29597,6 +29766,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         ensureAiIndicatorController();
+        syncStatusNotificationsMark();
         // The tiers just moved, and a tier is which hue this widget's ink is toned from.
         syncStatusBarInk();
     }
@@ -31448,12 +31618,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSurfaceEditor() {
-            TermuxActivity.this.openSurfaceEditor();
+            TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
         }
 
-        @Override public void openLayoutEditor() {
-            TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.TERMINAL);
-        }
 
         @Override public void openSettings() {
             TermuxActivity.this.openSettings();
@@ -31696,7 +31863,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean staysWhenWorkspaceEmpty() {
-            return com.termux.app.wall.WallRow.lastShellClosedShowsHome(isWidgetsPageWanted(),
+            return com.termux.app.wall.WallRow.lastShellClosedShowsHome(homePagesShown(),
                 isDefaultHomeApp());
         }
 
@@ -32278,7 +32445,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openWallpaperPicker() {
             // The Appearance card, whose Wallpaper row leads to the picker.
-            TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorCard.APPEARANCE);
+            TermuxActivity.this.openSurfaceEditor(
+                com.termux.app.surfaces.EditorDoor.LAUNCHERCTL_WALLPAPER);
         }
 
         @Override public boolean toggleWallpaperMode() {
@@ -32321,7 +32489,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSurfaceEditor() {
-            TermuxActivity.this.openSurfaceEditor();
+            TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.LAUNCHERCTL);
         }
 
         @Override public void updateWindowBackgroundForCurrentSession() {

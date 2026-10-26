@@ -147,13 +147,13 @@ public class SettingsSearchLandingTest {
 
         SettingsSearchFragment search = (SettingsSearchFragment) searchScreen;
         SettingsSearchPreference box = search.findPreference("settings_search");
-        box.getOnQueryChangedListener().onQueryChanged("appearance");
+        box.getOnQueryChangedListener().onQueryChanged("edit on screen");
         SettingsSearchIndex.Entry layoutRow = null;
         for (SettingsSearchIndex.Entry entry : search.results().results()) {
-            if ("Appearance".equals(entry.title)) { layoutRow = entry; break; }
+            if ("Edit on screen".equals(entry.title)) { layoutRow = entry; break; }
         }
         assertNotNull(layoutRow);
-        assertEquals("Home's own Appearance row ranks before the others", SettingsTree.Section.HOME,
+        assertEquals("Home's own Edit on screen row ranks before the others", SettingsTree.Section.HOME,
             layoutRow.section);
     }
 

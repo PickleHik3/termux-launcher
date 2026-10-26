@@ -1956,6 +1956,50 @@ public class Keyboard2View extends View
     return null;
   }
 
+  /**
+   * Whether a touch at ({@code tx}, {@code ty}), in this view's coordinates, lands on a drawn key:
+   * inside the key's own rectangle, not in the gap to its neighbours (half a key margin on each
+   * side) nor on the margins around the rows (above the top row, beside and under the rows). Those
+   * are the keyboard's frame rather than any key's. A press still starts a key by its whole cell,
+   * as {@link #onTouch} reads it; this only decides who owns a long hold.
+   */
+  public boolean hasKeyAt(float tx, float ty)
+  {
+    KeyboardData.Key key = getKeyAtPosition(tx, ty);
+    if (key == null || _tc == null)
+      return false;
+    float halfV = _tc.vertical_margin / 2f;
+    float halfH = _tc.horizontal_margin / 2f;
+    // The cell's row, and the cell's horizontal span.
+    float y = getPaddingTop() + _config.marginTopPx;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      float top = y + row.shift * _tc.row_height;
+      y = top + row.height * _tc.row_height;
+      if (ty < y)
+      {
+        if (ty < top + halfV || ty >= y - halfV)
+          return false;
+        break;
+      }
+    }
+    float x = _marginLeft;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      if (!row.keys.contains(key))
+        continue;
+      for (KeyboardData.Key k : row.keys)
+      {
+        float xLeft = x + k.shift * _keyWidth;
+        float xRight = xLeft + k.width * _keyWidth;
+        if (k == key)
+          return tx >= xLeft + halfH && tx < xRight - halfH;
+        x = xRight;
+      }
+    }
+    return true;
+  }
+
   private KeyboardData.Key getKeyAtPosition(float tx, float ty)
   {
     KeyboardData.Row row = getRowAtPosition(ty);

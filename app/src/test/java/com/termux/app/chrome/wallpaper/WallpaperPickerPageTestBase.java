@@ -106,7 +106,6 @@ public abstract class WallpaperPickerPageTestBase {
         @Nullable WallpaperPickerPage.ReturnState back;
 
         @Override public void onOpenLook() { calls.add("look"); }
-        @Override public void onOpenLayout() { calls.add("layout"); }
         @Override public void onOpenIcons() { calls.add("icons"); }
     }
 

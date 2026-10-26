@@ -80,8 +80,7 @@ dropped; what follows is what still owes a look.
 - 2026-10-25 · commit "feat(appearance): hidden-items cards wrap their own text" · hide all six
   items in the Appearance editor: one-word cards (Keyboard) are one line tall, two-word cards two
   lines, the gap between cards stays equal, one label size throughout; tap a card shows it, drag
-  a card into the frame shows it where it lands, dragging a frame element over the rail
-  highlights the border and drops into the slot after the last card; repeat at font scale 1.3,
+  a card into the frame shows it where it was; repeat at font scale 1.3,
   in Home and Workspace halves, dark and light; with the card sheet up the stack shrinks its
   text, never overlaps the sheet · emulator or pong.
 - 2026-10-25 · commit "refactor(settings): edge colours follow Wallpaper colors" · Settings ->
@@ -179,7 +178,7 @@ dropped; what follows is what still owes a look.
   Style…") · Home Floating with a status bar along the bottom, the window Docked with it along
   the top: swipe Home → window with the window's pane not shown before → the pane meets the dock
   with no gap and no jump at the settle · emulator (no checker found the route to opposite
-  bars per half; the Layout editor's place icon at 645,1728 switches halves).
+  bars per half; in the editor a sideways swipe on the frame or the page label switches halves).
 - 2026-10-22 · PR #99 (migrations 9–13) and the glass rounds · Upgrade from the shipped stable
   (1.0.6 / 1.1.0 release APK) over a real profile with a Home dock height, Corners or Margin set
   apart, a Prompt line or Taskbar dock style and a Custom Look → Home keeps its rows, Prompt line
@@ -438,7 +437,7 @@ dropped; what follows is what still owes a look.
   the audit's shots at rest (no Element gained or lost, same Style, same dock) · emulator.
 - 2026-10-23 · same commit · a slow drag Home → window and back in Docked and in Floating, with
   Tray and with Beads → no Element appears or disappears mid-slide or at the landing that the
-  audit's clips did not show; a Style or Dock design change in the Layout editor shows on the
+  audit's clips did not show; a Style or Dock type change on the editor's Dock card shows on the
   next pass on both halves · emulator, frames recorded.
 - 2026-10-23 · #143 (merge f19d7e1ff) · the status bar at rest with the capsule, folded and open:
   row height, foot and slot the same as 52831bcac (Docked Tray and Floating seen) and the row
@@ -489,7 +488,7 @@ dropped; what follows is what still owes a look.
 
 - 2026-10-24 · Appearance + Settings rework (branch feat/appearance-settings-rework, on pong as
   1.1.0-pre.6+dev.f076a2dbe) · taste: the one-rule editor (tap a surface → card; palette glyph →
-  Appearance card; swipe the frame between Home and Workspace; hold-drag moves), the per-half dock
+  Appearance card; swipe the frame between Home and Workspace), the per-half dock
   look while sliding (the stack dips and comes back in the arriving half's glass), the M3 settings
   pages in your scheme, the clock widgets' stacked AM/PM, glass widgets by default · pong.
 - 2026-10-24 · same · known small items from the emulator: Settings reopened after a force-stop
@@ -500,8 +499,6 @@ dropped; what follows is what still owes a look.
 - 2026-10-24 · #159 editor · the card's rise, the frame's shrink and the half line moving with the
   card read as one motion; a header drag between detents follows the thumb; no dropped frame while
   a slider drags on the dock card · pong.
-- 2026-10-24 · same · the hold-and-drag on the live frame: the switch to the layout drawing under
-  the thumb is acceptable, or a drag on the live frame itself is wanted · pong.
 - 2026-10-24 · #159 model · the dip a differing look now causes on every crossing (the same dip
   a differing icon size gets) is acceptable to the eye, or the status bar's change at the landing
   on Home reads as a snap · pong.
@@ -515,8 +512,8 @@ dropped; what follows is what still owes a look.
 - 2026-10-23 · finding (emulator, #151) · the App menu showed only after the injected finger
   lifted, not at the long-press threshold (icon lifted at 2 s): confirm it is the injection, or a
   real wait for release · pong, a hand on the icon.
-- 2026-10-23 · finding (emulator, #146/#142) · after changing the Dock design to Beads in the
-  Layout editor on Home, the dock rested on the most-used page instead of the 7 pins: leftover
+- 2026-10-23 · finding (emulator, #146/#142) · after changing the Dock type to Beads in the
+  editor on Home, the dock rested on the most-used page instead of the 7 pins: leftover
   emulator state, or the resting page lost on a design change · emulator, fresh install.
 - 2026-10-23 · #142 phase 2 (commit "feat(place): the crossing morphs the dock's row and holds
   every reader") · a slow drag Home → window and back, and a fling reversed mid-way, in both
@@ -559,13 +556,6 @@ dropped; what follows is what still owes a look.
   Dock or Keyboard) opens; drag a card into the frame and let go → the item comes back, the card
   does not open; drag a card and let go outside the frame → it springs back, nothing changes ·
   emulator.
-- 2026-10-24 · 10aced449 · hold the dock or the status bar in the frame and drag it over the left
-  column → a dashed "drop" zone shows, goes primary-coloured while the finger is over it, and the
-  drop hides the item as a new card; a drop elsewhere moves it as before · emulator.
-- 2026-10-24 · 10aced449 · Home and the Workspace share the layout (Home's own layout off): hide
-  the pinned apps on Home → the Workspace still shows its dock, Home's own layout reads on in the
-  Home card, nothing else on Home moved; then hide the pinned apps on the Workspace first with
-  Home's own layout off → Home keeps its dock · emulator.
 - 2026-10-24 · 10aced449 · the dock's Search field off (Dock card switch) and Drawer tile off
   (Dock design Tray) → a Search field and a Drawer tile card in the stack; tapping one turns it
   on again in the dock of that half only; Undo and Discard put the stack back as it was ·
@@ -657,33 +647,6 @@ dropped; what follows is what still owes a look.
   where it falls back to the tray (a Workspace window on the shared layout): judge the icons'
   size there; 3-button navigation (taller strip, buttons over the card) and no navigation bar
   (the reflection only has the air under the icons) · pong.
-- 2026-10-24 · commit "feat(editor): live drag over the real frame…" · Appearance editor, hold
-  the dock and drag it over the top, side and bottom slots: the frame stays the real launcher (no
-  grey tiles, clock outline or icon dock), the dock's own picture follows the finger slightly
-  raised, the status bar and other bars slide aside smoothly (no stutter, no terminal reflow under
-  the finger); drop: the bars settle on their real places with no flash of the old layout and no
-  jump at the hand-over; release off any slot: everything slides back. Both Styles, glass on ·
-  pong (no emulator).
-- 2026-10-24 · same · with nothing hidden, at rest: the frame is centred with no rail; hold an
-  element: the frame slides right in about 0.2s at the same size and the rail shows only its empty
-  slot in a dotted border; drop on an edge: it slides back to centre; drop on the rail: it stays
-  offset (and shrinks slightly to the reserve's scale). Look at the frame's right edge while
-  offset at rest: it runs about 10dp past the screen on pong · pong.
-- 2026-10-24 · same · with something hidden: tap the dock (card up), hold, drag, drop: the frame
-  never moves or rescales and the card stays up · pong.
-- 2026-10-24 · same · drag the A–Z card out of the rail: over the rail it stays a chip; over a
-  slot in the frame the chip goes and a tinted shape of the index's size stands at the slot while
-  the bars move aside; drop: the index appears there; let go over no slot: it stays hidden. The
-  keyboard and Search field cards still restore where they were · pong.
-- 2026-10-24 · commit "feat(layout-canvas): slim drop markers…" · hold the A–Z index, then the
-  status bar: every slot a slim dotted rounded marker on its gap line, none touching another or
-  the frame's edge, top and bottom markers starting after the side strips where those show, side
-  strips only for an element that can stand on a side; the hovered slot opens to the element's
-  size and corners, solid with a light tint · pong.
-- 2026-10-24 · commit "feat(editor): the hidden rail's border hugs its cards…" · two elements
-  hidden, hold a third: the rail's dotted border wraps both chips and one empty slot under them
-  with even air on all four sides, ends there (not down at the bar), and the chips do not move
-  when it shows; finger over it, solid and tinted; drop there hides the element · pong.
 - 2026-10-24 · widget settings sheet (7fd67a8c8) · Clock gear: the bottom sheet of cards matches
   the mockup (~/reports/clock-settings-2026-10-24/); real faces in the tiles, check badge on the
   selected one; Save and the Glass labels show their text; the selected Glass segment's corners are
@@ -820,7 +783,7 @@ Developer:
 Crops and per-batch tables: `~/reports/device-checks-2026-10-24/`. Each becomes an issue or a
 fix, then leaves this file.
 
-1. **Beads never renders on Home.** Layout editor → dock → Beads → Done (pref
+1. **Beads never renders on Home.** Editor → Dock card → Beads → Done (pref
    `layout.dock_design=lens_beads`, also after a force-stop): Home draws one frosted slab with
    icons; no shader errors. Seen on emu by two checkers.
 2. **Start in = Terminal lands on Home after a cold start.** Pref `app_launcher_start_in=workspace`
@@ -831,26 +794,24 @@ fix, then leaves this file.
 4. **Floats-only workspace Replace-load moves the wall to page 2** from Home page 1.
 5. **Notes widget 2x1**: "scratch.md1 min ago" with no gap; at font 2.0 the file label vanishes and
    the age clips.
-6. **Layout editor at 360 dp + Large text**: "#2 Bea…" in the dock picker and "La…" by One layout /
-   Home's own.
-7. **Split gap slider** (row labelled Frost): 0/13/24 dp persist but the gutter looks identical in
+6. **Split gap slider** (row labelled Frost): 0/13/24 dp persist but the gutter looks identical in
    the miniature and a 4-pane window; may be the checker's drag.
-8. **Settings does not reopen on its last page after an upgrade install** (old build on Terminal ›
+7. **Settings does not reopen on its last page after an upgrade install** (old build on Terminal ›
    Status bar, install, `am start` → root); recents route untried.
-9. **Landscape sessions drawer, keyboard hidden**: Saved tab's Add to current and Replace shrink to
+8. **Landscape sessions drawer, keyboard hidden**: Saved tab's Add to current and Replace shrink to
    a 7 px sliver; keyboard up, the list is empty.
-10. **A–Z strip default mismatch**: Drawer layout shows Left checked on a fresh profile while the
+9. **A–Z strip default mismatch**: Drawer layout shows Left checked on a fresh profile while the
     strip draws on the right.
-11. **Text over the wallpaper**: Home icon labels (white with a grey shadow box) read as a smudge on
+10. **Text over the wallpaper**: Home icon labels (white with a grey shadow box) read as a smudge on
     a light wallpaper and clip "Calendar"; folder title and "Remove from folder" bubble are dark on
     the dimmed wallpaper, the bubble overlaps the title on a disabled app; the folder popup at font
     1.3 + Large labels breaks words mid-word and clips its last row; the Home lock message is dark
     on a bright wallpaper.
-12. **Display window draws over an open app drawer**; after × on the selected Display chip the chip
+11. **Display window draws over an open app drawer**; after × on the selected Display chip the chip
     stays "Display", floats draw over a blank area and an extra float chip appears.
-13. **Tour**: the Workspace keyboard card shows no Skip or dots after 5 s and clips after one body
+12. **Tour**: the Workspace keyboard card shows no Skip or dots after 5 s and clips after one body
     line; with split panes the "Tap ?" card points at pane controls.
-14. Smaller: Save sessions' Save sits under the keyboard (Enter works); the "Saved" toast covers the
+13. Smaller: Save sessions' Save sits under the keyboard (Enter works); the "Saved" toast covers the
     Sessions drawer's +; the pinned-app menu hides Add to Home below the fold; LCD clock face bottom
     segments look clipped; dragging an app onto a 14-app folder swapped cells instead of merging
     (possibly injected-drag technique); overlapping floats show each other's text through the glass
@@ -957,3 +918,68 @@ Agent
 
 Developer
 - 2026-10-25 · 6b6fc51b8 · Drag feel on pong: the hold, the sideways pickup from the dock, no jank in the carried picture · pong.
+
+## Editor redesign (2026-10-26)
+
+Built on feat/editor-redesign, waves 1 to 6; the emulator rounds are at `~/reports/editor-redesign-wave1/`,
+`-wave2a/`, `-wave2/` and `-waves3-6/`. Nothing below has been seen on pong. Still owed:
+
+Agent
+- 2026-10-26 · editor redesign wave 5 (commit "feat(launcher): A–Z glass off, Faint and Pull
+  tab") · Dock card › Bars › A–Z: Show Faint → the letters rest at about 30% and come to full
+  under a finger, the scrub unchanged; Pull tab → the strip goes, Home's widgets and the
+  terminal take its room, a tab stands on the screen's edge 48 dp below the canvas top (touch
+  56 × 48 dp, out of Back's way), dragging it brings the letters out over Home and slides into
+  the scrub; Back still works from that edge above and below the tab, and the page swipe never
+  takes a drag that began on it · emulator, A–Z on Right, Left and Top, Home and Workspace.
+- 2026-10-26 · wave 5 (same commit) · A–Z Glass background off (the default) with the A–Z on
+  its own edge under Floating Style: no capsule behind the letters, and their ink flips to suit
+  the wallpaper under them (try a light and a dark wallpaper under Dark and Light themes); on
+  the dock's row, a shared plank or inside the Docked frame the shared sheet stays · emulator.
+- 2026-10-26 · editor redesign wave 5 (commit "feat(launcher): long-press popup on the dock,
+  status bar and keyboard") · hold still on bare dock (between icons, an empty slot, the A–Z
+  host's margin, between extra keys), on the status bar (clock, bare bar) and on the keyboard's
+  frame above the keys: a card in the App menu's style opens beside it, the pressed bar outlined,
+  captioned Apps row / A–Z / Extra keys / Dock / Status bar / Keyboard, rows Edit · Hide, the
+  keyboard's adding Docked · Floating; nothing under the finger fires on release · emulator,
+  Workspace and Home, keyboard up and down, Docked and Floating Style.
+- 2026-10-26 · wave 5 (same commit) · the old holds still win: an app icon opens the App menu
+  (now ending on Edit dock), an extra key its alternates, the A–Z letters scrub at once, a
+  keyboard key its alternates, a window chip lifts, a pinned notification its menu; a swipe on
+  the dock, a fold of the status bar and a scrub never open the card · emulator.
+- 2026-10-26 · wave 5 (same commit) · Edit opens the right card (the Dock card on the bar pressed,
+  expanded) and logcat shows `EditorDoor: popup-dock -> DOCK`, `popup-status -> STATUS`,
+  `popup-keyboard -> KEYBOARD`, `app-menu-edit-dock -> DOCK`; Hide puts the bar or status bar in
+  the editor's tray (the keyboard: switched off, back by its card's eye); Docked · Floating moves
+  the keyboard at once · emulator, `adb logcat -s EditorDoor`.
+- 2026-10-26 · editor redesign wave 3 (commit "feat(editor): Strip height moves onto the Dock
+  card") · Dock card, Dock type Strip → a Strip height row under the type tiles (84 dp); + and −
+  step 4 dp between 56 and 128 and the live Strip row follows at once; Undo puts it back; the
+  card's reset returns 84 dp; Tray, Beads and Peek hide the row · emulator.
+- 2026-10-26 · wave 3 (commit "refactor(editor): retire Layout mode's canvas; rotate to edit") ·
+  open the editor in portrait and turn the phone: the editor stays open, the chip reads
+  Landscape, the open card reads landscape's values, and a Position change lands on the live
+  landscape launcher; turn back: portrait is as it was; Undo after a turn puts back both
+  orientations; a tap on the chip shows "Turn the phone to edit landscape" (or portrait) and
+  changes nothing · emulator (rotation), then pong.
+- 2026-10-26 · same · hide the A–Z strip with its eye on the Dock card → a card in the rail; tap
+  it → the Dock card opens on A–Z; drag it out and let go over the frame → A–Z comes back where it
+  was; let go outside the frame → nothing changes. A long hold on a surface in the frame lifts
+  nothing (a tap still opens its card); Back with a card up puts the card down · emulator.
+- 2026-10-26 · wave 4 · Fresh install: the welcome sheet opens on "How will you use it?" with Home screen chosen; tapping a card moves the outline; Continue shows the switches page; long copy fits at 1.3× font scale · emu.
+- 2026-10-26 · wave 4 · Welcome: choose Terminal only, Continue: the Home page leaves behind the sheet and the wall stands on the Workspace; Show me around skips the two Home lessons · emu.
+- 2026-10-26 · wave 4 · Settings › General › Launcher: Use as and Start in rows with icons, sentence case, the look of the page unchanged; Terminal only drops Home from Start in and shows Terminal where Home was stored; back to Home screen shows Home again · emu.
+- 2026-10-26 · wave 4 · Terminal only, live from Settings while the launcher rests on Home: back in the launcher it stands on the Workspace, same window in front; the root's Home row is gone; searching "icon size" or "gestures" finds no Home row; two-pane (tablet width) opens on Terminal · emu.
+- 2026-10-26 · wave 4 · Terminal only: the home press lands on the Workspace; with no window it starts one shell; the wall does not swipe to a Home page; the editor's page swipe and page label never reach Home; the Workspace card has no Match Home styling row; `launcherctl wall.go page=widgets` is refused · emu.
+- 2026-10-26 · wave 4 · Terminal only while not the default home app: exiting the last shell ends the app as plain Termux; while the default home app: an empty Workspace stays · emu.
+- 2026-10-26 · wave 4 · An upgrade over a build without Use as: no prompt, Home screen, Start in where it was · emu.
+- 2026-10-26 · wave 4b · Dark theme, a light still wallpaper, Use system wallpaper on: the extra keys' icons and labels and the glass-off A–Z letters are dark on both Home and the Workspace, keyboard up and down; the same with a dark wallpaper under the light theme gives pale ink · emu.
+- 2026-10-26 · wave 4b · Dock opacity 0, 10, 50 and 100 under the dark theme on a light wallpaper: the extra keys stay readable at each, theme ink only once the glass is thick enough to be the face · emu.
+- 2026-10-26 · wave 4b · Extra keys at every Position (Bottom, Top, Left, Right, Above keyboard, Rides apps row), including with nothing else left on the dock: their ink follows the wallpaper under the strip · emu.
+- 2026-10-26 · wave 4b · Home icon and folder labels: dark on a light wallpaper, white on a dark one, in both themes; Label shadow on gives a soft glow/shadow away from the ink, stronger on a mid-grey wallpaper; off gives none; a folder popup's labels keep the popup's ink · emu.
+- 2026-10-26 · wave 4b · The empty page's "Long-press to add widgets" hint and the page dots (two or more pages) read on a light wallpaper under the dark theme · emu.
+- 2026-10-26 · wave 4b · Change the wallpaper (system picker, then the launcher's own) while on Home: labels, hint, dots, extra keys and letters re-ink without a restart · emu.
+
+Developer
+- 2026-10-26 · wave 4 · The welcome page's two choice cards: do they read as the app's segment style? · pong.
+- 2026-10-26 · wave 4b · Dark labels with a pale glow on a light wallpaper: does it read as Home's label, or should the shadow stay dark always? · pong.

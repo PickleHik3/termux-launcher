@@ -24,10 +24,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean reducedMotion();
         /**
          * Whether the current session's row has a window — a terminal window, or the display
-         * window — so the Workspace is on the row. Home is on it always; the usage mode is not
-         * asked.
+         * window — so the Workspace is on the row. Home is on it unless {@link #useAs} is
+         * Terminal only.
          */
         default boolean hasWindow() { return true; }
+        /**
+         * Use as, read fresh on every ask: under Terminal only the row is the Workspace alone,
+         * and the home press, the last window closing and a cold start all land there.
+         */
+        @NonNull default UseAs useAs() { return UseAs.HOME; }
         /**
          * Whether an empty Workspace can be started by Home's swipe past its last page: a shell
          * can be made now. Asked only while the Workspace has no window.
@@ -227,9 +232,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         PaneWallPage before = mWall.currentPage();
         boolean hasWindow = mHost.hasWindow();
         if (hasWindow) { mSeamIntoEmpty = false; mSeamShellStarted = false; }
-        mWall.setPages(PaneWallPolicy.rowPages(hasWindow || mSeamIntoEmpty));
+        mWall.setPages(mHost.useAs().rowPages(hasWindow || mSeamIntoEmpty));
         PaneWallPage after = mWall.currentPage();
-        if (after != before && !mWall.pages().contains(before)) {
+        // Home taken off the row by Use as hands the wall to the Workspace as it stands, the
+        // window in front kept; only a page handing to its left turns that page to its last.
+        if (after != before && !mWall.pages().contains(before)
+            && after != PaneWallPage.TERMINAL) {
             mHost.showInnerPage(after, Math.max(0, mHost.innerCount(after) - 1));
         }
         if (mWorkspacePending && mWall.pages().contains(PaneWallPage.TERMINAL)) {
@@ -546,12 +554,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * arrives. False when there is no Workspace to show and none can be started.
      */
     public boolean goToWorkspace(boolean animate) {
-        if (mWall.pages().contains(PaneWallPage.TERMINAL))
+        boolean homeShown = mHost.useAs().showsHomePage();
+        boolean hasWindow = mHost.hasWindow();
+        // Under Terminal only the Workspace is on the row while it is empty too; going there
+        // still starts its first shell, as the Terminal entry does.
+        if (mWall.pages().contains(PaneWallPage.TERMINAL) && (homeShown || hasWindow))
             return goTo(PaneWallPage.TERMINAL, animate);
-        if (mHost.hasWindow() || !mHost.canStartWorkspace())
-            return false;
-        if (!mHost.startWorkspaceShell())
-            return false;
+        if (hasWindow || !mHost.canStartWorkspace() || !mHost.startWorkspaceShell())
+            return !homeShown && goTo(PaneWallPage.TERMINAL, animate);
         mWorkspacePending = true;
         refreshPages();
         return true;
@@ -570,6 +580,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * while the launcher is in front.
      */
     public void goHome(boolean animate) {
+        if (!mHost.useAs().showsHomePage()) {
+            // Terminal only: the home press lands on the Workspace.
+            goToWorkspace(animate);
+            return;
+        }
         mHost.showInnerPage(PaneWallPage.WIDGETS, Math.max(0, mHost.homePressPage()));
         goTo(PaneWallPage.WIDGETS, animate);
     }
@@ -579,6 +594,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * the row closes.
      */
     public void goToLastHomePage(boolean animate) {
+        if (!mHost.useAs().showsHomePage()) {
+            goTo(PaneWallPage.TERMINAL, animate);
+            return;
+        }
         mHost.showInnerPage(PaneWallPage.WIDGETS,
             WallRow.lastHomePage(mHost.innerCount(PaneWallPage.WIDGETS)));
         goTo(PaneWallPage.WIDGETS, animate);
@@ -589,7 +608,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * a window already, else as soon as one arrives.
      */
     public void landOnColdStart(@Nullable String startIn) {
-        if (WallRow.coldStart(startIn) == PaneWallPage.TERMINAL) {
+        if (WallRow.coldStart(mHost.useAs().startIn(startIn)) == PaneWallPage.TERMINAL) {
             landInWorkspace();
         } else {
             goHome(false);

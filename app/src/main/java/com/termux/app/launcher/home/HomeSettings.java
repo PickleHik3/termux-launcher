@@ -27,7 +27,11 @@ public final class HomeSettings {
      */
     public static final String KEY_PAGE_TRANSITION = "app_launcher_home_page_transition";
 
-    /** Settings › Home › Icons and labels: the icon's size, a percentage of the dock's 48 dp. */
+    /**
+     * Settings › Home › Icons and labels: the icon's size, a {@link
+     * com.termux.app.launcher.widget.HomeIconSize} preset ({@code small}, {@code default} or
+     * {@code large}); an older percentage of the dock's 48 dp reads as the nearest preset.
+     */
     public static final String KEY_ICON_SCALE = "app_launcher_home_icon_scale";
     /** The label's size: {@code small}, {@code default} or {@code large}. */
     public static final String KEY_LABEL_SIZE = "app_launcher_home_label_size";
@@ -109,7 +113,7 @@ public final class HomeSettings {
     @NonNull
     public static com.termux.app.launcher.widget.HomeIconStyle iconStyle(@NonNull Context context) {
         return new com.termux.app.launcher.widget.HomeIconStyle(
-            com.termux.app.launcher.widget.HomeIconStyle.parseScale(getString(context, KEY_ICON_SCALE, null)),
+            com.termux.app.launcher.widget.HomeIconSize.fromStored(getString(context, KEY_ICON_SCALE, null)),
             com.termux.app.launcher.widget.HomeIconStyle.LabelSize.fromValue(
                 getString(context, KEY_LABEL_SIZE, null)),
             getBoolean(context, KEY_LABEL_TWO_LINES, false),

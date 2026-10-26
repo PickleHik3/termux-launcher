@@ -94,7 +94,7 @@ public final class TerminalClockWidget extends View {
 
     public void setUseAmPm(boolean useAmPm) {
         if (!mRenderer.setUseAmPm(useAmPm)) return;
-        updateTime(System.currentTimeMillis(), SystemClock.uptimeMillis());
+        updateTime(wallTime(), SystemClock.uptimeMillis());
         requestLayout();
     }
 
@@ -102,11 +102,43 @@ public final class TerminalClockWidget extends View {
         return mRenderer.isUsingAmPm();
     }
 
+    /**
+     * Whether the face draws its seconds ({@code status_clock_seconds}); the face's width moves
+     * with them, so the slot lays it out again.
+     */
+    public void setSeconds(boolean seconds) {
+        if (!mRenderer.setSeconds(seconds)) return;
+        requestLayout();
+        invalidate();
+    }
+
+    public boolean isShowingSeconds() {
+        return mRenderer.isShowingSeconds();
+    }
+
+    /**
+     * Holds the face at {@code wallTime} and stops its ticking: a preview that always reads one
+     * time (the editor's clock tiles read 07:48). A held face plays no load flourish.
+     */
+    public void holdTime(long wallTime) {
+        mHeldTime = wallTime;
+        stopTicker();
+        updateTime(wallTime, SystemClock.uptimeMillis());
+    }
+
+    /** The time the face reads: the held one, or now. */
+    private long wallTime() {
+        return mHeldTime >= 0 ? mHeldTime : System.currentTimeMillis();
+    }
+
+    /** The held time, or -1 while the face follows the clock. */
+    private long mHeldTime = -1L;
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         refreshColors(getContext());
-        if (mRenderer.playLoadFlourish(SystemClock.uptimeMillis())) invalidate();
+        if (mHeldTime < 0 && mRenderer.playLoadFlourish(SystemClock.uptimeMillis())) invalidate();
         post(mSyncTicker);
     }
 
@@ -135,7 +167,8 @@ public final class TerminalClockWidget extends View {
     }
 
     private void syncTicker() {
-        if (isAttachedToWindow() && isShown() && getWindowVisibility() == VISIBLE) startTicker();
+        if (mHeldTime < 0 && isAttachedToWindow() && isShown()
+            && getWindowVisibility() == VISIBLE) startTicker();
         else stopTicker();
     }
 

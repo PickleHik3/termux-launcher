@@ -119,6 +119,15 @@ public final class ChromeRenderer {
             return android.graphics.Color.TRANSPARENT;
         }
 
+        /**
+         * The wallpaper as the system describes it ({@link WallpaperInk#hintColor}), for the ink
+         * to assume until a sample is read; transparent when the launcher shows its own picture
+         * or the system says nothing. Read, never changed.
+         */
+        default int wallpaperHintColor() {
+            return android.graphics.Color.TRANSPARENT;
+        }
+
         /** True while the dock (and the surfaces that follow it) render as floating capsules. */
         boolean roundedDockStyle();
 

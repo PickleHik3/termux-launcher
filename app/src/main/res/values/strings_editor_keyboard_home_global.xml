@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Keyboard, Home and Global cards of the Appearance editor (editor-redesign §2), and the
+     Home icon size presets they share with Settings › Home (§6). -->
+<resources>
+
+    <!-- Section headers and the notes at their end. -->
+    <string name="editor_section_glass">Glass</string>
+    <string name="editor_section_shape">Shape</string>
+    <string name="editor_section_more">More</string>
+    <string name="editor_section_grid">Grid</string>
+    <string name="editor_section_look">Look</string>
+    <string name="editor_section_labels_folders">Labels &amp; folders</string>
+    <string name="editor_section_options">Options</string>
+    <string name="editor_section_wallpaper">Wallpaper</string>
+    <string name="editor_section_colour">Colour</string>
+    <string name="editor_section_glass_material">Glass material</string>
+    <string name="editor_note_home_only">Home only</string>
+    <string name="editor_note_workspace_only">Workspace only</string>
+    <string name="editor_note_home_glass">Widgets, status bar, dock</string>
+    <string name="editor_note_workspace_glass">Status bar, dock, keyboard, terminal</string>
+    <string name="editor_note_both_screens">Both screens</string>
+    <string name="editor_hint_glass_material">Edge and Depth show on phones that draw the glass edge.</string>
+
+    <!-- Keyboard card. -->
+    <string name="editor_row_background_opacity">Background opacity</string>
+    <string name="editor_row_bottom_padding">Bottom padding</string>
+    <string name="editor_row_opacity_link">Move both opacities together</string>
+    <string name="editor_chip_keyboard_theme">Theme</string>
+
+    <!-- Home card. -->
+    <string name="editor_row_columns">Columns</string>
+    <string name="editor_row_rows">Rows</string>
+    <string name="editor_row_home_icon_size">Icon size</string>
+    <string name="editor_chip_edit_pages">Edit pages</string>
+
+    <!-- Global card. -->
+    <string name="editor_row_change_wallpaper">Change wallpaper</string>
+    <string name="editor_row_show_wallpaper">Show wallpaper</string>
+
+    <!-- Home icon size presets: the Home card's glyphs name them on long-press, and Settings ›
+         Home lists them. Sizes from AOSP Launcher3's grid profiles. -->
+    <string name="editor_home_icon_small">Small (48 dp)</string>
+    <string name="editor_home_icon_default">Default (54 dp)</string>
+    <string name="editor_home_icon_large">Large (60 dp)</string>
+    <string-array name="editor_home_icon_size_entries">
+        <item>@string/editor_home_icon_small</item>
+        <item>@string/editor_home_icon_default</item>
+        <item>@string/editor_home_icon_large</item>
+    </string-array>
+    <string-array name="editor_home_icon_size_values" translatable="false">
+        <item>small</item>
+        <item>default</item>
+        <item>large</item>
+    </string-array>
+</resources>

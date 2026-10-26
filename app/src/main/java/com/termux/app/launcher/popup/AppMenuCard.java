@@ -1,16 +1,19 @@
 package com.termux.app.launcher.popup;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.view.AccessibilityDelegateCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
@@ -34,6 +37,10 @@ public final class AppMenuCard {
         @DrawableRes final int glyph;
         @NonNull final Runnable action;
         final boolean opensSubmenu;
+        /** A group's caption: a shorter slab with no action, never highlighted. */
+        final boolean header;
+        /** A row the host draws itself (a segmented choice), in the group's shade; no action. */
+        @Nullable final View custom;
 
         public Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action) {
             this(label, glyph, action, false);
@@ -41,10 +48,29 @@ public final class AppMenuCard {
 
         public Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action,
                     boolean opensSubmenu) {
+            this(label, glyph, action, opensSubmenu, false, null);
+        }
+
+        private Item(@NonNull String label, @DrawableRes int glyph, @NonNull Runnable action,
+                     boolean opensSubmenu, boolean header, @Nullable View custom) {
             this.label = label;
             this.glyph = glyph;
             this.action = action;
             this.opensSubmenu = opensSubmenu;
+            this.header = header;
+            this.custom = custom;
+        }
+
+        /** A caption over the group it leads, such as the name of what was pressed. */
+        @NonNull
+        public static Item header(@NonNull String label) {
+            return new Item(label, 0, () -> { }, false, true, null);
+        }
+
+        /** {@code view} as a row of its own, a row's height, in the group's shade. */
+        @NonNull
+        public static Item custom(@NonNull View view) {
+            return new Item("", 0, () -> { }, false, false, view);
         }
     }
 
@@ -86,6 +112,7 @@ public final class AppMenuCard {
         float density = context.getResources().getDisplayMetrics().density;
         int width = dp(density, AppMenuGeometry.ROW_WIDTH_DP);
         int height = dp(density, AppMenuGeometry.ROW_HEIGHT_DP);
+        int headerHeight = dp(density, AppMenuGeometry.HEADER_HEIGHT_DP);
         int padding = dp(density, AppMenuGeometry.ROW_PADDING_DP);
         int glyphSize = dp(density, AppMenuGeometry.GLYPH_DP);
         int glyphGap = dp(density, AppMenuGeometry.GLYPH_GAP_DP);
@@ -115,31 +142,46 @@ public final class AppMenuCard {
             for (int i = 0; i < group.size(); i++) {
                 Item item = group.get(i);
                 AppMenuGeometry.rowRadii(i, group.size(), outer, join, pill, radii);
-                TextView row = new TextView(context);
-                M3.textAppearance(row, com.google.android.material.R.attr.textAppearanceBodyMedium);
-                row.setTextSize(TypedValue.COMPLEX_UNIT_SP, AppMenuGeometry.LABEL_SP);
-                row.setTextColor(ink);
-                row.setText(item.label);
-                row.setSingleLine(true);
-                row.setEllipsize(TextUtils.TruncateAt.END);
-                row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-                row.setPaddingRelative(padding, 0, padding, 0);
-                Drawable glyph = item.glyph != 0
-                    ? factory.loadMenuIcon(item.glyph, glyphSize, glyphInk) : null;
-                if (glyph != null) {
-                    row.setCompoundDrawablesRelative(glyph, null, null, null);
-                    row.setCompoundDrawablePadding(glyphGap);
+                Item led = item.header && i + 1 < group.size() ? group.get(i + 1) : null;
+                if (led != null && !led.header && led.custom == null) {
+                    // A caption and the row it leads are one slab: one shade, one shadow, so the
+                    // caption never reads as a card of its own behind the row.
+                    float[] ledRadii = new float[2];
+                    AppMenuGeometry.rowRadii(i + 1, group.size(), outer, join, pill, ledRadii);
+                    LinearLayout slab = new LinearLayout(context);
+                    slab.setOrientation(LinearLayout.VERTICAL);
+                    slab.setBackground(new AppMenuRowDrawable(shade, 0, radii[0], ledRadii[1]));
+                    slab.setElevation(elevation);
+                    slab.addView(headerView(context, item.label, glyphInk, padding),
+                        new LinearLayout.LayoutParams(width, headerHeight));
+                    TextView row = row(context, factory, led, ink, glyphInk, glyphSize, glyphGap,
+                        padding, new AppMenuRowDrawable(Color.TRANSPARENT, stateLayer, 0f,
+                            ledRadii[1]));
+                    slab.addView(row, new LinearLayout.LayoutParams(width, height));
+                    LinearLayout.LayoutParams slabLp = new LinearLayout.LayoutParams(width,
+                        headerHeight + height);
+                    if (i == 0 && groupIndex > 0) slabLp.topMargin = gap;
+                    column.addView(slab, slabLp);
+                    rows.add(new MenuRow(row, led.action, led.opensSubmenu));
+                    i++;
+                    continue;
                 }
-                row.setBackground(new AppMenuRowDrawable(shade, stateLayer, radii[0], radii[1]));
+                if (item.header || item.custom != null) {
+                    View slab = item.header
+                        ? headerView(context, item.label, glyphInk, padding)
+                        : customSlab(context, item.custom, padding);
+                    slab.setBackground(new AppMenuRowDrawable(shade, 0, radii[0], radii[1]));
+                    slab.setElevation(elevation);
+                    LinearLayout.LayoutParams slabLp = new LinearLayout.LayoutParams(width,
+                        item.header ? headerHeight : height);
+                    if (i == 0 && groupIndex > 0) slabLp.topMargin = gap;
+                    column.addView(slab, slabLp);
+                    continue;
+                }
+                TextView row = row(context, factory, item, ink, glyphInk, glyphSize, glyphGap,
+                    padding, new AppMenuRowDrawable(shade, stateLayer, radii[0], radii[1]));
                 row.setElevation(elevation);
-                row.setClickable(true);
-                // Real views in a window of their own: say outright that they are buttons a
-                // screen reader should reach, and which one opens more.
-                ViewCompat.setImportantForAccessibility(row,
-                    ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
-                ViewCompat.setAccessibilityDelegate(row, BUTTON_ROLE);
                 Runnable action = item.action;
-                row.setOnClickListener(v -> factory.runWithFeedback(row, action));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, height);
                 if (i == 0 && groupIndex > 0) lp.topMargin = gap;
                 column.addView(row, lp);
@@ -150,6 +192,66 @@ public final class AppMenuCard {
         int[] groupShades = new int[usedShades.size()];
         for (int i = 0; i < groupShades.length; i++) groupShades[i] = usedShades.get(i);
         return new AppMenuCard(new AppMenuCardView(context, column), rows, groupShades, width);
+    }
+
+    /** One action row: its glyph and label on {@code background}, a button to screen readers. */
+    @NonNull
+    private static TextView row(@NonNull Context context, @NonNull MenuRowFactory factory,
+                                @NonNull Item item, int ink, int glyphInk, int glyphSize,
+                                int glyphGap, int padding, @NonNull Drawable background) {
+        TextView row = new TextView(context);
+        M3.textAppearance(row, com.google.android.material.R.attr.textAppearanceBodyMedium);
+        row.setTextSize(TypedValue.COMPLEX_UNIT_SP, AppMenuGeometry.LABEL_SP);
+        row.setTextColor(ink);
+        row.setText(item.label);
+        row.setSingleLine(true);
+        row.setEllipsize(TextUtils.TruncateAt.END);
+        row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        row.setPaddingRelative(padding, 0, padding, 0);
+        Drawable glyph = item.glyph != 0
+            ? factory.loadMenuIcon(item.glyph, glyphSize, glyphInk) : null;
+        if (glyph != null) {
+            row.setCompoundDrawablesRelative(glyph, null, null, null);
+            row.setCompoundDrawablePadding(glyphGap);
+        }
+        row.setBackground(background);
+        row.setClickable(true);
+        // Real views in a window of their own: say outright that they are buttons a screen reader
+        // should reach, and which one opens more.
+        ViewCompat.setImportantForAccessibility(row, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        ViewCompat.setAccessibilityDelegate(row, BUTTON_ROLE);
+        Runnable action = item.action;
+        row.setOnClickListener(v -> factory.runWithFeedback(row, action));
+        return row;
+    }
+
+    /** A group's caption: the label style, in the glyphs' ink, sitting on the slab's foot. */
+    @NonNull
+    private static TextView headerView(@NonNull Context context, @NonNull String label,
+                                       int ink, int padding) {
+        TextView header = new TextView(context);
+        M3.textAppearance(header, com.google.android.material.R.attr.textAppearanceLabelMedium);
+        header.setTextColor(ink);
+        header.setText(label);
+        header.setSingleLine(true);
+        header.setEllipsize(TextUtils.TruncateAt.END);
+        header.setGravity(Gravity.START | Gravity.BOTTOM);
+        header.setPaddingRelative(padding, 0, padding, padding / 4);
+        ViewCompat.setAccessibilityHeading(header, true);
+        return header;
+    }
+
+    /** The host's own row, centred in a row-sized slab with the rows' side padding. */
+    @NonNull
+    private static View customSlab(@NonNull Context context, @NonNull View custom, int padding) {
+        FrameLayout slab = new FrameLayout(context);
+        slab.setPaddingRelative(padding, 0, padding, 0);
+        if (custom.getParent() instanceof android.view.ViewGroup)
+            ((android.view.ViewGroup) custom.getParent()).removeView(custom);
+        slab.addView(custom, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_VERTICAL));
+        return slab;
     }
 
     /** The rows' total height at {@code width}, before any placement clamps it. */

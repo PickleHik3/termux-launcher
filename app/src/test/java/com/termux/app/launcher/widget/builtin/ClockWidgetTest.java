@@ -20,7 +20,6 @@ import androidx.annotation.Nullable;
 import com.termux.app.launcher.widget.LauncherWidgetRecord;
 import com.termux.app.launcher.widget.LauncherWidgetRepository;
 import com.termux.app.launcher.widget.WidgetCellRect;
-import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.terminal.ClockFaceRenderer;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -667,27 +666,6 @@ public class ClockWidgetTest {
         assertNotNull(heavy.faceView().renderer());
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM,
             heavy.faceView().renderer().getStyle());
-
-        // The Look's bar-clock picker: the same row, only while Minimal is the bar's face.
-        assertTrue(Arrays.asList(SurfaceEditorController.clockDropdownRows("minimal"))
-            .contains(SurfaceEditorController.CLOCK_ROW_WEIGHT));
-        assertTrue(Arrays.asList(SurfaceEditorController.clockDropdownRows("minimal_medium"))
-            .contains(SurfaceEditorController.CLOCK_ROW_WEIGHT));
-        assertFalse(Arrays.asList(SurfaceEditorController.clockDropdownRows("slab"))
-            .contains(SurfaceEditorController.CLOCK_ROW_WEIGHT));
-        assertFalse("Minimal's medium weight is not a face row of its own",
-            Arrays.asList(SurfaceEditorController.clockDropdownRows("minimal_medium"))
-                .contains("minimal_medium"));
-    }
-
-    /** The picker stands as tall as its rows: no blank strip for a Weight row it does not show. */
-    @Test public void theLooksClockPickerReservesTheWeightRowOnlyForMinimal() {
-        int faces = 6 * 48, row = 56;
-        assertEquals(faces + row, SurfaceEditorController.clockPopupHeightDp("slab"));
-        assertEquals(faces + row, SurfaceEditorController.clockPopupHeightDp(null));
-        assertEquals(faces + row + row, SurfaceEditorController.clockPopupHeightDp("minimal"));
-        assertEquals(faces + row + row,
-            SurfaceEditorController.clockPopupHeightDp("minimal_medium"));
     }
 
     // ----- helpers --------------------------------------------------------------------------

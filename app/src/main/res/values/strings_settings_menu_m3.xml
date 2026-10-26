@@ -8,7 +8,7 @@
     <string name="settings_root_system_header">System</string>
     <string name="settings_section_home">Home</string>
     <string name="settings_section_home_summary">Pages, widgets and gestures</string>
-    <string name="settings_section_dock_drawer">Apps &amp; dock</string>
+    <string name="settings_section_dock_drawer">Dock</string>
     <string name="settings_section_dock_drawer_summary">Drawer, dock items and search</string>
     <string name="settings_section_terminal_summary">Windows, status bar and text</string>
     <string name="settings_section_look">Appearance</string>
@@ -24,7 +24,7 @@
     <string name="settings_search_no_results">No settings match</string>
 
     <!-- Every door into the Appearance editor goes by one name (spec §4). -->
-    <string name="settings_layout_editor_title">Appearance</string>
+    <string name="settings_layout_editor_title">Edit on screen</string>
     <string name="settings_appearance_door_summary">Edit how it looks and sits</string>
     <string name="settings_layout_editor_home_summary">Arrange Home in the Layout editor</string>
     <string name="settings_layout_editor_terminal_summary">Arrange the Terminal in the Layout editor</string>

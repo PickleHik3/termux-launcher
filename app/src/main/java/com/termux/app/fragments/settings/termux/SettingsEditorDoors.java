@@ -16,6 +16,7 @@ import com.termux.app.fragments.settings.SettingsMotion;
 import com.termux.app.fragments.settings.SettingsTransitions;
 import com.termux.app.surfaces.AppearanceEditorEntry;
 import com.termux.app.surfaces.EditorCard;
+import com.termux.app.surfaces.EditorDoor;
 
 /**
  * The Settings rows that open an editor over the live launcher rather than a page of rows: the
@@ -32,11 +33,13 @@ public final class SettingsEditorDoors {
 
     /**
      * The Intent that opens the Appearance editor on {@code card} (null: at rest), marked as coming
-     * from Settings. Every Settings door into the editor is built here.
+     * from Settings and naming {@code door}, whose line the launcher logs. Every Settings door into
+     * the editor is built here.
      */
     @NonNull
-    public static Intent editorIntent(@NonNull Context context, @Nullable EditorCard card) {
-        return AppearanceEditorEntry.intent(context, card, true);
+    public static Intent editorIntent(@NonNull Context context, @Nullable EditorCard card,
+                                      @NonNull EditorDoor door) {
+        return AppearanceEditorEntry.intent(context, card, true, door);
     }
 
     /**
@@ -51,12 +54,15 @@ public final class SettingsEditorDoors {
         return EditorCard.APPEARANCE;
     }
 
-    /** Opens the editor on {@code card} (null: at rest) from {@code row} on {@code page}. */
+    /**
+     * Opens the editor from {@code row} on {@code page}, on the card {@code door} opens (the door
+     * table, {@link EditorDoor#cardFor}).
+     */
     public static void openEditor(@NonNull PreferenceFragmentCompat page, @NonNull Preference row,
-                                  @Nullable EditorCard card) {
+                                  @NonNull EditorDoor door) {
         Context context = page.getContext();
         if (context == null) return;
-        open(page, row, editorIntent(context, card));
+        open(page, row, editorIntent(context, door.cardFor(null, null), door));
     }
 
     /** The Intent that opens Edit pages over Home, marked as coming from Settings. */

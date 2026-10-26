@@ -169,7 +169,10 @@ public class PlaceLayoutHomeLayoutTest {
     @Test
     public void aPageSaysWhichVariantItIsArrangedBy() {
         PlaceLayoutStore store = store();
-        assertEquals("one layout until Home holds its own", LayoutVariant.NORMAL,
+        assertEquals("every install holds a Home layout (version 14)", LayoutVariant.HOME,
+            store.variantFor(PaneWallPage.WIDGETS));
+        store.setHomeLayout(false);
+        assertEquals("one layout, as a store before version 14 held it", LayoutVariant.NORMAL,
             store.variantFor(PaneWallPage.WIDGETS));
         store.setHomeLayout(true);
         assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));

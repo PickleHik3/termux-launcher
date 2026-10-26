@@ -49,8 +49,10 @@ public class PaneWallControllerTest {
         float homeShift;
         boolean canStart;
         int shellsStarted;
+        UseAs useAs = UseAs.HOME;
 
         @Override public boolean reducedMotion() { return reduced; }
+        @Override public UseAs useAs() { return useAs; }
         @Override public boolean canStartWorkspace() { return canStart; }
         @Override public boolean startWorkspaceShell() {
             shellsStarted++;
@@ -164,6 +166,57 @@ public class PaneWallControllerTest {
         host.hasWindow = false;
         controller.refreshPages();
         assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.pages());
+    }
+
+    @Test public void terminalOnlyTakesHomeOffTheRowAndMovesTheWallOffIt() {
+        controller.goHome(false);
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        host.current = 1;
+
+        host.useAs = UseAs.TERMINAL;
+        controller.refreshPages();
+
+        assertEquals("the window in front stays in front", 1, host.current);
+        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), controller.pages());
+        assertEquals("the wall left the Home page it stood on", PaneWallPage.TERMINAL,
+            controller.currentPage());
+        assertFalse("launcherctl's wall.go home is refused", controller.goTo("home"));
+        assertFalse(controller.goTo("widgets"));
+    }
+
+    @Test public void terminalOnlyLandsTheHomePressAndAColdStartOnTheWorkspace() {
+        host.useAs = UseAs.TERMINAL;
+        controller.refreshPages();
+        controller.goHome(false);
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+        controller.goToLastHomePage(false);
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+    }
+
+    @Test public void terminalOnlyKeepsAnEmptyWorkspaceOnTheRowAndTheHomePressStartsAShell() {
+        host.useAs = UseAs.TERMINAL;
+        host.hasWindow = false;
+        host.canStart = true;
+        controller.refreshPages();
+        assertEquals("never a Home page to fall back on",
+            Collections.singletonList(PaneWallPage.TERMINAL), controller.pages());
+
+        controller.goHome(false);
+
+        assertEquals(1, host.shellsStarted);
+        assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
+    }
+
+    @Test public void backToHomeScreenPutsHomeBackOnTheRow() {
+        host.useAs = UseAs.TERMINAL;
+        controller.refreshPages();
+        host.useAs = UseAs.HOME;
+        controller.refreshPages();
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.pages());
+        controller.goHome(false);
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
     }
 
     @Test public void thePagesAreALineNotARing() {

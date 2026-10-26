@@ -1603,7 +1603,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return dp(configured);
     }
 
-    /** The Dock &amp; drawer rows, read once per open and handed to the grid. */
+    /** The Dock rows, read once per open and handed to the grid. */
     private void applyDrawerSettings() {
         AppDrawerContentView content = mContent;
         if (content == null) return;

@@ -292,8 +292,17 @@ opens one fresh shell window, or Display, the **display window**, which holds on
 display starts with the launcher (choosing it turns that on; turning it off falls back to the
 Workspace when a terminal window is open, else Home). It is also what the page overview's home
 button sets: a Home page, the first terminal window or the display window. It replaces the usage
-mode's Terminal alone.
+mode's Terminal alone. Under **Use as** Terminal only it offers Terminal and Display, and a stored
+Home reads as the Workspace.
 _Avoid_: default place, start page, usage mode
+
+**Use as**:
+Home screen (the default) or Terminal only, asked on the welcome sheet's first page and kept in
+Settings › General › Launcher beside **Start in** (`use_as`, policy in `UseAs`). Terminal only takes
+the Home page off the wall, hides Home's settings, drops Home from Start in and removes the Home
+card and both Match rows; the home press lands on the Workspace. Whether the app is the phone's
+home app is a separate choice.
+_Avoid_: usage mode, launcher mode, terminal alone
 
 **Search field**:
 The field under the dock's apps row that opens the command palette, there when the layout turns it
@@ -524,22 +533,21 @@ _Avoid_: Home variant, Home place
 
 **Layout editor**:
 Legacy name for the Appearance editor's move and size controls (2026-10-24: there is one editor,
-see **Appearance editor**). The engine underneath keeps the name in code: a bar moves by dragging,
-anything is put away by dropping it in the **restore tray**, and a selected element shows its
-**handle** with a readout in real units. One layout dresses both halves of the wall; only look
-values differ per half (ADR 0013).
-_Avoid_: Layout page, Layout tab, Layout (as the name of a door; the door is Appearance)
+see **Appearance editor**). Its shrunken Layout mode, the **layout canvas** with its drags and
+handles, was retired on 2026-10-26 (editor-redesign §1): a bar moves by its card's **Position**
+row, sizes are rows on the cards, a hidden bar waits in the stack beside the frame, and the
+editor edits the orientation the phone is in (turn the phone for the other). The session
+underneath keeps the name in code (`LayoutEditorController`, `LayoutEditorPlan`).
+_Avoid_: Layout page, Layout tab, Layout mode, Layout (as the name of a door; the door is Appearance)
 
 **Layout canvas**:
-The scaled model of a page's layout that the user drags elements around on, in the Layout
-editor; there is no second one. Code still calls it the miniature (`LayoutCanvasView`) until
-it is redrawn from the layout element pack.
-_Avoid_: miniature (in new prose), preview, thumbnail, overview
+Retired 2026-10-26 with Layout mode: the scaled model of a page's layout (`LayoutCanvasView`,
+once called the miniature) that elements were dragged around on. Nothing draws it now.
+_Avoid_: miniature, preview, thumbnail, overview
 
 **Restore tray**:
-The strip under the layout canvas: one chip, with a struck-through eye, per hidden element, which
-brings the element back to the edge it was put away from; one short line when nothing is hidden;
-"Drop here to hide" while something is lifted.
+Retired with the layout canvas. Hidden bars now wait as cards in the stack beside the editor's
+frame: a tap opens the bar's card, a drag onto the frame brings it back.
 _Avoid_: Hidden box, shelf
 
 ### Widgets

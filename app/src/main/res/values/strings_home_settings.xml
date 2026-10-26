@@ -38,20 +38,6 @@
     <!-- Icons and labels (F7) -->
     <string name="settings_home_icons_header">Icons and labels</string>
     <string name="settings_home_icon_scale_title">Icon size</string>
-    <string-array name="settings_home_icon_scale_entries" translatable="false">
-        <item>80%</item>
-        <item>90%</item>
-        <item>100%</item>
-        <item>110%</item>
-        <item>120%</item>
-    </string-array>
-    <string-array name="settings_home_icon_scale_values" translatable="false">
-        <item>80</item>
-        <item>90</item>
-        <item>100</item>
-        <item>110</item>
-        <item>120</item>
-    </string-array>
     <string name="settings_home_label_size_title">Label size</string>
     <string name="settings_home_label_size_small">Small</string>
     <string name="settings_home_label_size_default">Default</string>

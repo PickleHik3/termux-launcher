@@ -86,33 +86,46 @@ public class EditorCardSheetFitTest {
         float density = fixture.themed.getResources().getDisplayMetrics().density;
         LinearLayout column = (LinearLayout) ((ViewGroup) fixture.sheet.view()).getChildAt(0);
         assertEquals(Math.round(64 * density), column.getChildAt(0).getHeight());
-        View strip = fixture.sheet.rows().getChildAt(0);
+        // The Dock's strip follows its Style and Bars rows.
+        View strip = legends(fixture.sheet.rows()).get(0);
+        while (strip.getParent() != fixture.sheet.rows())
+            strip = (View) strip.getParent();
         assertTrue("the glass strip is at least 72dp", strip.getHeight() >= Math.round(72 * density));
     }
 
     @Test
     public void aSlidersThumbAtEitherEndStaysInsideTheMargins() {
-        Fixture fixture = new Fixture(EditorCard.APPEARANCE, 1f);
-        fixture.layOut();
-        int width = fixture.parent.getWidth();
         int checked = 0;
-        for (com.google.android.material.slider.Slider slider : sliders(fixture.sheet.rows())) {
-            if (slider.getWidth() <= 0)
+        boolean anyLook = false;
+        for (EditorCard card : EditorCard.values()) {
+            // The Look slider stands only on a card the sheet still draws itself; the redesigned
+            // cards show the Look as tiles (EditorCardBodyTest).
+            if (CardBody.redesigned(card))
                 continue;
-            int[] at = new int[2];
-            slider.getLocationInWindow(at);
-            int[] parentAt = new int[2];
-            fixture.parent.getLocationInWindow(parentAt);
-            int left = at[0] - parentAt[0];
-            int trackStart = left + slider.getTrackSidePadding();
-            int trackEnd = left + slider.getWidth() - slider.getTrackSidePadding();
-            int radius = slider.getThumbWidth() / 2;
-            assertTrue("the thumb at the end clears the 16dp margin: " + (trackEnd + radius)
-                + " vs " + (width - fixture.dp(16)), trackEnd + radius <= width - fixture.dp(16) + 1);
-            assertEquals("the track starts at the text column", fixture.dp(56), trackStart, 1);
-            checked++;
+            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true)))
+                anyLook |= spec.row == EditorRows.Row.LOOK;
+            Fixture fixture = new Fixture(card, 1f);
+            fixture.layOut();
+            int width = fixture.parent.getWidth();
+            for (com.google.android.material.slider.Slider slider : sliders(fixture.sheet.rows())) {
+                if (slider.getWidth() <= 0)
+                    continue;
+                int[] at = new int[2];
+                slider.getLocationInWindow(at);
+                int[] parentAt = new int[2];
+                fixture.parent.getLocationInWindow(parentAt);
+                int left = at[0] - parentAt[0];
+                int trackStart = left + slider.getTrackSidePadding();
+                int trackEnd = left + slider.getWidth() - slider.getTrackSidePadding();
+                int radius = slider.getThumbWidth() / 2;
+                assertTrue("the thumb at the end clears the 16dp margin: " + (trackEnd + radius)
+                    + " vs " + (width - fixture.dp(16)),
+                    trackEnd + radius <= width - fixture.dp(16) + 1);
+                assertEquals("the track starts at the text column", fixture.dp(56), trackStart, 1);
+                checked++;
+            }
         }
-        assertTrue(checked > 0);
+        assertTrue(!anyLook || checked > 0);
     }
 
     @Test
@@ -124,6 +137,8 @@ public class EditorCardSheetFitTest {
             for (MaterialButton tile : buttons(fixture.sheet.rows())) {
                 if (tile.getIcon() == null || tile.getLayout() == null)
                     continue;
+                if (tile.getIconGravity() != MaterialButton.ICON_GRAVITY_TOP)
+                    continue;
                 tiles++;
                 assertEquals("no inset under the outline", 0, tile.getInsetBottom());
                 int textBottom = tile.getTotalPaddingTop() + tile.getLayout().getHeight();
@@ -131,7 +146,7 @@ public class EditorCardSheetFitTest {
                         + " inside " + tile.getHeight(),
                     textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
             }
-            assertEquals(3, tiles);
+            assertEquals("four Dock types and six Options", 10, tiles);
         }
     }
 
@@ -143,6 +158,8 @@ public class EditorCardSheetFitTest {
             int tiles = 0;
             for (MaterialButton tile : buttons(fixture.sheet.rows())) {
                 if (tile.getIcon() == null || tile.getLayout() == null)
+                    continue;
+                if (tile.getIconGravity() != MaterialButton.ICON_GRAVITY_TOP)
                     continue;
                 tiles++;
                 android.graphics.drawable.Drawable[] sides = tile.getCompoundDrawablesRelative();
@@ -156,7 +173,7 @@ public class EditorCardSheetFitTest {
                 assertEquals(tile.getText() + " at " + scale + ": under the glyph's centre",
                     tile.getWidth() / 2f, wordCentre, 2f);
             }
-            assertEquals(3, tiles);
+            assertEquals("four Dock types and six Options", 10, tiles);
         }
     }
 
@@ -181,13 +198,20 @@ public class EditorCardSheetFitTest {
         int[] parentAt = new int[2];
         fixture.parent.getLocationInWindow(parentAt);
         assertTrue("the icon stands 16dp in", at[0] - parentAt[0] >= fixture.dp(16) - 1);
-        for (int i = 0; i < style.getChildCount(); i++)
-            assertEquals(null, ((MaterialButton) style.getChildAt(i)).getIcon());
+        // The Style segments carry their glyph before the word, never a check mark.
+        for (int i = 0; i < style.getChildCount(); i++) {
+            MaterialButton button = (MaterialButton) style.getChildAt(i);
+            assertTrue(button.getText() + ": a glyph and its word", button.getIcon() != null
+                && button.getText().length() > 0);
+            assertEquals(MaterialButton.ICON_GRAVITY_TEXT_START, button.getIconGravity());
+        }
     }
 
     @Test
     public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
         for (EditorCard card : EditorCard.values()) {
+            if (CardBody.redesigned(card))
+                continue;
             Fixture fixture = new Fixture(card, 1f);
             fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
             fixture.layOut();
@@ -223,6 +247,8 @@ public class EditorCardSheetFitTest {
     public void everyStripStandsOnOneLineWhenItsColumnsFit() {
         for (float scale : new float[] {1f, 1.3f}) {
             for (EditorCard card : EditorCard.values()) {
+                if (CardBody.redesigned(card))
+                    continue;
                 Fixture fixture = new Fixture(card, scale);
                 fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
                 fixture.layOut();
@@ -271,6 +297,8 @@ public class EditorCardSheetFitTest {
     public void everyGlassStripsLegendsStandWholeInTheirColumnsAtAnyTextSize() {
         for (float scale : new float[] {1f, 1.3f, 2f}) {
             for (EditorCard card : EditorCard.values()) {
+                if (CardBody.redesigned(card))
+                    continue;
                 Fixture fixture = new Fixture(card, scale);
                 fixture.layOut();
                 List<LegendSlider> legends = legends(fixture.sheet.rows());
@@ -295,6 +323,8 @@ public class EditorCardSheetFitTest {
     @Test
     public void everySliderButTheLooksIsAStripColumnAndEveryRowIsThere() {
         for (EditorCard card : EditorCard.values()) {
+            if (CardBody.redesigned(card))
+                continue;
             Fixture fixture = new Fixture(card, 1f);
             fixture.sheet.setDetent(EditorCardSheet.DETENT_FULL, false);
             fixture.layOut();
@@ -309,8 +339,13 @@ public class EditorCardSheetFitTest {
                 assertTrue(card + ": " + legend.getContentDescription() + " stands open, no More",
                     legend.isShown() && legend.getWidth() > 0);
             List<com.google.android.material.slider.Slider> sliders = sliders(fixture.sheet.rows());
-            assertEquals(card + ": the Look's is the one horizontal slider",
-                card == EditorCard.APPEARANCE ? 1 : 0, sliders.size());
+            int looks = 0;
+            for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
+                if (spec.row == EditorRows.Row.LOOK)
+                    looks++;
+            }
+            assertEquals(card + ": the Look's is the one horizontal slider", looks,
+                sliders.size());
             for (TextView text : texts(fixture.sheet.rows()))
                 assertTrue(card + " has no More row", !"More".contentEquals(text.getText()));
         }
@@ -365,7 +400,7 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void theSetHereDotRidesOnTheRotatedLegend() {
-        Fixture fixture = new Fixture(EditorCard.KEYBOARD, 1f);
+        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
         fixture.layOut();
         int marked = 0;
         for (LegendSlider slider : legends(fixture.sheet.rows())) {
@@ -483,14 +518,13 @@ public class EditorCardSheetFitTest {
             sheet = new EditorCardSheet(themed, new FakeModel(themed), new EditorCardSheet.Listener() {
                 @Override public void onClose() {}
                 @Override public void onReset() {}
-                @Override public void onCopyToOtherHalf() {}
                 @Override public void onSheetMoved(int detent, float topPx) {}
             });
             int full = Math.round(mHeight * 0.55f);
             sheet.attach(parent);
             sheet.setGeometry(full, full, navPx);
-            sheet.show(card, EditorRows.rows(card, new EditorRows.Offers(true, true)),
-                card.perHalf() ? "Copy to Home" : null, "Reset", false);
+            sheet.show(card, EditorRows.rows(card, new EditorRows.Offers(true, true)), "Reset",
+                false);
             layOut();
             EditorFramePose.Window window = new EditorFramePose.Window(mHeight,
                 Math.round(41 * density), navPx, density, fontScale, Math.round(41 * density),
@@ -515,9 +549,19 @@ public class EditorCardSheetFitTest {
     /** Values a card would show on a phone in its first days: mid-range, choices in place. */
     private static final class FakeModel implements EditorCardSheet.Model {
         private final Context mContext;
+        private final com.termux.app.surfaces.cards.DockCard mDock;
 
         FakeModel(@NonNull Context context) {
             mContext = context;
+            mDock = new com.termux.app.surfaces.cards.DockCard(new FakeDockHost(context));
+        }
+
+        @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
+            return mDock.view(row, widthPx);
+        }
+
+        @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
+            mDock.restate(row);
         }
 
         @Override public int value(@NonNull Row row) {
@@ -603,5 +647,54 @@ public class EditorCardSheetFitTest {
                 out[i] = mContext.getString(res[i]);
             return out;
         }
+    }
+
+    /** The Dock card on a fresh install: Docked, Apps and A–Z shown, Extra keys hidden. */
+    private static final class FakeDockHost implements com.termux.app.surfaces.cards.DockCard.Host {
+        private final Context mContext;
+
+        FakeDockHost(@NonNull Context context) {
+            mContext = context;
+        }
+
+        @NonNull @Override public Context context() { return mContext; }
+        @Override public boolean floating() { return false; }
+        @Override public void setFloating(boolean floating) {}
+        @NonNull @Override public List<com.termux.app.place.Element> barOrder() {
+            return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
+        }
+        @Override public void setBarOrder(@NonNull List<com.termux.app.place.Element> order) {}
+        @Override public boolean offers(@NonNull com.termux.app.place.Element bar) { return true; }
+        @Override public boolean barShown(@NonNull com.termux.app.place.Element bar) {
+            return bar != com.termux.app.place.Element.EXTRA_KEYS;
+        }
+        @Override public void setBarShown(@NonNull com.termux.app.place.Element bar, boolean shown) {}
+        @NonNull @Override public com.termux.app.surfaces.cards.BarOrder.Position position(
+                @NonNull com.termux.app.place.Element bar) {
+            return com.termux.app.surfaces.cards.BarOrder.positionsFor(bar).get(0);
+        }
+        @Override public void setPosition(@NonNull com.termux.app.place.Element bar,
+                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {}
+        @Override public int appIcons() { return 7; }
+        @Override public int appIconsFrom() { return 3; }
+        @Override public int appIconsTo() { return 10; }
+        @Override public void setAppIcons(int count) {}
+        @Override public boolean mostUsed() { return true; }
+        @Override public void setMostUsed(boolean on) {}
+        @NonNull @Override public CharSequence iconPack() { return "System"; }
+        @Override public void pickIconPack() {}
+        @Override public boolean azGlass() { return false; }
+        @Override public void setAzGlass(boolean on) {}
+        @Override public int azShow() { return 0; }
+        @Override public void setAzShow(int index) {}
+        @Override public void openExtraKeysEditor() {}
+        @Override public int dockType() { return 0; }
+        @Override public void setDockType(int index) {}
+        @Override public boolean option(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option) {
+            return option.ordinal() % 2 == 0;
+        }
+        @Override public void setOption(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option, boolean on) {}
     }
 }

@@ -84,6 +84,15 @@ public abstract class MaterialPreferenceFragment extends PreferenceFragmentCompa
 
         if (savedInstanceState != null) {
             mPendingRestoreSectionTitle = savedInstanceState.getString(STATE_SELECTED_SECTION_TITLE);
+        } else {
+            // A deep link that names a section (SettingsActivity's EXTRA_SECTION_KEY) opens on
+            // its chip, as a restored selection would.
+            Bundle arguments = getArguments();
+            String sectionKey = arguments == null ? null
+                : arguments.getString(SettingsActivity.EXTRA_SECTION_KEY);
+            Preference section = sectionKey == null ? null : findPreference(sectionKey);
+            if (section instanceof PreferenceCategory && section.getTitle() != null)
+                mPendingRestoreSectionTitle = section.getTitle().toString();
         }
 
         LinearLayout wrapper = new LinearLayout(getContext());

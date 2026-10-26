@@ -65,6 +65,11 @@ public final class PlaceArrangeSnapshot {
         final int keyboardChinDp;
         /** The Wall strip's first row, in dp: a size like the dock's, so its handle undoes too. */
         final int wallStripHeightDp;
+        /**
+         * The Dock card's Bars list as stored, or null where it never was: a reorder of bars on
+         * edges of their own moves no slot, so it is kept beside them.
+         */
+        @Nullable final String barOrder;
 
         Entry(@NonNull PlaceLayoutStore places, @NonNull PlaceOrientation orientation) {
             this.orientation = orientation;
@@ -80,6 +85,7 @@ public final class PlaceArrangeSnapshot {
             keyboardHeightScale = places.keyboardHeightScale(orientation);
             keyboardChinDp = places.keyboardChinDp(orientation);
             wallStripHeightDp = places.wallStripHeightDp(orientation);
+            barOrder = places.barOrder(orientation);
         }
 
         /** {@code base} with the four sizes {@code sizes} holds. */
@@ -95,6 +101,7 @@ public final class PlaceArrangeSnapshot {
             keyboardHeightScale = sizes.keyboardHeightScale;
             keyboardChinDp = sizes.keyboardChinDp;
             wallStripHeightDp = sizes.wallStripHeightDp;
+            barOrder = base.barOrder;
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
@@ -109,6 +116,7 @@ public final class PlaceArrangeSnapshot {
             places.setKeyboardHeightScale(orientation, keyboardHeightScale);
             places.setKeyboardChinDp(orientation, keyboardChinDp);
             places.setWallStripHeightDp(orientation, wallStripHeightDp);
+            places.setBarOrder(orientation, barOrder);
         }
 
         void appendTo(@NonNull StringBuilder out) {
@@ -120,7 +128,8 @@ public final class PlaceArrangeSnapshot {
                 .append(dockHeightScale).append(',')
                 .append(keyboardHeightScale).append(',')
                 .append(keyboardChinDp).append(',')
-                .append(wallStripHeightDp);
+                .append(wallStripHeightDp).append(',')
+                .append(barOrder);
             out.append('|');
         }
     }

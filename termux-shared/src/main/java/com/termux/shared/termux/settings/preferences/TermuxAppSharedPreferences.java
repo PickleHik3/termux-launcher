@@ -936,6 +936,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, value, false);
     }
 
+    public boolean isStatusWidgetNotificationsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
+    }
+
+    public void setStatusWidgetNotificationsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, value, false);
+    }
+
+    public boolean isStatusClockSecondsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, TERMUX_APP.DEFAULT_STATUS_CLOCK_SECONDS);
+    }
+
+    public void setStatusClockSecondsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, value, false);
+    }
+
     /** Whose box the status row's camera gap follows: auto, custom or off; unknown reads as auto. */
     @NonNull
     public String getStatusBarCutoutMode() {
@@ -1436,6 +1454,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setLauncherStartIn(@Nullable String value) {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LAUNCHER_START_IN,
             normalizeLauncherStartIn(value), false);
+    }
+
+    /** Use as, {@code home} or {@code terminal}; anything else (or nothing stored) is Home. */
+    @NonNull
+    public String getUseAs() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_USE_AS, TERMUX_APP.DEFAULT_USE_AS, true);
+        return TERMUX_APP.USE_AS_TERMINAL.equals(value) ? TERMUX_APP.USE_AS_TERMINAL
+            : TERMUX_APP.USE_AS_HOME;
+    }
+
+    public void setUseAs(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_USE_AS,
+            TERMUX_APP.USE_AS_TERMINAL.equals(value) ? TERMUX_APP.USE_AS_TERMINAL
+                : TERMUX_APP.USE_AS_HOME, false);
     }
 
     @NonNull

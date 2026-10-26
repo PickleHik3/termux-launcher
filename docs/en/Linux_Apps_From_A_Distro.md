@@ -63,7 +63,7 @@ apt install -y mousepad
 exit
 ```
 
-Go back to the launcher and open the app drawer. **Mousepad** is there under **Linux Apps**, with
+Go back to the launcher and open the app drawer. **Mousepad** is there under **Linux apps**, with
 its icon. The drawer looks the distro over again every time you return to the launcher, so an app
 installed a minute ago is already waiting.
 

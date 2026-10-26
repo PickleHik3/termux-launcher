@@ -4,7 +4,7 @@ This page covers Home and launching apps: app icons on Home, the pinned apps row
 index, the app drawer, the Terminal entry, searching from the shell prompt and making the launcher your home app.
 Widgets have their own page, [Widgets](Widgets.md).
 
-Most of these settings are on **Settings → Apps & dock** and **Settings → Home**.
+Most of these settings are on **Settings → Dock** and **Settings → Home**.
 
 ## Home and the Workspace
 
@@ -119,8 +119,8 @@ The apps row in the dock holds the apps you pin.
 - **Drag one app onto another** to make a folder. Tap a folder to open it; its popup can rename the
   folder.
 
-The full list is also under **Settings → Apps & dock → Pinned apps** ("Choose and reorder dock
-apps."). **Settings → Apps & dock → Most-used apps page** adds a page ranked by how often you launch apps from the launcher; it is off by default.
+The full list is also under **Settings → Dock → Pinned apps** ("Choose and reorder dock
+apps."). **Settings → Dock → Most-used apps page** adds a page ranked by how often you launch apps from the launcher; it is off by default.
 
 The apps row can stand on any edge, or be hidden, in Appearance → **Layout**. In landscape it is a
 rail on the left by default. See [Layout and full screen](Layout_And_Full_Screen.md).
@@ -159,11 +159,11 @@ You can also put an **App drawer** key on the extra-keys row; see
 Hold an app in the drawer for its menu; **Add to Home** puts it on a Home page (see
 [App icons on Home](#app-icons-on-home)).
 
-Beside your Android apps, the drawer lists the **Terminal** entry and, under **Linux Apps**, the
+Beside your Android apps, the drawer lists the **Terminal** entry and, under **Linux apps**, the
 Linux apps installed in Termux or in a distro, with a **Display** entry that opens the bare Linux
 display. See [The Linux display](X11_Display.md#apps-on-the-display).
 
-**Settings → Apps & dock → Drawer layout** opens the drawer's own page:
+**Settings → Dock → Drawer layout** opens the drawer's own page:
 
 - **Grid**: **Vertical**, **Horizontal pages** or **Categories**.
 - **Open keyboard automatically**: the keyboard comes up when the drawer opens.
@@ -195,9 +195,9 @@ At an idle prompt, type the app-search prefix and a query:
 The matches replace the normal dock content; tap one to launch it. Clear the query to get the dock
 back.
 
-- **Settings → Apps & dock → App search → App search prefix** changes the `%` if it clashes with your
+- **Settings → Dock → App search → App search prefix** changes the `%` if it clashes with your
   shell.
-- **Settings → Apps & dock → App search → Reset usage ranking** clears the learned ranking without
+- **Settings → Dock → App search → Reset usage ranking** clears the learned ranking without
   changing your pinned apps.
 
 The command palette lists installed apps too. Swipe up on the space bar, or on Home swipe up from

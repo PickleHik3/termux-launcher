@@ -83,8 +83,9 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         LauncherIconPackPreferenceController.configure(this, context);
         Preference appearanceSurface = findPreference("appearance_surface");
         if (appearanceSurface != null) appearanceSurface.setOnPreferenceClickListener(preference -> {
-            // The launcher comes forward with the Appearance surface open; Back returns here.
-            SettingsEditorDoors.openEditor(this, preference, null);
+            // The launcher comes forward on the Global card; Back returns here.
+            SettingsEditorDoors.openEditor(this, preference,
+                com.termux.app.surfaces.EditorDoor.SETTINGS_LOOK);
             return true;
         });
         configureTerminalContrastPreference();
@@ -561,6 +562,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_az_lock_method":
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
+            case "use_as":
+                // The launcher re-reads its wall as this lands (its Start in listener).
+                mPreferences.setUseAs(value);
+                break;
             case "app_launcher_start_in": {
                 // Read at the next cold start only; nothing on screen changes. Display also turns
                 // on the display's start with the launcher, without which it would not hold.
@@ -627,8 +632,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherAzLockMethod();
             case "in_app_keyboard_theme":
                 return mKeyboardLook.getString(key, defValue);
+            case "use_as":
+                return mPreferences.getUseAs();
             case "app_launcher_start_in":
-                return mPreferences.getLauncherStartIn();
+                // As the launcher reads it: Home is the Workspace under Terminal only.
+                return com.termux.app.wall.UseAs.read(mPreferences.getUseAs())
+                    .startIn(mPreferences.getLauncherStartIn());
             case "app_launcher_home_palette_gesture":
                 return mPreferences.getHomePaletteGesture();
             case "app_launcher_drawer_view_type":

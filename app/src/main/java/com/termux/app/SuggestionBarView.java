@@ -852,7 +852,7 @@ public final class SuggestionBarView extends GridLayout
             super.dispatchDraw(canvas);
             canvas.restore();
             drawSwipePreviewPage(canvas);
-            drawDrawerTileUnshifted(canvas);
+            drawStillTilesUnshifted(canvas);
             canvas.restoreToCount(clipSave);
             return;
         }
@@ -937,8 +937,11 @@ public final class SuggestionBarView extends GridLayout
     private int drawerTileAppSlots;
     /** Whether a long press has picked the tile up and a drag is moving it. */
     private boolean drawerTileDragging;
-    /** Whether {@link #drawChild} is drawing the tile outside a swipe's offset just now. */
-    private boolean drawingDrawerTileUnshifted;
+    /**
+     * Whether {@link #drawChild} is drawing the still tiles (the Drawer tile, the palette tile)
+     * outside a swipe's offset just now.
+     */
+    private boolean drawingStillTilesUnshifted;
 
     /**
      * The Drawer tile at {@code position}, or none for null. A change re-lays the row's slots: on a
@@ -965,11 +968,110 @@ public final class SuggestionBarView extends GridLayout
         return drawerTilePosition != null && !vertical;
     }
 
+    // The Command palette tile (editor-redesign wave 6): a trailing slot after the apps and the
+    // Drawer tile (PaletteTilePolicy), a tap opening the palette with the keyboard.
+    private boolean paletteTileOn;
+    @Nullable private Runnable paletteTileListener;
+    @Nullable private View paletteTileSlot;
+
+    /**
+     * The Command palette tile on or off, {@code onTap} what a tap does. A change re-lays the
+     * row's slots as {@link #setDrawerTile} does.
+     */
+    public void setPaletteTile(boolean on, @Nullable Runnable onTap) {
+        paletteTileListener = onTap;
+        if (paletteTileOn == on) return;
+        paletteTileOn = on;
+        invalidateMostUsedCache();
+        pinnedPageIndex = DockPagingModel.clampPage(pinnedPageIndex, getPinnedPagesCount());
+        lastSurfaceRenderSignature = 0;
+        if (configRepository != null && activeAzLetter == null
+            && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
+            reload();
+            publishPageIndicator();
+        }
+    }
+
+    /** Whether the row lays the palette tile out: it is on, and the row is lying down. */
+    private boolean paletteTileActive() {
+        return paletteTileOn && !vertical;
+    }
+
+    /** Whether the row on screen holds the palette tile. */
+    private boolean paletteTileShown() {
+        return paletteTileSlot != null && paletteTileSlot.getParent() == this && paletteTileOn;
+    }
+
+    /** The palette tile's slot: a round shell like the Drawer tile's, holding the prompt glyph. */
+    @NonNull
+    private View createPaletteTileButton() {
+        FrameLayout shell = new FrameLayout(getContext());
+        shell.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        shell.setClipChildren(false);
+        shell.setClipToPadding(false);
+        ImageButton tile = new ImageButton(getContext());
+        int size = iconSizePx();
+        tile.setLayoutParams(new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+        tile.setMinimumWidth(size);
+        tile.setMinimumHeight(size);
+        tile.setPadding(0, 0, 0, 0);
+        tile.setBackground(createPinnedFolderShellBackground());
+        tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_terminal);
+        paletteTileGlyph = null;
+        if (glyph != null) {
+            glyph = DrawableCompat.wrap(glyph.mutate());
+            DrawableCompat.setTint(glyph, tileGlyphInk());
+            paletteTileGlyph = glyph;
+            tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
+        }
+        tile.setContentDescription(getContext().getString(R.string.dock_command_palette_tile));
+        tile.setOnClickListener(v -> {
+            if (paletteTileListener != null) paletteTileListener.run();
+        });
+        shell.addView(tile);
+        slotIcons.add(new SlotIcon(shell, tile, null, null, null, null, null));
+        return shell;
+    }
+
+    /** The Drawer tile's and the palette tile's glyphs as last built, retinted in place. */
+    @Nullable private Drawable drawerTileGlyph;
+    @Nullable private Drawable paletteTileGlyph;
+    /** The dock's face measured under the row, transparent before a sample; and its tier. */
+    private int tileFace = android.graphics.Color.TRANSPARENT;
+    private double tileInkTarget = com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT;
+
+    /**
+     * The face the dock's own glass and the wallpaper make under the row, as the chrome measured
+     * it: the Drawer tile's and the palette tile's glyphs take their ink on it
+     * ({@link com.termux.app.chrome.WallpaperInk#tileInk}), so a dark theme over a light wallpaper
+     * does not leave a pale glyph on a pale shell. Retints only when the ink moved.
+     */
+    public void setTileFace(int face, double target) {
+        if (tileFace == face && tileInkTarget == target) return;
+        tileFace = face;
+        tileInkTarget = target;
+        int ink = tileGlyphInk();
+        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph}) {
+            if (glyph == null) continue;
+            DrawableCompat.setTint(glyph, ink);
+            glyph.invalidateSelf();
+        }
+    }
+
+    /** The tiles' glyph ink: the theme's, held legible on the shell over the dock's face. */
+    private int tileGlyphInk() {
+        return com.termux.app.chrome.WallpaperInk.tileInk(tileFace,
+            com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR),
+            getLauncherTextColor(), tileInkTarget);
+    }
+
     /** How many apps a page of the row lying down holds: its slots, less the Drawer tile's. */
     private int pinnedRowAppSlots() {
         int slots = Math.max(1, maxButtonCount);
-        return drawerTileActive()
-            ? Math.max(1, com.termux.app.dock.DrawerTilePolicy.appSlots(slots)) : slots;
+        return com.termux.app.dock.PaletteTilePolicy.appSlots(slots, drawerTileActive(),
+            paletteTileActive());
     }
 
     /**
@@ -977,12 +1079,46 @@ public final class SuggestionBarView extends GridLayout
      * carries the pages, or NaN where the row holds none: Lens beads keep its bead there.
      */
     public float drawerTileCenterX() {
-        View shell = drawerTileSlot;
-        if (!drawerTileShown() || shell == null || shell.getVisibility() != VISIBLE
+        return drawerTileShown() ? tileCenterX(drawerTileSlot) : Float.NaN;
+    }
+
+    /**
+     * The palette tile's icon centre along the row as laid out, where it stands while a swipe
+     * carries the pages, or NaN where the row holds none: Lens beads keep its bead there.
+     */
+    public float paletteTileCenterX() {
+        return paletteTileShown() ? tileCenterX(paletteTileSlot) : Float.NaN;
+    }
+
+    /**
+     * The icon centres of the row's still tiles, the ones no page holds (the Drawer tile and the
+     * palette tile, {@link com.termux.app.dock.PaletteTilePolicy#stillColumns}), as laid out,
+     * into {@code out}; how many. A swipe or a page switch draws them where they stand, and Lens
+     * beads keep a bead under each. 0 on a rail and where the row holds neither.
+     */
+    public int stillTileCentersX(@NonNull float[] out) {
+        if (vertical) return 0;
+        int count = 0;
+        float drawer = drawerTileCenterX();
+        if (!Float.isNaN(drawer) && count < out.length) out[count++] = drawer;
+        float palette = paletteTileCenterX();
+        if (!Float.isNaN(palette) && count < out.length) out[count++] = palette;
+        return count;
+    }
+
+    /** A tile's icon centre along the row as laid out, or NaN where it is not on screen. */
+    private float tileCenterX(@Nullable View shell) {
+        if (shell == null || shell.getVisibility() != VISIBLE
             || !(shell instanceof ViewGroup) || ((ViewGroup) shell).getChildCount() == 0)
             return Float.NaN;
         View box = ((ViewGroup) shell).getChildAt(0);
         return shell.getLeft() + box.getLeft() + box.getWidth() * 0.5f;
+    }
+
+    /** Whether {@code child} is one of the row's still tiles on screen: no page's, so held still. */
+    private boolean isStillTile(@NonNull View child) {
+        return (child == drawerTileSlot && drawerTileShown())
+            || (child == paletteTileSlot && paletteTileShown());
     }
 
     /** Whether the row on screen holds the Drawer tile (a pinned page lying down). */
@@ -1001,7 +1137,8 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private int pinnedColumnCount(int appSlots) {
-        return drawerTileShown() ? appSlots + 1 : appSlots;
+        return com.termux.app.dock.PaletteTilePolicy.columnCount(appSlots, drawerTileShown(),
+            paletteTileShown());
     }
 
     /** The Drawer tile's slot: a round shell like a folder's, holding the drawer's glyph. */
@@ -1021,9 +1158,11 @@ public final class SuggestionBarView extends GridLayout
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
         Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_apps);
+        drawerTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
-            DrawableCompat.setTint(glyph, getLauncherTextColor());
+            DrawableCompat.setTint(glyph, tileGlyphInk());
+            drawerTileGlyph = glyph;
             // A share of the box rather than pixels, so a new icon size keeps the glyph's air.
             tile.setImageDrawable(new android.graphics.drawable.InsetDrawable(glyph, 0.27f));
         }
@@ -1121,13 +1260,13 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /**
-     * A finger's page swipe draws the row's icons off their places, and the Drawer tile is no
-     * page's: it is drawn where it stands, after the pages ({@link #dispatchDraw}).
+     * A finger's page swipe draws the row's icons off their places, and the Drawer tile and the
+     * palette tile are no page's: they are drawn where they stand, after the pages
+     * ({@link #dispatchDraw}).
      */
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
-        if (child == drawerTileSlot && !drawingDrawerTileUnshifted && swipeOffsetDrawn()
-            && drawerTileShown()) return false;
+        if (!drawingStillTilesUnshifted && swipeOffsetDrawn() && isStillTile(child)) return false;
         // A crossing's morph draws the slot at the frame's icon and its share of the frame's row.
         if (slotMorph(child)) {
             int save = canvas.save();
@@ -1140,15 +1279,18 @@ public final class SuggestionBarView extends GridLayout
         return super.drawChild(canvas, child, drawingTime);
     }
 
-    /** The Drawer tile, drawn where it stands while a swipe offsets the pages. */
-    private void drawDrawerTileUnshifted(@NonNull Canvas canvas) {
-        View tile = drawerTileSlot;
-        if (tile == null || !drawerTileShown() || tile.getVisibility() != VISIBLE) return;
-        drawingDrawerTileUnshifted = true;
+    /** The still tiles (Drawer, palette), drawn where they stand while a swipe offsets the pages. */
+    private void drawStillTilesUnshifted(@NonNull Canvas canvas) {
+        drawingStillTilesUnshifted = true;
         try {
-            drawChild(canvas, tile, getDrawingTime());
+            View drawer = drawerTileSlot;
+            if (drawer != null && drawer.getVisibility() == VISIBLE && isStillTile(drawer))
+                drawChild(canvas, drawer, getDrawingTime());
+            View palette = paletteTileSlot;
+            if (palette != null && palette.getVisibility() == VISIBLE && isStillTile(palette))
+                drawChild(canvas, palette, getDrawingTime());
         } finally {
-            drawingDrawerTileUnshifted = false;
+            drawingStillTilesUnshifted = false;
         }
     }
 
@@ -1343,12 +1485,15 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void notifyIconsMoved() {
-        // A page switch slides the whole row; the Drawer tile is no page's, so it holds its place.
+        // A page switch slides the whole row; the Drawer tile and the palette tile are no page's,
+        // so they hold their places.
+        float hold = pageSwitchAnimating ? -getTranslationX() : 0f;
         View tile = drawerTileSlot;
-        if (tile != null && drawerTileShown() && !drawerTileDragging) {
-            float hold = pageSwitchAnimating ? -getTranslationX() : 0f;
-            if (tile.getTranslationX() != hold) tile.setTranslationX(hold);
-        }
+        if (tile != null && drawerTileShown() && !drawerTileDragging
+            && tile.getTranslationX() != hold) tile.setTranslationX(hold);
+        View palette = paletteTileSlot;
+        if (palette != null && paletteTileShown() && palette.getTranslationX() != hold)
+            palette.setTranslationX(hold);
         Runnable listener = iconMotionListener;
         if (listener != null) listener.run();
     }
@@ -3858,7 +4003,8 @@ public final class SuggestionBarView extends GridLayout
             pinnedPageOffset = pinnedPageIndex * pinnedItemsPerPage;
             buttonCount = Math.max(1, pinnedItemsPerPage);
             // The Drawer tile takes a slot of its own beside the page's apps.
-            if (drawerTileActive()) buttonCount = Math.max(1, pinnedItemsPerPage) + 1;
+            buttonCount = com.termux.app.dock.PaletteTilePolicy.columnCount(
+                Math.max(1, pinnedItemsPerPage), drawerTileActive(), paletteTileActive());
             if (isMostUsedDynamicPage(pinnedPageIndex)) {
                 // Dynamic most-used page: render ranked apps as launch-only buttons. pinnedForSlots
                 // stays empty so the render loop binds them with pinnedIndex -1 (no drag/reorder),
@@ -3932,6 +4078,7 @@ public final class SuggestionBarView extends GridLayout
         drawerTileSlot = null;
         drawerTileColumn = -1;
         drawerTileAppSlots = 0;
+        paletteTileSlot = null;
         // The Drawer tile, on a pinned page lying down: where it stands among the page's
         // app slots, which keep their order around it.
         boolean drawerTileRow = pinnedSurface && drawerTileActive() && drawerTilePosition != null;
@@ -4034,6 +4181,18 @@ public final class SuggestionBarView extends GridLayout
             drawerTileAppSlots = homeAppSlots;
         }
 
+        if (pinnedSurface && paletteTileActive()) {
+            int paletteColumn = com.termux.app.dock.PaletteTilePolicy.column(
+                Math.max(1, pinnedItemsPerPage), drawerTileRow);
+            if (paletteColumn < buttonCount) {
+                View tile = createPaletteTileButton();
+                tile.setLayoutParams(createSlotParams(paletteColumn));
+                addView(tile);
+                usedColumns[paletteColumn] = true;
+                paletteTileSlot = tile;
+            }
+        }
+
         if (pendingPinnedMutationFeedback && !azPreview) {
             pendingPinnedMutationFeedback = false;
             post(this::animatePinnedMutationFeedback);
@@ -4089,27 +4248,18 @@ public final class SuggestionBarView extends GridLayout
                 filler.setVisibility(VISIBLE);
                 filler.setAlpha(0f);
                 filler.setLayoutParams(createSlotParams(i));
-                if (!azPreview) {
-                    final int slotIndex = i;
-                    filler.setOnLongClickListener(v -> {
-                        openPinEditor();
-                        return true;
-                    });
-                }
+                // An empty slot is the dock's frame: a hold there opens the dock's popup
+                // (editor-redesign §3), which a long-click of its own here would shut out.
+                filler.setLongClickable(false);
                 addView(filler);
             }
         }
 
-        if (!azPreview) {
-            setOnLongClickListener(v -> {
-                openPinEditor();
-                return true;
-            });
-            setOnDragListener(this::handlePinnedBarDragEvent);
-        } else {
-            setOnLongClickListener(null);
-            setOnDragListener(null);
-        }
+        // Between items the bar is the dock's frame, whose hold opens the dock's popup
+        // (editor-redesign §3); the bar keeps no long-press of its own.
+        setOnLongClickListener(null);
+        setLongClickable(false);
+        setOnDragListener(azPreview ? null : this::handlePinnedBarDragEvent);
         if (!terminalSearchEntries.isEmpty()) {
             terminalSearchFocusIndex = 0;
             applyTerminalSearchFocusOutline();
@@ -4311,6 +4461,7 @@ public final class SuggestionBarView extends GridLayout
         signature = (31 * signature) + Math.max(1, buttonCount);
         // Where the Drawer tile stands moves every slot after it.
         signature = (31 * signature) + (drawerTileActive() ? drawerTilePosition.ordinal() + 1 : 0);
+        signature = (31 * signature) + (paletteTileActive() ? 1 : 0);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
         signature = (31 * signature) + lastInput.trim().hashCode();
@@ -5248,6 +5399,18 @@ public final class SuggestionBarView extends GridLayout
 
     @Nullable private AddToHomeListener addToHomeListener;
 
+    /** Who opens the Dock card for the App menu's Edit dock (editor-redesign §3). */
+    public interface EditDockListener {
+        void onEditDock();
+    }
+
+    @Nullable private EditDockListener editDockListener;
+
+    /** Who opens the Dock card; null takes Edit dock out of the App menu. */
+    public void setEditDockListener(@Nullable EditDockListener listener) {
+        editDockListener = listener;
+    }
+
     /** Who puts an app on Home; null takes the Add to Home row out of the app menu. */
     public void setAddToHomeListener(@Nullable AddToHomeListener listener) {
         addToHomeListener = listener;
@@ -5993,9 +6156,12 @@ public final class SuggestionBarView extends GridLayout
             : null;
         bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, () -> {
             dismissShortcutsPopup();
-            showAppContextPopup(new AppMenuContext(entry, pressTarget, pinnedIndex,
+            AppMenuContext menu = new AppMenuContext(entry, pressTarget, pinnedIndex,
                 sourceFolder == null ? null : sourceFolder.id,
-                folderEntryRef));
+                folderEntryRef);
+            // A folder's member is in the folder's popup, not on the dock's row.
+            menu.onDock = sourceFolder == null;
+            showAppContextPopup(menu);
         }, notificationSwipeAction, entry.appRef.packageName, null, null, folderEntryPickup);
     }
 
@@ -6384,6 +6550,7 @@ public final class SuggestionBarView extends GridLayout
             : context.removeFromHome != null ? AppMenuPlan.Source.HOME
             : topPinned ? AppMenuPlan.Source.PINNED : AppMenuPlan.Source.UNPINNED;
         inputs.pinnedToDock = topPinned;
+        inputs.onDock = context.onDock && editDockListener != null;
         inputs.badged = !linuxApp && LauncherNotificationBadgeStore.hasBadge(packageName);
         inputs.shortcutCount = shortcutCount;
         inputs.androidPackage = !linuxApp;
@@ -6652,6 +6819,11 @@ public final class SuggestionBarView extends GridLayout
                     } else {
                         resetAppIcon(entry);
                     }
+                });
+            case EDIT_DOCK:
+                return appMenuItem(R.string.app_menu_edit_dock, R.drawable.ic_ms_edit, () -> {
+                    EditDockListener listener = editDockListener;
+                    if (listener != null) listener.onEditDock();
                 });
             case UNINSTALL:
             default:
@@ -7411,9 +7583,9 @@ public final class SuggestionBarView extends GridLayout
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child == null) continue;
-            // The Drawer tile is not an app the drop shifts; the apps before it are its children
-            // in their own order.
-            if (child == drawerTileSlot) continue;
+            // The Drawer tile and the palette tile are not apps the drop shifts; the apps before
+            // them are its children in their own order.
+            if (child == drawerTileSlot || child == paletteTileSlot) continue;
             float tx = 0f;
             if (folderDragHoverIndex >= 0 && i >= folderDragHoverIndex) {
                 tx += insertShift;
@@ -7430,6 +7602,8 @@ public final class SuggestionBarView extends GridLayout
         @Nullable final AppRef folderEntryRef;
         /** Set for an icon on Home: what its Remove from Home row runs. */
         @Nullable final Runnable removeFromHome;
+        /** The icon was pressed on the dock's row itself, so the card offers Edit dock. */
+        boolean onDock;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -7795,7 +7969,8 @@ public final class SuggestionBarView extends GridLayout
     @NonNull
     private DropSlot dropSlotAt(float localX) {
         boolean drawerTile = drawerTileShown();
-        int slotCount = drawerTile ? drawerTileAppSlots + 1 : Math.max(1, maxButtonCount);
+        int tail = paletteTileShown() ? 1 : 0;
+        int slotCount = drawerTile ? drawerTileAppSlots + 1 + tail : Math.max(1, maxButtonCount);
         float width = Math.max(1f, getWidth());
         float x = Math.max(0f, Math.min(width, localX));
         float slotWidth = width / slotCount;
@@ -7803,6 +7978,11 @@ public final class SuggestionBarView extends GridLayout
         float slotStartX = hoveredSlot * slotWidth;
         float dropXRatio = slotWidth <= 0f ? 0.5f
             : Math.max(0f, Math.min(1f, (x - slotStartX) / slotWidth));
+        if (tail > 0 && hoveredSlot >= slotCount - tail) {
+            // The palette tile takes no drop: it lands on the last app's slot, after it.
+            hoveredSlot = Math.max(0, slotCount - tail - 1);
+            dropXRatio = 1f;
+        }
         if (drawerTile) {
             // Columns around the Drawer tile hold the page's apps in order; a drop on the tile
             // itself lands beside it, on the side the finger is, or the other where none is.

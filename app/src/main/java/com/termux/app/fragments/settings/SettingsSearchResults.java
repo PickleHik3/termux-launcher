@@ -107,7 +107,10 @@ public final class SettingsSearchResults {
         if (screen == null || context == null) return;
         boolean searching = !query.trim().isEmpty();
         if (searching && mIndex == null) mIndex = SettingsSearchIndex.get(context);
-        mResults = searching ? mIndex.search(query, mScope, LIMIT) : new ArrayList<>();
+        // Use as Terminal only has no Home section to open a hit in.
+        mResults = searching ? mIndex.search(query, mScope, LIMIT,
+            com.termux.app.settings.UseAsSetting.read(context).showsHomeSettings()
+                ? null : SettingsTree.Section.HOME) : new ArrayList<>();
 
         PreferenceCategory list = screen.findPreference(KEY_RESULTS);
         if (!searching) {

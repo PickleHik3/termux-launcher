@@ -18,12 +18,14 @@
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
     <!-- The doors: Settings › Keyboard's row opens the editor on the Keyboard card. -->
-    <string name="settings_look_appearance_editor_title">Appearance</string>
+    <string name="settings_look_appearance_editor_title">Edit on screen</string>
     <string name="settings_look_appearance_editor_summary">The keyboard\'s glass, height and keys</string>
 
     <!-- The editor bar: the orientation chip names the orientation the frame shows. -->
     <string name="appearance_bar_portrait">Portrait</string>
     <string name="appearance_bar_landscape">Landscape</string>
+    <string name="appearance_bar_turn_for_landscape">Turn the phone to edit landscape</string>
+    <string name="appearance_bar_turn_for_portrait">Turn the phone to edit portrait</string>
     <!-- Under the frame: which half of the wall the frame shows, and what a card changes. -->
     <string name="appearance_half_home">Home</string>
     <string name="appearance_half_workspace">Workspace</string>
@@ -33,6 +35,7 @@
 
     <!-- The cards' titles: one per thing you can tap, and the palette's. -->
     <string name="appearance_card_home">Home</string>
+    <string name="appearance_card_workspace">Workspace</string>
     <string name="appearance_card_status">Status bar</string>
     <string name="appearance_card_terminal">Terminal</string>
     <string name="appearance_card_dock">Dock</string>
@@ -42,17 +45,19 @@
     <string name="appearance_theme_hint">Theme, colours and glass</string>
     <string name="appearance_card_appearance">Appearance</string>
     <string name="appearance_card_close">Close</string>
-    <string name="appearance_card_menu">More options</string>
+    <string name="appearance_card_reset">Reset</string>
+    <!-- A stepper row's buttons, read by a screen reader and on long-press: "Decrease App icons". -->
+    <string name="appearance_stepper_less">Decrease %1$s</string>
+    <string name="appearance_stepper_more">Increase %1$s</string>
 
     <!-- The card menu: back on the Look, or the same look on the other half. -->
     <string name="appearance_reset_home">Reset Home</string>
+    <string name="appearance_reset_workspace">Reset Workspace</string>
     <string name="appearance_reset_status">Reset status bar</string>
     <string name="appearance_reset_terminal">Reset terminal</string>
     <string name="appearance_reset_dock">Reset dock</string>
     <string name="appearance_reset_keyboard">Reset keyboard</string>
     <string name="appearance_reset_look">Reset surfaces</string>
-    <string name="appearance_copy_to_home">Copy to Home</string>
-    <string name="appearance_copy_to_workspace">Copy to Workspace</string>
 
     <!-- Card rows: a label of one or two words each. -->
     <string name="appearance_row_opacity">Opacity</string>
@@ -67,14 +72,12 @@
     <string name="appearance_row_margin">Margin</string>
     <string name="appearance_row_depth">Depth</string>
     <string name="appearance_row_search_field">Search field</string>
-    <string name="appearance_row_app_icons">App count</string>
     <string name="appearance_row_text_size">Text size</string>
     <string name="appearance_row_contrast">Contrast</string>
     <string name="appearance_row_cursor_trail">Cursor trail</string>
     <string name="appearance_row_effect">Effect</string>
     <string name="appearance_row_split_gap">Split gap</string>
     <string name="appearance_row_font">Font</string>
-    <string name="appearance_row_icon_size">Icon size</string>
     <string name="appearance_row_label_size">Label size</string>
     <string name="appearance_row_glass_widgets">Glass widgets</string>
     <string name="appearance_row_two_line">Two-line labels</string>
@@ -83,25 +86,28 @@
     <string name="appearance_row_numerals">Numerals</string>
     <string name="appearance_row_page_dots">Page dots</string>
     <string name="appearance_row_wallpaper_scroll">Wallpaper scroll</string>
-    <string name="appearance_row_own_layout">Own layout</string>
+    <!-- The Match rows: copy the other screen's layout and glass onto this one. -->
+    <string name="appearance_row_match_workspace">Match Workspace styling</string>
+    <string name="appearance_row_match_home">Match Home styling</string>
+    <!-- The Match row's button: Copy, then Undo while the copy can be taken back. -->
+    <string name="appearance_match_copy">Copy</string>
+    <string name="appearance_match_undo">Undo</string>
+    <!-- The link from a screen's card to the card both screens share. -->
+    <string name="appearance_row_global">Global</string>
     <string name="appearance_row_gestures">Gestures</string>
     <string name="appearance_row_pages">Pages</string>
     <string name="appearance_row_clock_12h">12-hour clock</string>
     <string name="appearance_row_clock_face">Clock face</string>
-    <string name="appearance_row_indicators">Indicators</string>
     <string name="appearance_row_keyboard_theme">Keyboard theme</string>
     <string name="appearance_row_key_opacity">Key opacity</string>
     <string name="appearance_row_key_corners">Key corners</string>
     <string name="appearance_row_key_spacing">Key spacing</string>
     <string name="appearance_row_form">Type</string>
-    <string name="appearance_row_keyboard_size">Size</string>
     <string name="appearance_row_layouts">Layouts</string>
-    <string name="appearance_row_dock_items">Dock items</string>
     <string name="appearance_row_look">Look</string>
     <string name="appearance_row_wallpaper">Wallpaper</string>
     <string name="appearance_row_theme">Theme</string>
     <string name="appearance_row_icon_pack">Icon pack</string>
-    <string name="appearance_row_monochrome">Monochrome</string>
     <string name="appearance_row_wallpaper_colours">Wallpaper colours</string>
     <string name="appearance_row_full_screen">Full screen</string>
     <string name="appearance_row_minimal">Minimal</string>
@@ -113,7 +119,6 @@
     <!-- The dot after a row's label, as accessibility reads it. -->
     <string name="appearance_row_own_value">Set here</string>
     <!-- Under Visible while the frame shows the other orientation. -->
-    <string name="appearance_other_orientation_note">Changes the other orientation. You see them when you turn the phone.</string>
     <string name="appearance_wallpaper_change">Change</string>
     <string name="appearance_wallpaper_shown">Show wallpaper</string>
 

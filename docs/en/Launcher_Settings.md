@@ -10,7 +10,7 @@ setting inside every page, so `fonts`, `ligatures` or `Shizuku` lead straight to
 Search also finds the settings that live in the Appearance editor (theme, wallpaper, icon pack,
 full screen and the rest) and opens the editor for them.
 
-Settings is grouped in three: **Your launcher** (Home, Apps & dock, Terminal, Linux apps),
+Settings is grouped in three: **Your launcher** (Home, Dock, Terminal, Linux apps),
 **Everywhere** (Appearance, Keyboard, Notifications, On-device AI) and **System** (General).
 
 ## Your launcher
@@ -29,7 +29,7 @@ notification dot behaves like on any other icon) and **Swipe on the terminal to 
 **Terminal** opens the Workspace with one fresh shell window. See
 [Home screen and apps](Home_Screen_And_Apps.md) and [Widgets](Widgets.md).
 
-### Apps & dock
+### Dock
 
 "Dock, drawer, A–Z and app search": **Pinned apps** and **Most-used apps page** for the dock, then
 **Drawer layout** (its page starts with **Grid**, the drawer's view), **App search** and **Linux

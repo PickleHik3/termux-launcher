@@ -30,7 +30,7 @@ import org.robolectric.annotation.ConscryptMode;
 
 /**
  * The settings root by the wall's halves (settings restructure 10-19, refiled 10-24): the search
- * box, then Your launcher (Home, Apps &amp; dock, Terminal, Linux apps), Everywhere (Appearance,
+ * box, then Your launcher (Home, Dock, Terminal, Linux apps), Everywhere (Appearance,
  * Keyboard, Notifications, On-device AI) and System (General). Each row opens its section's page,
  * as SettingsTree names it; Appearance opens the editor.
  */
@@ -72,7 +72,7 @@ public class RootPreferencesSearchIndexTest {
                 assertEquals("group " + g + " row " + i, EXPECTED_ROWS[g][i], group.getPreference(i).getKey());
             }
         }
-        assertNull("Start in is Home's now", root.findPreference("app_launcher_start_in"));
+        assertNull("Start in is General's now", root.findPreference("app_launcher_start_in"));
         assertNull("Display is a window of the Terminal now", root.findPreference("display"));
     }
 

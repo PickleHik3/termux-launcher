@@ -49,9 +49,9 @@ import java.util.Map;
  * whether the dock's design is picked here, are the edited layout's page's {@link Dress}.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
- * {@link LayoutEditorController} is the wiring that draws it, in Layout mode of the one editor.
- * The canvas stands in the editor's frame at its full size (spec §3.5), so there is no sheet or
- * layout canvas to size here any more.
+ * {@link LayoutEditorController} is the wiring under the Appearance editor's cards. The shrunken
+ * Layout mode that drew this on a canvas is retired (editor-redesign §1); the session now always
+ * shows the phone's orientation, and {@link #showOrientation} is left for the policy tests.
  */
 public final class LayoutEditorPlan {
 
@@ -312,6 +312,16 @@ public final class LayoutEditorPlan {
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
+    /** Home's widget grid in the shown orientation: its columns. */
+    public int widgetColumns() {
+        return mPlaces.widgetColumns(mShownOrientation);
+    }
+
+    /** Home's widget grid in the shown orientation: its rows. */
+    public int widgetRows() {
+        return mPlaces.widgetRows(mShownOrientation);
+    }
+
     /** Home's corner handle dragged: the grid in whole cells. */
     @NonNull
     public Drop setWidgetGrid(int columns, int rows) {
@@ -509,33 +519,14 @@ public final class LayoutEditorPlan {
         return place;
     }
 
-    /** Whether Home holds a Home layout of its own: the Layout editor's Home layout switch. */
-    public boolean hasHomeLayout() {
-        return mRoot.hasHomeLayout();
-    }
-
-    /**
-     * The Home layout switch turned: Home wears its own copy of the layout, or the shared one
-     * again. The page being edited stays; what it wears is re-read, so a Home page edits Home's
-     * layout while the switch is on and the shared one while it is off, and the canvas, offers and
-     * Undo follow. The caller re-lays the live place and restates the shape that page wears.
-     */
-    public void setHomeLayout(boolean on) {
-        mRoot.setHomeLayout(on);
-        mVariant = dress().layout();
-        mPlaces = mRoot.forVariant(mVariant);
-        enterVariant(mVariant);
-    }
-
     /** The Portrait / Landscape toggle. Moves the picture and the target of the next drop. */
     public void showOrientation(@NonNull PlaceOrientation orientation) {
         mShownOrientation = orientation;
     }
 
     /**
-     * The phone turned mid-session. The layout canvas goes with it: the editor is a picture of the
-     * place behind it, and leaving it on the orientation the user can no longer see would make the
-     * next drop land somewhere they are not looking.
+     * The phone turned mid-session: the session goes with it (rotate to edit, editor-redesign
+     * §1). The editor is the live place, so every write lands on the orientation on screen.
      */
     public void onDeviceOrientationChanged(@NonNull PlaceOrientation orientation) {
         mDeviceOrientation = orientation;
@@ -638,5 +629,46 @@ public final class LayoutEditorPlan {
             mVariant = dress().layout();
             mPlaces = mRoot.forVariant(mVariant);
         }
+    }
+
+    // ------------------------------------------------------------------------- Dock card
+
+    /**
+     * The shown orientation's arrangement as this layout stores it, before the page's dress: what
+     * a drop is written against ({@link LayoutChooserModel#applyDrop}).
+     */
+    @NonNull
+    public PlaceLayout arrangedLayout() {
+        return mPlaces.resolve(mShownOrientation);
+    }
+
+    /**
+     * Every slot of {@code next} that differs from {@link #arrangedLayout}, written for the shown
+     * orientation: the Dock card's Position rows and its restacking. The page's dress decides
+     * what it may write, as for a drop.
+     */
+    @NonNull
+    public Drop writeSlots(@NonNull PlaceLayout next) {
+        PlaceLayout now = arrangedLayout();
+        boolean wrote = false;
+        for (Element element : Element.values()) {
+            if (!dress().wears(element)) continue;
+            Slot slot = next.slot(element);
+            if (slot.equals(now.slot(element))) continue;
+            mPlaces.setSlot(mShownOrientation, element, slot);
+            wrote = true;
+        }
+        if (!wrote) return Drop.NONE;
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** The Dock card's Bars list for the shown orientation, or null where it never was stored. */
+    @Nullable
+    public String barOrder() {
+        return mPlaces.barOrder(mShownOrientation);
+    }
+
+    public void setBarOrder(@NonNull String order) {
+        mPlaces.setBarOrder(mShownOrientation, order);
     }
 }

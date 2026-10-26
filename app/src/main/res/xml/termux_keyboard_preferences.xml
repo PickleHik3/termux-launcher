@@ -42,7 +42,7 @@
     <PreferenceCategory app:key="keyboard_appearance" app:title="@string/settings_keyboard_look_title">
         <Preference
             app:key="customize_keyboard_surface"
-            app:icon="@drawable/ic_symbol_palette"
+            app:icon="@drawable/ic_symbol_keyboard"
             app:persistent="false"
             app:title="@string/settings_look_appearance_editor_title"
             app:summary="@string/settings_appearance_door_summary" />

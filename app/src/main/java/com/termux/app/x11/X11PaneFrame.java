@@ -95,8 +95,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         default void showHelpOverlay() {}
         /** The sliders: open the Appearance editor on this place, as every corner tab does. */
         default void openSurfaceEditor() {}
-        /** The grid: open the Layout editor on this place, as every corner tab does. */
-        default void openLayoutEditor() {}
         /** Whether the Display place is in minimal mode, which the tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
         /** The minimal-mode glyph: turn the Display place's minimal mode on or off. */

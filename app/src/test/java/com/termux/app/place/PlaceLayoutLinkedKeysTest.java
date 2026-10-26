@@ -234,7 +234,9 @@ public class PlaceLayoutLinkedKeysTest {
             .putString(TERMUX_APP.KEY_HOME_LAYOUT_STYLE, "floating")
             .commit();
         PlaceLayoutStore store = store();
-        assertFalse(store.hasHomeLayout());
+        // Version 9 put Home on the shared layout; version 14 gave it a copy of that layout.
+        assertTrue(store.hasHomeLayout());
+        assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
         assertEquals(1.1f, store.forVariant(LayoutVariant.HOME).dockHeightScale(LANDSCAPE),
             0.001f);
         assertFalse(prefs.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));

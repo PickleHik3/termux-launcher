@@ -67,6 +67,16 @@ public class SettingsActivity extends AppCompatActivity implements
      */
     public static final String EXTRA_INITIAL_PLACE = "settings_initial_place";
     public static final String EXTRA_SCROLL_TO_KEY = "settings_scroll_to_key";
+    /**
+     * Which section chip a page should open on: a {@code PreferenceCategory}'s key. The
+     * Appearance editor's chips land on a section this way (Home's Gestures).
+     */
+    public static final String EXTRA_SECTION_KEY = "settings_section_key";
+    /**
+     * The page was opened from the Appearance editor, which is still open under Settings: a
+     * row that would open the editor goes back to it instead of opening it again.
+     */
+    public static final String EXTRA_FROM_EDITOR = "settings_from_editor";
 
     /** SharedPreferences key for the JSON stack {@link SettingsBackStackState} serializes. */
     static final String PREFS_KEY_BACK_STACK_STATE = "settings_back_stack_state_v1";
@@ -143,10 +153,14 @@ public class SettingsActivity extends AppCompatActivity implements
     static Bundle deepLinkArguments(@NonNull Intent intent) {
         String place = intent.getStringExtra(EXTRA_INITIAL_PLACE);
         String scrollToKey = intent.getStringExtra(EXTRA_SCROLL_TO_KEY);
-        if (place == null && scrollToKey == null) return null;
+        String section = intent.getStringExtra(EXTRA_SECTION_KEY);
+        boolean fromEditor = intent.getBooleanExtra(EXTRA_FROM_EDITOR, false);
+        if (place == null && scrollToKey == null && section == null && !fromEditor) return null;
         Bundle arguments = new Bundle();
         if (place != null) arguments.putString(EXTRA_INITIAL_PLACE, place);
         if (scrollToKey != null) arguments.putString(EXTRA_SCROLL_TO_KEY, scrollToKey);
+        if (section != null) arguments.putString(EXTRA_SECTION_KEY, section);
+        if (fromEditor) arguments.putBoolean(EXTRA_FROM_EDITOR, true);
         return arguments;
     }
 
@@ -231,7 +245,7 @@ public class SettingsActivity extends AppCompatActivity implements
      */
     private void showInitialFragment(@NonNull Fragment initial) {
         if (mTwoPane && initial instanceof RootPreferencesFragment) {
-            openSectionPage(SettingsTree.Section.HOME, SettingsMotionPolicy.Move.RESTORE, null);
+            openSectionPage(firstSection(), SettingsMotionPolicy.Move.RESTORE, null);
             return;
         }
         getSupportFragmentManager().beginTransaction()
@@ -246,6 +260,33 @@ public class SettingsActivity extends AppCompatActivity implements
     @NonNull
     static String screenTag(int position) {
         return "settings_screen_" + position;
+    }
+
+    /**
+     * The section a two-pane detail opens on where a phone would show the root: the first one,
+     * Home, or the Terminal under Use as Terminal only, which has no Home section.
+     */
+    @NonNull
+    private SettingsTree.Section firstSection() {
+        return homeSectionHidden(this) ? SettingsTree.Section.TERMINAL : SettingsTree.Section.HOME;
+    }
+
+    /** Whether Use as Terminal only hides Home's section: its root row, its pages, its hits. */
+    static boolean homeSectionHidden(@NonNull Context context) {
+        return !com.termux.app.settings.UseAsSetting.read(context).showsHomeSettings();
+    }
+
+    /**
+     * Whether {@code className} is a page of Home's section that Use as Terminal only took away;
+     * a door to it is refused, and logs its line.
+     */
+    private boolean refusedByUseAs(@NonNull String className) {
+        SettingsTree.Screen screen = SettingsTree.find(className);
+        if (screen == null || screen.section != SettingsTree.Section.HOME || !homeSectionHidden(this))
+            return false;
+        Logger.logInfo(com.termux.app.wall.UseAs.LOG_TAG,
+            com.termux.app.settings.UseAsSetting.read(this).doorLine("settings-" + className));
+        return true;
     }
 
     /** Pushes a section's own page as the detail's first screen. */
@@ -302,7 +343,7 @@ public class SettingsActivity extends AppCompatActivity implements
             out = pushScreen(screen, entry.titleResId, entry.titleText, args,
                 SettingsMotionPolicy.Move.RESTORE, null, out);
         }
-        if (mTwoPane && out == null) openSectionPage(SettingsTree.Section.HOME, SettingsMotionPolicy.Move.RESTORE, null);
+        if (mTwoPane && out == null) openSectionPage(firstSection(), SettingsMotionPolicy.Move.RESTORE, null);
     }
 
     @Override
@@ -327,7 +368,7 @@ public class SettingsActivity extends AppCompatActivity implements
         if (askAboutUnsavedChanges()) return;
         Fragment base = buildInitialFragment();
         if (mTwoPane && base instanceof RootPreferencesFragment) {
-            jumpTo(SettingsTree.path(SettingsTree.sectionPage(SettingsTree.Section.HOME).className), null);
+            jumpTo(SettingsTree.path(SettingsTree.sectionPage(firstSection()).className), null);
             return;
         }
         // A timed reset is not a navigation the user should see: no fade through the old page.
@@ -415,7 +456,7 @@ public class SettingsActivity extends AppCompatActivity implements
             } catch (ClassNotFoundException e) {
                 break;
             }
-            if (!isAllowedInitialFragment(fragmentClass)) break;
+            if (!isAllowedInitialFragment(fragmentClass) || refusedByUseAs(entry.className)) break;
             @SuppressWarnings("unchecked")
             Class<? extends Fragment> screenClass = (Class<? extends Fragment>) fragmentClass;
             Bundle args = null;
@@ -433,7 +474,7 @@ public class SettingsActivity extends AppCompatActivity implements
                 known != null ? null : entry.titleText, args, SettingsMotionPolicy.Move.RESTORE, null, out);
         }
         // Left at the root: with two panes the root is the list, and the detail opens on Home.
-        if (mTwoPane && out == null) openSectionPage(SettingsTree.Section.HOME, SettingsMotionPolicy.Move.RESTORE, null);
+        if (mTwoPane && out == null) openSectionPage(firstSection(), SettingsMotionPolicy.Move.RESTORE, null);
         return true;
     }
 
@@ -542,7 +583,8 @@ public class SettingsActivity extends AppCompatActivity implements
         if (path.get(path.size() - 1).door) {
             // A row the Appearance editor holds: the editor opens over the launcher on its card.
             startActivity(com.termux.app.fragments.settings.termux.SettingsEditorDoors.editorIntent(
-                this, com.termux.app.fragments.settings.termux.SettingsEditorDoors.cardForSearchKey(key)));
+                this, com.termux.app.fragments.settings.termux.SettingsEditorDoors.cardForSearchKey(key),
+                com.termux.app.surfaces.EditorDoor.SETTINGS_SEARCH));
             return;
         }
         jumpTo(path, key);
@@ -772,6 +814,7 @@ public class SettingsActivity extends AppCompatActivity implements
                 Logger.logWarn(LOG_TAG, "Refusing to open non-settings fragment: " + fragmentClassName);
                 return new RootPreferencesFragment();
             }
+            if (refusedByUseAs(fragmentClassName)) return new RootPreferencesFragment();
             Fragment fragment = getSupportFragmentManager().getFragmentFactory()
                 .instantiate(getClassLoader(), fragmentClassName);
             Bundle arguments = deepLinkArguments(getIntent());
@@ -904,10 +947,12 @@ public class SettingsActivity extends AppCompatActivity implements
             // A build made without the X server has no Linux apps to set up.
             Preference linuxApps = findPreference(SettingsTree.Section.LINUX_APPS.rootKey);
             if (linuxApps != null && !com.termux.BuildConfig.X11_SERVER) linuxApps.setVisible(false);
+            showHomeRow(context);
             // Appearance is the editor itself, over the live launcher, not a page of rows.
             Preference appearance = findPreference(SettingsTree.Section.APPEARANCE.rootKey);
             if (appearance != null) appearance.setOnPreferenceClickListener(row -> {
-                com.termux.app.fragments.settings.termux.SettingsEditorDoors.openEditor(this, row, null);
+                com.termux.app.fragments.settings.termux.SettingsEditorDoors.openEditor(this, row,
+                    com.termux.app.surfaces.EditorDoor.SETTINGS_LOOK);
                 return true;
             });
             SettingsSearchPreference search = findPreference("settings_search");
@@ -921,6 +966,16 @@ public class SettingsActivity extends AppCompatActivity implements
             if (getActivity() instanceof SettingsActivity && !((SettingsActivity) getActivity()).isTwoPane()) {
                 getActivity().setTitle(R.string.title_activity_termux_settings);
             }
+            // Use as may have moved on General since this list was built.
+            Context context = getContext();
+            if (context != null) showHomeRow(context);
+        }
+
+        /** Home's row, gone under Use as Terminal only. */
+        private void showHomeRow(@NonNull Context context) {
+            Preference home = findPreference(SettingsTree.Section.HOME.rootKey);
+            boolean shown = !homeSectionHidden(context);
+            if (home != null && home.isVisible() != shown) home.setVisible(shown);
         }
 
         @Override

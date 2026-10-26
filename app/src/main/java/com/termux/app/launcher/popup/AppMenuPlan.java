@@ -15,7 +15,8 @@ import java.util.List;
  * Reset icon beside it once a custom icon is set), Uninstall. An app in a dock folder trades Pin for
  * Move to dock and Remove from folder, the two things only a folder member can do. An icon on Home
  * has no Add to home (it is there already) and offers Remove from Home before Uninstall: the same
- * thing its drag onto the Remove target does.
+ * thing its drag onto the Remove target does. An icon on the dock adds Edit dock, alone in the last
+ * group: the dock's card, two taps away (editor-redesign §3).
  */
 public final class AppMenuPlan {
 
@@ -36,7 +37,8 @@ public final class AppMenuPlan {
         REMOVE_FROM_HOME,
         CHANGE_ICON,
         RESET_ICON,
-        UNINSTALL
+        UNINSTALL,
+        EDIT_DOCK
     }
 
     /** Where the long-pressed icon lives, which decides the Pin slot. */
@@ -64,6 +66,8 @@ public final class AppMenuPlan {
         public boolean customIcon;
         /** For {@link Source#HOME}: the app is also on the dock, so the row is Unpin. */
         public boolean pinnedToDock;
+        /** The icon was pressed on the dock itself (not the drawer, Home or a folder's popup). */
+        public boolean onDock;
     }
 
     private AppMenuPlan() {
@@ -116,6 +120,7 @@ public final class AppMenuPlan {
         if (in.source == Source.HOME) actions.add(Row.REMOVE_FROM_HOME);
         if (in.androidPackage) actions.add(Row.UNINSTALL);
         groups.add(actions);
+        if (in.onDock) groups.add(Collections.singletonList(Row.EDIT_DOCK));
         return groups;
     }
 }

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Status bar and Terminal cards of the Appearance editor (editor-redesign §2). -->
+<resources>
+    <!-- Status bar card -->
+    <string name="editor_st_position">Position</string>
+    <string name="editor_st_position_top">Top</string>
+    <string name="editor_st_position_bottom">Bottom</string>
+    <string name="editor_st_section_glass">Glass</string>
+    <string name="editor_st_section_glass_note">Shape</string>
+    <string name="editor_st_section_clock">Clock</string>
+    <string name="editor_st_clock_position">Clock position</string>
+    <string name="editor_st_clock_left">Left</string>
+    <string name="editor_st_clock_center">Center</string>
+    <string name="editor_st_clock_right">Right</string>
+    <string name="editor_st_clock_flip">Flip</string>
+    <string name="editor_st_clock_lcd">LCD</string>
+    <string name="editor_st_clock_minimal">Minimal</string>
+    <string name="editor_st_clock_led">LED</string>
+    <string name="editor_st_clock_tape">Tape</string>
+    <string name="editor_st_clock_slab">Slab</string>
+    <string name="editor_st_section_options">Options</string>
+    <string name="editor_st_option_12h">12-hour</string>
+    <string name="editor_st_option_seconds">Seconds</string>
+    <string name="editor_st_option_fahrenheit">°F weather</string>
+    <string name="editor_st_option_camera_gap">Camera gap</string>
+    <string name="editor_st_option_camera_gap_hint">Camera gap: opens its setting, where the bar leaves room for the camera</string>
+    <string name="editor_st_section_indicators">Indicators</string>
+    <string name="editor_st_indicator_cpu">CPU</string>
+    <string name="editor_st_indicator_ram">RAM</string>
+    <string name="editor_st_indicator_weather">Weather</string>
+    <string name="editor_st_indicator_notifications">Notifications</string>
+    <string name="editor_st_indicator_notifications_hint">Notifications: a bell with the count while notifications wait</string>
+    <string name="editor_st_indicator_media">Media</string>
+    <string name="editor_st_notifications_indicator_description">Notifications waiting</string>
+
+    <!-- Terminal card -->
+    <string name="editor_st_section_cursor_trail">Cursor trail</string>
+    <string name="editor_st_trail_off">Off</string>
+    <string name="editor_st_trail_default">Default</string>
+    <string name="editor_st_trail_motion">Motion</string>
+    <string name="editor_st_trail_railgun">Railgun</string>
+    <string name="editor_st_trail_torpedo">Torpedo</string>
+    <string name="editor_st_trail_pixie">Pixie</string>
+    <string name="editor_st_trail_comet">Comet</string>
+    <string name="editor_st_section_screen_effect">Screen effect</string>
+    <string name="editor_st_effect_none">None</string>
+    <string name="editor_st_effect_crt">CRT</string>
+    <string name="editor_st_effect_green">Green</string>
+    <string name="editor_st_effect_amber">Amber</string>
+    <string name="editor_st_effect_material">Material</string>
+    <string name="editor_st_effect_tft">TFT</string>
+    <string name="editor_st_section_more">More</string>
+</resources>

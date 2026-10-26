@@ -127,9 +127,11 @@ public class SettingsFragmentAliasesTest {
         PreferenceScreen home = screen(launch(HomePreferencesFragment.class));
         assertEquals("home_layout_editor", home.getPreference(0).getKey());
         for (String key : new String[] {"app_launcher_home_palette_gesture", "app_launcher_widget_pane_enabled",
-            "app_launcher_builtin_widget_style", "wallpaper_parallax", "app_launcher_start_in"}) {
+            "app_launcher_builtin_widget_style", "wallpaper_parallax"}) {
             assertNotNull(key, home.findPreference(key));
         }
+        assertNull("Start in stands beside Use as on General now",
+            home.findPreference("app_launcher_start_in"));
         // Gestures gathers every gesture, the lock's page linked from its row.
         androidx.preference.PreferenceGroup gestures = home.findPreference("home_gestures");
         for (String key : new String[] {"app_launcher_sub_lock", "app_launcher_quick_reply_swipe",

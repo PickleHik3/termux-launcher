@@ -3,6 +3,7 @@ package com.termux.app.launcher.popup;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.ADD_TO_HOME;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.APP_INFO;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.CHANGE_ICON;
+import static com.termux.app.launcher.popup.AppMenuPlan.Row.EDIT_DOCK;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.MORE_SHORTCUTS;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.MOVE_TO_DOCK;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.NOTIFICATIONS;
@@ -39,6 +40,16 @@ public class AppMenuPlanTest {
         assertEquals(Collections.singletonList(
                 Arrays.asList(WIDGETS, APP_INFO, ADD_TO_HOME, UNPIN, CHANGE_ICON, UNINSTALL)),
             AppMenuPlan.groups(dockApp()));
+    }
+
+    @Test
+    public void anIconPressedOnTheDock_endsWithEditDockAloneInItsGroup() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.onDock = true;
+        assertEquals(Arrays.asList(
+                Arrays.asList(WIDGETS, APP_INFO, ADD_TO_HOME, UNPIN, CHANGE_ICON, UNINSTALL),
+                Collections.singletonList(EDIT_DOCK)),
+            AppMenuPlan.groups(in));
     }
 
     @Test

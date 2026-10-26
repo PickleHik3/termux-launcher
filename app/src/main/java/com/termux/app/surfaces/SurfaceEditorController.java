@@ -8,13 +8,8 @@ import android.graphics.DashPathEffect;
 import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.os.SystemClock;
-import android.text.TextUtils;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -22,25 +17,18 @@ import android.graphics.RectF;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
-import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ListPopupWindow;
 import android.widget.TextView;
 
-import androidx.annotation.AttrRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
-import androidx.appcompat.widget.PopupMenu;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.termux.R;
@@ -50,13 +38,10 @@ import com.termux.app.chrome.GlassMotion;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.PeekGlassGeometry;
 import com.termux.app.dock.PeekGlassPreferences;
-import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.fragments.settings.termux.AppearanceSettingsStore;
 import com.termux.app.fragments.settings.termux.HomePreferencesFragment;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment;
-import com.termux.app.fragments.settings.termux.KeyboardSizePreferencesFragment;
-import com.termux.app.fragments.settings.termux.LauncherDockPreferencesFragment;
 import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment;
@@ -68,12 +53,11 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.SeamDress;
-import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.surfaces.AppearanceLooks.Control;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.PaneRetroEffect;
-import com.termux.app.terminal.TerminalClockWidget;
+import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.logger.Logger;
@@ -94,9 +78,11 @@ import java.util.Locale;
  * The Appearance editor (appearance-and-settings-rework §2, §3, §7, §8): the launcher itself,
  * live, scaled into a frame, on one rule: <b>tap the thing</b>. A tap on a surface in the frame
  * (Home, the status bar, the terminal, the dock, the keyboard) raises its card; the editor bar's
- * palette raises the Appearance card for what has no surface. A hold on a surface drags it to
- * another edge; a plain horizontal swipe slides the frame between Home and the Workspace, and a
- * card writes the half the frame shows.
+ * palette raises the Appearance card for what has no surface. A plain horizontal swipe slides
+ * the frame between Home and the Workspace, and a card writes the half the frame shows. Where a
+ * surface sits is its card's Position row (editor-redesign §1: the shrunken Layout mode, its
+ * canvas and its drags, is retired); the editor edits the orientation the phone is in, and turning
+ * the phone turns the editor with it.
  *
  * <p><b>The frame.</b> {@code terminal_root_container} scaled about a top-centre pivot
  * ({@link AppearanceEditorFrame}), at rest between the top line and the half line over the editor
@@ -183,12 +169,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         float terminalFrameCornerRadiusPx();
         /** The corner the keyboard surface itself is clipped to. */
         float keyboardSurfaceCornerRadiusPx();
-        /** The move-and-size engine, which the editor lends its canvas to. */
+        /** The layout session: where each bar sits and the sizes the cards write. */
         @Nullable LayoutEditorController layoutEditor();
         /** The wallpaper for the editor to paint inside the frame, or null. Off the main thread. */
         @Nullable Drawable readEditorWallpaper();
         /** The dim the window's root paints over the system wallpaper. */
         int editorWallpaperDimColor();
+        /**
+         * The system's description of the wallpaper the screen shows, as one colour
+         * ({@link com.termux.app.chrome.WallpaperInk#hintColor}); transparent for none. What the
+         * page label stands on when the picture itself cannot be read (no storage permission).
+         */
+        default int editorWallpaperHintColor() {
+            return 0;
+        }
         /** Whether the frame has to paint the wallpaper itself (passthrough mode). */
         boolean editorPaintsWallpaper();
         /** The icon packs for the Appearance card's Icon pack row, built once per session. */
@@ -249,6 +243,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable
     private TermuxAppSharedPreferences prefs() {
         return mHost.preferences();
+    }
+
+    /** Use as, read fresh: Terminal only has no Home half, no Home card and no Match rows. */
+    @NonNull
+    private com.termux.app.wall.UseAs useAs() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return com.termux.app.wall.UseAs.read(prefs == null ? null : prefs.getUseAs());
     }
 
     @Nullable
@@ -318,6 +319,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mDepthSet = GlassEdgeControls.NONE;
     /** The half the frame shows: where a card writes. */
     @NonNull private WallHalf mHalf = WallHalf.WORKSPACE;
+    /**
+     * Each Match this visit that can still be taken back, by the screen it copied onto (the
+     * Match rows' Undo). Dropped when the editor closes or its Undo puts everything back.
+     */
+    @NonNull private final java.util.EnumMap<WallHalf, ScreenMatch.Undo> mMatchUndos =
+        new java.util.EnumMap<>(WallHalf.class);
     /** The card that is up, or null. */
     @Nullable private EditorCard mCard;
     /** Whether the editor raised the in-app keyboard itself, and so owes taking it down. */
@@ -487,6 +494,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         beginSession();
         if (!mSession)
             return;
+        // Terminal only has no Home: a door to Home's card opens the editor at rest, and says so.
+        com.termux.app.wall.UseAs useAs = useAs();
+        if (!useAs.reaches(card)) {
+            android.util.Log.i(EditorDoor.LOG_TAG, useAs.doorLine(card.key + "-card"));
+            card = null;
+        }
+        // A card that stands on one screen opens on it: Home's card over a Workspace left on
+        // screen would be refused by cardRefusal, leaving the editor with no card.
+        place = useAs.editorPlace(EditorDoor.placeFor(card, place, mHost.pageOnScreen()));
         if (mOpen) {
             if (place != null)
                 switchHalf(SeamDress.halfOf(place), true);
@@ -530,7 +546,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mSessionCustom.copyFrom(carried.custom);
             refreshSettingsSignature();
         }
-        PaneWallPage page = place != null ? place : mHost.pageOnScreen();
+        PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
         mHalf = page == null ? WallHalf.WORKSPACE : SeamDress.halfOf(page);
         mCard = null;
         mRaisedKeyboard = false;
@@ -539,19 +555,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mFrame = new AppearanceEditorFrame(rootContainer);
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null) {
-            attachLayoutViews(content, layout);
             layout.setOnChangedListener(this::onArrangementChanged);
             layout.setOnPlaceShownListener(() -> {
-                pushLayoutShape(layout);
                 restateCard();
                 refreshStack();
             });
-            layout.setOnTrayOfferListener((offered, hovered) -> {
-                HiddenStackView stack = mStack;
-                if (stack != null) stack.setZone(offered, hovered);
-            });
-            layout.setOnSelectionListener(this::onCanvasSelection);
-            pushLayoutShape(layout);
             layout.begin(place, carried == null ? null : carried.arrangement);
         }
         attachStack(content);
@@ -560,6 +568,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mBar.setListener(new BarListener());
         }
         mBar.attach(content);
+        // A picture read before the bar existed is applied now; a new bar starts at the theme's.
+        mLabelInk = 0;
+        if (mLabelPicture == null)
+            mBar.resetHalfNameInk();
+        applyLabelInk();
         TermuxAppSharedPreferences hintPrefs = prefs();
         mBar.setThemeHintWanted(hintPrefs != null && !hintPrefs.isAppearanceThemeHintSeen());
         mBar.setShown(true);
@@ -619,216 +632,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return mHalf;
     }
 
-    // ------------------------------------------------------------------------- the canvas
-
-    /** The layout canvas's host: the frame's rect, over the scaled launcher. */
-    @Nullable private FrameLayout mLayoutFrame;
-    @Nullable private LayoutCanvasView mCanvas;
-    @Nullable private LayoutEditorController.Views mLayoutViews;
-    /** The frame's rect in the content view, as {@code {left, top, right, bottom}}. */
-    @Nullable private int[] mFrameRectInContent;
-    private float mFrameCornerPx;
-    /** The layout canvas reaches this far past the scaled launcher, so no seam shows. */
-    private static final int RING_PX = 1;
-    private static final long CANVAS_FADE_MS = 200L;
-
-    /**
-     * Lends the move-and-size engine its canvas, in a host of its own over the scaled launcher,
-     * under the half line, the bar and the card. Laid out but not drawn until a drag or the other
-     * orientation shows it.
-     */
-    private void attachLayoutViews(@NonNull ViewGroup content,
-                                   @NonNull LayoutEditorController layout) {
-        FrameLayout frame = mLayoutFrame;
-        if (frame == null) {
-            View inflated = LayoutInflater.from(mHost.context())
-                .inflate(R.layout.layout_editor_frame, content, false);
-            if (!(inflated instanceof FrameLayout))
-                return;
-            frame = (FrameLayout) inflated;
-            frame.setOutlineProvider(new ViewOutlineProvider() {
-                @Override public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
-                        mFrameCornerPx + RING_PX);
-                }
-            });
-            frame.setClipToOutline(true);
-            mLayoutFrame = frame;
-            mCanvas = frame.findViewById(R.id.layout_editor_canvas);
-        }
-        if (frame.getParent() != content) {
-            if (frame.getParent() instanceof ViewGroup)
-                ((ViewGroup) frame.getParent()).removeView(frame);
-            content.addView(frame, new FrameLayout.LayoutParams(0, 0, Gravity.TOP | Gravity.LEFT));
-        }
-        frame.animate().cancel();
-        frame.setAlpha(1f);
-        frame.setVisibility(View.INVISIBLE);
-        LayoutCanvasView canvas = mCanvas;
-        if (canvas == null)
-            return;
-        canvas.setLiftOverlayHost(content);
-        canvas.setOnModelResizedListener(this::onModelShapeChanged);
-        if (mLayoutViews == null)
-            mLayoutViews = new LayoutEditorController.Views(frame, canvas);
-        layout.attach(mLayoutViews);
-        positionLayoutFrame();
-    }
-
-    /** Whether the canvas stands over the frame now: the other orientation, or a drag. */
-    private boolean mCanvasShown;
-    /** The canvas is up for a drag alone, and goes once the finger lifts. */
-    private boolean mCanvasForDrag;
-
-    private void showCanvas(boolean shown, boolean animate) {
-        FrameLayout frame = mLayoutFrame;
-        if (frame == null || shown == mCanvasShown)
-            return;
-        mCanvasShown = shown;
-        frame.animate().cancel();
-        boolean instant = !animate || ReducedMotion.isEnabled(mHost.context());
-        if (shown) {
-            positionLayoutFrame();
-            frame.setVisibility(View.VISIBLE);
-            if (instant) {
-                frame.setAlpha(1f);
-                return;
-            }
-            frame.setAlpha(0f);
-            frame.animate().alpha(1f).setDuration(CANVAS_FADE_MS).setInterpolator(Motion.settle())
-                .start();
-            return;
-        }
-        applyModelShape(false, animate);
-        if (instant) {
-            frame.setAlpha(1f);
-            frame.setVisibility(View.INVISIBLE);
-            return;
-        }
-        frame.animate().alpha(0f).setDuration(CANVAS_FADE_MS).setInterpolator(Motion.settle())
-            .withEndAction(() -> {
-                if (mCanvasShown)
-                    return;
-                frame.setVisibility(View.INVISIBLE);
-                frame.setAlpha(1f);
-            }).start();
-    }
-
-    // ---- the other orientation's phone model ------------------------------------------------------
-
-    private static final long MODEL_MS = 250L;
-    private boolean mModelShape;
-    private float mModelProgress;
-    @Nullable private android.animation.ValueAnimator mModelAnimator;
-
-    /**
-     * The canvas draws a landscape phone of its own in a portrait editor: the live launcher under
-     * it, which cannot show landscape, fades away beneath it.
-     */
-    private void applyModelShape(boolean resized, boolean animate) {
-        if (resized == mModelShape && mModelAnimator == null && mModelProgress == (resized ? 1f : 0f))
-            return;
-        mModelShape = resized;
-        if (mModelAnimator != null) {
-            mModelAnimator.cancel();
-            mModelAnimator = null;
-        }
-        final float to = resized ? 1f : 0f;
-        if (!animate || ReducedMotion.isEnabled(mHost.context()) || mLayoutFrame == null || !mOpen) {
-            setModelProgress(to);
-            return;
-        }
-        android.animation.ValueAnimator animator =
-            android.animation.ValueAnimator.ofFloat(mModelProgress, to);
-        animator.setDuration(MODEL_MS);
-        animator.setInterpolator(Motion.settle());
-        animator.addUpdateListener(a -> setModelProgress((Float) a.getAnimatedValue()));
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator a) {
-                if (mModelAnimator == animator)
-                    mModelAnimator = null;
-            }
-        });
-        mModelAnimator = animator;
-        animator.start();
-    }
-
-    /** 0 is the host's own phone over the launcher, 1 the free-standing model. */
-    private void setModelProgress(float progress) {
-        mModelProgress = progress;
-        AppearanceEditorFrame frame = mFrame;
-        if (frame != null)
-            frame.root().setAlpha(1f - progress);
-        FrameLayout host = mLayoutFrame;
-        if (host != null && host.getBackground() != null)
-            host.getBackground().mutate().setAlpha(Math.round(255f * (1f - progress)));
-    }
-
-    /** The canvas changed between the host's own shape and the other orientation's model. */
-    private void onModelShapeChanged() {
-        LayoutCanvasView canvas = mCanvas;
-        if (!mOpen || canvas == null || !mCanvasShown)
-            return;
-        applyModelShape(canvas.isModelResized(), true);
-    }
-
-    /** Stands the canvas's host exactly over the frame's rect, at the frame's corner. */
-    private void positionLayoutFrame() {
-        FrameLayout frame = mLayoutFrame;
-        int[] rect = mFrameRectInContent;
-        if (frame == null || rect == null)
-            return;
-        ViewGroup.LayoutParams raw = frame.getLayoutParams();
-        if (!(raw instanceof FrameLayout.LayoutParams))
-            return;
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        int left = rect[0] - RING_PX;
-        int top = rect[1] - RING_PX;
-        int width = Math.max(1, rect[2] - rect[0] + 2 * RING_PX);
-        int height = Math.max(1, rect[3] - rect[1] + 2 * RING_PX);
-        if (params.width != width || params.height != height || params.leftMargin != left
-            || params.topMargin != top) {
-            params.width = width;
-            params.height = height;
-            params.leftMargin = left;
-            params.topMargin = top;
-            params.gravity = Gravity.TOP | Gravity.LEFT;
-            frame.setLayoutParams(params);
-        }
-        // Laid out at the pose now; any carry by translation is spent.
-        frame.setTranslationX(0f);
-        frame.setTranslationY(0f);
-        frame.setScaleX(1f);
-        frame.setScaleY(1f);
-        frame.invalidateOutline();
-        if (mCanvas != null)
-            mCanvas.setFrameCornerRadiusPx(mFrameCornerPx + RING_PX);
-        updateCanvasTray();
-    }
-
-    /** A tap on an element of the canvas (the other orientation): its card. */
-    private void onCanvasSelection(@Nullable LayoutCanvasView.Block block) {
-        if (!mOpen || mCanvasForDrag || block == null)
-            return;
-        EditorCard card = cardForBlock(block, mHalf);
-        if (card != null)
-            openCard(card, true);
-    }
-
-    /** The card an element of the canvas opens. */
-    @Nullable
-    static EditorCard cardForBlock(@NonNull LayoutCanvasView.Block block, @NonNull WallHalf half) {
-        switch (block) {
-            case STATUS_BAR: return EditorCard.STATUS;
-            case APPS_ROW:
-            case ALPHABETS_ROW:
-            case EXTRA_KEYS: return EditorCard.DOCK;
-            case KEYBOARD: return EditorCard.KEYBOARD;
-            case CANVAS:
-            default: return half == WallHalf.HOME ? EditorCard.HOME : EditorCard.TERMINAL;
-        }
-    }
-
     // ---------------------------------------------------------------------- the halves and the bar
 
     /**
@@ -838,6 +641,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void switchHalf(@NonNull WallHalf half, boolean animate) {
         if (!mOpen || half == mHalf)
             return;
+        if (half == WallHalf.HOME && !useAs().showsHomePage()) {
+            android.util.Log.i(EditorDoor.LOG_TAG, useAs().doorLine("editor-home-half"));
+            return;
+        }
         mHalf = half;
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null)
@@ -851,28 +658,31 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         positionTargets();
     }
 
-    /** The orientation chip: the frame shows the other orientation on the canvas, or the phone's. */
-    private void flipOrientation() {
+    /**
+     * The orientation chip names the orientation being edited, which is the phone's: the other
+     * one is edited by turning the phone (editor-redesign §1), and a tap says so.
+     */
+    private void hintOtherOrientation() {
         LayoutEditorController layout = mHost.layoutEditor();
         if (!mOpen || layout == null || layout.shownOrientation() == null)
             return;
-        PlaceOrientation next = layout.shownOrientation() == PlaceOrientation.LANDSCAPE
-            ? PlaceOrientation.PORTRAIT : PlaceOrientation.LANDSCAPE;
-        layout.showOrientation(next);
+        boolean landscape = layout.shownOrientation() == PlaceOrientation.LANDSCAPE;
+        // In the theme hint's bubble over the page label, not a toast across it.
         if (mBar != null)
-            mBar.setOrientation(next == PlaceOrientation.LANDSCAPE);
-        boolean other = layout.showsOtherOrientation();
-        mCanvasForDrag = false;
-        showCanvas(other, true);
-        if (other && mCanvas != null)
-            applyModelShape(mCanvas.isModelResized(), true);
-        restateCard();
-        refreshStack();
+            mBar.showNote(landscape ? R.string.appearance_bar_turn_for_portrait
+                : R.string.appearance_bar_turn_for_landscape);
+    }
+
+    /** The chip follows the orientation the session edits, which turns with the phone. */
+    private void restateOrientation() {
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (mBar != null && layout != null && layout.shownOrientation() != null)
+            mBar.setOrientation(layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
     }
 
     private final class BarListener implements EditorBar.Listener {
         @Override public void onOrientation() {
-            flipOrientation();
+            hintOtherOrientation();
         }
 
         @Override public void onUndo() {
@@ -884,7 +694,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public void onPalette() {
-            openCard(EditorCard.APPEARANCE, true);
+            EditorCard card = EditorDoor.EDITOR_PALETTE.route(null, null);
+            if (card != null) openCard(card, true);
+        }
+
+        @Override public void onPageLabel() {
+            if (!mOpen)
+                return;
+            EditorCard card = EditorDoor.EDITOR_PAGE_LABEL.route(mHalf == WallHalf.HOME
+                ? com.termux.app.wall.PaneWallPage.WIDGETS
+                : com.termux.app.wall.PaneWallPage.TERMINAL, null);
+            if (card != null) openCard(card, true);
         }
 
         @Override public void onThemeHintSeen() {
@@ -911,6 +731,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return "the editor is not presented";
         if (mSheet == null)
             return "the editor has no card sheet";
+        if (!useAs().reaches(card))
+            return "Use as Terminal only has no Home card";
         if (!card.standsOn(mHalf))
             return "it does not stand on the " + mHalf + " half";
         return null;
@@ -921,12 +743,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCardSheet sheet = mSheet;
         if (sheet == null || cardRefusal(card) != null)
             return;
-        dismissClockDropdown();
         mCard = card;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
-        sheet.show(card, EditorRows.rows(card, offers()), copyLabel(card), resetLabel(card),
-            animate);
+        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate);
         if (mBar != null)
             mBar.setBarShown(false, animate);
         layoutSheet();
@@ -940,7 +760,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mCard == null)
             return;
         mCard = null;
-        dismissClockDropdown();
         if (sheet != null)
             sheet.hide(animate, null);
         if (mBar != null && mOpen)
@@ -951,22 +770,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private EditorRows.Offers offers() {
-        return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available());
-    }
-
-    /** The menu's copy item for a card held per half: the other half's name; null otherwise. */
-    @Nullable
-    private String copyLabel(@NonNull EditorCard card) {
-        if (!card.perHalf())
-            return null;
-        return getString(mHalf == WallHalf.HOME ? R.string.appearance_copy_to_workspace
-            : R.string.appearance_copy_to_home);
+        return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available(),
+            useAs().showsHomePage());
     }
 
     @NonNull
     private String resetLabel(@NonNull EditorCard card) {
         switch (card) {
             case HOME: return getString(R.string.appearance_reset_home);
+            case WORKSPACE: return getString(R.string.appearance_reset_workspace);
             case STATUS: return getString(R.string.appearance_reset_status);
             case TERMINAL: return getString(R.string.appearance_reset_terminal);
             case DOCK: return getString(R.string.appearance_reset_dock);
@@ -976,13 +788,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** The card's rows read again, the copy label with them (the half may have moved). */
+    /** The card's rows read again (the half may have moved). */
     private void restateCard() {
         EditorCardSheet sheet = mSheet;
         EditorCard card = mCard;
         if (sheet == null || card == null || !sheet.isShown())
             return;
-        sheet.show(card, EditorRows.rows(card, offers()), copyLabel(card), resetLabel(card), false);
+        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), false);
         sheet.restate();
     }
 
@@ -995,10 +807,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             resetCard();
         }
 
-        @Override public void onCopyToOtherHalf() {
-            copyCard();
-        }
-
         @Override public void onSheetMoved(int detent, float topPx) {
             onCardMoved(detent, topPx);
         }
@@ -1008,37 +816,65 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** Reset in the card's menu: the object back on the half's Look (Home: back as it shipped). */
+    /**
+     * The card header's reset, with no question asked: the object's glass back on the half's Look
+     * (a screen's own glass back as it shipped), and every other value the card's rows show back
+     * as it ships ({@link EditorCardReset}); where bars stand stays. Undo, not Reset, returns to
+     * the state the editor opened on.
+     */
     private void resetCard() {
         TermuxAppSharedPreferences prefs = prefs();
         EditorCard card = mCard;
         if (prefs == null || card == null)
             return;
-        switch (card) {
-            case HOME:
-                resetHome();
-                break;
-            case APPEARANCE:
-                for (SurfaceSlot slot : SurfaceSlot.values())
-                    prefs.resetSurfaceToLook(slot, mHalf);
-                break;
-            default:
-                if (card.slot != null)
-                    prefs.resetSurfaceToLook(card.slot, mHalf);
-                break;
+        EditorCardReset.resetStore(prefs, card, mHalf);
+        mScreenFrostPosition.clear();
+        mLinkAnchor = null;
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (card == EditorCard.HOME)
+            resetHome();
+        if (card == EditorCard.DOCK) {
+            // The dock's height, type and the Search field and Drawer icon live in the layout
+            // session, so its Undo covers them.
+            float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+            if (layout != null) {
+                layout.setDockHeightScale(scale);
+                layout.setDockStyle(DockStyle.GLASS_TRAY);
+                layout.setSearchField(false);
+                layout.setDrawerTile(false);
+                layout.setWallStripHeightDp(
+                    com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP);
+            } else {
+                prefs.setAppLauncherBarHeightScale(scale);
+            }
+            writeStyle(false);
+            resetDockOptions();
+        }
+        if (card == EditorCard.KEYBOARD && layout != null) {
+            layout.setKeyboardForm(PlaceLayout.KeyboardForm.DOCKED);
+            layout.setKeyboardHeightScale(prefs.getDefaultInAppKeyboardHeightScale(), false);
+            layout.setKeyboardChinDp(com.termux.shared.termux.settings.preferences
+                .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING, false);
         }
         syncAfterBulkWrite();
     }
 
-    /**
-     * Home's rows back to what they ship with, and Home's glass back on the Look the Home half
-     * wore when the editor opened (its Base as captured on entry).
-     */
+    /** The Dock card's options and the apps row's Most used switch back as they ship. */
+    private void resetDockOptions() {
+        Context context = mHost.context();
+        for (String key : new String[] {"app_launcher_notification_dots",
+            "app_launcher_quick_reply_swipe", "app_launcher_bw_icons",
+            "app_launcher_most_used_page"}) {
+            boolean shipped = EditorSettingsSnapshot.defaultOf(key);
+            if (AppearanceSettingsStore.getBoolean(context, key, shipped) != shipped)
+                AppearanceSettingsStore.putBoolean(context, key, shipped);
+        }
+        settingsWritten();
+    }
+
+    /** Home's rows and widget grid back to what they ship with (its glass: EditorCardReset). */
     private void resetHome() {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs != null && mEntry != null)
-            mEntry.restoreHalfBase(prefs, WallHalf.HOME, SurfaceProperty.BLUR,
-                SurfaceProperty.GRAIN, SurfaceProperty.OPACITY, SurfaceProperty.TINT);
         Context context = mHost.context();
         for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
             HomeSettings.KEY_FOLDER_DENSITY,
@@ -1053,19 +889,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style", null);
         settingsWritten();
         mHost.applyHomeSettings();
-    }
-
-    /** Copy in the card's menu: the other half made to look as this one does. */
-    private void copyCard() {
-        TermuxAppSharedPreferences prefs = prefs();
-        EditorCard card = mCard;
-        if (prefs == null || card == null || !card.perHalf())
-            return;
-        if (card == EditorCard.APPEARANCE)
-            prefs.copyLookToOtherHalf(mHalf);
-        else if (card.slot != null)
-            prefs.copySurfaceToOtherHalf(card.slot, mHalf);
-        syncAfterBulkWrite();
+        // The widget grid lives in the layout session, so its Undo covers it.
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (layout != null)
+            layout.setWidgetGrid(com.termux.shared.termux.settings.preferences
+                    .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
     }
 
     // ----------------------------------------------------------------------------- the frame
@@ -1201,20 +1031,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return new EditorFramePose.Pose(1f, 0f, 0f);
         float cardTop = mCard != null && sheet != null
             ? window.heightPx - sheet.heightAt(sheet.detent()) : Float.MAX_VALUE;
-        return EditorFramePose.railPose(window, cardTop, poseReserve(), mHidden.size(), mLifted);
-    }
-
-    /** An element of the frame is in the air: with nothing hidden, the frame stands off the rail. */
-    private boolean mLifted;
-    /** The slide to and from the rail's offset at a lift with nothing hidden (SPEC §3.6a). */
-    private static final long LIFT_SLIDE_MS = 200L;
-
-    /** The lift began or ended: the frame takes its rail pose, sliding across when it moves. */
-    private void setLifted(boolean lifted) {
-        if (mLifted == lifted)
-            return;
-        mLifted = lifted;
-        applyPose(true, LIFT_SLIDE_MS);
+        return EditorFramePose.railPose(window, cardTop, poseReserve(), mHidden.size(), false);
     }
 
     /** The band on the frame's left that the stack of hidden items keeps clear. */
@@ -1273,11 +1090,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mTargetTx = tx;
         mTargetTy = ty;
         setFrameRect(scale, tx, ty);
-        positionLayoutFrame();
         restyleOutlines();
     }
 
-    /** Moves the frame to its new pose on the card's clock; the canvas and outlines follow at the end. */
+    /** Moves the frame to its new pose on the card's clock; the outlines follow at the end. */
     private void moveFrame(float scale, float tx, float ty, boolean animate, long durationMs) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
@@ -1304,19 +1120,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(durationMs);
         animator.setInterpolator(Motion.settle());
-        // While a drag's pictures stand on the canvas (the slide to the rail's pose and back),
-        // the canvas is carried over the frame with it, so its slots never leave the frame.
-        FrameLayout carried = mLayoutFrame;
-        final boolean carryCanvas = mLive != null || mLifted
-            || (carried != null && !carried.getMatrix().isIdentity());
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
             float nowScale = fromScale + (scale - fromScale) * f;
             float nowTx = fromTx + (tx - fromTx) * f;
             float nowTy = fromTy + (ty - fromTy) * f;
             frame.setPose(nowScale, nowTx, nowTy);
-            if (carryCanvas)
-                carryLayoutFrame(nowScale, nowTx, nowTy);
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             private boolean mCancelled;
@@ -1331,10 +1140,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (mCancelled || !mOpen)
                     return;
                 frame.setPose(scale, tx, ty);
-                // The drag's pictures stand in the canvas's px: it stays carried, and is laid
-                // out at the new pose once they are gone (finishLive).
-                if (mLive != null)
-                    return;
                 setTarget(scale, tx, ty);
             }
         });
@@ -1352,37 +1157,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             animator.cancel();
     }
 
-    /** The pose {@link #mFrameRectInContent} was worked out for. */
-    private float mFrameRectScale = 1f;
-    private float mFrameRectTx;
-    private float mFrameRectTy;
-    /** The container's origin in the canvas's px at that pose: with the scale, the live map. */
-    private float mRootInCanvasX;
-    private float mRootInCanvasY;
+    /** The scaled container's rect in the content view, as {@code {left, top, right, bottom}}. */
+    @Nullable private int[] mFrameRectInContent;
 
-    /**
-     * The canvas's host moved with the frame while the frame slides: its laid-out rect is the
-     * pose {@link #setFrameRect} last took, and the rest is a scale about the frame's own pivot
-     * (top centre, {@link AppearanceEditorFrame#setPose}) and a translation.
-     */
-    private void carryLayoutFrame(float scale, float tx, float ty) {
-        FrameLayout host = mLayoutFrame;
-        AppearanceEditorFrame frame = mFrame;
-        if (host == null || frame == null || mFrameRectScale <= 0f)
-            return;
-        float pivotX = mContainerLeftPx + frame.root().getWidth() / 2f + mFrameRectTx;
-        float pivotY = mContainerTopPx + mFrameRectTy;
-        float k = scale / mFrameRectScale;
-        host.setPivotX(pivotX - host.getLeft());
-        host.setPivotY(pivotY - host.getTop());
-        host.setScaleX(k);
-        host.setScaleY(k);
-        host.setTranslationX(tx - mFrameRectTx);
-        host.setTranslationY(ty - mFrameRectTy);
-        updateCanvasTray();
-    }
-
-    /** The scaled container's rect in the content view: the canvas's host. */
+    /** Works out {@link #mFrameRectInContent} for a pose. */
     private void setFrameRect(float scale, float translationX, float translationY) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
@@ -1393,15 +1171,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), (int) Math.floor(top),
             (int) Math.ceil(scaledLeft + root.getWidth() * scale),
             (int) Math.ceil(top + root.getHeight() * scale)};
-        mFrameRectScale = scale;
-        mFrameRectTx = translationX;
-        mFrameRectTy = translationY;
-        // Where the container's own (0, 0) stands in the canvas, at this pose.
-        mRootInCanvasX = scaledLeft - (mFrameRectInContent[0] - RING_PX);
-        mRootInCanvasY = top - (mFrameRectInContent[1] - RING_PX);
-        mFrameCornerPx = AppearanceEditorFrame.visibleCornerRadiusPx(
-            AppearanceEditorFrame.deviceCornerRadiusPx(root), mDisplayInsetLeftPx,
-            mRevealTopPx) * scale;
     }
 
     /**
@@ -1420,6 +1189,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? mWindowHeightPx - sheet.sheetTopPx() + gap
             : barLift + dp(EditorBar.BAR_DP) + gap;
         bar.place(barLift, halfLift);
+        applyLabelInk();
         placeStack();
     }
 
@@ -1434,8 +1204,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private float mLabelBasePx;
     private float mLabelForFontScale = -1f;
     private float mLabelPx;
-    /** The rail's border in the content view, {left, top, right, bottom}: the drop target. */
-    @Nullable private int[] mStackColumn;
 
     private void attachStack(@NonNull ViewGroup content) {
         HiddenStackView stack = mStack;
@@ -1447,20 +1215,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 }
 
                 @Override public void onDropped(@NonNull HiddenItem item, float rawX, float rawY) {
-                    dropChip(item, rawX, rawY);
-                }
-
-                @Override public void onDragStarted(@NonNull HiddenItem item) {
-                    beginChipDrag(item);
-                }
-
-                @Override public boolean onDragMoved(@NonNull HiddenItem item, float rawX,
-                                                     float rawY) {
-                    return moveChipDrag(rawX, rawY);
-                }
-
-                @Override public void onDragCancelled(@NonNull HiddenItem item) {
-                    cancelChip();
+                    // Dragged out of the tray and let go over the frame: back where it was.
+                    if (isOverFrame(rawX, rawY))
+                        showHidden(item, false);
                 }
             });
             mStack = stack;
@@ -1479,7 +1236,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ((ViewGroup) stack.getParent()).removeView(stack);
         mHidden.clear();
         mStackSignature = null;
-        mStackColumn = null;
     }
 
     /** The items the edited layout puts away, read again; the stack and the frame follow. */
@@ -1488,8 +1244,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         readHidden();
         placeStack();
         // The rail comes or goes with the first hidden item or the last: the frame's offset
-        // follows, but never under live snapshots, which wait for it (see finishLive).
-        if (wasEmpty != mHidden.isEmpty() && mLive == null)
+        // follows.
+        if (wasEmpty != mHidden.isEmpty())
             applyPose(true);
     }
 
@@ -1541,8 +1297,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int left = mContainerLeftPx + dp(HiddenStackPolicy.SIDE_DP);
         HiddenStackPolicy.Rail rail = HiddenStackPolicy.rail(heights, slot, left, top, available,
             density);
-        // The drop target is the border the finger sees, no more.
-        mStackColumn = rail.border.clone();
         String signature = mHidden + "/" + left + "/" + top + "/" + Arrays.toString(heights) + "/"
             + mLabelPx
             + "/" + available;
@@ -1550,27 +1304,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mStackSignature = signature;
             stack.set(mHidden, rail, mLabelPx);
         }
-        updateCanvasTray();
-    }
-
-    /** The canvas is told where the stack is (in its own coordinates), the place to drop a lifted element. */
-    private void updateCanvasTray() {
-        LayoutCanvasView canvas = mCanvas;
-        int[] column = mStackColumn;
-        int[] frame = mFrameRectInContent;
-        if (canvas == null || column == null || frame == null)
-            return;
-        float dx = frame[0] - RING_PX;
-        float dy = frame[1] - RING_PX;
-        RectF tray = new RectF(column[0] - dx, column[1] - dy, column[2] - dx, column[3] - dy);
-        // Undo the host's carry (scale about its pivot, then translation), if any.
-        FrameLayout host = mLayoutFrame;
-        if (host != null) {
-            android.graphics.Matrix inverse = new android.graphics.Matrix();
-            if (host.getMatrix().invert(inverse))
-                inverse.mapRect(tray);
-        }
-        canvas.setExternalTrayRect(tray);
     }
 
     /** Whether a raw screen point is over the frame. */
@@ -1610,8 +1343,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         refreshStack();
         positionTargets();
-        if (openItsCard && item.card.standsOn(mHalf))
+        if (openItsCard && item.card.standsOn(mHalf)) {
+            EditorDoor.EDITOR_HIDDEN_BAR.log(item.card);
+            if (item.card == EditorCard.DOCK)
+                dockCard().expand(item.tray == null ? null : item.tray.element);
             openCard(item.card, true);
+        }
     }
 
     /** The card stands at a new top edge, or settled on a detent. */
@@ -1636,7 +1373,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** The card came to rest: the frame's pose, the canvas and the outlines are made final. */
+    /** The card came to rest: the frame's pose and the outlines are made final. */
     private void onCardSettled() {
         mLastDetent = -1;
         if (mFrameAnimator == null)
@@ -1654,7 +1391,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         frame.root().animate().cancel();
         mFollowingSheet = true;
         EditorFramePose.Pose pose = EditorFramePose.railPose(window, cardTopPx, poseReserve(),
-            mHidden.size(), mLifted);
+            mHidden.size(), false);
         frame.setPose(pose.scale, pose.translationX, pose.translationY);
     }
 
@@ -1744,9 +1481,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mWallpaperToken;
     @Nullable private Drawable mEditorWallpaper;
 
+    /**
+     * The picture the page label stands on, as a small copy centre-cropped to the decor the way
+     * the screen shows it ({@link EditorLabelInk#cropBounds}), for {@link #applyLabelInk}; null
+     * while there is none. Kept for the session: the label moves with the card.
+     */
+    @Nullable private int[] mLabelPicture;
+    private int mLabelPictureWidth;
+    private int mLabelPictureHeight;
+    /** The label's ink as last set, so a placement that did not move it costs nothing. */
+    private int mLabelInk;
+
     /** Passthrough mode: the picture is read off the main thread and painted inside the container. */
     private void loadEditorWallpaper(@NonNull View rootContainer) {
         final int token = ++mWallpaperToken;
+        View decor = rootContainer.getRootView();
+        final int decorWidth = decor != null && decor.getWidth() > 0 ? decor.getWidth()
+            : rootContainer.getResources().getDisplayMetrics().widthPixels;
+        final int decorHeight = decor != null && decor.getHeight() > 0 ? decor.getHeight()
+            : rootContainer.getResources().getDisplayMetrics().heightPixels;
         Thread reader = new Thread(() -> {
             Drawable wallpaper;
             try {
@@ -1755,9 +1508,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 wallpaper = null;
             }
             final Drawable picture = wallpaper;
+            // The label stands on the wallpaper the screen shows outside the scaled frame, which
+            // is the picture the frame paints (the managed one or the system's), or the system's
+            // still when the editor reads none. Its ink follows that picture, never the theme.
+            final int[] sample = picture != null
+                ? sampleLabelPicture(picture, decorWidth, decorHeight)
+                : sampleSystemLabelPicture(rootContainer.getContext(), decorWidth, decorHeight);
+            final int sampleHeight = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
             rootContainer.post(() -> {
                 if (!mSession || token != mWallpaperToken)
                     return;
+                mLabelPicture = sample;
+                mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
+                mLabelPictureHeight = sampleHeight;
+                // The bar may not be up yet (the first open after a theme relaunch); present()
+                // applies the ink again once it is.
+                applyLabelInk();
                 if (picture != null) {
                     mEditorWallpaper = picture;
                     showEditorWallpaper(picture);
@@ -1769,6 +1535,89 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }, "appearance-editor-wallpaper");
         reader.setDaemon(true);
         reader.start();
+    }
+
+    /**
+     * The page label's ink from the picture under it: the sampled rows at the label's height on
+     * the screen ({@link EditorLabelInk#band}), with no theme dim over them. Called when the
+     * picture arrives, when the bar goes up and whenever the label moves; it sets the ink only
+     * when it changed.
+     */
+    private void applyLabelInk() {
+        EditorBar bar = mBar;
+        if (bar == null)
+            return;
+        int[] picture = mLabelPicture;
+        float fraction = Float.NaN;
+        if (picture != null) {
+            View label = bar.halfRow();
+            View decor = label.getRootView();
+            if (label.getParent() == null || decor == null || decor.getHeight() <= 0)
+                return;
+            label.getLocationOnScreen(mTmpLocation);
+            float centre = mTmpLocation[1] + label.getHeight() / 2f;
+            decor.getLocationOnScreen(mTmpDecorLocation);
+            fraction = (centre - mTmpDecorLocation[1]) / decor.getHeight();
+        }
+        // No picture is what a launcher without storage permission gets for the system's
+        // wallpaper: the system's own description of it stands in, as for Home's labels.
+        int backdrop = EditorLabelInk.backdrop(picture, mLabelPictureWidth, mLabelPictureHeight,
+            fraction, mHost.editorWallpaperHintColor());
+        if (!EditorLabelInk.isKnown(backdrop))
+            return;
+        int[] inks = bar.halfNameInks();
+        int ink = EditorLabelInk.pick(backdrop, inks[0], inks[1]);
+        if (ink == mLabelInk)
+            return;
+        mLabelInk = ink;
+        bar.setHalfNameInk(ink);
+    }
+
+    @NonNull private final int[] mTmpLocation = new int[2];
+    @NonNull private final int[] mTmpDecorLocation = new int[2];
+
+    /** The system's still wallpaper, sampled as {@link #sampleLabelPicture}; null for none. */
+    @Nullable
+    private static int[] sampleSystemLabelPicture(@NonNull android.content.Context context,
+                                                  int decorWidth, int decorHeight) {
+        try {
+            android.app.WallpaperManager manager =
+                android.app.WallpaperManager.getInstance(context);
+            if (manager.getWallpaperInfo() != null)
+                return null;
+            Drawable system = manager.getDrawable();
+            return system == null ? null : sampleLabelPicture(system, decorWidth, decorHeight);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * {@code picture} drawn into a {@link EditorLabelInk#SAMPLE_WIDTH}-wide bitmap of the decor's
+     * shape, centre-cropped as the frame paints it, and its pixels; null when it cannot be drawn.
+     * Read off the main thread; the bitmap is not kept.
+     */
+    @Nullable
+    private static int[] sampleLabelPicture(@NonNull Drawable picture, int decorWidth,
+                                            int decorHeight) {
+        try {
+            int w = EditorLabelInk.SAMPLE_WIDTH;
+            int h = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
+            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(w, h,
+                android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Rect old = picture.copyBounds();
+            int[] bounds = EditorLabelInk.cropBounds(picture.getIntrinsicWidth(),
+                picture.getIntrinsicHeight(), w, h);
+            picture.setBounds(bounds[0], bounds[1], bounds[2], bounds[3]);
+            picture.draw(new android.graphics.Canvas(bmp));
+            picture.setBounds(old);
+            int[] px = new int[w * h];
+            bmp.getPixels(px, 0, w, 0, 0, w, h);
+            bmp.recycle();
+            return px;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private void showEditorWallpaper(@NonNull Drawable picture) {
@@ -1862,10 +1711,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mSheet.restate();
     }
 
-    /** Where the app-wide choices are read and written: Settings' own store. */
+    /**
+     * Where the app-wide choices are read and written: Settings' own store, and the app's store
+     * for the Dock card's switches Settings has no row for.
+     */
     @NonNull
     private EditorSettingsSnapshot.Store settingsStore() {
-        return EditorSettingsSnapshot.settings(mHost.context());
+        return EditorSettingsSnapshot.settings(mHost.context(), dockPrefs());
     }
 
     /** A card wrote an app-wide choice: its signature is read again for the dirty state. */
@@ -1937,18 +1789,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             commitAndExit();
     }
 
-    /** Back inside the editor: a lift cancelled, a popup shut, a card put down. */
+    /** Back inside the editor: a card put down. */
     @Override
     public boolean consumeBack() {
         if (!mOpen)
             return false;
-        LayoutEditorController layout = mHost.layoutEditor();
-        if (layout != null && layout.cancelGesture())
-            return true;
-        if (mClockDropdown != null) {
-            dismissClockDropdown();
-            return true;
-        }
         if (mCard != null) {
             closeCard(true);
             return true;
@@ -2034,7 +1879,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** Every card's values and writes, row by row. */
-    private final class CardModel implements EditorCardSheet.Model {
+    private final class CardModel implements EditorCardSheet.Model, CardBody.Looks {
 
         @Override public int value(@NonNull Row row) {
             TermuxAppSharedPreferences prefs = prefs();
@@ -2065,11 +1910,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case VISIBLE: {
                     if (layout == null) return 1;
                     Element element = elementOf(card);
-                    // The keyboard reads what the frame draws (the canvas, for the other
-                    // orientation): the one answer the switch and the preview can share.
+                    // The keyboard reads what the frame draws: the one answer the switch and the
+                    // preview can share.
                     if (element == null)
-                        return (layout.showsOtherOrientation() ? layout.isKeyboardShown()
-                            : mHost.isInAppKeyboardShown()) ? 1 : 0;
+                        return mHost.isInAppKeyboardShown() ? 1 : 0;
                     return layout.isShown(element) ? 1 : 0;
                 }
                 case STYLE:
@@ -2080,18 +1924,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
                 case MARGIN: return AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false));
                 case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
-                case SEARCH_FIELD: return layout != null && layout.searchField() ? 1 : 0;
-                case DRAWER_ICON: return layout != null && layout.drawerTile() ? 1 : 0;
                 case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
-                case APP_ICONS: return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
                 case TEXT_SIZE:
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
                         / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
                 case CONTRAST: return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
                 case SPLIT_GAP: return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
-                case ICON_SIZE:
-                    return parseInt(AppearanceSettingsStore.getString(context,
-                        HomeSettings.KEY_ICON_SCALE, null), 100);
                 case LABEL_SIZE:
                     return indexOf(LABEL_SIZES, AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_LABEL_SIZE, null), 1);
@@ -2116,7 +1954,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
-                case OWN_LAYOUT: return layout != null && layout.hasHomeLayout() ? 1 : 0;
+                case MATCH_WORKSPACE:
+                case MATCH_HOME:
+                    return mMatchUndos.containsKey(matchTarget(row)) ? 1 : 0;
                 case CLOCK_12H: return prefs.isTopPaneClockAmPmEnabled() ? 1 : 0;
                 case KEY_OPACITY: return keyOpacityValue(prefs);
                 case KEY_CORNERS:
@@ -2130,14 +1970,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return 0;
                 }
                 case LOOK: return lookStop(mHalf);
-                case WALLPAPER:
-                    return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
-                        ? 1 : 0;
+                case CHANGE_WALLPAPER: return 0;
                 case THEME:
                     return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
-                case MONOCHROME:
-                    return AppearanceSettingsStore.getBoolean(context, "app_launcher_bw_icons", false)
-                        ? 1 : 0;
                 case WALLPAPER_COLOURS:
                     return AppearanceSettingsStore.getBoolean(context,
                         "terminal_dynamic_colors_enabled", false) ? 1 : 0;
@@ -2149,7 +1984,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
                         ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
                 case GLASS_EDGE: return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
-                default: return 0;
+                default: return cardRowValue(row);
             }
         }
 
@@ -2162,15 +1997,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
                         mHost.isAppsRowAlone(), density())[0];
                 case DEPTH: return GlassEdgeControls.MIN;
-                case APP_ICONS: return AppearanceLooks.APP_ICONS_MIN;
                 case REFLECTION: return PeekGlassGeometry.REFLECTION_MIN;
                 case TEXT_SIZE: return Control.TEXT_SIZE.min;
-                case ICON_SIZE: return HOME_ICON_MIN;
                 case KEY_OPACITY: return Control.KEY_OPACITY.min;
                 case LOOK: return 0;
                 case VIBRANCY: return Control.VIBRANCY.min;
                 case GLASS_EDGE: return Control.EDGE.min;
-                default: return 0;
+                default: return cardRowFrom(row);
             }
         }
 
@@ -2188,25 +2021,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case CORNERS: return AppearanceLooks.CORNERS_MAX_DP;
                 case MARGIN: return AppearanceLooks.MARGIN_MAX_DP;
                 case DEPTH: return GlassEdgeControls.MAX;
-                case APP_ICONS: return AppearanceLooks.APP_ICONS_MAX;
                 case REFLECTION: return PeekGlassGeometry.REFLECTION_MAX;
                 case TEXT_SIZE: return Control.TEXT_SIZE.max;
                 case SPLIT_GAP: return Control.SPLIT_GAP.max;
-                case ICON_SIZE: return HOME_ICON_MAX;
                 case KEY_OPACITY: return Control.KEY_OPACITY.max;
                 case KEY_CORNERS: return AppearanceLooks.KEY_CORNERS_MAX_DP;
                 case KEY_SPACING: return AppearanceLooks.KEY_SPACING_MAX_TENTHS;
                 case LOOK: return AppearanceLooks.CUSTOM_STOP;
                 case VIBRANCY: return Control.VIBRANCY.max;
                 case GLASS_EDGE: return Control.EDGE.max;
-                default: return 1;
+                default: return cardRowTo(row);
             }
         }
 
         @Override public int step(@NonNull Row row) {
             switch (row) {
                 case TEXT_SIZE: return Control.TEXT_SIZE.step;
-                case ICON_SIZE: return HOME_ICON_STEP;
                 case REFLECTION: return PeekGlassGeometry.REFLECTION_STEP;
                 default: return 1;
             }
@@ -2219,7 +2049,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case TINT:
                 case DEPTH:
                 case TEXT_SIZE:
-                case ICON_SIZE:
                 case KEY_OPACITY:
                 case GLASS_EDGE:
                 case REFLECTION:
@@ -2238,12 +2067,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case VIBRANCY:
                     return getString(R.string.appearance_readout_times,
                         String.format(Locale.getDefault(), "%.2f", value / 100f));
-                case APP_ICONS:
-                    return String.valueOf(value);
                 case LOOK:
                     return lookStopName(value);
+                case MATCH_WORKSPACE:
+                case MATCH_HOME:
+                    return getString(value != 0 ? R.string.appearance_match_undo
+                        : R.string.appearance_match_copy);
                 default:
-                    return String.valueOf(value);
+                    return cardRowReadout(row, value);
             }
         }
 
@@ -2288,14 +2119,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return getString(clockStyleLabel(prefs.getTopPaneClockStyle()));
                 case GLASS_WIDGETS:
                     return getString(R.string.appearance_glass_widgets_note);
-                case VISIBLE: {
-                    LayoutEditorController layout = mHost.layoutEditor();
-                    if (layout != null && layout.showsOtherOrientation())
-                        return getString(R.string.appearance_other_orientation_note);
+                case VISIBLE:
                     return null;
-                }
                 default:
-                    return null;
+                    return cardRowSummary(row);
             }
         }
 
@@ -2329,12 +2156,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return out;
                 }
                 default:
-                    return new String[0];
+                    return cardRowChoices(row);
             }
         }
 
         @Nullable @Override public int[] chipIcons(@NonNull Row row) {
-            return row == Row.DESIGN ? DESIGN_ICONS.clone() : null;
+            return row == Row.DESIGN ? DESIGN_ICONS.clone() : cardRowGlyphs(row);
         }
 
         @Nullable @Override public View expanderContent(@NonNull Row row) {
@@ -2352,7 +2179,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onReleased(@NonNull Row row) {
             mLinkAnchor = null;
             endDrag();
-            if (row == Row.HEIGHT && mCard == EditorCard.KEYBOARD) {
+            if ((row == Row.HEIGHT || row == Row.BOTTOM_PADDING) && mCard == EditorCard.KEYBOARD) {
                 LayoutEditorController layout = mHost.layoutEditor();
                 if (layout != null) layout.relayHeldWrites();
             }
@@ -2365,7 +2192,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public boolean shown(@NonNull Row row) {
             // All surfaces is the Custom stop's, as the Look page's Custom row was.
-            if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row))
+            if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row)
+                && !com.termux.app.surfaces.cards.GlobalCard.isGlassMaterial(row))
                 return AppearanceLooks.isCustomStop(lookStop(mHalf));
             // Reflection is Peek glass's own knob: it stands only while that is the design.
             if (row == Row.REFLECTION) {
@@ -2376,25 +2204,50 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Nullable @Override public CharSequence stripHeading(@NonNull Row first) {
+            if (mCard == EditorCard.DOCK)
+                return com.termux.app.surfaces.cards.DockCard.stripHeading(mHost.context());
             return mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(first)
                 ? getString(R.string.appearance_strip_all_surfaces) : null;
         }
-    }
 
-    /** Home's icon size, a percent of the dock's 48dp, as Settings › Home offers it. */
-    private static final int HOME_ICON_MIN = 80;
-    private static final int HOME_ICON_MAX = 120;
-    private static final int HOME_ICON_STEP = 10;
+        @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
+            EditorCard card = mCard;
+            if (card == EditorCard.DOCK)
+                return dockCard().view(row, widthPx);
+            if (card != null && CardBody.redesigned(card))
+                return cardBody(card).rowView(row, widthPx);
+            return statusTerminalRowView(row, widthPx);
+        }
 
-    private static int parseInt(@Nullable String value, int fallback) {
-        if (value == null)
-            return fallback;
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            return fallback;
+        @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
+            EditorCard card = mCard;
+            if (card == EditorCard.DOCK)
+                dockCard().restate(row);
+            else if (card != null && CardBody.redesigned(card)) {
+                CardBody body = mCardBody;
+                if (body != null) body.restate(row, view);
+            } else
+                restateStatusTerminalRow(row, view);
+        }
+
+        @Nullable @Override public CharSequence name(@NonNull Row row) {
+            return cardRowName(row);
+        }
+
+        @Override public int glyph(@NonNull Row row) {
+            return cardRowGlyph(row);
+        }
+
+        @Nullable @Override public int[] swatches(@NonNull Row row) {
+            return cardRowSwatches(row);
+        }
+
+        @Nullable @Override public android.graphics.Typeface choiceTypeface(@NonNull Row row,
+                                                                          int index) {
+            return cardRowTypeface(row, index);
         }
     }
+
 
     @NonNull
     private String lookStopName(int stop) {
@@ -2435,8 +2288,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case TINT:
                 // Each value re-bakes the blurred frames: a drag holds that for its release.
                 holdFrameBakesForDrag();
-                if (card == EditorCard.HOME)
-                    writeHomeGlass(row, value);
+                if (isScreenCard(card))
+                    writeScreenGlass(row, value);
                 else if (card.slot == null)
                     writeShared(row, value);
                 else if (!writeLinkedOpacity(row, value, dragging))
@@ -2483,15 +2336,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case CORNERS: writeCorners(value); break;
             case MARGIN: writeMargin(value); break;
             case DEPTH: writeGlassDepth(value); break;
-            case SEARCH_FIELD: if (layout != null) layout.setSearchField(value != 0); break;
-            case DRAWER_ICON: if (layout != null) layout.setDrawerTile(value != 0); break;
-            case APP_ICONS: writeAppIcons(value); break;
             case TEXT_SIZE: writeTextSize(value); break;
             case CONTRAST: writeLegibility(value); break;
             case SPLIT_GAP: writeSplitGap(value); break;
-            case ICON_SIZE:
-                writeHomeString(HomeSettings.KEY_ICON_SCALE, String.valueOf(value));
-                break;
             case LABEL_SIZE:
                 writeHomeString(HomeSettings.KEY_LABEL_SIZE, LABEL_SIZES[clamp(value, 0, 2)]);
                 break;
@@ -2526,7 +2373,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
                 settingsWritten();
                 break;
-            case OWN_LAYOUT: if (layout != null) layout.setHomeLayout(value != 0); break;
             case CLOCK_12H:
                 if (prefs.isTopPaneClockAmPmEnabled() != (value != 0)) {
                     prefs.setTopPaneClockAmPmEnabled(value != 0);
@@ -2547,16 +2393,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LOOK:
                 writeLook(value, dragging);
                 break;
-            case WALLPAPER:
-                AppearanceSettingsStore.putBoolean(context, "use_system_wallpaper", value != 0);
-                settingsWritten();
+            case CHANGE_WALLPAPER:
+                // Never written: the tile is a shortcut and its tap goes to onAction.
                 break;
             case THEME:
                 previewTheme(THEMES[clamp(value, 0, 2)]);
-                break;
-            case MONOCHROME:
-                AppearanceSettingsStore.putBoolean(context, "app_launcher_bw_icons", value != 0);
-                settingsWritten();
                 break;
             case WALLPAPER_COLOURS:
                 AppearanceSettingsStore.putBoolean(context, "terminal_dynamic_colors_enabled",
@@ -2575,6 +2416,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case VIBRANCY: writeVibrancy(value); break;
             case GLASS_EDGE: writeGlassEdge(value); break;
             default:
+                writeCardRow(row, value, dragging);
                 break;
         }
     }
@@ -2601,29 +2443,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         switch (row) {
-            case CURSOR_TRAIL:
-                showChoiceMenu(anchor, R.array.appearance_editor_cursor_trail_entries,
-                    R.array.appearance_editor_cursor_trail_values,
-                    CursorTrailChoice.menuId(prefs.isTerminalCursorTrailEnabled(),
-                        prefs.getTerminalCursorTrailStyle()), this::writeTrailStyle);
-                break;
-            case EFFECT:
-                showChoiceMenu(anchor, R.array.settings_terminal_retro_effect_entries,
-                    R.array.settings_terminal_retro_effect_values, prefs.getTerminalRetroEffect(),
-                    this::writeRetroEffect);
-                break;
-            case TINT_HUE:
-                showChoiceMenu(anchor, R.array.appearance_editor_tint_hue_entries,
-                    R.array.appearance_editor_tint_hue_values, prefs.getSurfaceGlassTintHue(),
-                    this::writeTintHue);
-                break;
-            case CLOCK_FACE:
-                showClockDropdown(anchor);
-                break;
             case KEYBOARD_THEME:
                 openKeyboardTheme();
                 break;
-            case WALLPAPER:
+            case CHANGE_WALLPAPER:
                 if (mPageListener != null) mPageListener.onOpenWallpaper();
                 break;
             case ICON_PACK: {
@@ -2636,60 +2459,66 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             }
             case TOOL_COLOURS:
-                openSettingsPage(TermuxStylePreferencesFragment.class, R.string.appearance_row_tool_colours);
+                openSettingsFromEditor(TermuxStylePreferencesFragment.class,
+                    R.string.appearance_row_tool_colours, null, TOOL_COLOURS_KEY);
                 break;
             case LINK_GESTURES:
-                openSettingsPage(HomePreferencesFragment.class, R.string.appearance_row_gestures);
+                openSettingsFromEditor(HomePreferencesFragment.class,
+                    R.string.settings_section_home, HOME_GESTURES_SECTION, null);
                 break;
             case LINK_PAGES:
-                openSettingsPage(HomePreferencesFragment.class, R.string.appearance_row_pages);
-                break;
-            case LINK_INDICATORS:
-                openSettingsPage(StatusBarPreferencesFragment.class, R.string.appearance_row_indicators);
-                break;
-            case LINK_FONT:
-                openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
-                break;
-            case LINK_DOCK_ITEMS:
-                openSettingsPage(LauncherDockPreferencesFragment.class, R.string.appearance_row_dock_items);
-                break;
-            case LINK_KEYBOARD_SIZE:
-                openSettingsPage(KeyboardSizePreferencesFragment.class,
-                    R.string.appearance_row_keyboard_size);
+                openSettingsFromEditor(HomePreferencesFragment.class,
+                    R.string.settings_section_home, null, HOME_PAGES_SECTION);
                 break;
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
                 break;
+            case MATCH_WORKSPACE:
+            case MATCH_HOME:
+                toggleMatch(matchTarget(row));
+                break;
+            case LINK_GLOBAL: {
+                EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
+                if (global != null) openCard(global, true);
+                break;
+            }
             default:
                 break;
         }
     }
 
-    private interface Choice {
-        void chosen(@NonNull String id);
+    // ---- the Match rows ----------------------------------------------------------------------
+
+    /** The screen a Match row copies onto: Home for Match Workspace styling, else the Workspace. */
+    @NonNull
+    private static WallHalf matchTarget(@NonNull Row row) {
+        return row == Row.MATCH_WORKSPACE ? WallHalf.HOME : WallHalf.WORKSPACE;
     }
 
-    /** The entries/values arrays as a single-choice menu on {@code anchor}. */
-    private void showChoiceMenu(@NonNull View anchor, int entriesRes, int valuesRes,
-                                @NonNull String current, @NonNull Choice choice) {
-        String[] entries = getResources().getStringArray(entriesRes);
-        String[] values = getResources().getStringArray(valuesRes);
-        PopupMenu menu = new PopupMenu(mHost.context(), anchor, Gravity.END);
-        for (int i = 0; i < entries.length && i < values.length; i++) {
-            MenuItem item = menu.getMenu().add(Menu.NONE, i, i, entries[i]);
-            item.setCheckable(true);
-            item.setChecked(values[i].equals(current));
+    /**
+     * A Match row tapped: Copy takes the other screen's layout and glass ({@link ScreenMatch});
+     * Undo, while the copy is still held this visit, puts this screen back as it was.
+     */
+    private void toggleMatch(@NonNull WallHalf target) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        com.termux.app.place.PlaceLayoutStore places = layout == null ? null : layout.places();
+        if (prefs == null || layout == null || places == null)
+            return;
+        ScreenMatch.Undo undo = mMatchUndos.remove(target);
+        if (undo != null) {
+            undo.restore(prefs);
+        } else {
+            undo = ScreenMatch.match(prefs, places, target);
+            if (undo != null) mMatchUndos.put(target, undo);
         }
-        menu.getMenu().setGroupCheckable(Menu.NONE, true, true);
-        menu.setOnMenuItemClickListener(item -> {
-            int index = item.getItemId();
-            if (index >= 0 && index < values.length && !values[index].equals(current)) {
-                choice.chosen(values[index]);
-                if (mSheet != null) mSheet.restate();
-            }
-            return true;
-        });
-        menu.show();
+        // The Look slider reads the half's values again rather than a Custom held this visit.
+        mHeldCustom.remove(target);
+        layout.applyStoreWrite();
+        mHost.redressChrome();
+        syncAfterBulkWrite();
+        syncDirty();
+        if (mSheet != null) mSheet.restate();
     }
 
     /** Builds the icon packs once per session for the Appearance card's Icon pack row. */
@@ -2751,6 +2580,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
         WallHalf half = readHalf(Row.FROST);
+        if (isScreenCard(card) && half != null) {
+            Integer held = mScreenFrostPosition.get(half);
+            return GlassControls.readBack(held == null ? -1 : held,
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+        }
         if (card.slot == null)
             return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
                 prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
@@ -2760,12 +2595,29 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             prefs.getSurfaceValue(card.slot, SurfaceProperty.GRAIN, half));
     }
 
+    /** Where Frost was left on a screen card this session, per half ({@link #writeFrost}). */
+    private final java.util.EnumMap<WallHalf, Integer> mScreenFrostPosition =
+        new java.util.EnumMap<>(WallHalf.class);
+
     /**
      * Frost: blur and grain together along {@link GlassControls}' curve, and the position it was
      * left at. On the Appearance card it is the shared glass of the frame's half, every surface on
      * that half put back on it ({@link GlobalGlass}); on a surface's card, that surface's own
      * pair on the half, as the previous editor's Frost wrote it for a tapped element.
      */
+    /**
+     * A screen card's Frost: that half's Base alone. A surface that holds its own value there
+     * keeps it, and neither the other half nor the shared glass position is touched.
+     */
+    @VisibleForTesting
+    static void writeScreenFrost(@NonNull TermuxAppSharedPreferences prefs, @NonNull WallHalf half,
+                                 int glass) {
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half,
+            AppearanceLooks.blurDp(GlassControls.blurForGlass(glass)));
+        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
+            AppearanceLooks.grainPercent(GlassControls.grainForGlass(glass)));
+    }
+
     private void writeFrost(@NonNull EditorCard card, int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2774,13 +2626,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int blur = GlassControls.blurForGlass(glass);
         int grain = GlassControls.grainForGlass(glass);
         WallHalf half = writeHalf(Row.FROST);
-        prefs.setSurfaceGlassPosition(card.slot, glass);
-        if (card == EditorCard.HOME) {
-            // Home's Base alone: a surface that holds its own Home value keeps it.
-            prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME,
-                AppearanceLooks.blurDp(blur));
-            prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME,
-                AppearanceLooks.grainPercent(grain));
+        // The position key is one for every card that holds none of its own (the Appearance
+        // card's); a screen card keeps its position for the session, per half, and writes its
+        // own half's Base only.
+        if (isScreenCard(card) && half != null)
+            mScreenFrostPosition.put(half, glass);
+        else
+            prefs.setSurfaceGlassPosition(card.slot, glass);
+        if (isScreenCard(card) && half != null) {
+            writeScreenFrost(prefs, half, glass);
         } else if (card.slot == null) {
             GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
             GlobalGlass.write(prefs, SurfaceProperty.GRAIN, half, grain);
@@ -2809,18 +2663,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Home's Opacity or Tint: the Home half's Base, which Home's widgets, status bar and dock
-     * wear while they follow it. Unlike the Appearance card's shared glass it puts no surface
-     * back on the Base: a dock or status bar given its own Home value on its card keeps it.
+     * A screen card's Opacity or Tint: that half's Base (Home's on the Home card, the
+     * Workspace's on the Workspace card), which the surfaces on it wear while they follow it.
+     * Unlike the Appearance card's shared glass it puts no surface back on the Base: a dock or
+     * status bar given its own value there on its card keeps it.
      */
-    private void writeHomeGlass(@NonNull Row row, int value) {
+    private void writeScreenGlass(@NonNull Row row, int value) {
         TermuxAppSharedPreferences prefs = prefs();
         SurfaceProperty property = row.property();
-        if (prefs == null || property == null)
+        WallHalf half = writeHalf(row);
+        if (prefs == null || property == null || half == null)
             return;
         int clamped = row == Row.OPACITY ? AppearanceLooks.opacityPercent(value)
             : AppearanceLooks.tintPercent(value);
-        prefs.setSurfaceBaseValue(property, WallHalf.HOME, clamped);
+        prefs.setSurfaceBaseValue(property, half, clamped);
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
         restateGlassRow(row);
@@ -2848,7 +2704,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         prefs.setLayoutStyle(style);
         mHost.redressChrome();
         applyStructuralPreview();
-        syncLayoutCanvas();
+        syncLayoutSession();
         syncDirty();
         if (mSheet != null) mSheet.restate();
     }
@@ -3374,7 +3230,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         prefs.setLayoutCornersDp(false, corners);
         prefs.setTerminalCornerRadius(corners);
         requestGeometryPreview();
-        syncLayoutCanvas();
+        syncLayoutSession();
     }
 
     /** Margin: one number for all the air on screen, on both halves. */
@@ -3385,7 +3241,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int margin = AppearanceLooks.marginDp(value);
         prefs.setLayoutMarginDp(false, margin);
         requestGeometryPreview();
-        syncLayoutCanvas();
+        syncLayoutSession();
     }
 
     /** The shape pass for Corners and Margin; mid-drag the terminal is not resized. */
@@ -3396,23 +3252,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(scopes);
     }
 
-    /** The canvas re-read while it shows. */
-    private void syncLayoutCanvas() {
+    /** The layout session re-read: its Undo and the card follow a Style, Corners or Margin write. */
+    private void syncLayoutSession() {
         LayoutEditorController layout = mHost.layoutEditor();
-        if (mOpen && layout != null) {
-            pushLayoutShape(layout);
+        if (mOpen && layout != null)
             layout.sync();
-        }
-    }
-
-    /** Tells the canvas the Style, Corners and Margin it draws every shape from. */
-    private void pushLayoutShape(@NonNull LayoutEditorController layout) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return;
-        layout.setShape(prefs.getLayoutStyle(),
-            AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false)),
-            AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false)));
     }
 
     // ---------------------------------------------------------------------- the frame's targets
@@ -3441,15 +3285,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private float mDownRawX;
     private float mDownRawY;
     private boolean mSwiping;
-    private boolean mForwarding;
-    private long mDownTime;
-    @Nullable private Runnable mHoldRunnable;
 
     /**
      * Every group takes its touches, so nothing under the frame receives them while the editor is
-     * up. A tap raises the group's card; a plain horizontal swipe slides to the other half; a hold
-     * on a surface that stands on an edge hands the finger to the layout canvas, whose lift moves
-     * it.
+     * up. A tap raises the group's card; a plain horizontal swipe slides to the other half. Where a
+     * surface sits is its card's Position row: nothing in the frame is dragged.
      */
     @SuppressLint("ClickableViewAccessibility")
     private void bindTargets() {
@@ -3461,50 +3301,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             final int index = i;
             group.setOnClickListener(view -> {
                 EditorCard card = cardOfGroup(index);
-                if (card != null) openCard(card, true);
-                else closeCard(true);
+                if (card != null) {
+                    EditorDoor.EDITOR_OUTLINE.log(card);
+                    if (card == EditorCard.DOCK)
+                        dockCard().expand(dockBarAt(mDownRawX, mDownRawY));
+                    openCard(card, true);
+                } else {
+                    closeCard(true);
+                }
             });
             group.setOnTouchListener((view, event) -> {
                 if (!mOpen)
                     return false;
-                if (mLiftPending) {
-                    // The frame is being copied for the lift: the finger is kept for it.
-                    int action = event.getActionMasked();
-                    if (action == MotionEvent.ACTION_MOVE) {
-                        mPendingRawX = event.getRawX();
-                        mPendingRawY = event.getRawY();
-                        mPendingMoved = true;
-                    } else if (action == MotionEvent.ACTION_UP
-                        || action == MotionEvent.ACTION_CANCEL) {
-                        view.getParent().requestDisallowInterceptTouchEvent(false);
-                        cancelPendingLift();
-                    }
-                    return true;
-                }
-                if (mForwarding) {
-                    forwardToCanvas(event);
-                    return true;
-                }
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         view.getParent().requestDisallowInterceptTouchEvent(true);
                         mDownRawX = event.getRawX();
                         mDownRawY = event.getRawY();
-                        mDownTime = event.getDownTime();
                         mSwiping = false;
-                        scheduleHold(view, index);
                         return true;
                     case MotionEvent.ACTION_MOVE: {
                         float dx = event.getRawX() - mDownRawX;
                         float dy = event.getRawY() - mDownRawY;
-                        if (Math.hypot(dx, dy) > slop)
-                            cancelHold(view);
                         if (!mSwiping && Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy))
                             mSwiping = true;
                         return true;
                     }
                     case MotionEvent.ACTION_UP: {
-                        cancelHold(view);
                         view.getParent().requestDisallowInterceptTouchEvent(false);
                         float dx = event.getRawX() - mDownRawX;
                         if (mSwiping) {
@@ -3519,7 +3342,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         return true;
                     }
                     case MotionEvent.ACTION_CANCEL:
-                        cancelHold(view);
                         view.getParent().requestDisallowInterceptTouchEvent(false);
                         return true;
                     default:
@@ -3531,348 +3353,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** A swipe this far across slides the frame to the other half. */
     private static final int SWIPE_DP = 48;
-
-    private void scheduleHold(@NonNull View view, int index) {
-        cancelHold(view);
-        EditorCard card = GROUP_CARDS[index];
-        if (elementOf(card) == null)
-            return;
-        Runnable hold = () -> {
-            mHoldRunnable = null;
-            startDrag();
-        };
-        mHoldRunnable = hold;
-        view.postDelayed(hold, ViewConfiguration.getLongPressTimeout());
-    }
-
-    private void cancelHold(@NonNull View view) {
-        Runnable hold = mHoldRunnable;
-        mHoldRunnable = null;
-        if (hold != null)
-            view.removeCallbacks(hold);
-    }
-
-    /**
-     * The hold landed: the canvas stands over the frame and takes the finger from here. The card
-     * that is up stays up, so the frame keeps its pose from the hold through the drop: putting the
-     * card down here moved the frame to its rest pose, larger and further across, under a finger
-     * already on an element.
-     */
-    private void startDrag() {
-        LayoutCanvasView canvas = mCanvas;
-        if (!mOpen || canvas == null || mLayoutFrame == null)
-            return;
-        mCanvasForDrag = !mCanvasShown;
-        // In the orientation on screen the drag is live: the frame is copied first, as it is
-        // drawn now, and the lift starts once the pictures stand in for it.
-        // Pending from here: the copy may come back at once (liftHeld then clears it).
-        mLiftPending = true;
-        mPendingMoved = false;
-        if (mCanvasForDrag && beginLiveCapture(this::liftHeld))
-            return;
-        liftHeld();
-    }
-
-    /** The hold's finger handed to the canvas, whose lift starts under it. */
-    private void liftHeld() {
-        mLiftPending = false;
-        LayoutCanvasView canvas = mCanvas;
-        if (!mOpen || canvas == null)
-            return;
-        showCanvas(true, false);
-        mForwarding = true;
-        MotionEvent down = MotionEvent.obtain(mDownTime, SystemClock.uptimeMillis(),
-            MotionEvent.ACTION_DOWN, mDownRawX, mDownRawY, 0);
-        forwardToCanvas(down);
-        down.recycle();
-        if (!canvas.isLifting()) {
-            // Nothing liftable under the finger: the pictures go at once.
-            if (canvas.isLive()) {
-                canvas.endLive();
-                finishLive();
-            }
-            return;
-        }
-        if (mForwarding && mPendingMoved) {
-            MotionEvent move = MotionEvent.obtain(mDownTime, SystemClock.uptimeMillis(),
-                MotionEvent.ACTION_MOVE, mPendingRawX, mPendingRawY, 0);
-            forwardToCanvas(move);
-            move.recycle();
-        }
-        setLifted(true);
-    }
-
-    // ---- the live drag (SPEC §3.6a items 1 and 2) -------------------------------------------
-
-    /** The pictures that stand in for the frame's elements during a drag, or null. */
-    @Nullable private LiveDragCapture mLive;
-    /** A hold landed and the frame is being copied: the finger waits for the lift. */
-    private boolean mLiftPending;
-    private boolean mPendingMoved;
-    private float mPendingRawX;
-    private float mPendingRawY;
-    /** A rail card carried through the canvas, once its lift has started; null otherwise. */
-    @Nullable private LayoutCanvasView.Block mChipDrag;
-
-    /** The container's px in the canvas's, at the pose the canvas was laid out for. */
-    @NonNull
-    private LiveDragCapture.FrameMap liveMap() {
-        return new LiveDragCapture.FrameMap(mFrameRectScale, mRootInCanvasX, mRootInCanvasY);
-    }
-
-    /**
-     * Copies the frame and, once the copy is in, lets the canvas draw the elements' pictures
-     * over a transparent host, makes the real views transparent and runs {@code then}. False
-     * where a live drag cannot start (the frame is moving, or not laid out): the caller goes on
-     * without one.
-     */
-    private boolean beginLiveCapture(@NonNull Runnable then) {
-        LayoutCanvasView canvas = mCanvas;
-        AppearanceEditorFrame frame = mFrame;
-        ViewGroup content = mHost.findView(android.R.id.content);
-        int[] rect = mFrameRectInContent;
-        if (canvas == null || frame == null || content == null || rect == null || mLive != null
-            || !poseHolds() || mFrameAnimator != null)
-            return false;
-        LiveDragCapture capture = new LiveDragCapture(mHost::findView, frame.root());
-        mLive = capture;
-        int[] at = new int[2];
-        content.getLocationInWindow(at);
-        android.graphics.Rect inWindow = new android.graphics.Rect(at[0] + rect[0],
-            at[1] + rect[1], at[0] + rect[2], at[1] + rect[3]);
-        capture.capture(mHost.context(), inWindow, RING_PX, liveMap(), canvas::cornerRadiusOf,
-            shots -> {
-                if (mLive != capture || !mOpen)
-                    return;
-                canvas.beginLive(shots, new LayoutCanvasView.LiveHost() {
-                    @NonNull @Override
-                    public java.util.Map<LayoutCanvasView.Block, android.graphics.RectF>
-                        realRects() {
-                        return capture.canvasRects(liveMap());
-                    }
-
-                    @Override public void onLiveFinished(boolean dropped) {
-                        if (mLive == capture)
-                            finishLive();
-                    }
-                });
-                setCanvasBackdrop(false);
-                capture.hideReal();
-                then.run();
-            });
-        return true;
-    }
-
-    /** The canvas's host shows its own ground (the schematic's), or none over the live frame. */
-    private void setCanvasBackdrop(boolean shown) {
-        FrameLayout host = mLayoutFrame;
-        if (host == null || host.getBackground() == null)
-            return;
-        if (shown)
-            setModelProgress(mModelProgress);
-        else
-            host.getBackground().mutate().setAlpha(0);
-    }
-
-    /**
-     * The pictures are gone: the real views show, the canvas goes once nothing holds it, and the
-     * frame takes the pose it waited for (a drop may have hidden the first element or shown the
-     * last), sliding at one scale.
-     */
-    private void finishLive() {
-        LiveDragCapture capture = mLive;
-        mLive = null;
-        mLiftPending = false;
-        if (capture != null) {
-            capture.cancel();
-            capture.showReal();
-        }
-        setCanvasBackdrop(true);
-        if (mCanvasForDrag && !mForwarding && mChipDrag == null) {
-            mCanvasForDrag = false;
-            showCanvas(false, false);
-        }
-        mLifted = false;
-        applyPose(true, LIFT_SLIDE_MS);
-        // No slide back (the pose holds): the carried canvas is laid out at the pose now.
-        if (mFrameAnimator == null)
-            setTarget(mTargetScale, mTargetTx, mTargetTy);
-        positionTargets();
-    }
-
-    /** The editor is going: pictures, copies and lifts dropped at once. */
-    private void abandonLive() {
-        LayoutCanvasView canvas = mCanvas;
-        if (canvas != null && canvas.isLive())
-            canvas.endLive();
-        LiveDragCapture capture = mLive;
-        mLive = null;
-        if (capture != null) {
-            capture.cancel();
-            capture.showReal();
-        }
-        setCanvasBackdrop(true);
-        mLiftPending = false;
-        mChipDrag = null;
-        mLifted = false;
-    }
-
-    /** A hold still being copied was let go: no lift. */
-    private void cancelPendingLift() {
-        mLiftPending = false;
-        LiveDragCapture capture = mLive;
-        mLive = null;
-        if (capture != null)
-            capture.cancel();
-        mCanvasForDrag = false;
-    }
-
-    /** The canvas's block a rail card stands for; null where the card is not carried through it. */
-    @Nullable
-    static LayoutCanvasView.Block blockOf(@NonNull HiddenItem item) {
-        switch (item) {
-            case STATUS_BAR: return LayoutCanvasView.Block.STATUS_BAR;
-            case PINNED_APPS: return LayoutCanvasView.Block.APPS_ROW;
-            case AZ_INDEX: return LayoutCanvasView.Block.ALPHABETS_ROW;
-            case EXTRA_KEYS: return LayoutCanvasView.Block.EXTRA_KEYS;
-            // The keyboard comes back raised by showHidden, and the Search field has no slot:
-            // both stay cards and come back where they were.
-            case KEYBOARD:
-            case SEARCH_FIELD:
-            default: return null;
-        }
-    }
-
-    /** A rail card began to be dragged: in the orientation on screen, the frame is copied. */
-    private void beginChipDrag(@NonNull HiddenItem item) {
-        LayoutCanvasView.Block block = blockOf(item);
-        if (block == null || !mOpen || mCanvas == null || mLayoutFrame == null || mCanvasShown
-            || mForwarding || mLiftPending)
-            return;
-        mCanvasForDrag = true;
-        mPendingMoved = false;
-        if (!beginLiveCapture(() -> liftChip(block))) {
-            mCanvasForDrag = false;
-        }
-    }
-
-    /** The copy is in: the card's element is lifted in the canvas, from the rail. */
-    private void liftChip(@NonNull LayoutCanvasView.Block block) {
-        LayoutCanvasView canvas = mCanvas;
-        if (canvas == null || !mOpen)
-            return;
-        showCanvas(true, false);
-        if (!canvas.beginHiddenDrag(block)) {
-            canvas.endLive();
-            mCanvasForDrag = false;
-            finishLive();
-            return;
-        }
-        mChipDrag = block;
-        if (mPendingMoved)
-            moveChipDrag(mPendingRawX, mPendingRawY);
-    }
-
-    /** The card is at a raw point: the canvas's hover follows; true while it draws the element. */
-    private boolean moveChipDrag(float rawX, float rawY) {
-        mPendingRawX = rawX;
-        mPendingRawY = rawY;
-        mPendingMoved = true;
-        LayoutCanvasView canvas = mCanvas;
-        if (mChipDrag == null || canvas == null)
-            return false;
-        float[] point = canvasPoint(canvas, rawX, rawY);
-        canvas.hoverHiddenDrag(point[0], point[1]);
-        return canvas.drawsHeldOverFrame();
-    }
-
-    /**
-     * The card let go: carried through the canvas, a drop over a slot puts its element there
-     * (and anywhere else the pictures go back); still being copied, or never carried, it is
-     * the card's own drop as before.
-     */
-    private void dropChip(@NonNull HiddenItem item, float rawX, float rawY) {
-        LayoutCanvasView canvas = mCanvas;
-        LayoutCanvasView.Block block = mChipDrag;
-        mChipDrag = null;
-        if (block == null || canvas == null) {
-            if (mLive != null && (canvas == null || !canvas.isLive()))
-                cancelPendingLift();
-            if (isOverFrame(rawX, rawY))
-                showHidden(item, false);
-            return;
-        }
-        float[] point = canvasPoint(canvas, rawX, rawY);
-        canvas.dropHiddenDrag(point[0], point[1]);
-        if (!canvas.isLive() && mCanvasForDrag) {
-            mCanvasForDrag = false;
-            showCanvas(false, true);
-        }
-    }
-
-    /** The card's drag was taken away: the lift ends with it. */
-    private void cancelChip() {
-        LayoutCanvasView canvas = mCanvas;
-        LayoutCanvasView.Block block = mChipDrag;
-        mChipDrag = null;
-        if (block != null && canvas != null) {
-            canvas.endHiddenDrag();
-            return;
-        }
-        if (mLive != null && (canvas == null || !canvas.isLive()))
-            cancelPendingLift();
-    }
-
-    /** One touch, in the canvas's own coordinates, to the canvas. */
-    /** A raw screen point in the canvas's own px, through the host's carry (scale, translation). */
-    @NonNull
-    private float[] canvasPoint(@NonNull LayoutCanvasView canvas, float rawX, float rawY) {
-        FrameLayout host = mLayoutFrame;
-        View parent = host == null ? null : (View) host.getParent();
-        if (host == null || parent == null || canvas.getParent() != host) {
-            int[] at = new int[2];
-            canvas.getLocationOnScreen(at);
-            return new float[] {rawX - at[0], rawY - at[1]};
-        }
-        int[] at = new int[2];
-        parent.getLocationOnScreen(at);
-        float[] point = {rawX - at[0] - host.getLeft(), rawY - at[1] - host.getTop()};
-        android.graphics.Matrix inverse = new android.graphics.Matrix();
-        if (host.getMatrix().invert(inverse))
-            inverse.mapPoints(point);
-        point[0] -= canvas.getLeft();
-        point[1] -= canvas.getTop();
-        return point;
-    }
-
-    private void forwardToCanvas(@NonNull MotionEvent event) {
-        LayoutCanvasView canvas = mCanvas;
-        if (canvas == null) {
-            mForwarding = false;
-            return;
-        }
-        float[] point = canvasPoint(canvas, event.getRawX(), event.getRawY());
-        MotionEvent local = MotionEvent.obtain(event);
-        local.setLocation(point[0], point[1]);
-        canvas.dispatchTouchEvent(local);
-        local.recycle();
-        int action = event.getActionMasked();
-        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-            mForwarding = false;
-            // Live, the pictures settle first; finishLive puts the canvas away after them.
-            if (canvas.isLive())
-                return;
-            if (mCanvasForDrag) {
-                mCanvasForDrag = false;
-                showCanvas(false, true);
-            }
-            if (mLifted) {
-                mLifted = false;
-                applyPose(true, LIFT_SLIDE_MS);
-            }
-            positionTargets();
-        }
-    }
 
     private void setOverlayVisible(boolean visible) {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
@@ -3912,7 +3392,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int[] overlayOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn(overlay, root, overlayOffset))
             return null;
-        if (card == null || card == EditorCard.HOME)
+        if (card == null || isScreenCard(card))
             return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
         if (card == EditorCard.TERMINAL) {
             int[] frame = mHost.terminalFrameRectInRoot();
@@ -4060,17 +3540,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         float scale = mTargetScale > 0f ? mTargetScale : 1f;
         int stroke = Math.max(1, Math.round(dp(RING_DP) / scale));
-        int grow = card == EditorCard.HOME ? -stroke : stroke;
+        int grow = isScreenCard(card) ? -stroke : stroke;
         int[] grown = {rect[0] - grow, rect[1] - grow, rect[2] + grow, rect[3] + grow};
         placeInOverlay(outline, overlay, grown);
         GradientDrawable ring = new GradientDrawable();
         ring.setColor(0);
         ring.setStroke(stroke, mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary));
-        ring.setCornerRadius(card == EditorCard.HOME ? 0f
+        ring.setCornerRadius(isScreenCard(card) ? 0f
             : Math.max(0f, outlineRadiusPx(card) + grow));
         outline.setBackground(ring);
         EditorViews.setVisible(outline, true);
+    }
+
+    /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
+    private static boolean isScreenCard(@Nullable EditorCard card) {
+        return card == EditorCard.HOME || card == EditorCard.WORKSPACE;
     }
 
     /** The radius a surface's outline wears: the surface's own. */
@@ -4176,9 +3661,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ------------------------------------------------------------------------- the clock face
     //
-    // The status bar's one control that is a look rather than a number: the Clock button above
-    // the sliders, opening the six faces upward, drawn as themselves, with the face's position
-    // beneath them. Live like every other editor control, and gated by Done.
+    // The status bar's face and its place in the bar, as the Status bar card's face tiles and
+    // Clock position row write them (cards/StatusBarCard). Live like every other editor control,
+    // and gated by Done.
 
     /**
      * Every stored clock style, Minimal's medium weight included. Package-private so a test can
@@ -4192,40 +3677,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
-
-    /**
-     * The faces the picker lists, one row each: every style but Minimal's medium weight, which is
-     * Minimal's row with the Weight row under it ({@link #clockWeightRow}).
-     */
-    static final String[] CLOCK_FACES = {
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
-
-    /** Whether {@code style} is Minimal, in either weight. */
-    static boolean isMinimalStyle(@Nullable String style) {
-        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style)
-            || TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(style);
-    }
-
-    /**
-     * The picker's rows for the bar's {@code current} style: the faces, then the Weight row while
-     * Minimal is the face, then the position row. Public for the Clock widget's test.
-     */
-    @NonNull
-    public static String[] clockDropdownRows(@Nullable String current) {
-        java.util.List<String> rows = new java.util.ArrayList<>(java.util.Arrays.asList(CLOCK_FACES));
-        if (isMinimalStyle(current)) rows.add(CLOCK_ROW_WEIGHT);
-        rows.add(CLOCK_ROW_POSITION);
-        return rows.toArray(new String[0]);
-    }
-
-    /** The picker's two rows that are not faces. */
-    public static final String CLOCK_ROW_WEIGHT = "@weight";
-    public static final String CLOCK_ROW_POSITION = "@position";
 
     /** Package-private so a test can hold it against the settings list's own segment values. */
     static final String[] CLOCK_ALIGNMENTS = {
@@ -4261,313 +3712,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return R.string.termux_top_pane_clock_style_flip;
     }
 
-    /**
-     * A face at the size the collapsed pane draws it, honouring the 12-hour and lazy-mode
-     * preferences so a preview never animates in a build where the real clock does not.
-     */
-    private void applyClockPreview(@NonNull TerminalClockWidget widget, @NonNull String style) {
-        widget.setForm(TopPaneClockForm.COMPACT);
-        widget.setStyle(style);
-        if (prefs() == null)
-            return;
-        widget.setUseAmPm(prefs().isTopPaneClockAmPmEnabled());
-        widget.setLazyMode(prefs().isLazyModeEnabled());
-    }
-
-    @Nullable private ListPopupWindow mClockDropdown;
-
-    /**
-     * The drop-down's rows: the six faces, Minimal's Weight row while Minimal is the face, then one
-     * row for the face's place in the pane ({@link #clockDropdownRows}). A real list popup, so the
-     * theme's popup style gives it its surface, shape and elevation.
-     */
-    private final class ClockDropdownAdapter extends BaseAdapter {
-        private final String mCurrent;
-        private final String[] mRows;
-
-        ClockDropdownAdapter(@NonNull String current) {
-            mCurrent = current;
-            mRows = clockDropdownRows(current);
-        }
-
-        @Override public int getCount() { return mRows.length; }
-
-        @Override public Object getItem(int position) {
-            return isFaceRow(position) ? mRows[position] : null;
-        }
-
-        @Override public long getItemId(int position) { return position; }
-
-        @Override public int getViewTypeCount() { return 3; }
-
-        @Override public int getItemViewType(int position) {
-            if (isFaceRow(position)) return 0;
-            return CLOCK_ROW_WEIGHT.equals(mRows[position]) ? 2 : 1;
-        }
-
-        @Override public boolean areAllItemsEnabled() { return false; }
-
-        /** The weight and position rows are made of controls of their own; the list takes faces. */
-        @Override public boolean isEnabled(int position) { return isFaceRow(position); }
-
-        boolean isFaceRow(int position) {
-            return position >= 0 && position < mRows.length
-                && !mRows[position].startsWith("@");
-        }
-
-        @Override public View getView(int position, @Nullable View convertView,
-                                      @NonNull ViewGroup parent) {
-            Context context = parent.getContext();
-            if (CLOCK_ROW_POSITION.equals(mRows[position]))
-                return clockPositionRow(context);
-            if (CLOCK_ROW_WEIGHT.equals(mRows[position]))
-                return clockWeightRow(context);
-            return clockFaceRow(context, mRows[position], mCurrent);
-        }
-    }
-
-    /**
-     * The Clock button's popup: the six faces drawn as themselves, over the frame. The button
-     * stands in the sheet at the foot of the screen, so the popup opens upward from its top edge
-     * (a negative vertical offset of the anchor's height plus the popup's own), aligned to the
-     * button's end, and never taller than the room above the button.
-     */
-    private void showClockDropdown(@NonNull View anchor) {
-        if (prefs() == null)
-            return;
-        dismissClockDropdown();
-        Context context = mHost.context();
-        ListPopupWindow popup = new ListPopupWindow(context);
-        popup.setAnchorView(anchor);
-        popup.setModal(true);
-        int windowWidth = Math.min(anchor.getRootView().getWidth(),
-            getResources().getDisplayMetrics().widthPixels);
-        // Beside the preview the sheet is the side pane: the popup takes its share of the pane,
-        // not of the window, so it stands over the pane rather than across the preview.
-        popup.setWidth(windowWidth * 3 / 4);
-        popup.setDropDownGravity(Gravity.END);
-        int[] anchorAt = new int[2];
-        anchor.getLocationInWindow(anchorAt);
-        // The bottom sheet's button is near the foot: the popup opens upward from its top edge.
-        // The side pane's stands near the top of a tall pane: it opens downward under it.
-        int roomAbove = anchorAt[1] - dp(FRAME_GAP_DP);
-        int roomBelow = anchor.getRootView().getHeight() - mNavInsetPx
-            - (anchorAt[1] + anchor.getHeight()) - dp(FRAME_GAP_DP);
-        int room = Math.max(dp(CLOCK_POPUP_MIN_HEIGHT_DP), Math.max(roomAbove, roomBelow));
-        int height = Math.min(dp(clockPopupHeightDp(prefs().getTopPaneClockStyle())), room);
-        popup.setHeight(height);
-        popup.setVerticalOffset(roomAbove >= roomBelow ? -(anchor.getHeight() + height) : 0);
-        popup.setOnDismissListener(() -> mClockDropdown = null);
-        ClockDropdownAdapter adapter = new ClockDropdownAdapter(prefs().getTopPaneClockStyle());
-        popup.setAdapter(adapter);
-        popup.setOnItemClickListener((parent, view, position, id) -> {
-            Object face = adapter.getItem(position);
-            if (face instanceof String) {
-                // Minimal's row keeps the weight it has; the Weight row moves between the two.
-                if (!(isMinimalStyle((String) face)
-                    && isMinimalStyle(prefs() == null ? null : prefs().getTopPaneClockStyle())))
-                    pickClockStyle((String) face);
-                popup.dismiss();
-            }
-        });
-        popup.setBackgroundDrawable(EditorM3.surface(anchor,
-            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh));
-        mClockDropdown = popup;
-        popup.show();
-    }
-
-    /**
-     * The popup's height as it wants to stand: six 48dp face rows and the 56dp position row, and
-     * the 56dp weight row only while Minimal is the face ({@link #clockDropdownRows}), so no
-     * blank strip is left where it is not shown.
-     */
-    public static int clockPopupHeightDp(@Nullable String current) {
-        return 6 * 48 + (isMinimalStyle(current) ? 56 : 0) + 56;
-    }
-
-    private static final int CLOCK_POPUP_MIN_HEIGHT_DP = 160;
-
-    private void dismissClockDropdown() {
-        if (mClockDropdown == null)
-            return;
-        mClockDropdown.dismiss();
-        mClockDropdown = null;
-    }
-
-    /** Gives a text view the theme's text appearance behind {@code attr}. */
-    private static void applyTextAppearance(@NonNull TextView view, @AttrRes int attr) {
-        TypedValue value = new TypedValue();
-        if (view.getContext().getTheme().resolveAttribute(attr, value, true)
-            && value.resourceId != 0)
-            view.setTextAppearance(value.resourceId);
-    }
-
-    /** One face in the drop-down: its name, the face itself, and a tick on the one in use. */
-    @NonNull
-    private View clockFaceRow(@NonNull Context context, @NonNull String style,
-                              @NonNull String current) {
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(48));
-        row.setPaddingRelative(dp(16), 0, dp(16), 0);
-        boolean selected = style.equals(current)
-            || (isMinimalStyle(style) && isMinimalStyle(current));
-
-        TextView name = new TextView(context);
-        name.setText(clockStyleLabel(style));
-        applyTextAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
-        name.setMaxLines(2);
-        name.setEllipsize(TextUtils.TruncateAt.END);
-        name.setTextColor(EditorM3.color(row, selected
-            ? androidx.appcompat.R.attr.colorPrimary
-            : com.google.android.material.R.attr.colorOnSurface));
-        name.setLayoutParams(new LinearLayout.LayoutParams(
-            dp(84), ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(name);
-
-        TerminalClockWidget preview = new TerminalClockWidget(context, null);
-        // Minimal's row draws the weight the bar wears.
-        applyClockPreview(preview, selected && isMinimalStyle(style) ? current : style);
-        preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        preview.setLayoutParams(new LinearLayout.LayoutParams(0, dp(30), 1f));
-        row.addView(preview);
-
-        TextView tick = new TextView(context);
-        tick.setText(R.string.termux_surface_tuning_clock_selected);
-        applyTextAppearance(tick, com.google.android.material.R.attr.textAppearanceTitleMedium);
-        tick.setGravity(Gravity.CENTER);
-        tick.setTextColor(EditorM3.color(row, androidx.appcompat.R.attr.colorPrimary));
-        tick.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
-        tick.setLayoutParams(new LinearLayout.LayoutParams(
-            dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(tick);
-
-        row.setContentDescription(getString(R.string.termux_surface_tuning_clock_face_description,
-            getString(clockStyleLabel(style))));
-        final boolean isSelected = selected;
-        androidx.core.view.ViewCompat.setAccessibilityDelegate(row,
-            new androidx.core.view.AccessibilityDelegateCompat() {
-                @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
-                        @NonNull androidx.core.view.accessibility
-                            .AccessibilityNodeInfoCompat info) {
-                    super.onInitializeAccessibilityNodeInfo(host, info);
-                    info.setClassName(Button.class.getName());
-                    info.setCheckable(true);
-                    info.setChecked(isSelected);
-                }
-            });
-        return row;
-    }
-
-    /**
-     * Where the face sits in the pane, left, centre or right, as the theme's segmented buttons
-     * under the faces. The popup stays open for a second look instead of dismissing like a face
-     * pick does.
-     */
-    @NonNull
-    private View clockPositionRow(@NonNull Context context) {
-        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
-        group.setSingleSelection(true);
-        group.setSelectionRequired(true);
-        group.setContentDescription(getString(R.string.settings_clock_alignment_title));
-        String current = prefs() == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT
-            : prefs().getTopPaneClockAlignment();
-        final java.util.Map<Integer, String> alignmentOf = new java.util.HashMap<>();
-        int currentId = View.NO_ID;
-        for (String alignment : CLOCK_ALIGNMENTS) {
-            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
-                .inflate(R.layout.segment_button, group, false);
-            button.setId(View.generateViewId());
-            button.setText(clockAlignmentLabel(alignment));
-            button.setMaxLines(1);
-            button.setContentDescription(getString(
-                R.string.termux_surface_tuning_clock_position_description,
-                getString(clockAlignmentLabel(alignment))));
-            button.setLayoutParams(new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            group.addView(button);
-            alignmentOf.put(button.getId(), alignment);
-            if (alignment.equals(current))
-                currentId = button.getId();
-        }
-        if (currentId != View.NO_ID)
-            group.check(currentId);
-        group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
-            String alignment = alignmentOf.get(checkedId);
-            if (isChecked && alignment != null)
-                pickClockAlignment(alignment);
-        });
-        FrameLayout holder = new FrameLayout(context);
-        holder.setPadding(dp(16), dp(4), dp(16), dp(4));
-        holder.addView(group, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return holder;
-    }
-
     private void pickClockAlignment(@NonNull String alignment) {
         if (prefs() == null || alignment.equals(prefs().getTopPaneClockAlignment()))
             return;
         prefs().setTopPaneClockAlignment(alignment);
         mHost.refreshTerminalWindowBar();
         syncDirty();
-    }
-
-    /**
-     * Minimal's weight, Thin or Medium, as the theme's segmented buttons under the faces while
-     * Minimal is the face. Like the position row, the popup stays open for a second look.
-     */
-    @NonNull
-    private View clockWeightRow(@NonNull Context context) {
-        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
-        group.setSingleSelection(true);
-        group.setSelectionRequired(true);
-        group.setContentDescription(getString(R.string.termux_surface_tuning_clock_weight));
-        String current = prefs() == null ? null : prefs().getTopPaneClockStyle();
-        String[] styles = {TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
-            TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM};
-        int[] labels = {R.string.termux_surface_tuning_clock_weight_thin,
-            R.string.termux_surface_tuning_clock_weight_medium};
-        final java.util.Map<Integer, String> styleOf = new java.util.HashMap<>();
-        int currentId = View.NO_ID;
-        for (int i = 0; i < styles.length; i++) {
-            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
-                .inflate(R.layout.segment_button, group, false);
-            button.setId(View.generateViewId());
-            button.setText(labels[i]);
-            button.setMaxLines(1);
-            button.setContentDescription(getString(
-                R.string.termux_surface_tuning_clock_weight_description, getString(labels[i])));
-            button.setLayoutParams(new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            group.addView(button);
-            styleOf.put(button.getId(), styles[i]);
-            if (styles[i].equals(current))
-                currentId = button.getId();
-        }
-        if (currentId != View.NO_ID)
-            group.check(currentId);
-        group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
-            String style = styleOf.get(checkedId);
-            if (isChecked && style != null)
-                pickClockStyle(style);
-        });
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(16), dp(4), dp(16), dp(4));
-        TextView name = new TextView(context);
-        name.setText(R.string.termux_surface_tuning_clock_weight);
-        applyTextAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
-        name.setTextColor(EditorM3.color(row, com.google.android.material.R.attr.colorOnSurface));
-        name.setLayoutParams(new LinearLayout.LayoutParams(dp(84),
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(name);
-        row.addView(group, new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        return row;
     }
 
     private void pickClockStyle(@NonNull String style) {
@@ -4599,6 +3749,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
     private void revertToEntry() {
         dropLookDrag();
+        // A Match onto a layout the session did not take on entry (Home's, opened in minimal
+        // mode) is put back by its own Undo; the session's revert covers the rest.
+        TermuxAppSharedPreferences matched = prefs();
+        if (matched != null) {
+            for (ScreenMatch.Undo undo : mMatchUndos.values())
+                undo.restore(matched);
+        }
+        mMatchUndos.clear();
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.isDirty())
             layout.revert();
@@ -4669,9 +3827,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             proceed.run();
             return;
         }
-        LayoutEditorController layoutEditor = mHost.layoutEditor();
-        if (layoutEditor != null && layoutEditor.cancelGesture())
-            return;
         if (!isDirty()) {
             proceed.run();
             return;
@@ -4685,9 +3840,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Leaving with the picker's choice pending as well: the one question, always. */
     @Override
     public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard) {
-        LayoutEditorController layoutEditor = mHost.layoutEditor();
-        if (mOpen && layoutEditor != null && layoutEditor.cancelGesture())
-            return;
         showUnsavedDialog(() -> {
             if (mOpen)
                 commitSession();
@@ -4711,29 +3863,41 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             .show();
     }
 
-    /** The phone turned: the canvas's default and the next write turn with it. */
+    /**
+     * The phone turned: the editor stays open and edits the orientation the phone is in now
+     * (editor-redesign §1, rotate to edit); the chip names it, and the open card reads it.
+     */
     public void onPlaceOrientationChanged() {
         LayoutEditorController layout = mHost.layoutEditor();
-        if (mOpen && layout != null)
+        View content = mHost.findView(android.R.id.content);
+        if (!mOpen || layout == null || content == null)
+            return;
+        // Posted: the configuration lands before the window is laid out in it.
+        content.post(() -> {
+            if (!mOpen)
+                return;
             layout.onPlaceOrientationChanged();
+            restateOrientation();
+            restateCard();
+            refreshStack();
+        });
     }
 
-    /** Takes the editor off screen: the card, the bar, the canvas, then the frame back to size. */
+    /** Takes the editor off screen: the card, the bar, then the frame back to size. */
     private void dismiss(@Nullable Runnable onHidden) {
         if (!mOpen) {
             if (onHidden != null)
                 onHidden.run();
             return;
         }
-        dismissClockDropdown();
         if (mSliderDragActive)
             endDrag();
         mOpen = false;
+        mMatchUndos.clear();
         mHost.retainGlassCapture(false);
         mFramed = false;
         mPresentToken++;
         mSliderDragActive = false;
-        mForwarding = false;
         mEntry = null;
         mEntryCustom = null;
         mEntrySignature = null;
@@ -4746,8 +3910,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.end();
             layout.setOnChangedListener(null);
             layout.setOnPlaceShownListener(null);
-            layout.setOnSelectionListener(null);
-            layout.setOnTrayOfferListener(null);
         }
         detachStack();
         cancelFrameAnimator();
@@ -4755,9 +3917,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mTargetScale = -1f;
         mFollowingSheet = false;
         mEntering = false;
-        abandonLive();
-        mCanvasForDrag = false;
-        showCanvas(false, false);
         setOverlayVisible(false);
         unregisterLayoutListener();
         View outline = mHost.findView(R.id.surface_editor_selection_outline);
@@ -4772,9 +3931,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             bar.setShown(false);
             bar.detach();
         }
-        FrameLayout canvasHost = mLayoutFrame;
-        if (canvasHost != null && canvasHost.getParent() instanceof ViewGroup)
-            ((ViewGroup) canvasHost.getParent()).removeView(canvasHost);
         AppearanceEditorFrame frame = mFrame;
         if (frame == null) {
             if (onHidden != null)
@@ -4840,6 +3996,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mWallpaperSettled = false;
         mWallpaperWaiter = null;
         mEditorWallpaper = null;
+        mLabelPicture = null;
+        mLabelInk = 0;
         releaseIconsContent();
         AppearanceEditorFrame frame = mFrame;
         if (frame != null) {
@@ -5035,8 +4193,919 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mHost.applyTextSizePreview(true);
         applyStructuralPreview();
         restateCard();
-        // An Undo can move Style or Corners under a showing canvas.
-        syncLayoutCanvas();
+        // An Undo can move Style or Corners: the layout session's dirty state follows.
+        syncLayoutSession();
         positionOutline();
+    }
+
+    // ------------------------------------------------------- Status bar and Terminal cards
+
+    /** The rows the Status bar and Terminal cards drew themselves, for their restates. */
+    @NonNull private final java.util.Map<Row, com.termux.app.surfaces.cards.CardRowView> mOwnRows =
+        new java.util.EnumMap<>(Row.class);
+
+    /**
+     * The Status bar or Terminal card's own row for {@code row} ({@link
+     * EditorCardSheet.Model#rowView}), or null for a row the sheet draws.
+     */
+    @Nullable
+    private View statusTerminalRowView(@NonNull Row row, int widthPx) {
+        EditorCard card = mCard;
+        Context context = mHost.context();
+        com.termux.app.surfaces.cards.CardRowView built = null;
+        if (card == EditorCard.STATUS)
+            built = com.termux.app.surfaces.cards.StatusBarCard.view(context, row, widthPx,
+                mStatusCardHost);
+        else if (card == EditorCard.TERMINAL)
+            built = com.termux.app.surfaces.cards.TerminalCard.view(context, row, widthPx,
+                mTerminalCardHost);
+        if (built == null) {
+            mOwnRows.remove(row);
+            return null;
+        }
+        mOwnRows.put(row, built);
+        return built.view;
+    }
+
+    /**
+     * The Keyboard, Home, Global or Workspace card's rows ({@link CardBody}), for the card being
+     * built. Asked only while the sheet builds a card (through {@link EditorCardSheet.Model#rowView}),
+     * so a restatement keeps reading the views it built; a card whose rows changed (the glass edge
+     * came or went) gets a body of its own.
+     */
+    @Nullable private CardBody mCardBody;
+
+    @NonNull
+    private CardBody cardBody(@NonNull EditorCard card) {
+        java.util.List<EditorRows.Spec> specs = EditorRows.rows(card, offers());
+        CardBody body = mCardBody;
+        if (body == null || !body.drawsFor(card, specs)) {
+            body = new CardBody(mHost.context(), mModel, mModel, card, specs, () -> {
+                EditorCardSheet sheet = mSheet;
+                if (sheet != null) sheet.setDetent(EditorCardSheet.DETENT_FULL, true);
+            });
+            mCardBody = body;
+        }
+        return body;
+    }
+
+    /** Reads a row {@link #statusTerminalRowView} built again from the values. */
+    private void restateStatusTerminalRow(@NonNull Row row, @NonNull View view) {
+        com.termux.app.surfaces.cards.CardRowView built = mOwnRows.get(row);
+        if (built != null && built.view == view)
+            built.restate();
+    }
+
+    /** The Status bar card's reads and writes, through the paths its old rows and Settings take. */
+    @NonNull private final com.termux.app.surfaces.cards.StatusBarCard.Host mStatusCardHost =
+        new com.termux.app.surfaces.cards.StatusBarCard.Host() {
+            @Override public int position() {
+                LayoutEditorController layout = mHost.layoutEditor();
+                return com.termux.app.surfaces.cards.StatusBarCard.positionIndex(
+                    layout == null ? null : layout.edgeOf(Element.STATUS));
+            }
+
+            @Override public void setPosition(int index) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                PlaceLayout.Edge[] edges = com.termux.app.surfaces.cards.StatusBarCard.POSITIONS;
+                if (layout == null || index < 0 || index >= edges.length)
+                    return;
+                layout.moveTo(Element.STATUS, edges[index]);
+                positionTargets();
+                syncDirty();
+            }
+
+            @Override public int clockFace() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.faceIndex(
+                    prefs == null ? null : prefs.getTopPaneClockStyle());
+            }
+
+            @Override public void setClockFace(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return;
+                pickClockStyle(com.termux.app.surfaces.cards.StatusBarCard.faceStyle(index,
+                    prefs.getTopPaneClockStyle()));
+            }
+
+            @Override public int clockPosition() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.alignmentIndex(
+                    prefs == null ? null : prefs.getTopPaneClockAlignment());
+            }
+
+            @Override public void setClockPosition(int index) {
+                String[] alignments = com.termux.app.surfaces.cards.StatusBarCard.ALIGNMENTS;
+                if (index >= 0 && index < alignments.length)
+                    pickClockAlignment(alignments[index]);
+            }
+
+            @Override public boolean option(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return false;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_12H:
+                        return prefs.isTopPaneClockAmPmEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_SECONDS:
+                        return prefs.isStatusClockSecondsEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_FAHRENHEIT:
+                        return prefs.isStatusWidgetWeatherFahrenheit();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_CAMERA_GAP:
+                        return com.termux.app.surfaces.cards.StatusBarCard.cameraGapOn(
+                            prefs.getStatusBarCutoutMode());
+                    default:
+                        return false;
+                }
+            }
+
+            @Override public void setOption(int index, boolean on) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || option(index) == on)
+                    return;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_12H:
+                        // The old 12-hour row's write, so the bar and the Wall strip follow.
+                        mModel.onValue(Row.CLOCK_12H, on ? 1 : 0, false);
+                        return;
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_SECONDS:
+                        prefs.setStatusClockSecondsEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_FAHRENHEIT:
+                        prefs.setStatusWidgetWeatherFahrenheit(on);
+                        break;
+                    default:
+                        return;
+                }
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
+            @Override public boolean indicator(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return false;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
+                        return prefs.isStatusWidgetCpuEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
+                        return prefs.isStatusWidgetRamEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
+                        return prefs.isStatusWidgetWeatherEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_NOTIFICATIONS:
+                        return prefs.isStatusWidgetNotificationsEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
+                        return prefs.isStatusWidgetMediaEnabled();
+                    default:
+                        return false;
+                }
+            }
+
+            @Override public void setIndicator(int index, boolean on) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || indicator(index) == on)
+                    return;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
+                        prefs.setStatusWidgetCpuEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
+                        prefs.setStatusWidgetRamEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
+                        prefs.setStatusWidgetWeatherEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_NOTIFICATIONS:
+                        prefs.setStatusWidgetNotificationsEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
+                        prefs.setStatusWidgetMediaEnabled(on);
+                        break;
+                    default:
+                        return;
+                }
+                // The bar's refresh ends in its widgets' pass, which reads every indicator.
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
+            @Override public void openCameraGap() {
+                Context context = mHost.context();
+                try {
+                    context.startActivity(SettingsActivity.createFragmentIntent(context,
+                        StatusBarPreferencesFragment.class,
+                        R.string.settings_destination_status_bar, null,
+                        TermuxPreferenceConstants.TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE));
+                } catch (RuntimeException e) {
+                    // No Settings to open (a stripped build): the editor stays as it is.
+                }
+            }
+        };
+
+    /** The Terminal card's reads and writes, through the paths its old rows and Settings take. */
+    @NonNull private final com.termux.app.surfaces.cards.TerminalCard.Host mTerminalCardHost =
+        new com.termux.app.surfaces.cards.TerminalCard.Host() {
+            @Override public int contrast() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 1
+                    : AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+            }
+
+            @Override public void setContrast(int index) {
+                // The old Contrast row's write: the palette rebuilds at the new level.
+                mModel.onValue(Row.CONTRAST, index, false);
+                syncDirty();
+            }
+
+            @Override public int trail() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 1
+                    : com.termux.app.surfaces.cards.TerminalCard.trailIndex(
+                        prefs.isTerminalCursorTrailEnabled(), prefs.getTerminalCursorTrailStyle());
+            }
+
+            @Override public void setTrail(int index) {
+                List<String> trails = com.termux.app.surfaces.cards.TerminalCard.TRAILS;
+                if (index >= 0 && index < trails.size())
+                    writeTrailStyle(trails.get(index));
+            }
+
+            @Override public int effect() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 0
+                    : com.termux.app.surfaces.cards.TerminalCard.effectIndex(
+                        prefs.getTerminalRetroEffect());
+            }
+
+            @Override public void setEffect(int index) {
+                List<String> effects = com.termux.app.surfaces.cards.TerminalCard.EFFECTS;
+                if (index >= 0 && index < effects.size())
+                    writeRetroEffect(effects.get(index));
+            }
+
+            @Override public void openFont() {
+                // The old Font link's page.
+                openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
+            }
+        };
+
+    // ------------------------------------------------------------------------------ Dock card
+    //
+    // The Dock card's Style, Bars, Dock type and Options rows (editor-redesign §2 Dock), built by
+    // cards/DockCard and read and written here.
+
+    @Nullable private com.termux.app.surfaces.cards.DockCard mDockCard;
+
+    @NonNull
+    private com.termux.app.surfaces.cards.DockCard dockCard() {
+        if (mDockCard == null)
+            mDockCard = new com.termux.app.surfaces.cards.DockCard(new DockHost());
+        return mDockCard;
+    }
+
+    /**
+     * The Dock card opens next on {@code bar}'s settings, or with every bar's closed for null: a
+     * door from outside the editor that names the bar pressed (the long-press popup's Edit).
+     */
+    public void expandDockBar(@Nullable Element bar) {
+        dockCard().expand(bar);
+    }
+
+    /** The bar a tap at a raw screen point landed on: the A–Z strip, the extra keys, or neither. */
+    @Nullable
+    private Element dockBarAt(float rawX, float rawY) {
+        if (dockViewHit(R.id.apps_bar_az_row, rawX, rawY)
+            || dockViewHit(R.id.place_az_bar_host, rawX, rawY))
+            return Element.AZ;
+        if (dockViewHit(R.id.place_extra_keys_host, rawX, rawY)
+            || dockViewHit(R.id.terminal_toolbar_view_pager, rawX, rawY))
+            return Element.EXTRA_KEYS;
+        return null;
+    }
+
+    private boolean dockViewHit(int id, float rawX, float rawY) {
+        View view = mHost.findView(id);
+        if (view == null || !view.isShown() || view.getWidth() <= 0 || view.getHeight() <= 0)
+            return false;
+        android.graphics.Rect rect = new android.graphics.Rect();
+        if (!view.getGlobalVisibleRect(rect))
+            return false;
+        int[] window = new int[2];
+        view.getRootView().getLocationOnScreen(window);
+        return rect.contains(Math.round(rawX) - window[0], Math.round(rawY) - window[1]);
+    }
+
+    /** Where the A–Z strip's and the dock's new switches are stored, beside the app's own. */
+    @Nullable
+    private SharedPreferences dockPrefs() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs == null ? null : prefs.getSharedPreferences();
+    }
+
+    /** The bars stacked in {@code order} where they share an edge, written when anything moved. */
+    private void restackBars(@NonNull java.util.List<Element> order) {
+        LayoutEditorController layout = mHost.layoutEditor();
+        PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+        if (layout == null || arranged == null)
+            return;
+        PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(arranged, order);
+        if (!next.equals(arranged)) {
+            layout.writeSlots(next);
+            positionTargets();
+        }
+    }
+
+    private final class DockHost implements com.termux.app.surfaces.cards.DockCard.Host {
+        @NonNull @Override public Context context() {
+            return mHost.context();
+        }
+
+        @Override public boolean floating() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs != null
+                && prefs.getLayoutStyle() == TermuxAppSharedPreferences.LayoutStyle.FLOATING;
+        }
+
+        @Override public void setFloating(boolean floating) {
+            writeStyle(floating);
+            // The Height strip's range follows the style.
+            if (mSheet != null) mSheet.restate();
+        }
+
+        @NonNull @Override public java.util.List<Element> barOrder() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
+            java.util.List<Element> stored =
+                com.termux.app.surfaces.cards.BarOrder.parse(layout.barOrder());
+            PlaceLayout arranged = layout.arrangedLayout();
+            return arranged == null ? stored
+                : com.termux.app.surfaces.cards.BarOrder.reconcile(stored, arranged);
+        }
+
+        @Override public void setBarOrder(@NonNull java.util.List<Element> order) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            layout.setBarOrder(com.termux.app.surfaces.cards.BarOrder.format(order));
+            restackBars(order);
+            // The order alone (bars on edges of their own) moves no slot: Undo still holds it.
+            syncDirty();
+        }
+
+        @Override public boolean offers(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.offers(bar);
+        }
+
+        @Override public boolean barShown(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.isShown(bar);
+        }
+
+        @Override public void setBarShown(@NonNull Element bar, boolean shown) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            java.util.List<Element> order = barOrder();
+            layout.setShown(bar, shown);
+            // Back in the list's place among the bars it now shares an edge with.
+            if (shown)
+                restackBars(order);
+            positionTargets();
+        }
+
+        @NonNull @Override
+        public com.termux.app.surfaces.cards.BarOrder.Position position(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+            if (arranged == null)
+                return bar == Element.AZ
+                    ? com.termux.app.surfaces.cards.BarOrder.Position.RIDES_APPS_ROW
+                    : com.termux.app.surfaces.cards.BarOrder.Position.ABOVE_KEYBOARD;
+            return com.termux.app.surfaces.cards.BarOrder.positionOf(bar, arranged.slot(bar));
+        }
+
+        @Override public void setPosition(@NonNull Element bar,
+                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+            if (layout == null || arranged == null)
+                return;
+            java.util.List<Element> order = barOrder();
+            PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(
+                com.termux.app.surfaces.cards.BarOrder.withPosition(arranged, bar, position),
+                order);
+            layout.writeSlots(next);
+            positionTargets();
+        }
+
+        @Override public int appIcons() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs == null ? AppearanceLooks.APP_ICONS_MIN
+                : Control.APP_ICONS.clamp(prefs.getAppLauncherButtonCount());
+        }
+
+        @Override public int appIconsFrom() {
+            return AppearanceLooks.APP_ICONS_MIN;
+        }
+
+        @Override public int appIconsTo() {
+            return AppearanceLooks.APP_ICONS_MAX;
+        }
+
+        @Override public void setAppIcons(int count) {
+            writeAppIcons(count);
+        }
+
+        @Override public boolean mostUsed() {
+            return AppearanceSettingsStore.getBoolean(mHost.context(),
+                "app_launcher_most_used_page", false);
+        }
+
+        @Override public void setMostUsed(boolean on) {
+            AppearanceSettingsStore.putBoolean(mHost.context(), "app_launcher_most_used_page", on);
+            settingsWritten();
+        }
+
+        @NonNull @Override public CharSequence iconPack() {
+            String pack = com.termux.app.launcher.data.IconPackChoices.current(prefs(),
+                com.termux.app.launcher.data.IconPackChoices.KEY_PINNED);
+            if (pack.isEmpty())
+                return getString(R.string.editor_dock_icon_pack_global);
+            android.content.pm.PackageManager manager = mHost.context().getPackageManager();
+            try {
+                return manager.getApplicationLabel(manager.getApplicationInfo(pack, 0));
+            } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+                return getString(R.string.editor_dock_icon_pack_global);
+            }
+        }
+
+        @Override public void pickIconPack() {
+            Context context = mHost.context();
+            CharSequence global = getString(R.string.editor_dock_icon_pack_global);
+            TermuxAppSharedPreferences prefs = prefs();
+            android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+            // Listing the packs asks the package manager: off the main thread.
+            new Thread(() -> {
+                com.termux.app.launcher.data.IconPackChoices.Listing listing =
+                    com.termux.app.launcher.data.IconPackChoices.listing(context, prefs,
+                        com.termux.app.launcher.data.IconPackChoices.KEY_PINNED, global);
+                main.post(() -> showIconPacks(listing));
+            }, "dock-icon-packs").start();
+        }
+
+        @Override public boolean azGlass() {
+            SharedPreferences store = dockPrefs();
+            return store == null
+                ? com.termux.app.surfaces.cards.DockCard.DEFAULT_AZ_GLASS_BACKGROUND
+                : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND,
+                    com.termux.app.surfaces.cards.DockCard.DEFAULT_AZ_GLASS_BACKGROUND);
+        }
+
+        @Override public void setAzGlass(boolean on) {
+            SharedPreferences store = dockPrefs();
+            if (store != null)
+                store.edit().putBoolean(
+                    com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND, on).apply();
+            settingsWritten();
+            azWritten();
+        }
+
+        @Override public int azShow() {
+            SharedPreferences store = dockPrefs();
+            String stored = store == null ? null
+                : store.getString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW, null);
+            return indexOf(com.termux.app.surfaces.cards.DockCard.AZ_SHOW_VALUES, stored, 0);
+        }
+
+        @Override public void setAzShow(int index) {
+            SharedPreferences store = dockPrefs();
+            String[] values = com.termux.app.surfaces.cards.DockCard.AZ_SHOW_VALUES;
+            if (store != null)
+                store.edit().putString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW,
+                    values[Math.max(0, Math.min(values.length - 1, index))]).apply();
+            settingsWritten();
+            azWritten();
+        }
+
+        /**
+         * The A–Z strip's look moved: the live chrome is arranged again, since the pull tab gives
+         * the strip's band back and Faint and the glass are applied with the bar's host.
+         */
+        private void azWritten() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null) layout.applyStoreWrite();
+        }
+
+        @Override public void openExtraKeysEditor() {
+            openSettingsPage(
+                com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment.class,
+                R.string.settings_edit_extra_keys_title);
+        }
+
+        @Override public int stripHeightDp() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            int dp = layout == null ? -1 : layout.wallStripHeightDp();
+            return dp > 0 ? dp : com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP;
+        }
+
+        @Override public void setStripHeightDp(int dp) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null)
+                layout.setWallStripHeightDp(dp);
+        }
+
+        @Override public int dockType() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
+        }
+
+        @Override public void setDockType(int index) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null && index >= 0 && index < DockStyle.CHOICES.size())
+                layout.setDockStyle(DockStyle.CHOICES.get(index));
+            // Peek's Reflection stands with that type alone.
+            if (mSheet != null) mSheet.restate(Row.REFLECTION);
+        }
+
+        @Override public boolean option(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            Context context = mHost.context();
+            switch (option) {
+                case SEARCH_FIELD: return layout != null && layout.searchField();
+                case DRAWER_ICON: return layout != null && layout.drawerTile();
+                case COMMAND_PALETTE: {
+                    SharedPreferences store = dockPrefs();
+                    return store == null
+                        ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
+                        : store.getBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+                            com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
+                }
+                case NOTIFICATION_DOTS:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        "app_launcher_notification_dots", false);
+                case QUICK_REPLY:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        "app_launcher_quick_reply_swipe", true);
+                case MONOCHROME:
+                default:
+                    return AppearanceSettingsStore.getBoolean(context, "app_launcher_bw_icons",
+                        false);
+            }
+        }
+
+        @Override public void setOption(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option, boolean on) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            Context context = mHost.context();
+            switch (option) {
+                case SEARCH_FIELD:
+                    if (layout != null) layout.setSearchField(on);
+                    break;
+                case DRAWER_ICON:
+                    if (layout != null) layout.setDrawerTile(on);
+                    break;
+                case COMMAND_PALETTE: {
+                    SharedPreferences store = dockPrefs();
+                    if (store != null)
+                        store.edit().putBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on)
+                            .apply();
+                    settingsWritten();
+                    break;
+                }
+                case NOTIFICATION_DOTS:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_notification_dots",
+                        on);
+                    settingsWritten();
+                    break;
+                case QUICK_REPLY:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_quick_reply_swipe",
+                        on);
+                    settingsWritten();
+                    break;
+                case MONOCHROME:
+                default:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_bw_icons", on);
+                    settingsWritten();
+                    break;
+            }
+        }
+    }
+
+    /** The apps row's icon packs to pick from; a pick lands at once, as Global's does. */
+    private void showIconPacks(
+            @NonNull com.termux.app.launcher.data.IconPackChoices.Listing listing) {
+        if (!mOpen)
+            return;
+        Context context = mHost.context();
+        CharSequence[] labels = new CharSequence[listing.entries.size()];
+        for (int i = 0; i < labels.length; i++)
+            labels[i] = listing.entries.get(i).label;
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.editor_dock_icon_pack)
+            .setSingleChoiceItems(labels, listing.checked, (dialog, which) -> {
+                if (which >= 0 && which < listing.entries.size()) {
+                    com.termux.app.launcher.data.IconPackChoices.applyLive(context, prefs(),
+                        com.termux.app.launcher.data.IconPackChoices.KEY_PINNED,
+                        listing.entries.get(which).value);
+                    settingsWritten();
+                    if (mSheet != null) mSheet.restate();
+                }
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    // Keyboard, Home and Global cards ---------------------------------------------------------
+    //
+    // The rows those cards added (editor-redesign §2): read, ranged, named and written here, so
+    // the card model's switches only hand their default case on.
+
+    /** Settings › Home's Gestures section, which the Home card's Gestures chip opens on. */
+    private static final String HOME_GESTURES_SECTION = "home_gestures";
+    /** Settings › Home's Pages section, which the Home card's Edit pages chip scrolls to. */
+    private static final String HOME_PAGES_SECTION = "home_pages";
+    /** The tools that follow the terminal's colours, on the page the Tool colours chip opens. */
+    private static final String TOOL_COLOURS_KEY = "theme_templates_enabled";
+
+    /** The Tint colour swatches' stored values, in order. */
+    private String[] tintHueValues() {
+        return getResources().getStringArray(R.array.appearance_editor_tint_hue_values);
+    }
+
+    /** A value for a row the card model's own switch does not name; 0 for none. */
+    private int cardRowValue(@NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        Context context = mHost.context();
+        if (prefs == null)
+            return 0;
+        switch (row) {
+            case BOTTOM_PADDING: {
+                int chin = layout == null ? -1 : layout.keyboardChinDp();
+                return chin >= 0 ? chin : prefs.getSharedInAppKeyboardBottomPadding();
+            }
+            case OPACITY_LINK:
+                return prefs.isInAppKeyboardOpacityLinked() ? 1 : 0;
+            case HOME_COLUMNS:
+            case HOME_ROWS: {
+                int[] grid = layout == null ? null : layout.widgetGrid();
+                if (grid == null)
+                    return row == Row.HOME_COLUMNS ? prefs.getAppLauncherWidgetGridColumns()
+                        : prefs.getAppLauncherWidgetGridRows();
+                return row == Row.HOME_COLUMNS ? grid[0] : grid[1];
+            }
+            case HOME_ICON_SIZE:
+                return com.termux.app.launcher.widget.HomeIconSize.fromStored(
+                    AppearanceSettingsStore.getString(context, HomeSettings.KEY_ICON_SCALE, null))
+                    .ordinal();
+            case SHOW_WALLPAPER:
+                return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
+                    ? 1 : 0;
+            case TINT_HUE:
+                return indexOf(tintHueValues(), prefs.getSurfaceGlassTintHue(), 0);
+            default:
+                return 0;
+        }
+    }
+
+    private int cardRowFrom(@NonNull Row row) {
+        switch (row) {
+            case BOTTOM_PADDING:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING;
+            case HOME_COLUMNS:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
+            case HOME_ROWS:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            default:
+                return 0;
+        }
+    }
+
+    private int cardRowTo(@NonNull Row row) {
+        switch (row) {
+            case BOTTOM_PADDING:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
+            case HOME_COLUMNS:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
+            case HOME_ROWS:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            case HOME_ICON_SIZE:
+            case TINT_HUE:
+                return 2;
+            default:
+                return 1;
+        }
+    }
+
+    @NonNull
+    private String cardRowReadout(@NonNull Row row, int value) {
+        if (row == Row.BOTTOM_PADDING)
+            return getString(R.string.appearance_readout_dp, value);
+        return String.valueOf(value);
+    }
+
+    /** A section's note, Glass widgets' explanation; null for the rest. */
+    @Nullable
+    private CharSequence cardRowSummary(@NonNull Row row) {
+        EditorCard card = mCard;
+        switch (row) {
+            case SECTION_LOOK:
+                if (card == EditorCard.HOME) return getString(R.string.editor_note_home_only);
+                if (card == EditorCard.WORKSPACE)
+                    return getString(R.string.editor_note_workspace_only);
+                return null;
+            case SECTION_GLASS:
+                if (card == EditorCard.HOME) return getString(R.string.editor_note_home_glass);
+                if (card == EditorCard.WORKSPACE)
+                    return getString(R.string.editor_note_workspace_glass);
+                return null;
+            case SECTION_GLASS_MATERIAL:
+                return getString(R.string.editor_note_both_screens);
+            default:
+                return null;
+        }
+    }
+
+    @NonNull
+    private String[] cardRowChoices(@NonNull Row row) {
+        switch (row) {
+            case HOME_ICON_SIZE:
+                return strings(R.string.editor_home_icon_small, R.string.editor_home_icon_default,
+                    R.string.editor_home_icon_large);
+            case TINT_HUE:
+                return getResources().getStringArray(R.array.appearance_editor_tint_hue_entries);
+            default:
+                return new String[0];
+        }
+    }
+
+    /** The glyphs a choice row shows instead of its words; null for words. */
+    @Nullable
+    private int[] cardRowGlyphs(@NonNull Row row) {
+        switch (row) {
+            case FORM:
+                return new int[] {EditorGlyphs.KB_DOCKED, EditorGlyphs.KB_FLOATING,
+                    EditorGlyphs.KB_SPLIT};
+            case LABEL_SIZE:
+                return new int[] {EditorGlyphs.LABEL_SMALL, EditorGlyphs.LABEL_MEDIUM,
+                    EditorGlyphs.LABEL_LARGE};
+            case HOME_ICON_SIZE:
+                return new int[] {EditorGlyphs.ICON_SMALL, EditorGlyphs.ICON_DEFAULT,
+                    EditorGlyphs.ICON_LARGE};
+            case FOLDERS:
+                return new int[] {EditorGlyphs.FOLDER_COMPACT, EditorGlyphs.FOLDER_DEFAULT,
+                    EditorGlyphs.FOLDER_ROOMY};
+            case THEME:
+                return new int[] {R.drawable.ic_ed_theme_system, R.drawable.ic_ed_theme_light,
+                    R.drawable.ic_ms_dark_mode};
+            default:
+                return null;
+        }
+    }
+
+    /** The name a redesigned card gives a row where it is not the row's own. */
+    @Nullable
+    private CharSequence cardRowName(@NonNull Row row) {
+        if (row == Row.OPACITY && mCard == EditorCard.KEYBOARD)
+            return getString(R.string.editor_row_background_opacity);
+        if (row == Row.KEYBOARD_THEME)
+            return getString(R.string.editor_chip_keyboard_theme);
+        if (row == Row.LINK_PAGES)
+            return getString(R.string.editor_chip_edit_pages);
+        return null;
+    }
+
+    /**
+     * The glyph a redesigned card gives a row (editor-redesign §8, one icon per idea: the palette
+     * is Global's alone, Wallpaper colours has its own); 0 keeps the row's own.
+     */
+    private int cardRowGlyph(@NonNull Row row) {
+        switch (row) {
+            case OPACITY:
+                return mCard == EditorCard.KEYBOARD ? EditorGlyphs.KB_BACKGROUND_OPACITY : 0;
+            case KEY_OPACITY: return EditorGlyphs.KB_KEY_OPACITY;
+            case KEY_SPACING: return R.drawable.ic_ms_space_bar;
+            case KEYBOARD_THEME: return R.drawable.ic_ms_brush;
+            case LINK_LAYOUTS: return R.drawable.ic_ms_keyboard_alt;
+            case LABEL_SIZE: return R.drawable.ic_ms_text_fields;
+            case NUMERALS: return R.drawable.ic_ms_tag;
+            case GLASS_WIDGETS: return R.drawable.ic_ms_widgets;
+            case TWO_LINE: return R.drawable.ic_ms_wrap_text;
+            case LABEL_SHADOW: return R.drawable.ic_ms_blur_on;
+            case PAGE_DOTS: return R.drawable.ic_ms_more_horiz;
+            case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
+            case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;
+            case LINK_GESTURES: return R.drawable.ic_ms_swipe;
+            case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
+            case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
+            case TINT_HUE: return R.drawable.ic_ms_format_color_fill;
+            case VIBRANCY: return R.drawable.ic_ms_auto_awesome;
+            case DEPTH: return R.drawable.ic_ms_layers;
+            case FULL_SCREEN: return R.drawable.ic_ms_fullscreen;
+            case MINIMAL: return R.drawable.ic_ms_crop_free;
+            case TOOL_COLOURS: return R.drawable.ic_ms_format_paint;
+            default: return 0;
+        }
+    }
+
+    /** Tint colour's three swatches: the theme's primary, secondary and tertiary. */
+    @Nullable
+    private int[] cardRowSwatches(@NonNull Row row) {
+        if (row != Row.TINT_HUE)
+            return null;
+        Context context = mHost.context();
+        return new int[] {
+            EditorViews.color(context, androidx.appcompat.R.attr.colorPrimary),
+            EditorViews.color(context, com.google.android.material.R.attr.colorSecondary),
+            EditorViews.color(context, com.google.android.material.R.attr.colorTertiary)};
+    }
+
+    /** Numerals' words, each written in its own font. */
+    @Nullable
+    private android.graphics.Typeface cardRowTypeface(@NonNull Row row, int index) {
+        if (row != Row.NUMERALS)
+            return null;
+        return index == 1 ? android.graphics.Typeface.MONOSPACE
+            : android.graphics.Typeface.SANS_SERIF;
+    }
+
+    /** A write for a row the card model's own switch does not name. */
+    private void writeCardRow(@NonNull Row row, int value, boolean dragging) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        Context context = mHost.context();
+        if (prefs == null)
+            return;
+        switch (row) {
+            case BOTTOM_PADDING:
+                if (layout != null) layout.setKeyboardChinDp(value, dragging);
+                syncDirty();
+                break;
+            case OPACITY_LINK:
+                if (prefs.isInAppKeyboardOpacityLinked() != (value != 0)) {
+                    prefs.setInAppKeyboardOpacityLinked(value != 0);
+                    mLinkAnchor = null;
+                    syncDirty();
+                }
+                break;
+            case HOME_COLUMNS:
+            case HOME_ROWS: {
+                int[] grid = layout == null ? null : layout.widgetGrid();
+                if (grid == null)
+                    break;
+                if (row == Row.HOME_COLUMNS) grid[0] = value;
+                else grid[1] = value;
+                layout.setWidgetGrid(grid[0], grid[1]);
+                syncDirty();
+                break;
+            }
+            case HOME_ICON_SIZE: {
+                com.termux.app.launcher.widget.HomeIconSize[] sizes =
+                    com.termux.app.launcher.widget.HomeIconSize.values();
+                writeHomeString(HomeSettings.KEY_ICON_SCALE,
+                    sizes[clamp(value, 0, sizes.length - 1)].value);
+                break;
+            }
+            case SHOW_WALLPAPER:
+                AppearanceSettingsStore.putBoolean(context, "use_system_wallpaper", value != 0);
+                settingsWritten();
+                break;
+            case TINT_HUE: {
+                String[] values = tintHueValues();
+                String id = values[clamp(value, 0, values.length - 1)];
+                if (!id.equals(prefs.getSurfaceGlassTintHue()))
+                    writeTintHue(id);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    /**
+     * A Settings page over the editor, opened on one of its sections or scrolled to a row, and
+     * told the editor is under it (so its own door back into the editor returns here instead).
+     */
+    private void openSettingsFromEditor(@NonNull Class<? extends androidx.fragment.app.Fragment> page,
+                                        @StringRes int title, @Nullable String section,
+                                        @Nullable String scrollToKey) {
+        Context context = mHost.context();
+        try {
+            android.content.Intent intent = SettingsActivity.createFragmentIntent(context, page,
+                title, null, scrollToKey);
+            intent.putExtra(SettingsActivity.EXTRA_FROM_EDITOR, true);
+            if (section != null)
+                intent.putExtra(SettingsActivity.EXTRA_SECTION_KEY, section);
+            context.startActivity(intent);
+        } catch (RuntimeException e) {
+            // No Settings to open (a stripped build): the editor stays as it is.
+        }
     }
 }

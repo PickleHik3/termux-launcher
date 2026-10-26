@@ -64,7 +64,7 @@ public class SettingsSearchIndexTest {
         assertFirst(index, "low-memory preset", PAGES + "PerformancePreferencesFragment", "low_memory_preset");
         assertFirst(index, "12-hour", PAGES + "StatusBarPreferencesFragment", "top_pane_clock_am_pm");
         assertFirst(index, "wallpaper scrolls", PAGES + "HomePreferencesFragment", "wallpaper_parallax");
-        assertFirst(index, "start in", PAGES + "HomePreferencesFragment", "app_launcher_start_in");
+        assertFirst(index, "start in", PAGES + "GeneralPreferencesFragment", "app_launcher_start_in");
         assertFirst(index, "keyboard over the window", PAGES + "X11DisplayInputPreferencesFragment",
             "x11_keyboard_over_display");
         assertFirst(index, "linux apps", PAGES + "X11DisplayPreferencesFragment", null);
@@ -74,11 +74,11 @@ public class SettingsSearchIndexTest {
     @Test
     public void theSearchedFromSectionRanksFirstAmongEqualHits() {
         SettingsSearchIndex index = index();
-        // "Appearance" is a row on Home, Terminal and Keyboard, and the root's door.
-        List<SettingsSearchIndex.Entry> fromTerminal = index.search("appearance", SettingsTree.Section.TERMINAL, 40);
-        List<SettingsSearchIndex.Entry> fromHome = index.search("appearance", SettingsTree.Section.HOME, 40);
-        assertEquals(SettingsTree.Section.TERMINAL, firstRow(fromTerminal, "Appearance").section);
-        assertEquals(SettingsTree.Section.HOME, firstRow(fromHome, "Appearance").section);
+        // "Edit on screen" is a row on Home, Terminal and Keyboard (editor-redesign §5).
+        List<SettingsSearchIndex.Entry> fromTerminal = index.search("edit on screen", SettingsTree.Section.TERMINAL, 40);
+        List<SettingsSearchIndex.Entry> fromHome = index.search("edit on screen", SettingsTree.Section.HOME, 40);
+        assertEquals(SettingsTree.Section.TERMINAL, firstRow(fromTerminal, "Edit on screen").section);
+        assertEquals(SettingsTree.Section.HOME, firstRow(fromHome, "Edit on screen").section);
         assertTrue(index.search("   ", null, 40).isEmpty());
         assertFalse(index.search("vibration", null, 40).isEmpty());
     }

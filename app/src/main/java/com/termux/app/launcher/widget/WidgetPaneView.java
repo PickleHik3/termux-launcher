@@ -154,6 +154,9 @@ public final class WidgetPaneView extends FrameLayout {
     private final TextView notice;
     private final WidgetPickerSheetView picker;
     private final PageDotsView dots;
+    /** The empty page's hint and the page dots stand on the wallpaper: their ink follows it. */
+    private final HomeLabelInk hintInk = new HomeLabelInk();
+    private final HomeLabelInk dotsInk = new HomeLabelInk();
     private final Runnable hideNotice;
     private final int touchSlop;
     private final int doubleTapSlop;
@@ -385,6 +388,53 @@ public final class WidgetPaneView extends FrameLayout {
         applyContentShift();
     }
     @NonNull public WidgetGridView grid() { return grid; }
+
+    /**
+     * What the page writes straight on the wallpaper takes light or dark ink from the wallpaper
+     * under it, not from the theme (editor-redesign §8): every icon's and folder's label, the
+     * empty page's hint and the page dots. Called on the page's dress pass (a new Look, frame or
+     * wallpaper) and after a layout; cheap when nothing moved, each piece keeping its own sample.
+     */
+    public void refreshWallpaperInk() {
+        com.termux.app.chrome.WidgetInkSource source = HomeLabelInk.sourceFor(this);
+        if (source == null) return;
+        refreshLabelInks(grid);
+        refreshOwnInks(source);
+    }
+
+    /** The hint and the dots, on their own sample each. */
+    private void refreshOwnInks(@NonNull com.termux.app.chrome.WidgetInkSource source) {
+        if (empty.getVisibility() == VISIBLE && emptyMessage.getVisibility() == VISIBLE) {
+            hintInk.wallpaperUnder(emptyMessage, source);
+            hintInk.apply(emptyMessage, false, getResources().getDisplayMetrics().density);
+        }
+        if (dots.getVisibility() == VISIBLE) {
+            int before = dotsInk.wallpaper();
+            if (dotsInk.wallpaperUnder(dots, source) != before) dots.invalidate();
+        }
+    }
+
+    /** Every Home icon and folder under {@code parent}; widgets' own trees are not walked. */
+    private static void refreshLabelInks(@NonNull ViewGroup parent) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (child instanceof HomeAppIconView) {
+                ((HomeAppIconView) child).refreshLabelInk();
+            } else if (child instanceof HomeFolderView) {
+                ((HomeFolderView) child).refreshLabelInk();
+            } else if (child instanceof ViewGroup
+                    && !(child instanceof android.appwidget.AppWidgetHostView)
+                    && !(child instanceof com.termux.app.launcher.widget.builtin.BuiltinWidgetView)) {
+                refreshLabelInks((ViewGroup) child);
+            }
+        }
+    }
+
+    @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        com.termux.app.chrome.WidgetInkSource source = HomeLabelInk.sourceFor(this);
+        if (source != null) refreshOwnInks(source);
+    }
 
     /** The band at the pane's bottom the dock takes at rest; see {@link #setDockReservePx}. */
     private int dockReservePx;
@@ -1191,10 +1241,19 @@ public final class WidgetPaneView extends FrameLayout {
             for (int page = 0; page < pageCount; page++) {
                 // The dots are chrome over the wall, so they follow the chrome's polarity: white
                 // light on the dark band, shadow on the light one, where white dots are no dots.
-                paint.setColor(page == currentPage
-                    ? com.termux.app.chrome.ChromeShade.structural(0xE6FFFFFF,
-                        com.termux.app.chrome.ChromeShade.TARGET_RIM)
-                    : com.termux.app.chrome.ChromeShade.fill(0x4DFFFFFF));
+                // On a measured wallpaper they follow it instead (editor-redesign §8): the ink
+                // that reads on the wallpaper behind them, at the same two strengths.
+                int wallpaper = dotsInk.wallpaper();
+                if (android.graphics.Color.alpha(wallpaper) != 0) {
+                    int ink = com.termux.app.chrome.WallpaperInk.bareInk(wallpaper,
+                        HomeLabelInk.DARK_INK, HomeLabelInk.PALE_INK);
+                    paint.setColor((ink & 0x00FFFFFF) | (page == currentPage ? 0xE6000000 : 0x4D000000));
+                } else {
+                    paint.setColor(page == currentPage
+                        ? com.termux.app.chrome.ChromeShade.structural(0xE6FFFFFF,
+                            com.termux.app.chrome.ChromeShade.TARGET_RIM)
+                        : com.termux.app.chrome.ChromeShade.fill(0x4DFFFFFF));
+                }
                 canvas.drawCircle(x, y, radius, paint);
                 x += step;
             }

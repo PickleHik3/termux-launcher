@@ -676,9 +676,45 @@ public final class AzScrubRowView extends AppCompatTextView {
         return true;
     }
 
+    /** The letters' opacity while no finger is on them: the Dock card's Faint, else full. */
+    private float restingAlpha = 1f;
+    private static final long LETTERS_FADE_IN_MS = 120L;
+    private static final long LETTERS_FADE_OUT_MS = 240L;
+
+    /**
+     * The letters' opacity at rest ({@code AzShowMode#restingAlpha}): Faint keeps them at about
+     * a third, still scrubbable, and a finger on them brings them to full for the scrub.
+     */
+    public void setRestingAlpha(float alpha) {
+        float clamped = Float.isNaN(alpha) ? 1f : Math.max(0f, Math.min(1f, alpha));
+        if (restingAlpha == clamped) return;
+        restingAlpha = clamped;
+        if (activeLetterIndex < 0) {
+            animate().cancel();
+            setAlpha(clamped);
+        }
+    }
+
+    private void fadeLettersTo(float alpha, long durationMs) {
+        if (getAlpha() == alpha) return;
+        animate().cancel();
+        if (!isAttachedToWindow()) {
+            setAlpha(alpha);
+            return;
+        }
+        animate().alpha(alpha).setDuration(durationMs).start();
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (callback == null) return super.onTouchEvent(event);
+        int fadeAction = event.getActionMasked();
+        if (fadeAction == MotionEvent.ACTION_DOWN) {
+            fadeLettersTo(1f, LETTERS_FADE_IN_MS);
+        } else if (fadeAction == MotionEvent.ACTION_UP
+            || fadeAction == MotionEvent.ACTION_CANCEL) {
+            fadeLettersTo(restingAlpha, LETTERS_FADE_OUT_MS);
+        }
         // Read in the canonical frame the gesture is written in: "along" the letters, and "away"
         // from the bar, whichever screen axes those are on this edge. A bottom bar is the frame
         // itself, so this is the identity there.
