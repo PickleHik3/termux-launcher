@@ -44,6 +44,9 @@
     <string name="appearance_card_appearance">Appearance</string>
     <string name="appearance_card_close">Close</string>
     <string name="appearance_card_reset">Reset</string>
+    <!-- A stepper row's buttons, read by a screen reader and on long-press: "Decrease App icons". -->
+    <string name="appearance_stepper_less">Decrease %1$s</string>
+    <string name="appearance_stepper_more">Increase %1$s</string>
 
     <!-- The card menu: back on the Look, or the same look on the other half. -->
     <string name="appearance_reset_home">Reset Home</string>

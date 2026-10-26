@@ -32,6 +32,7 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.surfaces.EditorRows.Kind;
 import com.termux.app.surfaces.EditorRows.Row;
+import com.termux.app.surfaces.rows.ActionRow;
 import com.termux.app.terminal.Motion;
 
 import java.util.ArrayList;
@@ -1235,19 +1236,11 @@ final class EditorCardSheet {
      */
     @NonNull
     private RowViews commandRow(@NonNull Row row) {
-        LinearLayout root = horizontalRow(SWITCH_ROW_MIN_DP);
-        RowViews views = new RowViews(row, root);
-        root.addView(iconView(row.iconRes));
-        root.addView(labelColumn(row, views),
-            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        MaterialButton command = new MaterialButton(mContext, null,
-            androidx.appcompat.R.attr.borderlessButtonStyle);
-        command.setSingleLine(true);
-        command.setOnClickListener(v -> mModel.onAction(row, v));
-        root.addView(command, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            dp(48)));
-        root.setOnClickListener(v -> mModel.onAction(row, v));
-        views.value = command;
+        ActionRow action = ActionRow.build(mContext, row.iconRes,
+            mContext.getString(row.labelRes), null, v -> mModel.onAction(row, v));
+        RowViews views = new RowViews(row, action.root);
+        views.label = action.title;
+        views.value = action.action;
         return views;
     }
 
