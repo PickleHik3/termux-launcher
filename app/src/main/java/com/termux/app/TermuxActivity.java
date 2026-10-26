@@ -17292,6 +17292,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (mPreferences == null || mChrome == null) return;
+        // A pictured dip dressed the slab for this page on its first frame: it already wears it.
+        if (mDockDesignTravelledTo == to) {
+            mDockDesignTravelledTo = null;
+            return;
+        }
         if (dockSurfaceSpec(from).equals(dockSurfaceSpec(to))
             && arrangementOf(from).searchField() == arrangementOf(to).searchField()
             && arrangementOf(from).drawerTile() == arrangementOf(to).drawerTile()) {
@@ -17303,6 +17308,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         cancelDockBandEase();
         restyleDockSurface();
     }
+
+    /**
+     * The page whose Dock design a pictured dip dressed the stack's slab in on its first frame
+     * (syncSeamTravel), until the settle: landed there, the commit finds it worn; landed back,
+     * the settle dresses it back. Null otherwise.
+     */
+    @Nullable private com.termux.app.wall.PaneWallPage mDockDesignTravelledTo;
 
     /**
      * Lays the dock out and dresses its glass again for the spec it wears now: a settle between
@@ -17475,7 +17487,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * dress's.
      */
     private boolean committedSearchField() {
-        if (mCrossing.seam().committedDesign() != null) return mCrossing.seam().committedSearchField();
+        if (mCrossing.seam().committedDesign() != null) return mCrossing.seam().stackSearchField();
         return mPreferences != null && arrangementOf(mLastWallPage).searchField();
     }
 
@@ -17493,11 +17505,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The committed page's Dock design: the one read when the slide reached the seam while one
-     * crosses it (SeamCrossing), so its frames read no store, else the dress's.
+     * crosses it (SeamCrossing), so its frames read no store, else the dress's. A pictured dip's
+     * stack is the other half's from its first frame, and wears that half's design
+     * (SeamCrossing#stackDesign).
      */
     @NonNull
     private com.termux.app.dock.DockStyle committedDockDesign() {
-        com.termux.app.dock.DockStyle travelling = mCrossing.seam().committedDesign();
+        com.termux.app.dock.DockStyle travelling = mCrossing.seam().stackDesign();
         return travelling != null ? travelling : arrangementOf(mLastWallPage).design();
     }
 
@@ -23380,6 +23394,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The rows it now stands carry their own half's Drawer tile, laid in while none
                 // of them shows.
                 syncDrawerTile();
+                // A pictured dip's stack is the other half's own from this frame: its slab takes
+                // that half's Dock design too, while none of it shows, so the dock rises as it
+                // rests and the settle has nothing to re-dress (SeamCrossing#stackDesign).
+                if (seam.restyle() && mCrossing.seam().stackDesignApart()) {
+                    restyleDockSurface();
+                    mDockDesignTravelledTo = mCrossing.seam().other();
+                }
                 // In this frame, so the stack's height the translation below reads is the new one.
                 mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
                     GeometryScheduler.ResizePolicy.AT_SETTLE);
@@ -24159,6 +24180,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // And its rows carry their own half's Drawer tile again.
                 syncDrawerTile();
             }
+            // A pictured dip that came back takes its slab's design back too, in the frame the
+            // stack is put back on screen; one that landed had it worn by the commit.
+            if (mDockDesignTravelledTo != null && mDockDesignTravelledTo != mLastWallPage)
+                restyleDockSurface();
+            mDockDesignTravelledTo = null;
             // Resting on the Workspace, the canvas comes back down below the bar, its pages out of
             // the band with it, so nothing on screen moves (PageTopInsets).
             syncCanvasTopReach();

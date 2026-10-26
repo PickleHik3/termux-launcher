@@ -141,6 +141,7 @@ public class SeamCrossingTest {
         float beadShare;
         float stripShare, fieldShare;
         float pictureReveal;
+        DockStyle stackDesign;
         boolean active, folds, rowsSink, relayout, restyle, restyleShape, bandsMoved, rides;
         boolean barRedressed;
         PaneWallPage stackDressPage;
@@ -202,6 +203,7 @@ public class SeamCrossingTest {
             step.extraKeysShare = answers.extraKeysShare();
             step.beadShare = answers.beadShare();
             step.pictureReveal = answers.pictureReveal();
+            step.stackDesign = crossing.stackDesign();
             step.folds = answers.folds();
             step.rowsSink = answers.rowsSink(100);
             step.relayout = answers.relayout();
@@ -996,6 +998,38 @@ public class SeamCrossingTest {
         assertEquals(0f, drive.last().dockReveal, EPSILON);
         SeamCrossing.Landing landing = drive.crossing.land();
         assertTrue("the settle dresses it back", landing.redressesBack(PaneWallPage.TERMINAL));
+    }
+
+    /**
+     * The dock a pictured dip brings in wears its own half's Dock design from the crossing's first
+     * frame, as it rests: Home's set design rises as itself, not in the window's Tray until the
+     * settle (pong, 2026-10-26).
+     */
+    @Test
+    public void aPicturedDipsStackWearsTheArrivingDesignFromTheFirstFrame() {
+        for (boolean pictured : new boolean[] {true, false}) {
+            Stored stored = new Stored();
+            stored.minimal = true;
+            stored.designs.put(LayoutVariant.HOME, DockStyle.WALL_STRIP);
+            stored.designs.put(LayoutVariant.NORMAL, DockStyle.WALL_STRIP);
+            Drive drive = drive(stored, PaneWallPage.TERMINAL, minimalWindow(), true,
+                PaneWallPage.WIDGETS, home(), false, false);
+            DockStyle window = drive.here.dress.dockDesign();
+            DockStyle home = drive.there.dress.dockDesign();
+            assertEquals(DockStyle.GLASS_TRAY, window);
+            assertEquals(DockStyle.WALL_STRIP, home);
+            drive.picture = pictured;
+            drive.slow(0f, 0.6f).slow(0.6f, 0.05f);
+            for (Step step : drive.steps) {
+                if (!step.active) continue;
+                assertSame("pictured " + pictured + " at " + step.fraction,
+                    pictured ? home : window, step.stackDesign);
+            }
+            assertEquals(pictured, drive.crossing.stackDesignApart());
+            drive.crossing.land();
+            assertNull("the landing reads the committed page's again",
+                drive.crossing.stackDesign());
+        }
     }
 
     /** A picture that could not be taken leaves the dip exactly as it was. */
