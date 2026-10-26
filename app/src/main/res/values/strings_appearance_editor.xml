@@ -33,6 +33,7 @@
 
     <!-- The cards' titles: one per thing you can tap, and the palette's. -->
     <string name="appearance_card_home">Home</string>
+    <string name="appearance_card_workspace">Workspace</string>
     <string name="appearance_card_status">Status bar</string>
     <string name="appearance_card_terminal">Terminal</string>
     <string name="appearance_card_dock">Dock</string>
@@ -46,6 +47,7 @@
 
     <!-- The card menu: back on the Look, or the same look on the other half. -->
     <string name="appearance_reset_home">Reset Home</string>
+    <string name="appearance_reset_workspace">Reset Workspace</string>
     <string name="appearance_reset_status">Reset status bar</string>
     <string name="appearance_reset_terminal">Reset terminal</string>
     <string name="appearance_reset_dock">Reset dock</string>
@@ -83,7 +85,14 @@
     <string name="appearance_row_numerals">Numerals</string>
     <string name="appearance_row_page_dots">Page dots</string>
     <string name="appearance_row_wallpaper_scroll">Wallpaper scroll</string>
-    <string name="appearance_row_own_layout">Own layout</string>
+    <!-- The Match rows: copy the other screen's layout and glass onto this one. -->
+    <string name="appearance_row_match_workspace">Match Workspace styling</string>
+    <string name="appearance_row_match_home">Match Home styling</string>
+    <!-- The Match row's button: Copy, then Undo while the copy can be taken back. -->
+    <string name="appearance_match_copy">Copy</string>
+    <string name="appearance_match_undo">Undo</string>
+    <!-- The link from a screen's card to the card both screens share. -->
+    <string name="appearance_row_global">Global</string>
     <string name="appearance_row_gestures">Gestures</string>
     <string name="appearance_row_pages">Pages</string>
     <string name="appearance_row_clock_12h">12-hour clock</string>
