@@ -35,6 +35,7 @@ Latest stable: v1.0.6.
 - The welcome message in a new session is a rounded card in your wallpaper's colours, with a tap-to-open link to the guide; it lays itself out to fit narrow panes.
 - Fixes that also shipped in v1.0.6: the Low-memory preset switch, smoother transcript scrolling, symbol icons in larger program text, kitty playback without flicker, icon packs that stay applied, the sessions drawer at large font sizes, and a wallpaper change that keeps your Look's blur.
 - The welcome message in a new terminal is a rounded card in your wallpaper's colours, with Apps, Packages and Setup sections that fit the pane's width and a tap-to-open link to the guide.
+- Settings › Linux apps › Arch Linux installs on arm64 phones again, from the Arch Linux ARM image; Debian and Ubuntu are unchanged.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
