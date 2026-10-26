@@ -9,12 +9,8 @@ import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.SystemClock;
-import android.text.TextUtils;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -22,25 +18,18 @@ import android.graphics.RectF;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
-import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ListPopupWindow;
 import android.widget.TextView;
 
-import androidx.annotation.AttrRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
-import androidx.appcompat.widget.PopupMenu;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.termux.R;
@@ -55,8 +44,6 @@ import com.termux.app.fragments.settings.termux.AppearanceSettingsStore;
 import com.termux.app.fragments.settings.termux.HomePreferencesFragment;
 import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment;
-import com.termux.app.fragments.settings.termux.KeyboardSizePreferencesFragment;
-import com.termux.app.fragments.settings.termux.LauncherDockPreferencesFragment;
 import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment;
@@ -68,13 +55,11 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.SeamDress;
-import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.surfaces.AppearanceLooks.Control;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.surfaces.rows.EditorGlyphs;
-import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.logger.Logger;
@@ -945,7 +930,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCardSheet sheet = mSheet;
         if (sheet == null || cardRefusal(card) != null)
             return;
-        dismissClockDropdown();
         mCard = card;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
@@ -963,7 +947,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mCard == null)
             return;
         mCard = null;
-        dismissClockDropdown();
         if (sheet != null)
             sheet.hide(animate, null);
         if (mBar != null && mOpen)
@@ -1020,8 +1003,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The card header's reset, with no question asked: the object back on the half's Look (Home:
-     * back as it shipped).
+     * The card header's reset, with no question asked: the object's glass back on the half's Look
+     * (a screen's own glass back as it shipped), and every other value the card's rows show back
+     * as it ships ({@link EditorCardReset}); where bars stand stays. Undo, not Reset, returns to
+     * the state the editor opened on.
      */
     private void resetCard() {
         TermuxAppSharedPreferences prefs = prefs();
@@ -1030,25 +1015,49 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         EditorCardReset.resetStore(prefs, card, mHalf);
         mScreenFrostPosition.clear();
+        mLinkAnchor = null;
+        LayoutEditorController layout = mHost.layoutEditor();
         if (card == EditorCard.HOME)
             resetHome();
         if (card == EditorCard.DOCK) {
-            // The dock's height lives in the layout session, so its Undo covers it.
+            // The dock's height, type and the Search field and Drawer icon live in the layout
+            // session, so its Undo covers them.
             float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
                 .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout != null)
+            if (layout != null) {
                 layout.setDockHeightScale(scale);
-            else
+                layout.setDockStyle(DockStyle.GLASS_TRAY);
+                layout.setSearchField(false);
+                layout.setDrawerTile(false);
+            } else {
                 prefs.setAppLauncherBarHeightScale(scale);
+            }
+            writeStyle(false);
+            resetDockOptions();
+        }
+        if (card == EditorCard.KEYBOARD && layout != null) {
+            layout.setKeyboardForm(PlaceLayout.KeyboardForm.DOCKED);
+            layout.setKeyboardHeightScale(prefs.getDefaultInAppKeyboardHeightScale(), false);
+            layout.setKeyboardChinDp(com.termux.shared.termux.settings.preferences
+                .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING, false);
         }
         syncAfterBulkWrite();
     }
 
-    /**
-     * Home's rows back to what they ship with, and Home's glass back on the Look the Home half
-     * wore when the editor opened (its Base as captured on entry).
-     */
+    /** The Dock card's options and the apps row's Most used switch back as they ship. */
+    private void resetDockOptions() {
+        Context context = mHost.context();
+        for (String key : new String[] {"app_launcher_notification_dots",
+            "app_launcher_quick_reply_swipe", "app_launcher_bw_icons",
+            "app_launcher_most_used_page"}) {
+            boolean shipped = EditorSettingsSnapshot.defaultOf(key);
+            if (AppearanceSettingsStore.getBoolean(context, key, shipped) != shipped)
+                AppearanceSettingsStore.putBoolean(context, key, shipped);
+        }
+        settingsWritten();
+    }
+
+    /** Home's rows and widget grid back to what they ship with (its glass: EditorCardReset). */
     private void resetHome() {
         Context context = mHost.context();
         for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
@@ -1064,6 +1073,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style", null);
         settingsWritten();
         mHost.applyHomeSettings();
+        // The widget grid lives in the layout session, so its Undo covers it.
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (layout != null)
+            layout.setWidgetGrid(com.termux.shared.termux.settings.preferences
+                    .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
     }
 
     // ----------------------------------------------------------------------------- the frame
@@ -1891,10 +1907,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mSheet.restate();
     }
 
-    /** Where the app-wide choices are read and written: Settings' own store. */
+    /**
+     * Where the app-wide choices are read and written: Settings' own store, and the app's store
+     * for the Dock card's switches Settings has no row for.
+     */
     @NonNull
     private EditorSettingsSnapshot.Store settingsStore() {
-        return EditorSettingsSnapshot.settings(mHost.context());
+        return EditorSettingsSnapshot.settings(mHost.context(), dockPrefs());
     }
 
     /** A card wrote an app-wide choice: its signature is read again for the dirty state. */
@@ -1966,7 +1985,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             commitAndExit();
     }
 
-    /** Back inside the editor: a lift cancelled, a popup shut, a card put down. */
+    /** Back inside the editor: a lift cancelled, a card put down. */
     @Override
     public boolean consumeBack() {
         if (!mOpen)
@@ -1974,10 +1993,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.cancelGesture())
             return true;
-        if (mClockDropdown != null) {
-            dismissClockDropdown();
-            return true;
-        }
         if (mCard != null) {
             closeCard(true);
             return true;
@@ -2109,18 +2124,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
                 case MARGIN: return AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false));
                 case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
-                case SEARCH_FIELD: return layout != null && layout.searchField() ? 1 : 0;
-                case DRAWER_ICON: return layout != null && layout.drawerTile() ? 1 : 0;
                 case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
-                case APP_ICONS: return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
                 case TEXT_SIZE:
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
                         / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
                 case CONTRAST: return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
                 case SPLIT_GAP: return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
-                case ICON_SIZE:
-                    return parseInt(AppearanceSettingsStore.getString(context,
-                        HomeSettings.KEY_ICON_SCALE, null), 100);
                 case LABEL_SIZE:
                     return indexOf(LABEL_SIZES, AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_LABEL_SIZE, null), 1);
@@ -2166,9 +2175,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         ? 1 : 0;
                 case THEME:
                     return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
-                case MONOCHROME:
-                    return AppearanceSettingsStore.getBoolean(context, "app_launcher_bw_icons", false)
-                        ? 1 : 0;
                 case WALLPAPER_COLOURS:
                     return AppearanceSettingsStore.getBoolean(context,
                         "terminal_dynamic_colors_enabled", false) ? 1 : 0;
@@ -2193,10 +2199,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
                         mHost.isAppsRowAlone(), density())[0];
                 case DEPTH: return GlassEdgeControls.MIN;
-                case APP_ICONS: return AppearanceLooks.APP_ICONS_MIN;
                 case REFLECTION: return PeekGlassGeometry.REFLECTION_MIN;
                 case TEXT_SIZE: return Control.TEXT_SIZE.min;
-                case ICON_SIZE: return HOME_ICON_MIN;
                 case KEY_OPACITY: return Control.KEY_OPACITY.min;
                 case LOOK: return 0;
                 case VIBRANCY: return Control.VIBRANCY.min;
@@ -2219,11 +2223,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case CORNERS: return AppearanceLooks.CORNERS_MAX_DP;
                 case MARGIN: return AppearanceLooks.MARGIN_MAX_DP;
                 case DEPTH: return GlassEdgeControls.MAX;
-                case APP_ICONS: return AppearanceLooks.APP_ICONS_MAX;
                 case REFLECTION: return PeekGlassGeometry.REFLECTION_MAX;
                 case TEXT_SIZE: return Control.TEXT_SIZE.max;
                 case SPLIT_GAP: return Control.SPLIT_GAP.max;
-                case ICON_SIZE: return HOME_ICON_MAX;
                 case KEY_OPACITY: return Control.KEY_OPACITY.max;
                 case KEY_CORNERS: return AppearanceLooks.KEY_CORNERS_MAX_DP;
                 case KEY_SPACING: return AppearanceLooks.KEY_SPACING_MAX_TENTHS;
@@ -2237,7 +2239,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public int step(@NonNull Row row) {
             switch (row) {
                 case TEXT_SIZE: return Control.TEXT_SIZE.step;
-                case ICON_SIZE: return HOME_ICON_STEP;
                 case REFLECTION: return PeekGlassGeometry.REFLECTION_STEP;
                 default: return 1;
             }
@@ -2250,7 +2251,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case TINT:
                 case DEPTH:
                 case TEXT_SIZE:
-                case ICON_SIZE:
                 case KEY_OPACITY:
                 case GLASS_EDGE:
                 case REFLECTION:
@@ -2269,8 +2269,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case VIBRANCY:
                     return getString(R.string.appearance_readout_times,
                         String.format(Locale.getDefault(), "%.2f", value / 100f));
-                case APP_ICONS:
-                    return String.valueOf(value);
                 case LOOK:
                     return lookStopName(value);
                 case MATCH_WORKSPACE:
@@ -2456,20 +2454,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** Home's icon size, a percent of the dock's 48dp, as Settings › Home offers it. */
-    private static final int HOME_ICON_MIN = 80;
-    private static final int HOME_ICON_MAX = 120;
-    private static final int HOME_ICON_STEP = 10;
-
-    private static int parseInt(@Nullable String value, int fallback) {
-        if (value == null)
-            return fallback;
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
 
     @NonNull
     private String lookStopName(int stop) {
@@ -2558,15 +2542,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case CORNERS: writeCorners(value); break;
             case MARGIN: writeMargin(value); break;
             case DEPTH: writeGlassDepth(value); break;
-            case SEARCH_FIELD: if (layout != null) layout.setSearchField(value != 0); break;
-            case DRAWER_ICON: if (layout != null) layout.setDrawerTile(value != 0); break;
-            case APP_ICONS: writeAppIcons(value); break;
             case TEXT_SIZE: writeTextSize(value); break;
             case CONTRAST: writeLegibility(value); break;
             case SPLIT_GAP: writeSplitGap(value); break;
-            case ICON_SIZE:
-                writeHomeString(HomeSettings.KEY_ICON_SCALE, String.valueOf(value));
-                break;
             case LABEL_SIZE:
                 writeHomeString(HomeSettings.KEY_LABEL_SIZE, LABEL_SIZES[clamp(value, 0, 2)]);
                 break;
@@ -2628,10 +2606,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case THEME:
                 previewTheme(THEMES[clamp(value, 0, 2)]);
                 break;
-            case MONOCHROME:
-                AppearanceSettingsStore.putBoolean(context, "app_launcher_bw_icons", value != 0);
-                settingsWritten();
-                break;
             case WALLPAPER_COLOURS:
                 AppearanceSettingsStore.putBoolean(context, "terminal_dynamic_colors_enabled",
                     value != 0);
@@ -2676,25 +2650,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         switch (row) {
-            case CURSOR_TRAIL:
-                showChoiceMenu(anchor, R.array.appearance_editor_cursor_trail_entries,
-                    R.array.appearance_editor_cursor_trail_values,
-                    CursorTrailChoice.menuId(prefs.isTerminalCursorTrailEnabled(),
-                        prefs.getTerminalCursorTrailStyle()), this::writeTrailStyle);
-                break;
-            case EFFECT:
-                showChoiceMenu(anchor, R.array.settings_terminal_retro_effect_entries,
-                    R.array.settings_terminal_retro_effect_values, prefs.getTerminalRetroEffect(),
-                    this::writeRetroEffect);
-                break;
-            case TINT_HUE:
-                showChoiceMenu(anchor, R.array.appearance_editor_tint_hue_entries,
-                    R.array.appearance_editor_tint_hue_values, prefs.getSurfaceGlassTintHue(),
-                    this::writeTintHue);
-                break;
-            case CLOCK_FACE:
-                showClockDropdown(anchor);
-                break;
             case KEYBOARD_THEME:
                 openKeyboardTheme();
                 break;
@@ -2721,19 +2676,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LINK_PAGES:
                 openSettingsFromEditor(HomePreferencesFragment.class,
                     R.string.settings_section_home, null, HOME_PAGES_SECTION);
-                break;
-            case LINK_INDICATORS:
-                openSettingsPage(StatusBarPreferencesFragment.class, R.string.appearance_row_indicators);
-                break;
-            case LINK_FONT:
-                openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
-                break;
-            case LINK_DOCK_ITEMS:
-                openSettingsPage(LauncherDockPreferencesFragment.class, R.string.appearance_row_dock_items);
-                break;
-            case LINK_KEYBOARD_SIZE:
-                openSettingsPage(KeyboardSizePreferencesFragment.class,
-                    R.string.appearance_row_keyboard_size);
                 break;
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
@@ -2784,33 +2726,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         syncAfterBulkWrite();
         syncDirty();
         if (mSheet != null) mSheet.restate();
-    }
-
-    private interface Choice {
-        void chosen(@NonNull String id);
-    }
-
-    /** The entries/values arrays as a single-choice menu on {@code anchor}. */
-    private void showChoiceMenu(@NonNull View anchor, int entriesRes, int valuesRes,
-                                @NonNull String current, @NonNull Choice choice) {
-        String[] entries = getResources().getStringArray(entriesRes);
-        String[] values = getResources().getStringArray(valuesRes);
-        PopupMenu menu = new PopupMenu(mHost.context(), anchor, Gravity.END);
-        for (int i = 0; i < entries.length && i < values.length; i++) {
-            MenuItem item = menu.getMenu().add(Menu.NONE, i, i, entries[i]);
-            item.setCheckable(true);
-            item.setChecked(values[i].equals(current));
-        }
-        menu.getMenu().setGroupCheckable(Menu.NONE, true, true);
-        menu.setOnMenuItemClickListener(item -> {
-            int index = item.getItemId();
-            if (index >= 0 && index < values.length && !values[index].equals(current)) {
-                choice.chosen(values[index]);
-                if (mSheet != null) mSheet.restate();
-            }
-            return true;
-        });
-        menu.show();
     }
 
     /** Builds the icon packs once per session for the Appearance card's Icon pack row. */
@@ -4335,9 +4250,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ------------------------------------------------------------------------- the clock face
     //
-    // The status bar's one control that is a look rather than a number: the Clock button above
-    // the sliders, opening the six faces upward, drawn as themselves, with the face's position
-    // beneath them. Live like every other editor control, and gated by Done.
+    // The status bar's face and its place in the bar, as the Status bar card's face tiles and
+    // Clock position row write them (cards/StatusBarCard). Live like every other editor control,
+    // and gated by Done.
 
     /**
      * Every stored clock style, Minimal's medium weight included. Package-private so a test can
@@ -4351,40 +4266,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
-
-    /**
-     * The faces the picker lists, one row each: every style but Minimal's medium weight, which is
-     * Minimal's row with the Weight row under it ({@link #clockWeightRow}).
-     */
-    static final String[] CLOCK_FACES = {
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
-        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
-
-    /** Whether {@code style} is Minimal, in either weight. */
-    static boolean isMinimalStyle(@Nullable String style) {
-        return TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style)
-            || TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(style);
-    }
-
-    /**
-     * The picker's rows for the bar's {@code current} style: the faces, then the Weight row while
-     * Minimal is the face, then the position row. Public for the Clock widget's test.
-     */
-    @NonNull
-    public static String[] clockDropdownRows(@Nullable String current) {
-        java.util.List<String> rows = new java.util.ArrayList<>(java.util.Arrays.asList(CLOCK_FACES));
-        if (isMinimalStyle(current)) rows.add(CLOCK_ROW_WEIGHT);
-        rows.add(CLOCK_ROW_POSITION);
-        return rows.toArray(new String[0]);
-    }
-
-    /** The picker's two rows that are not faces. */
-    public static final String CLOCK_ROW_WEIGHT = "@weight";
-    public static final String CLOCK_ROW_POSITION = "@position";
 
     /** Package-private so a test can hold it against the settings list's own segment values. */
     static final String[] CLOCK_ALIGNMENTS = {
@@ -4420,313 +4301,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return R.string.termux_top_pane_clock_style_flip;
     }
 
-    /**
-     * A face at the size the collapsed pane draws it, honouring the 12-hour and lazy-mode
-     * preferences so a preview never animates in a build where the real clock does not.
-     */
-    private void applyClockPreview(@NonNull TerminalClockWidget widget, @NonNull String style) {
-        widget.setForm(TopPaneClockForm.COMPACT);
-        widget.setStyle(style);
-        if (prefs() == null)
-            return;
-        widget.setUseAmPm(prefs().isTopPaneClockAmPmEnabled());
-        widget.setLazyMode(prefs().isLazyModeEnabled());
-    }
-
-    @Nullable private ListPopupWindow mClockDropdown;
-
-    /**
-     * The drop-down's rows: the six faces, Minimal's Weight row while Minimal is the face, then one
-     * row for the face's place in the pane ({@link #clockDropdownRows}). A real list popup, so the
-     * theme's popup style gives it its surface, shape and elevation.
-     */
-    private final class ClockDropdownAdapter extends BaseAdapter {
-        private final String mCurrent;
-        private final String[] mRows;
-
-        ClockDropdownAdapter(@NonNull String current) {
-            mCurrent = current;
-            mRows = clockDropdownRows(current);
-        }
-
-        @Override public int getCount() { return mRows.length; }
-
-        @Override public Object getItem(int position) {
-            return isFaceRow(position) ? mRows[position] : null;
-        }
-
-        @Override public long getItemId(int position) { return position; }
-
-        @Override public int getViewTypeCount() { return 3; }
-
-        @Override public int getItemViewType(int position) {
-            if (isFaceRow(position)) return 0;
-            return CLOCK_ROW_WEIGHT.equals(mRows[position]) ? 2 : 1;
-        }
-
-        @Override public boolean areAllItemsEnabled() { return false; }
-
-        /** The weight and position rows are made of controls of their own; the list takes faces. */
-        @Override public boolean isEnabled(int position) { return isFaceRow(position); }
-
-        boolean isFaceRow(int position) {
-            return position >= 0 && position < mRows.length
-                && !mRows[position].startsWith("@");
-        }
-
-        @Override public View getView(int position, @Nullable View convertView,
-                                      @NonNull ViewGroup parent) {
-            Context context = parent.getContext();
-            if (CLOCK_ROW_POSITION.equals(mRows[position]))
-                return clockPositionRow(context);
-            if (CLOCK_ROW_WEIGHT.equals(mRows[position]))
-                return clockWeightRow(context);
-            return clockFaceRow(context, mRows[position], mCurrent);
-        }
-    }
-
-    /**
-     * The Clock button's popup: the six faces drawn as themselves, over the frame. The button
-     * stands in the sheet at the foot of the screen, so the popup opens upward from its top edge
-     * (a negative vertical offset of the anchor's height plus the popup's own), aligned to the
-     * button's end, and never taller than the room above the button.
-     */
-    private void showClockDropdown(@NonNull View anchor) {
-        if (prefs() == null)
-            return;
-        dismissClockDropdown();
-        Context context = mHost.context();
-        ListPopupWindow popup = new ListPopupWindow(context);
-        popup.setAnchorView(anchor);
-        popup.setModal(true);
-        int windowWidth = Math.min(anchor.getRootView().getWidth(),
-            getResources().getDisplayMetrics().widthPixels);
-        // Beside the preview the sheet is the side pane: the popup takes its share of the pane,
-        // not of the window, so it stands over the pane rather than across the preview.
-        popup.setWidth(windowWidth * 3 / 4);
-        popup.setDropDownGravity(Gravity.END);
-        int[] anchorAt = new int[2];
-        anchor.getLocationInWindow(anchorAt);
-        // The bottom sheet's button is near the foot: the popup opens upward from its top edge.
-        // The side pane's stands near the top of a tall pane: it opens downward under it.
-        int roomAbove = anchorAt[1] - dp(FRAME_GAP_DP);
-        int roomBelow = anchor.getRootView().getHeight() - mNavInsetPx
-            - (anchorAt[1] + anchor.getHeight()) - dp(FRAME_GAP_DP);
-        int room = Math.max(dp(CLOCK_POPUP_MIN_HEIGHT_DP), Math.max(roomAbove, roomBelow));
-        int height = Math.min(dp(clockPopupHeightDp(prefs().getTopPaneClockStyle())), room);
-        popup.setHeight(height);
-        popup.setVerticalOffset(roomAbove >= roomBelow ? -(anchor.getHeight() + height) : 0);
-        popup.setOnDismissListener(() -> mClockDropdown = null);
-        ClockDropdownAdapter adapter = new ClockDropdownAdapter(prefs().getTopPaneClockStyle());
-        popup.setAdapter(adapter);
-        popup.setOnItemClickListener((parent, view, position, id) -> {
-            Object face = adapter.getItem(position);
-            if (face instanceof String) {
-                // Minimal's row keeps the weight it has; the Weight row moves between the two.
-                if (!(isMinimalStyle((String) face)
-                    && isMinimalStyle(prefs() == null ? null : prefs().getTopPaneClockStyle())))
-                    pickClockStyle((String) face);
-                popup.dismiss();
-            }
-        });
-        popup.setBackgroundDrawable(EditorM3.surface(anchor,
-            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh));
-        mClockDropdown = popup;
-        popup.show();
-    }
-
-    /**
-     * The popup's height as it wants to stand: six 48dp face rows and the 56dp position row, and
-     * the 56dp weight row only while Minimal is the face ({@link #clockDropdownRows}), so no
-     * blank strip is left where it is not shown.
-     */
-    public static int clockPopupHeightDp(@Nullable String current) {
-        return 6 * 48 + (isMinimalStyle(current) ? 56 : 0) + 56;
-    }
-
-    private static final int CLOCK_POPUP_MIN_HEIGHT_DP = 160;
-
-    private void dismissClockDropdown() {
-        if (mClockDropdown == null)
-            return;
-        mClockDropdown.dismiss();
-        mClockDropdown = null;
-    }
-
-    /** Gives a text view the theme's text appearance behind {@code attr}. */
-    private static void applyTextAppearance(@NonNull TextView view, @AttrRes int attr) {
-        TypedValue value = new TypedValue();
-        if (view.getContext().getTheme().resolveAttribute(attr, value, true)
-            && value.resourceId != 0)
-            view.setTextAppearance(value.resourceId);
-    }
-
-    /** One face in the drop-down: its name, the face itself, and a tick on the one in use. */
-    @NonNull
-    private View clockFaceRow(@NonNull Context context, @NonNull String style,
-                              @NonNull String current) {
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(48));
-        row.setPaddingRelative(dp(16), 0, dp(16), 0);
-        boolean selected = style.equals(current)
-            || (isMinimalStyle(style) && isMinimalStyle(current));
-
-        TextView name = new TextView(context);
-        name.setText(clockStyleLabel(style));
-        applyTextAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
-        name.setMaxLines(2);
-        name.setEllipsize(TextUtils.TruncateAt.END);
-        name.setTextColor(EditorM3.color(row, selected
-            ? androidx.appcompat.R.attr.colorPrimary
-            : com.google.android.material.R.attr.colorOnSurface));
-        name.setLayoutParams(new LinearLayout.LayoutParams(
-            dp(84), ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(name);
-
-        TerminalClockWidget preview = new TerminalClockWidget(context, null);
-        // Minimal's row draws the weight the bar wears.
-        applyClockPreview(preview, selected && isMinimalStyle(style) ? current : style);
-        preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        preview.setLayoutParams(new LinearLayout.LayoutParams(0, dp(30), 1f));
-        row.addView(preview);
-
-        TextView tick = new TextView(context);
-        tick.setText(R.string.termux_surface_tuning_clock_selected);
-        applyTextAppearance(tick, com.google.android.material.R.attr.textAppearanceTitleMedium);
-        tick.setGravity(Gravity.CENTER);
-        tick.setTextColor(EditorM3.color(row, androidx.appcompat.R.attr.colorPrimary));
-        tick.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
-        tick.setLayoutParams(new LinearLayout.LayoutParams(
-            dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(tick);
-
-        row.setContentDescription(getString(R.string.termux_surface_tuning_clock_face_description,
-            getString(clockStyleLabel(style))));
-        final boolean isSelected = selected;
-        androidx.core.view.ViewCompat.setAccessibilityDelegate(row,
-            new androidx.core.view.AccessibilityDelegateCompat() {
-                @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
-                        @NonNull androidx.core.view.accessibility
-                            .AccessibilityNodeInfoCompat info) {
-                    super.onInitializeAccessibilityNodeInfo(host, info);
-                    info.setClassName(Button.class.getName());
-                    info.setCheckable(true);
-                    info.setChecked(isSelected);
-                }
-            });
-        return row;
-    }
-
-    /**
-     * Where the face sits in the pane, left, centre or right, as the theme's segmented buttons
-     * under the faces. The popup stays open for a second look instead of dismissing like a face
-     * pick does.
-     */
-    @NonNull
-    private View clockPositionRow(@NonNull Context context) {
-        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
-        group.setSingleSelection(true);
-        group.setSelectionRequired(true);
-        group.setContentDescription(getString(R.string.settings_clock_alignment_title));
-        String current = prefs() == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT
-            : prefs().getTopPaneClockAlignment();
-        final java.util.Map<Integer, String> alignmentOf = new java.util.HashMap<>();
-        int currentId = View.NO_ID;
-        for (String alignment : CLOCK_ALIGNMENTS) {
-            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
-                .inflate(R.layout.segment_button, group, false);
-            button.setId(View.generateViewId());
-            button.setText(clockAlignmentLabel(alignment));
-            button.setMaxLines(1);
-            button.setContentDescription(getString(
-                R.string.termux_surface_tuning_clock_position_description,
-                getString(clockAlignmentLabel(alignment))));
-            button.setLayoutParams(new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            group.addView(button);
-            alignmentOf.put(button.getId(), alignment);
-            if (alignment.equals(current))
-                currentId = button.getId();
-        }
-        if (currentId != View.NO_ID)
-            group.check(currentId);
-        group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
-            String alignment = alignmentOf.get(checkedId);
-            if (isChecked && alignment != null)
-                pickClockAlignment(alignment);
-        });
-        FrameLayout holder = new FrameLayout(context);
-        holder.setPadding(dp(16), dp(4), dp(16), dp(4));
-        holder.addView(group, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return holder;
-    }
-
     private void pickClockAlignment(@NonNull String alignment) {
         if (prefs() == null || alignment.equals(prefs().getTopPaneClockAlignment()))
             return;
         prefs().setTopPaneClockAlignment(alignment);
         mHost.refreshTerminalWindowBar();
         syncDirty();
-    }
-
-    /**
-     * Minimal's weight, Thin or Medium, as the theme's segmented buttons under the faces while
-     * Minimal is the face. Like the position row, the popup stays open for a second look.
-     */
-    @NonNull
-    private View clockWeightRow(@NonNull Context context) {
-        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
-        group.setSingleSelection(true);
-        group.setSelectionRequired(true);
-        group.setContentDescription(getString(R.string.termux_surface_tuning_clock_weight));
-        String current = prefs() == null ? null : prefs().getTopPaneClockStyle();
-        String[] styles = {TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
-            TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM};
-        int[] labels = {R.string.termux_surface_tuning_clock_weight_thin,
-            R.string.termux_surface_tuning_clock_weight_medium};
-        final java.util.Map<Integer, String> styleOf = new java.util.HashMap<>();
-        int currentId = View.NO_ID;
-        for (int i = 0; i < styles.length; i++) {
-            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
-                .inflate(R.layout.segment_button, group, false);
-            button.setId(View.generateViewId());
-            button.setText(labels[i]);
-            button.setMaxLines(1);
-            button.setContentDescription(getString(
-                R.string.termux_surface_tuning_clock_weight_description, getString(labels[i])));
-            button.setLayoutParams(new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            group.addView(button);
-            styleOf.put(button.getId(), styles[i]);
-            if (styles[i].equals(current))
-                currentId = button.getId();
-        }
-        if (currentId != View.NO_ID)
-            group.check(currentId);
-        group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
-            String style = styleOf.get(checkedId);
-            if (isChecked && style != null)
-                pickClockStyle(style);
-        });
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(16), dp(4), dp(16), dp(4));
-        TextView name = new TextView(context);
-        name.setText(R.string.termux_surface_tuning_clock_weight);
-        applyTextAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
-        name.setTextColor(EditorM3.color(row, com.google.android.material.R.attr.colorOnSurface));
-        name.setLayoutParams(new LinearLayout.LayoutParams(dp(84),
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(name);
-        row.addView(group, new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        return row;
     }
 
     private void pickClockStyle(@NonNull String style) {
@@ -4892,7 +4472,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 onHidden.run();
             return;
         }
-        dismissClockDropdown();
         if (mSliderDragActive)
             endDrag();
         mOpen = false;
@@ -5562,6 +5141,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return;
             layout.setBarOrder(com.termux.app.surfaces.cards.BarOrder.format(order));
             restackBars(order);
+            // The order alone (bars on edges of their own) moves no slot: Undo still holds it.
+            syncDirty();
         }
 
         @Override public boolean offers(@NonNull Element bar) {
@@ -5679,6 +5260,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (store != null)
                 store.edit().putBoolean(
                     com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND, on).apply();
+            settingsWritten();
         }
 
         @Override public int azShow() {
@@ -5694,6 +5276,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (store != null)
                 store.edit().putString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW,
                     values[Math.max(0, Math.min(values.length - 1, index))]).apply();
+            settingsWritten();
         }
 
         @Override public void openExtraKeysEditor() {
@@ -5760,6 +5343,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         store.edit().putBoolean(
                             com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on)
                             .apply();
+                    settingsWritten();
                     break;
                 }
                 case NOTIFICATION_DOTS:
