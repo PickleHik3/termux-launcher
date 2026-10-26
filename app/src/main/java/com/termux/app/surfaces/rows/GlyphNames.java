@@ -17,6 +17,10 @@ public final class GlyphNames {
     /** Long-pressing {@code view} shows {@code name}. */
     public static void name(@NonNull View view, @Nullable CharSequence name) {
         TooltipCompat.setTooltipText(view, name);
+        // A tooltip opens from the long-press the view's touch handling raises, which a view
+        // that is neither clickable nor long-clickable (a bare glyph) never receives.
+        if (name != null && !view.isClickable() && !view.isLongClickable())
+            view.setLongClickable(true);
     }
 
     /** The name {@code view} shows on long-press, or null. */
