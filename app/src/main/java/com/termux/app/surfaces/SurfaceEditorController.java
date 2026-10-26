@@ -4397,6 +4397,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return mDockCard;
     }
 
+    /**
+     * The Dock card opens next on {@code bar}'s settings, or with every bar's closed for null: a
+     * door from outside the editor that names the bar pressed (the long-press popup's Edit).
+     */
+    public void expandDockBar(@Nullable Element bar) {
+        dockCard().expand(bar);
+    }
+
     /** The bar a tap at a raw screen point landed on: the A–Z strip, the extra keys, or neither. */
     @Nullable
     private Element dockBarAt(float rawX, float rawY) {
@@ -4595,6 +4603,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 store.edit().putBoolean(
                     com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND, on).apply();
             settingsWritten();
+            azWritten();
         }
 
         @Override public int azShow() {
@@ -4611,6 +4620,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 store.edit().putString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW,
                     values[Math.max(0, Math.min(values.length - 1, index))]).apply();
             settingsWritten();
+            azWritten();
+        }
+
+        /**
+         * The A–Z strip's look moved: the live chrome is arranged again, since the pull tab gives
+         * the strip's band back and Faint and the glass are applied with the bar's host.
+         */
+        private void azWritten() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null) layout.applyStoreWrite();
         }
 
         @Override public void openExtraKeysEditor() {

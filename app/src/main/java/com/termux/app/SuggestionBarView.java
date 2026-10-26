@@ -4212,27 +4212,18 @@ public final class SuggestionBarView extends GridLayout
                 filler.setVisibility(VISIBLE);
                 filler.setAlpha(0f);
                 filler.setLayoutParams(createSlotParams(i));
-                if (!azPreview) {
-                    final int slotIndex = i;
-                    filler.setOnLongClickListener(v -> {
-                        openPinEditor();
-                        return true;
-                    });
-                }
+                // An empty slot is the dock's frame: a hold there opens the dock's popup
+                // (editor-redesign §3), which a long-click of its own here would shut out.
+                filler.setLongClickable(false);
                 addView(filler);
             }
         }
 
-        if (!azPreview) {
-            setOnLongClickListener(v -> {
-                openPinEditor();
-                return true;
-            });
-            setOnDragListener(this::handlePinnedBarDragEvent);
-        } else {
-            setOnLongClickListener(null);
-            setOnDragListener(null);
-        }
+        // Between items the bar is the dock's frame, whose hold opens the dock's popup
+        // (editor-redesign §3); the bar keeps no long-press of its own.
+        setOnLongClickListener(null);
+        setLongClickable(false);
+        setOnDragListener(azPreview ? null : this::handlePinnedBarDragEvent);
         if (!terminalSearchEntries.isEmpty()) {
             terminalSearchFocusIndex = 0;
             applyTerminalSearchFocusOutline();
@@ -5372,6 +5363,18 @@ public final class SuggestionBarView extends GridLayout
 
     @Nullable private AddToHomeListener addToHomeListener;
 
+    /** Who opens the Dock card for the App menu's Edit dock (editor-redesign §3). */
+    public interface EditDockListener {
+        void onEditDock();
+    }
+
+    @Nullable private EditDockListener editDockListener;
+
+    /** Who opens the Dock card; null takes Edit dock out of the App menu. */
+    public void setEditDockListener(@Nullable EditDockListener listener) {
+        editDockListener = listener;
+    }
+
     /** Who puts an app on Home; null takes the Add to Home row out of the app menu. */
     public void setAddToHomeListener(@Nullable AddToHomeListener listener) {
         addToHomeListener = listener;
@@ -6117,9 +6120,12 @@ public final class SuggestionBarView extends GridLayout
             : null;
         bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, () -> {
             dismissShortcutsPopup();
-            showAppContextPopup(new AppMenuContext(entry, pressTarget, pinnedIndex,
+            AppMenuContext menu = new AppMenuContext(entry, pressTarget, pinnedIndex,
                 sourceFolder == null ? null : sourceFolder.id,
-                folderEntryRef));
+                folderEntryRef);
+            // A folder's member is in the folder's popup, not on the dock's row.
+            menu.onDock = sourceFolder == null;
+            showAppContextPopup(menu);
         }, notificationSwipeAction, entry.appRef.packageName, null, null, folderEntryPickup);
     }
 
@@ -6508,6 +6514,7 @@ public final class SuggestionBarView extends GridLayout
             : context.removeFromHome != null ? AppMenuPlan.Source.HOME
             : topPinned ? AppMenuPlan.Source.PINNED : AppMenuPlan.Source.UNPINNED;
         inputs.pinnedToDock = topPinned;
+        inputs.onDock = context.onDock && editDockListener != null;
         inputs.badged = !linuxApp && LauncherNotificationBadgeStore.hasBadge(packageName);
         inputs.shortcutCount = shortcutCount;
         inputs.androidPackage = !linuxApp;
@@ -6776,6 +6783,11 @@ public final class SuggestionBarView extends GridLayout
                     } else {
                         resetAppIcon(entry);
                     }
+                });
+            case EDIT_DOCK:
+                return appMenuItem(R.string.app_menu_edit_dock, R.drawable.ic_ms_edit, () -> {
+                    EditDockListener listener = editDockListener;
+                    if (listener != null) listener.onEditDock();
                 });
             case UNINSTALL:
             default:
@@ -7554,6 +7566,8 @@ public final class SuggestionBarView extends GridLayout
         @Nullable final AppRef folderEntryRef;
         /** Set for an icon on Home: what its Remove from Home row runs. */
         @Nullable final Runnable removeFromHome;
+        /** The icon was pressed on the dock's row itself, so the card offers Edit dock. */
+        boolean onDock;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,

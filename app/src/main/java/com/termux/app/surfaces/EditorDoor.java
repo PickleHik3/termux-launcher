@@ -69,7 +69,15 @@ public enum EditorDoor {
     /** A Settings search hit on a row the editor holds; the card is the row's. */
     SETTINGS_SEARCH("settings-search"),
     /** The editor's intent naming a card by its key (or none), from anywhere else. */
-    SECTION_INTENT("section-intent");
+    SECTION_INTENT("section-intent"),
+    /** Long-press the dock, then the popup's Edit: the Dock card, on the bar pressed. */
+    POPUP_DOCK("popup-dock"),
+    /** Long-press the status bar, then the popup's Edit. */
+    POPUP_STATUS("popup-status"),
+    /** Long-press the keyboard's frame, then the popup's Edit. */
+    POPUP_KEYBOARD("popup-keyboard"),
+    /** Long-press an app icon on the dock, then the App menu's Edit dock. */
+    APP_MENU_EDIT_DOCK("app-menu-edit-dock");
 
     /** The tag every door's line is logged under. */
     public static final String LOG_TAG = "EditorDoor";
@@ -106,7 +114,13 @@ public enum EditorDoor {
             case SETTINGS_TERMINAL:
                 return EditorCard.TERMINAL;
             case SETTINGS_KEYBOARD:
+            case POPUP_KEYBOARD:
                 return EditorCard.KEYBOARD;
+            case POPUP_DOCK:
+            case APP_MENU_EDIT_DOCK:
+                return EditorCard.DOCK;
+            case POPUP_STATUS:
+                return EditorCard.STATUS;
             case EDITOR_PAGE_LABEL:
                 return onScreen == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
             case PANE_CONTROLS:

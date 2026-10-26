@@ -16,6 +16,8 @@ public final class AppMenuGeometry {
 
     public static final int ROW_WIDTH_DP = 216;
     public static final int ROW_HEIGHT_DP = 52;
+    /** A group's caption slab (the surface popup's "Status bar", "Keyboard"). */
+    public static final int HEADER_HEIGHT_DP = 32;
     public static final int ROW_PADDING_DP = 16;
     public static final int GLYPH_DP = 24;
     /** Between the glyph and the label, so labels start 52 dp in. */

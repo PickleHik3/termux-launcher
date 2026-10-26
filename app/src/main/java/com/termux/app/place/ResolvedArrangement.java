@@ -37,6 +37,7 @@ public final class ResolvedArrangement {
     private final boolean mAppsRailShown;
     private final boolean mAzRowShown;
     private final boolean mAzIndexShown;
+    private final boolean mAzTabShown;
     @NonNull private final Edge mAzBarEdge;
     private final boolean mAzRowOnDock;
     private final boolean mExtraKeysShown;
@@ -63,6 +64,7 @@ public final class ResolvedArrangement {
         mAppsRailShown = PlaceChromePolicy.appsRailShown(layout);
         mAzRowShown = PlaceChromePolicy.azRowShown(layout);
         mAzIndexShown = PlaceChromePolicy.azIndexShown(layout);
+        mAzTabShown = PlaceChromePolicy.azTabShown(layout);
         mAzBarEdge = PlaceChromePolicy.azBarEdge(layout);
         mAzRowOnDock = PlaceChromePolicy.azRowOnDock(layout);
         mExtraKeysShown = PlaceChromePolicy.extraKeysShown(layout);
@@ -197,6 +199,10 @@ public final class ResolvedArrangement {
 
     public boolean appsRailShown() {
         return mAppsRailShown;
+    }
+
+    public boolean azTabShown() {
+        return mAzTabShown;
     }
 
     public boolean azRowShown() {

@@ -116,12 +116,26 @@ public final class AnchoredMenu {
     @NonNull
     public PopupWindow showAppMenu(@NonNull AppMenuCard card, @NonNull View anchor,
                                    @Nullable Runnable onDismiss) {
-        float density = host.getResources().getDisplayMetrics().density;
-        Rect frame = visibleFrame();
         int[] location = new int[2];
         anchor.getLocationOnScreen(location);
         Rect anchorRect = new Rect(location[0], location[1],
             location[0] + anchor.getWidth(), location[1] + anchor.getHeight());
+        return showAppMenu(card, anchorRect, onDismiss,
+            host.getResources().getString(R.string.app_menu_a11y_pane));
+    }
+
+    /**
+     * {@link #showAppMenu(AppMenuCard, View, Runnable)} against a box on the screen rather than a
+     * view: the surface popup points at the press on the bar it opened from.
+     *
+     * @param paneTitle what a screen reader announces as the card opens
+     */
+    @NonNull
+    public PopupWindow showAppMenu(@NonNull AppMenuCard card, @NonNull Rect anchorRect,
+                                   @Nullable Runnable onDismiss,
+                                   @NonNull CharSequence paneTitle) {
+        float density = host.getResources().getDisplayMetrics().density;
+        Rect frame = visibleFrame();
         int shadowRoom = AnchoredMenuGeometry.dp(density, AppMenuGeometry.SHADOW_ROOM_DP);
         int arrowWidth = AnchoredMenuGeometry.dp(density, AppMenuGeometry.ARROW_WIDTH_DP);
         int arrowHeight = AnchoredMenuGeometry.dp(density, AppMenuGeometry.ARROW_HEIGHT_DP);
@@ -169,8 +183,7 @@ public final class AnchoredMenu {
         // active window; naming the pane is what makes a screen reader announce it and move in.
         ViewCompat.setImportantForAccessibility(content,
             ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        ViewCompat.setAccessibilityPaneTitle(content,
-            host.getResources().getString(R.string.app_menu_a11y_pane));
+        ViewCompat.setAccessibilityPaneTitle(content, paneTitle);
         popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, placement.x, placement.y);
         animateAppMenuOpen(content, placement.pivotX, placement.pivotY);
         return popup;
