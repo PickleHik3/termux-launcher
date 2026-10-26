@@ -166,176 +166,74 @@ public class PeekGlassGeometryTest {
     }
 
     @Test
-    public void theDocksRowTakesTheCardsInsetUnderPeekGlassDocked() {
+    public void theDocksRowTakesTheCardsInsetUnderPeekGlass() {
+        int cardInset = PeekGlassGeometry.rowSideInsetPx(SCREEN_W, DENSITY);
         DockLayout docked = DockLayoutPolicy.compute(inputs(false, DockSurfaceSpec.PEEK_GLASS));
-        assertEquals(PeekGlassGeometry.rowSideInsetPx(SCREEN_W, DENSITY), docked.appsRowSideInsetPx());
+        assertEquals(cardInset, docked.appsRowSideInsetPx());
         assertEquals(docked.appsRowSideInsetPx(), docked.appsRowEdgeInsetPx);
         DockLayout tray = DockLayoutPolicy.compute(inputs(false, DockSurfaceSpec.GLASS_TRAY));
         assertEquals(0, tray.peekRowSideInsetPx);
+        // Floating the card is the same card, so the row is never wider than it either.
         DockLayout floating = DockLayoutPolicy.compute(inputs(true, DockSurfaceSpec.PEEK_GLASS));
-        assertEquals("Floating keeps its own inset", 0, floating.peekRowSideInsetPx);
+        assertEquals(cardInset, floating.peekRowSideInsetPx);
+        assertTrue(floating.appsRowSideInsetPx() >= cardInset);
+        assertEquals(floating.appsRowSideInsetPx(), floating.appsRowEdgeInsetPx);
     }
 
-    // ------------------------------------------------------------------ the Floating card
-    //
-    // Floating the dock's glass host is the Floating card (inset from the screen, its own rounded
-    // corners); the Peek card is that card cut down to the icons' centres.
+    @Test
+    public void floatingTheRowKeepsItsOwnInsetWhereItIsAlreadyNarrowerThanTheCard() {
+        // The shipped Margin: the capsule's own inset already stands inside the card.
+        DockLayout shipped = DockLayoutPolicy.compute(inputs(true, DockSurfaceSpec.PEEK_GLASS));
+        DockLayout shippedTray = DockLayoutPolicy.compute(inputs(true, DockSurfaceSpec.GLASS_TRAY));
+        assertEquals(shippedTray.appsRowSideInsetPx(), shipped.appsRowSideInsetPx());
+        // Margin 0: the capsule's inset alone would put the end icons past the card's sides.
+        DockLayout flush = DockLayoutPolicy.compute(inputs(true, DockSurfaceSpec.PEEK_GLASS, 0));
+        DockLayout flushTray = DockLayoutPolicy.compute(inputs(true, DockSurfaceSpec.GLASS_TRAY, 0));
+        int cardInset = PeekGlassGeometry.rowSideInsetPx(SCREEN_W, DENSITY);
+        assertTrue(flushTray.appsRowSideInsetPx() < cardInset);
+        assertEquals(cardInset, flush.appsRowSideInsetPx());
+    }
 
-    /** A Floating host this wide and tall, its row's icons laid out as the row lays them. */
-    private static final int FLOAT_HOST_W = 1000;
-    private static final int FLOAT_HOST_H = 190;
-    /** The Floating card's corners as the host is cut (Corners 26 dp). */
-    private static final float FLOAT_RADIUS = 26f * DENSITY;
-
-    private static float[] floatingBoxes(int slots, int icon, float iconTop, float sideInset) {
-        float slot = (FLOAT_HOST_W - 2f * sideInset) / slots;
-        float[] boxes = new float[slots * 4];
-        for (int i = 0; i < slots; i++) {
-            float cx = sideInset + slot * (i + 0.5f);
-            boxes[i * 4] = cx - icon / 2f;
-            boxes[i * 4 + 1] = iconTop;
-            boxes[i * 4 + 2] = cx + icon / 2f;
-            boxes[i * 4 + 3] = iconTop + icon;
+    @Test
+    public void floatingTheEndIconsStandOnTheCardAtEveryMargin() {
+        for (int marginDp : new int[] {0, 4, 12, 24, 48}) {
+            DockLayout dock = DockLayoutPolicy.compute(
+                inputs(true, DockSurfaceSpec.PEEK_GLASS, marginDp));
+            int inset = dock.appsRowSideInsetPx();
+            int slots = 7;
+            float slot = (SCREEN_W - 2f * inset) / slots;
+            int icon = dock.slotIconPx;
+            float[] boxes = new float[slots * 4];
+            for (int i = 0; i < slots; i++) {
+                float cx = inset + slot * (i + 0.5f);
+                boxes[i * 4] = cx - icon / 2f;
+                boxes[i * 4 + 1] = ICON_TOP;
+                boxes[i * 4 + 2] = cx + icon / 2f;
+                boxes[i * 4 + 3] = ICON_TOP + icon;
+            }
+            // The host spans the screen while the card stands (DockPlacement), as it does Docked.
+            PeekGlassGeometry.Card card = card(boxes, slots);
+            assertNotNull(card);
+            assertEquals(PeekGlassGeometry.sideInsetPx(SCREEN_W), card.left, 0.01f);
+            assertTrue("Margin " + marginDp + ": first icon on the card", boxes[0] >= card.left);
+            assertTrue("Margin " + marginDp + ": last icon on the card",
+                boxes[(slots - 1) * 4 + 2] <= card.right);
+            assertTrue("its lower corners are off screen",
+                card.bottom - card.radiusPx >= card.screenBottom);
         }
-        return boxes;
-    }
-
-    private static PeekGlassGeometry.Card floatingCard(float[] boxes, int count) {
-        return PeekGlassGeometry.computeFloating(boxes, count, FLOAT_HOST_W, FLOAT_HOST_H,
-            FLOAT_RADIUS);
-    }
-
-    @Test
-    public void floatingTheCardIsTheFloatingCardCutToTheIconsCentres() {
-        float[] boxes = floatingBoxes(6, 129, 30f, 40f);
-        PeekGlassGeometry.Card card = floatingCard(boxes, 6);
-        assertNotNull(card);
-        assertTrue(card.floating);
-        assertEquals("its sides are the Floating card's", 0f, card.left, 0f);
-        assertEquals(FLOAT_HOST_W, card.right, 0f);
-        assertEquals("its lower edge is the Floating card's own", FLOAT_HOST_H, card.bottom, 0f);
-        assertEquals("the icons' centres on its top edge", 30f + 129 / 2f, card.top, 0.01f);
-        assertEquals("the reflection's floor is the card's own lower edge", card.bottom,
-            card.screenBottom, 0f);
-    }
-
-    @Test
-    public void floatingItsCornersAreTheFloatingCardsHeldToHalfTheCutCard() {
-        // Tall enough: the Floating card's own radius.
-        float[] tall = floatingBoxes(5, 60, 10f, 40f);
-        PeekGlassGeometry.Card roomy = floatingCard(tall, 5);
-        assertNotNull(roomy);
-        assertTrue(roomy.bottom - roomy.top >= 2f * FLOAT_RADIUS);
-        assertEquals(FLOAT_RADIUS, roomy.radiusPx, 0.001f);
-        // Cut short: half of what is left, so the rounded rect is never past its own height.
-        float[] low = floatingBoxes(5, 129, 70f, 40f);
-        PeekGlassGeometry.Card shallow = floatingCard(low, 5);
-        assertNotNull(shallow);
-        float height = shallow.bottom - shallow.top;
-        assertTrue(height < 2f * FLOAT_RADIUS);
-        assertEquals(height / 2f, shallow.radiusPx, 0.001f);
-        // A square Floating card stays square.
-        PeekGlassGeometry.Card square = PeekGlassGeometry.computeFloating(low, 5, FLOAT_HOST_W,
-            FLOAT_HOST_H, 0f);
-        assertNotNull(square);
-        assertEquals(0f, square.radiusPx, 0f);
-    }
-
-    @Test
-    public void floatingTheReflectionHangsFromTheIconsAndStopsAtTheCardsLowerEdge() {
-        // Room under the icons for the whole band.
-        float[] boxes = floatingBoxes(6, 100, 10f, 40f);
-        PeekGlassGeometry.Card card = floatingCard(boxes, 6);
-        assertNotNull(card);
-        assertEquals("from the icons' lower edges", 110f, card.mirrorAxisY, 0.01f);
-        assertEquals(100f * PeekGlassGeometry.REFLECTION_DEPTH_SCALE, card.reflectionDepth(),
-            0.01f);
-        // Little room: the band ends at the card's lower edge, never past it.
-        float[] low = floatingBoxes(6, 129, 40f, 40f);
-        PeekGlassGeometry.Card tight = floatingCard(low, 6);
-        assertNotNull(tight);
-        assertEquals(FLOAT_HOST_H, tight.reflectionBottom, 0.01f);
-        assertEquals(FLOAT_HOST_H - (40f + 129f), tight.reflectionDepth(), 0.01f);
-        // Drawn on the host it is wholly the host's: no share left for any strip under it.
-        float[] band = new float[8];
-        assertTrue(PeekGlassGeometry.reflectionBandIn(tight, 0f, 0f, FLOAT_HOST_W, FLOAT_HOST_H,
-            band));
-        assertTrue(band[3] <= FLOAT_HOST_H + 0.5f);
-        assertEquals(0f, PeekGlassGeometry.reflectionProgress(band, band[5]), 0f);
-        assertEquals(1f, PeekGlassGeometry.reflectionProgress(band, band[3]), 0f);
-    }
-
-    @Test
-    public void floatingTheEndIconsStandOnTheCardWithTheRowsOwnInset() {
-        // The row's Floating inset, measured from the screen's edge, against a host inset by the
-        // Floating margin: the outermost icons stand inside the card's sides.
-        DockLayout floating = DockLayoutPolicy.compute(inputs(true, DockSurfaceSpec.PEEK_GLASS));
-        int hostW = SCREEN_W - 2 * floating.capsuleHorizontalMarginPx;
-        float rowInsetInHost = floating.appsRowSideInsetPx() - floating.capsuleHorizontalMarginPx;
-        assertTrue("the row stands in from the card's sides", rowInsetInHost > 0f);
-        int slots = 7;
-        float slot = (hostW - 2f * rowInsetInHost) / slots;
-        int icon = floating.slotIconPx;
-        float[] boxes = new float[slots * 4];
-        for (int i = 0; i < slots; i++) {
-            float cx = rowInsetInHost + slot * (i + 0.5f);
-            boxes[i * 4] = cx - icon / 2f;
-            boxes[i * 4 + 1] = 20f;
-            boxes[i * 4 + 2] = cx + icon / 2f;
-            boxes[i * 4 + 3] = 20f + icon;
-        }
-        PeekGlassGeometry.Card card = PeekGlassGeometry.computeFloating(boxes, slots, hostW,
-            Math.round(20f + icon + 30f), FLOAT_RADIUS);
-        assertNotNull(card);
-        assertTrue(boxes[0] >= card.left);
-        assertTrue(boxes[(slots - 1) * 4 + 2] <= card.right);
-    }
-
-    @Test
-    public void floatingNoIconsNoHostOrIconsBelowTheCardIsNoCard() {
-        assertNull(PeekGlassGeometry.computeFloating(new float[0], 0, FLOAT_HOST_W, FLOAT_HOST_H,
-            FLOAT_RADIUS));
-        float[] boxes = floatingBoxes(5, 100, 10f, 40f);
-        assertNull(PeekGlassGeometry.computeFloating(boxes, 5, 0, FLOAT_HOST_H, FLOAT_RADIUS));
-        assertNull(PeekGlassGeometry.computeFloating(boxes, 5, FLOAT_HOST_W, 0, FLOAT_RADIUS));
-        // The icons' centres at the host's lower edge: no card is left under them.
-        float[] under = floatingBoxes(5, 100, FLOAT_HOST_H - 50f, 40f);
-        assertNull(PeekGlassGeometry.computeFloating(under, 5, FLOAT_HOST_W, FLOAT_HOST_H,
-            FLOAT_RADIUS));
-    }
-
-    @Test
-    public void theDockedCardIsNotFloatingAndTheTwoNeverCompareEqual() {
-        PeekGlassGeometry.Card docked = card(rowBoxes(SCREEN_W, 7, 150, DENSITY), 7);
-        assertNotNull(docked);
-        assertFalse(docked.floating);
-        float[] boxes = floatingBoxes(5, 100, 10f, 40f);
-        PeekGlassGeometry.Card floating = floatingCard(boxes, 5);
-        assertNotNull(floating);
-        assertTrue("an offset card is still the Floating one", floating.offset(3f, 4f).floating);
-        assertEquals(floating, floating.offset(0f, 0f));
-        assertFalse(floating.equals(docked));
     }
 
     @Test
     public void theSlabDrawsWithTheCardsSpec() {
         // No card: the tray's slab, shelf and shadow included.
         assertEquals(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.PEEK_GLASS.forCard(null));
-        // Docked: exactly as before, no shelf and no shadow.
-        PeekGlassGeometry.Card docked = card(rowBoxes(SCREEN_W, 7, 150, DENSITY), 7);
-        assertEquals(DockSurfaceSpec.PEEK_GLASS, DockSurfaceSpec.PEEK_GLASS.forCard(docked));
-        // Floating: the card floats as the tray does, so its lower edge wears the tray's shelf
-        // and casts its shadow; the rest is Peek's.
-        DockSurfaceSpec floating = DockSurfaceSpec.PEEK_GLASS.forCard(
-            floatingCard(floatingBoxes(5, 100, 10f, 40f), 5));
-        assertEquals(DockSurfaceSpec.PEEK_GLASS_FLOATING, floating);
-        assertTrue(floating.peek);
-        assertEquals(DockSurfaceSpec.GLASS_TRAY.shelf, floating.shelf, 0f);
-        assertTrue(floating.contactShadow);
-        assertEquals(DockSurfaceSpec.PEEK_GLASS.softRimDp, floating.softRimDp, 0f);
-        assertEquals(DockSurfaceSpec.PEEK_GLASS.dashesAboveSlab, floating.dashesAboveSlab);
+        // A card, under either Style: no shelf and no shadow, its lower edge never shows.
+        PeekGlassGeometry.Card standing = card(rowBoxes(SCREEN_W, 7, 150, DENSITY), 7);
+        assertEquals(DockSurfaceSpec.PEEK_GLASS, DockSurfaceSpec.PEEK_GLASS.forCard(standing));
+        assertFalse(DockSurfaceSpec.PEEK_GLASS.forCard(standing).contactShadow);
+        assertEquals(0f, DockSurfaceSpec.PEEK_GLASS.forCard(standing).shelf, 0f);
         // Other designs are themselves, card or none.
-        assertEquals(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.GLASS_TRAY.forCard(docked));
+        assertEquals(DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.GLASS_TRAY.forCard(standing));
         assertEquals(DockSurfaceSpec.LENS_BEADS, DockSurfaceSpec.LENS_BEADS.forCard(null));
     }
 
@@ -445,9 +343,18 @@ public class PeekGlassGeometryTest {
     }
 
     private static DockLayoutPolicy.DockInputs inputs(boolean capsule, DockSurfaceSpec surface) {
+        return inputs(capsule, surface,
+            com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                .DEFAULT_SURFACE_HORIZONTAL_INSET);
+    }
+
+    /** The dock as {@link #inputs(boolean, DockSurfaceSpec)}, at a Margin of {@code marginDp}. */
+    private static DockLayoutPolicy.DockInputs inputs(boolean capsule, DockSurfaceSpec surface,
+                                                      int marginDp) {
         return DockLayoutPolicy.DockInputs.builder()
             .preferencesAvailable(true)
             .capsule(capsule)
+            .dockHorizontalInsetDp(marginDp)
             .appsRowAlone(true)
             .appsRowNextToCanvas(true)
             .surface(surface)

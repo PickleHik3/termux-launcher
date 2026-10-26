@@ -4910,7 +4910,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A row the beads cannot draw keeps the slab, and the slab the tray's own band.
             float softRim = spec.beads
                 ? com.termux.app.dock.DockSurfaceSpec.GLASS_TRAY.softRimDp : spec.softRimDp;
-            program.setDockSurface(softRim, arrangement().floating() ? spec.shelf : 0f);
+            program.setDockSurface(softRim, dockFloats() ? spec.shelf : 0f);
             program.clearBeads();
         }
     }
@@ -4928,7 +4928,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean beads = mDockBeads != null;
         boolean show = state != null && mGlassParamsValid && host != null
             && mDockRows.surfaceShown() && !state.keyboardShown
-            && (arrangement().floating() || beads) && dockSlabSpec().contactShadow;
+            && (dockFloats() || beads) && dockSlabSpec().contactShadow;
         shelf.setBeads(show ? dockBeadsShadowed() : null);
         shelf.setBeadShelfAlpha(dockBeadShelfAlpha());
         shelf.follow(show ? host : null);
@@ -5011,7 +5011,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mDockBeads == null || Float.isNaN(share) || share >= 1f) return Float.NaN;
         View host = hotView(R.id.accessory_surface_host);
         if (host == null) return Float.NaN;
-        return arrangement().floating() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
+        return dockFloats() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
     }
 
     /**
@@ -5348,13 +5348,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // lower corners stand past the screen's edge (PeekGlassGeometry), the host's outline clips
     // everything in it to the card, the glass program's rim follows the card, and the strip under
     // the gesture pill is the card's foot, inset as the card is. The icons' reflections fade down
-    // the card (PeekGlassReflection). Floating, the host is already the Floating card: the Peek
-    // card is that card with its top dropped to the icons' centres (PeekGlassGeometry
-    // #computeFloating), every edge and corner on screen and rimmed, the tray's shelf and shadow
-    // under it, and no foot under the pill. The card is worked out again only when the row or the
-    // host lays out, before the frame that shows the new layout draws; at rest nothing runs. Where
-    // the card cannot stand (another band or the keyboard on the dock's glass, the Search field
-    // under the row, the dock lifted over the system keyboard) the dock is the tray's slab.
+    // the card (PeekGlassReflection). The card rises from the screen's edge under either Style:
+    // while it stands, the dock is placed as it is Docked (DockPlacement, dockFloats) — flush with
+    // the bottom, no Floating gap or capsule, the strip under the pill shown as its foot — while
+    // its rows keep the Style's measurements and every other surface keeps the Style. The card is
+    // worked out again only when the row or the host lays out, before the frame that shows the new
+    // layout draws; at rest nothing runs. Where the card cannot stand (another band or the
+    // keyboard on the dock's glass, the Search field under the row, the dock lifted over the
+    // system keyboard) the dock is the tray's slab, placed as its Style places it.
 
     /** The card as last cut, in the host's coordinates; null while the dock is a slab. */
     @Nullable private com.termux.app.dock.PeekGlassGeometry.Card mPeekCard;
@@ -5428,8 +5429,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The slab's own spec for the glass program and the shelf: the dock's design's, except that
-     * Peek glass with no card standing draws exactly the tray (its shelf and shadow included),
-     * and a Floating Peek card wears the tray's shelf and shadow
+     * Peek glass with no card standing draws exactly the tray (its shelf and shadow included)
      * ({@link com.termux.app.dock.DockSurfaceSpec#forCard}).
      */
     @NonNull
@@ -5438,19 +5438,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether the dock can stand as the Peek glass card now: the design is Peek glass, Docked
-     * (the card rises from the screen's edge) or Floating (the Floating card cut down), the dock
-     * shown with the apps row alone on its glass along the bottom (LensBeadGeometry.rowWearsBeads,
-     * the beads' own rule: no other band, no joined frame, no keyboard sharing the glass), no
-     * keyboard up under it, the dock not lifted over the system keyboard, and no Search field
-     * under the row.
+     * Whether the dock can stand as the Peek glass card now, under either Style
+     * ({@link com.termux.app.dock.DockPlacement#peekCardStands}): the design is Peek glass, the
+     * dock shown with the apps row alone on its glass along the bottom, no keyboard up under it,
+     * the dock not lifted over the system keyboard, and no Search field under the row. Read from
+     * none of what the dock's placement moves, so the placement can read it
+     * ({@link #dockFloats}).
      */
     private boolean peekCardWanted() {
-        if (mPreferences == null || !shownDockSurfaceSpec().peek) return false;
-        if (!mDockRows.surfaceShown()) return false;
-        if (isInAppKeyboardShown() || mImeLiftPx > 0 || mAppliedPromptFieldBandPx > 0) return false;
-        return com.termux.app.dock.LensBeadGeometry.rowWearsBeads(arrangement().layout(),
-            stackStandsDownOnFrame(), false);
+        return peekCardStandsWith(mDockRows.surfaceShown(), isInAppKeyboardShown());
+    }
+
+    /**
+     * {@link #peekCardWanted} for the dock shown or not and the keyboard up or down as given, the
+     * rest as they are now: for a margin worked out ahead of the keyboard's settle. The joined
+     * frame's answer is the dear one (a shape model built per ask), so it is asked last, and only
+     * Docked: Floating has no joined frame to stand down on (ChromeShapeModel), and the dock asks
+     * this many times a pass under Floating ({@link #dockFloats}).
+     */
+    private boolean peekCardStandsWith(boolean dockShown, boolean keyboardShown) {
+        if (mPreferences == null) return false;
+        return com.termux.app.dock.DockPlacement.peekCardStands(shownDockSurfaceSpec().peek,
+                dockShown, arrangement().layout(), false, keyboardShown, mImeLiftPx > 0,
+                mAppliedPromptFieldBandPx > 0)
+            && (arrangement().floating() || !stackStandsDownOnFrame());
+    }
+
+    /**
+     * The dock's one answer to "am I placed as the Floating card?" (DockPlacement): the Floating
+     * Style, unless the Peek glass card stands, which rises from the screen's edge as it does
+     * Docked. Every read of the dock's own placement and dressing asks this — its margin under
+     * the stack, its sides, its outline, the strip under the pill, its shelf, veil, edge glow,
+     * hinge and launch wave — while the panes, the status bar, the keyboard and the extra keys
+     * keep asking the Style itself.
+     */
+    private boolean dockFloats() {
+        return dockFloatsIn(arrangement().floating());
+    }
+
+    /** {@link #dockFloats} for the dock measured in {@code floatingStyle}. */
+    private boolean dockFloatsIn(boolean floatingStyle) {
+        return com.termux.app.dock.DockPlacement.floats(floatingStyle,
+            floatingStyle && peekCardWanted());
     }
 
     /**
@@ -5482,14 +5511,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boxes[i * 4 + 2] = mPeekIconBoxes[i * 4 + 2] + dx;
             boxes[i * 4 + 3] = mPeekIconBoxes[i * 4 + 3] + dy;
         }
-        if (arrangement().floating()) {
-            // The host is the Floating card, its corners as applyDockSurfaceShape cuts them: the
-            // Peek card is that card cut down to the icons' centres.
-            return com.termux.app.dock.PeekGlassGeometry.computeFloating(boxes, count,
-                host.getWidth(), host.getHeight(),
-                resolveDockCapsuleCornerRadiusPx(host.getHeight()));
-        }
-        // The strip under the pill continues the card to the screen's bottom edge.
+        // The strip under the pill continues the card to the screen's bottom edge, under either
+        // Style: the host is placed flush while the card stands (dockFloats).
         float screenBottom = decor.getHeight() - hostInDecor[1];
         return com.termux.app.dock.PeekGlassGeometry.compute(boxes, count, hostInDecor[0],
             host.getWidth(), host.getHeight(), decor.getWidth(), screenBottom,
@@ -5498,56 +5521,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The glass program's rect for the card, in the backdrop's coordinates, and its radius
-     * (left, top, right, bottom, radius); null while the dock is a slab. Docked its bottom is a
-     * seam (the card runs on off the screen) and its top and sides keep the rim; Floating every
-     * edge keeps it.
+     * (left, top, right, bottom, radius); null while the dock is a slab. Its bottom is a seam
+     * (the card runs on off the screen), its top and sides keep the rim.
      */
     @Nullable
     private float[] peekGlassRect() {
         com.termux.app.dock.PeekGlassGeometry.Card card = mPeekCard;
-        // A card cut before the keyboard came up, or for the other Style, must not shape the
-        // glass program a moment longer.
-        if (card == null || !peekCardWanted() || card.floating != arrangement().floating())
-            return null;
+        // A card cut before the keyboard came up must not shape the glass program a moment longer.
+        if (card == null || !peekCardWanted()) return null;
         float reach = com.termux.app.chrome.GlassRefraction.seamReachPx(
             com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
             getResources().getDisplayMetrics().density, card.radiusPx);
         float[] rect = new float[4];
         com.termux.app.chrome.GlassRefraction.rimRect(rect, mGlassOriginLeft + card.left,
             mGlassOriginTop + card.top, mGlassOriginLeft + card.right,
-            mGlassOriginTop + card.bottom, reach, card.floating
-                ? com.termux.app.chrome.ChromeEdgeRule.NONE
-                : com.termux.app.chrome.ChromeEdgeRule.BOTTOM);
+            mGlassOriginTop + card.bottom, reach, com.termux.app.chrome.ChromeEdgeRule.BOTTOM);
         return new float[] {rect[0], rect[1], rect[2], rect[3], card.radiusPx};
     }
 
     /**
-     * The rim under the glass along the card's edges, where the program does not draw the
-     * glass's edge (below Android 13): the rim moved onto the card, drawn inside the host. Docked
-     * its bottom edge is left open (the card runs on under the pill); Floating the card's whole
-     * outline is rimmed, as the Floating card's always is.
+     * The rim under the glass along the card's top and sides, where the program does not draw
+     * the glass's edge (below Android 13): the rim moved onto the card, its bottom edge left
+     * open (the card runs on under the pill), drawn inside the host.
      */
     @Nullable
     private Drawable peekRimDrawable(@NonNull com.termux.app.dock.PeekGlassGeometry.Card card,
                                      int hostWidth, int hostHeight) {
         if (hostWidth <= 0 || hostHeight <= 0) return null;
-        Drawable rim = card.floating
-            ? mChrome.glass().rimUnderGlass(card.radiusPx)
-            : mChrome.glass().rimUnderGlass(card.radiusPx,
-                com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.TOP
-                    | com.termux.app.chrome.ChromeEdgeRule.RIGHT);
+        Drawable rim = mChrome.glass().rimUnderGlass(card.radiusPx,
+            com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.TOP
+                | com.termux.app.chrome.ChromeEdgeRule.RIGHT);
         if (rim == null) return null;
         // Never a plain InsetDrawable: its insets would become the host's padding and lay every
         // layer in the host out inside the card's box, long after the card is gone.
         return com.termux.app.dock.PeekRimDrawable.forCard(rim, card, hostWidth);
     }
 
-    /**
-     * The strip under the pill's inset from each side: the card's, while a Docked card stands.
-     * A Floating card has no foot: it floats with its own lower edge, and the strip is not its.
-     */
+    /** The strip under the pill's inset from each side: the card's, while the card stands. */
     private int peekStripSideInsetPx() {
-        if (mPeekCard == null || mPeekCard.floating || getWindow() == null) return 0;
+        if (mPeekCard == null || getWindow() == null) return 0;
         View decor = getWindow().getDecorView();
         return decor == null ? 0
             : com.termux.app.dock.PeekGlassGeometry.sideInsetPx(decor.getWidth());
@@ -5615,8 +5627,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.accessory_surface_host);
         if (host != null && mDockShapeCut) {
             // Cuts the card afresh, re-aims the glass program and the reflection, or puts the
-            // slab back.
-            applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
+            // slab back, in the shape the dock is placed in now: a card that gave way under
+            // Floating hands the host back its capsule (dockFloats).
+            applyDockSurfaceShape(host, dockFloats(), mDockShapeHeightPx, true, true);
         } else {
             mPeekCard = card;
             syncPeekReflection();
@@ -5679,9 +5692,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPeekWatchedStrip = strip;
             if (strip != null) strip.addOnLayoutChangeListener(mPeekLayoutListener);
         }
-        // A Floating card has no foot: its reflection stops at its own lower edge.
-        if (!card.floating && strip != null && strip.getVisibility() == View.VISIBLE
-            && strip.getHeight() > 0) {
+        if (strip != null && strip.getVisibility() == View.VISIBLE && strip.getHeight() > 0) {
             int[] stripAt = new int[2];
             int[] hostOnScreen = new int[2];
             strip.getLocationOnScreen(stripAt);
@@ -5910,7 +5921,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (glow instanceof DockEdgeGlowView) {
             View surfaceHost = findViewById(R.id.accessory_surface_host);
             int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
-            float radius = arrangement().floating()
+            float radius = dockFloats()
                 ? resolveDockCapsuleCornerRadiusPx(surfaceHeightPx)
                 : 0f;
             DockEdgeGlowView glowView = (DockEdgeGlowView) glow;
@@ -5926,7 +5937,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Both styles tilt now: the capsule free-floating with a press dip, the edge-to-edge bar
         // hinged at the screen edge and overscanned so its slide cannot open a strip at the sides.
-        boolean capsuleDock = arrangement().floating();
+        boolean capsuleDock = dockFloats();
         mDockPlankController.setMotionEnabled(true);
         mDockPlankController.setHingeMode(!capsuleDock);
         mDockPlankController.setReducedMotion(isReducedMotionEnabled());
@@ -6027,7 +6038,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             originY = ripple.getHeight() * 0.5f;
         }
 
-        boolean capsule = arrangement().floating();
+        boolean capsule = dockFloats();
         RectF bounds = new RectF(0f, 0f, ripple.getWidth(), ripple.getHeight());
         float cornerRadius = capsule ? resolveDockCapsuleCornerRadiusPx(ripple.getHeight()) : 0f;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -6042,7 +6053,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ripple.startRipple(color, originX, originY, capsule, bounds, cornerRadius,
             edgeGlow == null ? null : (collisionColor, level) ->
                 edgeGlow.setLaunchCollisionState(collisionColor, level),
-            () -> capsule == arrangement().floating()
+            () -> capsule == dockFloats()
                 && keyboardShownAtLaunch == isInAppKeyboardShown(),
             () -> {
                 if (mInAppKeyboard != null) mInAppKeyboard.fadeOutLaunchWave();
@@ -6162,7 +6173,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (accessoryContainer == null) {
             return;
         }
-        if (!state.toolbarShown || !arrangement().floating()) {
+        if (!state.toolbarShown || !dockFloats()) {
             accessoryContainer.setBackground(null);
             return;
         }
@@ -6209,7 +6220,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int targetHeight = ViewGroup.LayoutParams.MATCH_PARENT;
         int targetLeftMargin = 0;
         int targetRightMargin = 0;
-        boolean capsuleSurface = viewId == R.id.accessory_surface_host && arrangement().floating();
+        boolean capsuleSurface = viewId == R.id.accessory_surface_host && dockFloats();
         ViewParent parent = view.getParent();
         if (parent instanceof View) {
             View parentView = (View) parent;
@@ -6225,8 +6236,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The margins, and MATCH_PARENT for what is left — never the parent's width frozen
             // into pixels. The dock gets its width back in the same frame a bar leaves a side
             // edge, and this pass runs before that re-layout: a pixel width read here left the
-            // glass short by the rail's whole band, all of it on the right.
-            int horizontalMargin = appliedDockLayout().horizontalInsetPx;
+            // glass short by the rail's whole band, all of it on the right. A standing Peek card
+            // spans the screen as it does Docked and cuts its own sides (dockFloatsIn).
+            DockLayout dock = appliedDockLayout();
+            int horizontalMargin = dockFloatsIn(dock.capsule) ? dock.horizontalInsetPx : 0;
             targetLeftMargin = horizontalMargin;
             targetRightMargin = horizontalMargin;
         }
@@ -7538,7 +7551,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldShowDecorNavBarSurface(@NonNull ChromeSpec state) {
         // Floating capsules leave the gesture-pill inset showing wallpaper; edge-to-edge surfaces
-        // (dock glass, or the embedded keyboard's own background) continue under the pill. Bands
+        // (dock glass, or the embedded keyboard's own background) continue under the pill, and so
+        // does the Peek glass card under either Style, as its foot (dockFloats). Bands
         // under the keyboard are a card with air under it under Floating, so nothing above the
         // pill runs down into it and the pill shows wallpaper too; Docked they join the frame
         // flush to the edge and the strip continues them.
@@ -7548,7 +7562,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSurfaceEditor.isActive()) return false;
         return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
             mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(),
-            arrangement().floating(),
+            dockFloats(),
             isInAppKeyboardCapsule());
     }
 
@@ -7921,7 +7935,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mNavBarHeight <= 0) {
             return 0;
         }
-        if (arrangement().floating()) {
+        if (dockFloats()) {
             View accessoryContainer = findViewById(R.id.accessory_stack_container);
             int dockHeight = accessoryContainer != null ? Math.max(0, accessoryContainer.getHeight()) : 0;
             return dockHeight + mNavBarHeight + appliedDockLayout().capsuleBottomGapPx;
@@ -8088,7 +8102,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * 1 (no slicing) for the floating capsule or when there is no gesture-nav strip below.
      */
     private float defaultDockGlassFootFraction() {
-        if (arrangement().floating()) {
+        if (dockFloats()) {
             return 1f;
         }
         int navHeight = mNavBarHeight;
@@ -8678,7 +8692,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
-        int seamOverscanPx = !arrangement().floating() && shouldShowDecorNavBarSurface(state)
+        int seamOverscanPx = !dockFloats() && shouldShowDecorNavBarSurface(state)
             ? horizontalOverscanPx : 0;
         Rect currentTarget = buildAccessoryBackdropTargetRect(
             surfaceHost, horizontalOverscanPx, seamOverscanPx);
@@ -8720,7 +8734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // only) so the refraction edge band clears the visible seam and meets the dock's downward
         // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
         // above the overlay where clipChildren hides it.
-        int topOverscanPx = !arrangement().floating()
+        int topOverscanPx = !dockFloats()
             ? computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp) : 0;
         Rect targetRect = buildDecorNavBarBackdropTargetRect(topOverscanPx);
         if (targetRect == null) {
@@ -8800,7 +8814,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // its bottom and sides seamed too, so neither bends there and the picture runs straight
             // through. The capsule's overlay keeps the rim it always had. Its own program, not the
             // dock's: the two effects were only apart because RenderEffect copies uniforms.
-            boolean capsuleOverlay = arrangement().floating();
+            boolean capsuleOverlay = dockFloats();
             int stripSeams = com.termux.app.chrome.ChromeEdgeRule.seams(capsuleOverlay,
                 com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM),
                 capsuleOverlay ? 0 : com.termux.app.chrome.ChromeEdgeRule.TOP);
@@ -8850,7 +8864,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 boolean decorHealthy = mDecorNavBarBlurBackdrop != null
                     && mDecorNavBarBlurBackdrop.getVisibility() == View.VISIBLE
                     && mDecorNavBarBlurBackdrop.getDrawable() != null;
-                return arrangement().floating() ? accessoryHealthy && decorHealthy : decorHealthy;
+                return dockFloats() ? accessoryHealthy && decorHealthy : decorHealthy;
             }
             return accessoryHealthy;
         }
@@ -9371,7 +9385,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Lens beads follow the row as it is laid out now; a pass that moved them and
         // re-installs nothing rebuilds the effect once below.
         boolean beadsMoved = refreshDockBeads();
-        if (shouldUseDockDecorNavBarSurface(state) && !arrangement().floating()) {
+        if (shouldUseDockDecorNavBarSurface(state) && !dockFloats()) {
             clearAccessoryRenderEffectBackdrop();
             return;
         }
@@ -9393,7 +9407,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
         // the view downward past that seam so the refraction edge band lands below it — the strip
         // overscans upward by the same amount, so the two surfaces' blurred wallpaper meets seamlessly.
-        int seamOverscanPx = !arrangement().floating() && shouldShowDecorNavBarSurface(state)
+        int seamOverscanPx = !dockFloats() && shouldShowDecorNavBarSurface(state)
             ? horizontalOverscanPx : 0;
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
         // The dock's own overscan is what the ImageView is sized to. The drawable inside samples
@@ -9453,7 +9467,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Put the shader's bottom edge at the overscanned bitmap bottom (below the visible seam)
             // so the visible dock bottom reads as interior glass, not a refracting edge.
             float capBottom = Math.max(1, surfaceHost.getHeight()) + seamOverscanPx;
-            boolean capsuleDock = arrangement().floating();
+            boolean capsuleDock = dockFloats();
             float radiusPx = capsuleDock
                 ? resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
@@ -9587,7 +9601,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // while its source is still on screen. Under the navigation strip's glass a Docked dock's
         // own sheet stands down.
         mDockRows.apply(state, mStatusBarEdge == PlaceLayout.Edge.BOTTOM,
-            useDecorSurface && !arrangement().floating());
+            useDecorSurface && !dockFloats());
         if (state.toolbarShown && !state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
             // The letters keep their scrub without the apps row — it just shows its matches on the
@@ -16961,14 +16975,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ({@link ChromePolicy#bottomEdgeGapPx}) whatever the stack holds — the dock's rows, the
      * keyboard, both — plus the system IME's lift while it stands under the dock. The same number
      * with the keyboard up and down, so a slide that brings the keyboard in or puts it away lands
-     * the dock where the slide left it. Root/decor inset policy keeps the whole stack above the
-     * navigation bar; nothing here is for that. Also read for a stack other than the one on
-     * screen: the arriving place's, mid-slide.
+     * the dock where the slide left it — except under a Floating Peek glass card, which stands
+     * flush on the screen's edge with the keyboard down and gives way to the Floating tray, gap
+     * and all, with it up (DockPlacement, as Stack layout works it out). Root/decor inset policy
+     * keeps the whole stack above the navigation bar; nothing here is for that. Also read for a
+     * stack other than the one on screen: the arriving place's, mid-slide.
      */
     private int resolveAccessoryStackBottomMarginPx(boolean toolbarShown, boolean keyboardShown) {
         int lift = toolbarShown || keyboardShown ? mImeLiftPx : 0;
-        return lift + ChromePolicy.bottomEdgeGapPx(arrangement().floating(),
-            appliedDockLayout().capsuleBottomGapPx);
+        boolean floating = arrangement().floating();
+        boolean floats = com.termux.app.dock.DockPlacement.floats(floating,
+            floating && peekCardStandsWith(toolbarShown, keyboardShown));
+        return lift + ChromePolicy.bottomEdgeGapPx(floats, appliedDockLayout().capsuleBottomGapPx);
     }
 
     // Kept for test compatibility and to preserve existing RelativeLayout params in-place.

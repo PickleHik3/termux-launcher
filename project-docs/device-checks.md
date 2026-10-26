@@ -55,19 +55,19 @@ dropped; what follows is what still owes a look.
   Repeat with the built-in keyboard up, with Floating (unchanged), and with three-button
   navigation (rows above the buttons). Open the drawer after the sheet closes: the strip still
   fades under the plane and comes back · emulator or pong.
-- 2026-10-25 · commit "feat(peek): Peek glass works on the Floating dock" · Peek glass, Style
-  Floating, keyboard down, Search field off: the dock is a floating card whose top edge runs
-  through the icons' middles (their upper halves over the wallpaper), its sides and lower edge
-  where the Floating card's were, all four corners rounded and rimmed alike, the shelf and soft
-  shadow under its lower edge; the icons' reflections fade down it and are gone by its lower
-  edge, clipped by its rounded corners, never below the card; nothing under the gesture pill.
-  Fancier glass on (Android 13+: live, a press on an icon shows in its reflection) and off (still
-  bitmaps, back 160 ms after a swipe); Reflection knob 0 hides them; Corners 0 gives a square card;
-  Home and Workspace halves; light, dark and the Material You scheme. Then keyboard up and Search
-  field on: the full Floating tray slab, no reflection; back down/off: the card again. Switch to
-  Docked: the Docked Peek card exactly as before (foot under the pill, soft-rimmed sides). Look at
-  the card's lower corners on a press (the touch edge glow is drawn at the uncut card's radius) ·
-  emulator or pong.
+- 2026-10-26 · commit "fix(peek): the Peek card rises from the screen's edge under Floating
+  too" · Floating + Peek: card rises from the screen edge; keyboard up falls back to the Floating
+  tray. Peek glass, Style Floating, keyboard down, Search field off: the card is the Docked one —
+  inset about 3% from each side, top edge through the icons' middles, no gap under it, the strip
+  under the gesture pill is its foot (inset as the card, reflection running on down to the screen
+  edge), no shelf or shadow, no lower corners on screen; the terminal pane above stays a Floating
+  card and does not overlap the dock, one pane and split. Then the in-app keyboard up: the full
+  Floating tray (side margins, rounded corners, the gap above the keyboard's bottom, nothing under
+  the pill) with no reflection left behind, and back down: the card again; note how far the icons
+  move at that switch (the Floating gap, 6 dp). Same for Search field on, and the system keyboard
+  lifting the dock. Margin 0 and Margin 48: the card's sides stay ~3% in and the end icons stand
+  on it. Home and Workspace halves wearing different designs (slide between them), Floating ↔
+  Docked, Peek ↔ Tray, light and dark · emulator, then pong.
 - 2026-10-25 · commit "fix(appearance): a card's slider strip stands on one line when its columns fit" · on pong
   (411 dp, font scale 1.0) the Dock card shows its 8 sliders, and the Keyboard card its 9, in one
   row with every legend readable and each slider draggable; at font scale 1.3 the Keyboard card
@@ -649,7 +649,7 @@ dropped; what follows is what still owes a look.
   50 is clearly visible; dragging it updates the dock live without stutter; the card's other rows
   look exactly as before · pong.
 - 2026-10-25 · same commits · Peek glass falls back to the tray's slab (shelf and shadow under
-  Floating included) with no reflection left behind: Floating; the keyboard up; the system
+  Floating included) with no reflection left behind: the keyboard up; the system
   keyboard lifting the dock; Search field on; the A–Z row on the dock; a Workspace window with the
   extra keys; and comes back as the card when each goes away. The long-press app menu over the
   icons is not reflected (by design) and nothing flickers under it · pong.

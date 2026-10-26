@@ -16,12 +16,9 @@ import java.util.Locale;
  * <p>The icons' reflections fade down the card from the icons' lower edges ({@link Card#mirrorAxisY}),
  * over {@link #REFLECTION_DEPTH_SCALE} of an icon's height and never past the screen's edge.</p>
  *
- * <p>Floating ({@link #computeFloating}) the dock is already a card of its own, inset from the
- * screen's edges with its own rounded corners, so the Peek card is that card cut down: its sides
- * and its lower edge are the Floating card's, its top edge runs through the icons' centres, all
- * four corners are rounded by the Floating card's radius (held to half the cut card), and the
- * reflection stops at the card's own lower edge. There is no foot under the gesture pill: the
- * card floats ({@link Card#floating}).</p>
+ * <p>The card is the same under either Style: while it stands, the dock is placed as it is Docked
+ * ({@link DockPlacement}), flush with the screen's bottom edge with the strip under the gesture
+ * pill as the card's foot, so under Floating too the card rises from the screen's edge.</p>
  *
  * <p>Pure arithmetic: boxes and sizes in, one {@link Card} out, so every rule is held by JVM
  * tests. The activity hands it the row's icon boxes in the glass host's coordinates and cuts the
@@ -123,39 +120,7 @@ public final class PeekGlassGeometry {
         float bottom = screenBottom + radius;
         float axis = mirrorAxisY(icons);
         return new Card(left, centerY, right, bottom, radius, screenBottom, axis,
-            axis + reflectionDepth(icons, axis, screenBottom), false);
-    }
-
-    /**
-     * The card on the Floating dock, in the glass host's coordinates, or null where there is no
-     * card to cut: no icon, a host with no size, or icons whose centres stand at or below the
-     * host's lower edge. The host is the Floating card ({@code hostWidthPx} by
-     * {@code hostHeightPx}, its corners rounded by {@code floatingCornerRadiusPx}); the Peek card
-     * keeps its sides and its lower edge and drops its top to the icons' centres. Its corners are
-     * the Floating card's radius, held to half the cut card's height and width (the most a
-     * rounded rect can take), all four on screen. The reflection runs down from the icons' lower
-     * edges and stops at the card's lower edge ({@link Card#screenBottom} is that edge here).
-     *
-     * @param iconBoxes              left, top, right and bottom per icon, in the host's coordinates
-     * @param count                  how many boxes {@code iconBoxes} holds
-     * @param floatingCornerRadiusPx the Floating card's own corner radius, as the host is cut
-     */
-    @Nullable
-    public static Card computeFloating(@NonNull float[] iconBoxes, int count, int hostWidthPx,
-                                       int hostHeightPx, float floatingCornerRadiusPx) {
-        if (count <= 0 || hostWidthPx <= 0 || hostHeightPx <= 0
-            || iconBoxes.length < count * 4) return null;
-        float[] icons = iconLine(iconBoxes, count);
-        if (icons == null) return null;
-        float top = Math.max(0f, icons[0]);
-        float bottom = hostHeightPx;
-        if (!(bottom > top)) return null;
-        float right = hostWidthPx;
-        float radius = Math.max(0f, Math.min(Math.max(0f, floatingCornerRadiusPx),
-            Math.min(right, bottom - top) / 2f));
-        float axis = mirrorAxisY(icons);
-        return new Card(0f, top, right, bottom, radius, bottom, axis,
-            axis + reflectionDepth(icons, axis, bottom), true);
+            axis + reflectionDepth(icons, axis, screenBottom));
     }
 
     /**
@@ -237,31 +202,22 @@ public final class PeekGlassGeometry {
         /** The card's top edge: the icons' centre line. */
         public final float top;
         public final float right;
-        /**
-         * The card's bottom: past the screen's edge by {@link #radiusPx} Docked, the Floating
-         * card's own lower edge Floating.
-         */
+        /** The card's bottom: past the screen's edge by {@link #radiusPx}. */
         public final float bottom;
-        /** The corners' radius; Docked only the top ones show, the lower ones are off screen. */
+        /** The corners' radius; only the top ones show, the lower ones are off screen. */
         public final float radiusPx;
         /**
-         * The floor the reflection never runs past: the screen's bottom edge Docked (the strip
-         * under the gesture pill continuing the card), the card's own lower edge Floating.
+         * The floor the reflection never runs past: the screen's bottom edge (the strip under the
+         * gesture pill continuing the card).
          */
         public final float screenBottom;
         /** The line the icons are mirrored about: their lower edges. */
         public final float mirrorAxisY;
         /** Where the reflection has faded out: never past {@link #screenBottom}. */
         public final float reflectionBottom;
-        /**
-         * The card is the Floating dock's cut down ({@link #computeFloating}): all four edges and
-         * corners on screen and rimmed, and no foot under the gesture pill. False for the Docked
-         * card, which rises from the screen's edge.
-         */
-        public final boolean floating;
 
         Card(float left, float top, float right, float bottom, float radiusPx,
-             float screenBottom, float mirrorAxisY, float reflectionBottom, boolean floating) {
+             float screenBottom, float mirrorAxisY, float reflectionBottom) {
             this.left = left;
             this.top = top;
             this.right = right;
@@ -270,7 +226,6 @@ public final class PeekGlassGeometry {
             this.screenBottom = screenBottom;
             this.mirrorAxisY = mirrorAxisY;
             this.reflectionBottom = reflectionBottom;
-            this.floating = floating;
         }
 
         /** The reflection's band: from the mirror line down to where it has faded out. */
@@ -302,7 +257,7 @@ public final class PeekGlassGeometry {
         @NonNull
         public Card offset(float dx, float dy) {
             return new Card(left + dx, top + dy, right + dx, bottom + dy, radiusPx,
-                screenBottom + dy, mirrorAxisY + dy, reflectionBottom + dy, floating);
+                screenBottom + dy, mirrorAxisY + dy, reflectionBottom + dy);
         }
 
         @Override
@@ -315,8 +270,7 @@ public final class PeekGlassGeometry {
                 && Float.compare(radiusPx, c.radiusPx) == 0
                 && Float.compare(screenBottom, c.screenBottom) == 0
                 && Float.compare(mirrorAxisY, c.mirrorAxisY) == 0
-                && Float.compare(reflectionBottom, c.reflectionBottom) == 0
-                && floating == c.floating;
+                && Float.compare(reflectionBottom, c.reflectionBottom) == 0;
         }
 
         @Override
@@ -328,16 +282,14 @@ public final class PeekGlassGeometry {
             h = 31 * h + Float.floatToIntBits(radiusPx);
             h = 31 * h + Float.floatToIntBits(screenBottom);
             h = 31 * h + Float.floatToIntBits(mirrorAxisY);
-            h = 31 * h + Float.floatToIntBits(reflectionBottom);
-            return 31 * h + (floating ? 1 : 0);
+            return 31 * h + Float.floatToIntBits(reflectionBottom);
         }
 
         @NonNull
         @Override
         public String toString() {
-            return String.format(Locale.ROOT, "Card{%s %.1f,%.1f,%.1f,%.1f r=%.1f mirror=%.1f..%.1f}",
-                floating ? "floating" : "docked", left, top, right, bottom, radiusPx, mirrorAxisY,
-                reflectionBottom);
+            return String.format(Locale.ROOT, "Card{%.1f,%.1f,%.1f,%.1f r=%.1f mirror=%.1f..%.1f}",
+                left, top, right, bottom, radiusPx, mirrorAxisY, reflectionBottom);
         }
     }
 }
