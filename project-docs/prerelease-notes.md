@@ -13,29 +13,76 @@ Latest stable: v1.0.6.
 ## New in this drop
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
 
-- Look › Custom's Tint adds your accent colour from any Look, Clear and Mist included, and Hue picks primary, secondary or tertiary.
-- Look › Custom's Frost slider runs the glass from clear to frosted in one move, in place of Blur and Grain; a new Vibrancy slider makes what shows through the glass more or less colourful, and Edge runs the glass edge from no fringe to a bold coloured edge. Margin and Corner radius are on the Layout page only.
-- Look › Custom's keyboard card has a Keys slider for how solid the keys are, from clear to opaque; the key labels stay readable at every setting.
-- Glass edges show the same outline on frosted and solid glass as on clear glass.
-- Clear, Mist and Tint sit on the Frost slider's curve now, so Clear is a touch blurrier with finer grain and Tint has much less grain; an install on a Look keeps that Look.
-- Glass edges catch the wallpaper's own light instead of a white line, brightest at the top left, and keep the wallpaper's colour over a pale sky; each surface wears one edge, not a line on top of it.
-- Changing the wallpaper keeps the Appearance editor open on the page you were on, and the X11 display keeps showing its apps; new terminals still find the display (#83).
-- Changing the wallpaper or switching dark mode no longer crashes the launcher when app widgets are on Home (#83).
-- The herdr theme template goes see-through over the launcher glass, with its sidebar, text and accents in your wallpaper's colours.
-- Settings › Keyboard › Adaptive touch accuracy now learns the space bar too: aim for space and land at the bottom of the row above, and it types a space once it has learned your taps. Swipes and Ctrl or Alt shortcuts always keep the key under your finger, and Settings shows whether it is learning, active or paused.
-- Settings › Keyboard › Layouts lets you edit, reset and create keyboard layouts; a layout's row slides its buttons open beneath it, and a new layout shows at once on its first swap.
-- Terminal programs that ask for touch events receive your taps, long presses and swipes.
-- The Appearance editor's Cursor trail menu has an Off entry, so you can turn the trail off without going to Settings.
-- The Mouse mode key reads out the state it switched to: Mouse mode on, Mouse mode off.
-- Editing a cleaned-up dictation keeps the words the cleanup fixed or added highlighted while you type.
-- Starting a dictation no longer freezes the screen for a few seconds: when the cleanup model is not loaded yet, it loads after you stop speaking.
-- Round icons in icon packs stay whole circles now that pack icons draw bigger.
-- The window bar names terminal-browser in full, with a globe.
-- The command palette's key strip under the search field has solid keys, and its last row stays readable above the rounded bottom.
-- The welcome message in a new session is a rounded card in your wallpaper's colours, with a tap-to-open link to the guide; it lays itself out to fit narrow panes.
-- Fixes that also shipped in v1.0.6: the Low-memory preset switch, smoother transcript scrolling, symbol icons in larger program text, kitty playback without flicker, icon packs that stay applied, the sessions drawer at large font sizes, and a wallpaper change that keeps your Look's blur.
-- The welcome message in a new terminal is a rounded card in your wallpaper's colours, with Apps, Packages and Setup sections that fit the pane's width and a tap-to-open link to the guide.
+### Launcher
+- Home and Workspace are one wall of Home pages and windows: swipe from Home into the Workspace and back, and the glass edge, the dock and the keyboard cross with the page in one motion.
+- The Workspace can be empty, and Terminal and Display open on demand as windows of the row; reorder windows by dragging their chips along the window bar, and move panes between windows.
+- A shell can float over a Home page with a glass titlebar, minimise to a chip, and wait in the sessions drawer under Home and Saved sessions.
+- Settings › General › Use as picks Home screen or Terminal only, and the welcome screen asks which you want.
+- Pinch a Home page, or use Edit pages, to see Home pages and windows as cards; delete with Undo, and add a page, terminal or display.
+- Long-pressing Home opens an action sheet that can lock the layout and reaches past the navigation pill.
+- Long-press an app for the App menu: grouped rows with an arrow, shortcuts you can pin to Home, and Remove or Uninstall by dragging its icon.
+- Drag icons between Home and the dock, and from the drawer onto Home; apps can pin their shortcuts and widgets to Home.
+- The drawer keeps its own keyboard, hides it as you scroll, and walks its search results with the arrow keys; physical keys type into an open search wherever focus is.
+- Settings reopen on the page you left for three minutes, then at the top, and open full screen.
+- Screen readers can reach the command palette and the App menu, and a dock tile opens the command palette.
+- Text on glass and over the wallpaper stays readable: terminal and dock text hold a contrast floor that follows your level, and faint text fades toward its ground.
+- A one-time hint points new users to the theme; the welcome tour stays off on pre-release builds.
+- The long-press popup opens from a hold anywhere but the core of a key, and from the gaps and margins around the keys.
+- The status row flows around the camera and clears the screen's rounded corners (#163).
+- Caps, chips and the Home-locked notice fit at font scale 1.3.
+- The calendar's today disc is centred on its number, one size every day, and keeps its contrast on dark glass.
+- A pull down on Suggested's empty pane closes the folder, not the drawer.
+- Home keeps its grid and the terminal widget its prompt under the system keyboard.
+
+### Appearance editor
+- One editor for everything you see: tap the thing you want to change, on a card sheet that rests at peek, half or full height and stays open.
+- A Global card holds the wallpaper tile, the Look and its colours; each screen card (Home, Workspace, Status bar, Dock, Keyboard, Terminal) reads its Look from its own half and follows the page you swipe to.
+- Each screen can have its own glass, with Frost, Tint, Hue, Vibrancy, Edge and Keys controls on any Look, and Custom remembers your setup (#82).
+- Cards use glyphs and Match rows, and the Dock card has a Bars list; the screen cards have an Elements list for hidden items, with Undo and Reset.
+- Layout drags happen live in the preview, with slim drop markers and a lifted pose for the piece you carry.
+- The Alignment control is gone, and Edge colours follow Wallpaper colors.
+- Sliders and rows fit on one line where they can.
+
+### Home
+- Widgets are one redesigned family: a Clock with eight faces and time zones, one Calendar, one Device widget, Glance, Notes, Weather with a place you set, Media, Tasks and a narrower Notifications widget.
+- Clock widgets have Show date and Show next alarm toggles, and the flip clock stacks AM and PM; Clock and Weather can go Bare.
+- Widgets wear the Look's glass and corners, with one switch and per-widget overrides, and the widget picker names each design and stays clear of the dock.
+- Widgets resize to per-kind spans, and edit mode reaches every widget and explains refused drops.
+- Home keeps its layout when you change the wallpaper or dark mode, and the shared widget grid carries into Home's own keys.
+
+### Dock
+- Home's dock has styles you pick: Glass tray, Lens beads, Taskbar, Prompt line, Wall strip and the new-install default, Peek, which has a live reflection under the keyboard and a Floating variant.
+- Prompt line and Taskbar are toggles (Search field, Drawer tile) that work with any dock design.
+- The dock's design dresses both halves and follows the page you cross to, from the first frame.
+- A side dock on a landscape phone holds every pin and scrolls the rest, keeping the most-used apps in view (#146).
+- App icons carry no reflection in any glass.
+- Pinned apps never run Unpin from a still long press.
+
+### Keyboard
+- An extra keys editor (#164) lets you edit pages, rows and keys with a picker and Undo.
+- Auto keyboard waits until Linux apps have what it needs.
+- The keyboard keeps its height and shows the popup from its frame and gaps.
+- Keys fold the extra keys instead of dipping the dock on a single layout.
+- Keyboard over display: overlay or resize, from the display's Input page.
+
+### Terminal
+- A sideways swipe on a terminal's text pages the row.
+- A growing pane keeps the prompt at the bottom only while history fills the new rows.
+- Launcher sound works: a sound server and Linux media controls run with the launcher, and Linux apps opened from it play audio.
+
+### Linux apps
+- Settings › Linux apps › Graphics acceleration has a benchmark that runs on its own page with one confirmation, and skips the Vulkan wrapper where the phone's driver is too old for it.
+- GPU setup follows Termux's own package manager and never asks.
+- The display is a window of the row and holds the keyboard and focus only while it is on screen.
 - Settings › Linux apps › Arch Linux installs on arm64 phones again, from the Arch Linux ARM image; Debian and Ubuntu are unchanged.
+- A Set up Linux apps guide walks through the first setup.
+
+### Settings
+- Settings follow Material 3 and are regrouped by the wall's halves, with search everywhere and a Motion page for the page transition and animation speed.
+- Gestures: the gesture list is the one control, and quick reply has its own switch.
+- Home settings gather page transitions, icons and labels, the page indicator, lock, Edit pages and folders; Start in names Terminal, Display or Home.
+- Drawer settings cover search, position, reach, A–Z side and badge counts; Niagara-style A–Z has Shown, Faint and Pull tab states, and the pull tab rests beside the text.
+- What's new and Restart launcher are in Settings.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
@@ -65,8 +112,16 @@ These may change or be dropped before they reach a stable release.
 - Settings › Keyboard › Adaptive touch accuracy learns where your taps land, the space bar included, and pauses itself if typing gets less accurate. <!-- stays: P1, P2 (pass bar on pong, three emulator checks) -->
 - Look › Custom's glass controls work from any Look: Frost (clear to frosted), Tint with Hue, Vibrancy, Edge and the keyboard's Keys, with Custom remembering your setup; the wallpaper can change under the editor and the X11 display (#82). <!-- stays: P1, P2 -->
 - The welcome message in a new terminal is a rounded card in your wallpaper's colours, with Apps, Packages and Setup sections that fit the pane's width. <!-- stays: P1, P2 -->
+- The Appearance editor's one card sheet, per-screen glass and Elements list replace the old Layout and Look pages (editor redesign, 2026-10-26). <!-- stays: P1, P2 (device checks owed) -->
+- Peek dock style, page overview and live layout drag (peek-dock and overview, 2026-10-25). <!-- stays: P1, P2 (keyboard-up and overview checks owed) -->
+- The extra keys editor (#164) and Auto keyboard (2026-10-25). <!-- stays: P1, P2 -->
+- Launcher sound with Linux media controls (2026-10-25). <!-- stays: P1, P2 (visual and Sound-off checks owed) -->
+- Niagara-style A–Z with Shown, Faint and Pull tab, and the long-press popup (editor redesign). <!-- stays: P1, P2 -->
+- Use as (Home screen or Terminal only) and the welcome choice (editor redesign). <!-- stays: P1, P2 -->
+- Home's widget family, dock styles and the Home ⇄ Workspace crossing (widget redesign, chrome unification, wall rework). <!-- stays: P1, P2 -->
+- The graphics benchmark and Graphics acceleration row on Linux apps (GPU bench, 2026-10-24). <!-- stays: P1, P2 -->
 
 ## Editions
 <!-- Only what is exclusive to the Nix or VAJ build of this drop; say so when nothing is. -->
 
-Nothing is exclusive to an edition.
+Nothing exclusive to the Nix or VAJ build in this drop.
