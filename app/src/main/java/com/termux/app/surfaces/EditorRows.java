@@ -176,7 +176,8 @@ public final class EditorRows {
         /** Home's icon size: Small, Default or Large ({@code HomeIconSize}). */
         HOME_ICON_SIZE(Kind.SEGMENTS, R.string.editor_row_home_icon_size, R.drawable.ic_ms_apps),
         /** The wallpaper behind both screens, shown or not (the Wallpaper row keeps Change). */
-        SHOW_WALLPAPER(Kind.SWITCH, R.string.editor_row_show_wallpaper, R.drawable.ic_ms_image),
+        SHOW_WALLPAPER(Kind.SWITCH, R.string.editor_row_show_wallpaper,
+            R.drawable.ic_ed_show_wallpaper),
         /** A section's header: its name, and the model's summary as the note at its end. */
         SECTION_GLASS(Kind.MENU, R.string.editor_section_glass, 0),
         SECTION_SHAPE(Kind.MENU, R.string.editor_section_shape, 0),
