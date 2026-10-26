@@ -72,7 +72,7 @@ public class RootPreferencesSearchIndexTest {
                 assertEquals("group " + g + " row " + i, EXPECTED_ROWS[g][i], group.getPreference(i).getKey());
             }
         }
-        assertNull("Start in is Home's now", root.findPreference("app_launcher_start_in"));
+        assertNull("Start in is General's now", root.findPreference("app_launcher_start_in"));
         assertNull("Display is a window of the Terminal now", root.findPreference("display"));
     }
 

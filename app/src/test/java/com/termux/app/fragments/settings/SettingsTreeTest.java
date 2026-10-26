@@ -155,9 +155,12 @@ public class SettingsTreeTest {
     }
 
     @Test
-    public void theRootStartInRowIsHomes() {
-        assertEquals(PAGES + "HomePreferencesFragment",
+    public void startInStandsBesideUseAsOnGeneral() {
+        assertEquals(PAGES + "GeneralPreferencesFragment",
             SettingsTree.redirect(SettingsTree.ROOT, "app_launcher_start_in"));
+        assertEquals("a link to Start in on Home finds it on General",
+            PAGES + "GeneralPreferencesFragment",
+            SettingsTree.redirect(PAGES + "HomePreferencesFragment", "app_launcher_start_in"));
         assertEquals(R.xml.home_preferences, SettingsTree.find(PAGES + "HomePreferencesFragment").xmlRes);
     }
 }

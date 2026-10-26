@@ -64,7 +64,7 @@ public class SettingsSearchIndexTest {
         assertFirst(index, "low-memory preset", PAGES + "PerformancePreferencesFragment", "low_memory_preset");
         assertFirst(index, "12-hour", PAGES + "StatusBarPreferencesFragment", "top_pane_clock_am_pm");
         assertFirst(index, "wallpaper scrolls", PAGES + "HomePreferencesFragment", "wallpaper_parallax");
-        assertFirst(index, "start in", PAGES + "HomePreferencesFragment", "app_launcher_start_in");
+        assertFirst(index, "start in", PAGES + "GeneralPreferencesFragment", "app_launcher_start_in");
         assertFirst(index, "keyboard over the window", PAGES + "X11DisplayInputPreferencesFragment",
             "x11_keyboard_over_display");
         assertFirst(index, "linux apps", PAGES + "X11DisplayPreferencesFragment", null);
