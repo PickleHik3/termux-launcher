@@ -2,8 +2,6 @@ package com.termux.app.surfaces;
 
 import androidx.annotation.ColorInt;
 
-import com.termux.app.theme.SchemeTone;
-
 /**
  * The ink of the page label under the editor's frame (editor-redesign §8, "Text over the wallpaper
  * follows the wallpaper"). The label sits on the wallpaper the frame paints, which stays light
@@ -18,10 +16,13 @@ import com.termux.app.theme.SchemeTone;
 final class EditorLabelInk {
     private EditorLabelInk() {}
 
-    /** Whichever of the two inks contrasts more with {@code backdrop} (opaque). */
+    /**
+     * Whichever of the two inks contrasts more with {@code backdrop} (opaque): the launcher's one
+     * rule for text on the wallpaper ({@link com.termux.app.chrome.WallpaperInk#bareInk}).
+     */
     @ColorInt
     static int pick(@ColorInt int backdrop, @ColorInt int darkInk, @ColorInt int paleInk) {
-        return SchemeTone.mostLegible(backdrop | 0xFF000000, darkInk, paleInk);
+        return com.termux.app.chrome.WallpaperInk.bareInk(backdrop, darkInk, paleInk);
     }
 
     /** The average of {@code argb} pixels, opaque, then {@code dim} laid over it. */
