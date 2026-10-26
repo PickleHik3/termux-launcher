@@ -97,6 +97,41 @@ public class EditorScreenLookTest {
         assertEquals(AppearanceLooks.stopForPresetId("stock"), model(editor).value(Row.LOOK));
     }
 
+    /**
+     * The emulator's case (2026-10-26): both screens on Clear, Solid on the Workspace flips the
+     * glass edge the wall shares to 0. Home still reads Clear, and Match Home styling puts the
+     * Workspace back on Clear, which it keeps over a swipe round trip.
+     */
+    @Test
+    public void fromClearSolidOnTheWorkspaceLeavesHomeOnClearAndMatchBringsClearBack() {
+        int clear = AppearanceLooks.stopForPresetId("minimal");
+        SurfacePresets.applyLook(preferences, preset("minimal"));
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
+        assertEquals(clear, model(editor).value(Row.LOOK));
+        tapLook(editor, SOLID);
+        assertWorkspaceSolid(editor);
+
+        swipe(editor, WallHalf.HOME);
+        assertEquals(EditorCard.HOME, editor.shownCard());
+        assertEquals("Home reads its own Clear, not Custom", clear, model(editor).value(Row.LOOK));
+
+        swipe(editor, WallHalf.WORKSPACE);
+        assertEquals(EditorCard.WORKSPACE, editor.shownCard());
+        assertWorkspaceSolid(editor);
+        ReflectionHelpers.callInstanceMethod(editor, "toggleMatch",
+            ClassParameter.from(WallHalf.class, WallHalf.WORKSPACE));
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals("Match Home styling copies Home's Clear", clear,
+            model(editor).value(Row.LOOK));
+
+        swipe(editor, WallHalf.HOME);
+        assertEquals(clear, model(editor).value(Row.LOOK));
+        swipe(editor, WallHalf.WORKSPACE);
+        assertEquals("the Workspace keeps Clear over the round trip", clear,
+            model(editor).value(Row.LOOK));
+        assertTrue(SurfacePresets.wornOn(preferences, preset("minimal"), WallHalf.WORKSPACE));
+    }
+
     @Test
     public void eachScreenCardsLookRowIsItsOwnHalfWhateverTheFrameShows() {
         for (WallHalf frame : WallHalf.values()) {
