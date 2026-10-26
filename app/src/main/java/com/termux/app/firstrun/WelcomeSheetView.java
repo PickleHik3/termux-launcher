@@ -489,7 +489,7 @@ public final class WelcomeSheetView extends FrameLayout {
     @DrawableRes
     private static int glyphFor(@NonNull WelcomeSheet.Row row) {
         switch (row) {
-            case WALLPAPER: return R.drawable.ic_symbol_palette;
+            case WALLPAPER: return R.drawable.ic_ed_wallpaper_colours;
             case WEATHER: return R.drawable.ic_symbol_weather;
             case CONTACTS: return R.drawable.ic_symbol_person;
             case DISPLAY: return R.drawable.ic_symbol_desktop_windows;

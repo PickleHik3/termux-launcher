@@ -57,8 +57,8 @@ splits, clipboard and mouse mode, and moving between windows) are left out on Ho
 **Enter** runs the top match.
 
 The shorter **Terminal actions** sheet (`Ctrl+Alt+M`, or hold the terminal and tap **More**) has
-**Command palette**, **Select URL**, **Share transcript**, **Appearance**, **Enable Wallpaper** or
-**Disable Wallpaper**, **Style** (when Termux:Styling is installed), **Settings**, **Reset** and
+**Command palette**, **Select URL**, **Share transcript**, **Appearance**, **Enable wallpaper** or
+**Disable wallpaper**, **Style** (when Termux:Styling is installed), **Settings**, **Reset** and
 **Kill process**.
 
 ## Action ids

@@ -111,7 +111,7 @@ ad -s emu runas com.termux 'launcherctl pane list'
 - Crossing the wall: swipe left goes Home → window, right goes window → Home. A held mid-slide
   frame is `input motionevent DOWN`, MOVE steps, then UP; a start at x ≤ 100 or ≥ 1000 does not
   take.
-- Settings root (10-24): Your launcher (Home / Apps & dock / Terminal / Linux apps), Everywhere
+- Settings root (10-24): Your launcher (Home / Dock / Terminal / Linux apps), Everywhere
   (Appearance / Keyboard / Notifications / On-device AI), System (General). The root's Appearance
   row opens the Appearance editor directly (no page); Home › Appearance and Terminal › Appearance
   open that place's card in the Appearance editor (2026-10-26: Layout mode is retired; Position
@@ -265,7 +265,7 @@ a Linux app.
 
 ## Routes learned in the 2026-10-24 sweep (v2-redesign, 1080×2400 at 420 dpi)
 
-- **Settings root** is Home / Dock & drawer / Terminal / Look / Keyboard / Notifications /
+- **Settings root** is Home / Dock / Terminal / Look / Keyboard / Notifications /
   On-device AI / General. It reopens on its last sub-page; after a force-stop it opens on the root.
   The search icon is at about 964,240 and `settings_search_input` exists only after tapping it.
   "Navigate up" from a top-level page leaves Settings for the home app. Start in: Settings › Home,

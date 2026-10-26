@@ -138,7 +138,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_swap_horiz, "x11_force_bgra");
 
         // Home
-        key(R.drawable.ic_ms_dashboard_customize, "home_layout_editor", "terminal_layout_editor");
+        key(R.drawable.ic_ms_palette, "home_layout_editor", "terminal_layout_editor");
         key(R.drawable.ic_ms_format_size, "app_launcher_home_label_size", "fonts_size");
         key(R.drawable.ic_ms_wrap_text, "app_launcher_home_label_two_lines");
         key(R.drawable.ic_ms_shadow, "app_launcher_home_label_shadow");
@@ -260,11 +260,11 @@ public final class SettingsRowIcons {
 
         // Look
         key(R.drawable.ic_ms_dark_mode, "theme_mode");
-        key(R.drawable.ic_ms_colorize, "terminal_dynamic_colors_enabled");
+        key(R.drawable.ic_ed_wallpaper_colours, "terminal_dynamic_colors_enabled");
         key(R.drawable.ic_ms_contrast, "terminal_contrast_level");
         key(R.drawable.ic_ms_format_paint, "theme_templates_enabled");
         key(R.drawable.ic_ms_wallpaper, "use_system_wallpaper");
-        key(R.drawable.ic_ms_filter_b_and_w, "app_launcher_bw_icons");
+        key(R.drawable.ic_ed_monochrome, "app_launcher_bw_icons");
 
         // A row with no key of its own, by the page it opens.
         fragment(R.drawable.ic_ms_bug_report, "DebuggingPreferencesFragment");

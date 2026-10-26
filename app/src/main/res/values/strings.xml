@@ -430,7 +430,7 @@
     <string name="settings_x11_touch_mode_direct">Every touch goes straight to the app.</string>
     <string name="settings_x11_android_keyboard_title">Use Android keyboard</string>
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
-    <string name="settings_x11_keyboard_follows_text_title">Auto Keyboard</string>
+    <string name="settings_x11_keyboard_follows_text_title">Auto keyboard</string>
     <string name="settings_x11_keyboard_follows_text_summary">Automatic Keyboard show &amp; hide when you tap text input field</string>
     <string name="settings_x11_keyboard_follows_text_needs_setup">Set up Linux apps first</string>
     <string name="settings_x11_keyboard_over_display_title">Keyboard over the window</string>
@@ -779,7 +779,7 @@
     <string name="folder_capacity_reached">Folder is full</string>
     <string name="folder_already_contains_app">App is already in this folder</string>
     <string name="app_drawer_category_suggestions">Suggestions</string>
-    <string name="app_drawer_category_recently_added">Recently Added</string>
+    <string name="app_drawer_category_recently_added">Recently added</string>
     <string name="app_drawer_category_social">Communication &amp; Social</string>
     <string name="app_drawer_category_productivity">Work &amp; School</string>
     <string name="app_drawer_category_utilities">Utilities</string>
@@ -792,7 +792,7 @@
     <string name="app_drawer_category_travel">Travel &amp; Local</string>
     <string name="app_drawer_category_information_reading">News &amp; Reading</string>
     <string name="app_drawer_category_desktops">Desktops</string>
-    <string name="app_drawer_category_linux_apps">Linux Apps</string>
+    <string name="app_drawer_category_linux_apps">Linux apps</string>
     <string name="app_drawer_category_other">Other</string>
     <string name="app_drawer_category_automatic">Automatic (suggested)</string>
 
@@ -884,7 +884,7 @@
     <string name="settings_lazy_mode_header">Battery</string>
     <string name="settings_lazy_mode_title">Lazy mode</string>
     <string name="settings_lazy_mode_summary">Stops idle animations and slows status sampling so nothing repaints while you look.</string>
-    <string name="settings_fancier_glass_title">Fancier Glass</string>
+    <string name="settings_fancier_glass_title">Fancier glass</string>
     <string name="settings_fancier_glass_summary">Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker.</string>
     <string name="settings_motion_light_title">Living glass</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
@@ -899,8 +899,8 @@
 
     <string name="action_toggle_soft_keyboard">Keyboard</string>
 
-    <string name="msg_enabling_terminal_toolbar">Enabling Terminal Toolbar</string>
-    <string name="msg_disabling_terminal_toolbar">Disabling Terminal Toolbar</string>
+    <string name="msg_enabling_terminal_toolbar">Enabling terminal toolbar</string>
+    <string name="msg_disabling_terminal_toolbar">Disabling terminal toolbar</string>
 
 
     <!-- Terminal Extra Keys -->
@@ -921,7 +921,7 @@
     <string name="title_share_transcript">Terminal transcript</string>
     <string name="title_share_transcript_with">Send transcript to:</string>
 
-    <string name="title_share_selected_text">Terminal Text</string>
+    <string name="title_share_selected_text">Terminal text</string>
     <string name="title_share_selected_text_with">Send selected text to:</string>
 
     <string name="action_reset_terminal">Reset</string>
@@ -937,12 +937,12 @@
     <string name="action_kill_process">Kill process (%d)</string>
     <string name="title_confirm_kill_process">Really kill this session?</string>
 
-    <string name="action_set_background_image">Set Wallpaper</string>
+    <string name="action_set_background_image">Set wallpaper</string>
     <string name="action_apply">Apply</string>
-    <string name="action_enable_background_image">Enable Wallpaper</string>
-    <string name="action_disable_background_image">Disable Wallpaper</string>
-    <string name="wallpaper_target_home_screen">Home Screen</string>
-    <string name="wallpaper_target_lock_screen">Lock Screen</string>
+    <string name="action_enable_background_image">Enable wallpaper</string>
+    <string name="action_disable_background_image">Disable wallpaper</string>
+    <string name="wallpaper_target_home_screen">Home screen</string>
+    <string name="wallpaper_target_lock_screen">Lock screen</string>
     <string name="wallpaper_target_home_and_lock_screen">Home &amp; Lock Screen</string>
     <string name="title_wallpaper_read_permission">Allow wallpaper access</string>
     <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
@@ -964,7 +964,7 @@
     <string name="action_open_settings">Settings</string>
     <string name="action_wallpaper_style">Appearance</string>
     <string name="action_layout_editor">Layout</string>
-    <string name="msg_generating_report">Generating Report</string>
+    <string name="msg_generating_report">Generating report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
 
 
@@ -1990,7 +1990,7 @@
         <string name="termux_ai_dialog_enable">Enable</string>
 
             <string name="termux_privileged_access_overview_title">Backend status</string>
-            <string name="termux_privileged_backend_status_title">Backend Status</string>
+            <string name="termux_privileged_backend_status_title">Backend status</string>
             <string name="termux_privileged_backend_status_summary">Current backend state and permission status</string>
 
             <string name="termux_privileged_access_backend_title">Backend policy</string>

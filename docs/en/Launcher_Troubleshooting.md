@@ -113,7 +113,7 @@ important. Deleting a saved workspace removes its JSON definition but does not c
 
 ## App search does not start
 
-Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Dock & drawer →
+Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Dock →
 App search → App search prefix**; `%` is the default. If the prefix conflicts with shell input,
 choose a different single character.
 
