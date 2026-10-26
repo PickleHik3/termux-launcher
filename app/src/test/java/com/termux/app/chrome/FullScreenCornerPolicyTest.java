@@ -51,6 +51,20 @@ public class FullScreenCornerPolicyTest {
         assertEquals(140f, FullScreenCornerPolicy.bottomCornerRadiusPx(true, 140f, H, H, R), E);
     }
 
+    @Test public void theKeyboardClipRaisesOnlyItsBottomCorners() {
+        LiveChromeShape.Clip card = LiveChromeShape.cardClip(40f);
+        LiveChromeShape.Clip raised = LiveChromeShape.atLeast(card, 0f,
+            FullScreenCornerPolicy.bottomCornerRadiusPx(true, 40f, H - 24, H, R));
+        assertEquals(40f, raised.topLeft, E);
+        assertEquals(40f, raised.topRight, E);
+        assertEquals(115f, raised.bottomLeft, E);
+        assertEquals(115f, raised.bottomRight, E);
+        org.junit.Assert.assertTrue(raised.perCorner);
+        // A clip already round enough is handed back as it was: the outline stays a round rect.
+        LiveChromeShape.Clip round = LiveChromeShape.cardClip(140f);
+        org.junit.Assert.assertSame(round, LiveChromeShape.atLeast(round, 0f, 115f));
+    }
+
     @Test public void aKeyboardFrameAboveTheBandOrOutsideFullScreenKeepsItsRadius() {
         assertEquals(40f, FullScreenCornerPolicy.bottomCornerRadiusPx(true, 40f, H - 115, H, R), E);
         assertEquals(40f, FullScreenCornerPolicy.bottomCornerRadiusPx(true, 40f, H - 300, H, R), E);

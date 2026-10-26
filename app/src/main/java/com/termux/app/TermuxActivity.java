@@ -8473,11 +8473,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Clips the keyboard host to its shape. A card (Floating, or a floating keyboard under either
      * Style) is its own bounds rounded to Corners; a Docked keyboard is its slice of the frame.
      */
+    /**
+     * The keyboard's clip with its bottom corners curving with the screen's when Full screen puts
+     * the frame's bottom inside the bottom corners' band (FullScreenCornerPolicy); the clip as
+     * given otherwise. Only the outline: keys, chin and height stay where they are. Needs a path
+     * outline to clip, so Android 13 and later.
+     */
+    @Nullable
+    private com.termux.app.chrome.LiveChromeShape.Clip fullScreenKeyboardClip(
+            @NonNull View surfaceHost, @Nullable com.termux.app.chrome.LiveChromeShape.Clip clip) {
+        if (Build.VERSION.SDK_INT < 33 || mProperties == null || !mProperties.isUsingFullScreen()
+            || surfaceHost.getHeight() <= 0) return clip;
+        int windowHeight = getWindow().getDecorView().getHeight();
+        int[] origin = new int[2];
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
+        int bottom = origin[1] + surfaceHost.getHeight() + (clip == null ? 0 : clip.reachBottom);
+        float screen = Math.max(mDisplayCornerRadiiPx[2], mDisplayCornerRadiiPx[3]);
+        float own = clip == null ? 0f : Math.min(clip.bottomLeft, clip.bottomRight);
+        float raised = com.termux.app.chrome.FullScreenCornerPolicy.bottomCornerRadiusPx(true,
+            own, bottom, windowHeight, screen);
+        if (raised <= own) return clip;
+        return com.termux.app.chrome.LiveChromeShape.atLeast(clip == null
+            ? com.termux.app.chrome.LiveChromeShape.cardClip(0f) : clip, 0f, raised);
+    }
+
     private void applyInAppKeyboardSurfaceClip(@NonNull View surfaceHost, boolean capsule,
                                                float cornerRadiusPx) {
-        boolean changed = mKeyboardOutline.setClip(capsule
+        boolean changed = mKeyboardOutline.setClip(fullScreenKeyboardClip(surfaceHost, capsule
             ? com.termux.app.chrome.LiveChromeShape.cardClip(cornerRadiusPx)
-            : chromeClipOf(KEYBOARD_PIECES));
+            : chromeClipOf(KEYBOARD_PIECES)));
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
         else if (changed)
@@ -10044,9 +10068,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ({@link com.termux.app.statusbar.StatusRowKeepOut}); these insets are the window's, since
      * the content view they arrive on starts at the window's origin.
      */
+    /** The screen's corner radii, top-left, top-right, bottom-left, bottom-right; 0 unknown. */
+    @NonNull private float[] mDisplayCornerRadiiPx = new float[4];
+
     private void syncStatusRowKeepOut(@NonNull WindowInsetsCompat insetsCompat) {
         View row = findViewById(R.id.terminal_status_row);
-        if (!(row instanceof com.termux.app.statusbar.StatusRowLayout)) return;
         // The top edge's box: Android's rects that touch it, joined. A side cutout in landscape
         // stands off the top edge, so it is never one.
         Rect hole = null;
@@ -10072,6 +10098,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         }
+        // Kept for the frames Full screen brings to the screen's edges (FullScreenCornerPolicy).
+        mDisplayCornerRadiiPx = radii;
+        if (!(row instanceof com.termux.app.statusbar.StatusRowLayout)) return;
         int topBand = insetsCompat.getInsetsIgnoringVisibility(Type.statusBars()).top;
         com.termux.app.statusbar.StatusRowKeepOut.Mode mode = mPreferences == null
             ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO

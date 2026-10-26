@@ -87,6 +87,17 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
         }
         // A round rect has one radius, so a card square on a side (an edge card's screen side) is
         // grown by that radius past the square side: the view's bounds cut the excess off.
+        if (clip.perCorner && android.os.Build.VERSION.SDK_INT >= 33) {
+            // A screen corner raised some corners past the others: each at its own radius, which
+            // only a path outline can say (and clip to, from Android 13).
+            android.graphics.Path path = new android.graphics.Path();
+            path.addRoundRect(rect[0], rect[1], rect[2], rect[3], new float[] {
+                clip.topLeft, clip.topLeft, clip.topRight, clip.topRight,
+                clip.bottomRight, clip.bottomRight, clip.bottomLeft, clip.bottomLeft},
+                android.graphics.Path.Direction.CW);
+            outline.setPath(path);
+            return;
+        }
         float r = clip.radius;
         int grow = Math.round(r);
         if (r > 0f) {
@@ -105,6 +116,7 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
         return a.reachLeft == b.reachLeft && a.reachTop == b.reachTop
             && a.reachRight == b.reachRight && a.reachBottom == b.reachBottom
             && a.topLeft == b.topLeft && a.topRight == b.topRight
-            && a.bottomRight == b.bottomRight && a.bottomLeft == b.bottomLeft;
+            && a.bottomRight == b.bottomRight && a.bottomLeft == b.bottomLeft
+            && a.perCorner == b.perCorner;
     }
 }
