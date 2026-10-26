@@ -1983,7 +1983,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         if (FORMS[i] == layout.keyboardForm()) return i;
                     return 0;
                 }
-                case LOOK: return lookStop(mHalf);
+                case LOOK: return lookStop(lookHalf());
                 case CHANGE_WALLPAPER: return 0;
                 case THEME:
                     return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
@@ -2725,12 +2725,41 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ---- the Look slider ---------------------------------------------------------------------
 
-    /** Where the Look slider stands for a half: Custom where it was put there, else the match. */
-    private int lookStop(@NonNull WallHalf half) {
-        return mHeldCustom.contains(half) ? AppearanceLooks.CUSTOM_STOP : matchingStop(half);
+    /**
+     * The half the Look row of the card up reads and writes, as {@link EditorRows#halfFor} says:
+     * a screen card's own half (Home's, the Workspace's), else the half the frame shows.
+     */
+    @NonNull
+    private WallHalf lookHalf() {
+        return readHalf(Row.LOOK);
     }
 
-    /** The stop a half wears: the Look it matches, or Custom. */
+    /**
+     * Where the Look slider stands for a half: Custom where it was put there, else the Look the
+     * half wears in its own values ({@link SurfacePresets#wornOn}), so a Look picked on the other
+     * screen, which writes the values one for the wall, never moves it.
+     */
+    private int lookStop(@NonNull WallHalf half) {
+        if (mHeldCustom.contains(half))
+            return AppearanceLooks.CUSTOM_STOP;
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs == null ? AppearanceLooks.CUSTOM_STOP : wornStop(prefs, half);
+    }
+
+    /** The stop a half wears in its own values in {@code prefs} (the store, or a drag's batch). */
+    private static int wornStop(@NonNull TermuxAppSharedPreferences prefs,
+                                @NonNull WallHalf half) {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
+            if (SurfacePresets.wornOn(prefs, preset, half))
+                return AppearanceLooks.stopForPresetId(preset.id);
+        }
+        return AppearanceLooks.CUSTOM_STOP;
+    }
+
+    /**
+     * The stop a half wears with the values one for the wall compared too: the Look it matches
+     * whole, or Custom. What decides whether Done keeps the saved Custom.
+     */
     private int matchingStop(@NonNull WallHalf half) {
         TermuxAppSharedPreferences prefs = prefs();
         return prefs == null ? AppearanceLooks.CUSTOM_STOP : matchingStop(prefs, half);
@@ -2757,23 +2786,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean custom = AppearanceLooks.isCustomStop(stop);
         // Leaving Custom for the Look the values still match writes nothing, but the slider
         // and the All surfaces strip follow the stop.
-        boolean held = custom ? mHeldCustom.add(mHalf) : mHeldCustom.remove(mHalf);
-        if (prefs != null && moveToStop(prefs, stop))
+        WallHalf half = lookHalf();
+        boolean held = custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
+        if (prefs != null && moveToStop(prefs, stop, half))
             syncAfterBulkWrite();
         else if (held && mSheet != null)
             mSheet.restate();
     }
 
     /**
-     * The Look slider landed on {@code stop} for the half the frame shows, written into
-     * {@code into} (the store, or a drag's batch over it). A Look resets every surface on that
-     * half to it; leaving a Custom the user touched keeps it for this visit and stores it as the
-     * saved Custom ({@link SessionCustom}). Custom brings back this visit's values, else the
-     * saved Custom, else writes nothing: the Look on screen is its seed. False when the half
-     * already stood there.
+     * The Look slider landed on {@code stop} for {@code half} (the Look row's, {@link #lookHalf}),
+     * written into {@code into} (the store, or a drag's batch over it). A Look resets every
+     * surface on that half to it; leaving a Custom the user touched keeps it for this visit and
+     * stores it as the saved Custom ({@link SessionCustom}). Custom brings back this visit's
+     * values, else the saved Custom, else writes nothing: the Look on screen is its seed. False
+     * when the half already wears that stop in its own values ({@link #wornStop}).
      */
-    private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop) {
-        int current = matchingStop(into, mHalf);
+    private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop,
+                               @NonNull WallHalf half) {
+        int current = wornStop(into, half);
         if (stop == current)
             return false;
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
@@ -2781,11 +2812,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (look != null) {
             if (AppearanceLooks.isCustomStop(current))
                 mSessionCustom.leave(into);
-            SurfacePresets.applyLook(into, look, mHalf);
+            SurfacePresets.applyLook(into, look, half);
             forgetGlassEdgePositions();
             return true;
         }
-        mSessionCustom.enter(into, mHalf);
+        mSessionCustom.enter(into, half);
         return true;
     }
 
@@ -2902,7 +2933,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null) {
-            if (moveToStop(prefs, stop))
+            if (moveToStop(prefs, stop, lookHalf()))
                 syncAfterBulkWrite();
             return;
         }
@@ -2911,7 +2942,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mLookDrag = new SurfacePresets.Batch(store);
             mLookDragPrefs = SurfacePresets.writingInto(prefs, mLookDrag);
         }
-        if (!moveToStop(mLookDragPrefs, stop))
+        if (!moveToStop(mLookDragPrefs, stop, lookHalf()))
             return;
         SharedPreferencesPreview.show(store, mLookDrag.frozen());
         previewLook();

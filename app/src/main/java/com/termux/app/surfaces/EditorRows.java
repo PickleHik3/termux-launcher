@@ -332,8 +332,8 @@ public final class EditorRows {
      * The half a row of {@code card} writes while the frame shows {@code frameHalf}, or null
      * where it writes one value for the wall (ADR 0013 §4): the per-half glass numbers of the
      * dock, the status bar and the keyboard, the Look slider and the shared glass the
-     * Appearance card's Frost, Opacity and Tint write, follow the frame; Home's glass is the Home
-     * half's Base whatever the frame shows, and the Workspace card's Look and glass the Workspace
+     * Appearance card's Frost, Opacity and Tint write, follow the frame; the Home card's Look and glass are
+     * the Home half's whatever the frame shows, and the Workspace card's Look and glass the Workspace
      * half's; the terminal's numbers (it stands on the Workspace
      * alone), corners, margins, heights, places, the Dock's style and design, and every app-wide
      * choice do not.
@@ -342,7 +342,7 @@ public final class EditorRows {
     public static WallHalf halfFor(@NonNull EditorCard card, @NonNull Row row,
                                    @NonNull WallHalf frameHalf) {
         if (card == EditorCard.HOME)
-            return row.property() != null ? WallHalf.HOME : null;
+            return row == Row.LOOK || row.property() != null ? WallHalf.HOME : null;
         if (card == EditorCard.WORKSPACE)
             return row == Row.LOOK || row.property() != null ? WallHalf.WORKSPACE : null;
         if (card == EditorCard.APPEARANCE)

@@ -1157,6 +1157,45 @@ public final class SurfacePresets {
         return true;
     }
 
+    /**
+     * Whether one screen wears this preset in what it holds itself: {@link #matches(
+     * TermuxAppSharedPreferences, Preset, WallHalf)} asked of that half's own values only — its
+     * per-half cells and numbers, and on the Workspace the terminal's cells, which are the
+     * Workspace's alone. The values held once for the wall (the glass ink, rim, motion, hue,
+     * vibrancy and edge) are left out: a Look picked on the other screen writes them for both,
+     * and must not move this screen off its own Look (editor-redesign §1: each screen stores its
+     * own Look and glass; the two meet only through the Match rows).
+     */
+    public static boolean wornOn(@NonNull TermuxAppSharedPreferences prefs,
+                                 @NonNull Preset preset, @NonNull WallHalf half) {
+        Preset look = halfOf(preset, half);
+        for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
+            if (isLayoutOwned(row.property) || !touchesCell(row.slot, row.property, half, false))
+                continue;
+            String key = TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property);
+            if (prefs.isSurfaceInheriting(row.slot, row.property, half)
+                    == look.values.containsKey(key))
+                return false;
+        }
+        for (Map.Entry<String, Object> entry : look.values.entrySet()) {
+            String key = entry.getKey();
+            if (isLayoutOwned(key) || !isOwnKey(key, half))
+                continue;
+            Object current = currentOne(prefs, key, half);
+            if (current != null && !current.equals(entry.getValue()))
+                return false;
+        }
+        return true;
+    }
+
+    /** Whether a plain preset key is one {@code half} holds itself; see {@link #wornOn}. */
+    private static boolean isOwnKey(@NonNull String key, @NonNull WallHalf half) {
+        if (isHalfKey(key))
+            return true;
+        SurfaceEditorRows.Row cell = overrideCellForKey(key);
+        return cell != null && touchesCell(cell.slot, cell.property, half, false);
+    }
+
     /** The live value behind a preset key, or null for a key this build does not know. */
     @Nullable
     private static Object currentOne(@NonNull TermuxAppSharedPreferences prefs,
