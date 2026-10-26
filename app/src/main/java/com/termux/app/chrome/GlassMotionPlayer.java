@@ -101,6 +101,9 @@ public final class GlassMotionPlayer {
         void apply(float fraction);
     }
 
+    /** Frame-source counter for the idle audit: glassMotion. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("glassMotion");
+
     /** One spring, played on a ValueAnimator whose linear time is the spring's own clock. */
     private static void spring(@NonNull View card, @NonNull GlassMotion.Spring spring,
                                @NonNull Progress progress, @NonNull Runnable onSettled) {
@@ -123,7 +126,10 @@ public final class GlassMotionPlayer {
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(duration);
         animator.setInterpolator(t -> spring.valueAt(t * duration / 1000f));
-        animator.addUpdateListener(a -> progress.apply((Float) a.getAnimatedValue()));
+        animator.addUpdateListener(a -> {
+            FRAMES.tick();
+            progress.apply((Float) a.getAnimatedValue());
+        });
         animator.addListener(new AnimatorListenerAdapter() {
             private boolean mCancelled;
 

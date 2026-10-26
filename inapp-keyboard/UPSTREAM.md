@@ -86,6 +86,9 @@ fails when the catalogue has gone stale.
   corner-radius overrides: the former scales both immutable `Config` margin
   ratios, while the latter takes precedence over `Config`/palette radius;
   setters clear `Theme.Computed` and rebuild it during the next measurement.
+  The host may also apply a live legend scale (`setLabelScale`), which
+  multiplies the measured label and sublabel sizes and leaves key geometry
+  alone; the launcher feeds it the shared Text size.
 - `ACTION_CANCEL` commits live pointers (`Pointers.onTouchCancelCommit`)
   instead of aborting like upstream. Embedded in an activity the only cancel
   source is the system pilfering the stream for a navigation gesture; the

@@ -3,6 +3,8 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.dock.DockStyle;
+
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Locale;
@@ -156,6 +158,21 @@ public final class PlaceLayout {
     public final boolean keyboardShown;
     public final int widgetColumns;
     public final int widgetRows;
+    /**
+     * The shape Home's dock is drawn in: the style the dock really draws
+     * ({@link DockStyle#effectiveStyle}), so picking a style that is not built yet changes nothing
+     * here. Home's choice alone; a Workspace layout always carries {@link DockStyle#GLASS_TRAY},
+     * the dock as it has always been.
+     */
+    @NonNull public final DockStyle dockStyle;
+    /**
+     * Whether a shown alphabets index stands as its pull tab (the Dock card's A–Z Show set to
+     * Pull tab, editor-redesign §4): a tab on the screen's edge that brings the letters out over
+     * the content while it is held, claiming no band ({@link EdgeStackPolicy#claimsBand}), so the
+     * widgets and the content take the strip's room. Never stored in the layout keys: the store
+     * folds it in from that preference when it resolves ({@link PlaceLayoutStore#resolve}).
+     */
+    public final boolean azTab;
 
     /**
      * The arrangement spelled the terse way: one edge or row placement per element, each landing
@@ -185,6 +202,23 @@ public final class PlaceLayout {
     public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
                        @NonNull KeyboardForm keyboardForm, boolean keyboardShown,
                        int widgetColumns, int widgetRows) {
+        this(slots, keyboardMode, keyboardForm, keyboardShown, widgetColumns, widgetRows,
+            DockStyle.GLASS_TRAY);
+    }
+
+    /** The arrangement as slots, with the dock drawn in {@code dockStyle}. */
+    public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
+                       @NonNull KeyboardForm keyboardForm, boolean keyboardShown,
+                       int widgetColumns, int widgetRows, @NonNull DockStyle dockStyle) {
+        this(slots, keyboardMode, keyboardForm, keyboardShown, widgetColumns, widgetRows,
+            dockStyle, false);
+    }
+
+    /** The arrangement as slots, with the alphabets index standing as its pull tab or not. */
+    public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
+                       @NonNull KeyboardForm keyboardForm, boolean keyboardShown,
+                       int widgetColumns, int widgetRows, @NonNull DockStyle dockStyle,
+                       boolean azTab) {
         EnumMap<Element, Slot> copy = new EnumMap<>(Element.class);
         for (Element element : Element.values()) {
             Slot slot = slots.get(element);
@@ -198,6 +232,8 @@ public final class PlaceLayout {
         this.keyboardShown = keyboardShown;
         this.widgetColumns = widgetColumns;
         this.widgetRows = widgetRows;
+        this.dockStyle = dockStyle;
+        this.azTab = azTab;
     }
 
     /** Where one element stands on this place. Never null: every element always has a slot. */
@@ -219,7 +255,7 @@ public final class PlaceLayout {
         EnumMap<Element, Slot> next = new EnumMap<>(mSlots);
         next.put(element, slot);
         return new PlaceLayout(next, keyboardMode, keyboardForm, keyboardShown, widgetColumns,
-            widgetRows);
+            widgetRows, dockStyle, azTab);
     }
 
     /** The same arrangement with the keyboard shown or hidden. */
@@ -227,7 +263,23 @@ public final class PlaceLayout {
     public PlaceLayout withKeyboardShown(boolean shown) {
         if (shown == keyboardShown) return this;
         return new PlaceLayout(mSlots, keyboardMode, keyboardForm, shown, widgetColumns,
-            widgetRows);
+            widgetRows, dockStyle, azTab);
+    }
+
+    /** The same arrangement with the dock drawn in another style. */
+    @NonNull
+    public PlaceLayout withDockStyle(@NonNull DockStyle style) {
+        if (style == dockStyle) return this;
+        return new PlaceLayout(mSlots, keyboardMode, keyboardForm, keyboardShown, widgetColumns,
+            widgetRows, style, azTab);
+    }
+
+    /** The same arrangement with the alphabets index standing as its pull tab, or as a band. */
+    @NonNull
+    public PlaceLayout withAzTab(boolean tab) {
+        if (tab == azTab) return this;
+        return new PlaceLayout(mSlots, keyboardMode, keyboardForm, keyboardShown, widgetColumns,
+            widgetRows, dockStyle, tab);
     }
 
     @NonNull
@@ -265,6 +317,8 @@ public final class PlaceLayout {
             && keyboardMode == that.keyboardMode
             && keyboardForm == that.keyboardForm
             && keyboardShown == that.keyboardShown
+            && dockStyle == that.dockStyle
+            && azTab == that.azTab
             && mSlots.equals(that.mSlots);
     }
 
@@ -274,7 +328,8 @@ public final class PlaceLayout {
         result = 31 * result + keyboardMode.hashCode();
         result = 31 * result + keyboardForm.hashCode();
         result = 31 * result + (keyboardShown ? 1 : 0);
-
+        result = 31 * result + dockStyle.hashCode();
+        result = 31 * result + (azTab ? 1 : 0);
         result = 31 * result + widgetColumns;
         result = 31 * result + widgetRows;
         return result;
@@ -285,12 +340,13 @@ public final class PlaceLayout {
     public String toString() {
         return "PlaceLayout{status=" + slot(Element.STATUS)
             + ", apps=" + slot(Element.APPS)
-            + ", az=" + slot(Element.AZ)
+            + ", az=" + slot(Element.AZ) + (azTab ? "(tab)" : "")
             + ", keys=" + slot(Element.EXTRA_KEYS)
             + ", keyboard=" + keyboardMode
             + ", form=" + keyboardForm
             + ", keyboardShown=" + keyboardShown
             + ", grid=" + widgetColumns + "x" + widgetRows
+            + ", dock=" + dockStyle.storageValue()
             + "}";
     }
 }

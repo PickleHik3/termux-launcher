@@ -131,7 +131,7 @@ in-app Display place?
   `$PREFIX/var/lib/proot-distro/installed-rootfs/debian` and
   `:320` runs `proot-distro login debian --shared-tmp -- "$@"`. **The path is the pre-5.x one
   (see §3.1) — worth fixing whatever else is decided.**
-- No existing doc covers discovery of proot apps. `project-docs/active/display-fullscreen/PARKED.md` and
+- No existing doc covers discovery of proot apps. the parked full-screen Display spec (deleted 2026-10-19) and
   the retired display-tablet spec are about the Display place's chrome and input, not about
   the catalogue.
 

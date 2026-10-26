@@ -35,11 +35,6 @@ final class ClockWidgetFormats {
         return zoneId.substring(slash + 1).replace('_', ' ');
     }
 
-    /** The Pane caption form of a city: lower case, words joined like a path segment. */
-    @NonNull static String paneCity(@Nullable String zoneId) {
-        return cityName(zoneId).toLowerCase(Locale.ROOT).replace(' ', '-');
-    }
-
     /**
      * The zone the user meant by {@code input}: an IANA id ("Asia/Kolkata"), an offset id
      * ("UTC+3"), or just the city ("london", "New York") matched against the last segment of

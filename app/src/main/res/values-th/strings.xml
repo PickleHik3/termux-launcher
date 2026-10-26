@@ -40,7 +40,6 @@
     <string name="title_share_selected_text_with">ลงข้อความที่เลือกไปยัง:</string>
     <string name="title_select_url_none_found">ไม่พบ URL ในเทอร์มินอล</string>
     <string name="termux_plugin_error_notifications_enabled_on">แสดงแฟลชและการแจ้งเตือนข้อผิดพลาดของปลั๊กอิน (ค่าเริ่มต้น)</string>
-    <string name="termux_style_preferences_title">ลักษณะ &TERMUX_APP_NAME;</string>
     <string name="msg_max_terminals_reached">ปิดรายการที่มีอยู่ก่อนสร้างใหม่</string>
     <string name="action_new_session">ซีซั่นใหม่</string>
     <string name="action_share_transcript">แชร์สคริป</string>

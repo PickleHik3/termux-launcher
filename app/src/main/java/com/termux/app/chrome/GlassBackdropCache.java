@@ -85,6 +85,14 @@ public final class GlassBackdropCache {
          * moves.
          */
         KEYBOARD,
+        /**
+         * A Home widget's card, one rect per widget like {@link #TERMINAL_PANE}. Its inks are the
+         * card's own roles on the page's ink polarity, so the widget takes that polarity and
+         * answers with a veil of its card's colour; it casts no vote of its own, since the card's
+         * light or dark follows the polarity it would be voting on. Memoised per rect by
+         * {@code ChromeInk}.
+         */
+        WIDGET,
     }
 
     /** Reads the pixels behind a band. Implemented by the chrome renderer, faked in tests. */

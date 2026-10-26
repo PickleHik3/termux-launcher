@@ -24,14 +24,14 @@ public final class X11Autostart {
 
     /**
      * The command to run at service start, or null when nothing should be: the build has no
-     * server, the display or the opt-in is off, the launcher's {@code termux-x11} is not in the
-     * prefix yet, or a server already answers on the X socket.
+     * server, the opt-in is off, the launcher's {@code termux-x11} is not in the prefix yet, or a
+     * server already answers on the X socket. There is no display switch to ask (ADR 0008).
      */
     @Nullable
     public static String[] commandToRun(@NonNull Context context) {
         if (!X11ServerSupport.isAvailable(context)) return null;
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
-        if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DisplayAutostartEnabled()) {
+        if (prefs == null || !prefs.isX11DisplayAutostartEnabled()) {
             return null;
         }
         String[] argv = X11StartCommand.argv(prefs.getX11DisplayCommand(), prefs.getX11DisplayDpi(),

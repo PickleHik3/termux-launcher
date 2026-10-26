@@ -25,7 +25,7 @@ import com.termux.app.wall.PaneWallLayout;
  *
  * <p>So there are three anchors, chosen per surface by what moves it:</p>
  * <ul>
- *   <li>{@link #place}: glass on a wall page — the pane slabs, the Widgets and Display pages'
+ *   <li>{@link #place}: glass on a wall page — the pane slabs, the Widgets page and the display window'
  *       glass and corner arcs, the corner tab. The wallpaper in it is fixed to the screen, lined
  *       up with the wallpaper the launcher draws behind the wall, whatever the page does: slide,
  *       sink under a held border, tip as a plank. The page's whole transform — its translation,

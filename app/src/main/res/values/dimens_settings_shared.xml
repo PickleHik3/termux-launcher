@@ -14,4 +14,6 @@
     <dimen name="settings_status_min_height">72dp</dimen>
     <dimen name="settings_touch_target">48dp</dimen>
     <dimen name="settings_segment_min_height">48dp</dimen>
+    <!-- A row's leading icon: the 24dp Material Symbols slot. -->
+    <dimen name="settings_row_icon">24dp</dimen>
 </resources>

@@ -82,5 +82,4 @@
     <string name="termux_plugin_error_notifications_enabled_off">Вимкнуто повідомлення та сповіщення про помилки плагіна.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Показуються повідомлення та сповіщення про помилки плагіна. (За замовчуванням)</string>
     <string name="termux_crash_report_notifications_enabled_title">Сповіщення про збій</string>
-    <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Вигляд</string>
 </resources>

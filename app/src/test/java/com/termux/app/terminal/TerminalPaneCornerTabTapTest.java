@@ -66,8 +66,6 @@ public class TerminalPaneCornerTabTapTest {
         @Override public String defaultCwd() { return "/"; }
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
-        @Override public void openLayoutEditor() { log.add("layout"); }
-        @Override public void openWallpaperPicker() { log.add("wallpaper"); }
         @Override public void openSettings() { log.add("settings"); }
         @Override public void onAutoTilingChanged(boolean enabled) {
             log.add(enabled ? "tiling on" : "tiling off");
@@ -98,7 +96,7 @@ public class TerminalPaneCornerTabTapTest {
         assertEquals("five buttons on a lone pane", 5, fixture.slots().length);
 
         fixture.tapSlot(0);
-        assertEquals(Arrays.asList("wallpaper"), fixture.host.log);
+        assertEquals(Arrays.asList("appearance"), fixture.host.log);
 
         // Minimal mode re-lays the whole place out around the pane, so the tab goes with the tap;
         // opened again, the same slot is the way back.
@@ -106,7 +104,8 @@ public class TerminalPaneCornerTabTapTest {
         fixture.tapSlot(1);
         fixture.showTab();
         fixture.tapSlot(1);
-        assertEquals(Arrays.asList("wallpaper", "minimal on", "minimal off"), fixture.host.log);
+        assertEquals(Arrays.asList("appearance", "minimal on", "minimal off"),
+            fixture.host.log);
 
         // The tiling button flips the setting and leaves the tab up for a second tap.
         fixture.host.log.clear();

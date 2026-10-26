@@ -73,6 +73,17 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
 
         /** The city search took focus and wants the system keyboard, or gave it up. */
         void onPlaceSearchFocusChanged(@NonNull EditText field, boolean focused);
+
+        /** What the launcher is used as now: the first page starts on it. */
+        @NonNull
+        default com.termux.app.wall.UseAs useAs() {
+            return com.termux.app.settings.UseAsSetting.read(host().getContext());
+        }
+
+        /** The first page's Continue: stores Use as, and the wall behind the sheet follows. */
+        default void setUseAs(@NonNull com.termux.app.wall.UseAs useAs) {
+            com.termux.app.settings.UseAsSetting.write(host().getContext(), useAs);
+        }
     }
 
     @NonNull private final Activity mActivity;
@@ -106,6 +117,7 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
         start.displayOffered = mEnv.displayOffered();
         start.displayOn = mEnv.displayOn();
         start.aiRows = aiRows();
+        start.useAs = mEnv.useAs();
         mSheet = WelcomeSheet.from(start);
         WelcomeSheetView view = new WelcomeSheetView(mActivity);
         view.setCallbacks(new SheetCallbacks());
@@ -228,6 +240,22 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
                 bind();
                 return;
             }
+            refresh();
+        }
+
+        @Override
+        public void onUseAsChosen(@NonNull com.termux.app.wall.UseAs useAs) {
+            if (mSheet == null) return;
+            mSheet.chooseUseAs(useAs);
+            bind();
+        }
+
+        @Override
+        public void onUseAsContinue() {
+            WelcomeSheet sheet = mSheet;
+            if (sheet == null) return;
+            com.termux.app.wall.UseAs chosen = sheet.continueFromUseAs();
+            if (chosen != null) mEnv.setUseAs(chosen);
             refresh();
         }
 

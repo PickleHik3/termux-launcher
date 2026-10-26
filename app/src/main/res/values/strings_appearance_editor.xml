@@ -1,86 +1,157 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The Appearance editor (appearance-layout-editor SPEC §3): the frame's tap targets, the bottom
-  area's mode pill, Look slider, the Custom row's vertical sliders, Layout mode's Style toggle and
-  Corner radius / Margin sliders, and the doors that open it. Kept in their own file so the editor's copy travels
-  together.
+  The Appearance editor (appearance-and-settings-rework §2-§3): the editor bar, the half line, the
+  cards and their rows, and the doors that open it. Kept in their own file so the editor's copy
+  travels together.
 -->
 <resources>
     <string name="appearance_editor_undo">Undo</string>
     <string name="appearance_editor_done">Done</string>
-    <!-- The page bar's title over the scaled frame, by mode. -->
-    <string name="appearance_page_wallpaper">Wallpaper</string>
-    <string name="appearance_page_look">Look</string>
-    <string name="appearance_page_layout">Layout</string>
 
-    <string name="appearance_editor_mode_description">Editor mode</string>
-    <string name="appearance_editor_look_description">Look</string>
-    <!-- Row B's sliders before an element names them; the label text replaces it in code. -->
-    <string name="appearance_editor_control_description">Element setting</string>
-    <string name="appearance_editor_style_description">Style</string>
+    <!-- The dock card's Style segments. -->
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
 
-
-    <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
-    <string name="appearance_editor_target_status">Status bar</string>
-    <string name="appearance_editor_target_terminal">Terminal</string>
-    <string name="appearance_editor_target_dock">Dock</string>
-    <string name="appearance_editor_target_keyboard">Keyboard</string>
-    <string name="appearance_editor_target_wallpaper">Wallpaper</string>
-    <!-- Row 2's heading at the Custom stop with nothing tapped: the global glass row. -->
-    <string name="appearance_editor_target_all">All surfaces</string>
-    <string name="appearance_editor_target_description">Tune %1$s</string>
-
-    <!-- Row 2's controls; the number is the control's own read-out. -->
-    <string name="appearance_editor_legibility_low">Contrast · Softer</string>
-    <string name="appearance_editor_legibility_unavailable">Contrast · off</string>
-    <!-- The keyboard's key caps: how solid they are, from clear to opaque. -->
-    <string name="appearance_editor_key_opacity">Keys · %1$d%%</string>
-    <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
-    <string name="appearance_editor_legibility_normal">Contrast · Default</string>
-    <string name="appearance_editor_legibility_high">Contrast · Harder</string>
-    <!-- The terminal's two menu pills: the heading over the chosen option. -->
-    <string name="appearance_editor_trail_title">Cursor trail</string>
-    <string name="appearance_editor_effect_title">Terminal effect</string>
-    <!-- The global set's menu pill, beside its name: which accent Tint mixes in. Short, so it
-         fits beside "All surfaces" on a 360dp phone. -->
-    <string name="appearance_editor_tint_hue_title">Hue</string>
-    <string name="appearance_editor_tint_hue_description">Tint colour, %1$s</string>
-    <!-- The status bar's button: opens the clock face and position popup. -->
-    <string name="appearance_editor_clock">Clock</string>
-    <!-- The Custom row's own legends; the number is the slider's read-out. -->
-    <string name="appearance_editor_icon_size">Icon size · %1$d dp</string>
-    <string name="appearance_editor_app_icons">Icons · %1$d</string>
-    <string name="appearance_editor_key_spacing">Spacing · %1$s</string>
-    <string name="appearance_editor_trail_description">Cursor trail, %1$s</string>
-    <string name="appearance_editor_effect_description">Terminal effect, %1$s</string>
-    <!-- The global row (layout editor v2): the base values every surface follows. -->
-    <!-- Frost: clear to frosted, how much the glass blurs what is behind it, and its grain with it. -->
-    <string name="appearance_editor_glass">Frost · %1$d%%</string>
-    <string name="appearance_editor_opacity">Opacity · %1$d%%</string>
-    <string name="appearance_editor_tint">Tint · %1$d%%</string>
+    <!-- A surface's Tint, as its accessibility row names it. -->
     <string name="appearance_editor_tint_name">Tint</string>
-    <!-- While the glass edge is drawn: the coloured light along the glass's edge, from none to bold. -->
-    <string name="appearance_editor_edge">Edge · %1$d%%</string>
-    <!-- How colourful the wallpaper looks through the glass; 1.00× is as it is. -->
-    <string name="appearance_editor_vibrancy">Vibrancy · %1$s×</string>
-    <!-- The global set's last slider, while the glass edge is drawn: how thick it looks. -->
-    <string name="appearance_editor_depth">Depth · %1$d%%</string>
     <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
-    <!-- Layout mode's global shape: no Look sets these. -->
-    <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
-    <string name="appearance_editor_corners_description">Corner radius</string>
-    <string name="appearance_editor_margin">Margin · %1$d dp</string>
-    <string name="appearance_editor_margin_description">Margin</string>
+    <!-- The doors: Settings › Keyboard's row opens the editor on the Keyboard card. -->
+    <string name="settings_look_appearance_editor_title">Edit on screen</string>
+    <string name="settings_look_appearance_editor_summary">The keyboard\'s glass, height and keys</string>
 
-    <!-- The doors. -->
-    <string name="settings_look_appearance_editor_title">Surface style</string>
-    <string name="settings_look_appearance_editor_summary">Looks, glass, opacity and text contrast, previewed on the home screen</string>
-    <!-- The mode pill's first segment: the Looks slider and the tune row. Short on purpose: the pill shares its row with Undo and Done at 360dp. -->
-    <string name="appearance_editor_mode_look">Look</string>
-    <!-- Tooltip of the eye-off control before any count is known. -->
-    <string name="appearance_editor_hidden_tooltip">Hidden elements</string>
+    <!-- The editor bar: the orientation chip names the orientation the frame shows. -->
+    <string name="appearance_bar_portrait">Portrait</string>
+    <string name="appearance_bar_landscape">Landscape</string>
+    <string name="appearance_bar_turn_for_landscape">Turn the phone to edit landscape</string>
+    <string name="appearance_bar_turn_for_portrait">Turn the phone to edit portrait</string>
+    <!-- Under the frame: which half of the wall the frame shows, and what a card changes. -->
+    <string name="appearance_half_home">Home</string>
+    <string name="appearance_half_workspace">Workspace</string>
+    <string name="appearance_half_description">Editing %1$s. Swipe across the preview to switch.</string>
+    <!-- A surface in the preview, as accessibility names it. -->
+    <string name="appearance_target_description">%1$s. Tap to change it, hold to move it.</string>
+
+    <!-- The cards' titles: one per thing you can tap, and the palette's. -->
+    <string name="appearance_card_home">Home</string>
+    <string name="appearance_card_workspace">Workspace</string>
+    <string name="appearance_card_status">Status bar</string>
+    <string name="appearance_card_terminal">Terminal</string>
+    <string name="appearance_card_dock">Dock</string>
+    <string name="appearance_card_keyboard">Keyboard</string>
+    <string name="appearance_theme_hint">Theme, colours and glass</string>
+    <string name="appearance_card_appearance">Appearance</string>
+    <!-- The card sheet's handle, read by a screen reader, and its two actions. -->
+    <string name="appearance_card_handle">Drag handle</string>
+    <string name="appearance_card_expand">Expand</string>
+    <string name="appearance_card_collapse">Collapse</string>
+    <string name="appearance_card_reset">Reset</string>
+    <!-- A stepper row's buttons, read by a screen reader and on long-press: "Decrease App icons". -->
+    <string name="appearance_stepper_less">Decrease %1$s</string>
+    <string name="appearance_stepper_more">Increase %1$s</string>
+
+    <!-- The card menu: back on the Look, or the same look on the other half. -->
+    <string name="appearance_reset_home">Reset Home</string>
+    <string name="appearance_reset_workspace">Reset Workspace</string>
+    <string name="appearance_reset_status">Reset status bar</string>
+    <string name="appearance_reset_terminal">Reset terminal</string>
+    <string name="appearance_reset_dock">Reset dock</string>
+    <string name="appearance_reset_keyboard">Reset keyboard</string>
+    <string name="appearance_reset_look">Reset surfaces</string>
+
+    <!-- Card rows: a label of one or two words each. -->
+    <string name="appearance_row_opacity">Opacity</string>
+    <string name="appearance_row_tint">Tint</string>
+    <string name="appearance_row_height">Height</string>
+    <string name="appearance_row_visible">Visible</string>
+    <string name="appearance_row_style">Style</string>
+    <string name="appearance_row_design">Design</string>
+    <!-- Clear to frosted: how much the glass blurs what is behind it, and its grain with it. -->
+    <string name="appearance_row_frost">Frost</string>
+    <string name="appearance_row_corners">Corners</string>
+    <string name="appearance_row_margin">Margin</string>
+    <string name="appearance_row_depth">Depth</string>
+    <string name="appearance_row_search_field">Search field</string>
+    <string name="appearance_row_text_size">Text size</string>
+    <string name="appearance_row_contrast">Contrast</string>
+    <string name="appearance_row_cursor_trail">Cursor trail</string>
+    <string name="appearance_row_effect">Effect</string>
+    <string name="appearance_row_split_gap">Split gap</string>
+    <string name="appearance_row_font">Font</string>
+    <string name="appearance_row_label_size">Label size</string>
+    <string name="appearance_row_glass_widgets">Glass widgets</string>
+    <string name="appearance_row_two_line">Two-line labels</string>
+    <string name="appearance_row_label_shadow">Label shadow</string>
+    <string name="appearance_row_folders">Folders</string>
+    <string name="appearance_row_numerals">Numerals</string>
+    <string name="appearance_row_page_dots">Page dots</string>
+    <string name="appearance_row_wallpaper_scroll">Wallpaper scroll</string>
+    <!-- The Match rows: copy the other screen's layout and glass onto this one. -->
+    <string name="appearance_row_match_workspace">Match Workspace styling</string>
+    <string name="appearance_row_match_home">Match Home styling</string>
+    <!-- The Match row's button: Copy, then Undo while the copy can be taken back. -->
+    <string name="appearance_match_copy">Copy</string>
+    <string name="appearance_match_undo">Undo</string>
+    <!-- The link from a screen's card to the card both screens share. -->
+    <string name="appearance_row_global">Global</string>
+    <string name="appearance_row_gestures">Gestures</string>
+    <string name="appearance_row_pages">Pages</string>
+    <string name="appearance_row_clock_12h">12-hour clock</string>
+    <string name="appearance_row_clock_face">Clock face</string>
+    <string name="appearance_row_keyboard_theme">Keyboard theme</string>
+    <string name="appearance_row_key_opacity">Key opacity</string>
+    <string name="appearance_row_key_corners">Key corners</string>
+    <string name="appearance_row_key_spacing">Key spacing</string>
+    <string name="appearance_row_form">Type</string>
+    <string name="appearance_row_layouts">Layouts</string>
+    <string name="appearance_row_look">Look</string>
+    <string name="appearance_row_wallpaper">Wallpaper</string>
+    <string name="appearance_row_theme">Theme</string>
+    <string name="appearance_row_icon_pack">Icon pack</string>
+    <string name="appearance_row_wallpaper_colours">Wallpaper colours</string>
+    <string name="appearance_row_full_screen">Full screen</string>
+    <string name="appearance_row_minimal">Minimal</string>
+    <string name="appearance_row_vibrancy">Vibrancy</string>
+    <string name="appearance_row_tint_hue">Tint colour</string>
+    <!-- The coloured light along the glass's edge, from none to bold. -->
+    <string name="appearance_row_glass_edge">Edge</string>
+    <string name="appearance_row_tool_colours">Tool colours</string>
+    <!-- The dot after a row's label, as accessibility reads it. -->
+    <string name="appearance_row_own_value">Set here</string>
+    <!-- Under Visible while the frame shows the other orientation. -->
+    <string name="appearance_wallpaper_change">Change</string>
+    <string name="appearance_wallpaper_shown">Show wallpaper</string>
+
+    <!-- A glass strip's legend beside its track: the row's name and its value ("Frost · 20%"). -->
+    <string name="appearance_strip_legend">%1$s · %2$s</string>
+    <!-- Over the Appearance card's glass strip at the Custom stop: the values every surface shares. -->
+    <string name="appearance_strip_all_surfaces">All surfaces</string>
+
+    <!-- Under the Home card's Glass widgets switch: moving it resets every widget's own choice. -->
+    <string name="appearance_glass_widgets_note">Applies to every widget. A widget can still choose its own look in its settings.</string>
+
+    <!-- Row values. -->
+    <string name="appearance_readout_percent">%1$d%%</string>
+    <string name="appearance_readout_dp">%1$d dp</string>
+    <string name="appearance_readout_times">%1$s×</string>
+
+    <!-- Segment choices: short, so three fit a phone at a large font size. -->
+    <string name="appearance_contrast_softer">Softer</string>
+    <string name="appearance_contrast_default">Default</string>
+    <string name="appearance_contrast_harder">Harder</string>
+    <string name="appearance_size_small">Small</string>
+    <string name="appearance_size_medium">Medium</string>
+    <string name="appearance_size_large">Large</string>
+    <string name="appearance_folders_compact">Compact</string>
+    <string name="appearance_folders_default">Default</string>
+    <string name="appearance_folders_roomy">Roomy</string>
+    <string name="appearance_numerals_sans">Sans</string>
+    <string name="appearance_numerals_mono">Mono</string>
+    <string name="appearance_form_docked">Docked</string>
+    <string name="appearance_form_floating">Floating</string>
+    <string name="appearance_form_split">Split</string>
+    <string name="appearance_theme_system">System</string>
+    <string name="appearance_theme_light">Light</string>
+    <string name="appearance_theme_dark">Dark</string>
 </resources>

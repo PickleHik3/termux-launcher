@@ -205,6 +205,9 @@ public final class WallpaperBackdropView extends View {
             && getWidth() > 0 && getHeight() > 0;
     }
 
+    /** Frame-source counter for the idle audit: wallpaperCrossfade. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("wallpaperCrossfade");
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         Bitmap frame = mFrame;
@@ -222,6 +225,7 @@ public final class WallpaperBackdropView extends View {
             // geometry held, never across a rotation — so one dest rect draws either of them.
             drawFrame(canvas, previous, 255);
             drawFrame(canvas, frame, Math.round(255f * progress));
+            FRAMES.tick();
             postInvalidateOnAnimation();
         } else {
             mPreviousFrame = null;

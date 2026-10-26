@@ -20,8 +20,14 @@ import java.util.List;
 
 /**
  * The terminal effect on the launcher's own surfaces: the status bar, the dock and the bars off
- * it, the keyboard docked or floating, and the Docked frame's glass, so the whole home screen
- * reads as one CRT or TFT display with the panes.
+ * it, the keyboard docked or floating, and the Docked frame's glass, so the Workspace reads as one
+ * CRT or TFT display with the panes.
+ *
+ * <p>Only the Workspace's chrome wears it. On Home the same chrome (one dock, one status bar for
+ * both halves) is drawn plain: scanlines over the pinned apps' icons and the widgets read as a
+ * fault, not a look. A crossing switches it at the landing ({@link #setOnHome}), never per frame:
+ * a fade would mean a new effect chain on every root on every frame of the slide, and the chrome
+ * does not move during a crossing, so at rest it costs nothing.</p>
  *
  * <p>The effect is drawn on a short, fixed list of containers rather than on each bar. A place
  * moves bars between the four edge stacks, the plank and the strip under the keyboard; every one
@@ -71,6 +77,17 @@ public final class ChromeRetroEffect {
     @NonNull private final List<RetroEffectBinder> mAdopted = new ArrayList<>();
     @NonNull private final PreDrawHook mScan;
     @NonNull private PaneRetroStyle mStyle = PaneRetroStyle.NONE;
+    /** Whether the wall rests on Home, where the chrome is drawn plain. */
+    private boolean mOnHome;
+
+    /**
+     * The look the chrome is drawn through: the user's terminal effect on the Workspace, none on
+     * Home.
+     */
+    @NonNull
+    public static PaneRetroStyle chromeStyle(@Nullable PaneRetroStyle style, boolean onHome) {
+        return style == null || onHome ? PaneRetroStyle.NONE : style;
+    }
 
     /** @param root the activity's root view, which holds every id in {@link #ROOT_IDS} */
     public ChromeRetroEffect(@NonNull View root) {
@@ -92,14 +109,36 @@ public final class ChromeRetroEffect {
         PaneRetroStyle next = style == null || !PaneRetroEffect.available()
             ? PaneRetroStyle.NONE : style;
         mStyle = next;
-        for (RetroEffectBinder binder : mFixed) binder.setStyle(next);
-        adoptTransientSurfaces();
-        mScan.setOn(next != PaneRetroStyle.NONE);
+        apply();
     }
 
+    /**
+     * Where the wall rests: on Home the chrome is drawn plain, on the Workspace through the
+     * style. Called when the wall lands, so a crossing changes it once, at the landing.
+     */
+    public void setOnHome(boolean onHome) {
+        if (mOnHome == onHome) return;
+        mOnHome = onHome;
+        apply();
+    }
+
+    private void apply() {
+        PaneRetroStyle drawn = drawnStyle();
+        for (RetroEffectBinder binder : mFixed) binder.setStyle(drawn);
+        adoptTransientSurfaces();
+        mScan.setOn(drawn != PaneRetroStyle.NONE);
+    }
+
+    /** The user's style, whatever the wall rests on. */
     @NonNull
     public PaneRetroStyle style() {
         return mStyle;
+    }
+
+    /** The style the chrome is drawn through now: {@link #style()}, or NONE on Home. */
+    @NonNull
+    public PaneRetroStyle drawnStyle() {
+        return chromeStyle(mStyle, mOnHome);
     }
 
     /** The views the effect is drawn on now, fixed and adopted; for tests. */
@@ -118,13 +157,14 @@ public final class ChromeRetroEffect {
      * a handful of child reads, and nothing allocated unless a surface arrived.
      */
     private void adoptTransientSurfaces() {
+        PaneRetroStyle drawn = drawnStyle();
         for (int i = mAdopted.size() - 1; i >= 0; i--) {
             RetroEffectBinder binder = mAdopted.get(i);
-            if (mStyle != PaneRetroStyle.NONE && binder.view().isAttachedToWindow()) continue;
+            if (drawn != PaneRetroStyle.NONE && binder.view().isAttachedToWindow()) continue;
             binder.release();
             mAdopted.remove(i);
         }
-        if (mStyle == PaneRetroStyle.NONE) return;
+        if (drawn == PaneRetroStyle.NONE) return;
         adoptChildren(mFloatingKeyboardHost, FloatingKeyboardFrame.class);
         // The popup floats in the window's content view, beside this root, so that a top-row
         // popup is not clipped by the keyboard (KeyPopupController.findPopupHost).
@@ -140,7 +180,7 @@ public final class ChromeRetroEffect {
             if (type.isInstance(child) && !isAdopted(child)) {
                 RetroEffectBinder binder = RetroEffectBinder.flat(child);
                 mAdopted.add(binder);
-                binder.setStyle(mStyle);
+                binder.setStyle(drawnStyle());
             }
         }
     }

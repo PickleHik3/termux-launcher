@@ -1,28 +1,22 @@
 package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.surfaces.AppearanceLooks.Control;
-import com.termux.app.surfaces.AppearanceLooks.Door;
-import com.termux.app.surfaces.AppearanceLooks.Target;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
  * The Appearance editor's rules (appearance-layout-editor SPEC §3.3–3.4), held as arithmetic:
- * which Look each slider stop is, the Custom row's slider and button sets, and what Key corners,
+ * which Look each slider stop is, and what Key corners,
  * Key spacing, Icon size, Soft wallpaper's arithmetic and Layout's Corners and Margin write.
  */
 public class AppearanceLooksTest {
@@ -63,72 +57,7 @@ public class AppearanceLooksTest {
         assertEquals(AppearanceLooks.CUSTOM_STOP, AppearanceLooks.stopForPresetId("classic"));
     }
 
-    @Test
-    public void outOfRangeStopsAndSliderValuesClamp() {
-        assertEquals("minimal", AppearanceLooks.presetIdForStop(-3));
-        assertNull(AppearanceLooks.presetIdForStop(99));
-        assertTrue(AppearanceLooks.isCustomStop(99));
-        assertFalse(AppearanceLooks.isCustomStop(0));
-        assertEquals(0, AppearanceLooks.stopForSliderValue(-1f));
-        assertEquals(2, AppearanceLooks.stopForSliderValue(2.4f));
-        assertEquals(3, AppearanceLooks.stopForSliderValue(2.6f));
-        assertEquals(4, AppearanceLooks.stopForSliderValue(7f));
-        for (int stop = 0; stop < AppearanceLooks.STOP_COUNT; stop++)
-            assertEquals(stop, AppearanceLooks.stopForSliderValue(
-                AppearanceLooks.sliderValueForStop(stop)));
-    }
-
     // ------------------------------------------------------------------------------ the targets
-
-    /** The Custom row's sets, legend order, per selection (appearance final pass, section 5). */
-    @Test
-    public void eachSelectionHasItsSliderSet() {
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.VIBRANCY), AppearanceLooks.controls(null));
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.KEY_OPACITY, Control.KEY_RADIUS, Control.KEY_SPACING),
-            AppearanceLooks.controls(Target.KEYBOARD));
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.ICON_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.CONTRAST), AppearanceLooks.controls(Target.TERMINAL));
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT),
-            AppearanceLooks.controls(Target.STATUS));
-        for (Target target : Target.values()) {
-            assertTrue(target.name(), AppearanceLooks.controls(target).size()
-                <= AppearanceLooks.MAX_CONTROLS);
-            assertEquals("glass first, so the same columns stay under the thumb", Control.GLASS,
-                AppearanceLooks.controls(target).get(0));
-        }
-        assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null, true).size());
-    }
-
-    /**
-     * Edge (in the column Shade left, after Tint) and Depth (last) are the global set's while the
-     * glass edge is drawn, and absent otherwise; the one-argument form is the set without them.
-     * Six columns, the most any set has.
-     */
-    @Test
-    public void depthEndsTheGlobalSetOnlyWithTheGlassEdge() {
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT, Control.EDGE,
-            Control.VIBRANCY, Control.DEPTH), AppearanceLooks.controls(null, true));
-        assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null, true).size());
-        assertEquals(Arrays.asList(Control.GLASS, Control.OPACITY, Control.TINT,
-            Control.VIBRANCY), AppearanceLooks.controls(null, false));
-        assertEquals(AppearanceLooks.controls(null, false), AppearanceLooks.controls(null));
-    }
-
-    /** Depth is global: no element's set holds it, with the glass edge drawn or not. */
-    @Test
-    public void noElementHoldsDepth() {
-        for (Target target : Target.values()) {
-            assertEquals(target + " ignores the glass edge", AppearanceLooks.controls(target),
-                AppearanceLooks.controls(target, true));
-            assertEquals(AppearanceLooks.controls(target), AppearanceLooks.controls(target, false));
-            assertFalse(target + " never holds Depth",
-                AppearanceLooks.controls(target, true).contains(Control.DEPTH));
-        }
-    }
 
     /** Depth runs 0 to 100 over its own keys (GlassEdgeControls). */
     @Test
@@ -136,21 +65,6 @@ public class AppearanceLooksTest {
         assertEquals(0, Control.DEPTH.min);
         assertEquals(100, Control.DEPTH.max);
         assertEquals(1, Control.DEPTH.step);
-    }
-
-    /**
-     * The buttons above the sliders: Keyboard theme, Trail and Effect, Clock; the global set's
-     * Tint colour; none on the dock.
-     */
-    @Test
-    public void eachSelectionHasItsButtons() {
-        assertEquals(Collections.singletonList(Door.TINT_HUE), AppearanceLooks.doors(null));
-        assertTrue(AppearanceLooks.doors(Target.DOCK).isEmpty());
-        assertEquals(Collections.singletonList(Door.KEYBOARD_THEME),
-            AppearanceLooks.doors(Target.KEYBOARD));
-        assertEquals(Arrays.asList(Door.TRAIL, Door.EFFECT),
-            AppearanceLooks.doors(Target.TERMINAL));
-        assertEquals(Collections.singletonList(Door.CLOCK), AppearanceLooks.doors(Target.STATUS));
     }
 
     /** Each control's range is the stored value's own, and its value round-trips. */
@@ -166,6 +80,10 @@ public class AppearanceLooksTest {
         assertEquals(3, Control.APP_ICONS.min);
         assertEquals(10, Control.APP_ICONS.max);
         assertEquals("three stops", 2, Control.CONTRAST.max);
+        assertEquals("Text size: 80%", 80, Control.TEXT_SIZE.min);
+        assertEquals("Text size: 150%", 150, Control.TEXT_SIZE.max);
+        assertEquals("Text size: today's sizes are a step",
+            0, (100 - Control.TEXT_SIZE.min) % Control.TEXT_SIZE.step);
         for (Control control : Control.values()) {
             assertEquals(control.name(), control.min, control.clamp(control.min - 50));
             assertEquals(control.name(), control.max, control.clamp(control.max + 50));
@@ -260,37 +178,7 @@ public class AppearanceLooksTest {
         assertEquals(10, AppearanceLooks.appIconsValueFor(20));
     }
 
-    @Test
-    public void aLegendNameIsTheTextBeforeTheSeparator() {
-        assertEquals("Blur", AppearanceLooks.legendName("Blur · 12 dp"));
-        assertEquals("Contrast", AppearanceLooks.legendName("Contrast"));
-    }
-
     // ------------------------------------------------------------- layout editor v2: the global row
-
-    /** Row 2 is the global row only at Custom with nothing tapped (DECISIONS item 13). */
-    @Test
-    public void theGlobalRowShowsOnlyAtCustomWithNothingTapped() {
-        assertEquals(AppearanceLooks.Row.GLOBAL,
-            AppearanceLooks.rowFor(AppearanceLooks.CUSTOM_STOP, null));
-        for (Target target : Target.values()) {
-            assertEquals(AppearanceLooks.Row.ELEMENT,
-                AppearanceLooks.rowFor(AppearanceLooks.CUSTOM_STOP, target));
-        }
-        for (int stop = 0; stop < AppearanceLooks.CUSTOM_STOP; stop++) {
-            assertEquals("no global row on a Look stop", AppearanceLooks.Row.NONE,
-                AppearanceLooks.rowFor(stop, null));
-            assertEquals(AppearanceLooks.Row.NONE, AppearanceLooks.rowFor(stop, Target.DOCK));
-        }
-    }
-
-    /** A tap on bare wallpaper deselects at Custom and does nothing at a Look stop. */
-    @Test
-    public void aWallpaperTapGoesBackToTheGlobalSetOnlyAtCustom() {
-        assertTrue(AppearanceLooks.wallpaperTapDeselects(AppearanceLooks.CUSTOM_STOP));
-        for (int stop = 0; stop < AppearanceLooks.CUSTOM_STOP; stop++)
-            assertFalse(AppearanceLooks.wallpaperTapDeselects(stop));
-    }
 
     /** The global Opacity and Grain ranges cover every Look's value (DECISIONS item 13). */
     @Test
@@ -311,16 +199,6 @@ public class AppearanceLooksTest {
         }
         assertEquals(0, AppearanceLooks.opacityPercent(-5));
         assertEquals(100, AppearanceLooks.grainPercent(140));
-    }
-
-    @Test
-    public void targetsMapToTheirSurfaces() {
-        assertEquals(Target.TERMINAL, Target.forSlot(SurfaceSlot.CANVAS));
-        assertEquals(Target.STATUS, Target.forSlot(SurfaceSlot.STATUS));
-        assertEquals(Target.DOCK, Target.forSlot(SurfaceSlot.DOCK));
-        assertEquals(Target.KEYBOARD, Target.forSlot(SurfaceSlot.KEYBOARD));
-        assertNull(Target.forSlot(null));
-        assertEquals("the wallpaper is no target", 4, Target.values().length);
     }
 
     // ------------------------------------------------------------------------- Key corners
@@ -350,22 +228,12 @@ public class AppearanceLooksTest {
         assertEquals(48, AppearanceLooks.marginDp(90));
     }
 
-    /** The terminal's own margin never goes past 24, however much air Margin asks for. */
+    /** Split gap is the terminal's own slider, 0 to 24 dp in whole dp, last in its row. */
     @Test
-    public void marginCapsTheTerminalsShareAtTwentyFour() {
-        assertEquals(0, AppearanceLooks.terminalMarginDp(0));
-        assertEquals(12, AppearanceLooks.terminalMarginDp(12));
-        assertEquals(24, AppearanceLooks.terminalMarginDp(24));
-        assertEquals(24, AppearanceLooks.terminalMarginDp(40));
-        assertEquals(24, AppearanceLooks.terminalMarginDp(200));
-    }
-
-    /** Margin reads the side gap under both Styles: air under Floating, the gutter under Docked. */
-    @Test
-    public void marginReadsTheSideGapUnderBothStyles() {
-        assertEquals(30, AppearanceLooks.marginValueFor(true, 30, 6));
-        assertEquals(30, AppearanceLooks.marginValueFor(false, 30, 6));
-        assertEquals(48, AppearanceLooks.marginValueFor(true, 99, 6));
+    public void splitGapIsTheTerminalsLastSlider() {
+        assertEquals(0, Control.SPLIT_GAP.min);
+        assertEquals(24, Control.SPLIT_GAP.max);
+        assertEquals(1, Control.SPLIT_GAP.step);
     }
 
     // --------------------------------------------------------------------------- Soft and Dim

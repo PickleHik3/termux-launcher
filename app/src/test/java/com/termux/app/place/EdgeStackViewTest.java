@@ -203,6 +203,94 @@ public class EdgeStackViewTest {
         assertEquals(stack.getChildAt(0).getBottom(), stack.separatorCenters()[0]);
     }
 
+    // ------------------------------------------------ the status bar overlaying Home's canvas
+
+    private static final int COLUMN_WIDTH = 1080;
+    private static final int COLUMN_HEIGHT = 2201;
+    private static final int BAR_PX = 84;
+
+    /** The place column as activity_termux.xml builds it: the top stack, then the weighted band. */
+    private static final class Column {
+        LinearLayout column;
+        EdgeStackView top;
+        View bar;
+        View band;
+
+        void layOut() {
+            column.measure(
+                View.MeasureSpec.makeMeasureSpec(COLUMN_WIDTH, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(COLUMN_HEIGHT, View.MeasureSpec.EXACTLY));
+            column.layout(0, 0, COLUMN_WIDTH, COLUMN_HEIGHT);
+        }
+
+        int[] bandBounds() {
+            return new int[] {band.getTop(), band.getBottom()};
+        }
+    }
+
+    private Column column(boolean barShown) {
+        Column c = new Column();
+        c.column = new LinearLayout(mActivity);
+        c.column.setOrientation(LinearLayout.VERTICAL);
+        c.top = stack(Edge.TOP);
+        c.bar = new View(mActivity);
+        c.bar.setVisibility(barShown ? View.VISIBLE : View.GONE);
+        c.top.addView(c.bar, new LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT, BAR_PX));
+        c.column.addView(c.top, new LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        c.band = new View(mActivity);
+        c.column.addView(c.band, new LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        return c;
+    }
+
+    @Test public void anOverlayingBarLeavesTheCanvasItsBoundsWithoutTheBar() {
+        Column without = column(false);
+        without.layOut();
+        int[] expected = without.bandBounds();
+        assertEquals(0, expected[0]);
+        assertEquals(COLUMN_HEIGHT, expected[1]);
+
+        Column with = column(true);
+        assertTrue(with.top.overlayFollowing(with.band, BAR_PX));
+        with.layOut();
+        assertEquals("the bar's own band is still where it stands", BAR_PX,
+            with.top.getHeight());
+        assertEquals("the canvas starts where it does without the bar", expected[0],
+            with.bandBounds()[0]);
+        assertEquals("and keeps its whole height: the emulator lost the bar's 84 px at the bottom",
+            expected[1], with.bandBounds()[1]);
+        assertEquals("the bar is raised to draw and take touches over the canvas", 1f,
+            with.top.getTranslationZ(), 0f);
+    }
+
+    @Test public void aNegativeMarginAloneOnlySlidesTheCanvasUp() {
+        // The first cut, kept as the reason overlayFollowing asks for a base height too: a
+        // LinearLayout clamps a negative margin out of the length it shares among weighted
+        // children, so the canvas moved up under the bar but came short at the bottom by as much.
+        Column with = column(true);
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) with.band.getLayoutParams();
+        params.topMargin = -BAR_PX;
+        with.band.setLayoutParams(params);
+        with.layOut();
+        assertEquals(0, with.bandBounds()[0]);
+        assertEquals(COLUMN_HEIGHT - BAR_PX, with.bandBounds()[1]);
+    }
+
+    @Test public void noOverlapGivesTheCanvasItsOwnRowBack() {
+        Column with = column(true);
+        with.top.overlayFollowing(with.band, BAR_PX);
+        assertTrue(with.top.overlayFollowing(with.band, 0));
+        assertFalse("asking again changes nothing", with.top.overlayFollowing(with.band, 0));
+        with.layOut();
+        assertEquals("the Workspace: the bar takes its row and the canvas starts under it",
+            BAR_PX, with.bandBounds()[0]);
+        assertEquals(COLUMN_HEIGHT, with.bandBounds()[1]);
+        assertEquals(0f, with.top.getTranslationZ(), 0f);
+    }
+
     @Test public void aStackCarriesNoPaddingOfItsOwn() {
         // The cutout used to be each side stack's own padding, from the days when the two stood
         // outside the padded content root; they stand inside the canvas band now, so the root keeps

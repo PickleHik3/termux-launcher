@@ -155,7 +155,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // there may be no active pane yet at activity onCreate. Guard the initial font/keep-on setup.
         TerminalView view = mHost.focusedView();
         if (view != null)
-            view.setTextSize(mHost.preferences().getFontSize());
+            view.setTextSize(mHost.preferences().textScaledFontSize(
+                mHost.preferences().getFontSize()));
         mHost.requestFlushDockGeometryUpdate();
         if (view != null) {
             view.setKeepScreenOn(mHost.preferences().shouldKeepScreenOn());
@@ -184,13 +185,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     /**
      * Whether a pane paints the empty band around its text grid with the background colour of the
-     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). Pure preference, unlike
-     * the cursor trail: nothing about the device's power state should turn this back off.
+     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). It follows the Wallpaper
+     * colors switch and nothing else, unlike the cursor trail: nothing about the device's power
+     * state should turn this back off.
      */
     public void applyPaddingFillPolicy(TerminalView view) {
         if (view == null)
             return;
-        view.setPaddingFillEnabled(mHost.preferences().isTerminalPaddingFillEnabled());
+        view.setPaddingFillEnabled(mHost.preferences().isTerminalDynamicColorsEnabled());
     }
 
     /**
@@ -316,7 +318,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onSingleTapUp(MotionEvent e) {
-        TerminalEmulator term = mHost.currentSession().getEmulator();
+        // The Workspace may be empty (no shell at all); a tap then has nothing to reach.
+        TerminalSession session = mHost.currentSession();
+        TerminalEmulator term = session == null ? null : session.getEmulator();
+        if (term == null) return;
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             // Switched off, a tap is only a tap: the keyboard waits for its own key.
             if (isKeyboardTurnedOff()) return;
@@ -461,7 +466,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     /**
      * The launcher's own chord space, for a surface that has taken the keyboard away from the
-     * terminal — the wall's Display page, where an X client owns every ordinary key.
+     * terminal — the display window, where an X client owns every ordinary key.
      *
      * <p>The rule is deliberately narrow: only a stroke holding <em>both</em> Ctrl and Alt is
      * the launcher's, and only when it resolves to a binding. Every default binding lives in
@@ -981,7 +986,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     if (codePointLowerCase == shortcut.codePoint) {
                         switch(shortcut.shortcutAction) {
                             case TermuxPropertyConstants.ACTION_SHORTCUT_CREATE_SESSION:
-                                mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+                                if (!mHost.openNewTerminalOnHome(null))
+                                    mTermuxTerminalSessionActivityClient.addNewSession(false, null);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_NEXT_SESSION:
                                 mTermuxTerminalSessionActivityClient.switchToSession(true);
@@ -1035,7 +1041,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * pinned size, the scratchpad keeps its own, and the rest follow the new
      * default.
      */
-    void applyGlobalFontSize() {
+    public void applyGlobalFontSize() {
         if (!mHost.refreshPaneFontSizes()) {
             // No pane controller (compatibility mode): the single view follows the default.
             TerminalSession current = mHost.currentSession();
@@ -1043,7 +1049,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 return;
             TerminalView view = mHost.focusedView();
             if (view == null) return;
-            view.setTextSize(mHost.preferences().getFontSize());
+            view.setTextSize(mHost.preferences().textScaledFontSize(
+                mHost.preferences().getFontSize()));
         }
         mHost.requestFlushDockGeometryUpdate();
     }
@@ -1055,7 +1062,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (scratchpad) {
             mHost.preferences().changeScratchpadFontSize(increase);
             TerminalView view = mHost.focusedView();
-            if (view != null) view.setTextSize(mHost.preferences().getScratchpadFontSize());
+            if (view != null) view.setTextSize(mHost.preferences().textScaledFontSize(
+                mHost.preferences().getScratchpadFontSize()));
         } else {
             // Zoom pins a per-pane size on the focused pane instead of moving the app-wide
             // default, so no other pane — in this window or any other — changes with it. Panes
@@ -1067,7 +1075,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 // No pane controller (compatibility mode): the single view follows the default.
                 mHost.preferences().setFontSize(size);
                 TerminalView view = mHost.focusedView();
-                if (view != null) view.setTextSize(size);
+                if (view != null) view.setTextSize(mHost.preferences().textScaledFontSize(size));
             }
         }
         mHost.requestFlushDockGeometryUpdate();

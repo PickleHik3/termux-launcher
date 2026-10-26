@@ -38,7 +38,7 @@ public final class X11DisplayHostController {
     /** How long to wait before asking the server for its socket again. */
     private static final long CONNECT_RETRY_MS = 250L;
 
-    /** What the Display page and the status-bar tile want to know. */
+    /** What the display window and the status-bar tile want to know. */
     public interface Listener {
         /** A server came up, or the one that was there has gone. */
         void onDisplayRunningChanged(boolean running);
@@ -154,7 +154,7 @@ public final class X11DisplayHostController {
 
     /**
      * The page's surface is available: take the view and connect it. Called every time the wall
-     * settles on the Display page, because a hidden page detaches its surface.
+     * settles on the display window, because a hidden page detaches its surface.
      */
     public void attachView(@NonNull LorieView view) {
         // A view that has left a window has dropped its clipboard listener with it, so every
@@ -407,14 +407,6 @@ public final class X11DisplayHostController {
     }
 
     /**
-     * Mouse mode's touchpad took the keyboard frame, or gave it back. While it is there its taps
-     * are the display's taps whatever the touch mode, so the policy reads them.
-     */
-    public void setPadUp(boolean up) {
-        textFocus.setPadUp(up);
-    }
-
-    /**
      * The user put the keyboard up or down themselves. Up is theirs and pins the policy off; down
      * hands the keyboard back to it.
      */
@@ -437,19 +429,12 @@ public final class X11DisplayHostController {
         return textFocus;
     }
 
-    /** The touch mode and the setting, both of which can move while the place is on screen. */
+    /** The setting, which can move while the place is on screen. */
     private void reloadTextFocusPreferences() {
-        com.termux.x11.Prefs prefs = LorieHost.getPrefs();
-        if (prefs != null) {
-            try {
-                textFocus.setTouchMode(Integer.parseInt(prefs.touchMode.get()));
-            } catch (NumberFormatException ignored) {
-                // An unreadable mode is not Touchscreen, so the policy sleeps.
-                textFocus.setTouchMode(0);
-            }
-        }
         TermuxAppSharedPreferences launcher = TermuxAppSharedPreferences.build(appContext);
-        textFocus.setEnabled(launcher == null || launcher.isX11KeyboardFollowsTextEnabled());
+        // Auto Keyboard needs fcitx5, so a stored "on" counts only once Linux apps are set up.
+        textFocus.setEnabled(GuiAppsSetupGuide.isSetUp(appContext)
+            && (launcher == null || launcher.isX11KeyboardFollowsTextEnabled()));
     }
 
     /** Hardware keys the page routes into X; true when X took the key. */

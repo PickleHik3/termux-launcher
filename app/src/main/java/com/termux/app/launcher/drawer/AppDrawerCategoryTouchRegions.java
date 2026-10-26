@@ -9,6 +9,12 @@ import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 public final class AppDrawerCategoryTouchRegions {
     public enum Part {
         OVERVIEW_LIST, EXPAND_ACTION, DETAIL_LIST, COLLAPSE_ACTION,
+        /**
+         * An open folder's pane outside its header and grid: the band above a short folder's
+         * bottom-anchored rows. It is the folder's, not the plane's, so a pull down here collapses
+         * the folder instead of closing the drawer.
+         */
+        DETAIL_EMPTY,
         TRANSITION_BODY, EMPTY_CHROME, OUTSIDE
     }
 
@@ -29,7 +35,9 @@ public final class AppDrawerCategoryTouchRegions {
         }
         if (contains(detailHeader, x, y)) return Part.COLLAPSE_ACTION;
         if (contains(detailList, x, y)) return Part.DETAIL_LIST;
-        return Part.EMPTY_CHROME;
+        // The rest of an open folder's pane is the folder's, as the view resolves it
+        // (AppDrawerCategoryView#touchPart): a pull there collapses the folder.
+        return Part.DETAIL_EMPTY;
     }
 
     public static boolean isContentOwned(@NonNull Part part) {
@@ -38,6 +46,7 @@ public final class AppDrawerCategoryTouchRegions {
             case EXPAND_ACTION:
             case DETAIL_LIST:
             case COLLAPSE_ACTION:
+            case DETAIL_EMPTY:
             case TRANSITION_BODY:
                 return true;
             default:

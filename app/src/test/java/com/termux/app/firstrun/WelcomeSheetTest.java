@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The setup sheet's rules: which rows it carries, where each switch starts, what the weather switch
+ * The setup sheet's rules: the first page's Use as choice and Continue, which rows it carries, where each switch starts, what the weather switch
  * reveals, how the contacts switch follows the permission, and how the AI switch, its ticks and
  * the size in its sentence move together.
  */
@@ -219,6 +219,34 @@ public class WelcomeSheetTest {
         assertEquals(E2B, queued.get(3));
         sheet.setOn(WelcomeSheet.Row.AI, false);
         assertTrue(sheet.downloadsOnLeave(SIZE_TABLE, 100 * GIB).isEmpty());
+    }
+
+    @Test public void theFirstPageAsksUseAsStartingOnHomeScreen() {
+        WelcomeSheet sheet = WelcomeSheet.from(firstLaunch());
+        assertEquals(WelcomeSheet.Page.USE_AS, sheet.page());
+        assertEquals(com.termux.app.wall.UseAs.HOME, sheet.useAs());
+    }
+
+    @Test public void aReplayStartsOnWhatTheLauncherIsUsedAsNow() {
+        WelcomeSheet.Start start = firstLaunch();
+        start.useAs = com.termux.app.wall.UseAs.TERMINAL;
+        assertEquals(com.termux.app.wall.UseAs.TERMINAL, WelcomeSheet.from(start).useAs());
+    }
+
+    @Test public void continueAppliesTheChoiceOnceAndShowsTheSwitches() {
+        WelcomeSheet sheet = WelcomeSheet.from(firstLaunch());
+        sheet.chooseUseAs(com.termux.app.wall.UseAs.TERMINAL);
+        sheet.chooseUseAs(com.termux.app.wall.UseAs.HOME);
+        sheet.chooseUseAs(com.termux.app.wall.UseAs.TERMINAL);
+        assertEquals("nothing is applied before Continue", WelcomeSheet.Page.USE_AS, sheet.page());
+
+        assertEquals(com.termux.app.wall.UseAs.TERMINAL, sheet.continueFromUseAs());
+
+        assertEquals(WelcomeSheet.Page.SETUP, sheet.page());
+        assertEquals("a second Continue applies nothing", null, sheet.continueFromUseAs());
+        sheet.chooseUseAs(com.termux.app.wall.UseAs.HOME);
+        assertEquals("past the first page the choice stands",
+            com.termux.app.wall.UseAs.TERMINAL, sheet.useAs());
     }
 
     @Test public void aSelectionThatDoesNotFitTheStorageQueuesNothing() {

@@ -1,6 +1,7 @@
 package com.termux.app.tour;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 /**
@@ -32,6 +33,19 @@ public final class TourStep {
         BELOW
     }
 
+    /**
+     * Which half of the wall a stage is taught on (ADR 0008). A card read while the wall rests on
+     * the other half has nothing to point at, and asks the way there instead.
+     */
+    public enum Side {
+        /** A Home page: its free area and the dock rows that float over it. */
+        HOME,
+        /** A window of the Workspace: its border, its grabbers, its corner tab, the status bar. */
+        WORKSPACE,
+        /** Wherever the wall rests: the closing card, and gestures both halves answer. */
+        ANYWHERE
+    }
+
     /** What kind of card this is. */
     public enum Kind {
         /** A lesson: one control and one gesture per stage, cleared by watching the user do it. */
@@ -42,20 +56,44 @@ public final class TourStep {
 
     /** One stage of a lesson: what the card says, what it points at, and what clears it. */
     public static final class Stage {
+        /** The half of the wall the stage's control stands on. */
+        @NonNull public final Side side;
         @StringRes public final int titleRes;
         @StringRes public final int bodyRes;
         @NonNull public final String targetId;
         @NonNull public final String signal;
+        /**
+         * Another signal that clears the stage as well, or null: a second way to do the same thing
+         * (the apps lesson's drawer pull, and the tap on the A-Z letters that lays a letter's apps
+         * out in the row).
+         */
+        @Nullable public final String alsoSignal;
         @NonNull public final TourGesture gesture;
 
+        /** A stage read wherever the wall rests. */
         public Stage(@StringRes int titleRes, @StringRes int bodyRes, @NonNull String targetId,
                      @NonNull String signal, @NonNull TourGesture gesture) {
+            this(Side.ANYWHERE, titleRes, bodyRes, targetId, signal, gesture);
+        }
+
+        public Stage(@NonNull Side side, @StringRes int titleRes, @StringRes int bodyRes,
+                     @NonNull String targetId, @NonNull String signal,
+                     @NonNull TourGesture gesture) {
+            this(side, titleRes, bodyRes, targetId, signal, null, gesture);
+        }
+
+        /** As above, cleared by {@code alsoSignal} too. */
+        public Stage(@NonNull Side side, @StringRes int titleRes, @StringRes int bodyRes,
+                     @NonNull String targetId, @NonNull String signal,
+                     @Nullable String alsoSignal, @NonNull TourGesture gesture) {
             if (titleRes == 0 || bodyRes == 0)
                 throw new IllegalArgumentException("a stage needs a title and a sentence");
+            this.side = side;
             this.titleRes = titleRes;
             this.bodyRes = bodyRes;
             this.targetId = targetId;
             this.signal = signal;
+            this.alsoSignal = alsoSignal;
             this.gesture = gesture;
         }
     }
@@ -118,6 +156,18 @@ public final class TourStep {
         return stage >= 0 && stage < stages.length ? stages[stage].signal : null;
     }
 
+    /** The other signal that clears {@code stage} too, or null when it has only the one. */
+    @Nullable
+    public String alsoSignalAt(int stage) {
+        return stage >= 0 && stage < stages.length ? stages[stage].alsoSignal : null;
+    }
+
+    /** Whether {@code signalId} clears {@code stage}: its signal, or the other one it takes. */
+    public boolean clearedBy(int stage, @Nullable String signalId) {
+        if (signalId == null || stage < 0 || stage >= stages.length) return false;
+        return signalId.equals(stages[stage].signal) || signalId.equals(stages[stage].alsoSignal);
+    }
+
     /** The control to glow at {@code stage}; nothing on the closing card. */
     @NonNull
     public String targetIdAt(int stage) {
@@ -152,22 +202,23 @@ public final class TourStep {
         return stages[Math.max(0, Math.min(stage, stages.length - 1))];
     }
 
-    /**
-     * Whether this card's controls live on the terminal place. The status bar is on every place
-     * and so is the page's own border with the two pills on it; everything else — the keyboard,
-     * the panes, the dock — is the terminal's, and a card asking for it while the wall rests on
-     * another place is asking for a control that is not there.
-     */
-    public boolean taughtOnTheTerminal() {
-        for (Stage stage : stages)
-            if (!isOnEveryPlace(stage.targetId)) return true;
-        return false;
+    /** The half of the wall {@code stage} is taught on; anywhere on the closing card. */
+    @NonNull
+    public Side sideAt(int stage) {
+        Stage at = stageAt(stage);
+        return at == null ? Side.ANYWHERE : at.side;
     }
 
-    private static boolean isOnEveryPlace(@NonNull String target) {
-        return TourTargets.STATUS_BAR.equals(target) || TourTargets.NONE.equals(target)
-            || TourTargets.PAGE_BORDER.equals(target)
-            || TourTargets.KEYBOARD_GRABBER.equals(target)
-            || TourTargets.STATUS_GRABBER.equals(target);
+    /**
+     * Whether {@code stage} can be read where the wall rests. A stage taught anywhere always can,
+     * and so can every stage while the wall has not said where it rests: a card asking for a
+     * control on the other half is asking for one that is not on screen.
+     *
+     * @param wallSide the half the wall rests on, or null while it has not said
+     */
+    public boolean isTaughtOn(int stage, @Nullable Side wallSide) {
+        Side side = sideAt(stage);
+        return side == Side.ANYWHERE || wallSide == null || wallSide == Side.ANYWHERE
+            || side == wallSide;
     }
 }

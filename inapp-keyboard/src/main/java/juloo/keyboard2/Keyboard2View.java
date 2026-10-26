@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RenderNode;
 import android.graphics.RectF;
 import android.graphics.SweepGradient;
 import android.os.Build;
@@ -68,6 +69,7 @@ public class Keyboard2View extends View
 
   /** Host-owned multiplier for both Config key-margin ratios. */
   private float _keyMarginScale = 1f;
+  private float _labelScale = 1f;
 
   /** Host-owned radius override in px, or -1 to use Config/palette geometry. */
   private float _keyCornerRadiusOverridePx = -1f;
@@ -115,6 +117,22 @@ public class Keyboard2View extends View
   private final SparseArray<Trail> _trails = new SparseArray<Trail>();
   private final SparseArray<TouchFx> _touchFx = new SparseArray<TouchFx>();
   private final ArrayList<TouchFx> _releasedTouchFx = new ArrayList<TouchFx>();
+
+  /** Which way the press highlight animates; see {@link PressFxMode}. */
+  private static final PressFxMode PRESS_FX_MODE =
+      new PressFxMode(com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
+  /** One tick per frame the press highlight asks for, whichever way it is drawn. */
+  private static final com.termux.terminal.FrameProbe.Source PRESS_FX_FRAMES =
+      com.termux.terminal.FrameProbe.source("keyboardPressFx");
+  /** The caps the press overlay draws, as the last onDraw laid them out. */
+  private final ArrayList<PressFxEntry> _pressFxEntries = new ArrayList<PressFxEntry>();
+  private RenderNode _pressFxNode;
+  private boolean _pressFxTickPosted;
+  private boolean _pressFxNodeHasCaps;
+  private final Runnable _pressFxTick = new Runnable()
+  {
+    @Override public void run() { onPressFxTick(); }
+  };
 
   /**
    * Host hook that may send a plain tap as a neighbouring key, and that is
@@ -908,6 +926,29 @@ public class Keyboard2View extends View
     return _keyMarginScale;
   }
 
+  /**
+   * Scales the key legends (main labels and sublabels) without touching key
+   * geometry. The sizes are derived during measurement, so a change asks for
+   * one layout; the same scale again does nothing.
+   */
+  public void setLabelScale(float labelScale)
+  {
+    requireMainThread();
+    if (Float.isNaN(labelScale) || Float.isInfinite(labelScale)
+        || labelScale <= 0f)
+      throw new IllegalArgumentException("labelScale must be finite and positive");
+    if (Float.compare(_labelScale, labelScale) == 0)
+      return;
+    _labelScale = labelScale;
+    requestLayout();
+    invalidate();
+  }
+
+  public float getLabelScale()
+  {
+    return _labelScale;
+  }
+
   /** Overrides key corner radius in px; -1 restores Config/palette geometry. */
   public void setKeyCornerRadiusOverride(float radiusPx)
   {
@@ -1617,14 +1658,30 @@ public class Keyboard2View extends View
   {
     // [key_up] must be called before [updateFlags]. The latter might disable
     // flags.
-    _config.handler.key_up(k, mods);
+    android.os.Trace.beginSection("Keyboard.commit");
+    try
+    {
+      _config.handler.key_up(k, mods);
+    }
+    finally
+    {
+      android.os.Trace.endSection();
+    }
     updateFlags();
     invalidate();
   }
 
   public void onPointerHold(KeyValue k, Pointers.Modifiers mods)
   {
-    _config.handler.key_up(k, mods);
+    android.os.Trace.beginSection("Keyboard.commit");
+    try
+    {
+      _config.handler.key_up(k, mods);
+    }
+    finally
+    {
+      android.os.Trace.endSection();
+    }
     updateFlags();
   }
 
@@ -1667,13 +1724,22 @@ public class Keyboard2View extends View
         float ty = event.getY(p);
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
-        KeyboardData.Key key = getKeyAtPosition(tx, ty);
-        if (key != null)
+        com.termux.terminal.TouchDownListener.fire();
+        android.os.Trace.beginSection("Keyboard.down");
+        try
         {
-          startTouchFx(event.getPointerId(p), key, tx, ty, event.getTouchMajor(p));
-          _pointers.onTouchDown(tx, ty, event.getPointerId(p), key);
-          if (_config.swipeTrailEnabled)
-            _trails.put(event.getPointerId(p), new Trail(tx, ty));
+          KeyboardData.Key key = getKeyAtPosition(tx, ty);
+          if (key != null)
+          {
+            startTouchFx(event.getPointerId(p), key, tx, ty, event.getTouchMajor(p));
+            _pointers.onTouchDown(tx, ty, event.getPointerId(p), key);
+            if (_config.swipeTrailEnabled)
+              _trails.put(event.getPointerId(p), new Trail(tx, ty));
+          }
+        }
+        finally
+        {
+          android.os.Trace.endSection();
         }
         break;
       case MotionEvent.ACTION_MOVE:
@@ -1809,7 +1875,16 @@ public class Keyboard2View extends View
   private void releaseTouchFx(TouchFx fx, long now)
   {
     fx.releasedAt = now;
+    PressFxMode.Mode mode = PRESS_FX_MODE.current(now);
+    if (mode == PressFxMode.Mode.NOFADE)
+    {
+      // No fade: the highlight is gone at release, and one redraw shows that.
+      invalidate();
+      return;
+    }
     _releasedTouchFx.add(fx);
+    if (mode == PressFxMode.Mode.OVERLAY)
+      invalidate();
   }
 
   private boolean onPaintTouch(MotionEvent event)
@@ -1879,6 +1954,91 @@ public class Keyboard2View extends View
         return row;
     }
     return null;
+  }
+
+  /**
+   * Whether a touch at ({@code tx}, {@code ty}), in this view's coordinates, lands on a drawn key:
+   * inside the key's own rectangle, not in the gap to its neighbours (half a key margin on each
+   * side) nor on the margins around the rows (above the top row, beside and under the rows). Those
+   * are the keyboard's frame rather than any key's. A press still starts a key by its whole cell,
+   * as {@link #onTouch} reads it. The long-press popup does not use this: it reads
+   * {@link #drawnKeyRectAt} and keeps only a key's core, so gaps, key edges and margins open it.
+   */
+  public boolean hasKeyAt(float tx, float ty)
+  {
+    KeyboardData.Key key = getKeyAtPosition(tx, ty);
+    if (key == null || _tc == null)
+      return false;
+    float halfV = _tc.vertical_margin / 2f;
+    float halfH = _tc.horizontal_margin / 2f;
+    // The cell's row, and the cell's horizontal span.
+    float y = getPaddingTop() + _config.marginTopPx;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      float top = y + row.shift * _tc.row_height;
+      y = top + row.height * _tc.row_height;
+      if (ty < y)
+      {
+        if (ty < top + halfV || ty >= y - halfV)
+          return false;
+        break;
+      }
+    }
+    float x = _marginLeft;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      if (!row.keys.contains(key))
+        continue;
+      for (KeyboardData.Key k : row.keys)
+      {
+        float xLeft = x + k.shift * _keyWidth;
+        float xRight = xLeft + k.width * _keyWidth;
+        if (k == key)
+          return tx >= xLeft + halfH && tx < xRight - halfH;
+        x = xRight;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * The drawn rectangle, in this view's coordinates, of the key whose cell holds ({@code tx},
+   * {@code ty}), with the same arithmetic as {@link #onDraw}. False, and {@code out} untouched,
+   * when no key's cell holds the point (the band above the top row, the side margins, the strip
+   * under the rows). A point in the gap beside a key still gives that key's rectangle; the caller
+   * decides how far inside it counts as the key.
+   */
+  public boolean drawnKeyRectAt(float tx, float ty, RectF out)
+  {
+    if (_keyboard == null || _tc == null)
+      return false;
+    KeyboardData.Row hitRow = getRowAtPosition(ty);
+    KeyboardData.Key key = getKeyAtPosition(tx, ty);
+    if (hitRow == null || key == null)
+      return false;
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      if (row == hitRow)
+      {
+        float x = _marginLeft + _tc.margin_left;
+        for (KeyboardData.Key k : row.keys)
+        {
+          x += k.shift * _keyWidth;
+          if (k == key)
+          {
+            out.set(x, y, x + _keyWidth * k.width - _tc.horizontal_margin,
+                y + row.height * _tc.row_height - _tc.vertical_margin);
+            return true;
+          }
+          x += _keyWidth * k.width;
+        }
+        return false;
+      }
+      y += row.height * _tc.row_height;
+    }
+    return false;
   }
 
   private KeyboardData.Key getKeyAtPosition(float tx, float ty)
@@ -1981,7 +2141,7 @@ public class Keyboard2View extends View
     float labelBaseSize = Math.min(
         _tc.row_height - _tc.vertical_margin,
         (width / 10f - _tc.horizontal_margin) * 3f / 2f)
-        * _config.characterSize;
+        * _config.characterSize * _labelScale;
     _mainLabelSize = labelBaseSize * _config.labelSizeRatio;
     _subLabelSize = labelBaseSize * _config.sublabelSizeRatio;
     int desiredHeight = (int)Math.ceil(
@@ -2009,6 +2169,8 @@ public class Keyboard2View extends View
       return;
     long now = SystemClock.uptimeMillis();
     pruneReleasedTouchFx(now);
+    boolean overlay = pressFxOverlayOn(now, canvas.isHardwareAccelerated());
+    _pressFxEntries.clear();
     _launchWaveDensity = getResources().getDisplayMetrics().density;
     boolean animateNextFrame = false;
     int hintTraceIndex = 0;
@@ -2022,92 +2184,31 @@ public class Keyboard2View extends View
       for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
       {
         KeyboardData.Key k = row.keys.get(keyIndex);
-        int keyIdValue = keyId(rowIndex, keyIndex);
-        KeyColorOverride hintOverride = _hintColorOverrides.get(keyIdValue);
-        KeyColorOverride schemeOverride = _keyColorOverrides.get(keyIdValue);
-        KeyColorOverride colorOverride =
-            hintOverride != null ? hintOverride : schemeOverride;
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
-        boolean isKeyDown = _pointers.isKeyDown(k)
-            || (_voiceTypingActive && isVoiceTypingKey(k));
         TouchFx touchFx = findTouchFx(k);
-        float fxStrength = touchFx == null ? 0f : touchFx.strength(now);
-        float launchStrength = launchWaveStrength(x + keyW / 2f, y + keyH / 2f);
-        int keySave = canvas.save();
-        if (touchFx != null && !touchFx.swiped && fxStrength > 0f)
+        if (overlay && touchFx != null && !touchFx.swiped && touchFx.strength(now) > 0f)
         {
-          float scale = 1f - 0.035f * fxStrength;
-          canvas.scale(scale, scale, x + keyW / 2f, y + keyH / 2f);
+          // Drawn by the press overlay, which animates without re-recording this view.
+          _pressFxEntries.add(new PressFxEntry(rowIndex, keyIndex, k, x, y, keyW, keyH,
+              hintTraceIndex, touchFx));
+          if (usesHintTrace(k, isKeyDownOf(k)))
+            hintTraceIndex++;
         }
-        Theme.Computed.Key tc_key;
-        if (isKeyDown)
-          tc_key = _tc.key_activated;
         else
-          tc_key = paintFor(k);
-        // A key-down cap paints the theme's activated colors, whatever overrides it.
-        OverrideSlots slots = _overrideSlots;
-        slots.clear();
-        if (!isKeyDown && colorOverride != null)
         {
-          if (hintOverride != null && _hintFadeAnimator != null)
-            fadeHintOverride(hintOverride, schemeOverride, tc_key, slots);
-          else
-            slots.set(colorOverride);
-          if (hintOverride != null)
-          {
-            // Only the hint lighting breathes; color-scheme overrides stay steady.
-            if (slots.hasBackground)
-              slots.background = hintBreathe(slots.background, keyIdValue);
-            if (slots.hasBorder)
-              slots.border = hintBreathe(slots.border, keyIdValue);
-          }
+          if (drawKey(canvas, rowIndex, keyIndex, k, x, y, keyW, keyH, now, touchFx,
+                hintTraceIndex))
+            hintTraceIndex++;
+          if (touchFx != null && touchFx.needsFrame(now))
+            animateNextFrame = true;
         }
-        // On a theme that draws no key borders only a colour-scheme border shows; the hint
-        // lighting's border stays a tint of an existing stroke, not a new outline.
-        boolean drawsBorder = slots.hasBorder && (tc_key.border_width > 0.f
-            || (schemeOverride != null && schemeOverride.borderColor != null));
-        drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, slots.hasBackground, slots.background,
-            drawsBorder, slots.border);
-        // The latched Ctrl/Alt/Shift caps are the hint popup's prefix indicator; trace them
-        // while the hint lighting is up. Latched modifiers render as key-down.
-        if (_hintColorOverrides.size() > 0 && _hintBreathAnimator != null && isKeyDown
-            && k.keys[0] != null && k.keys[0].getKind() == KeyValue.Kind.Modifier)
-          drawHintTrace(canvas, x, y, keyW, keyH, tc_key, hintTraceIndex++);
-        if (launchStrength > 0f)
-        {
-          _launchWavePaint.setColor(withAlpha(_launchWaveColor,
-              Math.round(30f * launchStrength)));
-          float chipInset = tc_key.border_width * 0.5f;
-          _tmpRect.set(x + chipInset, y + chipInset,
-              x + keyW - chipInset, y + keyH - chipInset);
-          float chipRadius = Math.max(0f, tc_key.border_radius - chipInset);
-          canvas.drawRoundRect(_tmpRect, chipRadius, chipRadius, _launchWavePaint);
-        }
-        if (touchFx != null && fxStrength > 0f)
-          drawTouchFx(canvas, touchFx, x, y, keyW, keyH, tc_key,
-              fxStrength);
-        if (k.keys[0] != null)
-          drawLabel(canvas, k.keys[0], keyW / 2f + x, y, keyH, isKeyDown, tc_key,
-              slots.hasPrimary, slots.primary);
-        for (int i = 1; i < 9; i++)
-        {
-          if (k.keys[i] != null)
-          {
-            boolean bottom = (i == 3 || i == 4) && slots.hasSecondaryBottom;
-            drawSubLabel(canvas, k.keys[i], x, y, keyW, keyH, i, isKeyDown, tc_key,
-                bottom || slots.hasSecondary,
-                bottom ? slots.secondaryBottom : slots.secondary);
-          }
-        }
-        drawIndication(canvas, k, x, y, keyW, keyH, _tc);
-        canvas.restoreToCount(keySave);
-        if (touchFx != null && touchFx.needsFrame(now))
-          animateNextFrame = true;
         x += _keyWidth * k.width;
       }
       y += row.height * _tc.row_height;
     }
+    if (overlay)
+      drawPressFxOverlay(canvas, now);
     if (_config.swipeTrailEnabled)
       for (int i = 0; i < _trails.size(); i++)
       {
@@ -2119,8 +2220,270 @@ public class Keyboard2View extends View
         canvas.drawLine(trail.startX, trail.startY, trail.endX, trail.endY,
             _trailPaint);
       }
-    if (animateNextFrame || !_releasedTouchFx.isEmpty())
+    if (animateNextFrame || releasedTouchFxNeedsFrames(overlay))
+    {
+      PRESS_FX_FRAMES.tick();
       postInvalidateOnAnimation();
+    }
+  }
+
+  /** Whether the released highlights left in the list are ones this view has to draw itself. */
+  private boolean releasedTouchFxNeedsFrames(boolean overlay)
+  {
+    if (!overlay)
+      return !_releasedTouchFx.isEmpty();
+    for (int i = 0; i < _releasedTouchFx.size(); i++)
+      if (_releasedTouchFx.get(i).swiped)
+        return true;
+    return false;
+  }
+
+  private boolean isKeyDownOf(KeyboardData.Key k)
+  {
+    return _pointers.isKeyDown(k) || (_voiceTypingActive && isVoiceTypingKey(k));
+  }
+
+  private boolean usesHintTrace(KeyboardData.Key k, boolean isKeyDown)
+  {
+    return _hintColorOverrides.size() > 0 && _hintBreathAnimator != null && isKeyDown
+        && k.keys[0] != null && k.keys[0].getKind() == KeyValue.Kind.Modifier;
+  }
+
+  /** A cap the press overlay draws: where the last onDraw put it, and the press it shows. */
+  private static final class PressFxEntry
+  {
+    final int rowIndex;
+    final int keyIndex;
+    final KeyboardData.Key key;
+    final float x;
+    final float y;
+    final float keyW;
+    final float keyH;
+    final int hintTraceIndex;
+    final TouchFx fx;
+
+    PressFxEntry(int rowIndex, int keyIndex, KeyboardData.Key key, float x, float y,
+        float keyW, float keyH, int hintTraceIndex, TouchFx fx)
+    {
+      this.rowIndex = rowIndex;
+      this.keyIndex = keyIndex;
+      this.key = key;
+      this.x = x;
+      this.y = y;
+      this.keyW = keyW;
+      this.keyH = keyH;
+      this.hintTraceIndex = hintTraceIndex;
+      this.fx = fx;
+    }
+  }
+
+  private boolean pressFxOverlayOn(long now, boolean hardware)
+  {
+    return hardware && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        && PRESS_FX_MODE.current(now) == PressFxMode.Mode.OVERLAY;
+  }
+
+  /**
+   * Records the pressed caps into the overlay node and draws it where the caps would have been,
+   * then keeps the node ticking. Everything in the node is what {@link #drawKey} would have drawn
+   * in place, so the look is the same; the difference is that the node alone is re-recorded while
+   * a press animates, not the whole keyboard.
+   */
+  private void drawPressFxOverlay(Canvas canvas, long now)
+  {
+    if (_pressFxEntries.isEmpty())
+    {
+      if (_pressFxNodeHasCaps)
+        recordPressFxNode(now);
+      return;
+    }
+    recordPressFxNode(now);
+    canvas.drawRenderNode(_pressFxNode);
+    for (int i = 0; i < _pressFxEntries.size(); i++)
+      if (_pressFxEntries.get(i).fx.needsFrame(now) && !_pressFxTickPosted)
+      {
+        _pressFxTickPosted = true;
+        postOnAnimation(_pressFxTick);
+        break;
+      }
+  }
+
+  private void recordPressFxNode(long now)
+  {
+    if (_pressFxNode == null)
+      _pressFxNode = new RenderNode("keyboardPressFx");
+    _pressFxNodeHasCaps = !_pressFxEntries.isEmpty();
+    int w = getWidth();
+    int h = getHeight();
+    _pressFxNode.setPosition(0, 0, w, h);
+    _pressFxNode.setClipToBounds(false);
+    Canvas rec = _pressFxNode.beginRecording(Math.max(1, w), Math.max(1, h));
+    try
+    {
+      for (int i = 0; i < _pressFxEntries.size(); i++)
+      {
+        PressFxEntry e = _pressFxEntries.get(i);
+        drawKey(rec, e.rowIndex, e.keyIndex, e.key, e.x, e.y, e.keyW, e.keyH, now, e.fx,
+            e.hintTraceIndex);
+      }
+    }
+    finally
+    {
+      _pressFxNode.endRecording();
+    }
+  }
+
+  /**
+   * One frame of the overlay animation. Re-records the node and asks the parent for a frame; the
+   * parent's list is re-recorded, this view's is not. When a press the node shows has ended, or
+   * the mode changed, this view is invalidated once so its caps are drawn in place again.
+   */
+  private void onPressFxTick()
+  {
+    _pressFxTickPosted = false;
+    if (_pressFxEntries.isEmpty() || !isAttachedToWindow())
+      return;
+    android.os.Trace.beginSection("Keyboard.pressFx");
+    try
+    {
+      long now = SystemClock.uptimeMillis();
+      pruneReleasedTouchFx(now);
+      boolean changed = !pressFxOverlayOn(now, isHardwareAccelerated());
+      boolean needsFrame = false;
+      for (int i = _pressFxEntries.size() - 1; i >= 0; i--)
+      {
+        PressFxEntry e = _pressFxEntries.get(i);
+        if (findTouchFx(e.key) != e.fx || e.fx.swiped || e.fx.strength(now) <= 0f)
+        {
+          _pressFxEntries.remove(i);
+          changed = true;
+        }
+        else if (e.fx.needsFrame(now))
+          needsFrame = true;
+      }
+      PRESS_FX_FRAMES.tick();
+      if (changed)
+      {
+        // Its caps go back into this view's own list, which one invalidate re-records.
+        if (!_pressFxEntries.isEmpty())
+          _pressFxEntries.clear();
+        recordPressFxNode(now);
+        invalidate();
+        return;
+      }
+      recordPressFxNode(now);
+      if (needsFrame)
+      {
+        _pressFxTickPosted = true;
+        postOnAnimation(_pressFxTick);
+      }
+      View parent = getParent() instanceof View ? (View)getParent() : null;
+      if (parent != null)
+        parent.invalidate();
+      else
+        invalidate();
+    }
+    finally
+    {
+      android.os.Trace.endSection();
+    }
+  }
+
+  /** Draws one key, its press highlight included; true when it drew the hint trace. */
+  private boolean drawKey(Canvas canvas, int rowIndex, int keyIndex, KeyboardData.Key k,
+      float x, float y, float keyW, float keyH, long now, TouchFx touchFx, int hintTraceIndex)
+  {
+    boolean usedHintTrace = false;
+    int keyIdValue = keyId(rowIndex, keyIndex);
+    KeyColorOverride hintOverride = _hintColorOverrides.get(keyIdValue);
+    KeyColorOverride schemeOverride = _keyColorOverrides.get(keyIdValue);
+    KeyColorOverride colorOverride =
+        hintOverride != null ? hintOverride : schemeOverride;
+    boolean isKeyDown = _pointers.isKeyDown(k)
+        || (_voiceTypingActive && isVoiceTypingKey(k));
+    float fxStrength = touchFx == null ? 0f : touchFx.strength(now);
+    float launchStrength = launchWaveStrength(x + keyW / 2f, y + keyH / 2f);
+    int keySave = canvas.save();
+    if (touchFx != null && !touchFx.swiped && fxStrength > 0f)
+    {
+      float scale = 1f - 0.035f * fxStrength;
+      canvas.scale(scale, scale, x + keyW / 2f, y + keyH / 2f);
+    }
+    Theme.Computed.Key tc_key;
+    if (isKeyDown)
+      tc_key = _tc.key_activated;
+    else
+      tc_key = paintFor(k);
+    // A key-down cap paints the theme's activated colors, whatever overrides it.
+    OverrideSlots slots = _overrideSlots;
+    slots.clear();
+    if (!isKeyDown && colorOverride != null)
+    {
+      if (hintOverride != null && _hintFadeAnimator != null)
+        fadeHintOverride(hintOverride, schemeOverride, tc_key, slots);
+      else
+        slots.set(colorOverride);
+      if (hintOverride != null)
+      {
+        // Only the hint lighting breathes; color-scheme overrides stay steady.
+        if (slots.hasBackground)
+          slots.background = hintBreathe(slots.background, keyIdValue);
+        if (slots.hasBorder)
+          slots.border = hintBreathe(slots.border, keyIdValue);
+      }
+    }
+    // On a theme that draws no key borders only a colour-scheme border shows; the hint
+    // lighting's border stays a tint of an existing stroke, not a new outline.
+    boolean drawsBorder = slots.hasBorder && (tc_key.border_width > 0.f
+        || (schemeOverride != null && schemeOverride.borderColor != null));
+    drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, slots.hasBackground, slots.background,
+        drawsBorder, slots.border);
+    // The latched Ctrl/Alt/Shift caps are the hint popup's prefix indicator; trace them
+    // while the hint lighting is up. Latched modifiers render as key-down.
+    if (_hintColorOverrides.size() > 0 && _hintBreathAnimator != null && isKeyDown
+        && k.keys[0] != null && k.keys[0].getKind() == KeyValue.Kind.Modifier)
+    {
+      drawHintTrace(canvas, x, y, keyW, keyH, tc_key, hintTraceIndex);
+      usedHintTrace = true;
+    }
+    if (launchStrength > 0f)
+    {
+      _launchWavePaint.setColor(withAlpha(_launchWaveColor,
+          Math.round(30f * launchStrength)));
+      float chipInset = tc_key.border_width * 0.5f;
+      _tmpRect.set(x + chipInset, y + chipInset,
+          x + keyW - chipInset, y + keyH - chipInset);
+      float chipRadius = Math.max(0f, tc_key.border_radius - chipInset);
+      canvas.drawRoundRect(_tmpRect, chipRadius, chipRadius, _launchWavePaint);
+    }
+    if (touchFx != null && fxStrength > 0f)
+    {
+      android.os.Trace.beginSection("Keyboard.pressFx");
+      try
+      {
+        drawTouchFx(canvas, touchFx, x, y, keyW, keyH, tc_key, fxStrength);
+      }
+      finally
+      {
+        android.os.Trace.endSection();
+      }
+    }
+    if (k.keys[0] != null)
+      drawLabel(canvas, k.keys[0], keyW / 2f + x, y, keyH, isKeyDown, tc_key,
+          slots.hasPrimary, slots.primary);
+    for (int i = 1; i < 9; i++)
+    {
+      if (k.keys[i] != null)
+      {
+        boolean bottom = (i == 3 || i == 4) && slots.hasSecondaryBottom;
+        drawSubLabel(canvas, k.keys[i], x, y, keyW, keyH, i, isKeyDown, tc_key,
+            bottom || slots.hasSecondary,
+            bottom ? slots.secondaryBottom : slots.secondary);
+      }
+    }
+    drawIndication(canvas, k, x, y, keyW, keyH, _tc);
+    canvas.restoreToCount(keySave);
+    return usedHintTrace;
   }
 
   private float launchWaveStrength(float keyX, float keyY)

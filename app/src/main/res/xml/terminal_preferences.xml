@@ -1,84 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+<!-- Terminal: the Appearance editor first, then one row per part of the Terminal half. The rows
+     this page used to hold moved, keys unchanged, to Windows & panes, Text & display and Clipboard &
+     compatibility; Status bar joined from the root, and Linux apps went back to the root. -->
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_terminal_display_header">
-        <SwitchPreferenceCompat
-            app:key="fullscreen"
-            app:title="@string/settings_full_screen_title"
-            app:summary="@string/termux_fullscreen_summary"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="terminal_padding_fill"
-            app:title="@string/settings_terminal_padding_fill_title"
-            app:summary="@string/settings_terminal_padding_fill_summary"
-            android:defaultValue="true" />
-        <ListPreference
-            app:key="terminal_cursor_trail_style"
-            app:title="@string/settings_terminal_cursor_trail_style_title"
-            app:entries="@array/settings_terminal_cursor_trail_style_entries"
-            app:entryValues="@array/settings_terminal_cursor_trail_style_values"
-            app:defaultValue="default"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="terminal_retro_effect"
-            app:title="@string/settings_terminal_retro_effect_title"
-            app:entries="@array/settings_terminal_retro_effect_entries"
-            app:entryValues="@array/settings_terminal_retro_effect_values"
-            app:defaultValue="none"
-            app:useSimpleSummaryProvider="true" />
-    </PreferenceCategory>
+    <Preference
+        app:key="terminal_layout_editor"
+        app:persistent="false"
+        app:title="@string/settings_layout_editor_title"
+        app:summary="@string/settings_appearance_door_summary" />
 
-    <PreferenceCategory app:title="@string/settings_terminal_compat_header">
-        <SwitchPreferenceCompat
-            app:key="terminal_margin_adjustment"
-            app:title="@string/settings_adjust_keyboard_title"
-            app:summary="@string/settings_adjust_keyboard_summary" />
-    </PreferenceCategory>
+    <Preference
+        app:key="terminal_sub_windows"
+        app:persistent="false"
+        app:title="@string/settings_terminal_sub_windows_title"
+        app:summary="@string/settings_terminal_sub_windows_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.TerminalWindowsPreferencesFragment" />
 
-    <PreferenceCategory app:title="@string/settings_clipboard_header">
-        <SwitchPreferenceCompat
-            app:key="terminal_osc52_clipboard_read_enabled"
-            app:title="@string/settings_osc52_clipboard_read_title"
-            app:summary="@string/settings_osc52_clipboard_read_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="terminal_clipboard_cleanup"
-            app:title="@string/settings_clipboard_cleanup_title"
-            app:summary="@string/settings_clipboard_cleanup_summary"
-            android:defaultValue="true" />
-    </PreferenceCategory>
+    <Preference
+        app:key="status_bar"
+        app:persistent="false"
+        app:title="@string/settings_destination_status_bar"
+        app:summary="@string/settings_terminal_sub_status_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment" />
 
-    <PreferenceCategory app:title="@string/settings_sessions_panes_header">
-        <SwitchPreferenceCompat
-            app:key="split_pane_controls"
-            app:title="@string/settings_split_pane_controls_title"
-            app:summary="@string/settings_split_pane_controls_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="show_key_hints"
-            app:title="@string/settings_show_key_hints_title"
-            app:summary="@string/settings_show_key_hints_summary"
-            app:dependency="split_pane_controls"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="pane_dwindle_default"
-            app:title="@string/settings_pane_dwindle_default_title"
-            app:summary="@string/settings_pane_dwindle_default_summary"
-            app:dependency="split_pane_controls"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="pane_focus_grows"
-            app:title="@string/settings_pane_focus_grows_title"
-            app:summary="@string/settings_pane_focus_grows_summary"
-            app:dependency="split_pane_controls"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="pane_agent_api"
-            app:title="@string/settings_pane_agent_api_title"
-            app:summary="@string/settings_pane_agent_api_summary"
-            app:dependency="split_pane_controls"
-            android:defaultValue="true" />
-    </PreferenceCategory>
+    <Preference
+        app:key="terminal_sub_text"
+        app:persistent="false"
+        app:title="@string/settings_terminal_sub_text_title"
+        app:summary="@string/settings_terminal_sub_text_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.TerminalTextPreferencesFragment" />
 
+    <Preference
+        app:key="terminal_sub_clipboard"
+        app:persistent="false"
+        app:title="@string/settings_terminal_sub_clipboard_title"
+        app:summary="@string/settings_terminal_sub_clipboard_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.TerminalClipboardPreferencesFragment" />
 </PreferenceScreen>

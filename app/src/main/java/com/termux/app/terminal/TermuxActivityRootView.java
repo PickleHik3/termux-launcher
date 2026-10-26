@@ -481,11 +481,26 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             // a root that also padded for it pushed both a whole cutout inward (the terminal started
             // a second cutout width from the edge). Keep the bars, drop the cutout.
             androidx.core.graphics.Insets sides = horizontalRootInsets(compat);
-            if (v.getPaddingLeft() != sides.left || v.getPaddingRight() != sides.right) {
-                v.setPadding(sides.left, v.getPaddingTop(), sides.right, v.getPaddingBottom());
+            // The same fold on top: with the status bar hidden (fullscreen) the legacy padding
+            // fell back to the cutout and left an empty band the height of the camera's row.
+            int top = topRootInset(compat);
+            if (v.getPaddingLeft() != sides.left || v.getPaddingRight() != sides.right
+                || v.getPaddingTop() != top) {
+                v.setPadding(sides.left, top, sides.right, v.getPaddingBottom());
             }
             return result;
         }
+    }
+
+    /**
+     * The top padding the root should carry: the status bar while it shows, and the top cutout only
+     * then (the bar is normally at least as tall). With the bar hidden the window claims the whole
+     * top edge, cutout included, as fullscreen asks.
+     */
+    static int topRootInset(@NonNull WindowInsetsCompat insets) {
+        int statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+        if (statusBar <= 0) return 0;
+        return Math.max(statusBar, insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top);
     }
 
     /**

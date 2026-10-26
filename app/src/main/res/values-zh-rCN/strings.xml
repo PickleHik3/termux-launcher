@@ -116,5 +116,4 @@
     <!-- Donate Preference -->
     <string name="donate_preference_title">捐赠</string>
     <string name="action_set_background_image">设置背景图片</string>
-    <string name="termux_style_preferences_title">&TERMUX_APP_NAME; 外观</string>
 </resources>

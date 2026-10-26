@@ -76,6 +76,12 @@ import java.util.Map;
  * of the one pane band, each memoised here on its own rect ({@link #terminalPane}); the band's vote
  * is the mean of its panes, so a split cannot outvote the rest of the chrome.</p>
  *
+ * <h3>Home widgets</h3>
+ * <p>Each Home widget is a rect of {@link GlassBackdropCache.Band#WIDGET}, memoised here like a
+ * terminal pane ({@link #widget}). Its inks are its card's roles on the chrome's polarity, held by
+ * a veil of the card's colour over its glass body; it takes the polarity and casts no vote, since
+ * its card's light or dark follows the polarity it would vote on.</p>
+ *
  * <h3>How hard, and where</h3>
  * <p>Every target a band asks at is scaled by the user's one legibility control,
  * {@link LegibilityLevel} (the "Terminal contrast" choice: body text at 3.0, 4.5 or 7.0), before
@@ -241,6 +247,11 @@ public final class ChromeInk {
      * re-sample replaces it instead of leaving a gap. Transparent until a pane is measured.
      */
     @ColorInt private int mPaneGround = Color.TRANSPARENT;
+    /**
+     * The pane band's mean veiled glass as last measured: {@link #mPaneGround} with each pane's
+     * veil over it. Transparent until a pane is measured.
+     */
+    @ColorInt private int mPaneSurface = Color.TRANSPARENT;
     /** Told when {@link #mPaneGround} moves; see {@link #setOnTerminalPaneGroundChanged}. */
     @Nullable private Runnable mOnPaneGroundChanged;
     /** The user's legibility control as last read; every target is scaled by it. */
@@ -248,6 +259,8 @@ public final class ChromeInk {
     @ColorInt private int mBaseColor;
     @ColorInt private int mAccentColor;
     @ColorInt private int mDimColor;
+    /** {@link ChromeRenderer.Surfaces#wallpaperHintColor} as last read. */
+    @ColorInt private int mHintColor;
     private boolean mModeRead;
 
     @NonNull private final Rect mTmpSampleRect = new Rect();
@@ -499,8 +512,10 @@ public final class ChromeInk {
         answer.flat = flat;
         int ground = meanPaneVote(tint);
         vote(GlassBackdropCache.Band.TERMINAL_PANE, ground);
-        if (ground != mPaneGround) {
+        int surface = meanPaneSurface(tint);
+        if (ground != mPaneGround || surface != mPaneSurface) {
             mPaneGround = ground;
+            mPaneSurface = surface;
             if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
         }
         return resolution;
@@ -524,6 +539,20 @@ public final class ChromeInk {
     }
 
     /**
+     * What the terminal's text really stands on across the pane band: {@link #terminalPaneGround}
+     * with each pane's veil laid over it, the mean of the panes, opaque. This, not the ground, is
+     * what text is held to its contrast floor against — the veil is drawn under it. Read only,
+     * never samples; until a pane is measured it is the ground itself.
+     *
+     * @param tint the pane's tint as drawn, alpha included, for the nominal answer
+     */
+    @ColorInt
+    public int terminalPaneSurface(@ColorInt int tint) {
+        if (Color.alpha(mPaneSurface) != 0) return mPaneSurface;
+        return terminalPaneGround(tint);
+    }
+
+    /**
      * The ground a previous run measured, answered by {@link #terminalPaneGround} until a pane is
      * measured in this one, so a launch does not start from the nominal glass. Ignored once a pane
      * has been measured, and for a transparent {@code ground}. Tells no listener: nothing was
@@ -535,7 +564,8 @@ public final class ChromeInk {
     }
 
     /**
-     * Runs {@code listener} each time {@link #terminalPaneGround} moves — only when a pane is
+     * Runs {@code listener} each time {@link #terminalPaneGround} or {@link #terminalPaneSurface}
+     * moves — only when a pane is
      * measured anew (a wallpaper, dim, tint or rect change), never for a memoised answer. It runs
      * inside whatever pass asked about the pane, a draw included, so it must only post. Null
      * removes it.
@@ -547,6 +577,149 @@ public final class ChromeInk {
     /** Terminal panes remembered right now, for tests. */
     int paneAnswerCountForTests() {
         return mPanes.size();
+    }
+
+    // ------------------------------------------------------------------ the widget band
+
+    /** Widgets a wall's pages hold at once, and then some; an older rect is dropped, not an error. */
+    static final int MAX_WIDGET_ANSWERS = 32;
+
+    /** One widget's standing answer, remembered on its own rect. */
+    private static final class WidgetAnswer {
+        int wallpaper;
+        boolean sampled;
+        int dim;
+        boolean answered;
+        int body;
+        int veilColor;
+        int textInk;
+        int graphicInk;
+        double textTarget;
+        double graphicTarget;
+        @Nullable OnGlass.Resolution resolution;
+    }
+
+    /** Each widget's answer by its root-space rect, eldest first. Cleared by {@link #invalidate}. */
+    @NonNull private final java.util.LinkedHashMap<Rect, WidgetAnswer> mWidgets =
+        new java.util.LinkedHashMap<>(MAX_WIDGET_ANSWERS, 0.75f, true);
+
+    /**
+     * One Home widget's answer ({@link GlassBackdropCache.Band#WIDGET}): the veil its card lays
+     * over its body so the card's inks read on what is behind this widget, at 4.5:1 for body and
+     * label and 3:1 for hero numerals and graphics, both scaled by the legibility level
+     * ({@link OnGlass#resolveWidget}).
+     *
+     * <p>The inks are the card's roles on the page's one polarity ({@link #polarity}), the one the
+     * dock and the bars are drawn in, so a widget never reads as the opposite of the dock beside
+     * it; that is also why the band casts no vote. Memoised on the widget's rect like a terminal
+     * pane: asked again with the same inputs, nothing is sampled or searched, and only a widget
+     * that moved, a new wallpaper, dim, palette or level ({@link #invalidate}) re-derives it. A
+     * widget asked about before the wallpaper is readable is answered on the mode's nominal glass
+     * and samples again next time.</p>
+     *
+     * @param rootRect the widget's laid-out rect, in the root container's untransformed space
+     * @param body what the widget draws over the wallpaper, alpha included: the Look's slab tint
+     *     with the body's lift on glass, the opaque card on the solid one
+     * @param veilColor the card's colour on the page's polarity, which the veil moves toward
+     * @param textInk the card's weakest text ink (its on-surface-variant role)
+     * @param graphicInk the ink of its hero numerals and graphics (its accent)
+     */
+    @NonNull
+    public OnGlass.Resolution widget(@NonNull Rect rootRect, @ColorInt int body,
+                                     @ColorInt int veilColor, @ColorInt int textInk,
+                                     @ColorInt int graphicInk) {
+        readMode();
+        double textTarget = mLevel.target(OnGlass.TARGET_BODY_TEXT);
+        double graphicTarget = mLevel.target(OnGlass.TARGET_LARGE_TEXT);
+        WidgetAnswer answer = widgetSample(rootRect);
+        if (answer.answered && answer.resolution != null && answer.dim == mDimColor
+                && answer.body == body && answer.veilColor == veilColor
+                && answer.textInk == textInk && answer.graphicInk == graphicInk
+                && Double.compare(answer.textTarget, textTarget) == 0
+                && Double.compare(answer.graphicTarget, graphicTarget) == 0) {
+            return answer.resolution;
+        }
+        int under = OnGlass.backdrop(answer.wallpaper, mDimColor, Color.TRANSPARENT);
+        OnGlass.Resolution resolution = OnGlass.resolveWidget(under, body, textInk, textTarget,
+            graphicInk, graphicTarget, veilColor);
+        // Answered for good only once the wallpaper was really read; a nominal answer asks again.
+        answer.answered = answer.sampled;
+        answer.resolution = resolution;
+        answer.dim = mDimColor;
+        answer.body = body;
+        answer.veilColor = veilColor;
+        answer.textInk = textInk;
+        answer.graphicInk = graphicInk;
+        answer.textTarget = textTarget;
+        answer.graphicTarget = graphicTarget;
+        return resolution;
+    }
+
+    /**
+     * What a widget at {@code rootRect} stands on before its own card: the wallpaper under the
+     * launcher's dim, opaque. Shares the widget's one sample with {@link #widget}; the card's rim
+     * is decided against it ({@link OnGlass#cardShowsEdge}).
+     */
+    @ColorInt
+    public int widgetWallpaper(@NonNull Rect rootRect) {
+        readMode();
+        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, mDimColor, Color.TRANSPARENT);
+    }
+
+    /**
+     * The wallpaper under {@code rootRect} under the launcher's dim, opaque, read afresh through
+     * the one sampler; {@link Color#TRANSPARENT} while nothing can be read there. For text drawn
+     * straight on the wallpaper (editor-redesign §8: Home's labels, the page dots, the empty
+     * page's hint), which keeps its own answer against {@link #wallpaperGeneration} rather than
+     * crowding the widgets' memo.
+     */
+    @ColorInt
+    public int wallpaperSample(@NonNull Rect rootRect) {
+        readMode();
+        int read = mCache.sampleUncached(rootRect);
+        if (Color.alpha(read) == 0) return Color.TRANSPARENT;
+        return OnGlass.backdrop(read, mDimColor, Color.TRANSPARENT);
+    }
+
+    /** What {@link #wallpaperSample} stands for while it reads nothing: the fallback, under the dim. */
+    @ColorInt
+    public int wallpaperFallback() {
+        readMode();
+        return OnGlass.backdrop(mCache.fallbackWallpaper(), mDimColor, Color.TRANSPARENT);
+    }
+
+    /** Moves on every {@link #invalidate}: a new wallpaper, palette, dim or mode. */
+    public int wallpaperGeneration() {
+        readMode();
+        return mCache.generation();
+    }
+
+    /** The widget's remembered entry at {@code rootRect}, sampled when it has not been read yet. */
+    @NonNull
+    private WidgetAnswer widgetSample(@NonNull Rect rootRect) {
+        WidgetAnswer answer = mWidgets.get(rootRect);
+        if (answer == null) {
+            answer = new WidgetAnswer();
+            if (mWidgets.size() >= MAX_WIDGET_ANSWERS) {
+                java.util.Iterator<Rect> eldest = mWidgets.keySet().iterator();
+                eldest.next();
+                eldest.remove();
+            }
+            mWidgets.put(new Rect(rootRect), answer);
+        }
+        if (!answer.sampled) {
+            int read = mCache.sampleUncached(rootRect);
+            answer.sampled = Color.alpha(read) != 0;
+            int wallpaper = answer.sampled ? read : mCache.fallbackWallpaper();
+            if (wallpaper != answer.wallpaper) answer.answered = false;
+            answer.wallpaper = wallpaper;
+        }
+        return answer;
+    }
+
+    /** Widgets remembered right now, for tests. */
+    int widgetAnswerCountForTests() {
+        return mWidgets.size();
     }
 
     /**
@@ -566,6 +739,23 @@ public final class ChromeInk {
             red += Color.red(pane.flat);
             green += Color.green(pane.flat);
             blue += Color.blue(pane.flat);
+            count++;
+        }
+        count = Math.max(1, count);
+        return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+    }
+
+    /** {@link #meanPaneVote} of each pane's veiled surface rather than its bare glass. */
+    @ColorInt
+    private int meanPaneSurface(@ColorInt int tint) {
+        long red = 0, green = 0, blue = 0;
+        int count = 0;
+        for (PaneAnswer pane : mPanes.values()) {
+            if (pane.tint != tint || pane.dim != mDimColor) continue;
+            int surface = pane.resolution.surface;
+            red += Color.red(surface);
+            green += Color.green(surface);
+            blue += Color.blue(surface);
             count++;
         }
         count = Math.max(1, count);
@@ -916,6 +1106,18 @@ public final class ChromeInk {
     @ColorInt
     public int inkOn(@NonNull OnGlass.Resolution resolved, @ColorInt int ground,
                      @ColorInt int darkInk, @ColorInt int paleInk, double target) {
+        return inkOnGround(ground, darkInk, paleInk, target);
+    }
+
+    /**
+     * {@link #inkOn(OnGlass.Resolution, int, int, int, double)} for content that draws its own
+     * ground and stands on no measured band at all — a float's titlebar, whose readings take
+     * their ink by the status bar's rule on the strip's own surface. The chrome's polarity is the
+     * preference it is there, and the contrast floor still never gives way.
+     */
+    @ColorInt
+    public int inkOnGround(@ColorInt int ground, @ColorInt int darkInk, @ColorInt int paleInk,
+                           double target) {
         boolean pale = polarity() == Polarity.PALE_INK;
         // Asked in the Default level's tiers like every band, held to the user's level.
         target = mLevel.target(target);
@@ -927,9 +1129,9 @@ public final class ChromeInk {
         Integer known = mInkAnswers.get(question);
         if (known != null) return known;
         int ink = pale ? paleInk : darkInk;
-        int answer = OnGlass.inkOnBand(resolved, opaqueGround, ink, ink, target, pale);
+        int answer = OnGlass.inkOnGround(opaqueGround, ink, ink, target, pale);
         if (OnGlass.ratio(answer, opaqueGround) < target)
-            answer = OnGlass.inkOnBand(resolved, opaqueGround, darkInk, paleInk, target, null);
+            answer = OnGlass.inkOnGround(opaqueGround, darkInk, paleInk, target, null);
         if (mInkAnswers.size() >= MAX_INK_ANSWERS) mInkAnswers.clear();
         mInkAnswers.put(question, answer);
         return answer;
@@ -944,7 +1146,7 @@ public final class ChromeInk {
         return mInkAnswers.size();
     }
 
-    /** Everything {@link #inkOn(OnGlass.Resolution, int, int, int, double)} answers from. */
+    /** Everything {@link #inkOnGround} answers from. */
     private static final class InkQuestion {
         final boolean pale;
         final int ground;
@@ -1265,9 +1467,8 @@ public final class ChromeInk {
     @ColorInt
     private int flatFace(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
         BandGlass glass = glassFor(band);
-        int under = OnGlass.backdrop(mCache.wallpaperUnder(band, rootRect), mDimColor, Color.TRANSPARENT);
-        return OnGlass.opaque(OnGlass.composite(OnGlass.withAlpha(baseOf(glass),
-            ChromePolicy.dockGlassBaseAlpha(glass.opacity)), under));
+        return WallpaperInk.faceOf(mCache.wallpaperUnder(band, rootRect), mDimColor, baseOf(glass),
+            glass.opacity);
     }
 
     /**
@@ -1408,6 +1609,7 @@ public final class ChromeInk {
         mCache.invalidate();
         mVotes.clear();
         mPanes.clear();
+        mWidgets.clear();
         for (Contract contract : mContracts.values()) {
             contract.veil = Color.TRANSPARENT;
             contract.fixedAnswer = null;
@@ -1451,19 +1653,23 @@ public final class ChromeInk {
         int base = mSurfaces.glassBaseColor();
         int accent = mSurfaces.accentColor();
         int dim = mSurfaces.wallpaperDimColor();
+        int hint = mSurfaces.wallpaperHintColor();
         LegibilityLevel level = mSurfaces.legibilityLevel();
         if (mModeRead && base == mBaseColor && accent == mAccentColor && dim == mDimColor
-                && level == mLevel) {
+                && hint == mHintColor && level == mLevel) {
             return;
         }
         mBaseColor = base;
         mAccentColor = accent;
         mDimColor = dim;
+        mHintColor = hint;
         mLevel = level;
         mModeRead = true;
-        // Before anything is measured a band is answered with the mode's nominal glass, which is
-        // exactly what the app drew before this round: no flash, and no crash.
-        mCache.setFallbackWallpaper(base);
+        // Before anything is measured a band is answered with the wallpaper as the system
+        // describes it, else with the mode's nominal glass, which is what the app drew before
+        // this round: no flash, and no crash. Without the description, bare text over a light
+        // wallpaper kept the dark theme's pale ink (editor-redesign §8).
+        mCache.setFallbackWallpaper(WallpaperInk.fallbackWallpaper(base, hint));
         invalidate();
     }
 

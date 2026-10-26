@@ -6,9 +6,13 @@ import android.os.Bundle;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 
+import com.termux.BuildConfig;
 import com.termux.R;
+import com.termux.app.settings.WhatsNewNotes;
+import com.termux.app.tour.TourEdition;
 import com.termux.app.TermuxActivity;
 import com.termux.app.models.UserAction;
 import com.termux.shared.activities.ReportActivity;
@@ -35,7 +39,13 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         url("discord", TermuxConstants.TERMUX_LAUNCHER_DISCORD_URL);
         url("report_issue", "https://github.com/PickleHik3/termux-launcher/issues");
         url("source_code", "https://github.com/PickleHik3/termux-launcher");
+        // Help: an ordinary screen on top of this one, so Back comes back to Settings.
+        click("app_launcher_help", preference -> {
+            startActivity(com.termux.app.help.HelpActivity.intent(context, null, null, null));
+            return true;
+        });
         configureAbout(context);
+        configureWhatsNew(context);
         configureTourReplay(context);
         configureLicenses(context);
         configureDonate(context);
@@ -76,6 +86,36 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
             }).start();
             return true;
         });
+    }
+
+    /** This build's release notes in the same Markdown report screen the version row uses. */
+    private void configureWhatsNew(@NonNull Context context) {
+        click("whats_new", preference -> {
+            new Thread(() -> {
+                TourEdition edition = TourEdition.of(context.getPackageName());
+                String version = BuildConfig.VERSION_NAME;
+                WhatsNewNotes.Notes notes = WhatsNewNotes.select(version,
+                    readAsset(context, "whatsnew/release-notes.md"),
+                    readAsset(context, "whatsnew/prerelease-notes.md"), edition);
+                String url = notes == null ? WhatsNewNotes.url(version, edition) : notes.url;
+                String report = (notes == null ? getString(R.string.whats_new_none) : notes.body)
+                    + "\n\n[" + getString(R.string.whats_new_full_notes) + "](" + url + ")\n";
+                ReportInfo info = new ReportInfo("WhatsNew", TermuxConstants.TERMUX_APP.TERMUX_SETTINGS_ACTIVITY_NAME,
+                    getString(R.string.settings_whats_new_title) + " · " + WhatsNewNotes.core(version));
+                info.setReportString(report);
+                if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() -> ReportActivity.startReportActivity(context, info));
+            }).start();
+            return true;
+        });
+    }
+
+    @Nullable
+    private static String readAsset(Context context, String path) {
+        try (InputStream input = context.getAssets().open(path); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192]; int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return new String(output.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException e) { return null; }
     }
 
     private void configureLicenses(@NonNull Context context) {

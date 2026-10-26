@@ -16,6 +16,16 @@ public interface TourSignals {
     String PLACE_CHANGED = "place.changed";
     /** The place the run started on is showing again. */
     String PLACE_RETURNED = "place.returned";
+    /**
+     * The wall settled on the Workspace, having rested on Home: the seam was crossed forward, by
+     * the plain swipe off the last Home page or any other way there.
+     */
+    String SEAM_TO_WORKSPACE = "wall.seam_to_workspace";
+    /**
+     * The wall settled on Home, having rested on the Workspace: the seam was crossed back, by the
+     * border drag off the first window, the home press or any other way there.
+     */
+    String SEAM_TO_HOME = "wall.seam_to_home";
     /** The status bar settled expanded. */
     String STATUS_BAR_EXPANDED = "status_bar.expanded";
     /** The status bar settled compact again. */
@@ -46,6 +56,12 @@ public interface TourSignals {
     String DRAWER_OPENED = "drawer.opened";
     /** The app drawer settled closed again. */
     String DRAWER_CLOSED = "drawer.closed";
+    /**
+     * A tap (or a scrub) on the dock's A-Z letters laid a letter's apps out in the apps row, or
+     * in the floating strip where the place has no row: the apps found by their letter, which the
+     * apps lesson counts like the drawer's pull.
+     */
+    String AZ_APPS_SHOWN = "launcher.az_apps_shown";
     /** The A-Z row's scrub launched an app. */
     String APP_LAUNCHED_FROM_SCRUB = "launcher.scrub_launch";
     /** An Android app was launched from the launcher, however the user found it. */

@@ -272,12 +272,17 @@ public final class GlassTouchLight {
 
     /** The one {@link ValueAnimator} behind a light, linear; the easing is the light's own. */
     private static final class AnimatorTicker implements Ticker {
+        /** Frame-source counter for the idle audit: glassTouchLight. */
+        private static final com.termux.terminal.FrameProbe.Source FRAMES =
+            com.termux.terminal.FrameProbe.source("glassTouchLight");
+
         private final ValueAnimator mAnimator = ValueAnimator.ofFloat(0f, 1f);
         @Nullable private Frames mFrames;
 
         AnimatorTicker() {
             mAnimator.setInterpolator(new LinearInterpolator());
             mAnimator.addUpdateListener(animator -> {
+                FRAMES.tick();
                 Frames frames = mFrames;
                 if (frames != null) frames.onFraction(animator.getAnimatedFraction());
             });
