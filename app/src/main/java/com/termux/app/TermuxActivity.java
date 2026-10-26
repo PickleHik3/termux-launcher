@@ -3633,6 +3633,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The host rounds nothing itself: each pane's slab clips its own corners, a card
             // under Floating and the insert under Docked.
             applyPaneHostCornerPadding(paneHost, 0);
+            refreshAzTabTextInsets();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 setOutlineIfChanged(paneHost, paneHostContainmentOutlineProvider(), glass);
             }
@@ -3662,6 +3663,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (TerminalPaneController.updateActiveBorders), so the terminal does not pay for the
         // same corner twice. Split panes round their own corners and pay their own clearance.
         applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(innerRadiusPx));
+        refreshAzTabTextInsets();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             setOutlineIfChanged(paneHost, innerRadiusPx > 0f
@@ -11970,8 +11972,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 edge.isOnSide() ? 0 : appliedDockLayout().horizontalInsetPx,
                 appliedDockLayout().capsuleCornerRadiusPx(thicknessPx));
             layer.setReducedMotion(isReducedMotionEnabled());
+            refreshAzTabTextInsets();
         }
         layer.setTabShown(shown);
+    }
+
+    /**
+     * Tells the pull tab where the terminal's text begins inside the canvas, so it rests beside
+     * the text rather than over it, and at the same height whichever way the canvas reaches
+     * (AzTabPolicy#placeOnScreen): the wall's Workspace top inset (which grows with the canvas's
+     * reach under the bar, so the pane stays put), the pane host's frame margins, and its corners'
+     * padding. Off the Workspace's terminal page there is no pane of text and the tab keeps the
+     * canvas's placement.
+     */
+    private void refreshAzTabTextInsets() {
+        AzPullTabLayer layer = mAzTabLayer;
+        if (layer == null) return;
+        View paneHost = findViewById(R.id.terminal_pane_host);
+        if (mLastWallPage != com.termux.app.wall.PaneWallPage.TERMINAL || paneHost == null
+            || !(paneHost.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) {
+            layer.setTextInsets(null);
+            return;
+        }
+        ViewGroup.MarginLayoutParams margins =
+            (ViewGroup.MarginLayoutParams) paneHost.getLayoutParams();
+        layer.setTextInsets(new int[] {
+            margins.leftMargin + paneHost.getPaddingLeft(),
+            mWorkspaceTopInsetPx + margins.topMargin + paneHost.getPaddingTop(),
+            margins.rightMargin + paneHost.getPaddingRight(),
+            margins.bottomMargin + paneHost.getPaddingBottom()});
     }
 
     /**
@@ -16241,6 +16270,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController != null) mPaneWallController.wall().setWorkspaceTopInsetPx(insetPx);
         if (insetPx != mWorkspaceTopInsetPx) {
             mWorkspaceTopInsetPx = insetPx;
+            refreshAzTabTextInsets();
             View borderView = findViewById(R.id.terminal_border_overlay);
             if (borderView != null
                 && borderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
