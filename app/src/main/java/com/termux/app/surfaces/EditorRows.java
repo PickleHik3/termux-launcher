@@ -194,7 +194,13 @@ public final class EditorRows {
         SECTION_COLOUR(Kind.MENU, R.string.editor_section_colour, 0),
         SECTION_GLASS_MATERIAL(Kind.MENU, R.string.editor_section_glass_material, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
-        HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0);
+        HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
+        /**
+         * The Elements list at the end of a screen's card (cards/ElementsList): every element of
+         * the screen, its eye and the sliders glyph that opens its card. Drawn by the editor
+         * through EditorCardSheet.Model#rowView; the Kind is the stand-in.
+         */
+        ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune);
 
         @NonNull public final Kind kind;
         @StringRes public final int labelRes;
