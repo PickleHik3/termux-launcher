@@ -1891,10 +1891,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mSheet.restate();
     }
 
-    /** Where the app-wide choices are read and written: Settings' own store. */
+    /**
+     * Where the app-wide choices are read and written: Settings' own store, and the app's store
+     * for the Dock card's switches Settings has no row for.
+     */
     @NonNull
     private EditorSettingsSnapshot.Store settingsStore() {
-        return EditorSettingsSnapshot.settings(mHost.context());
+        return EditorSettingsSnapshot.settings(mHost.context(), dockPrefs());
     }
 
     /** A card wrote an app-wide choice: its signature is read again for the dirty state. */
@@ -5562,6 +5565,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return;
             layout.setBarOrder(com.termux.app.surfaces.cards.BarOrder.format(order));
             restackBars(order);
+            // The order alone (bars on edges of their own) moves no slot: Undo still holds it.
+            syncDirty();
         }
 
         @Override public boolean offers(@NonNull Element bar) {
@@ -5679,6 +5684,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (store != null)
                 store.edit().putBoolean(
                     com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND, on).apply();
+            settingsWritten();
         }
 
         @Override public int azShow() {
@@ -5694,6 +5700,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (store != null)
                 store.edit().putString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW,
                     values[Math.max(0, Math.min(values.length - 1, index))]).apply();
+            settingsWritten();
         }
 
         @Override public void openExtraKeysEditor() {
@@ -5760,6 +5767,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         store.edit().putBoolean(
                             com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on)
                             .apply();
+                    settingsWritten();
                     break;
                 }
                 case NOTIFICATION_DOTS:

@@ -2188,8 +2188,15 @@ public final class PlaceLayoutStore {
         return readString(orientation, KEY_BAR_ORDER);
     }
 
-    public void setBarOrder(@NonNull PlaceOrientation orientation, @NonNull String order) {
-        if (order.equals(barOrder(orientation))) return;
-        writeString(orientation, KEY_BAR_ORDER, order);
+    /** Stores the Bars list for {@code orientation}; null drops it (the default list). */
+    public void setBarOrder(@NonNull PlaceOrientation orientation, @Nullable String order) {
+        if (java.util.Objects.equals(order, barOrder(orientation))) return;
+        if (order != null) {
+            writeString(orientation, KEY_BAR_ORDER, order);
+            return;
+        }
+        if (mStore == null) return;
+        mStore.edit().remove(variantKey(orientation, KEY_BAR_ORDER)).apply();
+        mRevision.incrementAndGet();
     }
 }

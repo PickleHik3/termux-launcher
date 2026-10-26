@@ -65,6 +65,29 @@ public class PlaceArrangeSnapshotTest {
         places.setWidgetColumns(LANDSCAPE, 6);
     }
 
+    /**
+     * The Dock card's Bars list is something to lose even when no slot moves (bars on edges of
+     * their own), and Discard puts it back, absent where it was absent.
+     */
+    @Test
+    public void theBarsListOrderIsSomethingToLose() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+        places.setBarOrder(PORTRAIT, "az_bar,apps_row,extra_keys");
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+
+        entry.restore(places);
+
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertEquals(null, places.barOrder(PORTRAIT));
+
+        places.setBarOrder(LANDSCAPE, "extra_keys,apps_row,az_bar");
+        PlaceArrangeSnapshot stored = PlaceArrangeSnapshot.capture(places);
+        places.setBarOrder(LANDSCAPE, "apps_row,az_bar,extra_keys");
+        stored.restore(places);
+        assertEquals("extra_keys,apps_row,az_bar", places.barOrder(LANDSCAPE));
+    }
+
     /** The Wall strip's row height is as unsaved as the dock's, and Discard puts it back. */
     @Test
     public void theWallStripsRowHeightIsSomethingToLose() {
