@@ -105,6 +105,8 @@ Companion add-ons must be the matching builds from this project's forks (they sh
 
 Download the latest APK of your chosen [edition](#editions) from [Releases](https://github.com/PickleHik3/termux-launcher/releases), install it, then select Termux Launcher as your Android home app. [Get started](docs/en/Get_Started.md) walks through the first launch; the **com.termux** edition installs over official Termux and keeps your files, but it is a one-way move.
 
+> ⚠️ **No way back to official Termux without a wipe.** The `com.termux` edition carries versionCode 1020, well above official Termux's, so Android treats a later install of official Termux as a downgrade and refuses it. To return to official Termux you must uninstall Termux Launcher, which deletes your Termux home and packages, then install Termux fresh; copy `~` to shared storage first (`termux-setup-storage`). The high versionCode is what lets the launcher install over an existing Termux and keep your files; doing this properly is a large change that may come in a future version.
+
 ### Stable or pre-release
 
 There are two channels. **Stable** releases (`vX.Y.Z`, one build per edition) are what most people should run. The **pre-release** channel (`vX.Y.Z-pre.N`, with `nix-` and `vaj-` builds alongside, marked *Pre-release* on the releases page) is a rolling build of what is heading for the next stable plus experiments that may still change or be dropped; each drop's notes list everything it has beyond the latest stable. Both channels are signed with the same key and share a version code, so you can install one over the other in either direction and keep your data. When reporting an issue from a pre-release, include the version from Settings › About; it ends in `-pre.N`.
