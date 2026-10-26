@@ -1,6 +1,7 @@
 package com.termux.app.surfaces;
 
 import androidx.annotation.ColorInt;
+import androidx.annotation.NonNull;
 
 /**
  * The ink of the page label under the editor's frame (editor-redesign §8, "Text over the wallpaper
@@ -23,6 +24,52 @@ final class EditorLabelInk {
     @ColorInt
     static int pick(@ColorInt int backdrop, @ColorInt int darkInk, @ColorInt int paleInk) {
         return com.termux.app.chrome.WallpaperInk.bareInk(backdrop, darkInk, paleInk);
+    }
+
+    /** The sampled picture's width in pixels; its height follows the decor's shape. */
+    static final int SAMPLE_WIDTH = 16;
+
+    /** The sampled picture's height: {@link #SAMPLE_WIDTH} in the decor's proportions. */
+    static int sampleHeight(int decorWidth, int decorHeight) {
+        if (decorWidth <= 0 || decorHeight <= 0)
+            return SAMPLE_WIDTH;
+        int h = Math.round(SAMPLE_WIDTH * (float) decorHeight / decorWidth);
+        return Math.max(4, Math.min(SAMPLE_WIDTH * 4, h));
+    }
+
+    /**
+     * Where a picture of {@code srcWidth} x {@code srcHeight} is drawn into a {@code width} x
+     * {@code height} sample so it is centre-cropped as the editor's frame and the screen show it:
+     * scaled to cover, the overflow split evenly. A picture with no size of its own is stretched.
+     *
+     * @return left, top, right, bottom
+     */
+    @NonNull
+    static int[] cropBounds(int srcWidth, int srcHeight, int width, int height) {
+        if (srcWidth <= 0 || srcHeight <= 0)
+            return new int[] {0, 0, width, height};
+        float scale = Math.max(width / (float) srcWidth, height / (float) srcHeight);
+        int w = Math.round(srcWidth * scale);
+        int h = Math.round(srcHeight * scale);
+        int left = (width - w) / 2;
+        int top = (height - h) / 2;
+        return new int[] {left, top, left + w, top + h};
+    }
+
+    /**
+     * The colour of the sampled picture's rows at {@code fraction} of its height (the label's
+     * centre on the screen), averaged over the two rows nearest it; opaque.
+     */
+    @ColorInt
+    static int band(@NonNull int[] argb, int width, int height, float fraction) {
+        if (width <= 0 || height <= 0 || argb.length < width * height)
+            return average(argb, argb.length, 0);
+        float f = Float.isNaN(fraction) ? 1f : Math.max(0f, Math.min(1f, fraction));
+        int row = Math.max(0, Math.min(height - 2, Math.round(f * height) - 1));
+        int rows = Math.min(2, height - row);
+        int[] band = new int[width * rows];
+        System.arraycopy(argb, row * width, band, 0, band.length);
+        return average(band, band.length, 0);
     }
 
     /** The average of {@code argb} pixels, opaque, then {@code dim} laid over it. */

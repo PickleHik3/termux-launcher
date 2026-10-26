@@ -254,6 +254,12 @@ final class EditorBar {
         mHalfName.setTextColor(ink);
     }
 
+    /** The label back in the theme's ink, as built: no picture is known to be under it. */
+    void resetHalfNameInk() {
+        mHalfName.setTextColor(MaterialColors.getColor(mContext,
+            com.google.android.material.R.attr.colorOnSurface, 0));
+    }
+
     /** The two inks the label chooses between: dark and pale. */
     @androidx.annotation.ColorInt int[] halfNameInks() {
         return new int[] {0xFF1B1B1F, 0xFFE3E2E6};
