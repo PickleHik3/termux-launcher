@@ -16382,6 +16382,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Where the new style brings the Wall strip's row or the toggle the Search field, or
         // either goes, the slab eases to its new height from what it shows now: started before
         // any pass below lays it out.
+        // A slab a crossing already dressed for this design (SeamCrossing#stackDesign) wears it:
+        // the commit that changes the layout's design under it has nothing to ease or re-dress.
+        if (dockStyleChanged && slabWears(committedDockDesign(), searchField)) {
+            dockStyleChanged = false;
+        }
         if (dockStyleChanged) beginDockBandEase();
         com.termux.app.place.LayoutVariant variant = chromeVariant();
         boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
@@ -17323,7 +17328,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Layout editor ({@link #doSyncPlaceLayout}), live, with no restart. The backdrop up stays
      * until the re-cut one replaces it, so the switch never shows a bare frame.
      */
+    /** The Dock design and Search field the slab was last dressed for; null before any. */
+    @Nullable private com.termux.app.dock.DockStyle mDressedDockDesign;
+    private boolean mDressedSearchField;
+
+    /** Whether the slab is already dressed for {@code design} and {@code searchField}. */
+    private boolean slabWears(@NonNull com.termux.app.dock.DockStyle design,
+                              boolean searchField) {
+        return design == mDressedDockDesign && searchField == mDressedSearchField;
+    }
+
     private void restyleDockSurface() {
+        if (mPreferences != null) {
+            mDressedDockDesign = committedDockDesign();
+            mDressedSearchField = committedSearchField();
+        }
         if (mPreferences == null || mChrome == null) return;
         syncDockBeadsListeners();
         // The Drawer tile comes and goes with the page's toggle.
@@ -23166,7 +23185,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncSeamBeadMelt(seam);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
-        if (!mCrossing.keyboardPreRolled()
+        // A keyboard a pictured dip put away travels in the picture, never in the stack again.
+        if (!mCrossing.keyboardPreRolled() && !mKeyboardPicturedAway
             && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
                 isInAppKeyboardShown())
             && canPreRollTravelKeyboard()) {
@@ -23385,6 +23405,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // here, or a bar that comes, moves nothing it holds.
                 beginTravelHold();
                 mCrossing.seam().standLayout();
+                // A pictured dip toward a half without a keyboard: the keyboard leaves with the
+                // picture, so the stack is laid out in this pass as the other half rests — its
+                // rows, its glass and its foot measured without a keyboard under them, as the
+                // settle would lay them out — instead of over a keyboard pushed below the screen.
+                putKeyboardAwayWithPicture();
                 mChromeTravelMoved = true;
                 // The stack changes halves with its rows, so it is dressed for the half it now
                 // stands in this same pass, while none of it shows (SeamDress). The sizes follow
@@ -23995,7 +24020,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void dropPicture() {
-            if (mStackPicture != null) mStackPicture.release();
+            if (mStackPicture == null) return;
+            // Back at its rest the picture is the stack, under it: it goes once a keyboard
+            // brought back up has drawn. Sunk, it shows nothing and goes now.
+            if (mStackPicture.atRest()) mStackPicture.releaseAfter(PICTURE_HANDOVER_MS);
+            else mStackPicture.release();
         }
 
         // ---- The terminal's page laid out at its landing size ahead of the settle ----
@@ -24012,6 +24041,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * crossing brings in is drawn over the picture of the one it takes away.
      */
     @Nullable private com.termux.app.place.StackPicture mStackPicture;
+    /**
+     * How long the picture of a stack put back at its rest stays under it: past the keyboard's
+     * reveal gate's own backstop (160 ms), so a keyboard brought back up has drawn by then.
+     */
+    private static final long PICTURE_HANDOVER_MS = 200L;
 
     @Nullable
     private com.termux.app.place.StackPicture stackPicture(@Nullable View stack) {
@@ -24125,6 +24159,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.place.Crossing.Landing crossingLanding =
                 mCrossing.land(page, arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
+            // A keyboard a pictured dip put away comes back where the wall came back.
+            landKeyboardPicturedAway(page, left);
             boolean keyboardPreRolled = crossingLanding.keyboardPreRolled();
             contentPreRolled = crossingLanding.contentPreRolled();
             held = crossingLanding.held();
@@ -24338,7 +24374,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pre-rolled below the screen is the arriving place's, not this one's.
      */
     private boolean committedKeyboardVisible() {
+        // A keyboard a pictured dip put away is still the committed place's: it is up there.
+        if (mKeyboardPicturedAway) return true;
         return mInAppKeyboard != null && mInAppKeyboard.isVisible() && !mCrossing.keyboardPreRolled();
+    }
+
+    /**
+     * Whether a pictured dip put the committed place's keyboard away with its picture
+     * (putKeyboardAwayWithPicture): still up as far as that place is concerned, until the settle.
+     */
+    private boolean mKeyboardPicturedAway;
+
+    /**
+     * Puts the committed place's keyboard away, quietly, once per crossing, where a pictured dip
+     * carries it in its picture to a half that keeps none (SeamCrossing#picturesKeyboardAway).
+     */
+    private void putKeyboardAwayWithPicture() {
+        if (mKeyboardPicturedAway || !mCrossing.seam().picturesKeyboardAway()
+            || mInAppKeyboard == null || !mInAppKeyboard.isVisible()
+            || mCrossing.keyboardPreRolled())
+            return;
+        mKeyboardPicturedAway = true;
+        mQuietKeyboardChange = true;
+        try {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.WALL_PAGE);
+        } finally {
+            mQuietKeyboardChange = false;
+        }
+    }
+
+    /**
+     * The settle's half of {@link #putKeyboardAwayWithPicture}: landed on the other half there is
+     * nothing to do; back on the committed place the keyboard comes back up, quietly, under the
+     * picture, which stays a moment so the keyboard's own first frames are covered.
+     */
+    private void landKeyboardPicturedAway(@NonNull com.termux.app.wall.PaneWallPage page,
+                                          @NonNull com.termux.app.wall.PaneWallPage left) {
+        if (!mKeyboardPicturedAway) return;
+        mKeyboardPicturedAway = false;
+        if (page != left || mInAppKeyboard == null || mInAppKeyboard.isVisible()) return;
+        mQuietKeyboardChange = true;
+        try {
+            mInAppKeyboard.showForTravel(page == com.termux.app.wall.PaneWallPage.TERMINAL
+                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TERMINAL_TAP
+                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason
+                    .KEYBOARD_ACTION);
+        } finally {
+            mQuietKeyboardChange = false;
+        }
     }
 
     /**
