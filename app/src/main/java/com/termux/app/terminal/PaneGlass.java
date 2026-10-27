@@ -167,6 +167,7 @@ public final class PaneGlass {
      * veil is capped at none anyway. Nothing before the frame is laid out.
      */
     static void measureBarePane(@NonNull PaneSurfaceStyle style, @NonNull View frame) {
+        // A bare pane draws no frame, so even-out never applies to it: it keeps the mean ground.
         if (frame.getWidth() <= 0 || frame.getHeight() <= 0) return;
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, sBareLocation,
             sBareRootLocation);

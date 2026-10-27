@@ -217,6 +217,9 @@ public final class MaterialTerminalColorScheme {
         Properties props = new Properties();
         ChromeInk.Polarity natural = naturalPolarity(seeds.surface);
         boolean glass = Color.alpha(ground) != 0;
+        // The glass floors belong to the even-out stage: only over a bounded band are they safe.
+        // With the Debugging switch off the ground is the unbounded mean and today's floors hold.
+        boolean glassFloors = glass && sGlassFloors;
         ChromeInk.Polarity ink = glass
             ? inkPolarity(ground, level.bodyTarget, current != null ? current : natural)
             : natural;
@@ -234,7 +237,8 @@ public final class MaterialTerminalColorScheme {
         int foreground = Hct.from(warmNeutralHue(surfaceHct.getHue()),
             warmNeutralChroma(Hct.fromInt(seeds.onSurface).getChroma()),
             dark ? level.fgToneDark : level.fgToneLight).toInt();
-        foreground = contrastTone(foreground, measuredOn, level.bodyTarget, level.toneReach,
+        foreground = contrastTone(foreground, measuredOn, level.bodyTarget,
+            glassFloors ? level.glassToneReach() : level.toneReach,
             TEXT_TONE_MIN, TEXT_TONE_MAX, 0d);
         int cursor = ink == natural ? seeds.primary
             : Hct.from(primaryHct.getHue(), primaryHct.getChroma(),
@@ -252,7 +256,7 @@ public final class MaterialTerminalColorScheme {
             seeds.error != 0 ? Hct.fromInt(seeds.error).getHue() : ANSI_HUE_ANCHORS[0],
             surfaceHct.getHue(), surfaceHct.getChroma(), dark, level));
 
-        applyAnsiContrastFloor(props, measuredOn, level);
+        applyAnsiContrastFloor(props, measuredOn, level, glassFloors);
 
         return props;
     }
@@ -278,7 +282,7 @@ public final class MaterialTerminalColorScheme {
      */
     @NonNull
     @VisibleForTesting
-    static ChromeInk.Polarity inkPolarity(@ColorInt int ground, double target,
+    public static ChromeInk.Polarity inkPolarity(@ColorInt int ground, double target,
                                           @NonNull ChromeInk.Polarity current) {
         int surface = OnGlass.opaque(ground);
         double pale = contrastRatio(Color.WHITE, surface);
@@ -289,6 +293,43 @@ public final class MaterialTerminalColorScheme {
         double margin = held >= target ? MARKED_POLARITY_MARGIN : ChromeInk.POLARITY_FLIP_MARGIN;
         if (other < held * margin) return current;
         return holdingPale ? ChromeInk.Polarity.DARK_INK : ChromeInk.Polarity.PALE_INK;
+    }
+
+    /** Whether glass grounds use the glass floors; the Debugging switch, set by the host. */
+    private static volatile boolean sGlassFloors = true;
+
+    /**
+     * Glass floors (ADR 0014) apply only while the even-out stage is on: they are safe on a
+     * bounded band and not on the unbounded mean ground, and the switch exists to compare with
+     * today. On by default; the host sets it from the switch before every palette build.
+     */
+    public static void setGlassFloors(boolean on) {
+        sGlassFloors = on;
+    }
+
+    /** The theme roles the recipe palettes read, as a comparable key for a cache of ceilings. */
+    @NonNull
+    public static int[] seedsKey(@NonNull Context context) {
+        Seeds seeds = Seeds.of(context);
+        return new int[] {seeds.surface, seeds.onSurface, seeds.primary, seeds.error};
+    }
+
+    /**
+     * The ground limits the even-out stage works to for {@code level}, one per ink polarity
+     * (index 0 pale, 1 dark), from the level's recipe palette in each polarity: built on a
+     * nominal extreme glass so no wallpaper enters, and never from the band-solved palette, so
+     * the palette cannot feed back into the band it is solved against.
+     */
+    @NonNull
+    public static com.termux.app.chrome.EvenOut.Ceiling[] evenOutCeilings(
+            @NonNull Context context, @NonNull TerminalContrastLevel level) {
+        Seeds seeds = Seeds.of(context);
+        return new com.termux.app.chrome.EvenOut.Ceiling[] {
+            com.termux.app.chrome.EvenOut.ceiling(build(seeds, level, 0xFF0A0A0A, null),
+                ChromeInk.Polarity.PALE_INK, level),
+            com.termux.app.chrome.EvenOut.ceiling(build(seeds, level, 0xFFF5F5F5, null),
+                ChromeInk.Polarity.DARK_INK, level),
+        };
     }
 
     /** The ink a built palette wears, read off its background the way {@code mode} is. */
@@ -429,6 +470,11 @@ public final class MaterialTerminalColorScheme {
         return LegibilityPairs.backgroundFloor(slot, level);
     }
 
+    /** {@link #ansiFloor(int, TerminalContrastLevel)} on glass or off it. */
+    static double ansiFloor(int slot, @NonNull TerminalContrastLevel level, boolean glass) {
+        return LegibilityPairs.backgroundFloor(slot, level, glass);
+    }
+
     /**
      * ANSI white's recipe tone on a dark palette. It used to be 80, which left no tone for red and
      * blue that read both on the dark background and on this white; the pass below raises it
@@ -459,6 +505,21 @@ public final class MaterialTerminalColorScheme {
     @VisibleForTesting
     static void applyAnsiContrastFloor(@NonNull Properties props, @ColorInt int background,
                                        @NonNull TerminalContrastLevel level) {
+        applyAnsiContrastFloor(props, background, level, false);
+    }
+
+    /**
+     * {@link #applyAnsiContrastFloor(Properties, int, TerminalContrastLevel)} on glass or off it.
+     * On glass (ADR 0014) the normal accents hold {@code glassAnsiRatio}, every ink may move
+     * {@link TerminalContrastLevel#glassToneReach()} (the ink, not the ground, absorbs the
+     * difference), and the grey may rise to {@code glassDimToneMax} (fall to 100 minus it for a
+     * dark ink). Red and blue are held by the panel pair first: where both pairs cannot hold the
+     * existing fallback gives the ground the best ratio the panel leaves, which is the best
+     * effort the decision asks for.
+     */
+    static void applyAnsiContrastFloor(@NonNull Properties props, @ColorInt int background,
+                                       @NonNull TerminalContrastLevel level, boolean glass) {
+        double reach = glass ? level.glassToneReach() : level.toneReach;
         Hct white = Hct.fromInt(Color.parseColor(props.getProperty("color7")));
         // No white that fits both pairs: go as high as the ladder allows, which leaves the panel
         // inks the most background contrast they can have while they still read on it.
@@ -466,7 +527,7 @@ public final class MaterialTerminalColorScheme {
             Math.max(white.getTone(), WHITE_TONE_MAX)).toInt();
         for (double tone = white.getTone(); tone <= WHITE_TONE_MAX; tone++) {
             int candidate = Hct.from(white.getHue(), white.getChroma(), tone).toInt();
-            if (panelAccentsFit(props, background, level, candidate)) {
+            if (panelAccentsFit(props, background, level, candidate, glass)) {
                 whiteColor = candidate;
                 break;
             }
@@ -480,21 +541,30 @@ public final class MaterialTerminalColorScheme {
         }
 
         for (int slot = 1; slot < 16; slot++) {
-            double floor = ansiFloor(slot, level);
+            double floor = ansiFloor(slot, level, glass);
             if (floor <= 0d) continue;
             String key = "color" + slot;
             int color = Color.parseColor(props.getProperty(key));
             boolean dimText = slot == 8;
             double onWhite = LegibilityPairs.onWhiteFloor(slot);
             if (onWhite > 0d) {
-                int fitted = panelTone(color, background, floor, whiteColor, onWhite, level.toneReach,
+                int fitted = panelTone(color, background, floor, whiteColor, onWhite, reach,
                     false);
                 if (fitted != 0) {
                     props.setProperty(key, hex(fitted));
                     continue;
                 }
             }
-            props.setProperty(key, hex(contrastTone(color, background, floor, level.toneReach,
+            if (dimText && glass) {
+                // The grey's window on glass is its own cap, not the recipe tone plus a reach.
+                boolean paleInk = Hct.fromInt(Color.parseColor(props.getProperty("background")))
+                    .getTone() < 50d;
+                props.setProperty(key, hex(contrastTone(color, background, floor, 100d,
+                    paleInk ? DIM_TONE_MIN : Math.max(DIM_TONE_MIN, 100d - level.glassDimToneMax),
+                    paleInk ? level.glassDimToneMax : ACCENT_TONE_MAX, 0d)));
+                continue;
+            }
+            props.setProperty(key, hex(contrastTone(color, background, floor, reach,
                 dimText ? DIM_TONE_MIN : ACCENT_TONE_MIN, ACCENT_TONE_MAX,
                 dimText ? 0d : ACCENT_CHROMA_KEPT)));
         }
@@ -502,12 +572,14 @@ public final class MaterialTerminalColorScheme {
 
     /** Whether every panel ink has a tone satisfying both its pairs with {@code white} as slot 7. */
     private static boolean panelAccentsFit(@NonNull Properties props, @ColorInt int background,
-                                           @NonNull TerminalContrastLevel level, @ColorInt int white) {
+                                           @NonNull TerminalContrastLevel level, @ColorInt int white,
+                                           boolean glass) {
         for (int slot = 1; slot <= 6; slot++) {
             double onWhite = LegibilityPairs.onWhiteFloor(slot);
             if (onWhite <= 0d) continue;
             if (panelTone(Color.parseColor(props.getProperty("color" + slot)), background,
-                ansiFloor(slot, level), white, onWhite, level.toneReach, true) == 0) {
+                ansiFloor(slot, level, glass), white, onWhite,
+                glass ? level.glassToneReach() : level.toneReach, true) == 0) {
                 return false;
             }
         }
@@ -1090,7 +1162,8 @@ public final class MaterialTerminalColorScheme {
         for (int attr : PALETTE_ATTRS) {
             result = 31 * result + MaterialColors.getColor(context, attr, 0);
         }
-        return 31 * result + level.ordinal();
+        // The glass floors follow the Debugging switch, so flipping it must rebuild the palette.
+        return 31 * (31 * result + level.ordinal()) + (sGlassFloors ? 1 : 0);
     }
 
     /**

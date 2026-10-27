@@ -123,6 +123,16 @@ public final class GlassBackdropCache {
         default int sampleWallpaper(@NonNull Rect screenRect, int blurRadiusDp) {
             return sampleWallpaper(screenRect);
         }
+
+        /**
+         * The lightness statistics of the wallpaper under {@code screenRect} ({@link Lightness}),
+         * read before the frost filter, which is what the even-out stage maps; null when nothing
+         * can be read or the sampler keeps no statistics. Never throws.
+         */
+        @Nullable
+        default Lightness sampleLightness(@NonNull Rect screenRect) {
+            return null;
+        }
     }
 
     /** What a {@link Sampler} returns when it has nothing: fully transparent, so it cannot be a colour. */
@@ -235,6 +245,13 @@ public final class GlassBackdropCache {
         if (mSampler == null || rect.isEmpty()) return UNREADABLE;
         int read = mSampler.sampleWallpaper(rect);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
+    }
+
+    /** {@link Sampler#sampleLightness}, remembered nowhere; null when there is nothing to read. */
+    @Nullable
+    public Lightness sampleLightnessUncached(@NonNull Rect rect) {
+        if (mSampler == null || rect.isEmpty()) return null;
+        return mSampler.sampleLightness(rect);
     }
 
     /**

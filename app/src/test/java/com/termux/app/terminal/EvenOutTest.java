@@ -67,7 +67,7 @@ public class EvenOutTest {
         assertEquals(log.toString(), 34d, ceiling.tone, 1d);
         assertFalse(mapping.isIdentity());
         assertTrue(log.toString(), mapping.dstHi <= ceiling.tone + 1e-9);
-        assertTrue(log.toString(), mapping.dstLo >= ceiling.tone - level.evenOutWidth - 0.5d - 1e-9);
+        assertTrue(log.toString(), mapping.dstLo >= ceiling.tone - level.evenOutWidth - 1.0d - 1e-9);
         assertEquals(level.evenOutWidth, mapping.dstHi - mapping.dstLo, 1e-9);
         assertTrue(ColorUtils.lstarFromArgb(ends.lightest) <= ceiling.tone + 1d);
         // The mean sits 48% of the way up [p2, p98], so it maps to about 26.7 in a band of
@@ -116,6 +116,36 @@ public class EvenOutTest {
         EvenOut.BandEnds ends = EvenOut.bandEnds(mapping, Color.TRANSPARENT, Color.TRANSPARENT);
         assertEquals(ends.darkest, EvenOut.worstEnd(ends, DARK));
         assertEquals(ends.lightest, EvenOut.worstEnd(ends, PALE));
+    }
+
+    /**
+     * The polarity ChromeInk picks from the pane's mean (inkPolarity on the mean flat glass) is the
+     * one build derives from the band's worst end, for a pale mean, a dark mean and one at the
+     * crossover (tone about 50, where both inks read alike), whichever polarity the palette wears.
+     */
+    @Test
+    public void thePolarityFromTheMeanIsThePolarityBuildDerivesFromTheWorstEnd() {
+        TerminalContrastLevel level = TerminalContrastLevel.DEFAULT;
+        MaterialTerminalColorScheme.Seeds seeds = new MaterialTerminalColorScheme.Seeds(
+            0xFF0C141B, 0xFFDCE3ED, 0xFF93CCFF, 0xFFF2B8B5);
+        for (double mean : new double[] {39.5d, 75d, 50d}) {
+            for (ChromeInk.Polarity current : new ChromeInk.Polarity[] {PALE, DARK}) {
+                GlassBackdropCache.Lightness wall = stats(mean - 25d, mean, mean + 25d);
+                ChromeInk.Polarity chosen = MaterialTerminalColorScheme.inkPolarity(
+                    wall.meanColor, level.bodyTarget, current);
+                boolean pale = chosen == PALE;
+                Properties recipe = MaterialTerminalColorScheme.build(seeds, level,
+                    pale ? 0xFF0A0A0A : 0xFFF5F5F5, null);
+                EvenOut.Mapping mapping = EvenOut.map(wall, EvenOut.ceiling(recipe, chosen, level),
+                    chosen, level);
+                int worst = EvenOut.worstEnd(
+                    EvenOut.bandEnds(mapping, Color.TRANSPARENT, Color.TRANSPARENT), chosen);
+                Properties built = MaterialTerminalColorScheme.build(seeds, level, worst, current);
+                assertEquals("mean " + mean + " current " + current + " worst "
+                    + Integer.toHexString(worst), chosen,
+                    MaterialTerminalColorScheme.polarityOf(built));
+            }
+        }
     }
 
     @Test

@@ -279,8 +279,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mGrainStrength = grainStrength;
         mRadiusPx = radiusPx;
         mFrostFilter = frostFilter;
-        mFramePaint.setColorFilter(frostFilter);
-        mPreviousFramePaint.setColorFilter(frostFilter);
+        applyFrameFilter(0xFF);
         mFilterKeptBrightness = 0xFF;
         mAimStale = true;   // force the matrix to be rebuilt against the new frame
         invalidate();
@@ -324,17 +323,40 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      *
      * @return true when the veil changed
      */
+    /**
+     * The frame's filter: the pane's even-out matrix ahead of the frost, then lifted by what the
+     * page's sink will take away. Even-out acts on the blurred wallpaper, then frost, then tint,
+     * opacity and grain as before.
+     */
+    private void applyFrameFilter(int keptBrightness) {
+        ColorFilter filter = GlassFilters.undimmed(
+            GlassFilters.withEvenOut(mEvenOut, mFrostFilter), keptBrightness);
+        mFramePaint.setColorFilter(filter);
+        mPreviousFramePaint.setColorFilter(filter);
+    }
+
+    /** The even-out matrix last asked of the veil source, or null. */
+    @Nullable private android.graphics.ColorMatrix mEvenOut;
+
     private boolean refreshVeil() {
         int veil = android.graphics.Color.TRANSPARENT;
+        android.graphics.ColorMatrix evenOut = null;
         if (mVeilSource != null && getWidth() > 0 && getHeight() > 0) {
             GlassAnchor.layoutOriginOnScreen(this, mVeilLocation, mVeilRootLocation);
             mVeilRect.set(mVeilLocation[0], mVeilLocation[1],
                 mVeilLocation[0] + getWidth(), mVeilLocation[1] + getHeight());
             veil = mVeilSource.paneGlassVeil(mVeilRect);
+            evenOut = mVeilSource.paneGlassEvenOut(mVeilRect);
         } else {
             mVeilRect.setEmpty();
         }
-        if (veil == mVeilColor) return false;
+        boolean evenOutMoved = !java.util.Arrays.equals(
+            evenOut == null ? null : evenOut.getArray(), mEvenOut == null ? null : mEvenOut.getArray());
+        if (evenOutMoved) {
+            mEvenOut = evenOut;
+            applyFrameFilter(mFilterKeptBrightness);
+        }
+        if (veil == mVeilColor) return evenOutMoved;
         mVeilColor = veil;
         return true;
     }
@@ -738,9 +760,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             int kept = mPlacement.keptBrightness;
             if (kept != mFilterKeptBrightness) {
                 mFilterKeptBrightness = kept;
-                ColorFilter filter = GlassFilters.undimmed(mFrostFilter, kept);
-                mFramePaint.setColorFilter(filter);
-                mPreviousFramePaint.setColorFilter(filter);
+                applyFrameFilter(kept);
             }
             float parallax = mParallax == null || liveFrame != null ? 0f : mParallax.offsetPx();
             GlassRefraction.Program program = mProgram;

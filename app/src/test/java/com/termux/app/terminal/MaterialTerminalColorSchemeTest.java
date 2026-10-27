@@ -852,6 +852,34 @@ public class MaterialTerminalColorSchemeTest {
             harder > 6.0d && harder < black);
     }
 
+    /**
+     * With the Debugging switch off the glass floors do not apply: a glass ground is held to
+     * today's floors (the only safe ones on an unbounded mean ground), and the palette differs
+     * from the one the switch-on build solves for the same ground.
+     */
+    @Test
+    public void withTheSwitchOffTheGlassFloorsDoNotApply() {
+        boolean changed = false;
+        try {
+            for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+                MaterialTerminalColorScheme.setGlassFloors(true);
+                Properties on = MaterialTerminalColorScheme.build(PONG, level, DUSK, null);
+                MaterialTerminalColorScheme.setGlassFloors(false);
+                Properties off = MaterialTerminalColorScheme.build(PONG, level, DUSK, null);
+                for (int i = 0; i < 16; i++) {
+                    assertTrue("ANSI " + i + " at " + level.value + " off",
+                        ratio(color(off, "color" + i), DUSK) + .01
+                            >= LegibilityPairs.backgroundFloor(i, level, color(off, "color7"),
+                                DUSK));
+                }
+                changed |= !on.equals(off);
+            }
+        } finally {
+            MaterialTerminalColorScheme.setGlassFloors(true);
+        }
+        assertTrue("the switch changes the palette at some level", changed);
+    }
+
     /** (c) A dark wallpaper keeps the theme's pale ink, and every level still meets its target. */
     @Test
     public void aDarkGroundKeepsPaleInkAndMeetsTheLevel() {
@@ -869,8 +897,9 @@ public class MaterialTerminalColorSchemeTest {
                 // their floor is what still leaves 3:1 on ANSI white.
                 assertTrue("ANSI " + i + " at " + level.value,
                     ratio(color(palette, "color" + i), DUSK) + .01
-                        >= LegibilityPairs.backgroundFloor(i, level, color(palette, "color7"),
-                            DUSK));
+                        >= Math.min(LegibilityPairs.backgroundFloor(i, level, true),
+                            LegibilityPairs.backgroundFloor(i, level, color(palette, "color7"),
+                                DUSK)));
             }
         }
     }
