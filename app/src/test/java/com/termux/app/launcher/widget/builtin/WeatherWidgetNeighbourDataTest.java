@@ -62,4 +62,33 @@ public class WeatherWidgetNeighbourDataTest {
                 activity.getString(com.termux.R.string.bw_feeds_weather_empty)));
         services.destroy();
     }
+
+    /** Pong's case: the Home widgets' controller is new (no Weather card lived before), the
+     *  status bar's fetch already landed. */
+    @Test public void aControllerMadeAfterAForecastLandedStartsFromIt() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        BuiltinWidgetServices first = new BuiltinWidgetServices(activity, HOST);
+        WeatherController a = first.acquireWeather(w -> { });
+        java.lang.reflect.Field placeField = WeatherController.class.getDeclaredField("mCachePlace");
+        placeField.setAccessible(true);
+        Object place = placeField.get(a);
+        java.lang.reflect.Field lastField = WeatherController.class.getDeclaredField("sLastValid");
+        lastField.setAccessible(true);
+        WeatherController.Weather last = (WeatherController.Weather) lastField.get(null);
+        last.valid = true;
+        last.currentC = 32;
+        last.fetchedAtMs = System.currentTimeMillis();
+        java.lang.reflect.Field lastPlace = WeatherController.class.getDeclaredField("sLastValidPlace");
+        lastPlace.setAccessible(true);
+        lastPlace.set(null, place);
+        first.destroy();
+
+        BuiltinWidgetServices second = new BuiltinWidgetServices(activity, HOST);
+        WeatherController b = second.acquireWeather(w -> { });
+        assertTrue("the new controller holds the forecast", b.cache().valid);
+        assertTrue(32 == b.cache().currentC);
+        second.destroy();
+        last.valid = false;
+        lastPlace.set(null, null);
+    }
 }
