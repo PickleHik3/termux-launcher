@@ -1162,7 +1162,8 @@ public final class MaterialTerminalColorScheme {
         for (int attr : PALETTE_ATTRS) {
             result = 31 * result + MaterialColors.getColor(context, attr, 0);
         }
-        return 31 * result + level.ordinal();
+        // The glass floors follow the Debugging switch, so flipping it must rebuild the palette.
+        return 31 * (31 * result + level.ordinal()) + (sGlassFloors ? 1 : 0);
     }
 
     /**
