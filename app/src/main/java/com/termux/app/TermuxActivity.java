@@ -4428,6 +4428,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mWallpaperParallaxSettleGapPx, mWallpaperParallaxSettleRemaining, sparePx);
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
+        android.util.Log.d("DEBUG-wpx", android.os.SystemClock.uptimeMillis() + " " + offsetPx + " rows=" + mWallpaperParallaxRowCount); // [DEBUG-wpx]
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
         if (!pagesReaimed && mPaneController != null) mPaneController.invalidatePaneGlassPositions();
         if (!pagesReaimed && mPaneWallController != null) {
