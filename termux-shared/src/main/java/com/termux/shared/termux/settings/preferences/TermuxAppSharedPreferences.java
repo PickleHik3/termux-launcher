@@ -3286,10 +3286,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 writeSurfaceValue(slot, property, key, value);
             return;
         }
-        if (isSurfaceInheriting(slot, property, half))
+        if (workspaceOverrideKey(slot, property, half) != null)
+            writeSurfaceRaw(slot, property, half, value);
+        else if (isSurfaceInheriting(slot, property, half))
             setSurfaceBaseValue(property, half, value);
         else
             writeSurfaceRaw(slot, property, half, value);
+    }
+
+    /**
+     * The key of the Workspace's (the Terminal page's) own value of a surface's property, or null
+     * for any other half, a value a page may not hold, or when no Terminal page is known.
+     */
+    @Nullable
+    private static String workspaceOverrideKey(SurfaceSlot slot, SurfaceProperty property,
+                                               @Nullable WallHalf half) {
+        if (half != WallHalf.WORKSPACE || !isPerHalf(slot, property))
+            return null;
+        String key = surfaceOverrideKey(slot, property);
+        if (key == null || !PageLookKeys.DETACHABLE.contains(key))
+            return null;
+        String pageKey = surfaceHalfKey(key, half);
+        return pageKey.equals(key) ? null : pageKey;
     }
 
     /**
@@ -3558,6 +3576,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                                        @Nullable WallHalf half) {
         if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return true;
+        String pageKey = workspaceOverrideKey(slot, property, half);
+        if (pageKey != null && containsKey(pageKey))
+            return false;
         String key = surfaceInheritKey(slot, property);
         if (half != null && isPerHalf(slot, property) && containsKey(surfaceHalfKey(key, half)))
             key = surfaceHalfKey(key, half);
@@ -3579,6 +3600,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return;
         String key = surfaceInheritKey(slot, property);
+        String pageKey = workspaceOverrideKey(slot, property, half);
+        if (pageKey != null) {
+            // The Workspace is the Terminal page: its link is an override of its own, so the
+            // wall's flag (Home's) stays where it is.
+            if (inherit) {
+                if (mSharedPreferences != null && containsKey(pageKey))
+                    mSharedPreferences.edit().remove(pageKey).apply();
+            } else if (!containsKey(pageKey)) {
+                SharedPreferenceUtils.setInt(mSharedPreferences, pageKey,
+                    getSurfaceValue(slot, property, half), false);
+            }
+            return;
+        }
         if (half != null && isPerHalf(slot, property)) {
             SharedPreferenceUtils.setBoolean(mSharedPreferences, surfaceHalfKey(key, half),
                 inherit, false);
@@ -3587,6 +3621,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (mSharedPreferences == null) return;
         SharedPreferences.Editor editor = mSharedPreferences.edit().putBoolean(key, inherit);
         removeHalfKeys(editor, key);
+        // Both halves: the Terminal page's own value goes too, as the half twins used to.
+        String ownKey = surfaceOverrideKey(slot, property);
+        if (ownKey != null && isPerHalf(slot, property)) {
+            String override = surfaceHalfKey(ownKey, WallHalf.WORKSPACE);
+            if (!override.equals(ownKey) && containsKey(override))
+                editor.remove(override);
+        }
         editor.apply();
     }
 
@@ -3634,7 +3675,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             boolean follows = isSurfaceInheriting(slot, property, from)
                 && getSurfaceBaseValue(property, to) == shown;
             setSurfaceInheriting(slot, property, to, follows);
-            writeSurfaceRaw(slot, property, to, shown);
+            // A Workspace that follows holds no override of its own.
+            if (!(follows && workspaceOverrideKey(slot, property, to) != null))
+                writeSurfaceRaw(slot, property, to, shown);
         }
         if (slot == SurfaceSlot.KEYBOARD)
             copyKeyboardBackdropOpacity(from);
@@ -3663,9 +3706,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (!isPerHalf(slot, property))
                     continue;
-                setSurfaceInheriting(slot, property, to,
-                    isSurfaceInheriting(slot, property, from));
-                writeSurfaceRaw(slot, property, to, getSurfaceOverrideValue(slot, property, from));
+                boolean follows = isSurfaceInheriting(slot, property, from);
+                setSurfaceInheriting(slot, property, to, follows);
+                if (!(follows && workspaceOverrideKey(slot, property, to) != null))
+                    writeSurfaceRaw(slot, property, to,
+                        getSurfaceOverrideValue(slot, property, from));
             }
         }
         copyKeyboardBackdropOpacity(from);
