@@ -43,8 +43,15 @@ public final class EvenOut {
         public final double floor;
         /** The highest (pale ink) or lowest (dark ink) ground tone that still meets {@link #floor}. */
         public final double groundTone;
+        /**
+         * Whether this pair sets the ceiling. Red and blue do not: on glass they are held only by
+         * the panel pair and get best effort on the ground (ADR 0014, decided 2026-10-27).
+         */
+        public final boolean limiting;
 
-        PairLimit(@NonNull String label, double inkTone, double floor, double groundTone) {
+        PairLimit(@NonNull String label, double inkTone, double floor, double groundTone,
+                  boolean limiting) {
+            this.limiting = limiting;
             this.label = label;
             this.inkTone = inkTone;
             this.floor = floor;
@@ -53,8 +60,8 @@ public final class EvenOut {
 
         @Override
         public String toString() {
-            return String.format(Locale.US, "%s: ink tone %.1f at %.2f:1 -> ground %.1f",
-                label, inkTone, floor, groundTone);
+            return String.format(Locale.US, "%s: ink tone %.1f at %.2f:1 -> ground %.1f%s",
+                label, inkTone, floor, groundTone, limiting ? "" : " (not limiting)");
         }
     }
 
@@ -82,7 +89,9 @@ public final class EvenOut {
      * minus it). Red and blue also have to read on ANSI white, whose top tone is
      * {@link MaterialTerminalColorScheme#WHITE_TONE_MAX}, so for pale ink their tone is capped at
      * the one that keeps {@link LegibilityPairs#PANEL_INK_FLOOR} on that white; a dark ink stands
-     * on the opposite side of the white and needs no cap. The floors are the glass ones: the
+     * on the opposite side of the white and needs no cap. Red and blue stay in the breakdown but
+     * do not set the ceiling: on glass the panel pair is all that holds them and the ground gets
+     * best effort, as kitty's red does (decided 2026-10-27). The floors are the glass ones: the
      * foreground {@code bodyTarget}, normal accents {@code glassAnsiRatio}, bright accents
      * {@code ansiRatio}, the grey {@code dimRatio}.
      */
@@ -96,6 +105,7 @@ public final class EvenOut {
             boolean foreground = pair.ink == LegibilityPairs.FOREGROUND;
             String key = foreground ? "foreground" : "color" + pair.ink;
             double slotTone = Hct.fromInt(Color.parseColor(palette.getProperty(key))).getTone();
+            boolean panelInk = !foreground && LegibilityPairs.onWhiteFloor(pair.ink) > 0d;
             double floor;
             double tone;
             if (foreground) {
@@ -118,10 +128,12 @@ public final class EvenOut {
                         onWhite, true));
                 }
             }
-            limits.add(new PairLimit(pair.label(), tone, floor, toneAtRatio(tone, floor, pale)));
+            limits.add(new PairLimit(pair.label(), tone, floor, toneAtRatio(tone, floor, pale),
+                !panelInk));
         }
         double worst = pale ? 100d : 0d;
         for (PairLimit limit : limits) {
+            if (!limit.limiting) continue;
             worst = pale ? Math.min(worst, limit.groundTone) : Math.max(worst, limit.groundTone);
         }
         return new Ceiling(worst, Collections.unmodifiableList(limits));

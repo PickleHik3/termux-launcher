@@ -53,7 +53,7 @@ public class EvenOutTest {
     }
 
     @Test
-    public void pongCloudPaneAtDefaultIsBoundedByTheRedAndBlueCap() {
+    public void pongCloudPaneAtDefaultIsBoundedByTheGreyAndNormalAccents() {
         TerminalContrastLevel level = TerminalContrastLevel.DEFAULT;
         EvenOut.Ceiling ceiling = EvenOut.ceiling(pong(level), PALE, level);
         StringBuilder log = new StringBuilder("ceiling " + ceiling.tone + "\n");
@@ -64,16 +64,16 @@ public class EvenOutTest {
             mapping.apply(39.5d)));
         System.out.print(log);
 
-        assertEquals(log.toString(), 29d, ceiling.tone, 2d);
+        assertEquals(log.toString(), 34d, ceiling.tone, 1d);
         assertFalse(mapping.isIdentity());
         assertTrue(log.toString(), mapping.dstHi <= ceiling.tone + 1e-9);
         assertTrue(log.toString(), mapping.dstLo >= ceiling.tone - level.evenOutWidth - 1e-9);
         assertEquals(level.evenOutWidth, mapping.dstHi - mapping.dstLo, 1e-9);
         assertTrue(ColorUtils.lstarFromArgb(ends.lightest) <= ceiling.tone + 1d);
-        // The mean moves down by the amount the skew of [p2, p98] about the mean forces: the brief
-        // asked for under 12 tones, which no mapping into [ceiling - 14, ceiling] can give.
+        // The mean sits 48% of the way up [p2, p98], so it maps to about 26.7 in a band of
+        // [20, 34]: a move of about 12.8 tones, hence the bound of 14 rather than 12.
         double moved = 39.5d - mapping.apply(39.5d);
-        assertTrue(log.toString(), moved > 0d && moved < 20d);
+        assertTrue(log.toString(), moved > 0d && moved < 14d);
     }
 
     @Test
@@ -116,8 +116,17 @@ public class EvenOutTest {
         double standard = bandTop(TerminalContrastLevel.DEFAULT);
         double harder = bandTop(TerminalContrastLevel.HARDER);
         System.out.println("band tops " + softer + " " + standard + " " + harder);
-        assertTrue(softer > standard);
+        // With red and blue no longer limiting, Softer's pastel accents (tone 52 + reach 4) set a
+        // lower ceiling than Default's (55 + 10), so its band top is NOT higher; it is wider.
         assertTrue(standard > harder);
+        assertTrue(widthOf(TerminalContrastLevel.SOFTER) > widthOf(TerminalContrastLevel.DEFAULT));
+        assertTrue(widthOf(TerminalContrastLevel.DEFAULT) > widthOf(TerminalContrastLevel.HARDER));
+    }
+
+    private static double widthOf(TerminalContrastLevel level) {
+        EvenOut.Ceiling ceiling = EvenOut.ceiling(pong(level), PALE, level);
+        EvenOut.Mapping mapping = EvenOut.map(cloud(), ceiling, PALE, level);
+        return mapping.dstHi - mapping.dstLo;
     }
 
     private static double bandTop(TerminalContrastLevel level) {
@@ -139,6 +148,9 @@ public class EvenOutTest {
                 double groundTone = ColorUtils.lstarFromArgb(EvenOut.worstEnd(ends, polarity));
                 assertFalse(level + " " + polarity, ceiling.pairs.isEmpty());
                 for (EvenOut.PairLimit limit : ceiling.pairs) {
+                    // Red and blue are held by the panel pair only on glass (ADR 0014, decided
+                    // 2026-10-27); they do not set the ceiling and may miss the ground floor.
+                    if (!limit.limiting) continue;
                     // Hct rounds to an 8-bit colour, which moves a tone by a few tenths.
                     double ratio = EvenOut.toneRatio(limit.inkTone, groundTone);
                     assertTrue(level + " " + polarity + " " + limit + " ground " + groundTone
