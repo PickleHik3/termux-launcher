@@ -83,6 +83,7 @@
     <string name="appearance_row_glass_widgets">Glass widgets</string>
     <string name="appearance_row_two_line">Two-line labels</string>
     <string name="appearance_row_label_shadow">Label shadow</string>
+    <string name="appearance_row_page_transition">Transition</string>
     <string name="appearance_row_folders">Folders</string>
     <string name="appearance_row_numerals">Numerals</string>
     <string name="appearance_row_page_dots">Page dots</string>

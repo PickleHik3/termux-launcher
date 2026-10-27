@@ -99,13 +99,21 @@ public class EditorRowsTest {
     }
 
     @Test
+    public void theHomeCardHoldsOneTransitionRowOfFiveGlyphTilesInTheEnumsOrder() {
+        assertTrue(EditorRows.tier(EditorCard.HOME, ALL, 2).contains(Row.PAGE_TRANSITION));
+        assertEquals(Kind.SEGMENTS, Row.PAGE_TRANSITION.kind);
+        assertEquals(5, com.termux.app.launcher.home.HomePageTransition.values().length);
+        assertEquals("slide", com.termux.app.launcher.home.HomePageTransition.values()[0].value);
+    }
+
+    @Test
     public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
         assertEquals(Arrays.asList(Row.SECTION_GRID, Row.HOME_COLUMNS, Row.HOME_ROWS,
             Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY, Row.TINT),
             EditorRows.tier(EditorCard.HOME, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_LABELS_FOLDERS, Row.LABEL_SIZE,
             Row.HOME_ICON_SIZE, Row.FOLDERS, Row.NUMERALS, Row.SECTION_OPTIONS,
-            Row.GLASS_WIDGETS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
+            Row.GLASS_WIDGETS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS, Row.PAGE_TRANSITION,
             Row.WALLPAPER_SCROLL), EditorRows.tier(EditorCard.HOME, ALL, 2));
         assertEquals(Arrays.asList(Row.MATCH_WORKSPACE, Row.ELEMENTS, Row.SECTION_MORE,
             Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES),

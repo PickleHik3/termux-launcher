@@ -52,6 +52,13 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
             com.termux.app.HomeAppChooser.open(context);
             return true;
         });
+        Preference transition = findPreference(
+            com.termux.app.launcher.home.HomeSettings.KEY_PAGE_TRANSITION);
+        // The choice lives on the Appearance editor's Home card; this row opens it there.
+        if (transition != null) transition.setOnPreferenceClickListener(row -> {
+            SettingsEditorDoors.openEditor(this, row, com.termux.app.surfaces.EditorDoor.SETTINGS_HOME);
+            return true;
+        });
         Preference restart = findPreference("app_launcher_restart");
         if (restart != null) restart.setOnPreferenceClickListener(row -> {
             confirmRestart(context);
@@ -131,8 +138,20 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         if (context != null) offerStartIn(com.termux.app.settings.UseAsSetting.read(context));
         Preference transition = context == null ? null
             : findPreference(com.termux.app.launcher.home.HomeSettings.KEY_PAGE_TRANSITION);
-        if (transition != null) transition.setSummary(HomePageTransitionFragment.titleOf(
+        if (transition != null) transition.setSummary(titleOfTransition(
             com.termux.app.launcher.home.HomeSettings.pageTransition(context)));
+    }
+
+    @androidx.annotation.StringRes
+    private static int titleOfTransition(@NonNull com.termux.app.launcher.home.HomePageTransition effect) {
+        switch (effect) {
+            case DEPTH: return R.string.settings_home_page_transition_depth;
+            case FADE: return R.string.settings_home_page_transition_fade;
+            case CAROUSEL: return R.string.settings_home_page_transition_carousel;
+            case STACK: return R.string.settings_home_page_transition_stack;
+            case SLIDE:
+            default: return R.string.settings_home_page_transition_slide;
+        }
     }
 
     /** Keyboard vibration belongs to the keyboard's store; everything else to the launcher's. */

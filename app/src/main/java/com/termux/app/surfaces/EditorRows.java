@@ -104,6 +104,8 @@ public final class EditorRows {
         TWO_LINE(Kind.SWITCH, R.string.appearance_row_two_line, R.drawable.ic_editor_text_size),
         LABEL_SHADOW(Kind.SWITCH, R.string.appearance_row_label_shadow, R.drawable.ic_editor_contrast),
         FOLDERS(Kind.SEGMENTS, R.string.appearance_row_folders, R.drawable.ic_symbol_folder),
+        PAGE_TRANSITION(Kind.SEGMENTS, R.string.appearance_row_page_transition,
+            R.drawable.ic_ed_transition_slide),
         NUMERALS(Kind.SEGMENTS, R.string.appearance_row_numerals, R.drawable.ic_editor_text_size),
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,

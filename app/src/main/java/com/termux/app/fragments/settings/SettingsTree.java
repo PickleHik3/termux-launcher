@@ -216,8 +216,6 @@ public final class SettingsTree {
         // System
         String general = PAGES + "GeneralPreferencesFragment";
         section(Section.GENERAL, general, R.string.settings_section_general, R.xml.general_preferences);
-        // Page transition turns every page, not only Home's: it sits under Motion.
-        editor(general, PAGES + "HomePageTransitionFragment", R.string.settings_home_page_transition_title);
         // The presets and the motion they trim: General's Battery row opens it.
         page(general, PAGES + "PerformancePreferencesFragment", R.string.settings_destination_performance,
             R.xml.performance_preferences);
@@ -241,6 +239,8 @@ public final class SettingsTree {
         ALIASES.put(PAGES + "GuiAppsSetupPreferencesFragment", PAGES + "GuiAppsSetupGuideFragment");
         ALIASES.put(PAGES + "TerminalStatusPreferencesFragment", terminal);
         // The two Debugging pages folded into Diagnostics.
+        // Page transition moved into the Appearance editor's Home card; General's row links to it.
+        ALIASES.put(PAGES + "HomePageTransitionFragment", general);
         ALIASES.put(PAGES + "DebuggingPreferencesFragment", PAGES + "AdvancedDiagnosticsPreferencesFragment");
         ALIASES.put(SETTINGS + "termux_api.DebuggingPreferencesFragment",
             PAGES + "AdvancedDiagnosticsPreferencesFragment");
