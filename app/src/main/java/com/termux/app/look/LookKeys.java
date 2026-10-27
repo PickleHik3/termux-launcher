@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.wall.WallPages.PageKind;
+import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -24,12 +25,12 @@ final class LookKeys {
 
     private LookKeys() { }
 
-    static final String PAGE_SEPARATOR = "@";
+    static final String PAGE_SEPARATOR = PageLookKeys.PAGE_SEPARATOR;
 
     /** The key a page's override of {@code key} lives under. */
     @NonNull
     static String pageKey(@NonNull String key, int pageId) {
-        return key + PAGE_SEPARATOR + pageId;
+        return PageLookKeys.pageKey(key, pageId);
     }
 
     /** The page id a key's {@code @<id>} suffix names, or -1 when it has none. */
@@ -51,8 +52,7 @@ final class LookKeys {
     }
 
     static boolean isLookProperty(@NonNull SurfaceProperty property) {
-        return property == SurfaceProperty.BLUR || property == SurfaceProperty.OPACITY
-            || property == SurfaceProperty.GRAIN || property == SurfaceProperty.TINT;
+        return PageLookKeys.isLookProperty(property);
     }
 
     static boolean isShape(@NonNull SurfaceProperty property) {
@@ -173,7 +173,7 @@ final class LookKeys {
     static final Set<String> KNOWN = new HashSet<>();
 
     /** The keys a page may override: detachable surface keys and the two ground/keyboard inputs. */
-    static final Set<String> OVERRIDABLE = new HashSet<>();
+    static final Set<String> OVERRIDABLE = PageLookKeys.DETACHABLE;
 
     static {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
@@ -182,14 +182,11 @@ final class LookKeys {
                 if (key == null) continue;
                 KNOWN.add(key);
                 KNOWN.add(inheritKey(slot, property));
-                if (isLookProperty(property)) OVERRIDABLE.add(key);
             }
         }
         for (SurfaceProperty property : SurfaceProperty.values()) KNOWN.add(property.baseKey);
         KNOWN.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
-        OVERRIDABLE.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
         KNOWN.add(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM);
-        OVERRIDABLE.add(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM);
         KNOWN.add(TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY);
         KNOWN.add(TERMUX_APP.KEY_SURFACE_MATERIAL);
         KNOWN.add(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY);

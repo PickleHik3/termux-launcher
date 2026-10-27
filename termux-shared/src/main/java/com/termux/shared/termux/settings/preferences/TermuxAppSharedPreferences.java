@@ -63,6 +63,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                                        @Nullable SharedPreferences multiProcessSharedPreferences, @NonNull String displayIdSuffix) {
         super(context, sharedPreferences, multiProcessSharedPreferences);
         mDisplayIdSuffix = displayIdSuffix;
+        sTerminalPageId = sharedPreferences.getInt(PageLookKeys.KEY_TERMINAL_PAGE_ID, -1);
         setFontVariables(context);
     }
 
@@ -3447,22 +3448,27 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             && hasSurfaceProperty(slot, property);
     }
 
-    /** A half's own key beside a shared one. Public because the preset format names it. */
-    @NonNull
-    public static String surfaceHalfKey(@NonNull String key, @NonNull WallHalf half) {
-        // Built once per key: the look getters run on the chrome's passes, which must not allocate.
-        return HALF_KEYS.computeIfAbsent(key, TermuxAppSharedPreferences::halfKeysOf)[half.ordinal()];
+    /** The Terminal page's id as the app last told these preferences; -1 when it has none. */
+    private static volatile int sTerminalPageId = -1;
+
+    /** Tells the half shim which page the Workspace is now (ADR 0015); -1 for none. */
+    public static void setTerminalPageId(int pageId) {
+        sTerminalPageId = pageId;
     }
 
-    private static final java.util.concurrent.ConcurrentHashMap<String, String[]> HALF_KEYS =
-        new java.util.concurrent.ConcurrentHashMap<>();
-
+    /**
+     * The key a half's value of {@code key} lives under, now that the halves are pages. Home is
+     * the wall: its key is the plain one. The Workspace is the Terminal page: for a key a page may
+     * hold its own value of ({@link PageLookKeys#DETACHABLE}) it is {@code <key>@<terminalPageId>},
+     * which holds a value only once one was written there; every other key is wall-wide and the
+     * Workspace shares the plain one. Public because the preset format names it.
+     */
     @NonNull
-    private static String[] halfKeysOf(@NonNull String key) {
-        String[] keys = new String[WallHalf.values().length];
-        for (WallHalf half : WallHalf.values())
-            keys[half.ordinal()] = key + "_" + half.key;
-        return keys;
+    public static String surfaceHalfKey(@NonNull String key, @NonNull WallHalf half) {
+        int terminal = sTerminalPageId;
+        if (half == WallHalf.WORKSPACE && terminal >= 0 && PageLookKeys.DETACHABLE.contains(key))
+            return PageLookKeys.pageKey(key, terminal);
+        return key;
     }
 
     /** The shared properties. Not every slot has every one - see {@link #hasSurfaceProperty}. */
@@ -3759,11 +3765,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     private void removeHalfKeys(@NonNull SharedPreferences.Editor editor, @NonNull String key) {
-        for (WallHalf half : WallHalf.values()) {
-            String halfKey = surfaceHalfKey(key, half);
-            if (containsKey(halfKey))
-                editor.remove(halfKey);
-        }
+        String override = surfaceHalfKey(key, WallHalf.WORKSPACE);
+        if (!override.equals(key) && containsKey(override))
+            editor.remove(override);
     }
 
     /** The glass tint colour a preset chose; {@code scheme} unless it named another that we know. */
