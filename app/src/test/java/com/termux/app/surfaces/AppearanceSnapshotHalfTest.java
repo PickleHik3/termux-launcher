@@ -105,7 +105,7 @@ public class AppearanceSnapshotHalfTest {
         assertFalse(hasHalfKeys());
 
         preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 77);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN, WallHalf.HOME, 12);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN, WallHalf.WORKSPACE, 12);
         assertTrue(hasHalfKeys());
 
         entry.restore(preferences);

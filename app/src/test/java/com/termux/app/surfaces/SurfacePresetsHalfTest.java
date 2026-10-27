@@ -104,7 +104,7 @@ public class SurfacePresetsHalfTest {
         assertEquals(70, preferences.getAppBarOpacity(WallHalf.WORKSPACE));
         assertEquals(15, preferences.getAppBarOpacity(WallHalf.HOME));
         assertEquals(60, preferences.getDockTintStrength(WallHalf.HOME));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
+        assertFalse("the detach is wall-wide, so the Terminal page holds it too", preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
             WallHalf.WORKSPACE));
         assertEquals(30, preferences.getStatusBarBlurRadius(WallHalf.WORKSPACE));
         // Home's cells are all named, so the status bar Home never detached follows Home's Base.
