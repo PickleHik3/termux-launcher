@@ -45,6 +45,10 @@ public class EditorCardSheetScrollTest {
     private long mTime = 1000L;
 
     private void setUp() {
+        setUp(EditorCard.DOCK);
+    }
+
+    private void setUp(EditorCard card) {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         Context themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -63,7 +67,7 @@ public class EditorCardSheetScrollTest {
         int half = Math.round(mHeight * 0.4f);
         mSheet.attach(mParent);
         mSheet.setGeometry(half, full, nav);
-        mSheet.show(EditorCard.DOCK, EditorRows.rows(EditorCard.DOCK,
+        mSheet.show(card, EditorRows.rows(card,
             new EditorRows.Offers(true, true)), "Reset", false);
         layOut();
     }
@@ -87,10 +91,53 @@ public class EditorCardSheetScrollTest {
         send(scroll, MotionEvent.ACTION_UP, x, y + dy);
     }
 
+    private static String deepest(View view, float x, float y) {
+        int[] at = new int[2];
+        String best = "";
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = group.getChildCount() - 1; i >= 0; i--) {
+                View child = group.getChildAt(i);
+                if (child.getVisibility() != View.VISIBLE) continue;
+                float cx = x + group.getScrollX() - child.getLeft();
+                float cy = y + group.getScrollY() - child.getTop() - child.getTranslationY();
+                if (cx >= 0 && cy >= 0 && cx < child.getWidth() && cy < child.getHeight())
+                    return view.getClass().getSimpleName() + ">" + deepest(child, cx, cy);
+            }
+        }
+        return view.getClass().getSimpleName();
+    }
+
     private void send(View view, int action, float x, float y) {
         MotionEvent event = MotionEvent.obtain(mTime, mTime, action, x, y, 0);
         view.dispatchTouchEvent(event);
         event.recycle();
+    }
+
+    /** The device's path: the drag goes into the sheet's parent, down the real hierarchy. */
+    @Test
+    public void upOnARowFromTheParentGrowsTheSheetOnEveryCard() {
+        for (EditorCard card : EditorCard.values()) {
+            for (int step = 0; step < 6; step++) {
+                setUp(card);
+                float top = mHeight - (mHeight * 0.4f);
+                float y = top + 160 + step * (mHeight * 0.4f - 220) / 6f;
+                float x = 100f;
+                // A glass column's slider is vertical: a vertical drag on it is the slider's.
+                if (deepest(mParent, x, y).contains("LegendSlider"))
+                    continue;
+                // The Dock card's bars reorder by a vertical drag on their handle.
+                if (card == EditorCard.DOCK && deepest(mParent, x, y).endsWith("ImageView"))
+                    continue;
+                send(mParent, MotionEvent.ACTION_DOWN, x, y);
+                for (int i = 1; i <= 5; i++) {
+                    mTime += 10;
+                    send(mParent, MotionEvent.ACTION_MOVE, x, y - 60f * i);
+                }
+                send(mParent, MotionEvent.ACTION_UP, x, y - 300f);
+                assertEquals(card + " step " + step + " at " + deepest(mParent, x, y), EditorCardSheet.DETENT_FULL, mSheet.detent());
+            }
+        }
     }
 
     @Test
