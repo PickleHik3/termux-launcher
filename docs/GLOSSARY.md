@@ -423,6 +423,16 @@ A carry of several items: after one is picked up, taps on more Home items fly th
 stack; the drop lays them out in pick order.
 _Avoid_: multi-select, bulk move
 
+**Page list**:
+The wall's ordered pages and its **home page**, held by one module (`WallPages`, designed
+2026-10-27). Pages have stable ids; what stands on a page is kept by its owner under that id.
+_Avoid_: page order (as a store), wall model
+
+**Stop**:
+One place the wall can land: a page, or one window of the **Terminal page**. The Terminal page
+gives one stop per window of the current session, or one when it has none.
+_Avoid_: page index, position
+
 **Widgets** (the surface):
 The look surface for widget cards on a Home page, following **Base** or detached per page; each
 widget only chooses Card or **Bare**.

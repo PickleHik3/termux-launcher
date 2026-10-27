@@ -149,7 +149,8 @@ lifted once into Floats pinned to their window; Home floats keep their page.
   The getters that silently answer the Workspace, and so dress Home's drawer and corner tab in the
   Workspace dock's glass, cannot survive this.
 - Page storage gains a list of pages (kind, name, binding, look overrides, dress) beside Home's
-  widget repository; the Terminal page's windows need a persistent store for the cold-start
+  widget repository, designed as `WallPages` with stable page ids in
+  `project-docs/active/page-list-2026-10-27.md`; the Terminal page's windows need a persistent store for the cold-start
   restore, which today lives only in the activity's saved state.
 - The crossing module's two-half snapshot becomes a pair of neighbouring pages.
 - ADR 0014 wave 2c (even-out for the keyboard, dock, status bar and widgets) waits for this model
