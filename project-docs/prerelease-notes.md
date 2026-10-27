@@ -19,6 +19,7 @@ Latest stable: v1.2.1.
 
 ### Home
 - Bare widgets draw nothing behind themselves: the soft dim behind a Bare clock is gone, and only its ink changes tone to stay readable.
+- Swiping between Home pages moves both pages together under your finger, in the transition you picked, instead of the next page appearing only after you let go.
 - The Home card has a Transition row of five glyph tiles (Slide, Depth, Fade, Carousel and Stack), and Settings › General › Page transition now opens it.
 
 ### Appearance editor
