@@ -552,6 +552,7 @@ public final class ChromeInk {
         readMode();
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         PaneAnswer answer = mPanes.get(rootRect);
+        if (answer == null) pruneResized(rootRect);
         if (answer != null && answer.sampled
                 && answer.matches(mDimColor, tint, veilColor, ink, dimInk, target)
                 && samePolicy(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
@@ -586,9 +587,14 @@ public final class ChromeInk {
                 // The limit is applied on the composited ground (after frost, dim and tint), and
                 // a side the chain cannot reach is not chosen over one it can.
                 EvenOut.Chain chain = compositeChain(lightness.meanColor, mDimColor, tint);
-                shortPale = EvenOut.shortfall(policy.pale, Polarity.PALE_INK, chain);
-                shortDark = EvenOut.shortfall(policy.dark, Polarity.DARK_INK, chain);
-                evenOutPolarity = pickPolarity(meanFlat, policy, shortPale, shortDark);
+                shortPale = EvenOut.shortfall(lightness, policy.pale, Polarity.PALE_INK,
+                    policy.level, chain);
+                shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
+                    policy.level, chain);
+                // One polarity for the whole band: every live pane's shortfalls vote, this
+                // pane's fresh ones included (its old answer, if any, is replaced).
+                evenOutPolarity = bandPolarity(policy, rootRect, shortPale, shortDark);
+                mBandPolarity = evenOutPolarity;
                 boolean pale = evenOutPolarity == Polarity.PALE_INK;
                 EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
                     pale ? policy.pale : policy.dark, evenOutPolarity, policy.level, chain);
@@ -633,8 +639,8 @@ public final class ChromeInk {
         // The chrome's vote stays the mean (the keyboard, dock and status bar are not evened out
         // yet); the palette's ground is the worst end across panes when the stage is on.
         vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote(tint, true));
-        int ground = policy != null ? worstPaneGround(tint, evenOutPolarity != null
-            ? evenOutPolarity : policy.current) : meanPaneVote(tint, true);
+        int ground = policy != null ? worstPaneGround(tint, mBandPolarity != null
+            ? mBandPolarity : policy.current) : meanPaneVote(tint, true);
         int surface = meanPaneSurface(tint);
         if (ground != mPaneGround || surface != mPaneSurface) {
             mPaneGround = ground;
@@ -695,6 +701,11 @@ public final class ChromeInk {
      */
     public void setOnTerminalPaneGroundChanged(@Nullable Runnable listener) {
         mOnPaneGroundChanged = listener;
+    }
+
+    /** The band's polarity as last chosen, for tests. */
+    @Nullable Polarity bandPolarityForTests() {
+        return mBandPolarity;
     }
 
     /** Terminal panes remembered right now, for tests. */
@@ -886,6 +897,7 @@ public final class ChromeInk {
         double worstLuma = 0d;
         for (PaneAnswer pane : mPanes.values()) {
             if (pane.tint != tint || pane.dim != mDimColor) continue;
+            if (pane.evenOutPolarity != polarity) continue;
             double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
             if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
                 worst = pane.flat;
@@ -899,30 +911,74 @@ public final class ChromeInk {
         return a == null ? b == null : a.sameAs(b);
     }
 
-    /** Whether the polarity this pane's matrix was built for is no longer the mean's choice. */
+    /** The polarity the band was last mapped on, or null before the first measured pane. */
+    @Nullable private Polarity mBandPolarity;
+
+    /** Whether the polarity this pane's matrix was built for is no longer the band's choice. */
     private boolean polarityMoved(@NonNull PaneAnswer pane) {
         EvenOutPolicy policy = mEvenOutPolicy;
         if (policy == null || pane.evenOutPolarity == null) return false;
-        return pane.evenOutPolarity != pickPolarity(pane.meanFlat, policy, pane.shortPale,
-            pane.shortDark);
+        return pane.evenOutPolarity != bandPolarity(policy, null, 0d, 0d, pane);
+    }
+
+    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @NonNull Rect fresh,
+                                  double shortPale, double shortDark) {
+        return bandPolarity(policy, fresh, shortPale, shortDark, null);
     }
 
     /**
-     * The polarity from the mean flat glass (with the palette's hysteresis), unless that ink's
-     * side is out of reach on the composited ground and the other's is nearer: reachability, not
-     * the mean alone, decides. build() derives its polarity from the worst end of the band chosen
-     * here, which sits on the chosen side of the crossover, so the two agree.
+     * The band's one polarity: the palette's current ink when every live pane can reach it with
+     * room, else the other side when every pane can reach that, else the side with the least
+     * total shortfall (the current one on a tie). A pane being measured ({@code fresh}, with its
+     * new shortfalls) replaces any stored answer for that rect; panes with no measurement (no
+     * shortfalls stored) do not vote.
      */
     @NonNull
-    static Polarity pickPolarity(@ColorInt int meanFlat, @NonNull EvenOutPolicy policy,
-                                 double shortPale, double shortDark) {
-        Polarity base = MaterialTerminalColorScheme.inkPolarity(meanFlat, policy.level.bodyTarget,
-            policy.current);
-        boolean pale = base == Polarity.PALE_INK;
-        double own = pale ? shortPale : shortDark;
-        double other = pale ? shortDark : shortPale;
-        if (own > 0d && other < own) return pale ? Polarity.DARK_INK : Polarity.PALE_INK;
-        return base;
+    private Polarity bandPolarity(@NonNull EvenOutPolicy policy, @Nullable Rect fresh,
+                                  double freshPale, double freshDark, @Nullable PaneAnswer self) {
+        double totalPale = 0d, totalDark = 0d;
+        double worstPale = 0d, worstDark = 0d;
+        if (fresh != null) {
+            totalPale = worstPale = freshPale;
+            totalDark = worstDark = freshDark;
+        }
+        for (java.util.Map.Entry<Rect, PaneAnswer> e : mPanes.entrySet()) {
+            PaneAnswer pane = e.getValue();
+            if (fresh != null && e.getKey().equals(fresh)) continue;
+            if (pane.evenOutPolicy == null || pane.evenOutPolarity == null) continue;
+            totalPale += pane.shortPale;
+            totalDark += pane.shortDark;
+            worstPale = Math.max(worstPale, pane.shortPale);
+            worstDark = Math.max(worstDark, pane.shortDark);
+        }
+        Polarity current = policy.current;
+        boolean paleCurrent = current == Polarity.PALE_INK;
+        double ownWorst = paleCurrent ? worstPale : worstDark;
+        double otherWorst = paleCurrent ? worstDark : worstPale;
+        if (ownWorst <= 0d) return current;
+        Polarity other = paleCurrent ? Polarity.DARK_INK : Polarity.PALE_INK;
+        if (otherWorst <= 0d) return other;
+        double ownTotal = paleCurrent ? totalPale : totalDark;
+        double otherTotal = paleCurrent ? totalDark : totalPale;
+        return otherTotal < ownTotal ? other : current;
+    }
+
+    /**
+     * A pane laid out anew replaces the answer of the rect it was resized from: any stored answer
+     * whose rect overlaps {@code fresh} by more than half of the smaller of the two is dropped.
+     * Split neighbours that merely touch or shift by a divider's width are kept.
+     */
+    private void pruneResized(@NonNull Rect fresh) {
+        java.util.Iterator<java.util.Map.Entry<Rect, PaneAnswer>> it = mPanes.entrySet().iterator();
+        while (it.hasNext()) {
+            Rect old = it.next().getKey();
+            Rect hit = new Rect();
+            if (!hit.setIntersect(old, fresh)) continue;
+            long overlap = (long) hit.width() * hit.height();
+            long smaller = Math.min((long) old.width() * old.height(),
+                (long) fresh.width() * fresh.height());
+            if (overlap * 2 > smaller) it.remove();
+        }
     }
 
     /** Bumped whenever a pane is measured anew or the stage changes; panes poll it to re-dress. */
