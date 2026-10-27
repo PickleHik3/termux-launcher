@@ -25,7 +25,9 @@
             app:persistent="false"
             app:title="@string/settings_x11_keyboard_over_display_title"
             app:entries="@array/x11_keyboard_over_display_entries"
-            app:entryValues="@array/x11_keyboard_over_display_values" />
+            app:entryValues="@array/x11_keyboard_over_display_values">
+            <extra android:name="search_terms" android:value="keyboard overlay resize float display" />
+        </ListPreference>
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_x11_group_clipboard">

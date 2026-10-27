@@ -711,9 +711,12 @@ public final class TerminalView extends View {
                     return true;
                 if (mHoldConsumedGesture)
                     return true;
-                // Do not start scrolling until last fling has been taken care of:
-                if (!mScroller.isFinished())
+                // Do not start scrolling until last fling has been taken care of. A flick that
+                // keeps the running one going is still a scroll, so it is no tap either.
+                if (!mScroller.isFinished()) {
+                    mScrollDelivery.flung(mScroller.getCurrY(), mScroller.getFinalY());
                     return true;
+                }
                 // A sideways swipe is not a vertical fling, however much it drifted.
                 if (mScrollAxis == SCROLL_AXIS_HORIZONTAL && !e2.isFromSource(InputDevice.SOURCE_MOUSE))
                     return true;
@@ -722,6 +725,7 @@ public final class TerminalView extends View {
                     mSmoothFlingActive = true;
                     mScroller.fling(0, Math.round(getScrollPixelPosition()), 0, -(int) velocityY, 0, 0,
                         getScrollPixelMinimum(), 0);
+                    mScrollDelivery.flung(mScroller.getStartY(), mScroller.getFinalY());
                     postOnAnimation(mSmoothScrollRunnable);
                     return true;
                 }
@@ -732,6 +736,9 @@ public final class TerminalView extends View {
                 	//this doesn't fling in less
                     mScroller.fling(0, mTopRow, 0, -(int) (velocityY * SCALE), 0, 0, -mEmulator.getScreen().getActiveTranscriptRows(), 0);
                 }
+                // The lift is read by onUp next: while the wheel runs on, a program tracking the
+                // mouse must not also get it as a click, nor the client a tap to raise the keyboard.
+                mScrollDelivery.flung(mScroller.getStartY(), mScroller.getFinalY());
                 postOnAnimation(new Runnable() {
 
                     private int mLastY = 0;

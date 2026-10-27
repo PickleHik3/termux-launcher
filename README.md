@@ -82,20 +82,16 @@ The models run in the launcher's own runtime, on Google's [LiteRT-LM](https://gi
 
 Every release ships the same launcher built from the same source; the editions differ only in Android package identity and the package ecosystem they use.
 
-<p align="center">
-  <a href="#updates-with-obtainium"><img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="60"></a>
-</p>
-
 | | Termux edition | Nix edition | VAJ demo edition |
 |---|---|---|---|
 | Package name | `com.termux` | `com.termux.launcher.nix` | `io.vaj.tl` |
 | Release tag | `vX.Y.Z` | `nix-vX.Y.Z` | `vaj-vX.Y.Z` |
-| Obtainium | [stable][obt-termux] · [pre-release][obt-termux-pre] | [stable][obt-nix] · [pre-release][obt-nix-pre] | [stable][obt-vaj] · [pre-release][obt-vaj-pre] |
+| Obtainium | [<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="44">][obt-termux]<br>[pre-release][obt-termux-pre] | [<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="44">][obt-nix]<br>[pre-release][obt-nix-pre] | [<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="44">][obt-vaj]<br>[pre-release][obt-vaj-pre] |
 | Alongside official Termux? | ❌ No: same package name, replaces it | ✅ Yes, installs side by side | ✅ Yes, installs side by side |
 | Package manager | `pkg` / APT | [Nix](https://nixos.org) ([guide](docs/en/Nix_Package_Management.md)) | `pkg` / APT |
 | Package repository | official Termux repos | official `nixpkgs` binary cache | small VAJ APT repo (`https://repo.pathayam.xyz`) |
 | Architectures | arm64-v8a, armeabi-v7a, x86_64, x86 | arm64-v8a, x86_64; bootstrap downloaded on first run | arm64-v8a (aarch64) only; bootstrap downloaded on first run |
-| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases) / [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.1) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.2) / [TLNix:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/nix-v0.8.1) (`nix-v*` tags) | same forks, `-vaj` tagged releases |
+| Companion add-ons | [Termux:API](https://github.com/PickleHik3/termux-api/releases/tag/v0.53.2) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/v0.32.3) / [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/v0.8.2) (plain tags) | [TLNix:API](https://github.com/PickleHik3/termux-api/releases/tag/nix-v0.53.2) / [TLNix:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/nix-v0.32.3) / [TLNix:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/nix-v0.8.2) (`nix-v*` tags) | [Termux:API](https://github.com/PickleHik3/termux-api/releases/tag/v0.53.2-vaj) / [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases/tag/v0.32.3-vaj) / [Termux:Boot](https://github.com/PickleHik3/termux-boot/releases/tag/v0.8.2-vaj) (`-vaj` tags) |
 
 > ⚠️ **The VAJ edition is a demo.** It runs off my manually maintained APT repo (`https://repo.pathayam.xyz`), which carries only a small fraction of the Termux package set, and keeping its crucial packages updated is hard for me, so `pkg` updates may or may not come. If you want the launcher next to official Termux, use the Nix edition; the **[VAJ to Nix migration guide](docs/en/VAJ_To_Nix_Migration.md)** may help. For the curious, this is a [pathayam](https://commons.wikimedia.org/wiki/File:Exhibits_at_Koyikkal_Palace_Museum_Nedumangad_162.jpg); the odd URL is my homelab domain, which was never supposed to see the light of day :(
 

@@ -231,7 +231,7 @@ Files:
 
 - `config.fish` and `conf.d-personal.fish`: optional Fish defaults. `config.fish` is launcher-owned and replaced on re-install; `conf.d-personal.fish` is copied once to `~/.config/fish/conf.d/personal.fish` and never overwritten, so personal edits survive re-runs. It is the Termux-edition copy — the Nix edition ships its own, with nix-on-droid shortcuts in place of the `pkg`/`pacman` ones.
 
-Refresh installed files after an APK or docs update with `tlstore update`.
+Refresh installed files after an APK or docs update with `tlstore upgrade`.
 
 ## Shizuku and rish
 

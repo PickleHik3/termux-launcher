@@ -399,3 +399,29 @@ a Linux app.
 - (History: the retired Layout editor opened with a `LAYOUT_EDITOR` intent, now deleted.) The
   Dock design chips sit at about (139,2022) Tray and
   (332,2022) Beads.
+
+## Notes from the v1.2.0 release smoke (2026-10-21, emulator)
+
+- Pong is often asleep (`dumpsys power | grep mWakefulness` not Awake, keyguard up). Check that before taking a lease; a run that finds it asleep reports so at once instead of waking it.
+- Appearance editor: the page icons shift per page (the Look icon sits near x 390 on the Wallpaper page and near x 612 on Layout). On the Look page, tapping the terminal pane in the preview shows Cursor trail and Terminal effect; tapping the keyboard shows Keys, Radius and Spacing; tapping the dock shows Glass, Opacity, Tint, Icon size and App icons. "All surfaces" is a label, not a control.
+- Backup & restore is the last row of Settings, below App behavior. Export settings goes through the system Save picker with a default name (`termux-launcher-settings-<date>.zip`); Save sits near 927,2273 on the emulator.
+- Typing `\e` into the terminal with `ad type`: pass the backslash unescaped, single-quoted in the shell; a pre-escaped form mangles the printf.
+- `ad long` on a dock icon launched the app instead of opening the Unpin popup (see device-checks.md, 2026-10-21).
+
+
+## Notes from the graphics benchmark check (2026-10-21, emulator)
+
+- Long terminal commands: drive a pane under runas instead of `ad type` (typing after a tap near the
+  dock can switch to the Widgets page): `id=$(launcherctl pane open --print-id --no-focus)`,
+  `launcherctl pane write $id --enter "CMD"`, poll `launcherctl pane read $id`, Ctrl-C with
+  `launcherctl pane write $id "$(printf '\003')"`. `pane wait` caps at 300000 ms.
+- Clipboard: `ad shell cmd clipboard` has no get-primary-clip; read it with `launcherctl clipboard paste` under runas.
+- Benchmark graphics is the last row of Settings → Display → Linux apps → Set up Linux apps; swipe up.
+- The launcher rewrites `termux-x11*` scripts in the prefix only when `X11CliInstaller.VERSION`
+  changes. After installing a build that changed one, check `$PREFIX/bin/termux-x11-gpu-setup`
+  is the new one before testing it.
+- The emulator has no proot-distro, so container checks need a device that has one.
+- The X11 installer's marker is `$PREFIX/libexec/termux-launcher/x11/.installed` ("… v14").
+- Each `ad runas` call is a new shell: keep a pane id in a file (`$HOME/pid`) between calls.
+- The Benchmark graphics toast shows on the launcher after Settings closes: `ad frames 6 <dir> --
+  tap "Benchmark graphics"` and read the last frames.

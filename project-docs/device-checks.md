@@ -560,3 +560,37 @@ Agent
 
 ## Terminal legibility contract, wave 1 (2026-10-27)
 - 2026-10-27 · legibility pair table (LegibilityPairs) · run `sh project-docs/verification/legibility-card.sh` in a terminal pane on pong over the cloud wallpaper (bright patch), Contrast at Default then Softer and Harder, screenshot and read the pixel ratios with `python3 -I project-docs/verification/legibility-ratios.py shot.png NAME X0 Y0 X1 Y1 ...`: the dialog row (black, red, blue, bold blue on white) reads >= 3:1 on every cell; accents 31-36 and 91-96 and the grey and faint lines are listed with their ratios (the grey over the bright patch is wave 2) · pong.
+
+## Display keyboard Resize reset (from pre, 1.3.0-pre.3; re-check on the merged pre.4)
+- 2026-10-23 · branch fix/display-keyboard-resize-reset (one-time portrait Resize reset, Layout editor
+  revert no longer saves the keyboard mode) · Emulator: in `shared_prefs`, seed
+  `layout.portrait.keyboard_mode` = `resize` and remove `place_keyboard_overlay_reset_done`, install,
+  open a Linux app in portrait and raise the keyboard: it floats, the key is gone and the flag is
+  set. Set Resize with the touchpad's mode button afterwards and relaunch: it stays Resize. Then open
+  the Layout editor on the display in portrait and Discard: no `keyboard_mode` key appears in the
+  prefs file · emulator.
+- 2026-10-23 · Settings row "Keyboard over the window" (Linux apps → Input; "Keyboard over display" on pre.3) · Emulator: open it,
+  pick Resize display and open a Linux app in portrait and then landscape: the keyboard makes room in
+  both. Pick Overlay: it floats in both. Switch one orientation with the touchpad's mode button and
+  reopen the row: the summary reads "Portrait: … · Landscape: …" and nothing is ticked. Change it
+  while a display is on screen, return to the launcher: the pad's mode button and the keyboard follow
+  without a restart · emulator.
+
+## From dev (1.2.1), merged into pre for 1.3.0-pre.4
+- 2026-10-25 · commit "fix(display): phones whose ABI has no X server never offer or start the display"
+  · An armeabi-v7a or x86 emulator image with the universal or split APK: open the launcher and
+  Settings; there is no Display entry or Display page, no Linux apps, and no crash (libXlorie.so
+  is shipped for arm64-v8a and x86_64 only). On arm64-v8a the Display page still opens.
+- 2026-10-25 · commit "fix(x11): bump the installer so the new benchmark script is written" · On a
+  pacman Termux, `x11-gpu-setup.sh` runs in pacman mode ("Package manager: pacman"), installs the
+  Vulkan wrapper (repacked, `pacman -U` accepts it), and the virgl run reports a virgl renderer,
+  not Zink · pong over adb, with the developer's go-ahead.
+- 2026-10-24 · fix(display) graphics setup uses a private headless display · On pong, run
+  `termux-x11-gpu-setup --yes`: (1) with the Linux display on and an app open, it stays connected
+  with no reset and the glass is kept; (2) with the display off, `pgrep -af termux-x11` and
+  `ls $PREFIX/tmp/.X11-unix` show nothing left afterwards; (3) the Vulkan wrapper is downloaded,
+  tested and removed again if it lost (kept if it won), and a wrong checksum is refused · pong,
+  by hand.
+- 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
+  in landscape and portrait: repeated short and long flicks scroll it and never raise the
+  keyboard; a still tap still raises it; a slow drag under a row still clicks · pong, by hand.

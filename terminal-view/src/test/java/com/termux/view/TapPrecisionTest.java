@@ -97,4 +97,21 @@ public class TapPrecisionTest {
         delivery.reset();
         assertFalse(delivery.delivered());
     }
+
+    @Test
+    public void aFlingThatWillMoveIsADeliveryEvenWithNoRowDraggedYet() {
+        // A quick flick inside one row: the drag scrolled nothing, the fling will.
+        TapPrecision.ScrollDelivery delivery = new TapPrecision.ScrollDelivery();
+        delivery.rowsScrolled(0);
+        delivery.flung(0, -7);
+        assertTrue(delivery.delivered());
+    }
+
+    @Test
+    public void aFlingThatComesToRestWhereItStartsDeliveredNothing() {
+        // Clamped at the end of the transcript, the fling has nowhere to go.
+        TapPrecision.ScrollDelivery delivery = new TapPrecision.ScrollDelivery();
+        delivery.flung(0, 0);
+        assertFalse(delivery.delivered());
+    }
 }
