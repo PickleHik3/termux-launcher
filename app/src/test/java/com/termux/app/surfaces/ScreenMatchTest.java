@@ -54,7 +54,7 @@ public class ScreenMatchTest {
         prefs = app.getSharedPreferences("screen-match-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
-        store = new PlaceLayoutStore(launcher);
+        store = com.termux.app.place.KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
         assertTrue("every install holds a Home layout", store.hasHomeLayout());
 
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);

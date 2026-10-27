@@ -48,7 +48,7 @@ public class PlaceLayoutHomeLayoutTest {
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
     }
 
     @Test

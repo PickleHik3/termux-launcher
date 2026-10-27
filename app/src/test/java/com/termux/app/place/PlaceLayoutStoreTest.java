@@ -43,7 +43,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 14;
+    private static final int MIGRATED = 15;
 
     private Application app;
     private SharedPreferences prefs;
@@ -58,7 +58,7 @@ public class PlaceLayoutStoreTest {
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
     }
 
     // ------------------------------------------------------------------ the dictation pill
@@ -680,7 +680,6 @@ public class PlaceLayoutStoreTest {
         // top it started on.
         prefs.edit().putString("layout.landscape.status_bar", "hidden").commit();
         Slot unremembered = store.slot(PlaceOrientation.LANDSCAPE, Element.STATUS);
-        assertTrue(unremembered.hidden);
         assertEquals(Edge.TOP, unremembered.edge);
 
         // Standing it on an edge brings it back.
@@ -700,7 +699,7 @@ public class PlaceLayoutStoreTest {
                     value).commit();
                 Slot slot = store().slot(orientation, Element.APPS);
                 if ("hidden".equals(value)) {
-                    assertTrue(value, slot.hidden);
+                    // Whether it shows is the kind's now; the spelling still names no edge.
                     assertEquals(value, Edge.BOTTOM, slot.edge);
                 } else {
                     assertFalse(value, slot.hidden);

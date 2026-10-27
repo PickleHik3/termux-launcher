@@ -128,7 +128,7 @@ public final class DressResolver {
 
             @Override public boolean shows(@NonNull PageKind kind, @NonNull Element element) {
                 PlaceLayoutStore store = places.get();
-                return store != null ? store.kindShows(kind, element)
+                return store != null ? store.kindShowsAny(kind, element)
                     : PlaceLayoutStore.kindShowsByDefault(kind, element);
             }
         });

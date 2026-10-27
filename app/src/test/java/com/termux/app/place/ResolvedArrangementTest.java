@@ -50,7 +50,7 @@ public class ResolvedArrangementTest {
      * identical (editor-redesign §1).
      */
     private PlaceLayoutStore dressed(LayoutStyle style, DockStyle design) {
-        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        PlaceLayoutStore store = KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
         launcher.setLayoutStyle(style);
         store.forVariant(LayoutVariant.NORMAL).setDockStyle(design);
         store.forVariant(LayoutVariant.HOME).setDockStyle(design);
@@ -105,7 +105,7 @@ public class ResolvedArrangementTest {
 
     @Test
     public void theFrameRunsToTheBottomOnlyDockedOffBeads() {
-        PlaceLayout layout = new PlaceLayoutStore(launcher).resolve(PlaceOrientation.PORTRAIT);
+        PlaceLayout layout = KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher)).resolve(PlaceOrientation.PORTRAIT);
         for (DockStyle design : DockStyle.CHOICES) {
             assertFalse(design.toString(), arranged(layout, LayoutStyle.FLOATING, design)
                 .frameRunsToBottom());

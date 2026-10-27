@@ -50,34 +50,34 @@ public class PlaceLayoutKindVisibilityTest {
         return new PlaceLayoutStore(launcher);
     }
 
-    private static String dress(PageKind kind, Element element) {
-        return PlaceLayoutStore.kindKey(kind, element);
+    private static String dress(PageKind kind, PlaceOrientation o, Element element) {
+        return PlaceLayoutStore.kindKey(kind, o, element);
     }
 
     // ------------------------------------------------------------------ defaults
 
     @Test
     public void theKeysAreDressKindElement() {
-        assertEquals("place.dress.home.apps_row", dress(PageKind.HOME, Element.APPS));
-        assertEquals("place.dress.terminal.extra_keys",
-            dress(PageKind.TERMINAL, Element.EXTRA_KEYS));
+        assertEquals("place.dress.home.portrait.apps_row", dress(PageKind.HOME, PORTRAIT, Element.APPS));
+        assertEquals("place.dress.terminal.landscape.extra_keys",
+            dress(PageKind.TERMINAL, LANDSCAPE, Element.EXTRA_KEYS));
     }
 
     @Test
     public void aNewInstallShowsTheStatusBarAndDockOnHomeAndTheStatusBarAndKeysOnTheTerminal() {
         PlaceLayoutStore store = store();
         for (PageKind kind : PageKind.values())
-            assertTrue(kind.name(), store.kindShows(kind, Element.STATUS));
-        assertTrue(store.kindShows(PageKind.HOME, Element.APPS));
-        assertTrue(store.kindShows(PageKind.HOME, Element.AZ));
-        assertFalse(store.kindShows(PageKind.HOME, Element.EXTRA_KEYS));
+            assertTrue(kind.name(), store.kindShows(kind, PORTRAIT, Element.STATUS));
+        assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
+        assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.AZ));
+        assertFalse(store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
         for (PageKind kind : new PageKind[] {PageKind.TERMINAL, PageKind.DISPLAY}) {
-            assertTrue(kind.name(), store.kindShows(kind, Element.EXTRA_KEYS));
-            assertFalse(kind.name(), store.kindShows(kind, Element.APPS));
-            assertFalse(kind.name(), store.kindShows(kind, Element.AZ));
+            assertTrue(kind.name(), store.kindShows(kind, PORTRAIT, Element.EXTRA_KEYS));
+            assertFalse(kind.name(), store.kindShows(kind, PORTRAIT, Element.APPS));
+            assertFalse(kind.name(), store.kindShows(kind, PORTRAIT, Element.AZ));
         }
         assertFalse("a new install writes nothing",
-            prefs.contains(dress(PageKind.HOME, Element.APPS)));
+            prefs.contains(dress(PageKind.HOME, PORTRAIT, Element.APPS)));
     }
 
     @Test
@@ -98,19 +98,19 @@ public class PlaceLayoutKindVisibilityTest {
     @Test
     public void theToolbarSwitchStillPutsTheExtraKeysAwayEverywhere() {
         PlaceLayoutStore store = store();
-        store.setKindShows(PageKind.HOME, Element.EXTRA_KEYS, true);
+        store.setKindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS, true);
         launcher.setShowTerminalToolbar(false);
         assertTrue(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
         assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.EXTRA_KEYS).hidden);
     }
 
     @Test
-    public void aKindsVisibilityIsOneValueForBothOrientations() {
+    public void aKindsVisibilityIsPerOrientation() {
         PlaceLayoutStore store = store();
-        store.setKindShows(PageKind.TERMINAL, Element.APPS, true);
+        store.setKindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS, true);
         assertFalse(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
-        assertFalse(store.resolve(LANDSCAPE, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
-        assertFalse("Home is its own kind", store.kindShows(PageKind.HOME, Element.EXTRA_KEYS));
+        assertTrue(store.resolve(LANDSCAPE, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
+        assertFalse("Home is its own kind", store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
     }
 
     // ------------------------------------------------------------------ the editor's writers
@@ -120,13 +120,13 @@ public class PlaceLayoutKindVisibilityTest {
         PlaceLayoutStore store = store();
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
         normal.setSlot(PORTRAIT, Element.APPS, normal.slot(PORTRAIT, Element.APPS).withHidden(false));
-        assertTrue(store.kindShows(PageKind.TERMINAL, Element.APPS));
-        assertFalse("the Home kind is its own", prefs.contains(dress(PageKind.HOME, Element.APPS)));
+        assertTrue(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS));
+        assertFalse("the Home kind is its own", prefs.contains(dress(PageKind.HOME, PORTRAIT, Element.APPS)));
 
         PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
         home.setSlot(PORTRAIT, Element.AZ, home.slot(PORTRAIT, Element.AZ).withHidden(true));
-        assertFalse(store.kindShows(PageKind.HOME, Element.AZ));
-        assertTrue(store.kindShows(PageKind.TERMINAL, Element.EXTRA_KEYS));
+        assertFalse(store.kindShows(PageKind.HOME, PORTRAIT, Element.AZ));
+        assertTrue(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.EXTRA_KEYS));
         assertEquals("an edge stays an arrangement", Edge.BOTTOM,
             home.slot(PORTRAIT, Element.AZ).edge);
     }
@@ -137,9 +137,9 @@ public class PlaceLayoutKindVisibilityTest {
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
         Slot before = normal.slot(PORTRAIT, Element.EXTRA_KEYS);
         normal.setSlot(PORTRAIT, Element.EXTRA_KEYS, before.withHidden(true));
-        assertFalse(store.kindShows(PageKind.TERMINAL, Element.EXTRA_KEYS));
+        assertFalse(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.EXTRA_KEYS));
         normal.setSlot(PORTRAIT, Element.EXTRA_KEYS, before);
-        assertTrue(store.kindShows(PageKind.TERMINAL, Element.EXTRA_KEYS));
+        assertTrue(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.EXTRA_KEYS));
     }
 
     @Test
@@ -149,7 +149,7 @@ public class PlaceLayoutKindVisibilityTest {
         minimal.setSlot(PORTRAIT, Element.STATUS,
             minimal.slot(PORTRAIT, Element.STATUS).withHidden(true));
         assertTrue("Terminal pages still show the bar",
-            store.kindShows(PageKind.TERMINAL, Element.STATUS));
+            store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.STATUS));
         assertTrue(minimal.resolve(PORTRAIT).slot(Element.STATUS).hidden);
         assertFalse(store.forVariant(LayoutVariant.NORMAL).resolve(PORTRAIT)
             .slot(Element.STATUS).hidden);
@@ -181,14 +181,14 @@ public class PlaceLayoutKindVisibilityTest {
                 prefs.edit().clear().commit();
                 PlaceLayoutStore store = upgrade(true, sharedDock, homeDock);
                 String why = "shared " + sharedDock + ", home " + homeDock;
-                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, Element.APPS));
-                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, Element.AZ));
-                assertFalse(why, store.kindShows(PageKind.HOME, Element.EXTRA_KEYS));
-                assertTrue(why, store.kindShows(PageKind.HOME, Element.STATUS));
+                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
+                assertEquals(why, homeDock, store.kindShows(PageKind.HOME, PORTRAIT, Element.AZ));
+                assertFalse(why, store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
+                assertTrue(why, store.kindShows(PageKind.HOME, PORTRAIT, Element.STATUS));
                 for (PageKind kind : new PageKind[] {PageKind.TERMINAL, PageKind.DISPLAY}) {
-                    assertEquals(why, sharedDock, store.kindShows(kind, Element.APPS));
-                    assertEquals(why, sharedDock, store.kindShows(kind, Element.AZ));
-                    assertTrue(why, store.kindShows(kind, Element.EXTRA_KEYS));
+                    assertEquals(why, sharedDock, store.kindShows(kind, PORTRAIT, Element.APPS));
+                    assertEquals(why, sharedDock, store.kindShows(kind, PORTRAIT, Element.AZ));
+                    assertTrue(why, store.kindShows(kind, PORTRAIT, Element.EXTRA_KEYS));
                 }
                 assertEquals(why, PlaceLayoutStore.MIGRATION_VERSION,
                     prefs.getInt("place.migrated", 0));
@@ -208,28 +208,49 @@ public class PlaceLayoutKindVisibilityTest {
 
     @Test
     public void withTheHomeLayoutOffHomeTakesTheSharedLayoutsVisibility() {
-        PlaceLayoutStore store = upgrade(false, false, true);
-        assertFalse(store.kindShows(PageKind.HOME, Element.APPS));
-        assertFalse(store.kindShows(PageKind.TERMINAL, Element.APPS));
+        PlaceLayoutStore store = upgrade(false, true, false);
+        assertTrue("Home kind = the shared layout's", store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
+        assertFalse("minus the extra keys", store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
+        assertTrue("the dock stays on the Terminal", store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS));
+        assertTrue(store.kindShows(PageKind.DISPLAY, LANDSCAPE, Element.AZ));
+        assertTrue(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.EXTRA_KEYS));
     }
 
     @Test
-    public void anElementShownInEitherOrientationShows() {
+    public void eachOrientationIsCopiedOnItsOwn() {
         prefs.edit().putInt("place.migrated", 14).putBoolean("place.home_layout", true)
             .putString(PlaceLayoutStore.layoutKey(LayoutVariant.NORMAL, PORTRAIT, "apps_row"),
                 "hidden")
             .putString(PlaceLayoutStore.layoutKey(LayoutVariant.NORMAL, LANDSCAPE, "apps_row"),
                 "left")
+            .putString(PlaceLayoutStore.layoutKey(LayoutVariant.HOME, LANDSCAPE, "status_bar"),
+                "hidden")
             .commit();
-        assertTrue(store().kindShows(PageKind.TERMINAL, Element.APPS));
+        PlaceLayoutStore store = store();
+        assertFalse(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS));
+        assertTrue(store.kindShows(PageKind.TERMINAL, LANDSCAPE, Element.APPS));
+        assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.STATUS));
+        assertFalse("hidden in landscape only", store.kindShows(PageKind.HOME, LANDSCAPE, Element.STATUS));
+        assertFalse(store.resolve(LANDSCAPE, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
+        assertTrue(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
+        assertTrue(store.resolve(LANDSCAPE, PaneWallPage.WIDGETS).slot(Element.STATUS).hidden);
+    }
+
+    @Test
+    public void theEditorsHideInOneOrientationLeavesTheOther() {
+        PlaceLayoutStore store = store();
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        home.setSlot(LANDSCAPE, Element.APPS, home.slot(LANDSCAPE, Element.APPS).withHidden(true));
+        assertFalse(store.kindShows(PageKind.HOME, LANDSCAPE, Element.APPS));
+        assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.APPS));
     }
 
     @Test
     public void theUpgradeRunsOnceAndKeepsLaterChoices() {
         PlaceLayoutStore first = upgrade(true, true, true);
-        first.setKindShows(PageKind.TERMINAL, Element.APPS, false);
+        first.setKindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS, false);
         PlaceLayoutStore second = store();
-        assertFalse(second.kindShows(PageKind.TERMINAL, Element.APPS));
+        assertFalse(second.kindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS));
     }
 
     @Test
@@ -237,7 +258,7 @@ public class PlaceLayoutKindVisibilityTest {
         prefs.edit().putInt("place.migrated", 6).commit();
         PlaceLayoutStore store = store();
         assertTrue("written, so nothing moves",
-            prefs.contains(dress(PageKind.TERMINAL, Element.APPS)));
-        assertTrue(store.kindShows(PageKind.TERMINAL, Element.APPS));
+            prefs.contains(dress(PageKind.TERMINAL, PORTRAIT, Element.APPS)));
+        assertTrue(store.kindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS));
     }
 }
