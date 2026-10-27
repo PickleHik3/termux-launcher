@@ -411,39 +411,151 @@ public final class MaterialTerminalColorScheme {
     }
 
     /**
-     * The legibility floor, per slot.
+     * The legibility floor on the background, per slot, read from {@link LegibilityPairs}.
      *
      * <p>Not every ANSI slot is text. Black and white are what a TUI fills a panel with, and a floor
      * that treats them as glyph colours lifts both to the same mid tone as everything else — which is
-     * how ANSI black stopped being dark and started matching bright black. So slots 0, 7 and 15 are
-     * exempt — bright white is a fill exactly as much as white is, and holding it to a text ratio is
-     * what used to drag it down into the dark end of the neutral ladder; slot 8 is dim text and
-     * takes the level's own dim ratio ({@link TerminalContrastLevel#dimRatio}): a fixed 3.0:1 at
-     * every level held Softer's and Harder's grey to Default's contrast, so Contrast barely moved
-     * it. Its tone ({@link TerminalContrastLevel#dimToneDark}) keeps it from brightening into
-     * ordinary text. The rest take the level's ratio.
+     * how ANSI black stopped being dark and started matching bright black. So slots 0, 7 and 15 have
+     * no background row — bright white is a fill exactly as much as white is, and holding it to a text
+     * ratio is what used to drag it down into the dark end of the neutral ladder; they are held
+     * against each other instead (the panel rows of the table). Slot 8 is dim text and takes the
+     * level's own dim ratio ({@link TerminalContrastLevel#dimRatio}): a fixed 3.0:1 at every level
+     * held Softer's and Harder's grey to Default's contrast, so Contrast barely moved it. Its tone
+     * ({@link TerminalContrastLevel#dimToneDark}) keeps it from brightening into ordinary text. The
+     * rest take the level's ratio.
      */
     @VisibleForTesting
     static double ansiFloor(int slot, @NonNull TerminalContrastLevel level) {
-        if (slot == 0 || slot == 7 || slot == 15) return 0d;
-        if (slot == 8) return level.dimRatio;
-        return level.ansiRatio;
+        return LegibilityPairs.backgroundFloor(slot, level);
     }
 
-    /** {@link #ansiFloor} over all sixteen slots, in place. */
+    /**
+     * ANSI white's recipe tone on a dark palette. It used to be 80, which left no tone for red and
+     * blue that read both on the dark background and on this white; the pass below raises it
+     * further where a level's floors ask for it.
+     */
+    private static final double WHITE_TONE_DARK = 88d;
+
+    /** How far up the ladder ANSI white may rise to leave the panel inks room, in HCT tone. */
+    private static final double WHITE_TONE_MAX = 98d;
+
+    /**
+     * The pair-table pass over the sixteen slots, in place.
+     *
+     * <p>Neutrals first. ANSI white starts at its recipe tone and rises only as far as black, red
+     * and blue need to read on it at {@link LegibilityPairs#PANEL_INK_FLOOR}: the accents are held
+     * to the background at the level's ratio, so on a dark ground they cannot go darker than the
+     * background floor allows, and the white they sit on has to go up to meet them. Bright white
+     * stays above white. The accents are then searched: red and blue for the tone nearest their
+     * recipe tone that satisfies every pair they appear in; the other accents, and the bright
+     * ones, only need the background and take the level's ordinary search.
+     *
+     * <p>When no tone satisfies both pairs the panel wins (ADR 0014): white goes to the top of its
+     * range and red and blue take the best background ratio that still reads on it, so a dialog
+     * box is never unreadable at any level. When the background floor cannot be reached
+     * at all in the window — any accent on a mid-tone wallpaper at 4.5:1 — it drops out of the
+     * search and the panel pair is met with the best background ratio left.
+     */
     @VisibleForTesting
     static void applyAnsiContrastFloor(@NonNull Properties props, @ColorInt int background,
                                        @NonNull TerminalContrastLevel level) {
-        for (int slot = 0; slot < 16; slot++) {
+        Hct white = Hct.fromInt(Color.parseColor(props.getProperty("color7")));
+        // No white that fits both pairs: go as high as the ladder allows, which leaves the panel
+        // inks the most background contrast they can have while they still read on it.
+        int whiteColor = Hct.from(white.getHue(), white.getChroma(),
+            Math.max(white.getTone(), WHITE_TONE_MAX)).toInt();
+        for (double tone = white.getTone(); tone <= WHITE_TONE_MAX; tone++) {
+            int candidate = Hct.from(white.getHue(), white.getChroma(), tone).toInt();
+            if (panelAccentsFit(props, background, level, candidate)) {
+                whiteColor = candidate;
+                break;
+            }
+        }
+        props.setProperty("color7", hex(whiteColor));
+        Hct brightWhite = Hct.fromInt(Color.parseColor(props.getProperty("color15")));
+        double whiteTone = Hct.fromInt(whiteColor).getTone();
+        if (brightWhite.getTone() < whiteTone + 2d) {
+            props.setProperty("color15", hex(Hct.from(brightWhite.getHue(), brightWhite.getChroma(),
+                Math.min(100d, whiteTone + 2d)).toInt()));
+        }
+
+        for (int slot = 1; slot < 16; slot++) {
             double floor = ansiFloor(slot, level);
             if (floor <= 0d) continue;
             String key = "color" + slot;
+            int color = Color.parseColor(props.getProperty(key));
             boolean dimText = slot == 8;
-            props.setProperty(key, hex(contrastTone(Color.parseColor(props.getProperty(key)),
-                background, floor, level.toneReach,
+            double onWhite = LegibilityPairs.onWhiteFloor(slot);
+            if (onWhite > 0d) {
+                int fitted = panelTone(color, background, floor, whiteColor, onWhite, level.toneReach,
+                    false);
+                if (fitted != 0) {
+                    props.setProperty(key, hex(fitted));
+                    continue;
+                }
+            }
+            props.setProperty(key, hex(contrastTone(color, background, floor, level.toneReach,
                 dimText ? DIM_TONE_MIN : ACCENT_TONE_MIN, ACCENT_TONE_MAX,
                 dimText ? 0d : ACCENT_CHROMA_KEPT)));
         }
+    }
+
+    /** Whether every panel ink has a tone satisfying both its pairs with {@code white} as slot 7. */
+    private static boolean panelAccentsFit(@NonNull Properties props, @ColorInt int background,
+                                           @NonNull TerminalContrastLevel level, @ColorInt int white) {
+        for (int slot = 1; slot <= 6; slot++) {
+            double onWhite = LegibilityPairs.onWhiteFloor(slot);
+            if (onWhite <= 0d) continue;
+            if (panelTone(Color.parseColor(props.getProperty("color" + slot)), background,
+                ansiFloor(slot, level), white, onWhite, level.toneReach, true) == 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The tone of {@code color}, nearest where it stands, that reads at {@code groundFloor} on the
+     * background and at {@code whiteFloor} on {@code white}; 0 (never a valid opaque colour) when
+     * none does. Searched in the window {@link #contrastTone} uses. When no tone meets both, the
+     * panel wins (ADR 0014): the tone with the best background ratio among those that read on
+     * white is taken. Harder over very dark glass is that case — 6:1 on a tone-10 ground and 3:1
+     * on white would need a white brighter than white. {@code strict} asks only whether both can
+     * be met, for the search that places white, and answers none instead.
+     */
+    @ColorInt
+    private static int panelTone(@ColorInt int color, @ColorInt int background, double groundFloor,
+                                 @ColorInt int white, double whiteFloor, double reach,
+                                 boolean strict) {
+        Hct source = Hct.fromInt(color);
+        int from = (int) Math.ceil(Math.max(ACCENT_TONE_MIN, source.getTone() - reach));
+        int to = (int) Math.floor(Math.min(ACCENT_TONE_MAX, source.getTone() + reach));
+        int best = 0;
+        double bestDistance = Double.MAX_VALUE;
+        int bestOnGround = 0;
+        double bestGroundRatio = 0d;
+        boolean groundReachable = false;
+        for (int tone = from; tone <= to; tone++) {
+            int candidate = Hct.from(source.getHue(), source.getChroma(), tone).toInt();
+            if (Hct.fromInt(candidate).getChroma() < source.getChroma() * ACCENT_CHROMA_KEPT) continue;
+            double onGround = contrastRatio(candidate, background);
+            boolean readsOnWhite = contrastRatio(candidate, white) >= whiteFloor;
+            if (onGround >= groundFloor) {
+                groundReachable = true;
+                if (readsOnWhite) {
+                    double distance = Math.abs(tone - source.getTone());
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        best = candidate;
+                    }
+                }
+            } else if (readsOnWhite && onGround > bestGroundRatio) {
+                bestGroundRatio = onGround;
+                bestOnGround = candidate;
+            }
+        }
+        if (best != 0) return best;
+        return strict && groundReachable ? 0 : bestOnGround;
     }
 
     /**
@@ -496,7 +608,7 @@ public final class MaterialTerminalColorScheme {
         // Harder. Default keeps the 45 and 50 the ladder always had.
         slots.setProperty("color8", hex(Hct.from(warm, neutral,
             dark ? level.dimToneDark : level.dimToneLight).toInt()));
-        slots.setProperty("color7", hex(Hct.from(warm, neutral, dark ? 80d : 75d).toInt()));
+        slots.setProperty("color7", hex(Hct.from(warm, neutral, dark ? WHITE_TONE_DARK : 75d).toInt()));
         slots.setProperty("color15", hex(Hct.from(warm, neutral, dark ? 96d : 92d).toInt()));
         return slots;
     }
