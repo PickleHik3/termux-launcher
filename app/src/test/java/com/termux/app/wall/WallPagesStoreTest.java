@@ -80,6 +80,19 @@ public class WallPagesStoreTest {
     }
 
     @Test
+    public void homeMemoryRoundTrips() {
+        WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
+        WallPages p = WallPagesMigration.seed("home", 1, "home", 3);
+        p = p.setHome(2).pages.detachHomes().pages;
+        new WallPagesStore(storage).replace(p);
+        WallPages again = new WallPagesStore(storage).current();
+        assertEquals(p, again);
+        assertEquals(2, again.lastHomePageId());
+        assertTrue(again.homeParked());
+        assertEquals(2, again.attachDetached().pages.home().id);
+    }
+
+    @Test
     public void unreadableOrNewerJsonIsTreatedAsAbsent() {
         WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
         storage.write("{not json");

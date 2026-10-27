@@ -154,11 +154,24 @@ public final class WallPages {
     private final int homeId;
     private final int nextId;
     private final boolean homeIsDisplayWindow;
+    /** The Home page that was home last (0: none), so a trip through Terminal only or the
+     *  Workspace or the display comes back to it. */
+    private final int lastHomePageId;
+    /** Home was moved to the Terminal page by {@link #detachHomes}, to be given back. */
+    private final boolean homeParked;
 
     /** Builds a value; used by the upgrade and the store's reader. */
     public WallPages(@NonNull List<Page> all, @NonNull List<Integer> pending,
                      @NonNull List<Page> detached, int homeId, int nextId,
                      boolean homeIsDisplayWindow) {
+        this(all, pending, detached, homeId, nextId, homeIsDisplayWindow, 0, false);
+    }
+
+    public WallPages(@NonNull List<Page> all, @NonNull List<Integer> pending,
+                     @NonNull List<Page> detached, int homeId, int nextId,
+                     boolean homeIsDisplayWindow, int lastHomePageId, boolean homeParked) {
+        this.lastHomePageId = lastHomePageId;
+        this.homeParked = homeParked;
         this.all = Collections.unmodifiableList(new ArrayList<>(all));
         this.pending = Collections.unmodifiableList(new ArrayList<>(pending));
         this.detached = Collections.unmodifiableList(new ArrayList<>(detached));
@@ -192,6 +205,18 @@ public final class WallPages {
 
     /** Transitional: home is the display window, which is not a page. */
     public boolean homeIsDisplayWindow() { return homeIsDisplayWindow; }
+
+    /** The Home page that was home last (0 when none was). */
+    public int lastHomePageId() { return lastHomePageId; }
+
+    /** Home was parked on the Terminal page by {@link #detachHomes}. */
+    public boolean homeParked() { return homeParked; }
+
+    /** The Home page to come back to: home when it is one, else the one remembered. */
+    private int rememberedHome() {
+        Page h = homeIsDisplayWindow ? null : find(homeId);
+        return h != null && h.kind == PageKind.HOME ? homeId : lastHomePageId;
+    }
 
     public boolean isPending(int id) { return pending.contains(id); }
 
@@ -383,14 +408,15 @@ public final class WallPages {
     public Result setHome(int id) {
         Page page = page(id);
         if (page == null) return refuse(Error.UNKNOWN_PAGE);
-        WallPages next = copy(all, pending, detached, id, nextId, false);
+        WallPages next = withHome(all, detached, id, false,
+            page.kind == PageKind.HOME ? id : rememberedHome(), false);
         return new Result(next, ChangeType.HOME_SET, page, null, -1, next.visibleIndex(id));
     }
 
     /** Transitional: makes the display window home. The pages and the home id stay. */
     @NonNull
     public Result setHomeDisplayWindow() {
-        WallPages next = copy(all, pending, detached, homeId, nextId, true);
+        WallPages next = withHome(all, detached, homeId, true, rememberedHome(), false);
         return new Result(next, ChangeType.HOME_SET, null, null, -1, -1);
     }
 
@@ -455,7 +481,9 @@ public final class WallPages {
         if (home != null && home.kind == PageKind.HOME) return new Result(this, ChangeType.NONE,
             home, null, -1, -1);
         List<Page> homes = homePages();
-        return homes.isEmpty() ? refuse(Error.UNKNOWN_PAGE) : setHome(homes.get(0).id);
+        if (homes.isEmpty()) return refuse(Error.UNKNOWN_PAGE);
+        Page last = page(lastHomePageId);
+        return setHome(last != null && last.kind == PageKind.HOME ? last.id : homes.get(0).id);
     }
 
     /** Makes the {@code index}th Home page (from 0) home. */
@@ -511,8 +539,8 @@ public final class WallPages {
         kept.addAll(homes);
         boolean homeWasHome = !homeIsDisplayWindow && find(homeId) != null
             && find(homeId).kind == PageKind.HOME;
-        WallPages next = copy(list, pending, kept, homeWasHome ? t.id : homeId, nextId,
-            homeIsDisplayWindow);
+        WallPages next = withHome(list, kept, homeWasHome ? t.id : homeId, homeIsDisplayWindow,
+            rememberedHome(), homeWasHome || homeParked);
         return new Result(next, ChangeType.HOMES_DETACHED, null, null, -1, -1);
     }
 
@@ -529,7 +557,13 @@ public final class WallPages {
             if (list.get(i).kind == PageKind.TERMINAL) { at = i; break; }
         }
         list.addAll(at, back);
-        WallPages next = copy(list, pending, rest, homeId, nextId, homeIsDisplayWindow);
+        int home = homeId;
+        boolean restore = homeParked && !homeIsDisplayWindow;
+        if (restore) {
+            for (Page p : back) if (p.id == lastHomePageId) home = p.id;
+        }
+        WallPages next = withHome(list, rest, home, homeIsDisplayWindow, lastHomePageId,
+            restore && home != homeId ? false : homeParked);
         return new Result(next, ChangeType.HOMES_ATTACHED, null, null, -1, -1);
     }
 
@@ -546,9 +580,15 @@ public final class WallPages {
         return new Result(this, ChangeType.NONE, null, error, -1, -1);
     }
 
-    private static WallPages copy(List<Page> all, List<Integer> pending, List<Page> detached,
-                                  int homeId, int nextId, boolean display) {
-        return new WallPages(all, pending, detached, homeId, nextId, display);
+    private WallPages copy(List<Page> all, List<Integer> pending, List<Page> detached,
+                           int homeId, int nextId, boolean display) {
+        return new WallPages(all, pending, detached, homeId, nextId, display, lastHomePageId,
+            homeParked);
+    }
+
+    private WallPages withHome(List<Page> all, List<Page> detached, int homeId, boolean display,
+                               int last, boolean parked) {
+        return new WallPages(all, pending, detached, homeId, nextId, display, last, parked);
     }
 
     private boolean hasTerminal() {
@@ -578,7 +618,8 @@ public final class WallPages {
         WallPages w = (WallPages) o;
         return homeId == w.homeId && nextId == w.nextId
             && homeIsDisplayWindow == w.homeIsDisplayWindow && all.equals(w.all)
-            && pending.equals(w.pending) && detached.equals(w.detached);
+            && pending.equals(w.pending) && detached.equals(w.detached)
+            && lastHomePageId == w.lastHomePageId && homeParked == w.homeParked;
     }
 
     @Override public int hashCode() { return Objects.hash(all, pending, detached, homeId, nextId); }
