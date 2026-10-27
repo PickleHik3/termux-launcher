@@ -1966,7 +1966,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // a mode that keeps its place off the wall, which used to leave a host listening for a
         // page that was GONE.
         if (isWidgetsPageWanted()) {
-            mWidgetHostController = new com.termux.app.launcher.widget.LauncherWidgetHostController(this);
+            mWidgetHostController = new com.termux.app.launcher.widget.LauncherWidgetHostController(
+                this, com.termux.app.launcher.widget.LauncherWidgetRepository.create(this,
+                    widgetPageOwner()), null);
             applyWidgetGridPreference();
         }
         mPreferences.migrateTerminalMarginAdjustmentDefaultIfNeeded();
@@ -27303,32 +27305,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The widget repository's pages and the wall's Home pages are one list: the repository tells
-     * every change of its page numbers (Edit pages, a drop's fresh page, an undo, a trim) and the
-     * wall's pages follow, and at start the wall's count is held to the repository's.
+     * The widget repository's Home pages are the wall's Home pages: it keys what stands on a page
+     * by the page's id and asks this owner to add, remove or reorder them. The store tells it
+     * back when the pages change by another route ({@link #mWallPagesListener}).
      */
-    private void followWidgetPagesInWallPages() {
-        final com.termux.app.launcher.widget.LauncherWidgetRepository repository =
-            mWidgetHostController.repository();
-        // Terminal only sets the Home pages aside; the repository keeps them either way.
-        final int count = repository.pageCount();
-        int held = wallPages().homeCount();
-        if (held != count) {
-            // Grow only: a layout for another orientation can hold fewer pages, and the pages it
-            // lacks come back with it. Pages are dropped only by a removal, a move or a trim.
-            Logger.logWarn("WallPages", "Home pages " + held + " in the wall, " + count
-                + " in the widget repository" + (held < count ? ": adding the missing ones"
-                : ": keeping the wall's"));
-            if (held < count) wallPagesStore().transform(pages -> pages.withHomeCount(count));
-        }
-        repository.setPageListener((oldCount, newCount, mapping) -> {
-            boolean mapped = mapping != null && mapping.length == wallPages().homeCount();
-            if (mapped) wallPagesStore().transform(pages -> pages.withHomeMapping(mapping));
-            // Without a mapping (an orientation's layout, a drop's page) the pages only grow.
-            if (mapped || newCount > wallPages().homeCount()) {
-                wallPagesStore().transform(pages -> pages.withHomeCount(newCount));
+    @NonNull
+    private com.termux.app.launcher.widget.LauncherWidgetRepository.HomePageOwner widgetPageOwner() {
+        return new com.termux.app.launcher.widget.LauncherWidgetRepository.HomePageOwner() {
+            @NonNull @Override public java.util.List<Integer> homePageIds() {
+                return wallPages().homePageIdsForRepository();
             }
-        });
+            @NonNull @Override public java.util.List<Integer> addHomePages(int count) {
+                java.util.List<Integer> before = homePageIds();
+                wallPagesStore().transform(pages -> pages.withHomeCount(before.size() + count));
+                java.util.List<Integer> added = homePageIds();
+                added.removeAll(before);
+                return added;
+            }
+            @Override public void removeHomePages(@NonNull java.util.Collection<Integer> ids) {
+                java.util.List<Integer> held = homePageIds();
+                int[] mapping = new int[held.size()];
+                int next = 0;
+                for (int i = 0; i < mapping.length; i++) {
+                    mapping[i] = ids.contains(held.get(i)) ? -1 : next++;
+                }
+                wallPagesStore().transform(pages -> pages.withHomeMapping(mapping));
+            }
+            @Override public void reorderHomePages(@NonNull java.util.List<Integer> order) {
+                java.util.List<Integer> held = homePageIds();
+                if (held.size() != order.size() || !held.containsAll(order)) return;
+                int[] mapping = new int[held.size()];
+                for (int i = 0; i < mapping.length; i++) mapping[i] = order.indexOf(held.get(i));
+                wallPagesStore().transform(pages -> pages.withHomeMapping(mapping));
+            }
+        };
     }
 
     /** Runs an edit of the wall's pages through the store (saved, announced). */
@@ -27398,10 +27408,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWallPagesListener = new com.termux.app.wall.WallPagesStore.Listener() {
             @Override public void onChanged(@NonNull com.termux.app.wall.WallPages pages) {
                 if (mPageOverview != null) mPageOverview.refresh();
+                // The widget repository lines its pages up with the Home pages by id.
+                if (mWidgetHostController != null) mWidgetHostController.repository().onHomePagesChanged();
             }
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
-                // The removal is final: the page's own look goes with it.
+                // The removal is final: the page's own look goes with it, and what stood on it.
                 if (mPageLookPruner != null) mPageLookPruner.dropPage(page.id);
+                if (mWidgetHostController != null && page.kind == com.termux.app.wall.WallPages.PageKind.HOME) {
+                    mWidgetHostController.repository().pageRemoved(page.id);
+                }
             }
         };
         wallPagesStore().addListener(mWallPagesListener);
@@ -28906,7 +28921,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)
             || mWidgetHostController == null) return;
-        followWidgetPagesInWallPages();
         mWidgetPaneController = new com.termux.app.launcher.widget.WidgetPaneController(
             (com.termux.app.launcher.widget.WidgetPaneView) view, mWidgetHostController,
             new com.termux.app.launcher.widget.WidgetPaneController.Host() {
