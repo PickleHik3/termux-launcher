@@ -771,6 +771,40 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         return mCrossfade.isFinished() ? null : mPreviousFrame;
     }
 
+
+    /**
+     * True when this draw is a software canvas (the window-switch card is one) and the slab wears
+     * a refraction program: AGSL needs the GPU, so the card shows the slab as the plain frosted
+     * frame instead of leaving the frame out, which left the departing pane bare.
+     */
+    static boolean drawsPlainOnSoftware(boolean hasProgram, boolean hardwareCanvas) {
+        return hasProgram && !hardwareCanvas;
+    }
+
+    @Nullable private BitmapShader mSoftShader;
+    @Nullable private Bitmap mSoftShaderFrame;
+    private final Paint mSoftPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Matrix mSoftMatrix = new Matrix();
+
+    /** The frame through the frost and even-out filter, aimed as the plain draw aims it. */
+    private void drawFramePlain(@NonNull Canvas canvas, int width, int height) {
+        Bitmap frame = mFrame;
+        if (frame == null) return;
+        if (mSoftShader == null || mSoftShaderFrame != frame) {
+            mSoftShader = new BitmapShader(frame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            mSoftShaderFrame = frame;
+        }
+        GlassAnchor.place(this, mPlacement);
+        mAim.set(mPlacement.toScreen, mFrameRect, frame.getWidth(), frame.getHeight(),
+            mParallax == null ? 0f : mParallax.offsetPx());
+        mAim.shaderMatrix(mSoftMatrix);
+        mSoftShader.setLocalMatrix(mSoftMatrix);
+        mSoftPaint.setShader(mSoftShader);
+        mSoftPaint.setColorFilter(GlassFilters.undimmed(
+            GlassFilters.withEvenOut(mEvenOut, mFrostFilter), mPlacement.keptBrightness));
+        canvas.drawRect(0f, 0f, width, height, mSoftPaint);
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int width = getWidth();
@@ -797,6 +831,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (liveFrame != null && !canvas.isHardwareAccelerated()) return;
         // The scene went off: the still frame goes back on the paint.
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
+        if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
+                && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated())) {
+            drawFramePlain(canvas, width, height);
+        }
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && (mProgram == null || canvas.isHardwareAccelerated())) {
             BitmapShader aimShader = mFrameShader;

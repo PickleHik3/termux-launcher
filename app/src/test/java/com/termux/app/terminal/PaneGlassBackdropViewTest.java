@@ -419,4 +419,17 @@ public class PaneGlassBackdropViewTest {
         assertEquals("no question at all while it slid", asksAtRest, source.veilAsks);
         assertTrue("still wearing the resting rect's matrix", backdrop.frameFilterForTest() != null);
     }
+
+    /**
+     * The window-switch card draws the slab on a software canvas, which cannot run the refraction
+     * program: the frame must then be drawn plain, not left out (the departing pane showed bare
+     * wallpaper under its text). A hardware canvas keeps the program; no program is the plain draw.
+     */
+    @Test
+    public void aSoftwareCanvasDrawsARefractingSlabPlainNotNothing() {
+        assertTrue(PaneGlassBackdropView.drawsPlainOnSoftware(true, false));
+        assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(true, true));
+        assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, false));
+        assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, true));
+    }
 }
