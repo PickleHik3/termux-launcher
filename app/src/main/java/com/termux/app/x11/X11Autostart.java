@@ -4,9 +4,9 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.shared.logger.Logger;
-import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
@@ -41,12 +41,16 @@ public final class X11Autostart {
             Logger.logInfo(LOG_TAG, "Not starting the display: its command is not in the prefix yet");
             return null;
         }
-        File sockets = new File(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, ".X11-unix");
-        String[] live = sockets.list((dir, name) -> name.startsWith("X"));
-        if (live != null && live.length > 0) {
+        if (serverRunning(X11Sockets.socketDir(), X11Sockets.LOCAL_SOCKET)) {
             Logger.logInfo(LOG_TAG, "Not starting the display: one is already running");
             return null;
         }
         return argv;
+    }
+
+    /** True when a socket in the directory answers; dead ones are cleaned up on the way. */
+    @VisibleForTesting
+    static boolean serverRunning(@NonNull File socketDir, @NonNull X11Sockets.Probe probe) {
+        return !X11Sockets.liveDisplays(socketDir, probe).isEmpty();
     }
 }

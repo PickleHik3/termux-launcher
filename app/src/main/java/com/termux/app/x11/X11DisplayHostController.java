@@ -359,17 +359,14 @@ public final class X11DisplayHostController {
 
     /**
      * The display the running server answers on, as {@code DISPLAY} wants it — read from the X
-     * socket the server opened, {@code :0} when there is nothing better to go on.
+     * socket the server opened and answers on (a dead socket file is ignored and removed),
+     * {@code :0} when there is nothing better to go on.
      */
     @NonNull
     public static String displayName() {
-        java.io.File dir = new java.io.File(
-            com.termux.shared.termux.TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, ".X11-unix");
-        String[] sockets = dir.list((d, name) -> name.startsWith("X") && name.length() > 1);
-        if (sockets != null && sockets.length > 0) {
-            java.util.Arrays.sort(sockets);
-            return ":" + sockets[0].substring(1);
-        }
+        java.util.List<Integer> live = X11Sockets.liveDisplays(
+            X11Sockets.socketDir(), X11Sockets.LOCAL_SOCKET);
+        if (!live.isEmpty()) return ":" + live.get(0);
         return ":0";
     }
 

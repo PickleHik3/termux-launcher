@@ -25801,7 +25801,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void killEmbeddedDisplayServer() {
         final String packageName = getPackageName();
         new Thread(() -> {
-            if (com.termux.app.x11.X11ServerProcesses.stopAll(packageName) > 0) return;
+            int stopped = com.termux.app.x11.X11ServerProcesses.stopAll(packageName);
+            // A SIGTERMed server leaves its socket; looking at the sockets drops the dead ones.
+            com.termux.app.x11.X11Sockets.liveDisplays(com.termux.app.x11.X11Sockets.socketDir(),
+                com.termux.app.x11.X11Sockets.LOCAL_SOCKET);
+            if (stopped > 0) return;
             runOnUiThread(() -> {
                 if (mTermuxService == null) return;
                 mTermuxService.createTermuxTask(
