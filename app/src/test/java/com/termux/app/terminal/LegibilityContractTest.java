@@ -25,10 +25,10 @@ import java.util.Properties;
  * here, and a failure names the seed, ground, level, pair, both colours and the ratio, so a miss
  * can't ship silently.
  *
- * <p>The background pairs are asserted wherever the floor can be reached at all. Over a mid-tone
- * wallpaper no accent reaches 4.5:1 in either ink, and the solver then keeps the panel pairs and
- * the best background ratio left; there the test asks for exactly that, no worse than the palette
- * of the ground's own polarity could do.
+ * <p>The background pairs are not asserted on the mid glass ground yet. Over a mid-tone wallpaper
+ * no accent reaches 4.5:1 in either ink, and the solver keeps the panel pairs and the best
+ * background ratio left. Wave 2 of the legibility contract (ADR 0014) bounds the glass ground so
+ * that case cannot arise, and it turns those rows back on.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
