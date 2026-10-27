@@ -359,6 +359,9 @@
     <string name="settings_widget_grid_rows_title">Grid rows</string>
     <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
     <string name="termux_x11_no_display">No display is running.</string>
+    <string name="termux_x11_start_failed">The display could not start.</string>
+    <string name="termux_x11_start_failed_generic">The display stopped as it started.</string>
+    <string name="termux_x11_start_failed_help">Startup and support</string>
     <string name="termux_x11_needs_keyboard_data">The display needs the xkeyboard-config package installed before it can start.</string>
     <string name="termux_x11_needs_keyboard_data_nix">Add xkeyboard-config to home.nix and switch, then come back.</string>
     <string name="termux_x11_read_guide">Read the guide</string>

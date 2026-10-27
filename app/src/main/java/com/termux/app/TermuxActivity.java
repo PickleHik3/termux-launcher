@@ -27839,7 +27839,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * window on its left, or the last Home page when there is none.
      */
     private void onEmbeddedDisplayRunningChanged(boolean running) {
-        if (running) mDisplayRequested = false;
+        if (running) {
+            mDisplayRequested = false;
+            mDisplayConnectedSinceStart = true;
+            setDisplayStartFailure(null);
+        }
         if (!running && !mDisplayRequested) {
             tearDownEmbeddedDisplay();
             syncPlaceBar();
@@ -27957,8 +27961,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.isX11ForceBgraEnabled(),
             com.termux.app.x11.X11WindowManager.xstartup(mPreferences.getX11WindowManager()));
         if (argv.length == 0) return;
-        mTermuxService.createTermuxTask(argv[0], java.util.Arrays.copyOfRange(argv, 1, argv.length),
-            null, TermuxConstants.TERMUX_HOME_DIR_PATH);
+        // A new Start clears what the last one said, and counts from here whether a display
+        // connects.
+        final int startId = ++mDisplayStartId;
+        mDisplayConnectedSinceStart = false;
+        setDisplayStartFailure(null);
+        final com.termux.shared.shell.command.runner.app.AppShell task =
+            mTermuxService.createTermuxTask(argv[0],
+                java.util.Arrays.copyOfRange(argv, 1, argv.length), null,
+                TermuxConstants.TERMUX_HOME_DIR_PATH);
+        if (task == null) return;
+        // The exit callback runs on the main thread after the task's output is complete, so
+        // stderr is safe to read here.
+        mTermuxService.notifyOnAppShellExit(task, exitCode -> {
+            if (isFinishing() || isDestroyed()) return;
+            // Superseded by a later Start, or a display did connect: the server ended normally.
+            if (startId != mDisplayStartId || mDisplayConnectedSinceStart) return;
+            setDisplayStartFailure(com.termux.app.x11.X11StartFailure.reason(
+                task.getExecutionCommand().resultData.stderr,
+                getString(R.string.termux_x11_start_failed_generic)));
+        });
+    }
+
+    /** Which Start the exit callback belongs to; bumped by every Start. */
+    private int mDisplayStartId;
+    /** Whether a display came up since the last Start. */
+    private boolean mDisplayConnectedSinceStart;
+
+    /** Hand the Display window the reason the last Start died, or clear it with null. */
+    private void setDisplayStartFailure(@Nullable String reason) {
+        if (mPaneWallController == null) return;
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController.displayWindow();
+        if (frame != null) frame.setStartFailure(reason);
     }
 
     /** The Display place's menu while it is up. */
