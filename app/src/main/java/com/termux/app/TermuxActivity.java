@@ -1895,6 +1895,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
+        // The wall's pages, one store for this activity. A removal still pending from a process
+        // that was killed becomes final before any owner attaches.
+        mWallPagesStore = com.termux.app.wall.WallPagesStore.open(this);
+        mWallPagesStore.flushPending();
         com.termux.terminal.LatencyProbe.setDebugBuild(com.termux.BuildConfig.DEBUG);
         mIsOnResumeAfterOnCreate = true;
         mCreatedThisMessage.mark();
@@ -11444,7 +11448,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private String arrangementStartIn() {
         return com.termux.app.terminal.ArrangementRecovery.effectiveStartIn(
-            useAs().startIn(mPreferences == null ? null : mPreferences.getLauncherStartIn()),
+            useAs().startIn(wallPages().startIn()),
             com.termux.app.wall.WallRow.lastShellClosedShowsHome(homePagesShown(),
                 isDefaultHomeApp()));
     }
@@ -25193,9 +25197,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // Edit pages' default page, held to the pages there are now.
                 @Override public int homePressPage() {
-                    return com.termux.app.launcher.home.HomePageEdits.clampDefault(
-                        com.termux.app.launcher.home.HomeSettings.defaultPage(TermuxActivity.this),
-                        wallInnerCount(com.termux.app.wall.PaneWallPage.WIDGETS));
+                    return Math.max(0, Math.min(wallPages().homeIndex(),
+                        wallInnerCount(com.termux.app.wall.PaneWallPage.WIDGETS) - 1));
                 }
                 // Home's own swipe between Home pages, for the wallpaper's pan over the row.
                 @Override public float innerShiftFraction(
@@ -27130,6 +27133,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener
         mStartInListener;
 
+    /** The wall's pages and its home (ADR 0015): the one source of Start in and the Home page. */
+    private com.termux.app.wall.WallPagesStore mWallPagesStore;
+    @Nullable private com.termux.app.wall.WallPagesStore.Listener mWallPagesListener;
+
+    @NonNull
+    private com.termux.app.wall.WallPages wallPages() {
+        return mWallPagesStore.current();
+    }
+
+    /** Runs an edit of the wall's pages through the store (saved, announced). */
+    private void editWallPages(@NonNull com.termux.app.wall.WallPagesStore.Edit edit) {
+        mWallPagesStore.edit(edit);
+    }
+
     /** Whether the display starts with the launcher here: switched on, on a build that has one. */
     private boolean displayStartsWithLauncher() {
         return isX11DisplayEnabled() && mPreferences.isX11DisplayAutostartEnabled();
@@ -27138,8 +27155,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Start in as it stands, the one value the Home marker and the start-up read. */
     @NonNull
     private String effectiveStartIn() {
-        return com.termux.app.wall.StartInPolicy.effective(
-            mPreferences == null ? null : mPreferences.getLauncherStartIn(),
+        return com.termux.app.wall.StartInPolicy.effective(wallPages().startIn(),
             displayStartsWithLauncher(), !rowWindows().isEmpty());
     }
 
@@ -27147,14 +27163,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyStartIn(@NonNull com.termux.app.wall.StartInPolicy.Choice choice) {
         if (mPreferences == null) return;
         if (choice.startsDisplay) mPreferences.setX11DisplayAutostartEnabled(true);
-        mPreferences.setLauncherStartIn(choice.startIn);
+        chooseWallStartIn(choice.startIn);
+    }
+
+    /** Makes home what Start in {@code startIn} names, in the wall's pages. */
+    private void chooseWallStartIn(@NonNull String startIn) {
+        editWallPages(pages -> pages.chooseStartIn(startIn));
     }
 
     /** Stores Start in as it stands when the stored value no longer holds: an unstartable Display. */
     private void settleStartIn() {
         if (mPreferences == null) return;
         String now = effectiveStartIn();
-        if (!now.equals(mPreferences.getLauncherStartIn())) mPreferences.setLauncherStartIn(now);
+        if (!now.equals(wallPages().startIn())) chooseWallStartIn(now);
     }
 
     /** Edit pages really removed a window: Start in falls back if it named it. */
@@ -27162,8 +27183,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                      int terminalsLeft) {
         if (mPreferences == null) return;
         String next = com.termux.app.wall.StartInPolicy.afterRemoval(
-            mPreferences.getLauncherStartIn(), kind, terminalsLeft);
-        if (next != null) mPreferences.setLauncherStartIn(next);
+            wallPages().startIn(), kind, terminalsLeft);
+        if (next != null) chooseWallStartIn(next);
     }
 
     /** Listens for the display's start and Start in, for {@link #settleStartIn} and the marker. */
@@ -27184,6 +27205,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPageOverview != null) mPageOverview.refresh();
         };
         store.registerOnSharedPreferenceChangeListener(mStartInListener);
+        // Home moved (Settings, Edit pages, another holder of the store): the marker follows.
+        mWallPagesListener = new com.termux.app.wall.WallPagesStore.Listener() {
+            @Override public void onChanged(@NonNull com.termux.app.wall.WallPages pages) {
+                if (mPageOverview != null) mPageOverview.refresh();
+            }
+            @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {}
+        };
+        mWallPagesStore.addListener(mWallPagesListener);
     }
 
     /**
@@ -27207,6 +27236,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             store.unregisterOnSharedPreferenceChangeListener(mStartInListener);
         }
         mStartInListener = null;
+        if (mWallPagesListener != null && mWallPagesStore != null) {
+            mWallPagesStore.removeListener(mWallPagesListener);
+        }
+        mWallPagesListener = null;
     }
 
     /** The display window's card key in the page overview: there is only ever one display. */
@@ -27242,22 +27275,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return mPaneController == null ? 0 : mPaneController.homeFloatCountOn(page);
                 }
                 @Override public int defaultPage() {
-                    return com.termux.app.launcher.home.HomeSettings.defaultPage(TermuxActivity.this);
+                    return wallPages().homeIndex();
                 }
+                // Each edit of Home's pages is mirrored in the wall's pages, so their order stays
+                // the widget repository's. Removal is final at once: the undo window comes later.
                 @Override public void movePage(int from, int to) {
-                    if (mWidgetPaneController != null) mWidgetPaneController.movePage(from, to);
+                    if (mWidgetPaneController == null) return;
+                    if (!mWidgetPaneController.movePage(from, to)) return;
+                    editWallPages(pages -> pages.moveHomePage(from, to));
                 }
                 @Override public void removePage(int page) {
-                    if (mWidgetPaneController != null) mWidgetPaneController.removePage(page);
+                    if (mWidgetPaneController == null) return;
+                    if (!mWidgetPaneController.removePage(page)) return;
+                    com.termux.app.wall.WallPages.Page gone =
+                        wallPages().homePages().size() > page && page >= 0
+                            ? wallPages().homePages().get(page) : null;
+                    editWallPages(pages -> pages.removeHomePage(page));
+                    if (gone != null) mWallPagesStore.commitRemoval(gone.id);
                 }
                 @Override public void addPage() {
-                    if (mWidgetPaneController != null) mWidgetPaneController.addPage();
+                    if (mWidgetPaneController == null) return;
+                    // The repository appends after the last page, so the wall's pages do too.
+                    if (mWidgetPaneController.addPage() >= 0) {
+                        editWallPages(pages -> pages.addHomePage(-1));
+                    }
                 }
                 @Override public void chooseHome(
                         @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
                     if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE) {
-                        com.termux.app.launcher.home.HomeSettings.setDefaultPage(
-                            TermuxActivity.this, index);
+                        editWallPages(pages -> pages.chooseHomePage(index));
+                        return;
                     }
                     applyStartIn(com.termux.app.wall.StartInPolicy.choose(kind));
                 }
@@ -27446,9 +27493,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onHomePagesRenumbered(@NonNull int[] mapping) {
         if (mPaneController != null) mPaneController.remapHomeFloatPages(mapping);
-        int before = com.termux.app.launcher.home.HomeSettings.defaultPage(this);
-        int after = com.termux.app.launcher.home.HomePageEdits.remap(before, mapping);
-        if (after != before) com.termux.app.launcher.home.HomeSettings.setDefaultPage(this, after);
+        // The home page follows its page by id, in the wall's pages.
     }
 
     /** Each row runs what the corner tab, the palette and Settings already run for it. */

@@ -290,4 +290,84 @@ public class WallPagesTest {
         assertNull(p.setHome(9).page);
         assertFalse(p.setHome(9).ok());
     }
+
+    @Test
+    public void startInIsDerivedFromWhereHomeIs() {
+        assertEquals("home", three().startIn());
+        assertEquals("workspace", ok(three().setHome(3)).startIn());
+        assertEquals("display", ok(three().setHomeDisplayWindow()).startIn());
+        assertEquals(1, ok(three().setHome(2)).homeIndex());
+        assertEquals(0, ok(three().setHome(3)).homeIndex());
+    }
+
+    @Test
+    public void chooseStartInKeepsTheHomePageHomeAlreadyIs() {
+        WallPages p = ok(three().setHome(2));
+        assertEquals(WallPages.ChangeType.NONE, p.chooseStartIn("home").change);
+        assertEquals(3, ok(p.chooseStartIn("workspace")).home().id);
+        assertEquals(1, ok(ok(p.chooseStartIn("workspace")).chooseStartIn("home")).home().id);
+        assertTrue(ok(p.chooseStartIn("display")).homeIsDisplayWindow());
+        assertEquals(1, ok(ok(p.chooseStartIn("display")).chooseStartIn("home")).home().id);
+        assertEquals(Error.BAD_INDEX, three().chooseHomePage(2).error);
+        assertEquals(2, ok(three().chooseHomePage(1)).home().id);
+    }
+
+    @Test
+    public void homePageEditsByHomeIndexFollowTheRepository() {
+        WallPages p = ok(three().addHomePage(-1));
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(p));
+        p = ok(p.addHomePage(0));
+        assertEquals(java.util.Arrays.asList(1, 5, 2, 4, 3), ids(p));
+        p = ok(p.moveHomePage(3, 0));
+        assertEquals(java.util.Arrays.asList(4, 1, 5, 2, 3), ids(p));
+        Result r = p.removeHomePage(1);
+        assertEquals(1, r.page.id);
+        assertEquals(java.util.Arrays.asList(4, 5, 2, 3), ids(r.pages));
+        assertEquals(Error.BAD_INDEX, p.moveHomePage(0, 4).error);
+        assertEquals(Error.BAD_INDEX, p.removeHomePage(4).error);
+    }
+
+    @Test
+    public void detachHomesMovesHomePagesAndHomeGoesToTheTerminal() {
+        WallPages p = ok(three().detachHomes());
+        assertEquals(java.util.Arrays.asList(3), ids(p));
+        assertEquals(2, p.detached().size());
+        assertEquals(3, p.home().id);
+        // Detaching again changes nothing.
+        assertEquals(WallPages.ChangeType.NONE, p.detachHomes().change);
+    }
+
+    @Test
+    public void detachHomesKeepsTheDisplayWindowAsHome() {
+        WallPages p = ok(ok(three().setHomeDisplayWindow()).detachHomes());
+        assertTrue(p.homeIsDisplayWindow());
+        assertEquals(3, p.pages().get(0).id);
+    }
+
+    @Test
+    public void attachDetachedPutsHomePagesBackBeforeTheTerminalWithTheirIds() {
+        WallPages detached = ok(three().detachHomes());
+        WallPages back = ok(detached.attachDetached());
+        assertEquals(java.util.Arrays.asList(1, 2, 3), ids(back));
+        assertTrue(back.detached().isEmpty());
+        // Home is not given back: it stays where Terminal only put it.
+        assertEquals(3, back.home().id);
+        assertEquals(WallPages.ChangeType.NONE, three().attachDetached().change);
+        // Pages added meanwhile stay after the Homes' return point, before the Terminal.
+        WallPages more = ok(detached.add(PageKind.DISPLAY, 3, null));
+        assertEquals(java.util.Arrays.asList(1, 2, 3, 4), ids(ok(more.attachDetached())));
+    }
+
+    @Test
+    public void detachThenAttachKeepsEveryId() {
+        WallPages p = ok(ok(three().addHomePage(-1)).detachHomes());
+        assertEquals(java.util.Arrays.asList(1, 2, 4), idsOf(p.detached()));
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(ok(p.attachDetached())));
+    }
+
+    private static List<Integer> idsOf(List<WallPages.Page> pages) {
+        List<Integer> out = new ArrayList<>();
+        for (WallPages.Page page : pages) out.add(page.id);
+        return out;
+    }
 }

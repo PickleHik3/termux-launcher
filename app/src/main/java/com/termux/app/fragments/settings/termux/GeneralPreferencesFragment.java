@@ -121,7 +121,8 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
         if (prefs == null) return;
-        String shown = useAs.startIn(prefs.getLauncherStartIn());
+        String shown = useAs.startIn(
+            com.termux.app.wall.WallPagesStore.open(context).current().startIn());
         // setValue would write it; the stored Home stays for a return to Home screen. The list's
         // summary reads the value it holds, so it is set without persisting.
         boolean persistent = startIn.isPersistent();

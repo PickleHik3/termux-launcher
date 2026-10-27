@@ -35,22 +35,41 @@ public final class WallPagesMigration {
 
     private WallPagesMigration() {}
 
+    /** The Home page count, asked only when a seed is needed. */
+    public interface HomeCount {
+        int get();
+    }
+
     /**
-     * Seeds {@code store} from {@code prefs} when this install has not been through it; a second
-     * call is a no-op.
+     * Seeds {@code store} from {@code prefs} when this install has not been through it, or when
+     * the store holds no pages (unreadable or newer data: an empty wall never reaches the
+     * activity). Otherwise a no-op.
      *
-     * @param homeCount the widget repository's Home page count
-     * @return whether it ran
+     * @param homeCount the widget repository's Home page count, read only when seeding
+     * @return whether it seeded
      */
-    public static boolean migrateIfNeeded(@Nullable SharedPreferences prefs, int homeCount,
+    public static boolean migrateIfNeeded(@Nullable SharedPreferences prefs,
+                                          @NonNull HomeCount homeCount,
                                           @NonNull WallPagesStore store) {
-        if (prefs == null || prefs.getInt(KEY_VERSION, 0) >= VERSION) return false;
-        WallPages seed = seed(prefs.getString(TERMUX_APP.KEY_LAUNCHER_START_IN, null),
-            prefs.getInt(KEY_DEFAULT_PAGE, 0), prefs.getString(TERMUX_APP.KEY_USE_AS, null),
-            homeCount);
-        if (!store.wasSeeded()) store.replace(seed);
+        if (prefs == null) return false;
+        boolean gated = prefs.getInt(KEY_VERSION, 0) >= VERSION;
+        boolean empty = store.current().allPages().isEmpty();
+        if (gated && !empty) return false;
+        if (empty) {
+            store.replace(seed(prefs.getString(TERMUX_APP.KEY_LAUNCHER_START_IN, null),
+                prefs.getInt(KEY_DEFAULT_PAGE, 0), prefs.getString(TERMUX_APP.KEY_USE_AS, null),
+                homeCount.get()));
+        }
         prefs.edit().putInt(KEY_VERSION, VERSION).apply();
-        return true;
+        return !gated || empty;
+    }
+
+    /** As above with the count in hand. */
+    public static boolean migrateIfNeeded(@Nullable SharedPreferences prefs, final int homeCount,
+                                          @NonNull WallPagesStore store) {
+        return migrateIfNeeded(prefs, new HomeCount() {
+            @Override public int get() { return homeCount; }
+        }, store);
     }
 
     /** The seeded value; pure. Stored strings are read as the policies read them. */
@@ -63,8 +82,10 @@ public final class WallPagesMigration {
         Page terminal = new Page(n + 1, PageKind.TERMINAL, null, null);
         int next = n + 2;
         if (!UseAs.read(useAs).showsHomePage() || n == 0) {
+            // The display stays Start in for them too (as UseAs.startIn keeps it).
             return new WallPages(Collections.singletonList(terminal), Collections.<Integer>emptyList(),
-                homes, terminal.id, next, false);
+                homes, terminal.id, next,
+                WallRow.START_IN_DISPLAY.equals(StartInPolicy.read(startIn)));
         }
         List<Page> all = new ArrayList<>(homes);
         all.add(terminal);

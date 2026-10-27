@@ -77,6 +77,15 @@ public class WallPagesMigrationTest {
     }
 
     @Test
+    public void terminalOnlyUsersStartingInTheDisplayKeepIt() {
+        WallPages p = WallPagesMigration.seed("display", 0, "terminal", 2);
+        assertTrue(p.homeIsDisplayWindow());
+        assertEquals("T", kinds(p));
+        assertEquals(2, p.detached().size());
+        assertFalse(WallPagesMigration.seed("workspace", 0, "terminal", 2).homeIsDisplayWindow());
+    }
+
+    @Test
     public void everyStartInUseAsAndCountCombinationSeedsAValidWall() {
         for (String startIn : START_INS) {
             for (String useAs : USE_ASES) {
@@ -89,8 +98,8 @@ public class WallPagesMigrationTest {
                         assertEquals(tag, terminalOnly ? count : 0, p.detached().size());
                         if (p.homeIsDisplayWindow()) {
                             assertEquals(tag, "display", StartInPolicy.read(startIn));
-                            assertFalse(tag, terminalOnly);
                         } else {
+                            assertFalse(tag, "display".equals(StartInPolicy.read(startIn)));
                             assertTrue(tag, p.home() != null);
                         }
                         if (!terminalOnly && "home".equals(StartInPolicy.read(startIn))) {
@@ -145,6 +154,30 @@ public class WallPagesMigrationTest {
         assertTrue(WallPagesMigration.migrateIfNeeded(prefs, 4, store));
         assertEquals("HT", kinds(store.current()));
         assertEquals(1, prefs.getInt("wall_pages_migration_version", 0));
+    }
+
+    @Test
+    public void anEmptyStoreIsSeededAgainEvenWhenTheVersionIsRecorded() {
+        prefs.edit().putString("app_launcher_start_in", "workspace").putInt(
+            "wall_pages_migration_version", 1).commit();
+        WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
+        storage.write("{not json");
+        WallPagesStore store = new WallPagesStore(storage);
+        assertTrue(store.current().allPages().isEmpty());
+        assertTrue(WallPagesMigration.migrateIfNeeded(prefs, 2, store));
+        assertEquals("HHT", kinds(store.current()));
+        assertEquals(PageKind.TERMINAL, store.current().home().kind);
+        assertFalse(WallPagesMigration.migrateIfNeeded(prefs, 2, store));
+    }
+
+    @Test
+    public void theHomeCountIsAskedOnlyWhenSeeding() {
+        WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        final int[] asked = {0};
+        WallPagesMigration.HomeCount count = () -> { asked[0]++; return 2; };
+        assertTrue(WallPagesMigration.migrateIfNeeded(prefs, count, store));
+        assertFalse(WallPagesMigration.migrateIfNeeded(prefs, count, store));
+        assertEquals(1, asked[0]);
     }
 
     @Test
