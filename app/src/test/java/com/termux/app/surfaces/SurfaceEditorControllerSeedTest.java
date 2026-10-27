@@ -48,6 +48,7 @@ public class SurfaceEditorControllerSeedTest {
         store = context.getSharedPreferences("surface-editor-seed-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         clear = AppearanceLooks.presetForStop(SurfacePresets.presets(), 0);
         mist = AppearanceLooks.presetForStop(SurfacePresets.presets(), 1);
         assertNotNull(clear);

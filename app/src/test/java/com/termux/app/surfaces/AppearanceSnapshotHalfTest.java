@@ -42,6 +42,7 @@ public class AppearanceSnapshotHalfTest {
         store = context.getSharedPreferences("appearance-snapshot-half-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         SurfacePresets.apply(preferences, SurfacePresets.presets().get(1));
     }
 

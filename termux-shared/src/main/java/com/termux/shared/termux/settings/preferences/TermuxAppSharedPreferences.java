@@ -3330,6 +3330,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         writeSurfaceRaw(slot, property, half, value);
     }
 
+    /**
+     * Gives the Terminal page (the Workspace) its own value of a surface's property, which wins
+     * over the wall's. A no-op where no Terminal page is known or a page may not hold the value.
+     */
+    public void setSurfaceWorkspaceOverride(SurfaceSlot slot, SurfaceProperty property, int value) {
+        String key = surfaceOverrideKey(slot, property);
+        if (key == null || !PageLookKeys.DETACHABLE.contains(key))
+            return;
+        String override = surfaceHalfKey(key, WallHalf.WORKSPACE);
+        if (override.equals(key))
+            return;
+        SharedPreferenceUtils.setInt(mSharedPreferences, override, value, false);
+    }
+
     private void writeSurfaceRaw(SurfaceSlot slot, SurfaceProperty property, int value) {
         writeSurfaceRaw(slot, property, null, value);
     }
@@ -3934,6 +3948,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private int resolveSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
                                     String overrideKey, int overrideDefault,
                                     @Nullable WallHalf half) {
+        // A page's own value (the Workspace's override) wins over the link, as in PageLook.
+        if (half != null && isPerHalf(slot, property)) {
+            String pageKey = surfaceHalfKey(overrideKey, half);
+            if (!pageKey.equals(overrideKey) && containsKey(pageKey))
+                return SharedPreferenceUtils.getInt(mSharedPreferences, pageKey, overrideDefault);
+        }
         if (isSurfaceInheriting(slot, property, half))
             return getSurfaceBaseValue(property, half);
         return readHalfInt(overrideKey, isPerHalf(slot, property) ? half : null, overrideDefault);

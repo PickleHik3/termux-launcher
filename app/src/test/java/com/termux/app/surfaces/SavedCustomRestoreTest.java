@@ -209,7 +209,8 @@ public class SavedCustomRestoreTest {
     }
 
     private TermuxAppSharedPreferences freshPreferences() {
-        return new TermuxAppSharedPreferences(context, store, null);
+        return com.termux.app.look.TerminalPageIdFixture.give(
+            new TermuxAppSharedPreferences(context, store, null));
     }
 
     /** The editor's Done at a Look's stop (SurfaceEditorController.commitLook). */

@@ -37,6 +37,7 @@ public class SurfaceHalfTest {
         store = context.getSharedPreferences("surface-half-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     // ------------------------------------------------------------------ equal until touched

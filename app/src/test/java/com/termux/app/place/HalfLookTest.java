@@ -42,6 +42,7 @@ public class HalfLookTest {
             context.getSharedPreferences("half-look-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static final WallHalfShape SHAPE = WallHalfShape.of(LayoutStyle.DOCKED, -1, 8);

@@ -44,6 +44,7 @@ public class SurfaceEditorHomeGlassTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
         // Pong's Home half, and a Workspace that looks otherwise.
         preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 92);

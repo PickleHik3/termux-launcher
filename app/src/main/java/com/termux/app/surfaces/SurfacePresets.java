@@ -503,8 +503,7 @@ public final class SurfacePresets {
         if (!halfCells(home).equals(halfCells(look))) {
             look.put(KEY_HOME_LOOK, Boolean.TRUE);
             for (Map.Entry<String, Object> entry : halfCells(home).entrySet())
-                look.put(TermuxAppSharedPreferences.surfaceHalfKey(entry.getKey(), WallHalf.HOME),
-                    entry.getValue());
+                look.put(entry.getKey() + HOME_TWIN_SUFFIX, entry.getValue());
         }
         return look;
     }
@@ -557,6 +556,9 @@ public final class SurfacePresets {
     // (every shipped Look, and a look saved from one half) is one look for both halves. A build
     // before the halves ignores the twins and the marker as unknown keys.
 
+    /** The preset format's suffix for Home's twin of a key; the format predates the page keys. */
+    static final String HOME_TWIN_SUFFIX = "_home";
+
     /** Marks a look that names Home's per-half cells apart from the Workspace's. */
     static final String KEY_HOME_LOOK = "surface_look_home";
 
@@ -599,7 +601,7 @@ public final class SurfacePresets {
     /** The plain key a Home twin stands for, or null when {@code key} is not one. */
     @Nullable
     private static String homeTwinOf(@NonNull String key) {
-        String suffix = TermuxAppSharedPreferences.surfaceHalfKey("", WallHalf.HOME);
+        String suffix = HOME_TWIN_SUFFIX;
         if (!key.endsWith(suffix))
             return null;
         String plain = key.substring(0, key.length() - suffix.length());
@@ -973,8 +975,28 @@ public final class SurfacePresets {
         // The Workspace's look lands on both halves; Home's own, where the look names it, then
         // lands on Home's per-half cells alone.
         applyHalf(prefs, halfOf(preset, WallHalf.WORKSPACE), null, false);
-        if (hasHomeLook(preset))
-            applyHalf(prefs, halfOf(preset, WallHalf.HOME), WallHalf.HOME, true);
+        if (!hasHomeLook(preset))
+            return;
+        // The halves are pages now (ADR 0015 6): Home's values are the wall's, and what the
+        // Workspace showed under this look goes to the Terminal page's overrides where a page may
+        // hold it. Note the Workspace's numbers, put Home's on the wall, then override the numbers
+        // that moved.
+        SurfaceSlot[] slots = SurfaceSlot.values();
+        SurfaceProperty[] properties = SurfaceProperty.values();
+        int[][] workspace = new int[slots.length][properties.length];
+        for (SurfaceSlot slot : slots)
+            for (SurfaceProperty property : properties)
+                workspace[slot.ordinal()][property.ordinal()] =
+                    prefs.getSurfaceValue(slot, property, WallHalf.WORKSPACE);
+        applyHalf(prefs, halfOf(preset, WallHalf.HOME), WallHalf.HOME, true);
+        for (SurfaceSlot slot : slots) {
+            for (SurfaceProperty property : properties) {
+                if (!TermuxAppSharedPreferences.isPerHalf(slot, property)) continue;
+                int want = workspace[slot.ordinal()][property.ordinal()];
+                if (prefs.getSurfaceValue(slot, property, WallHalf.WORKSPACE) != want)
+                    prefs.setSurfaceWorkspaceOverride(slot, property, want);
+            }
+        }
     }
 
     /**

@@ -55,6 +55,7 @@ public class EditorScreenLookTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         places = new PlaceLayoutStore(preferences);
         places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
         SurfacePresets.applyLook(preferences, preset("frost"));

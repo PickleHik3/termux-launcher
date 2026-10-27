@@ -40,6 +40,7 @@ public class SurfacePresetsHalfTest {
             context.getSharedPreferences("surface-presets-half-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static SurfacePresets.Preset preset(String id) {
@@ -60,6 +61,28 @@ public class SurfacePresetsHalfTest {
         assertFalse(look.containsKey(SurfacePresets.KEY_HOME_LOOK));
         for (String key : look.keySet())
             assertFalse(key, key.endsWith("_home"));
+    }
+
+    @Test
+    public void oldCustomWithHalfKeys_loadsHomesWallValuesAndTheWorkspacesOverrides() {
+        Map<String, Object> look =
+            new java.util.LinkedHashMap<>(SurfacePresets.captureLook(preferences));
+        look.put(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 70);
+        look.put(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_SURFACE_BASE_OPACITY + "_home", 15);
+        look.put(SurfacePresets.KEY_HOME_LOOK, Boolean.TRUE);
+        SurfacePresets.apply(preferences, saved(look));
+
+        // Base is wall-wide: Home's value is the wall's, for both halves.
+        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE));
+        // The dock follows Base: Home shows the wall's 15, the Terminal page keeps its 70.
+        assertEquals(15, preferences.getAppBarOpacity(WallHalf.HOME));
+        assertEquals(70, preferences.getAppBarOpacity(WallHalf.WORKSPACE));
+        assertTrue(preferences.getSharedPreferences().contains("app_bar_opacity@"
+            + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID));
     }
 
     @Test

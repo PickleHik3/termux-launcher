@@ -38,6 +38,7 @@ public class EditorCardResetTest {
         store = context.getSharedPreferences("editor-card-reset-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         prefs = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(prefs);
     }
 
     @Test
