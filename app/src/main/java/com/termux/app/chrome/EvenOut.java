@@ -230,16 +230,27 @@ public final class EvenOut {
     }
 
     /**
-     * How far the composited band's limiting end falls short of the ceiling even at the best
-     * the chain can do: pale ink needs the composite of tone 0 under the limit, dark ink needs the
-     * composite of tone 100 over it. Zero means the ink's side is reachable.
+     * How far a side is out of reach: the limit's own shortfall plus the band's missing width. A
+     * pane that already sits on the ink's side of the limit (composited p98 under it for pale,
+     * p2 over it for dark) needs nothing. Otherwise the band must fit, at the narrower of the
+     * level's width and the pane's composited span, between the chain's best end and the limit:
+     * pale needs [c(0), limit], dark needs [limit, c(100)]. The shortfall is the width it lacks
+     * (the limit's own overshoot included, as a negative room); zero means reachable with room.
      */
-    public static double shortfall(@NonNull Ceiling ceiling, @NonNull ChromeInk.Polarity polarity,
-                                   @NonNull Chain chain) {
+    public static double shortfall(@NonNull GlassBackdropCache.Lightness stats,
+                                   @NonNull Ceiling ceiling, @NonNull ChromeInk.Polarity polarity,
+                                   @NonNull TerminalContrastLevel level, @NonNull Chain chain) {
+        double cLo = chain.composited(stats.p2);
+        double cHi = chain.composited(stats.p98);
+        double width = Math.min(level.evenOutWidth, Math.max(0d, cHi - cLo));
         if (polarity == ChromeInk.Polarity.PALE_INK) {
-            return Math.max(0d, chain.composited(0d) - (ceiling.tone - BAND_MARGIN));
+            double limit = ceiling.tone - BAND_MARGIN;
+            if (cHi <= limit) return 0d;
+            return Math.max(0d, width - (limit - chain.composited(0d)));
         }
-        return Math.max(0d, (ceiling.tone + BAND_MARGIN) - chain.composited(100d));
+        double limit = ceiling.tone + BAND_MARGIN;
+        if (cLo >= limit) return 0d;
+        return Math.max(0d, width - (chain.composited(100d) - limit));
     }
 
     /** The pre-frost tone whose composite is {@code target}, clamped to 0..100. */
