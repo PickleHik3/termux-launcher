@@ -28,7 +28,8 @@ public final class X11StartFailure {
         if (stderr == null) return generic;
         String[] lines = stderr.toString().split("\\r?\\n");
         for (int i = lines.length - 1; i >= 0; i--) {
-            String line = lines[i].trim();
+            // Xorg brackets its fatal lines with "(EE)"; the user reads the sentence, not the tag.
+            String line = lines[i].replace("(EE)", " ").trim();
             if (line.isEmpty() || line.startsWith("at ") || line.startsWith("...")) continue;
             if (!ERROR_WORDS.matcher(line).find()) continue;
             return line.length() <= MAX_LENGTH ? line : line.substring(0, MAX_LENGTH - 1) + "…";

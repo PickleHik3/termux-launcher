@@ -26,4 +26,14 @@ public class X11StartFailureTest {
         assertEquals(GENERIC, X11StartFailure.reason(null, GENERIC));
         assertEquals(GENERIC, X11StartFailure.reason("starting\nbye\n", GENERIC));
     }
+
+    @Test
+    public void xorgsFatalLineLosesItsTags() {
+        String stderr = "_XSERVTransSocketUNIXCreateListener: ...SocketCreateListener() failed\n"
+            + "_XSERVTransMakeAllCOTSServerListeners: server already running\n(EE) \nFatal server error:\n"
+            + "(EE) Cannot establish any listening sockets - Make sure an X server isn't already running(EE)\n";
+        org.junit.Assert.assertEquals(
+            "Cannot establish any listening sockets - Make sure an X server isn't already running",
+            X11StartFailure.reason(stderr, "generic"));
+    }
 }
