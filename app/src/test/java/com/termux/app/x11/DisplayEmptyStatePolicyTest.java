@@ -121,6 +121,26 @@ public class DisplayEmptyStatePolicyTest {
         assertTrue(off.startVisible);
     }
 
+    @Test public void aFailedStartSpeaksOverTheRestingStateUntilCleared() {
+        State failed = DisplayEmptyStatePolicy.decide(true, true, TourEdition.TERMUX, "Boom");
+        assertEquals(R.string.termux_x11_start_failed, failed.messageRes);
+        assertEquals("Boom", failed.failureReason);
+        assertTrue(failed.failed());
+        assertTrue("Start stays out so it can be tried again", failed.startVisible);
+        assertFalse(failed.resting());
+
+        State next = DisplayEmptyStatePolicy.decide(true, true, TourEdition.TERMUX, null);
+        assertEquals(R.string.termux_x11_no_display, next.messageRes);
+        assertFalse(next.failed());
+    }
+
+    @Test public void aFailureDoesNotHideTheThingToFixFirst() {
+        assertEquals(R.string.termux_x11_display_off,
+            DisplayEmptyStatePolicy.decide(false, true, TourEdition.TERMUX, "Boom").messageRes);
+        assertEquals(R.string.termux_x11_needs_keyboard_data,
+            DisplayEmptyStatePolicy.decide(true, false, TourEdition.TERMUX, "Boom").messageRes);
+    }
+
     @Test public void vajReadsTheSameAsTermux() {
         for (boolean enabled : new boolean[] {true, false}) {
             for (boolean hasKeyboardData : new boolean[] {true, false}) {
