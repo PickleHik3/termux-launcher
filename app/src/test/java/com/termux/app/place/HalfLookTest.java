@@ -55,7 +55,9 @@ public class HalfLookTest {
 
     @Test
     public void stackLook_isPartOfTheStacksDress() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 5);
+        // Base is wall-wide: the halves differ by the Terminal page's own dock value.
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE, 5);
         HalfLook home = HalfLook.read(preferences, WallHalf.HOME);
         HalfLook workspace = HalfLook.read(preferences, WallHalf.WORKSPACE);
 
@@ -66,8 +68,8 @@ public class HalfLookTest {
 
     @Test
     public void statusLookAlone_leavesTheStacksDressAlike() {
-        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, WallHalf.HOME,
-            90);
+        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            WallHalf.WORKSPACE, 90);
         HalfLook home = HalfLook.read(preferences, WallHalf.HOME);
         HalfLook workspace = HalfLook.read(preferences, WallHalf.WORKSPACE);
 

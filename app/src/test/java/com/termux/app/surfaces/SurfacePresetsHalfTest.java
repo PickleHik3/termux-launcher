@@ -87,8 +87,10 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void differingHalves_saveAndLoadBoth() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 70);
+        // Base is wall-wide, so the halves differ by the Terminal page's own values.
         preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 15);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE, 70);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, WallHalf.HOME, 60);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
             WallHalf.WORKSPACE, 30);
@@ -114,8 +116,9 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void oneHalfsLook_appliesToBoth() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME, 40);
+        // Base is wall-wide: the Workspace's 2 is replaced by Home's 40 on the one wall value.
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE, 2);
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME, 40);
         SurfacePresets.Preset home = saved(SurfacePresets.captureLook(preferences, WallHalf.HOME));
         assertFalse(SurfacePresets.hasHomeLook(home));
 
@@ -135,10 +138,10 @@ public class SurfacePresetsHalfTest {
         SurfacePresets.applyLook(preferences, solid, WallHalf.WORKSPACE);
 
         assertTrue(SurfacePresets.matches(preferences, solid, WallHalf.WORKSPACE));
-        assertFalse(SurfacePresets.matches(preferences, solid, WallHalf.HOME));
         assertEquals(solid.values.get(SurfaceProperty.OPACITY.baseKey),
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
-        assertEquals(clear.values.get(SurfaceProperty.OPACITY.baseKey),
+        // Base is wall-wide: a Look chosen on the Workspace is the wall's Base for Home too.
+        assertEquals(solid.values.get(SurfaceProperty.OPACITY.baseKey),
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
         // Today's callers read the Workspace's stop.
         assertTrue(SurfacePresets.matches(preferences, solid));

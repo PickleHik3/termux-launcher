@@ -58,7 +58,8 @@ public class SurfaceEditorCardsTest {
         model(editor).onReleased(Row.OPACITY);
 
         assertEquals(23, opacity(WallHalf.HOME));
-        assertEquals("the Workspace keeps its dock", workspace, opacity(WallHalf.WORKSPACE));
+        // Home's value is the wall's: the Workspace's dock wears it unless it holds its own.
+        assertEquals("the Workspace's dock follows the wall", 23, opacity(WallHalf.WORKSPACE));
         assertTrue("the dot: Home's own value", model(editor).ownValue(Row.OPACITY));
     }
 
@@ -148,7 +149,8 @@ public class SurfaceEditorCardsTest {
             SurfaceSlot.STATUS, SurfaceProperty.BLUR, WallHalf.HOME));
         assertEquals(GlassControls.grainForGlass(40), preferences.getSurfaceValue(
             SurfaceSlot.STATUS, SurfaceProperty.GRAIN, WallHalf.HOME));
-        assertEquals("the Workspace keeps its status bar", workspaceBlur,
+        assertEquals("the Workspace's status bar wears the wall's value",
+            GlassControls.blurForGlass(40),
             preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
                 WallHalf.WORKSPACE));
         assertEquals("Frost reads back where it was left", 40, model(editor).value(Row.FROST));
@@ -177,7 +179,7 @@ public class SurfaceEditorCardsTest {
         assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY,
             WallHalf.WORKSPACE));
         assertEquals("every surface on the half wears it", 33, opacity(WallHalf.WORKSPACE));
-        assertEquals("Home keeps its own", home,
+        assertEquals("Base is wall-wide, so Home wears it too", 33,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
 
         model.onValue(Row.FROST, 75, false);

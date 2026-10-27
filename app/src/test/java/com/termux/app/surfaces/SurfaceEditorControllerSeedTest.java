@@ -188,9 +188,12 @@ public class SurfaceEditorControllerSeedTest {
         SurfaceEditorController.writeScreenFrost(preferences, workspace, 90);
         assertEquals("the shared position is the Appearance card's", 33,
             preferences.getSurfaceGlassPosition(null));
-        assertEquals(otherBlur, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home));
-        assertEquals(otherGrain, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home));
+        // Base is wall-wide: the screen card's Frost is the wall's, so Home reads it too.
         assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, workspace));
+        assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home));
+        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, workspace),
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home));
     }
 }

@@ -47,15 +47,17 @@ public class SurfaceEditorHomeGlassTest {
         com.termux.app.look.TerminalPageIdFixture.give(preferences);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
         // Pong's Home half, and a Workspace that looks otherwise.
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 92);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, WallHalf.HOME, 0);
+        // Base is wall-wide since the halves became pages: the Workspace's numbers first, then
+        // Home's, which are the wall's.
         preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 40);
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE,
             GlassControls.blurForGlass(60));
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE,
             GlassControls.grainForGlass(60));
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 92);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME, 0);
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME, 0);
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, WallHalf.HOME, 0);
         // The Workspace's Frost was left at 60: Home's pair is not that position's.
         preferences.setSurfaceGlassPosition(null, 60);
         for (SurfaceSlot slot : new SurfaceSlot[] {SurfaceSlot.DOCK, SurfaceSlot.STATUS}) {
@@ -94,9 +96,9 @@ public class SurfaceEditorHomeGlassTest {
             preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, WallHalf.HOME));
         assertEquals("the status bar on Home follows", 70, preferences.getSurfaceValue(
             SurfaceSlot.STATUS, SurfaceProperty.OPACITY, WallHalf.HOME));
-        assertEquals("the Workspace keeps its glass", 40,
+        assertEquals("Base is the wall's, so the Workspace reads Home's write", 70,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
-        assertEquals(GlassControls.blurForGlass(60),
+        assertEquals(GlassControls.blurForGlass(40),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
         assertEquals("Frost reads back where it was left", 40, model(editor).value(Row.FROST));
     }
@@ -108,7 +110,7 @@ public class SurfaceEditorHomeGlassTest {
             WallHalf.WORKSPACE));
         model(editor).onValue(Row.OPACITY, 55, false);
         assertEquals(55, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
-        assertEquals(40,
+        assertEquals(55,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
     }
 
@@ -147,7 +149,8 @@ public class SurfaceEditorHomeGlassTest {
             preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME));
         assertEquals(GlassControls.glassFor(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
             TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN), model(editor).value(Row.FROST));
-        assertEquals("the Workspace is untouched", 40,
+        assertEquals("Base is the wall's, so the Workspace reads the reset too",
+            TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
     }
 

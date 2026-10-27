@@ -55,7 +55,8 @@ public class AppearanceSnapshotHalfTest {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, WallHalf.HOME,
             23);
 
-        assertEquals("the Workspace's dock is untouched", workspace,
+        // Home's detach is the wall's: the Workspace's dock wears the same number.
+        assertEquals("the Workspace's dock follows the wall", 23,
             preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
                 WallHalf.WORKSPACE));
         assertEquals(23, preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
@@ -134,9 +135,11 @@ public class AppearanceSnapshotHalfTest {
     private boolean hasHalfKeys() {
         for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
             String key = entry.getKey();
-            if (key.endsWith("_" + WallHalf.HOME.key) || key.endsWith("_" + WallHalf.WORKSPACE.key)) {
+            // The halves are pages: the Workspace's own values are the Terminal page's overrides.
+            String page = "@" + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID;
+            if (key.endsWith(page)) {
                 for (String halfAble : AppearanceSnapshot.halfAbleKeys()) {
-                    if (key.startsWith(halfAble + "_"))
+                    if (key.equals(halfAble + page))
                         return true;
                 }
             }
