@@ -140,12 +140,26 @@ mean moves 39.5 → 33.6, and the worst grey is 3.00:1 and the worst body text 4
 
 ### Rendering
 
-- Android 13+: an AGSL pass on the frost bitmap, one program per surface (the pattern of
-  `PaneGlassBackdropView`'s existing RuntimeShader cache, ~170).
-- Android 8–12: the same curve applied in software once to the cached pre-blurred frame,
-  recomputed when the wallpaper, rect, level or polarity changes. Nothing runs per frame.
-- Sampling: `GlassBackdropCache.sampleBitmapRegion` (434) returns a mean today. Add a sibling that
-  returns the percentiles from the same grid.
+Decided 2026-10-27, replacing the earlier AGSL plus CPU-fallback plan. Even-out is a
+`ColorMatrix` composed into the frost `ColorFilter` that every glass band already draws its frame
+with (`GlassFilters.frost`, used in `TermuxActivity` and set on `PaneGlassBackdropView` through
+`setGlass(..., frostFilter)`).
+
+- **Lightness.** An affine map on the sRGB-encoded value, `v' = a·v + b`. `a` and `b` are solved
+  so the greys at p2 and p98 land on the mapping's band ends. Because sRGB encoding and L\* are
+  both near-perceptual, this tracks the linear L\* map to within 0.29–0.50 tone across dark, mid
+  and light ranges (computed 2026-10-27), which sits inside the half-tone margin.
+- **Colour.** A plain affine map would also scale saturation by `a`. Instead, the matrix scales
+  each channel's luma part by `a` and keeps a share `s` of its spread around luma (`s` starts at
+  (a + 1) / 2, tuned on pong shots), clamped by the filter.
+- **Band ends are computed from the matrix actually drawn,** applied to the p2 and p98 sample
+  colours and then composited with `OnGlass.backdrop`. So the palette is solved against what is
+  on screen, not against the ideal map.
+- **Cost and reach:** no shader, no extra pass and nothing per frame, so it works on every
+  supported Android (API 26+) with the same guarantee. It is recomputed only when the wallpaper,
+  rect, level or polarity changes.
+- Sampling: `GlassBackdropCache.sampleBitmapLightness` (wave 2a), read from the same pre-blurred
+  frame the frost is drawn from.
 
 ### Switch
 
