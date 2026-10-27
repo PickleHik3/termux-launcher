@@ -16,6 +16,8 @@ Latest stable: v1.2.1.
 ### Terminal
 - dialog and whiptail screens, such as termux-change-repo, are readable: the red and blue text on their white panels now stands out in every Look and at every Contrast level.
 - Grey and normal text stays readable on a glass terminal over a bright wallpaper: the glass evens out the wallpaper under the text. It is on by default; Settings › Debugging › Even out glass turns it off so you can compare.
+- Switching terminal windows with Fancier Glass on no longer flashes the bare wallpaper behind the window that is leaving.
+- The terminal's Opacity stays yours: at 0% the glass is exactly as clear as you set it, with no evening-out, and below the default it evens out less.
 
 ### Home
 - Bare widgets draw nothing behind themselves: the soft dim behind a Bare clock is gone, and only its ink changes tone to stay readable.
@@ -24,6 +26,7 @@ Latest stable: v1.2.1.
 
 ### Appearance editor
 - Scrolling a card's content moves the card sheet like a standard bottom sheet: up grows it to half and full height, down at the top of the content shrinks it a stop. Sliders and strips still drag sideways.
+- A swipe on a glass slider in the Appearance sheet moves it straight away, without tapping it first.
 - Change wallpaper opens its picker above the card sheet, so Choose photo can be tapped again.
 
 ### Launcher
