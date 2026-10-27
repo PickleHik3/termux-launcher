@@ -98,6 +98,9 @@ public final class TerminalSession extends TerminalOutput {
      */
     private boolean mBoldWithBright;
 
+    /** Whether {@link #finishIfRunning()} ended the process, rather than a signal from elsewhere. */
+    private boolean mFinishRequested;
+
     /**
      * The file descriptor referencing the master half of a pseudo-terminal pair, resulting from calling
      * {@link JNI#createSubprocess(String, String, String[], String[], int[], int, int, int, int)}.
@@ -383,6 +386,7 @@ public final class TerminalSession extends TerminalOutput {
      */
     public void finishIfRunning() {
         if (!isRunning()) return;
+        mFinishRequested = true;
         ShellTerminator.terminate(mShellPid, OsConstants.SIGHUP, OsConstants.SIGKILL,
             this::sendSignal, mMainThreadHandler::postDelayed, PROCESS_TABLE, () -> mShellPid);
     }
@@ -426,6 +430,11 @@ public final class TerminalSession extends TerminalOutput {
 
     public synchronized boolean isRunning() {
         return mShellPid != -1;
+    }
+
+    /** Whether the process ended because {@link #finishIfRunning()} asked it to. */
+    public boolean isFinishRequested() {
+        return mFinishRequested;
     }
 
     /**
