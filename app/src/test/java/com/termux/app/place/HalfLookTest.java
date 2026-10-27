@@ -45,7 +45,7 @@ public class HalfLookTest {
         com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
-    private static final WallHalfShape SHAPE = WallHalfShape.of(LayoutStyle.DOCKED, -1, 8);
+    private static final WallShape SHAPE = WallShape.of(LayoutStyle.DOCKED, -1, 8);
 
     @Test
     public void untouchedHalves_lookAlike() {

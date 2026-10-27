@@ -7,8 +7,9 @@ import com.termux.app.dock.DockStyle;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
-import com.termux.app.place.WallHalfShape;
+import com.termux.app.place.WallShape;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.app.wall.WallPages.PageKind;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -56,16 +57,23 @@ public final class DressResolver {
 
         /** One half's Style, Corners and Margin as stored: Home's own, or the Workspace's. */
         @NonNull
-        WallHalfShape shape(boolean home);
+        WallShape shape();
+
+        /** Whether a kind of page shows one element: the page model's per-kind visibility. */
+        boolean shows(@NonNull PageKind kind, @NonNull Element element);
     }
 
     /**
-     * What a Home page leaves out, whichever layout it wears: the extra keys are the Workspace's
-     * alone. The status bar is worn on both halves (#90).
+     * What the Layout editor does not offer on the Home layout: the extra keys. Only an offer
+     * ({@link #wornOn}); what a page wears is its kind's visibility ({@link Source#shows}).
      */
-    @NonNull private static final Set<Element> HOME_LEAVES_OUT = EnumSet.of(Element.EXTRA_KEYS);
+    @NonNull private static final Set<Element> HOME_NOT_OFFERED = EnumSet.of(Element.EXTRA_KEYS);
 
-    @NonNull private static final Set<Element> NONE_LEFT_OUT = EnumSet.noneOf(Element.class);
+    /** The kind of page a wall page carries: the Home pages' row, or the Workspace's windows. */
+    @NonNull
+    public static PageKind kindOf(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS ? PageKind.HOME : PageKind.TERMINAL;
+    }
 
     @NonNull private final Source mSource;
 
@@ -113,9 +121,15 @@ public final class DressResolver {
                 return store != null && store.forVariant(layout).drawerTile();
             }
 
-            @NonNull @Override public WallHalfShape shape(boolean home) {
+            @NonNull @Override public WallShape shape() {
                 PlaceLayoutStore store = places.get();
-                return store != null ? store.halfShape(home) : WallHalfShape.read(null, home);
+                return store != null ? store.shape() : WallShape.read(null);
+            }
+
+            @Override public boolean shows(@NonNull PageKind kind, @NonNull Element element) {
+                PlaceLayoutStore store = places.get();
+                return store != null ? store.kindShows(kind, element)
+                    : PlaceLayoutStore.kindShowsByDefault(kind, element);
             }
         });
     }
@@ -127,11 +141,15 @@ public final class DressResolver {
      */
     @NonNull
     public Dress dressOf(@NonNull PaneWallPage page) {
-        boolean home = page == PaneWallPage.WIDGETS;
         LayoutVariant layout = layoutOf(page);
-        return new Dress(layout, home ? HOME_LEAVES_OUT : NONE_LEFT_OUT,
+        PageKind kind = kindOf(page);
+        Set<Element> leftOut = EnumSet.noneOf(Element.class);
+        for (Element element : Element.values()) {
+            if (!mSource.shows(kind, element)) leftOut.add(element);
+        }
+        return new Dress(layout, leftOut,
             DockStyle.effectiveStyle(mSource.dockDesign(layout)), mSource.searchField(layout),
-            mSource.drawerTile(layout), mSource.shape(home && layout == LayoutVariant.HOME));
+            mSource.drawerTile(layout), mSource.shape());
     }
 
     /**
@@ -174,21 +192,20 @@ public final class DressResolver {
     }
 
     /**
-     * Whether {@code page} wears {@code element} ({@link Dress#wears}) on whichever layout it
-     * wears, for a reader that has the page but not the dress: the store's resolve for a page.
+     * Whether {@code page} wears {@code element} ({@link Dress#wears}): its kind shows it, as the
+     * store has it now, for a reader that has the page but not the dress.
      */
-    public static boolean wornBy(@NonNull PaneWallPage page, @NonNull Element element) {
-        return page != PaneWallPage.WIDGETS || !HOME_LEAVES_OUT.contains(element);
+    public boolean wears(@NonNull PaneWallPage page, @NonNull Element element) {
+        return mSource.shows(kindOf(page), element);
     }
 
     /**
-     * Whether a page on {@code layout} wears {@code element} ({@link Dress#wears}), for a reader
-     * that holds a layout rather than a page: the Layout editor's offers, the store's resolve.
-     * The Home layout is worn only on Home, so it leaves out what Home leaves out; the
-     * Workspace's layouts are offered whole, since a window wears them so.
+     * Whether the Layout editor offers {@code element} on {@code layout}: the Home layout leaves
+     * out the extra keys, the Workspace's layouts are offered whole. An offer only; whether a
+     * page wears an element is its kind's visibility ({@link #wears}).
      */
     public static boolean wornOn(@NonNull LayoutVariant layout, @NonNull Element element) {
-        return layout != LayoutVariant.HOME || !HOME_LEAVES_OUT.contains(element);
+        return layout != LayoutVariant.HOME || !HOME_NOT_OFFERED.contains(element);
     }
 
 }

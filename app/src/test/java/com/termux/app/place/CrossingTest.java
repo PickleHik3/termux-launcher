@@ -44,7 +44,7 @@ public class CrossingTest {
     private static final float DENSITY = 2.625f;
     private static final List<PaneWallPage> ROW =
         Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
-    private static final WallHalfShape SHAPE = WallHalfShape.of(LayoutStyle.DOCKED, 12, 8);
+    private static final WallShape SHAPE = WallShape.of(LayoutStyle.DOCKED, 12, 8);
 
     /** A window with the pinned apps and the extra keys along the bottom. */
     private static final PlaceLayout WINDOW = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
@@ -94,7 +94,12 @@ public class CrossingTest {
         @Override public boolean drawerTile(@NonNull LayoutVariant variant) {
             return variant == LayoutVariant.HOME;
         }
-        @NonNull @Override public WallHalfShape shape(boolean home) { return SHAPE; }
+        @Override public boolean shows(@NonNull com.termux.app.wall.WallPages.PageKind kind,
+                                       @NonNull Element element) {
+            return kind != com.termux.app.wall.WallPages.PageKind.HOME
+                || element != Element.EXTRA_KEYS;
+        }
+        @NonNull @Override public WallShape shape() { return SHAPE; }
     }
 
     private static SeamCrossing.Half half(@NonNull PaneWallPage page, boolean keyboardUp) {

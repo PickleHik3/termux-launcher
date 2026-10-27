@@ -1259,8 +1259,8 @@ public class PlaceLayoutStoreTest {
             0.001f);
         assertEquals(DockStyle.LENS_BEADS, home.dockStyle());
         assertEquals(DrawerTilePolicy.Position.END, home.drawerTilePosition());
-        assertEquals("Home wears the Workspace's shape", WallHalfShape.of(LayoutStyle.FLOATING,
-            launcher.getLayoutCornersDp(false), 14), store.halfShape(true));
+        assertEquals("Home wears the Workspace's shape", WallShape.of(LayoutStyle.FLOATING,
+            launcher.getLayoutCornersDp(false), 14), store.shape());
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
 
         // From then on its rows are Home's own.
@@ -1770,7 +1770,7 @@ public class PlaceLayoutStoreTest {
             .commit();
         PlaceLayoutStore store = store();
         assertHomeIsACopyOfTheWorkspace(store);
-        assertEquals(launcher.getLayoutMarginDp(false), store.halfShape(true).marginDp);
+        assertEquals(launcher.getLayoutMarginDp(false), store.shape().marginDp);
         assertFalse(prefs.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));
     }
 

@@ -53,14 +53,14 @@ public final class SeamDress {
      * them changes nothing the stack shows.
      */
     public static final class StackDress {
-        @NonNull public final WallHalfShape shape;
+        @NonNull public final WallShape shape;
         public final float dockHeightScale;
         public final float keyboardHeightScale;
         public final int keyboardChinDp;
         /** The half's look; only its stack part (the dock and the keyboard) is compared. */
         @NonNull public final HalfLook look;
 
-        private StackDress(@NonNull WallHalfShape shape, float dockHeightScale,
+        private StackDress(@NonNull WallShape shape, float dockHeightScale,
                            float keyboardHeightScale, int keyboardChinDp,
                            @NonNull HalfLook look) {
             this.shape = shape;
@@ -71,13 +71,13 @@ public final class SeamDress {
         }
 
         @NonNull
-        public static StackDress of(@NonNull WallHalfShape shape, float dockHeightScale,
+        public static StackDress of(@NonNull WallShape shape, float dockHeightScale,
                                     float keyboardHeightScale, int keyboardChinDp) {
             return of(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp, HalfLook.NONE);
         }
 
         @NonNull
-        public static StackDress of(@NonNull WallHalfShape shape, float dockHeightScale,
+        public static StackDress of(@NonNull WallShape shape, float dockHeightScale,
                                     float keyboardHeightScale, int keyboardChinDp,
                                     @NonNull HalfLook look) {
             return new StackDress(shape, dockHeightScale, keyboardHeightScale, keyboardChinDp,

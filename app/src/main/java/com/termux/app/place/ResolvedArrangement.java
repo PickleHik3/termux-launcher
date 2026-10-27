@@ -86,7 +86,7 @@ public final class ResolvedArrangement {
                                               @NonNull PlaceOrientation orientation,
                                               boolean home) {
         LayoutVariant variant = store.variantFor(pageOf(home));
-        LayoutStyle style = store.halfShape(home && variant == LayoutVariant.HOME).style;
+        LayoutStyle style = store.shape().style;
         return resolve(store, orientation, variant, home, style);
     }
 

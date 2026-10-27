@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config;
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
-public class WallHalfShapePreferencesTest {
+public class WallShapePreferencesTest {
 
     private TermuxAppSharedPreferences prefs;
     private SharedPreferences sp;
@@ -45,7 +45,7 @@ public class WallHalfShapePreferencesTest {
         prefs.setLayoutStyle(LayoutStyle.FLOATING);
         prefs.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, 30);
         prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 18);
-        assertEquals(WallHalfShape.of(LayoutStyle.FLOATING, 30, 18), WallHalfShape.read(prefs, true));
+        assertEquals(WallShape.of(LayoutStyle.FLOATING, 30, 18), WallShape.read(prefs));
         assertEquals(LayoutStyle.FLOATING, prefs.getLayoutStyle(true));
         assertEquals(30, prefs.getLayoutCornersDp(true));
         assertEquals(18, prefs.getLayoutMarginDp(true));
@@ -86,6 +86,6 @@ public class WallHalfShapePreferencesTest {
 
     @Test
     public void aMissingPreferencesStoreWearsTheDefaults() {
-        assertEquals(WallHalfShape.DEFAULT, WallHalfShape.read(null, true));
+        assertEquals(WallShape.DEFAULT, WallShape.read(null));
     }
 }
