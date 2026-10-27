@@ -37,6 +37,8 @@ public final class WallPagesStore {
     public interface Storage {
         @Nullable String read();
         void write(@NonNull String json);
+        /** Calls {@code changed} when another holder writes; the default never does. */
+        default void watch(@NonNull Runnable changed) {}
     }
 
     /** The {@code wall_pages} preferences file. */
@@ -55,6 +57,14 @@ public final class WallPagesStore {
 
         @Override public void write(@NonNull String json) {
             prefs.edit().putString(KEY_STATE, json).apply();
+        }
+
+        // Held here: the preferences keep their listeners weakly.
+        private SharedPreferences.OnSharedPreferenceChangeListener watcher;
+
+        @Override public void watch(@NonNull final Runnable changed) {
+            watcher = (p, key) -> { if (KEY_STATE.equals(key)) changed.run(); };
+            prefs.registerOnSharedPreferenceChangeListener(watcher);
         }
     }
 
@@ -81,6 +91,7 @@ public final class WallPagesStore {
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
     private WallPages current;
     private final boolean seeded;
+    private String lastJson;
 
     /** Reads the stored value; an absent or unreadable one leaves {@link WallPages#EMPTY}. */
     public WallPagesStore(@NonNull Storage storage) {
@@ -88,6 +99,24 @@ public final class WallPagesStore {
         WallPages loaded = fromJson(storage.read());
         this.seeded = loaded != null;
         this.current = loaded != null ? loaded : WallPages.EMPTY;
+        this.lastJson = loaded != null ? storage.read() : null;
+        storage.watch(this::reloadIfChanged);
+    }
+
+    /** A store on the {@code wall_pages} preferences; another holder's writes reach this one. */
+    @NonNull
+    public static WallPagesStore open(@NonNull Context context) {
+        return new WallPagesStore(new PrefsStorage(context));
+    }
+
+    private void reloadIfChanged() {
+        String json = storage.read();
+        if (json == null || json.equals(lastJson)) return;
+        WallPages loaded = fromJson(json);
+        if (loaded == null || loaded.equals(current)) return;
+        lastJson = json;
+        current = loaded;
+        for (Listener l : listeners) l.onChanged(loaded);
     }
 
     /** Whether a value was stored when this store was built (the upgrade seeds when not). */
@@ -102,7 +131,8 @@ public final class WallPagesStore {
     /** Replaces the value (the upgrade's seed); saves and announces it. */
     public void replace(@NonNull WallPages pages) {
         current = pages;
-        storage.write(toJson(pages));
+        lastJson = toJson(pages);
+        storage.write(lastJson);
         for (Listener l : listeners) l.onChanged(pages);
     }
 

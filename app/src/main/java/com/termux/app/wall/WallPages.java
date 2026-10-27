@@ -36,7 +36,8 @@ public final class WallPages {
 
     /** What an accepted edit did. */
     public enum ChangeType {
-        NONE, ADDED, MOVED, REMOVAL_PENDING, UNDONE, REMOVAL_COMMITTED, HOME_SET, RENAMED, BOUND
+        NONE, ADDED, MOVED, REMOVAL_PENDING, UNDONE, REMOVAL_COMMITTED, HOME_SET, RENAMED, BOUND,
+        HOMES_DETACHED, HOMES_ATTACHED
     }
 
     /** The id {@code add} takes for "at the end". */
@@ -409,6 +410,127 @@ public final class WallPages {
         if (page == null) return refuse(Error.UNKNOWN_PAGE);
         if (page.kind != PageKind.DISPLAY) return refuse(Error.BINDING_NOT_DISPLAY);
         return replace(page, page.withBinding(binding), ChangeType.BOUND);
+    }
+
+    // ---- Home, Start in and the Home pages as the app's settings speak of them ------------------
+
+    /** Start in as the app's strings name it: where home is (display, workspace or home). */
+    @NonNull
+    public String startIn() {
+        if (homeIsDisplayWindow) return WallRow.START_IN_DISPLAY;
+        Page home = home();
+        return home != null && home.kind == PageKind.TERMINAL
+            ? WallRow.START_IN_WORKSPACE : WallRow.START_IN_HOME;
+    }
+
+    /** The Home pages on the wall, in order. */
+    @NonNull
+    public List<Page> homePages() {
+        List<Page> out = new ArrayList<>();
+        for (Page p : pages()) if (p.kind == PageKind.HOME) out.add(p);
+        return out;
+    }
+
+    /** Which Home page home is, counting Home pages from 0; 0 when home is not a Home page. */
+    public int homeIndex() {
+        Page home = home();
+        if (home == null || home.kind != PageKind.HOME) return 0;
+        return Math.max(0, homePages().indexOf(home));
+    }
+
+    /**
+     * Makes home what Start in {@code startIn} names: the Terminal page for the workspace, the
+     * display window, or a Home page (the one home already is, else the first). A value that
+     * cannot be (no Terminal page, no Home page) leaves home as it is.
+     */
+    @NonNull
+    public Result chooseStartIn(@Nullable String startIn) {
+        String value = StartInPolicy.read(startIn);
+        if (WallRow.START_IN_DISPLAY.equals(value)) return setHomeDisplayWindow();
+        if (WallRow.START_IN_WORKSPACE.equals(value)) {
+            Page t = terminal();
+            return t == null ? refuse(Error.UNKNOWN_PAGE) : setHome(t.id);
+        }
+        Page home = home();
+        if (home != null && home.kind == PageKind.HOME) return new Result(this, ChangeType.NONE,
+            home, null, -1, -1);
+        List<Page> homes = homePages();
+        return homes.isEmpty() ? refuse(Error.UNKNOWN_PAGE) : setHome(homes.get(0).id);
+    }
+
+    /** Makes the {@code index}th Home page (from 0) home. */
+    @NonNull
+    public Result chooseHomePage(int index) {
+        List<Page> homes = homePages();
+        if (index < 0 || index >= homes.size()) return refuse(Error.BAD_INDEX);
+        return setHome(homes.get(index).id);
+    }
+
+    /** Adds a Home page after the {@code afterIndex}th Home page (-1: at the end of the Homes). */
+    @NonNull
+    public Result addHomePage(int afterIndex) {
+        List<Page> homes = homePages();
+        if (afterIndex < 0 || afterIndex >= homes.size()) {
+            return add(PageKind.HOME, homes.isEmpty() ? END : homes.get(homes.size() - 1).id, null);
+        }
+        return add(PageKind.HOME, homes.get(afterIndex).id, null);
+    }
+
+    /** Moves the Home page at index {@code from} to index {@code to} among the Home pages. */
+    @NonNull
+    public Result moveHomePage(int from, int to) {
+        List<Page> homes = homePages();
+        if (from < 0 || from >= homes.size() || to < 0 || to >= homes.size()) {
+            return refuse(Error.BAD_INDEX);
+        }
+        return move(homes.get(from).id, visibleIndex(homes.get(to).id));
+    }
+
+    /** Marks the {@code index}th Home page pending removal. */
+    @NonNull
+    public Result removeHomePage(int index) {
+        List<Page> homes = homePages();
+        if (index < 0 || index >= homes.size()) return refuse(Error.BAD_INDEX);
+        return remove(homes.get(index).id);
+    }
+
+    /**
+     * Use as Terminal only: every Home page on the wall goes to the detached pages (ids kept) and
+     * home becomes the Terminal page, unless home is the display window, which stays. Refused when
+     * nothing but Home pages is on the wall.
+     */
+    @NonNull
+    public Result detachHomes() {
+        List<Page> homes = homePages();
+        if (homes.isEmpty()) return new Result(this, ChangeType.NONE, null, null, -1, -1);
+        Page t = terminal();
+        if (t == null) return refuse(Error.LAST_PAGE);
+        List<Page> list = new ArrayList<>(all);
+        list.removeAll(homes);
+        List<Page> kept = new ArrayList<>(detached);
+        kept.addAll(homes);
+        boolean homeWasHome = !homeIsDisplayWindow && find(homeId) != null
+            && find(homeId).kind == PageKind.HOME;
+        WallPages next = copy(list, pending, kept, homeWasHome ? t.id : homeId, nextId,
+            homeIsDisplayWindow);
+        return new Result(next, ChangeType.HOMES_DETACHED, null, null, -1, -1);
+    }
+
+    /** Use as Home screen: the detached Home pages return, in their order, before the Terminal page. */
+    @NonNull
+    public Result attachDetached() {
+        List<Page> back = new ArrayList<>();
+        List<Page> rest = new ArrayList<>();
+        for (Page p : detached) (p.kind == PageKind.HOME ? back : rest).add(p);
+        if (back.isEmpty()) return new Result(this, ChangeType.NONE, null, null, -1, -1);
+        List<Page> list = new ArrayList<>(all);
+        int at = list.size();
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).kind == PageKind.TERMINAL) { at = i; break; }
+        }
+        list.addAll(at, back);
+        WallPages next = copy(list, pending, rest, homeId, nextId, homeIsDisplayWindow);
+        return new Result(next, ChangeType.HOMES_ATTACHED, null, null, -1, -1);
     }
 
     // ---- internals ------------------------------------------------------------------------
