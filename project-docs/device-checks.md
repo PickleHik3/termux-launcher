@@ -594,3 +594,10 @@ Agent
 - 2026-10-20 · fix(terminal) a flick is a scroll, not also a tap · On pong with opencode running,
   in landscape and portrait: repeated short and long flicks scroll it and never raise the
   keyboard; a still tap still raises it; a slow drag under a row still clicks · pong, by hand.
+
+## Linux display follows the upstream Termux:X11 docs (2026-10-27)
+- 2026-10-27 · 876a0006f · A display killed by SIGTERM/force-stop leaves `X0`; restarting the launcher still auto-starts the display (no "Not starting the display: one is already running") · pong (passed 4/4 over a dead X0).
+- 2026-10-27 · b7cd51250 · `termux-x11 :0 &` typed in a shell: within ~6 s openbox runs (pid in `$PREFIX/tmp/termux-x11-wm.pid`) and a new app fills the screen; a launcher-started display gets no second manager · pong (passed).
+- 2026-10-27 · d5b2807e0 · apt edition: the launcher writes two dpkg diversions; `apt install termux-x11-nightly` leaves the launcher's `termux-x11`/`termux-x11-preference` and puts the package's at `*.upstream` · emu tl16 (passed); pacman edition writes no diversions · pong (passed).
+- 2026-10-27 · efe83d95b · `proot-distro install debian` in a shell while the launcher runs, then back to the launcher: the distro has `/etc/pulse/client.conf.d/termux-launcher.conf` and the cookie, and `pactl info` inside it connects (no "Access denied") · pong.
+- 2026-10-27 · ed5f41715 · Open mousepad then xfce4-terminal from the drawer, tap mousepad again: it comes to the front, no second copy; long-press the Display chip: "Switch to …" lists the other window and raises it · pong.
