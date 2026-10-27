@@ -4156,7 +4156,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.shared.termux.settings.preferences.TerminalContrastLevel level =
                     mPreferences != null
                         ? com.termux.app.chrome.LegibilityLevel.terminalContrast(mPreferences) : null;
-                if (enabled != mEvenOutSwitchSeen || level != mEvenOutLevelSeen) {
+                int strength = evenOutStrengthNow();
+                if (enabled != mEvenOutSwitchSeen || level != mEvenOutLevelSeen
+                        || strength != mEvenOutStrengthSeen) {
+                    mEvenOutStrengthSeen = strength;
                     mEvenOutSwitchSeen = enabled;
                     mEvenOutLevelSeen = level;
                     updateEvenOutPolicy();
@@ -22918,9 +22921,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * while level, ceilings and the palette's current polarity are unchanged, so a veil query that
      * changes nothing costs nothing downstream.
      */
+    private int evenOutStrengthNow() {
+        return com.termux.app.chrome.ChromeInk.evenOutStrengthPercent(
+            mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100);
+    }
+
+    private int mEvenOutStrengthSeen = -1;
+
     private void updateEvenOutPolicy() {
         if (mChrome == null) return;
-        boolean enabled = mPreferences != null && mPreferences.isGlassEvenOutEnabled();
+        int strength = evenOutStrengthNow();
+        boolean enabled = mPreferences != null && mPreferences.isGlassEvenOutEnabled() && strength > 0;
         com.termux.app.terminal.MaterialTerminalColorScheme.setGlassFloors(enabled);
         if (!enabled) {
             mEvenOutPolicy = null;
@@ -22945,9 +22956,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : com.termux.app.chrome.ChromeInk.Polarity.DARK_INK;
         com.termux.app.chrome.ChromeInk.EvenOutPolicy kept = mEvenOutPolicy;
         if (kept == null || kept.level != level || kept.pale != mEvenOutCeilings[0]
-                || kept.dark != mEvenOutCeilings[1] || kept.current != current) {
+                || kept.dark != mEvenOutCeilings[1] || kept.current != current
+                || kept.strengthPercent != strength) {
             kept = new com.termux.app.chrome.ChromeInk.EvenOutPolicy(level, mEvenOutCeilings[0],
-                mEvenOutCeilings[1], current);
+                mEvenOutCeilings[1], current, strength);
             mEvenOutPolicy = kept;
         }
         mChrome.ink().setEvenOutPolicy(kept);
