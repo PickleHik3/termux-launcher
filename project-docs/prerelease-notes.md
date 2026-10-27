@@ -38,6 +38,7 @@ Latest stable: v1.2.1.
 - On the apt edition, installing termux-x11-nightly no longer replaces the launcher's termux-x11 command.
 - Linux apps play sound in a distro you installed while the launcher was running, without an "Access denied" from the sound server.
 - Tapping an app that is already open, in the drawer or Home, raises its window instead of starting a second copy, and the Display chip's menu lists the other open windows under Switch to.
+- The Linux display now works on 32-bit phones and with the 32-bit APK; before, it could not start there at all.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
