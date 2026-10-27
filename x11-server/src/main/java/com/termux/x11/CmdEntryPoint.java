@@ -27,6 +27,7 @@ import dalvik.annotation.optimization.CriticalNative;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.URL;
+import java.util.Arrays;
 
 @Keep @SuppressLint({"StaticFieldLeak", "UnsafeDynamicallyLoadedCode"})
 public class CmdEntryPoint extends ICmdEntryInterface.Stub {
@@ -202,18 +203,27 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     private static void initEntryPoint() {
         ctx = createContext();
 
-        String path = "lib/" + Build.SUPPORTED_ABIS[0] + "/libXlorie.so";
         ClassLoader loader = CmdEntryPoint.class.getClassLoader();
-        URL res = loader != null ? loader.getResource(path) : null;
-        String libPath = res != null ? res.getFile().replace("file:", "") : null;
-        if (libPath != null) {
-            try {
-                System.load(libPath);
-            } catch (Exception e) {
-                Log.e("CmdEntryPoint", "Failed to dlopen " + libPath, e);
-                System.err.println("Failed to load native library. Did you install the right apk? Try the universal one.");
-                System.exit(134);
-            }
+        // The process's own bitness picks the folder: a 32-bit app on a 64-bit device carries
+        // only lib/x86 or lib/armeabi-v7a, while SUPPORTED_ABIS[0] names the 64-bit one.
+        String abi = LibAbiChoice.choose(android.os.Process.is64Bit(),
+            Build.SUPPORTED_64_BIT_ABIS, Build.SUPPORTED_32_BIT_ABIS, Build.SUPPORTED_ABIS,
+            a -> loader != null && loader.getResource("lib/" + a + "/libXlorie.so") != null);
+        if (abi == null) {
+            Log.e("CmdEntryPoint", "No libXlorie.so for " + Arrays.toString(Build.SUPPORTED_ABIS));
+            System.err.println("Failed to load native library: no libXlorie.so for ABIs "
+                + Arrays.toString(Build.SUPPORTED_ABIS) + ". Did you install the right apk? Try the universal one.");
+            System.exit(134);
+            return;
+        }
+        URL res = loader.getResource("lib/" + abi + "/libXlorie.so");
+        String libPath = res.getFile().replace("file:", "");
+        try {
+            System.load(libPath);
+        } catch (Throwable e) {
+            Log.e("CmdEntryPoint", "Failed to dlopen " + libPath, e);
+            System.err.println("Failed to load native library. Did you install the right apk? Try the universal one.");
+            System.exit(134);
         }
     }
 }

@@ -293,3 +293,16 @@ One leftover: the native knock listener still binds its TCP port with `SO_REUSEP
 user's own server, so a knock from the launcher's view can be delivered to the headless server and
 go unanswered. The user's server re-announces itself every second while unconnected anyway, so a
 lost knock only delays a connection. A merge must keep the three early returns.
+
+## 32-bit installs: the loader runs at the app's bitness (2026-10-27)
+
+- **`CmdEntryPoint.initEntryPoint`** no longer takes `lib/<SUPPORTED_ABIS[0]>/libXlorie.so`, which
+  on a 64-bit device names a folder a 32-bit APK does not carry (and a missing library was skipped
+  silently, ending in `UnsatisfiedLinkError`). `LibAbiChoice` (new) picks the first ABI of the
+  running process's bitness (`Process.is64Bit()`, `SUPPORTED_64_BIT_ABIS`/`SUPPORTED_32_BIT_ABIS`)
+  whose library is in the APK, falling back to `SUPPORTED_ABIS` order. None found: it logs the ABIs
+  tried, prints "Failed to load native library" and exits 134.
+- **The launcher's generated `termux-x11` and `termux-x11-preference` scripts** (not upstream's
+  `termux-x11.in`) exec `/system/bin/app_process32` when the launcher is a 32-bit process and that
+  binary exists, so the zygote binary matches the 32-bit library. Otherwise `app_process`, as before.
+  `X11CliInstaller.VERSION` was bumped so an existing install rewrites them.
