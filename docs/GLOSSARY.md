@@ -438,6 +438,18 @@ The look surface for widget cards on a Home page, following **Base** or detached
 widget only chooses Card or **Bare**.
 _Avoid_: widget glass (in prose)
 
+**Ground**:
+What is painted between the wallpaper and a page: its wallpaper dim, plus the canvas tint on the
+**Terminal page** when the canvas is not glass. One per page; neighbouring grounds meet in a soft
+seam that travels with the pages. The ink solver reads the ground under a rect.
+_Avoid_: wall ground (the retired single colour), unified background dim
+
+**Wall slot**:
+The place one page takes on the wall while it is built: each Home page and Display page has its
+own, and the **Terminal page** one, inside which its windows page. Only the current slot and its
+neighbours are built.
+_Avoid_: page view, cell
+
 **Page override**:
 A look value one page holds instead of the wall's: stored as the surface's key plus `@<page id>`,
 resolved page override → the surface's wall-wide value → **Base**. Reset under the page's scope

@@ -154,6 +154,8 @@ lifted once into Floats pinned to their window; Home floats keep their page.
   `project-docs/active/page-list-2026-10-27.md`; the Terminal page's windows need a persistent store for the cold-start
   restore, which today lives only in the activity's saved state.
 - The crossing module's two-half snapshot becomes a pair of neighbouring pages.
+  Ground per page, dress per page kind, wall slots and crossings are designed in
+  `project-docs/active/page-chrome-2026-10-27.md`.
 - ADR 0014 wave 2c (even-out for the keyboard, dock, status bar and widgets) waits for this model
   and then applies per page; Bare's dim is part of it.
 - The docs and Settings strings that say Workspace are renamed to Terminal.
