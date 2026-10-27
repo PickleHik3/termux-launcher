@@ -46,16 +46,9 @@ public class HomePageEditsTest {
     }
 
     @Test
-    public void removingAPageRenumbersThePagesAfterIt() {
-        assertArrayEquals(new int[] {0, GONE, 1, 2}, HomePageEdits.removeMapping(4, 1));
-        assertArrayEquals(new int[] {0, 1, GONE}, HomePageEdits.removeMapping(3, 2));
-    }
-
-    @Test
     public void theLastPageIsNeverRemoved() {
         assertFalse(HomePageEdits.canRemove(1));
         assertTrue(HomePageEdits.canRemove(2));
-        assertArrayEquals(new int[] {0}, HomePageEdits.removeMapping(1, 0));
     }
 
     @Test
@@ -66,11 +59,11 @@ public class HomePageEditsTest {
 
     @Test
     public void whatStoodOnARemovedPageLandsOnThePageNowInItsPlace() {
-        int[] middle = HomePageEdits.removeMapping(4, 1);
+        int[] middle = {0, GONE, 1, 2};
         assertEquals("the page after it slid into its place", 1, HomePageEdits.remap(1, middle));
         assertEquals(0, HomePageEdits.remap(0, middle));
         assertEquals(2, HomePageEdits.remap(3, middle));
-        int[] last = HomePageEdits.removeMapping(3, 2);
+        int[] last = {0, 1, GONE};
         assertEquals("the last page went: the new last", 1, HomePageEdits.remap(2, last));
     }
 
@@ -78,7 +71,7 @@ public class HomePageEditsTest {
     public void theDefaultPageFollowsItsPage() {
         assertEquals(2, HomePageEdits.remap(0, HomePageEdits.moveMapping(4, 0, 2)));
         assertEquals(0, HomePageEdits.remap(1, HomePageEdits.moveMapping(4, 0, 2)));
-        assertEquals(1, HomePageEdits.remap(2, HomePageEdits.removeMapping(3, 0)));
+        assertEquals(1, HomePageEdits.remap(2, new int[] {GONE, 0, 1}));
     }
 
     @Test
@@ -91,7 +84,7 @@ public class HomePageEditsTest {
 
     @Test
     public void pagesOutsideTheMappingAreLeftAlone() {
-        assertEquals(-1, HomePageEdits.remap(-1, HomePageEdits.removeMapping(3, 1)));
-        assertEquals(7, HomePageEdits.remap(7, HomePageEdits.removeMapping(3, 1)));
+        assertEquals(-1, HomePageEdits.remap(-1, new int[] {0, GONE, 1}));
+        assertEquals(7, HomePageEdits.remap(7, new int[] {0, GONE, 1}));
     }
 }

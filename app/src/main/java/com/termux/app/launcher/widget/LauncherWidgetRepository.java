@@ -72,23 +72,6 @@ public final class LauncherWidgetRepository {
     private static final String KEY_STATE = "state";
 
     /**
-     * Told when the Home pages change, by index: {@code mapping} gives where each old page stands
-     * now ({@link com.termux.app.launcher.home.HomePageEdits#REMOVED} for one gone) when a
-     * removal, move or trim did it, else null for pages added or dropped at the end.
-     */
-    public interface PageListener {
-        void onPagesChanged(int oldCount, int newCount, @Nullable int[] mapping);
-    }
-
-    @Nullable private PageListener pageListener;
-    /** What the edit being committed does to the page numbers; null for a plain count change. */
-    @Nullable private int[] pageMapping;
-
-    public synchronized void setPageListener(@Nullable PageListener listener) {
-        pageListener = listener;
-    }
-
-    /**
      * Who owns the Home pages: the ordered Home page ids, and the changes to them. The repository
      * keys what stands on a page by that id (an index is only its position in this list) and asks
      * the owner to grow, remove or reorder the pages when its own edits do so. The wall's page
@@ -299,6 +282,17 @@ public final class LauncherWidgetRepository {
         fresh.remove(id);
         return new OrientationLayout(layout.grid, pageIds, fresh, cells);
     }
+
+    /** The Home page ids in the order the pager shows them. */
+    @NonNull public synchronized List<Integer> pageIds() { return new ArrayList<>(ids); }
+
+    /** The id of the page at {@code index}, or -1 when there is none. */
+    public synchronized int pageIdAt(int index) {
+        return index >= 0 && index < ids.size() ? ids.get(index) : -1;
+    }
+
+    /** Where page {@code id} stands in the pager, or -1 when it is not a Home page now. */
+    public synchronized int indexOfPage(int id) { return ids.indexOf(id); }
 
     @NonNull public synchronized List<LauncherWidgetRecord> records() {
         return Collections.unmodifiableList(new ArrayList<>(records.values()));
@@ -930,7 +924,7 @@ public final class LauncherWidgetRepository {
      * not held a widget yet. The page a reservation is waiting on counts as held.
      */
     public synchronized boolean trimEmptyPages() {
-        trimEmptyPagesRenumbering();
+        trimEmptyPageIds();
         return !trimFailed;
     }
 
@@ -938,13 +932,11 @@ public final class LauncherWidgetRepository {
     private boolean trimFailed;
 
     /**
-     * {@link #trimEmptyPages()}, answering how it renumbered the pages: each old page's new number,
-     * {@link com.termux.app.launcher.home.HomePageEdits#REMOVED} for a page it took away, for what
-     * else names a page (the floats, the default page). Null when nothing changed, or when the
-     * write failed.
+     * {@link #trimEmptyPages()}, answering which pages it took away: their ids, in order; empty
+     * when nothing changed or the write failed.
      */
-    @Nullable
-    public synchronized int[] trimEmptyPagesRenumbering() {
+    @NonNull
+    public synchronized List<Integer> trimEmptyPageIds() {
         trimFailed = false;
         boolean[] keep = new boolean[pageCount];
         for (LauncherWidgetRecord record : records.values()) {
@@ -959,7 +951,7 @@ public final class LauncherWidgetRepository {
         for (int page = 0; page < pageCount; page++) {
             renumbered[page] = keep[page] ? kept++ : -1;
         }
-        if (kept == pageCount) return null;
+        if (kept == pageCount) return Collections.emptyList();
         // Nothing to keep means nothing to renumber either: one empty page is what is left.
         int target = Math.max(1, kept);
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
@@ -974,18 +966,18 @@ public final class LauncherWidgetRepository {
                 nextFresh.add(renumbered[page]);
             }
         }
-        final int targetCount = target;
+        List<Integer> before = new ArrayList<>(ids);
         if (kept > 0) {
             ArrayList<Integer> plan = new ArrayList<>();
             for (int page = 0; page < pageCount; page++) if (keep[page]) plan.add(ids.get(page));
             plannedIds = plan;
         }
-        if (!commitWithMapping(renumbered, () -> commitValidated(next, nextPending, grid,
-                targetCount, nextFresh, revision + 1))) {
+        if (!commitValidated(next, nextPending, grid, target, nextFresh, revision + 1)) {
             trimFailed = true;
-            return null;
+            return Collections.emptyList();
         }
-        return renumbered;
+        before.removeAll(ids);
+        return before;
     }
 
     /**
@@ -1029,19 +1021,7 @@ public final class LauncherWidgetRepository {
         ArrayList<Integer> plan = new ArrayList<>(ids);
         plan.remove(page);
         plannedIds = plan;
-        return commitWithMapping(com.termux.app.launcher.home.HomePageEdits.removeMapping(
-            pageCount, page), () -> commitValidated(next, nextPending, grid, pageCount - 1,
-            nextFresh, revision + 1));
-    }
-
-    private boolean commitWithMapping(int[] mapping, java.util.function.BooleanSupplier commit) {
-        pageMapping = mapping;
-        try {
-            return commit.getAsBoolean();
-        } finally {
-            pageMapping = null;
-            plannedIds = null;
-        }
+        return commitValidated(next, nextPending, grid, pageCount - 1, nextFresh, revision + 1);
     }
 
     /**
@@ -1067,20 +1047,7 @@ public final class LauncherWidgetRepository {
         ArrayList<Integer> order = new ArrayList<>(ids);
         for (int i = 0; i < pageCount; i++) order.set(mapping[i], ids.get(i));
         plannedIds = order;
-        return commitWithMapping(mapping, () -> commitValidated(next, nextPending, grid, pageCount,
-            nextFresh, revision + 1));
-    }
-
-    /**
-     * Edit pages took a page away from the orientation on screen (its widgets went first, through
-     * their own removals): the shelved orientations' pages are renumbered by the same
-     * {@code mapping}, their cells on the removed page dropped (a widget placed there is laid out
-     * afresh when that orientation comes back). One commit; the live wall is unchanged.
-     */
-    public synchronized boolean renumberShelvedPages(@NonNull int[] mapping) {
-        // Shelved layouts name pages by id: nothing to renumber, and a removed page's cells are
-        // dropped when the owner tells the page is gone ({@link #pageRemoved}).
-        return true;
+        return commitValidated(next, nextPending, grid, pageCount, nextFresh, revision + 1);
     }
 
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {
@@ -1322,7 +1289,6 @@ public final class LauncherWidgetRepository {
         records = new LinkedHashMap<>(next);
         pending = nextPending;
         grid = nextGrid;
-        int oldPageCount = pageCount;
         ids = nextIds;
         pageCount = nextIds.size();
         freshPages = fresh;
@@ -1330,8 +1296,6 @@ public final class LauncherWidgetRepository {
         layouts = shelf;
         rowSnapshot = nextSnapshot;
         revision = nextRevision;
-        int[] mapping = pageMapping;
-        pageMapping = null;
         if (!removed.isEmpty()) {
             ownerRemove(removed);
         } else {
@@ -1343,9 +1307,6 @@ public final class LauncherWidgetRepository {
         }
         // The owner may have declined part of it; take its list as the truth.
         onHomePagesChanged();
-        if (pageListener != null && (mapping != null || oldPageCount != nextPageCount)) {
-            pageListener.onPagesChanged(oldPageCount, nextPageCount, mapping);
-        }
         return true;
     }
 
