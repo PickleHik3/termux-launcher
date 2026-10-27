@@ -1161,6 +1161,24 @@ public final class WidgetPaneView extends FrameLayout {
             applyTransform(pinnedLayer);
         }
         syncNeighbour(position, width, effect, turning);
+        android.util.Log.d("PAGEDRAG", "t=" + android.os.SystemClock.uptimeMillis()
+            + " shift=" + contentShiftPx + " grid=" + grid.getTranslationX()
+            + " pinned=" + (pinnedLayer == null ? "none" : pinnedLayer.getTranslationX())
+            + " neighbour=" + (neighbour == null ? "none" : neighbour.getTranslationX())
+            + " nvis=" + (neighbour != null && neighbour.getVisibility() == VISIBLE)
+            + " layered=" + contentLayered + " page=" + currentPage
+            + " callers=" + callers());
+    }
+
+    private static String callers() {
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder b = new StringBuilder();
+        for (int i = 2; i < Math.min(st.length, 8); i++) {
+            b.append(st[i].getClassName().substring(st[i].getClassName().lastIndexOf('.') + 1))
+                .append('.').append(st[i].getMethodName()).append(':').append(st[i].getLineNumber())
+                .append(' ');
+        }
+        return b.toString();
     }
 
     /**
