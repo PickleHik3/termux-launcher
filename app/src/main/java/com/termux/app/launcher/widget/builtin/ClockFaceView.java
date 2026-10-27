@@ -310,6 +310,7 @@ final class ClockFaceView extends View {
         super.onDraw(canvas);
         int width = getWidth(), height = getHeight();
         if (width <= 0 || height <= 0) return;
+        pageDragLog();
         if (face != ClockFace.ANALOG) shedFor(width, height);
         switch (face) {
             case ANALOG:
@@ -322,6 +323,23 @@ final class ClockFaceView extends View {
                 drawRendered(canvas, width, height);
                 break;
         }
+    }
+
+    private void pageDragLog() {
+        StringBuilder chain = new StringBuilder();
+        android.view.ViewParent p = getParent();
+        View v = this;
+        while (v != null) {
+            chain.append(v.getClass().getSimpleName()).append("[tx=").append(v.getTranslationX())
+                .append(" layer=").append(v.getLayerType()).append("] ");
+            p = v.getParent();
+            v = p instanceof View ? (View) p : null;
+        }
+        int[] loc = new int[2];
+        getLocationOnScreen(loc);
+        android.util.Log.d("PAGEDRAG", "clockdraw t=" + SystemClock.uptimeMillis()
+            + " screenX=" + loc[0] + " hwAccel=" + isHardwareAccelerated()
+            + " canvasHw=" + false + " chain=" + chain);
     }
 
     private void drawRendered(@NonNull Canvas canvas, int width, int height) {

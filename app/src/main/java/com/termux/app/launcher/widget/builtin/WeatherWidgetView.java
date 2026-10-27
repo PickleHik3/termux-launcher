@@ -55,6 +55,9 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         services.addTickListener(tickListener);
         // A fresh cache is replayed synchronously through the listener; a stale one fetches.
         controller = services.acquireWeather(weatherListener);
+        android.util.Log.d("PAGEDRAG", "weather onStart t=" + android.os.SystemClock.uptimeMillis()
+            + " inst=" + System.identityHashCode(this) + " ctrl=" + System.identityHashCode(controller)
+            + " cacheValid=" + controller.cache().valid + " latest=" + (latest != null));
         // A stale forecast is not replayed (it fetches), and the fetch may be in flight for
         // another view: a view made now, such as the second page layer of a swipe, would show
         // the empty card until it lands. The controller keeps the last forecast, so show that.
@@ -83,6 +86,8 @@ public class WeatherWidgetView extends BuiltinWidgetView {
     }
 
     private void onWeather(@NonNull WeatherController.Weather weather) {
+        android.util.Log.d("PAGEDRAG", "weather onWeather inst=" + System.identityHashCode(this)
+            + " started=" + isStarted() + " valid=" + weather.valid + " err=" + weather.error);
         if (!isStarted()) return;
         if (weather.valid) {
             boolean unchanged = weather == latest && weather.fetchedAtMs == shownFetchedAt
