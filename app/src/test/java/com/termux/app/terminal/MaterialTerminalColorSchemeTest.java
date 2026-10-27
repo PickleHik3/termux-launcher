@@ -439,20 +439,24 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
-    /** Normal slots sit one tone band below bright, and both bands flip with the background. */
+    /**
+     * Normal slots sit one tone band below bright, and both bands flip with the background. The
+     * dark normal band is 55, not 80, and ANSI white 88, not 80: red and blue must read on white
+     * at 3:1 and on the dark background at the level's ratio, which leaves only that band.
+     */
     @Test
     public void toneBandsFollowTheBackgroundMode() {
         Properties dark = slots(220d, 40d, true);
         Properties light = slots(220d, 40d, false);
         for (int i = 1; i <= 6; i++) {
-            assertEquals("dark normal " + i, 80d, tone(dark, "color" + i), 1d);
+            assertEquals("dark normal " + i, 55d, tone(dark, "color" + i), 1d);
             assertEquals("dark bright " + i, 90d, tone(dark, "color" + (i + 8)), 1d);
             assertEquals("light normal " + i, 40d, tone(light, "color" + i), 1d);
             assertEquals("light bright " + i, 30d, tone(light, "color" + (i + 8)), 1d);
         }
         assertEquals(25d, tone(dark, "color0"), 1d);
         assertEquals(45d, tone(dark, "color8"), 1d);
-        assertEquals(80d, tone(dark, "color7"), 1d);
+        assertEquals(88d, tone(dark, "color7"), 1d);
         assertEquals(96d, tone(dark, "color15"), 1d);
         assertEquals(25d, tone(light, "color0"), 1d);
         assertEquals(50d, tone(light, "color8"), 1d);
@@ -524,7 +528,7 @@ public class MaterialTerminalColorSchemeTest {
             Properties palette = slots(220d, 40d, dark);
             assertEquals(25d, tone(palette, "color0"), 1d);
             assertEquals(dark ? 45d : 50d, tone(palette, "color8"), 1d);
-            assertEquals(dark ? 80d : 75d, tone(palette, "color7"), 1d);
+            assertEquals(dark ? 88d : 75d, tone(palette, "color7"), 1d);
             assertEquals(dark ? 96d : 92d, tone(palette, "color15"), 1d);
             for (String key : new String[] {"color0", "color7", "color8", "color15"}) {
                 // Wide, deliberately: at neutral chroma the sRGB round trip moves a hue by a few

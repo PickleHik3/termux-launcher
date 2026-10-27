@@ -13,9 +13,9 @@ import androidx.annotation.NonNull;
 public enum TerminalContrastLevel {
     //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone     reach  dim tone    dim
     //                                              min   max    dark  light  dark  light  dark light  dark light         dark light  ratio
-    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.5d,   10d,  24d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d,   4d,   36d,  60d,  2.0d),
-    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   16d, 200d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d,   45d,  50d,  3.0d),
-    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.7d,   56d, 110d,   78d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d,   62d,  36d,  4.5d);
+    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.5d,   10d,  24d,   52d,  41d,   92d,  34d,   80d, 30d,  16d,  90d,   4d,   36d,  60d,  2.0d),
+    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   16d, 200d,   55d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d,   45d,  50d,  3.0d),
+    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.7d,   56d, 110d,   60d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d,   62d,  36d,  4.5d);
 
     @NonNull public final String value;
     /**
