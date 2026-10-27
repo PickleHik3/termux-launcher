@@ -187,6 +187,9 @@ public final class ChromeInk {
         /** The polarity and policy the matrix was built for. */
         @Nullable Polarity evenOutPolarity;
         @Nullable EvenOutPolicy evenOutPolicy;
+        /** How far each ink's side is out of reach on the composited ground; see EvenOut#shortfall. */
+        double shortPale;
+        double shortDark;
         @NonNull OnGlass.Resolution resolution;
 
         PaneAnswer(@NonNull OnGlass.Resolution resolution) {
@@ -248,6 +251,7 @@ public final class ChromeInk {
         mEvenOutPolicy = policy;
         boolean sameStage = previous == null ? policy == null : previous.sameStage(policy);
         if (sameStage) return;
+        mEvenOutGeneration++;
         mPanes.clear();
         if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
     }
@@ -573,15 +577,21 @@ public final class ChromeInk {
         GlassBackdropCache.Lightness lightness = null;
         android.graphics.ColorMatrix evenOut = null;
         Polarity evenOutPolarity = null;
+        double shortPale = 0d;
+        double shortDark = 0d;
         if (policy != null && sampled) {
             lightness = answer != null && answer.lightness != null
                 ? answer.lightness : mCache.sampleLightnessUncached(rootRect);
             if (lightness != null) {
-                evenOutPolarity = MaterialTerminalColorScheme.inkPolarity(meanFlat,
-                    policy.level.bodyTarget, policy.current);
+                // The limit is applied on the composited ground (after frost, dim and tint), and
+                // a side the chain cannot reach is not chosen over one it can.
+                EvenOut.Chain chain = compositeChain(lightness.meanColor, mDimColor, tint);
+                shortPale = EvenOut.shortfall(policy.pale, Polarity.PALE_INK, chain);
+                shortDark = EvenOut.shortfall(policy.dark, Polarity.DARK_INK, chain);
+                evenOutPolarity = pickPolarity(meanFlat, policy, shortPale, shortDark);
                 boolean pale = evenOutPolarity == Polarity.PALE_INK;
-                EvenOut.Mapping mapping = EvenOut.map(lightness, pale ? policy.pale : policy.dark,
-                    evenOutPolarity, policy.level);
+                EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
+                    pale ? policy.pale : policy.dark, evenOutPolarity, policy.level, chain);
                 evenOut = EvenOutMatrix.of(mapping);
                 flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, mDimColor, tint), evenOutPolarity);
             }
@@ -617,6 +627,9 @@ public final class ChromeInk {
         answer.evenOut = evenOut;
         answer.evenOutPolarity = evenOutPolarity;
         answer.evenOutPolicy = policy;
+        answer.shortPale = shortPale;
+        answer.shortDark = shortDark;
+        mEvenOutGeneration++;
         // The chrome's vote stays the mean (the keyboard, dock and status bar are not evened out
         // yet); the palette's ground is the worst end across panes when the stage is on.
         vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote(tint, true));
@@ -890,8 +903,52 @@ public final class ChromeInk {
     private boolean polarityMoved(@NonNull PaneAnswer pane) {
         EvenOutPolicy policy = mEvenOutPolicy;
         if (policy == null || pane.evenOutPolarity == null) return false;
-        return pane.evenOutPolarity != MaterialTerminalColorScheme.inkPolarity(pane.meanFlat,
-            policy.level.bodyTarget, policy.current);
+        return pane.evenOutPolarity != pickPolarity(pane.meanFlat, policy, pane.shortPale,
+            pane.shortDark);
+    }
+
+    /**
+     * The polarity from the mean flat glass (with the palette's hysteresis), unless that ink's
+     * side is out of reach on the composited ground and the other's is nearer: reachability, not
+     * the mean alone, decides. build() derives its polarity from the worst end of the band chosen
+     * here, which sits on the chosen side of the crossover, so the two agree.
+     */
+    @NonNull
+    static Polarity pickPolarity(@ColorInt int meanFlat, @NonNull EvenOutPolicy policy,
+                                 double shortPale, double shortDark) {
+        Polarity base = MaterialTerminalColorScheme.inkPolarity(meanFlat, policy.level.bodyTarget,
+            policy.current);
+        boolean pale = base == Polarity.PALE_INK;
+        double own = pale ? shortPale : shortDark;
+        double other = pale ? shortDark : shortPale;
+        if (own > 0d && other < own) return pale ? Polarity.DARK_INK : Polarity.PALE_INK;
+        return base;
+    }
+
+    /** Bumped whenever a pane is measured anew or the stage changes; panes poll it to re-dress. */
+    private int mEvenOutGeneration;
+
+    /** A cheap token that moves when any pane's even-out matrix may have; see PaneSurfaceStyle. */
+    public int evenOutGeneration() {
+        return mEvenOutGeneration;
+    }
+
+    /**
+     * What frost, the launcher's dim and the pane's tint do to the tone of a pane colour: the mean
+     * colour's hue and chroma at {@code tone}, through the frost arithmetic, then
+     * {@link OnGlass#backdrop}. Exactly the chain {@link #bandEnds} measures, as a function.
+     */
+    @NonNull
+    @VisibleForTesting
+    public static EvenOut.Chain compositeChain(@ColorInt int meanColor, @ColorInt int dim,
+                                               @ColorInt int tint) {
+        com.google.android.material.color.utilities.Hct mean =
+            com.google.android.material.color.utilities.Hct.fromInt(meanColor);
+        double hue = mean.getHue();
+        double chroma = mean.getChroma();
+        return tone -> com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(
+            OnGlass.backdrop(frostColor(com.google.android.material.color.utilities.Hct.from(hue,
+                chroma, Math.max(0d, Math.min(100d, tone))).toInt()), dim, tint));
     }
 
     /**

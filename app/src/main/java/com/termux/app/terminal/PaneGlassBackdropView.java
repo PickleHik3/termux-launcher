@@ -338,7 +338,22 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     /** The even-out matrix last asked of the veil source, or null. */
     @Nullable private android.graphics.ColorMatrix mEvenOut;
 
+    /** The source's generation as of the last refresh; see {@link PaneSurfaceStyle#paneGlassGeneration}. */
+    private int mVeilGeneration;
+
+    /** True when the source says its answers may have changed since this slab last asked. */
+    private boolean veilGenerationMoved() {
+        return mVeilSource.paneGlassGeneration() != mVeilGeneration;
+    }
+
     private boolean refreshVeil() {
+        boolean moved = refreshVeilNow();
+        // Read after asking: asking may itself measure the pane and move the generation.
+        if (mVeilSource != null) mVeilGeneration = mVeilSource.paneGlassGeneration();
+        return moved;
+    }
+
+    private boolean refreshVeilNow() {
         int veil = android.graphics.Color.TRANSPARENT;
         android.graphics.ColorMatrix evenOut = null;
         if (mVeilSource != null && getWidth() > 0 && getHeight() > 0) {
@@ -860,7 +875,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
             // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
             // that did not move costs one walk up the tree.
-            if (mVeilSource != null && veilRectMoved()) refreshVeil();
+            if (mVeilSource != null && (veilRectMoved() || veilGenerationMoved())) {
+                if (refreshVeil()) postInvalidateOnAnimation();
+            }
             if (android.graphics.Color.alpha(mVeilColor) > 0) {
                 mTintPaint.setColor(mVeilColor);
                 canvas.drawRect(0f, 0f, width, height, mTintPaint);

@@ -4147,6 +4147,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mChrome.ink().evenOutMatrix(rootRect);
             }
 
+            @Override public int paneGlassGeneration() {
+                if (mChrome == null) return 0;
+                // The switch and the level are what moves the policy while no pane is re-dressed
+                // (the Debugging toggle); a theme change re-dresses the panes itself. Two cached
+                // preference reads, and the policy is rebuilt only when one of them moved.
+                boolean enabled = mPreferences != null && mPreferences.isGlassEvenOutEnabled();
+                com.termux.shared.termux.settings.preferences.TerminalContrastLevel level =
+                    mPreferences != null
+                        ? com.termux.app.chrome.LegibilityLevel.terminalContrast(mPreferences) : null;
+                if (enabled != mEvenOutSwitchSeen || level != mEvenOutLevelSeen) {
+                    mEvenOutSwitchSeen = enabled;
+                    mEvenOutLevelSeen = level;
+                    updateEvenOutPolicy();
+                }
+                return mChrome.ink().evenOutGeneration();
+            }
+
             @Override public boolean paneGlassRimWanted() {
                 // Every look wears the dock's gradient rim; over a slab whose program draws its
                 // own edge, the pane's border yields to that edge (PaneRim.SlabEdge).
@@ -22887,6 +22904,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private com.termux.shared.termux.settings.preferences.TerminalContrastLevel mEvenOutLevel;
     @Nullable private int[] mEvenOutSeeds;
+    private boolean mEvenOutSwitchSeen;
+    @Nullable private com.termux.shared.termux.settings.preferences.TerminalContrastLevel mEvenOutLevelSeen;
     @Nullable private com.termux.app.chrome.EvenOut.Ceiling[] mEvenOutCeilings;
     /** The policy last handed to the pane band, reused while nothing it carries has changed. */
     @Nullable private com.termux.app.chrome.ChromeInk.EvenOutPolicy mEvenOutPolicy;
