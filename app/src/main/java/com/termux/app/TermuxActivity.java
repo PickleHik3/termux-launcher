@@ -3172,6 +3172,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         mReturnHold.onPaused();
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.onPause();
         dismissHelpOverlay();
         // An edit of the dictation card's text is kept and its typing handed back, before the
         // microphone closes below and the text settles with it.
