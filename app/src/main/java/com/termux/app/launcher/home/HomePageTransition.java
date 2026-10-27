@@ -6,17 +6,19 @@ import androidx.annotation.Nullable;
 /**
  * How a page moves while a swipe turns it (Settings › General › Page transition): Home's pages,
  * and the wall's — the seam between Home and the Workspace and the Workspace's windows
- * ({@code WallPageTransition}). Home shows one page at a time: the swipe carries the page on
- * screen away, and once the turn commits the next page comes in from the side the finger was
- * heading for. Every effect is a pure function of where that page stands, so the drag, the
- * settle, the page coming in and the Settings preview all draw the same curve.
+ * ({@code WallPageTransition}). Both pages travel together: the swipe carries the page on
+ * screen away while the page the finger is heading for comes in from the side in step with it,
+ * each posed by the same effect at its own place, and on release the pair settles on the target
+ * page (or back). Every effect is a pure function of where a page stands, so the drag, the
+ * settle and the Settings preview all draw the same curve.
  *
  * <p>Only view properties change — translation, scale, alpha, the turn about the vertical axis
  * — so a frame of the motion is a property change on the page's render nodes: no layout, no
  * bitmap, and glass on the page is not sampled again, since it is aimed through the wall page's
  * transform only ({@code GlassAnchor#place}), never through the page content's.
  *
- * <p>The rubber band at either end of the pages, where there is no page to turn to, only slides.
+ * <p>The rubber band at either end of the pages, where there is no page to turn to, only slides:
+ * no page travels beside it.
  */
 public enum HomePageTransition {
     /** The page slides with the finger: the motion Home always had. */
