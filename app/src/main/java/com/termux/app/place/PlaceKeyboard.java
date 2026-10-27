@@ -29,6 +29,18 @@ public final class PlaceKeyboard {
     }
 
     /**
+     * Whether a tap on a Home terminal widget's terminal takes the keyboard back from a stale
+     * "external text field has the keyboard" flag. A widget's terminal is the typing target once
+     * tapped; with the flag left set (by a sheet or field that never reported its end) the in-app
+     * keyboard keeps its container hidden on Home however often it is asked to show. A tap in a
+     * pane of the Workspace keeps the flag, as before.
+     */
+    public static boolean tapReclaimsFromExternalInput(boolean externalInputActive,
+                                                       boolean homeTerminalWidgetFocused) {
+        return externalInputActive && homeTerminalWidgetFocused;
+    }
+
+    /**
      * Whether the end of an editor session takes down the keyboard the editor raised for itself.
      * On Home with always on it stays: always on wants it up there, and turned on while the editor
      * was open, the arrangement pass found it already up (the editor's) and left it, so taking it
