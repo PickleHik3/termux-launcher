@@ -940,6 +940,9 @@
         <item quantity="other">%d panes</item>
     </plurals>
     <string name="msg_terminal_reset">Terminal reset</string>
+    <string name="msg_shell_killed_by_signal">%1$s was killed (signal %2$d). Enter closes it.</string>
+    <string name="msg_shell_killed_shell">A shell</string>
+    <string name="msg_shell_killed_phantom_hint">Android\'s process limit? Developer options → Disable child process restrictions</string>
 
     <string name="action_kill_process">Kill process (%d)</string>
     <string name="title_confirm_kill_process">Really kill this session?</string>

@@ -39,6 +39,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -195,6 +196,27 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // the first time bell key is pressed and play() is called, since sound may not be loaded
         // quickly enough before the call to play(). https://stackoverflow.com/questions/35435625
         loadBellSoundPool();
+        // A kill while Home was away is said once the return has settled: the phantom trim runs
+        // while the launcher is in the background, and a frozen process only hears of the exits
+        // as it comes back, before the notice pill can show anything.
+        mResumed = true;
+        if (!mHeldKilledShellNotices.isEmpty())
+            mMainHandler.postDelayed(this::sayHeldKilledShellNotices, KILLED_SHELL_NOTICE_DELAY_MS);
+    }
+
+    private void sayHeldKilledShellNotices() {
+        if (!mResumed) return;
+        List<String> held = mHeldKilledShellNotices;
+        mHeldKilledShellNotices = new ArrayList<>();
+        for (String text : held) mHost.showTerminalNotice(text, AppNoticeItem.Hold.REFUSAL);
+    }
+
+    /**
+     * Should be called when onPause() is called: a shell killed from here on, as the launcher
+     * leaves the screen, is said at the next resume.
+     */
+    public void onPause() {
+        mResumed = false;
     }
 
     /**
@@ -424,26 +446,20 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
         // Split panes / windows: route the finished shell through the pane controller first.
         com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
-        if (panes != null) {
-            com.termux.app.terminal.TerminalPaneController.Window window = panes.windowOf(finishedSession);
-            int result = panes.onSessionFinished(finishedSession);
-            if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_PANE) {
-                // A pane with siblings closed; its window lives on. Kill the shell, refresh drawer.
-                service.killTermuxSession(finishedSession);
-                mHost.rebuildDrawerSessions();
-                termuxSessionListNotifyUpdated();
-                return;
-            }
-            if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_WINDOW) {
-                // The window's last pane closed; drop the window from its session (and the session
-                // if that was its last window), then switch to whatever remains.
-                service.killTermuxSession(finishedSession);
-                if (window != null) mHost.onWindowEmptied(window);
-                termuxSessionListNotifyUpdated();
-                return;
-            }
-            // FINISHED_UNKNOWN: shell not tracked by the controller; fall through to classic close.
+        if (panes != null && panes.windowOf(finishedSession) != null
+            && KilledShellNotice.keepsPane(finishedSession.getExitStatus(),
+                finishedSession.isFinishRequested())) {
+            // A signal nobody here sent (Android's phantom-process limit, the low-memory killer, a
+            // `kill` from another shell): the pane stays with its "[Process completed (signal N)]"
+            // line until Enter, as in stock Termux, rather than its window vanishing unexplained.
+            mHost.clearShellAttention(finishedSession.getPid());
+            showKilledShellNotice(finishedSession);
+            mHost.scheduleWindowBarRefresh();
+            mHost.rebuildDrawerSessions();
+            termuxSessionListNotifyUpdated();
+            return;
         }
+        if (panes != null && closeFinishedPane(panes, service, finishedSession)) return;
         int index = service.getIndexOfSession(finishedSession);
         // For plugin commands that expect the result back, we should immediately close the session
         // and send the result back instead of waiting fo the user to press enter.
@@ -917,6 +933,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         TermuxService service = mHost.service();
         if (service == null)
             return;
+        // A pane kept after a kill (onSessionFinished) closes the way an exited pane does.
+        com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
+        if (panes != null && closeFinishedPane(panes, service, finishedSession)) return;
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
@@ -930,6 +949,61 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (termuxSession != null)
                 setCurrentSession(termuxSession.getTerminalSession());
         }
+    }
+
+    /**
+     * Drop a finished shell's pane through the pane controller, its window too when it was the
+     * last pane. False, changing nothing, when the controller does not hold the shell.
+     */
+    private boolean closeFinishedPane(@NonNull com.termux.app.terminal.TerminalPaneController panes,
+                                      @NonNull TermuxService service,
+                                      @NonNull TerminalSession finishedSession) {
+        com.termux.app.terminal.TerminalPaneController.Window window = panes.windowOf(finishedSession);
+        int result = panes.onSessionFinished(finishedSession);
+        if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_PANE) {
+            // A pane with siblings closed; its window lives on. Kill the shell, refresh drawer.
+            service.killTermuxSession(finishedSession);
+            mHost.rebuildDrawerSessions();
+            termuxSessionListNotifyUpdated();
+            return true;
+        }
+        if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_WINDOW) {
+            // The window's last pane closed; drop the window from its session (and the session
+            // if that was its last window), then switch to whatever remains.
+            service.killTermuxSession(finishedSession);
+            if (window != null) mHost.onWindowEmptied(window);
+            termuxSessionListNotifyUpdated();
+            return true;
+        }
+        // FINISHED_UNKNOWN: shell not tracked by the controller.
+        return false;
+    }
+
+    /** When the last killed-shell notice was raised, so a burst of kills says it once. */
+    private long mLastKilledShellNoticeAt;
+    /** Killed-shell notices raised while Home was not on screen, said at the next resume. */
+    private List<String> mHeldKilledShellNotices = new ArrayList<>();
+    /** Between onResume and onPause: whether a notice raised now can be seen. */
+    private boolean mResumed;
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    /** How long after a resume the held notices wait for the return to settle. */
+    private static final long KILLED_SHELL_NOTICE_DELAY_MS = 600L;
+
+    private void showKilledShellNotice(@NonNull TerminalSession session) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - mLastKilledShellNoticeAt < KilledShellNotice.QUIET_MS) return;
+        mLastKilledShellNoticeAt = now;
+        int signal = -session.getExitStatus();
+        String title = toToastTitle(session);
+        List<String> texts = new ArrayList<>();
+        texts.add(mContext.getString(R.string.msg_shell_killed_by_signal,
+            title == null ? mContext.getString(R.string.msg_shell_killed_shell) : title, signal));
+        // Its own notice after the first: the pill holds two lines, and the way out is the part
+        // that has to be read whole.
+        if (KilledShellNotice.mayBePhantomLimit(signal, android.os.Build.VERSION.SDK_INT))
+            texts.add(mContext.getString(R.string.msg_shell_killed_phantom_hint));
+        mHeldKilledShellNotices = texts;
+        if (mResumed) sayHeldKilledShellNotices();
     }
 
     public void termuxSessionListNotifyUpdated() {
