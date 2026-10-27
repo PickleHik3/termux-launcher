@@ -38,6 +38,10 @@ public class X11DisplayKeyboardFollowsTextTest {
     public void restoreFcitx5Check() {
         com.termux.app.x11.GuiAppsSetupGuide.fcitx5Installed =
             com.termux.app.x11.GuiAppsSetupGuide.FCITX5_ON_DISK;
+        com.termux.app.x11.GuiAppsSetupGuide.markerPresent =
+            com.termux.app.x11.GuiAppsSetupGuide.MARKER_ON_DISK;
+        com.termux.app.x11.GuiAppsSetupGuide.rootfsInstalled =
+            com.termux.app.x11.GuiAppsSetupGuide.ROOTFS_ON_DISK;
     }
 
 
@@ -100,6 +104,7 @@ public class X11DisplayKeyboardFollowsTextTest {
     public void inEveryTouchMode_theRowIsLiveAndSaysWhatItDoes() {
         Application app = RuntimeEnvironment.getApplication();
         com.termux.app.x11.GuiAppsSetupGuide.fcitx5Installed = () -> true;
+        com.termux.app.x11.GuiAppsSetupGuide.markerPresent = () -> true;
         com.termux.app.x11.GuiAppsSetupGuide.preferences(app).edit()
             .putBoolean(com.termux.app.x11.GuiAppsSetupGuide.KEY_COPIED, true).commit();
         for (String mode : new String[]{"1", "2", "3"}) {

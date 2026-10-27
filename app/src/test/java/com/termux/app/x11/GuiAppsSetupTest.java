@@ -26,6 +26,9 @@ import java.util.Set;
  */
 public class GuiAppsSetupTest {
 
+    /** The done-marker step every Termux-route command now ends with. */
+    private static final String X11_MARKER = " && mkdir -p \"$PREFIX/var/lib/termux-launcher\" && printf '%s\\n' 'x11' > \"$PREFIX/var/lib/termux-launcher/gui-apps-setup\"";
+
     private static final Set<StarterApp> ALL = EnumSet.allOf(StarterApp.class);
     private static final Set<StarterApp> NONE = EnumSet.noneOf(StarterApp.class);
 
@@ -112,7 +115,7 @@ public class GuiAppsSetupTest {
     }
 
     @Test public void theX11RouteWithNothingTickedIsJustTheRepository() {
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio" + X11_MARKER,
             command(Route.X11_REPO, Distro.DEBIAN, NONE));
     }
 
@@ -120,7 +123,7 @@ public class GuiAppsSetupTest {
         String command = command(Route.X11_REPO, Distro.DEBIAN,
             EnumSet.of(StarterApp.TEXT_EDITOR));
 
-        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio mousepad",
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio mousepad" + X11_MARKER,
             command);
     }
 
@@ -316,6 +319,20 @@ public class GuiAppsSetupTest {
         }
     }
 
+    @Test public void theCommandEndsByWritingTheDoneMarkerOnlyAfterEverythingSucceeded() {
+        String marker = "mkdir -p \"$PREFIX/var/lib/termux-launcher\" && printf '%s\\n' '";
+        String x11 = command(Route.X11_REPO, Distro.DEBIAN, ALL);
+        assertTrue(x11, x11.contains(" && " + marker));
+        assertTrue(x11, x11.endsWith("/gui-apps-setup\""));
+        for (Distro distro : Distro.values()) {
+            String command = command(Route.DISTRO, distro, ALL);
+            int at = command.indexOf(marker);
+            assertTrue(distro.name(), at > command.indexOf("proot-distro login"));
+            assertTrue(distro.name(), at < command.indexOf("Done."));
+            assertTrue(distro.name(), command.startsWith("( set -e\n"));
+        }
+    }
+
     // --- defaults and stored choices ----------------------------------------------------------
 
     @Test public void theDefaultTicksAreABrowserAFileManagerAndAnEditor() {
@@ -352,7 +369,7 @@ public class GuiAppsSetupTest {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
             GuiAppsSetup.defaultStarters(), TourEdition.VAJ);
 
-        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad && { pkg install -y openbox || true; }", command);
+        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad && { pkg install -y openbox || true; }" + X11_MARKER, command);
     }
 
     @Test public void vajsX11CommandAddsTheTerminalWhenTicked() {
@@ -361,7 +378,7 @@ public class GuiAppsSetupTest {
         String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
             TourEdition.VAJ);
 
-        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad xfce4-terminal && { pkg install -y openbox || true; }",
+        assertEquals("pkg install -y xkeyboard-config dbus pcmanfm mousepad xfce4-terminal && { pkg install -y openbox || true; }" + X11_MARKER,
             command);
     }
 
@@ -370,7 +387,7 @@ public class GuiAppsSetupTest {
             EnumSet.of(StarterApp.BROWSER), TourEdition.VAJ);
 
         // VAJ ships no browser at all; ticking it adds nothing to the command.
-        assertEquals("pkg install -y xkeyboard-config dbus && { pkg install -y openbox || true; }", command);
+        assertEquals("pkg install -y xkeyboard-config dbus && { pkg install -y openbox || true; }" + X11_MARKER, command);
         assertFalse(command.contains("firefox"));
     }
 
@@ -378,7 +395,7 @@ public class GuiAppsSetupTest {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
         assertEquals("pkg install -y x11-repo && pkg install -y "
-                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal",
+                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal" + X11_MARKER,
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
     }
 
