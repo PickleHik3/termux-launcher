@@ -305,9 +305,9 @@ public class WallPagesTest {
         WallPages p = ok(three().setHome(2));
         assertEquals(WallPages.ChangeType.NONE, p.chooseStartIn("home").change);
         assertEquals(3, ok(p.chooseStartIn("workspace")).home().id);
-        assertEquals(1, ok(ok(p.chooseStartIn("workspace")).chooseStartIn("home")).home().id);
+        assertEquals(2, ok(ok(p.chooseStartIn("workspace")).chooseStartIn("home")).home().id);
         assertTrue(ok(p.chooseStartIn("display")).homeIsDisplayWindow());
-        assertEquals(1, ok(ok(p.chooseStartIn("display")).chooseStartIn("home")).home().id);
+        assertEquals(2, ok(ok(p.chooseStartIn("display")).chooseStartIn("home")).home().id);
         assertEquals(Error.BAD_INDEX, three().chooseHomePage(2).error);
         assertEquals(2, ok(three().chooseHomePage(1)).home().id);
     }
@@ -350,8 +350,8 @@ public class WallPagesTest {
         WallPages back = ok(detached.attachDetached());
         assertEquals(java.util.Arrays.asList(1, 2, 3), ids(back));
         assertTrue(back.detached().isEmpty());
-        // Home is not given back: it stays where Terminal only put it.
-        assertEquals(3, back.home().id);
+        // Home goes back to the Home page it was parked from.
+        assertEquals(1, back.home().id);
         assertEquals(WallPages.ChangeType.NONE, three().attachDetached().change);
         // Pages added meanwhile stay after the Homes' return point, before the Terminal.
         WallPages more = ok(detached.add(PageKind.DISPLAY, 3, null));
@@ -369,5 +369,49 @@ public class WallPagesTest {
         List<Integer> out = new ArrayList<>();
         for (WallPages.Page page : pages) out.add(page.id);
         return out;
+    }
+
+    @Test
+    public void aTripThroughTerminalOnlyComesBackToTheSameHomePage() {
+        WallPages p = ok(three().setHome(2));
+        WallPages terminalOnly = ok(p.detachHomes());
+        assertEquals(3, terminalOnly.home().id);
+        assertEquals(2, terminalOnly.lastHomePageId());
+        WallPages back = ok(terminalOnly.attachDetached());
+        assertEquals(2, back.home().id);
+        assertEquals("home", back.startIn());
+        assertFalse(back.homeParked());
+    }
+
+    @Test
+    public void aTripThroughTerminalOnlyFromTheWorkspaceStaysOnTheWorkspace() {
+        WallPages p = ok(ok(three().setHome(2)).setHome(3));
+        WallPages back = ok(ok(p.detachHomes()).attachDetached());
+        assertEquals(3, back.home().id);
+        // ... and Start in Home from there still finds Home page 2.
+        assertEquals(2, ok(back.chooseStartIn("home")).home().id);
+    }
+
+    @Test
+    public void aTripThroughTerminalOnlyAndTheDisplayKeepsHomeAndMemory() {
+        WallPages p = ok(ok(three().setHome(2)).setHomeDisplayWindow());
+        assertEquals(2, p.lastHomePageId());
+        WallPages back = ok(ok(p.detachHomes()).attachDetached());
+        assertTrue(back.homeIsDisplayWindow());
+        assertEquals(2, ok(back.chooseStartIn("home")).home().id);
+    }
+
+    @Test
+    public void startInHomeAfterTheWorkspaceReturnsToTheRememberedHomePage() {
+        WallPages p = ok(three().setHome(2));
+        WallPages ws = ok(p.chooseStartIn("workspace"));
+        assertEquals(2, ws.lastHomePageId());
+        assertEquals(2, ok(ws.chooseStartIn("home")).home().id);
+        // When that page is gone, the first Home page.
+        WallPages gone = ok(ok(ws.remove(2)).commitRemoval(2));
+        assertEquals(1, ok(gone.chooseStartIn("home")).home().id);
+        // A fresh seed has no memory and falls to the first Home page.
+        assertEquals(1, ok(WallPagesMigration.seed("workspace", 1, "home", 3)
+            .chooseStartIn("home")).home().id);
     }
 }

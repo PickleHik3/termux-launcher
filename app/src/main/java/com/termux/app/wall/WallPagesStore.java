@@ -176,6 +176,8 @@ public final class WallPagesStore {
             o.put("home", pages.homeId());
             o.put("next", pages.nextId());
             o.put("homeIsDisplayWindow", pages.homeIsDisplayWindow());
+            o.put("lastHome", pages.lastHomePageId());
+            o.put("homeParked", pages.homeParked());
             o.put("pages", pagesToJson(pages.allPages()));
             o.put("detached", pagesToJson(pages.detached()));
             JSONArray pending = new JSONArray();
@@ -213,7 +215,8 @@ public final class WallPagesStore {
             JSONArray p = o.optJSONArray("pending");
             for (int i = 0; p != null && i < p.length(); i++) pending.add(p.getInt(i));
             return new WallPages(all, pending, detached, o.getInt("home"), o.getInt("next"),
-                o.optBoolean("homeIsDisplayWindow", false));
+                o.optBoolean("homeIsDisplayWindow", false), o.optInt("lastHome", 0),
+                o.optBoolean("homeParked", false));
         } catch (JSONException | IllegalArgumentException e) {
             return null;
         }
