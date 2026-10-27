@@ -139,6 +139,7 @@ public final class WidgetGridView extends ViewGroup {
             if (cell == null) {
                 cell = new WidgetCellView(getContext());
                 cell.setHoldExempt(holdExempt);
+                if (!Float.isNaN(cellCornerRadius)) cell.setLookCornerRadius(cellCornerRadius);
                 cell.setId(ViewCompat.generateViewId());
                 cells.put(record.appWidgetId, cell);
                 addView(cell);
@@ -277,7 +278,49 @@ public final class WidgetGridView extends ViewGroup {
      * included: every cell re-clips in place, so a hosted app widget's corner moves with theirs.
      */
     public void setCellCornerRadius(float radiusPx) {
+        cellCornerRadius = radiusPx;
         for (WidgetCellView cell : cells.values()) cell.setLookCornerRadius(radiusPx);
+    }
+
+    /** The last Look corner the page dressed its cells with; NaN before any. New cells wear it. */
+    private float cellCornerRadius = Float.NaN;
+    /** A grid that only shows a page in motion: it takes no touch and sends no size. */
+    private boolean inert;
+
+    /**
+     * Makes this grid a stand-in for {@code source} while a neighbouring page travels beside it
+     * (the pane's second page layer): the same factories, host and look, no touch and no size
+     * report of its own. Bound with {@link #refresh} like any grid.
+     */
+    void mirrorConfigFrom(@NonNull WidgetGridView source) {
+        controller = source.controller;
+        builtinFactory = source.builtinFactory;
+        appIconFactory = source.appIconFactory;
+        reservedRows = source.reservedRows;
+        edgePadding = source.edgePadding;
+        holdExempt = true;
+        inert = true;
+        pageAtRest = false;
+        if (!Float.isNaN(source.cellCornerRadius)) setCellCornerRadius(source.cellCornerRadius);
+        requestLayout();
+    }
+
+    /**
+     * Lets go of every cell without telling the factories: the views inside belong to the page
+     * that is (or is about to be) on the real grid, and a cell is only a shell around them.
+     */
+    void clear() {
+        for (WidgetCellView cell : cells.values()) removeView(cell);
+        cells.clear();
+        committedSizes.clear();
+        deliveredSizes.clear();
+        resizedSinceResync.clear();
+        retellSize.clear();
+        records = Collections.emptyList();
+    }
+
+    @Override public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        return !inert && super.dispatchTouchEvent(event);
     }
 
     /** Supplies the views of the launcher's own widgets; the grid never builds one itself. */

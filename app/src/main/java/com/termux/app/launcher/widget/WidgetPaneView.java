@@ -182,6 +182,19 @@ public final class WidgetPaneView extends FrameLayout {
     @NonNull private final HomePageTransition.Transform contentTransform =
         new HomePageTransition.Transform();
 
+    /**
+     * The page beside the one on screen while the content is off its rest: a second grid, bound
+     * once to that page's records, drawn through the same effect one page width to the side
+     * (the page the finger is bringing in, or the page that is leaving as the turn settles).
+     * Null until a drag first needs it; kept hidden and empty between motions.
+     */
+    @Nullable private WidgetGridView neighbour;
+    /** The page the neighbour grid is bound to; -1 for none. */
+    private int neighbourPage = -1;
+    @Nullable private LauncherWidgetRepository repository;
+    @NonNull private final HomePageTransition.Transform neighbourTransform =
+        new HomePageTransition.Transform();
+
     private int pageCount = 1;
     private int currentPage;
     private boolean pagingTracking;
@@ -659,6 +672,9 @@ public final class WidgetPaneView extends FrameLayout {
     public void render(@NonNull LauncherWidgetRepository repository,
                        @NonNull LauncherWidgetHostController.Capability capability, int page) {
         hideWidgetEditOverlay();
+        this.repository = repository;
+        // Whatever the neighbour holds belongs to the layout this render replaces.
+        neighbourPage = -1;
         List<LauncherWidgetRecord> pageRecords = repository.recordsOnPage(page);
         boolean populated = !pageRecords.isEmpty();
         grid.refresh(repository.gridDefinition(), pageRecords);
@@ -669,7 +685,10 @@ public final class WidgetPaneView extends FrameLayout {
         boolean supported = capability == LauncherWidgetHostController.Capability.AVAILABLE;
         emptyMessage.setText(supported ? R.string.widget_empty_hint : R.string.widget_unsupported);
         setPageState(repository.pageCount(), page);
+        // A render in the middle of a motion keeps the neighbour beside the page it shows now.
+        if (contentShiftPx != 0f) applyContentShift();
     }
+
 
     /** Updates the indicator and, after a committed swipe, slides the new page's content in. */
     public void setPageState(int count, int current) {
@@ -1080,6 +1099,12 @@ public final class WidgetPaneView extends FrameLayout {
         }
     }
 
+    /**
+     * The turned page's content starts the settle where the neighbour layer stood: the real grid
+     * now shows the page the finger brought in, posed as that layer was, and the layer carries the
+     * page that leaves (see {@link #syncNeighbour}). Without a drag (a page change from elsewhere)
+     * it is the page coming in from the side the turn heads for.
+     */
     private void enterFromSide(int direction, float dragX, float velocityPxPerSec) {
         if (instantMotion()) { setContentTranslationX(0f); return; }
         float start = direction > 0 ? getWidth() + dragX : dragX - getWidth();
@@ -1132,7 +1157,76 @@ public final class WidgetPaneView extends FrameLayout {
             pinnedLayer.animate().cancel();
             applyTransform(pinnedLayer);
         }
+        syncNeighbour(position, width, effect, turning);
     }
+
+    /**
+     * Keeps the second page layer: while the content is off its rest and a page lies that way,
+     * the layer holds that page ({@code currentPage} + 1 for a drag to the left, - 1 to the right)
+     * and is posed by the same effect one page width from the page on screen. It is bound when
+     * the page it should hold changes, never per frame, and dropped once the content is at rest.
+     * Not during the edit mode's page flips, which only slide a single page.
+     */
+    private void syncNeighbour(float position, int width, @NonNull HomePageTransition effect,
+                               boolean turning) {
+        int want = turning && repository != null && width > 0 && contentShiftPx != 0f
+            && !widgetEditActive() ? currentPage + (position < 0f ? 1 : -1) : -1;
+        if (want < 0) {
+            if (neighbour != null && neighbour.getVisibility() == VISIBLE) dropNeighbour();
+            return;
+        }
+        if (want != neighbourPage || neighbour == null) bindNeighbour(want);
+        WidgetGridView layer = neighbour;
+        if (layer == null) return;
+        float other = position + (position < 0f ? 1f : -1f);
+        effect.transform(other, width, true, neighbourTransform);
+        applyTransform(layer, neighbourTransform);
+        // Depth sinks the page leaving forward and Stack the one under the stack: the one that
+        // slides goes over it, whichever of the two pages that is.
+        boolean under = effect == HomePageTransition.STACK ? position < 0f
+            : effect == HomePageTransition.DEPTH && position > 0f;
+        layer.setTranslationZ(under ? -1f : 0f);
+    }
+
+    private void bindNeighbour(int page) {
+        LauncherWidgetRepository source = repository;
+        if (source == null) return;
+        WidgetGridView layer = neighbour;
+        if (layer == null) {
+            layer = new WidgetGridView(getContext());
+            layer.setCameraDistance(CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density);
+            layer.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            neighbour = layer;
+            addView(layer, indexOfChild(grid) + 1, new LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        }
+        LayoutParams params = (LayoutParams) layer.getLayoutParams();
+        params.bottomMargin = ((LayoutParams) grid.getLayoutParams()).bottomMargin;
+        layer.setLayoutParams(params);
+        layer.mirrorConfigFrom(grid);
+        layer.clear();
+        layer.refresh(source.gridDefinition(), source.recordsOnPage(page));
+        layer.setLayerType(contentLayered ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE, null);
+        layer.setVisibility(VISIBLE);
+        neighbourPage = page;
+    }
+
+    private void dropNeighbour() {
+        neighbourPage = -1;
+        WidgetGridView layer = neighbour;
+        if (layer == null) return;
+        layer.clear();
+        layer.setVisibility(GONE);
+    }
+
+    /** The second page layer's grid while a motion has one; for tests. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable WidgetGridView neighbourGrid() {
+        return neighbour != null && neighbour.getVisibility() == VISIBLE ? neighbour : null;
+    }
+
+    @androidx.annotation.VisibleForTesting
+    int neighbourPage() { return neighbourGrid() == null ? -1 : neighbourPage; }
 
     /** Whether the page's content draws through a hardware layer: only while an effect moves it. */
     private void setContentLayered(boolean layered) {
@@ -1142,10 +1236,14 @@ public final class WidgetPaneView extends FrameLayout {
         grid.setLayerType(type, null);
         empty.setLayerType(type, null);
         if (pinnedLayer != null) pinnedLayer.setLayerType(type, null);
+        if (neighbour != null) neighbour.setLayerType(type, null);
     }
 
     private void applyTransform(@NonNull View view) {
-        HomePageTransition.Transform t = contentTransform;
+        applyTransform(view, contentTransform);
+    }
+
+    private void applyTransform(@NonNull View view, @NonNull HomePageTransition.Transform t) {
         view.setTranslationX(t.translationX);
         view.setScaleX(t.scale);
         view.setScaleY(t.scale);
