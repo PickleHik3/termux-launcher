@@ -668,6 +668,22 @@ public final class AppearanceSurfaceController {
         view.setFocusable(takes);
         if (takes)
             view.bringToFront();
+        // Draw order goes by Z before child order: the card sheet and the editor bar have
+        // elevation, so bringToFront alone leaves them over the picker and its Choose photo.
+        view.setTranslationZ(takes ? siblingsTopZ(view) + 1f : 0f);
+    }
+
+    /** The highest Z among the host's siblings (the editor's sheet and bar). */
+    private static float siblingsTopZ(@NonNull View view) {
+        float top = 0f;
+        if (view.getParent() instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) view.getParent();
+            for (int i = 0; i < parent.getChildCount(); i++) {
+                View child = parent.getChildAt(i);
+                if (child != view) top = Math.max(top, child.getZ());
+            }
+        }
+        return top;
     }
 
     private void addPage(@NonNull View root) {
