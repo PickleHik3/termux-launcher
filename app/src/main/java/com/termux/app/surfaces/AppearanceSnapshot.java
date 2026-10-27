@@ -301,6 +301,9 @@ final class AppearanceSnapshot {
             for (TermuxAppSharedPreferences.WallHalf half
                     : TermuxAppSharedPreferences.WallHalf.values()) {
                 String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+                // Only the Terminal page's own values are half keys now; the wall's are shared.
+                if (halfKey.equals(key))
+                    continue;
                 Object value = all.get(halfKey);
                 if (value != null)
                     out.put(halfKey, value);
@@ -325,6 +328,8 @@ final class AppearanceSnapshot {
             if (!TermuxAppSharedPreferences.isPerHalfProperty(property))
                 continue;
             String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(property.baseKey, half);
+            if (halfKey.equals(property.baseKey))
+                continue; // Base is the wall's: the shared restore puts it back
             Object value = mHalfKeys.get(halfKey);
             if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
             else if (store.contains(halfKey)) editor.remove(halfKey);
@@ -343,6 +348,8 @@ final class AppearanceSnapshot {
             for (TermuxAppSharedPreferences.WallHalf half
                     : TermuxAppSharedPreferences.WallHalf.values()) {
                 String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+                if (halfKey.equals(key))
+                    continue;
                 Object value = halfKeys.get(halfKey);
                 if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
                 else if (value instanceof Boolean) editor.putBoolean(halfKey, (Boolean) value);

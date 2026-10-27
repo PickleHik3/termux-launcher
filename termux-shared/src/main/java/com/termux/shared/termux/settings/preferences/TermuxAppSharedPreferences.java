@@ -3483,6 +3483,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** The Terminal page's id as the app last told these preferences; -1 when it has none. */
     private static volatile int sTerminalPageId = -1;
 
+    /** Whether the Workspace is a page the preferences know (so it can hold its own values). */
+    public static boolean hasTerminalPage() {
+        return sTerminalPageId >= 0;
+    }
+
     /** Tells the half shim which page the Workspace is now (ADR 0015); -1 for none. */
     public static void setTerminalPageId(int pageId) {
         sTerminalPageId = pageId;
