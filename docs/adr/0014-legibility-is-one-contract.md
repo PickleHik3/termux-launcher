@@ -63,3 +63,8 @@ Consequences:
 
 Spec: project-docs/active/legibility-contract-2026-10-27.md. Research:
 project-docs/reference/terminal/material-terminal-palette-research-2026-10-27.md.
+
+Amendment (2026-10-27): **Bare widgets are the one exception.** A widget the user set to Bare
+draws nothing behind itself, so the contract cannot bound its ground. Its ink is still toned and
+flipped against the wallpaper it stands on, but on a busy wallpaper it may fall short of the floor.
+The user chose fully clear over the soft dim that used to keep it legible.

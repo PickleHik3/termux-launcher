@@ -483,9 +483,12 @@ public class GlanceWidgetTest {
             >= OnGlass.TARGET_LARGE_TEXT);
     }
 
-    /** Over a mid-grey wallpaper the pale ink is short: the least dim that holds it, never past 35%. */
+    /**
+     * Over a mid-grey wallpaper the page's pale ink is short, and Bare lays nothing behind itself
+     * (decided 2026-10-27): no dim, no card. The ink moves on its side until it reads instead.
+     */
     @Test
-    public void bareDimsOnlyAsMuchAsTheMeasurementAsks() {
+    public void bareLaysNoDimAndMovesItsInkInstead() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         InkLook look = new InkLook();
         look.wallpaper = 0xFF606060;
@@ -495,31 +498,14 @@ public class GlanceWidgetTest {
         assertTrue("the premise: the pale ink is short on the bare wallpaper",
             OnGlass.ratio(pale.onSurfaceVariant, look.wallpaper) < OnGlass.TARGET_BODY_TEXT);
         assertTrue(view.isBare());
-        assertNotNull("a dim is laid", cardOf(view).getBackground());
-        int dim = view.groundAlpha();
-        assertTrue("a dim: " + dim, dim > 0);
-        assertTrue("never past 35%: " + dim, dim <= OnGlass.BARE_MAX_DIM_255);
-        assertTrue(OnGlass.ratio(view.style().onSurfaceVariant, view.ground())
+        assertNull("nothing is laid behind a Bare widget", cardOf(view).getBackground());
+        assertEquals("no dim", 0, view.groundAlpha());
+        assertTrue(OnGlass.ratio(view.style().onSurfaceVariant, look.wallpaper)
             >= OnGlass.TARGET_BODY_TEXT);
-        assertTrue(OnGlass.ratio(view.style().onSurface, view.ground()) >= OnGlass.TARGET_BODY_TEXT);
-        assertTrue(OnGlass.ratio(view.style().primary, view.ground()) >= OnGlass.TARGET_LARGE_TEXT);
+        assertTrue(OnGlass.ratio(view.style().onSurface, look.wallpaper) >= OnGlass.TARGET_BODY_TEXT);
+        assertTrue(OnGlass.ratio(view.style().primary, look.wallpaper) >= OnGlass.TARGET_LARGE_TEXT);
         assertTrue("the caution ink reads as text",
-            OnGlass.ratio(view.style().warm, view.ground()) >= OnGlass.TARGET_BODY_TEXT);
-
-        // The least: one step thinner would not hold the page's inks.
-        OnGlass.Resolution answer = OnGlass.resolveBareWidget(look.wallpaper, pale.onSurfaceVariant,
-            OnGlass.TARGET_BODY_TEXT, pale.primary, OnGlass.TARGET_LARGE_TEXT, pale.card, true);
-        assertEquals(dim, Color.alpha(answer.veil));
-        int thinner = OnGlass.opaque(OnGlass.composite(OnGlass.withAlpha(pale.card, dim - 1),
-            look.wallpaper));
-        assertTrue(OnGlass.ratio(pale.onSurfaceVariant, thinner) < OnGlass.TARGET_BODY_TEXT
-            || OnGlass.ratio(pale.primary, thinner) < OnGlass.TARGET_LARGE_TEXT);
-
-        // Back over a dark wallpaper: the dim goes.
-        look.wallpaper = 0xFF101114;
-        view.onGlassStyle(look);
-        assertNull(cardOf(view).getBackground());
-        assertEquals(0, view.groundAlpha());
+            OnGlass.ratio(view.style().warm, look.wallpaper) >= OnGlass.TARGET_BODY_TEXT);
     }
 
     /** Where 35% is not enough the ink moves instead, and still holds 4.5:1 and 3:1. */
