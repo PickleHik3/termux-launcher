@@ -138,10 +138,16 @@ public class SurfacePresetsHalfTest {
         SurfacePresets.applyLook(preferences, solid, WallHalf.WORKSPACE);
 
         assertTrue(SurfacePresets.matches(preferences, solid, WallHalf.WORKSPACE));
+        assertFalse(SurfacePresets.matches(preferences, solid, WallHalf.HOME));
+        // Base is the wall's, so the Look lands on the Workspace as the Terminal page's own
+        // surface values: its dock shows Solid's number, Home's dock keeps Clear's.
         assertEquals(solid.values.get(SurfaceProperty.OPACITY.baseKey),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
-        // Base is wall-wide: a Look chosen on the Workspace is the wall's Base for Home too.
-        assertEquals(solid.values.get(SurfaceProperty.OPACITY.baseKey),
+            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+                WallHalf.WORKSPACE));
+        assertEquals(clear.values.get(SurfaceProperty.OPACITY.baseKey),
+            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+                WallHalf.HOME));
+        assertEquals(clear.values.get(SurfaceProperty.OPACITY.baseKey),
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
         // Today's callers read the Workspace's stop.
         assertTrue(SurfacePresets.matches(preferences, solid));

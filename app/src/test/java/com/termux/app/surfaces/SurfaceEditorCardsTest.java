@@ -290,11 +290,12 @@ public class SurfaceEditorCardsTest {
     /** Every key the store holds for Home's half alone, with its value. */
     private java.util.Map<String, Object> homeKeys() {
         java.util.Map<String, Object> out = new java.util.TreeMap<>();
-        String suffix = TermuxAppSharedPreferences.surfaceHalfKey("", WallHalf.HOME);
-        for (java.util.Map.Entry<String, ?> entry
-                : preferences.getSharedPreferences().getAll().entrySet()) {
-            if (entry.getKey().endsWith(suffix))
-                out.put(entry.getKey(), entry.getValue());
+        // Home is the wall now: its own look is the plain per-half keys (Base, the surfaces'
+        // cells and links, the material point), which a Workspace edit must leave alone.
+        java.util.Map<String, ?> all = preferences.getSharedPreferences().getAll();
+        for (String key : AppearanceSnapshot.halfAbleKeys()) {
+            if (all.containsKey(key))
+                out.put(key, all.get(key));
         }
         assertFalse("Home holds its own look", out.isEmpty());
         return out;
