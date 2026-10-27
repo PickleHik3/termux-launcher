@@ -51,6 +51,14 @@ public interface PaneSurfaceStyle {
     default android.graphics.ColorMatrix paneGlassEvenOut(@NonNull android.graphics.Rect rootRect) {
         return null;
     }
+    /**
+     * A token that changes whenever what {@link #paneGlassEvenOut} answers may have changed
+     * without any pane moving (the Debugging switch, the Contrast level, a re-measure). A laid-out
+     * pane polls it in onDraw, a plain int compare, and re-asks when it moved.
+     */
+    default int paneGlassGeneration() {
+        return 0;
+    }
     /** Film grain layer for one pane, or null while grain is off. */
     @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
     /**

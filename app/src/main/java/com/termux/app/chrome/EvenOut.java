@@ -221,6 +221,84 @@ public final class EvenOut {
             stats.meanColor);
     }
 
+    /**
+     * What the stages after the even-out do to a tone: the composited tone (frost, the launcher's
+     * dim, the pane's tint) of the pre-frost tone {@code tone}. Monotone increasing.
+     */
+    public interface Chain {
+        double composited(double tone);
+    }
+
+    /**
+     * How far the composited band's limiting end falls short of the ceiling even at the best
+     * the chain can do: pale ink needs the composite of tone 0 under the limit, dark ink needs the
+     * composite of tone 100 over it. Zero means the ink's side is reachable.
+     */
+    public static double shortfall(@NonNull Ceiling ceiling, @NonNull ChromeInk.Polarity polarity,
+                                   @NonNull Chain chain) {
+        if (polarity == ChromeInk.Polarity.PALE_INK) {
+            return Math.max(0d, chain.composited(0d) - (ceiling.tone - BAND_MARGIN));
+        }
+        return Math.max(0d, (ceiling.tone + BAND_MARGIN) - chain.composited(100d));
+    }
+
+    /** The pre-frost tone whose composite is {@code target}, clamped to 0..100. */
+    private static double invert(@NonNull Chain chain, double target) {
+        double lo = 0d;
+        double hi = 100d;
+        if (target <= chain.composited(lo)) return lo;
+        if (target >= chain.composited(hi)) return hi;
+        for (int i = 0; i < 40; i++) {
+            double mid = (lo + hi) / 2d;
+            if (chain.composited(mid) < target) lo = mid; else hi = mid;
+        }
+        return (lo + hi) / 2d;
+    }
+
+    /**
+     * {@link #map} with the limit applied where the text stands: on the composited ground, after
+     * frost, dim and tint. The band is chosen by {@link #map}'s own rules in the composited tone
+     * domain (its limit, width, margin, least shift from the composited mean), held to what the
+     * chain can reach (pale ink cannot go under the composite of tone 0, dark ink over that of
+     * tone 100), and pulled back through the chain to the pre-frost tones the matrix must
+     * produce. The returned mapping's source is the pane's p2/p98 and its destination is that
+     * pre-frost band, so {@link EvenOutMatrix#of} renders it unchanged.
+     */
+    @NonNull
+    public static Mapping mapThrough(@NonNull GlassBackdropCache.Lightness stats,
+                                     @NonNull Ceiling ceiling, @NonNull ChromeInk.Polarity polarity,
+                                     @NonNull TerminalContrastLevel level, @NonNull Chain chain) {
+        boolean pale = polarity == ChromeInk.Polarity.PALE_INK;
+        double cLo = chain.composited(stats.p2);
+        double cHi = chain.composited(stats.p98);
+        double cMean = chain.composited(stats.mean);
+        double limit = pale ? ceiling.tone - BAND_MARGIN : ceiling.tone + BAND_MARGIN;
+        boolean fits = pale ? cHi <= limit : cLo >= limit;
+        if (fits) {
+            return new Mapping(stats.p2, stats.p98, stats.p2, stats.p98, stats.meanColor);
+        }
+        double width = Math.min(level.evenOutWidth, Math.max(0d, cHi - cLo));
+        double center = pale ? Math.min(cMean, limit - width / 2d)
+            : Math.max(cMean, limit + width / 2d);
+        double bandLo = center - width / 2d;
+        double bandHi = center + width / 2d;
+        if (pale) {
+            double reach = chain.composited(0d);
+            if (bandLo < reach) {
+                bandLo = reach;
+                bandHi = Math.max(bandLo, Math.min(bandLo + width, limit));
+            }
+        } else {
+            double reach = chain.composited(100d);
+            if (bandHi > reach) {
+                bandHi = reach;
+                bandLo = Math.min(bandHi, Math.max(bandHi - width, limit));
+            }
+        }
+        return new Mapping(stats.p2, stats.p98, invert(chain, bandLo), invert(chain, bandHi),
+            stats.meanColor);
+    }
+
     /** The darkest and lightest ground of a band, opaque, after tint and Opacity. */
     public static final class BandEnds {
         @ColorInt public final int darkest;
