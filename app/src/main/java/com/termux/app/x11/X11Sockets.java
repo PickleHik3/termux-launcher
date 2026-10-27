@@ -36,11 +36,8 @@ public final class X11Sockets {
         try (LocalSocket s = new LocalSocket()) {
             s.connect(new LocalSocketAddress(socket.getAbsolutePath(),
                 LocalSocketAddress.Namespace.FILESYSTEM));
-            android.util.Log.i("DBG-x11sock", "answers " + socket + " connected=" + s.isConnected()
-                + " peer=" + s.getPeerCredentials().getPid());
             return true;
         } catch (IOException | RuntimeException e) {
-            android.util.Log.i("DBG-x11sock", "refuses " + socket + " " + e);
             return false;
         }
     };
@@ -60,9 +57,6 @@ public final class X11Sockets {
     public static List<Integer> liveDisplays(@NonNull File socketDir, @NonNull Probe probe) {
         List<Integer> live = new ArrayList<>();
         String[] names = socketDir.list();
-        android.util.Log.i("DBG-x11sock", "list " + socketDir + " " + java.util.Arrays.toString(names)
-            + " uptime=" + android.os.SystemClock.uptimeMillis() + " at "
-            + android.util.Log.getStackTraceString(new Throwable()).split("\n", 8)[2].trim());
         if (names == null) return live;
         for (String name : names) {
             if (!DISPLAY_SOCKET.matcher(name).matches()) continue;
