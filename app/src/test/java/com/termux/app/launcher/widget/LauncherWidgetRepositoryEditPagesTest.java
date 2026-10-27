@@ -138,7 +138,10 @@ public class LauncherWidgetRepositoryEditPagesTest {
         assertFalse(repository.applyOrientation("portrait", PORTRAIT));
         assertTrue(repository.applyOrientation("landscape", LANDSCAPE));
 
-        assertTrue(repository.renumberShelvedPages(HomePageEdits.removeMapping(3, 0)));
+        // Edit pages empties page 0 of the wall on screen and removes it; the shelf names pages
+        // by id, so the removed page's cells leave it with the page.
+        assertTrue(repository.removeRecord(10));
+        assertTrue(repository.removePage(0));
 
         assertTrue(repository.applyOrientation("portrait", PORTRAIT));
         assertEquals(0, repository.get(11).page);

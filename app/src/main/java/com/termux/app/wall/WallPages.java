@@ -583,6 +583,18 @@ public final class WallPages {
         return out;
     }
 
+    /**
+     * The ids of the Home pages the widget repository keys by, in order: those on the wall, or,
+     * under Terminal only where every one is set aside, the detached ones. Its size is
+     * {@link #homeCount()}.
+     */
+    @NonNull
+    public List<Integer> homePageIdsForRepository() {
+        List<Integer> out = new ArrayList<>();
+        for (Page p : countsDetached() ? detachedHomes() : homePages()) out.add(p.id);
+        return out;
+    }
+
     /** How many Home pages the repository would hold for this value. */
     public int homeCount() {
         return countsDetached() ? detachedHomes().size() : homePages().size();
