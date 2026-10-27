@@ -157,7 +157,7 @@ public class TerminalWorkspaceStoreTest {
             new TerminalWorkspace.FloatShape(.3f, .05f, .6f, .9f));
         TerminalWorkspace decoded = TerminalWorkspace.fromJson(withHomeFloat(saved).toJson());
 
-        assertEquals(4, decoded.version);
+        assertEquals(5, decoded.version);
         assertEquals(2, decoded.sessions.get(0).windows.size());
         assertNull("the row's window stays a window of the row",
             decoded.sessions.get(0).windows.get(0).homeFloat);
@@ -167,7 +167,7 @@ public class TerminalWorkspaceStoreTest {
         assertEquals("notes", window.name);
         TerminalWorkspace.HomeFloat homeFloat = window.homeFloat;
         assertNotNull(homeFloat);
-        assertEquals(1, homeFloat.page);
+        assertEquals(1, homeFloat.pageId);
         assertTrue(homeFloat.minimised);
         assertShape(.1f, .2f, .5f, .4f, homeFloat.portrait);
         assertShape(.3f, .05f, .6f, .9f, homeFloat.landscape);
@@ -181,14 +181,14 @@ public class TerminalWorkspaceStoreTest {
 
         TerminalWorkspace.HomeFloat homeFloat = decoded.sessions.get(0).windows.get(1).homeFloat;
         assertNotNull(homeFloat);
-        assertEquals(0, homeFloat.page);
+        assertEquals(0, homeFloat.pageId);
         assertFalse(homeFloat.minimised);
         assertNull(homeFloat.portrait);
         assertNull(homeFloat.landscape);
     }
 
     @Test
-    public void versionThreeAndVersionFourWithoutTheKey_loadAsTiledWindows() throws Exception {
+    public void versionThreeAndAWorkspaceWithoutAHomeFloat_loadAsTiledWindows() throws Exception {
         JSONObject v3 = sampleWithFloat("dev").toJson().put("version", 3);
         TerminalWorkspace three = TerminalWorkspace.fromJson(v3);
         assertEquals(3, three.version);
@@ -197,7 +197,7 @@ public class TerminalWorkspaceStoreTest {
             three.sessions.get(0).windows.get(0).floats.size());
 
         JSONObject v4 = sample("dev").toJson();
-        assertEquals(4, v4.getInt("version"));
+        assertEquals(TerminalWorkspace.VERSION, v4.getInt("version"));
         assertFalse(v4.getJSONArray("sessions").getJSONObject(0).getJSONArray("windows")
             .getJSONObject(0).has("homeFloat"));
         assertNull(TerminalWorkspace.fromJson(v4).sessions.get(0).windows.get(0).homeFloat);
@@ -243,9 +243,9 @@ public class TerminalWorkspaceStoreTest {
     }
 
     @Test
-    public void versionsPastFourAreStillUnsupported() throws Exception {
+    public void versionsPastFiveAreStillUnsupported() throws Exception {
         expectCode("unsupported_version",
-            () -> TerminalWorkspace.fromJson(sample("dev").toJson().put("version", 5)));
+            () -> TerminalWorkspace.fromJson(sample("dev").toJson().put("version", 6)));
     }
 
     @Test
@@ -261,7 +261,7 @@ public class TerminalWorkspaceStoreTest {
         assertNotNull(autosave.arrangement);
         TerminalWorkspace.Window floated = autosave.arrangement.sessions.get(0).windows.get(1);
         assertNotNull("the float keeps its page", floated.homeFloat);
-        assertEquals(1, floated.homeFloat.page);
+        assertEquals(1, floated.homeFloat.pageId);
         assertTrue(floated.homeFloat.minimised);
         assertTrue("never listed among Saved sessions", store.list().isEmpty());
         expectCode("invalid_name", () -> store.load(".autosave"));

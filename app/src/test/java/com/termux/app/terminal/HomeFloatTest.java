@@ -502,7 +502,7 @@ public class HomeFloatTest {
             shell -> new TerminalWorkspace.Pane("/home", null, null));
 
         assertNotNull(saved.homeFloat);
-        assertEquals(1, saved.homeFloat.page);
+        assertEquals(1, saved.homeFloat.pageId);
         assertTrue(saved.homeFloat.minimised);
         assertTrue(saved.root instanceof TerminalWorkspace.Pane);
         assertTrue(saved.floats.isEmpty());
