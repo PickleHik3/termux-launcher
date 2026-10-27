@@ -20,6 +20,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -417,8 +419,17 @@ public final class X11CliInstaller {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
         linkKeyboardData();
         writeWindowManagerScript();
+        ensureDiversions();
         String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
-        if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
+        if (marker.equals(read(markerFile()))) {
+            // The marker only says what we once wrote; a package that overwrote the script
+            // after that must not go unnoticed.
+            if (isForeignCommand()) {
+                Logger.logInfo(LOG_TAG, "The termux-x11 we wrote has been replaced");
+                return Result.FOREIGN_COMMAND;
+            }
+            return Result.UP_TO_DATE;
+        }
         if (isForeignCommand()) {
             Logger.logInfo(LOG_TAG, "Leaving a termux-x11 we did not write alone");
             return Result.FOREIGN_COMMAND;
@@ -452,6 +463,7 @@ public final class X11CliInstaller {
     }
 
     void uninstall() {
+        removeDiversions();
         if (isForeignCommand()) return;
         File prefixDir = binDir.getParentFile();
         if (prefixDir != null && isOurKeyboardDataLink(prefixDir)) {
@@ -470,6 +482,110 @@ public final class X11CliInstaller {
                 Logger.logWarn(LOG_TAG, "Failed to remove " + file);
             }
         }
+    }
+
+    /** The package name our dpkg diversions are filed under. */
+    static final String DIVERSION_PACKAGE = "termux-launcher";
+
+    /** dpkg's diversion list: three lines per entry, path, diverted path, package. */
+    @NonNull
+    private File diversionsFile() {
+        File prefixDir = binDir.getParentFile();
+        return new File(prefixDir, "var/lib/dpkg/diversions");
+    }
+
+    /** The two commands the upstream {@code termux-x11-nightly} package also ships. */
+    @NonNull
+    private File[] divertedCommands() {
+        return new File[]{serverScript(), preferenceScript()};
+    }
+
+    /** Whether this prefix is the apt edition: a dpkg database, and no pacman. */
+    private boolean isAptPrefix() {
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir == null || NixProfile.isNix(prefixDir)) return false;
+        return new File(prefixDir, "var/lib/dpkg/status").isFile()
+            && !new File(prefixDir, "etc/pacman.conf").exists();
+    }
+
+    /**
+     * On the apt edition, tell dpkg to set the upstream package's copy of our two commands aside
+     * as {@code <command>.upstream}, so installing {@code termux-x11-nightly} cannot overwrite
+     * them. Only missing entries are added; an entry another package holds is left alone.
+     */
+    @VisibleForTesting
+    void ensureDiversions() {
+        if (!isAptPrefix()) return;
+        File file = diversionsFile();
+        try {
+            List<String> lines = readDiversionLines(file);
+            boolean changed = false;
+            for (File command : divertedCommands()) {
+                String path = command.getAbsolutePath();
+                int at = diversionIndex(lines, path);
+                if (at < 0) {
+                    lines.add(path);
+                    lines.add(path + ".upstream");
+                    lines.add(DIVERSION_PACKAGE);
+                    changed = true;
+                } else if (!DIVERSION_PACKAGE.equals(lines.get(at + 2))) {
+                    Logger.logInfo(LOG_TAG, path + " is already diverted by " + lines.get(at + 2));
+                }
+            }
+            if (changed) writeDiversions(file, lines);
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "Failed to divert the upstream termux-x11: " + e.getMessage());
+        }
+    }
+
+    /** Remove exactly our two diversion entries; every other entry stays. */
+    private void removeDiversions() {
+        if (!isAptPrefix()) return;
+        File file = diversionsFile();
+        try {
+            List<String> lines = readDiversionLines(file);
+            boolean changed = false;
+            for (File command : divertedCommands()) {
+                String path = command.getAbsolutePath();
+                int at = diversionIndex(lines, path);
+                if (at >= 0 && DIVERSION_PACKAGE.equals(lines.get(at + 2))) {
+                    for (int i = 0; i < 3; i++) lines.remove(at);
+                    changed = true;
+                }
+            }
+            if (changed) writeDiversions(file, lines);
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "Failed to remove our diversions: " + e.getMessage());
+        }
+    }
+
+    /** The index of the entry that diverts {@code path}, or -1. Entries come in threes. */
+    private static int diversionIndex(@NonNull List<String> lines, @NonNull String path) {
+        for (int i = 0; i + 2 < lines.size(); i += 3) {
+            if (lines.get(i).equals(path)) return i;
+        }
+        return -1;
+    }
+
+    @NonNull
+    private static List<String> readDiversionLines(@NonNull File file) throws IOException {
+        List<String> lines = new ArrayList<>();
+        if (!file.exists()) return lines;
+        lines.addAll(Files.readAllLines(file.toPath(), StandardCharsets.UTF_8));
+        // A trailing partial entry is not ours to rewrite; keep dpkg's own file as it is.
+        if (lines.size() % 3 != 0) throw new IOException(file + " is not in threes");
+        return lines;
+    }
+
+    private static void writeDiversions(@NonNull File file, @NonNull List<String> lines)
+            throws IOException {
+        File dir = file.getParentFile();
+        if (dir != null && !dir.isDirectory() && !dir.mkdirs()) {
+            throw new IOException("Failed to create " + dir);
+        }
+        StringBuilder text = new StringBuilder();
+        for (String line : lines) text.append(line).append('\n');
+        writeAtomically(file, bytes(text.toString()), true, false);
     }
 
     /**

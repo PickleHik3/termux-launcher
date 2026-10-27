@@ -579,4 +579,71 @@ public class X11CliInstallerTest {
         assertFalse(new File(temp.getRoot(), "usr/share/X11/xkb").exists());
         assertFalse(installer.wmScript().exists());
     }
+
+    private File diversions() { return new File(temp.getRoot(), "usr/var/lib/dpkg/diversions"); }
+
+    private void aptPrefix() throws IOException {
+        File status = new File(temp.getRoot(), "usr/var/lib/dpkg/status");
+        assertTrue(status.getParentFile().mkdirs());
+        assertTrue(status.createNewFile());
+    }
+
+    private String ourEntries() {
+        String s = new File(bin, "termux-x11").getAbsolutePath();
+        String p = new File(bin, "termux-x11-preference").getAbsolutePath();
+        return s + "\n" + s + ".upstream\ntermux-launcher\n"
+            + p + "\n" + p + ".upstream\ntermux-launcher\n";
+    }
+
+    @Test public void anAptPrefixGetsBothDiversions() throws IOException {
+        aptPrefix();
+        installer.install();
+        assertEquals(ourEntries(), text(diversions()));
+        assertFalse(diversions().canExecute());
+    }
+
+    @Test public void diversionsAreNotDuplicated() throws IOException {
+        aptPrefix();
+        installer.install();
+        installer.install();
+        assertEquals(ourEntries(), text(diversions()));
+    }
+
+    @Test public void aForeignDiversionIsKept() throws IOException {
+        aptPrefix();
+        String s = new File(bin, "termux-x11").getAbsolutePath();
+        String theirs = s + "\n" + s + ".mine\nsomebody\n";
+        assertTrue(diversions().getParentFile().isDirectory());
+        Files.write(diversions().toPath(), theirs.getBytes(StandardCharsets.UTF_8));
+        installer.install();
+        String p = new File(bin, "termux-x11-preference").getAbsolutePath();
+        assertEquals(theirs + p + "\n" + p + ".upstream\ntermux-launcher\n", text(diversions()));
+        installer.uninstall();
+        assertEquals(theirs, text(diversions()));
+    }
+
+    @Test public void aPacmanPrefixGetsNoDiversionFile() throws IOException {
+        aptPrefix();
+        File conf = new File(temp.getRoot(), "usr/etc/pacman.conf");
+        assertTrue(conf.getParentFile().mkdirs());
+        assertTrue(conf.createNewFile());
+        installer.install();
+        assertFalse(diversions().exists());
+    }
+
+    @Test public void uninstallRemovesOnlyOurEntries() throws IOException {
+        aptPrefix();
+        String other = "/x/y\n/x/y.z\nother\n";
+        Files.write(diversions().toPath(), other.getBytes(StandardCharsets.UTF_8));
+        installer.install();
+        installer.uninstall();
+        assertEquals(other, text(diversions()));
+    }
+
+    @Test public void aReplacedScriptWithTheMarkerPresentIsForeign() throws IOException {
+        installer.install();
+        Files.write(installer.serverScript().toPath(),
+            "#!/bin/sh\necho upstream\n".getBytes(StandardCharsets.UTF_8));
+        assertEquals(X11CliInstaller.Result.FOREIGN_COMMAND, installer.install());
+    }
 }
