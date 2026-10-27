@@ -109,6 +109,11 @@ public final class X11LinuxAppRunner {
          * The display may not be running yet; {@link #startDisplay} starts it.
          */
         void showDisplayWindow();
+        /**
+         * Bring the display window of {@code app} to the front if it has one open. Answers whether
+         * there was one; the tap then needs nothing started.
+         */
+        boolean raiseWindowFor(@NonNull LinuxAppCatalog.LinuxApp app);
         void showNotice(@NonNull String message);
         /**
          * Ask the user {@code message} — one plain sentence, already built — before a second
@@ -302,6 +307,9 @@ public final class X11LinuxAppRunner {
         // not running (ADR 0008).
         current.showDisplayWindow();
         if (current.isDisplayRunning()) {
+            // A second tap on an app that already has a window brings it forward; another copy
+            // would only be one more window to lose.
+            if (!app.session && current.raiseWindowFor(app)) return;
             launch(app, false);
             return;
         }

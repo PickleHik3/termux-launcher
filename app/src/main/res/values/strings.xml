@@ -485,6 +485,7 @@
     <string name="window_chip_home_float_minimised">Home float, minimised on page %1$d</string>
     <!-- What a screen reader says for the display window's chip: the app in front, then Display. -->
     <string name="display_window_spoken_label">%1$s, %2$s</string>
+    <string name="display_window_switch_to">Switch to %1$s</string>
     <string name="launcher_entry_new_window">New window</string>
     <string name="termux_x11_session_failed">This desktop could not be opened.</string>
     <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>

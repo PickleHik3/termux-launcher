@@ -186,6 +186,27 @@ public class X11LinuxAppRunnerSessionTest {
         assertEquals("it is simply started", 1, host.displayStarts);
     }
 
+    @Test public void aTapOnAnAppThatHasAWindowRaisesItAndStartsNothing() {
+        host.raise = true;
+        runner.run(app("mousepad"));
+        assertEquals(1, host.raiseAsked);
+        assertTrue("nothing was launched", host.scripts.isEmpty());
+        assertEquals("the display is brought into view", 1, host.shown);
+    }
+
+    @Test public void aTapOnAnAppWithoutAWindowAsksAndThenLaunches() {
+        host.raise = false;
+        runner.run(app("mousepad"));
+        assertEquals(1, host.raiseAsked);
+        assertEquals(0, host.displayStarts);
+    }
+
+    @Test public void aDesktopTapNeverAsksToRaise() {
+        host.raise = true;
+        runner.run(session("xfce", "Xfce Session", "startxfce4"));
+        assertEquals(0, host.raiseAsked);
+    }
+
     private void idle() {
         Shadows.shadowOf(Looper.getMainLooper())
             .idleFor(X11LinuxAppRunner.QUICK_FAIL_MS, TimeUnit.MILLISECONDS);
@@ -206,6 +227,12 @@ public class X11LinuxAppRunnerSessionTest {
         @Override public boolean isDisplayRunning() { return displayRunning; }
         @Override public void startDisplay() { displayStarts++; }
         @Override public void showDisplayWindow() { shown++; }
+        boolean raise;
+        int raiseAsked;
+        @Override public boolean raiseWindowFor(@NonNull LinuxAppCatalog.LinuxApp app) {
+            raiseAsked++;
+            return raise;
+        }
         @Override public void showNotice(@NonNull String message) { notices.add(message); }
 
         @Override public boolean runScript(@NonNull String script,

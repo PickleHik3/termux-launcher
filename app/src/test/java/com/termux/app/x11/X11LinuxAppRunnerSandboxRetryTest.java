@@ -203,6 +203,12 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         @Override public boolean isDisplayRunning() { return true; }
         @Override public void startDisplay() { }
         @Override public void showDisplayWindow() { }
+        boolean raise;
+        int raiseAsked;
+        @Override public boolean raiseWindowFor(@NonNull LinuxAppCatalog.LinuxApp app) {
+            raiseAsked++;
+            return raise;
+        }
         @Override public void showNotice(@NonNull String message) { notices.add(message); }
 
         @Override public boolean runScript(@NonNull String script,
