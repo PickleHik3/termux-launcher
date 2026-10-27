@@ -55,6 +55,10 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         services.addTickListener(tickListener);
         // A fresh cache is replayed synchronously through the listener; a stale one fetches.
         controller = services.acquireWeather(weatherListener);
+        // A stale forecast is not replayed (it fetches), and the fetch may be in flight for
+        // another view: a view made now, such as the second page layer of a swipe, would show
+        // the empty card until it lands. The controller keeps the last forecast, so show that.
+        if (latest == null && controller.cache().valid) onWeather(controller.cache());
         if (latest != null && fahrenheit() != shownFahrenheit) redraw();
     }
 

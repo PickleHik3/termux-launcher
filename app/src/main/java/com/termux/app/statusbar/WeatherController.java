@@ -164,6 +164,14 @@ public final class WeatherController {
      */
     private static final Map<String, Long> sUnknownPlaces = new ConcurrentHashMap<>();
 
+    /**
+     * The last forecast any controller fetched, and the place it is for. A controller made later
+     * (the Home widgets' own, made when the first Weather card appears, such as the second page
+     * layer of a swipe) starts from it instead of empty. Main thread only.
+     */
+    private static final Weather sLastValid = new Weather();
+    @Nullable private static String sLastValidPlace;
+
     private final Context mContext;
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     // Daemon thread so a controller left over from an activity recreation never keeps the process
@@ -218,6 +226,8 @@ public final class WeatherController {
                 }
                 if (result.valid) {
                     copyInto(mCache, result);
+                    copyInto(sLastValid, result);
+                    sLastValidPlace = mCachePlace;
                 }
                 publish(result.valid ? mCache : result);
             });
@@ -250,6 +260,9 @@ public final class WeatherController {
         if (key.equals(mCachePlace)) return;
         if (mCachePlace != null) copyInto(mCache, new Weather());
         mCachePlace = key;
+        if (!mCache.valid && sLastValid.valid && key.equals(sLastValidPlace)) {
+            copyInto(mCache, sLastValid);
+        }
     }
 
     @NonNull
