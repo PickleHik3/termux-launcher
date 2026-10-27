@@ -111,6 +111,19 @@ L\*), the ink polarity, and the Contrast level.
   accents) meet their floors at that ground, and a test asserts the derivation. For pong's
   palette at Default, the ceiling is about tone 40 (grey `#b3b2b9` at 3:1 needs ground ≤ tone
   40.6; the foreground at 4.5:1, ≤ 42.8).
+- **Glass floors (decided 2026-10-27, kitty parity):** on glass, normal accents hold
+  `glassAnsiRatio`: Softer 2.5, Default 3.0, Harder 4.5. The foreground keeps `bodyTarget`. Bright
+  accents keep `ansiRatio`. Grey keeps `dimRatio`, but may rise on glass up to `glassDimToneMax`
+  (Softer 60, Default 65, Harder 70), still clearly below the foreground. Red and blue stay capped by
+  the panel pair (wave 1), and the opaque terminal keeps today's floors. With the floor at 4.5,
+  bright wallpapers would come out nearly opaque (band top near tone 23 at Default).
+- **The ceiling is computed, not tabled:** for each pair, take the most extreme tone its ink may
+  reach on glass (recipe tone ± `toneReach`, the grey's `glassDimToneMax`, and for red and blue
+  the panel cap given white's top tone). The ceiling is the highest ground tone at which that ink
+  still meets its glass floor, and the band's ceiling is the lowest across all pairs. Pale ink
+  shown, dark ink mirrored. At Default over pong's palette: foreground 47.8, bright accents 42.9,
+  normal accents at 3:1 34.0, red and blue about 29. So the band top is about tone 29 against a
+  pane mean of 39.5.
 - **Width:** each level carries a kept lightness range `w`: Softer widest, Default about 14 tones,
   Harder narrowest.
 - **Mapping:** lightness is mapped linearly from [p2, p98] onto [c − w/2, c + w/2], where
