@@ -332,7 +332,8 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
   header moves between detents, touching a surface or a chip swaps the card at the current detent,
   and the page swipe swaps Home ⇄ Workspace cards. Back above peek collapses to peek; at peek it
   routes through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken
-  on entry.
+  on entry. The sheet and the editor bar carry elevation, so anything raised over the editor in
+  the same parent (the wallpaper picker) takes a Z above them; `bringToFront` alone draws under.
 - **A stored `-1` corner radius is the "follow the style" sentinel**, resolved in one place
   (`resolveAutoCornerRadiusDp`). Never set `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
   `DEFAULT_STATUS_BAR_CORNER_RADIUS` to a real number — the shipped default rides on

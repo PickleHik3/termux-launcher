@@ -1379,6 +1379,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #holdWallpaperParallax} and {@link #releaseWallpaperParallax}.
      */
     private boolean mWallpaperParallaxHeld;
+    /**
+     * The row's page count the offset was last spread over; 0 before the first sync. A window or
+     * Home page coming or going changes it, and the wallpaper then settles to the new spread
+     * instead of jumping, even when the change happens off screen.
+     */
+    private int mWallpaperParallaxRowCount;
     /** The settle after a hold lets go, on a page's spring; null while none runs. */
     @Nullable private android.animation.ValueAnimator mWallpaperParallaxSettle;
     /** The gap between the held and the live offset at the release, in px. */
@@ -4393,7 +4399,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * their own curve, and every surface that samples the frame is told to draw again when it
      * moved. Per frame of a slide, so nothing here allocates: one number written, and
      * invalidates. A Home page or a window coming or going re-spreads the picture over the new
-     * count at once: the pan snaps to it rather than animating.
+     * count, and the picture settles there on a page's spring ({@link #settleWallpaperParallax}):
+     * a window opened behind the one in view used to jump the wallpaper under it.
      */
     private void syncWallpaperParallax() {
         syncWallpaperParallax(false);
@@ -4405,8 +4412,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *                     a second time here
      */
     private void syncWallpaperParallax(boolean pagesReaimed) {
+        int rowCount = mPaneWallController == null ? 0 : mPaneWallController.rowCount();
+        boolean recounted = mWallpaperParallaxRowCount > 0 && rowCount != mWallpaperParallaxRowCount;
+        mWallpaperParallaxRowCount = rowCount;
         // Held by Edit pages: every surface keeps sampling the one offset until it lets go.
         if (mWallpaperParallaxHeld) return;
+        if (recounted) {
+            settleWallpaperParallax();
+            return;
+        }
         int sparePx = mWallpaperParallaxSparePx;
         float offsetPx = liveWallpaperParallaxPx(sparePx);
         if (mWallpaperParallaxSettle != null) {
@@ -4471,6 +4485,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void releaseWallpaperParallax() {
         if (!mWallpaperParallaxHeld) return;
         mWallpaperParallaxHeld = false;
+        settleWallpaperParallax();
+    }
+
+    /**
+     * Settles the wallpaper from where it stands now to where the wall's live position puts it,
+     * on a page's spring over the distance the wall would have slid for the gap
+     * ({@link com.termux.app.wall.WallParallax#settleTravelPx}). A settle already running is
+     * replaced, starting from where it had got to. Reduce motion, or nothing to travel, lands it
+     * at once.
+     */
+    private void settleWallpaperParallax() {
+        android.animation.ValueAnimator running = mWallpaperParallaxSettle;
+        mWallpaperParallaxSettle = null;
+        if (running != null) running.cancel();
         int sparePx = mWallpaperParallaxSparePx;
         float gapPx = mWallpaperParallax.offsetPx() - liveWallpaperParallaxPx(sparePx);
         View decor = getWindow() == null ? null : getWindow().getDecorView();

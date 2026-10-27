@@ -121,6 +121,16 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
 
 ## Device quirks
 
+- The X server needs `xkeyboard-config`, which lives in x11-repo: `apt install -y x11-repo && apt
+  update && apt install -y xkeyboard-config` through `ad runas`. Then `nohup termux-x11 :0 -ac &`
+  (with `XDG_RUNTIME_DIR=$PREFIX/tmp`) opens the Display window behind the one in view.
+  `launcherctl launch Display` answers 500.
+- Windows opened with `launcherctl window open` from one `ad runas` call cannot be closed from
+  another (`not_owned`); they pile up across checks until the app is cleared.
+- Wallpaper pan: a picture one screen wide cannot pan, so a parallax check needs a wider one
+  (`launcherctl wallpaper set` with a 2160 px wide PNG). `ad record` on the emulator keeps only a
+  handful of frames, too few to see a settle; log the offset instead.
+
 - The emulator renders on the CPU: judge looks there, never motion or frame time.
 - Injected swipes release with zero velocity; read the end state, not the fling.
 - `ad ui` does not see dialog windows; screenshot and tap coordinates.

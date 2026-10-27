@@ -76,8 +76,8 @@ picture's left edge) to the row's last page, its last window (its right edge) â€
 counts where it stands in the row, as any window does â€”
 and pans continuously with Home's swipe, through the seam, with the border drag between windows and
 with a window's arrival from the window bar (over every window it jumps). A Home page or a window
-added or removed re-spreads the picture at once: the pan snaps to the new step rather than
-animating. Gated as before (portrait, the launcher drawing a managed wallpaper itself, the switch on,
+added or removed re-spreads the picture, and it settles to the new step on the page spring, also
+when the window comes or goes behind the one in view (a script starting the display). Gated as before (portrait, the launcher drawing a managed wallpaper itself, the switch on,
 animations on). A forward swipe on the last Home page crosses the seam to the first
 window. When the Workspace has none it crosses all the same: the empty Workspace comes in under the
 finger and, once the release commits to it, a fresh shell opens as window 1 (a swipe that springs

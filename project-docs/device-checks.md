@@ -553,3 +553,7 @@ Agent
 - 2026-10-27 · 9295241b2 · Full screen on, keyboard up: the keyboard's bottom corners follow the screen's curve once its bottom is within the corner band; above that its own radius; change the chin with the keyboard up and the curve follows on the same frame · pong.
 - 2026-10-27 · 2ddd83270 · Full screen on, status row hidden: the first terminal row sits below the camera with no reflow jump, taps land on the right cell, the glass still reaches the top; Full screen off restores everything · pong.
 - 2026-10-27 · c6cc6312f · Full screen on, window bar at the top: its chips step in from the corners; chips under the camera itself are not yet avoided (next drop) · pong.
+
+## Wallpaper picker and background windows (2026-10-27)
+- 2026-10-27 · ed7eaecc1 · Appearance editor, Global card at half and at peek › Change wallpaper: the picker covers the card sheet and the editor bar; Choose photo opens the photo picker; Back puts the picker down and the sheet is back · emu (passed), pong.
+- 2026-10-27 · c387378fc · Workspace in front, a wide managed wallpaper with parallax on: a window opened or closed in the background (`launcherctl window open --no-focus`, or `termux-x11 :0` from a script) glides the wallpaper to its new place on the page spring, never a jump; Reduce motion lands it at once; Home ⇄ Workspace still pans · emu (offsets logged, passed), pong (look at the glide).
