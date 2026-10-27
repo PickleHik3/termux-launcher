@@ -372,6 +372,7 @@
     <string name="distro_setup_offer">Get GUI apps</string>
     <string name="settings_gui_apps_title">Set up Linux apps</string>
     <string name="settings_gui_apps_row_summary">Not set up yet</string>
+    <string name="settings_gui_apps_row_summary_copied">Command copied. Run it in a terminal</string>
     <string name="settings_gui_apps_row_summary_nix">Add apps with nix</string>
     <string name="settings_gui_apps_row_with_both">%1$s with a browser and a file manager</string>
     <string name="settings_gui_apps_row_with_browser">%1$s with a browser</string>

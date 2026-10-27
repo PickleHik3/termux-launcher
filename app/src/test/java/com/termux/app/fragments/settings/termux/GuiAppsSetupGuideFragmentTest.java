@@ -2,6 +2,8 @@ package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
+import org.junit.After;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -90,13 +92,47 @@ public class GuiAppsSetupGuideFragmentTest {
         assertEquals(5, progress(root).getChildCount());
     }
 
+    @After public void restoreMarkerChecks() {
+        GuiAppsSetupGuide.markerPresent = GuiAppsSetupGuide.MARKER_ON_DISK;
+        GuiAppsSetupGuide.rootfsInstalled = GuiAppsSetupGuide.ROOTFS_ON_DISK;
+        GuiAppsSetupGuide.fcitx5Installed = GuiAppsSetupGuide.FCITX5_ON_DISK;
+    }
+
+    @Test public void aCopiedCommandWithNoRootfsIsNotMigrated() {
+        SharedPreferences prefs = prefs();
+        prefs.edit().putBoolean(GuiAppsSetupGuide.KEY_COPIED, true)
+            .putString(GuiAppsSetupGuide.KEY_ROUTE, "distro").commit();
+        GuiAppsSetupGuide.markerPresent = () -> false;
+        GuiAppsSetupGuide.fcitx5Installed = () -> true;
+        GuiAppsSetupGuide.rootfsInstalled = d -> false;
+        assertFalse(GuiAppsSetupGuide.finished(prefs, TourEdition.TERMUX));
+    }
+
     @Test public void theSummaryNamesWhatWasSetUp() {
         Context context = themed(1f);
         SharedPreferences prefs = prefs();
+        GuiAppsSetupGuide.markerPresent = () -> false;
         assertEquals("Not set up yet",
             GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
         prefs.edit().putBoolean(GuiAppsSetupGuide.KEY_COPIED, true)
             .putString(GuiAppsSetupGuide.KEY_ROUTE, "distro").commit();
+        GuiAppsSetupGuide.markerPresent = () -> false;
+        GuiAppsSetupGuide.fcitx5Installed = () -> false;
+        try {
+            assertEquals("Command copied. Run it in a terminal",
+                GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
+            assertFalse(GuiAppsSetupGuide.isSetUp(context));
+            GuiAppsSetupGuide.markerPresent = () -> true;
+            GuiAppsSetupGuide.fcitx5Installed = () -> true;
+            assertTrue(GuiAppsSetupGuide.isSetUp(context));
+            GuiAppsSetupGuide.fcitx5Installed = () -> false;
+            assertFalse(GuiAppsSetupGuide.isSetUp(context));
+        } finally {
+            GuiAppsSetupGuide.fcitx5Installed = GuiAppsSetupGuide.FCITX5_ON_DISK;
+        }
+        assertEquals("Debian with a browser and a file manager",
+            GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
+        GuiAppsSetupGuide.markerPresent = () -> true;
         assertEquals("Debian with a browser and a file manager",
             GuiAppsSetupGuide.rowSummary(context, prefs, TourEdition.TERMUX));
         prefs.edit().putBoolean("gui_apps_starter_browser", false).commit();
