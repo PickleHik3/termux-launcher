@@ -56,4 +56,12 @@ public class PlaceKeyboardTest {
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(WINDOW, false));
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(PaneWallPage.DISPLAY, true));
     }
+
+    @Test
+    public void tapOnHomeTerminalWidgetReclaimsOnlyFromStaleExternalInput() {
+        assertTrue(PlaceKeyboard.tapReclaimsFromExternalInput(true, true));
+        assertFalse(PlaceKeyboard.tapReclaimsFromExternalInput(true, false));
+        assertFalse(PlaceKeyboard.tapReclaimsFromExternalInput(false, true));
+        assertFalse(PlaceKeyboard.tapReclaimsFromExternalInput(false, false));
+    }
 }
