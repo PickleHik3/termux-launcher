@@ -180,12 +180,6 @@ public final class WallPages {
         this.homeIsDisplayWindow = homeIsDisplayWindow;
     }
 
-    /** [Home 1..n][Terminal] with n Home pages (ids 1..n, the Terminal n + 1): the wall as it is today. */
-    @NonNull
-    public static WallPages seed(int homeCount) {
-        return WallPagesMigration.seed("home", 0, "home", homeCount);
-    }
-
     // ---- state ----------------------------------------------------------------------------
 
     /** The pages on the wall, in order, without those pending removal. */

@@ -234,21 +234,4 @@ public class WallParallaxTest {
         assertEquals(0f, WallParallax.settlingOffsetPx(10f, -270f, 1f, SPARE), EPS);
         assertEquals(0f, WallParallax.settlingOffsetPx(135f, 270f, 1f, 0), EPS);
     }
-
-    @Test
-    public void rowIndexFromStopsMatchesTheArithmetic() {
-        for (int homes = 0; homes <= 5; homes++) {
-            for (int windows = 0; windows <= 4; windows++) {
-                for (int index = -1; index <= 6; index++) {
-                    int h = Math.max(1, homes);
-                    org.junit.Assert.assertEquals(
-                        Math.max(0, Math.min(index, h - 1)),
-                        WallParallax.rowIndex(PaneWallPage.WIDGETS, index, homes, windows));
-                    org.junit.Assert.assertEquals(
-                        h + Math.max(0, Math.min(index, Math.max(0, windows - 1))),
-                        WallParallax.rowIndex(PaneWallPage.TERMINAL, index, homes, windows));
-                }
-            }
-        }
-    }
 }

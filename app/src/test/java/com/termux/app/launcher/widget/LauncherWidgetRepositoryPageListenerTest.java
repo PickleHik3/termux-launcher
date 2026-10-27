@@ -39,7 +39,7 @@ public class LauncherWidgetRepositoryPageListenerTest {
     @Before public void setUp() {
         repository = new LauncherWidgetRepository(new WidgetTestFixtures.Memory());
         store = new WallPagesStore(new WallPagesStore.MemoryStorage());
-        store.replace(WallPages.seed(repository.pageCount()));
+        store.replace(com.termux.app.wall.WallPagesMigration.seed("home", 0, "home", repository.pageCount()));
         store.addListener(new WallPagesStore.Listener() {
             @Override public void onChanged(WallPages pages) {}
             @Override public void onRemoved(WallPages.Page page) { removed.add(page.id); }
