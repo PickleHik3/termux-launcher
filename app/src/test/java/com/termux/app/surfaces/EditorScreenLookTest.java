@@ -16,6 +16,7 @@ import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
@@ -165,12 +166,12 @@ public class EditorScreenLookTest {
             SurfacePresets.wornOn(preferences, preset("solid"), WallHalf.WORKSPACE));
         assertEquals(TERMUX_APP.SURFACE_MATERIAL_SOLID,
             preferences.getSurfaceMaterial(WallHalf.WORKSPACE));
-        assertEquals(92,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
-        assertEquals(0,
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
-        assertEquals(0,
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE));
+        assertEquals(92, preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE));
+        assertEquals(0, preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
+            WallHalf.WORKSPACE));
+        assertEquals(0, preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
+            WallHalf.WORKSPACE));
     }
 
     private Map<SurfaceProperty, Integer> homeBase() {
