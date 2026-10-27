@@ -414,4 +414,44 @@ public class WallPagesTest {
         assertEquals(1, ok(WallPagesMigration.seed("workspace", 1, "home", 3)
             .chooseStartIn("home")).home().id);
     }
+
+    @Test
+    public void withHomeCountAppendsAndDropsAtTheEnd() {
+        WallPages p = three();
+        assertSame(p, p.withHomeCount(2));
+        WallPages more = p.withHomeCount(4);
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 5, 3), ids(more));
+        assertEquals(6, more.nextId());
+        WallPages fewer = more.withHomeCount(1);
+        assertEquals(java.util.Arrays.asList(1, 3), ids(fewer));
+        assertEquals(1, fewer.homeCount());
+        assertEquals(java.util.Arrays.asList(1, 3), ids(p.withHomeCount(0)));
+    }
+
+    @Test
+    public void withHomeCountHandsHomeOverWhenTheHomePageIsDropped() {
+        WallPages p = ok(three().setHome(2)).withHomeCount(1);
+        assertEquals(1, p.home().id);
+    }
+
+    @Test
+    public void withHomeCountCountsDetachedHomesUnderTerminalOnly() {
+        WallPages t = ok(three().detachHomes());
+        assertEquals(2, t.homeCount());
+        WallPages more = t.withHomeCount(3);
+        assertEquals(java.util.Arrays.asList(3), ids(more));
+        assertEquals(3, more.detached().size());
+        assertEquals(1, t.withHomeCount(1).detached().size());
+    }
+
+    @Test
+    public void withHomeMappingReordersAndDropsLikeTheRepository() {
+        WallPages p = three().withHomeCount(3); // Homes 1 2 4, Terminal 3
+        WallPages moved = p.withHomeMapping(new int[] {2, 0, 1}); // page 0 to the end
+        assertEquals(java.util.Arrays.asList(2, 4, 1, 3), ids(moved));
+        WallPages removed = p.withHomeMapping(new int[] {0, -1, 1});
+        assertEquals(java.util.Arrays.asList(1, 4, 3), ids(removed));
+        assertSame(p, p.withHomeMapping(new int[] {0, 1}));
+        assertEquals(java.util.Arrays.asList(1, 3), ids(three().withHomeMapping(new int[] {-1, -1})));
+    }
 }

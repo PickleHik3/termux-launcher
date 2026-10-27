@@ -567,6 +567,113 @@ public final class WallPages {
         return new Result(next, ChangeType.HOMES_ATTACHED, null, null, -1, -1);
     }
 
+    // ---- keeping the Home pages in step with the widget repository -------------------------
+
+    /**
+     * The Home pages this value counts for the repository: those on the wall, or, under Terminal
+     * only where every one is set aside, the detached ones.
+     */
+    private boolean countsDetached() {
+        return homePages().isEmpty() && !detachedHomes().isEmpty();
+    }
+
+    private List<Page> detachedHomes() {
+        List<Page> out = new ArrayList<>();
+        for (Page p : detached) if (p.kind == PageKind.HOME) out.add(p);
+        return out;
+    }
+
+    /** How many Home pages the repository would hold for this value. */
+    public int homeCount() {
+        return countsDetached() ? detachedHomes().size() : homePages().size();
+    }
+
+    /**
+     * The same pages with exactly {@code count} Home pages (at least 1): missing ones are added
+     * after the last Home page, extra ones dropped from the end. A dropped home page hands home to
+     * the first page. Pure; what the start-up guard and the repository's page changes apply.
+     */
+    @NonNull
+    public WallPages withHomeCount(int count) {
+        int want = Math.max(1, count);
+        boolean inDetached = countsDetached();
+        List<Page> homes = inDetached ? detachedHomes() : homePages();
+        if (homes.size() == want) return this;
+        List<Page> list = new ArrayList<>(all);
+        List<Page> kept = new ArrayList<>(detached);
+        int next = nextId;
+        if (homes.size() < want) {
+            List<Page> target = inDetached ? kept : list;
+            int at = target.size();
+            if (!homes.isEmpty()) at = target.indexOf(homes.get(homes.size() - 1)) + 1;
+            else if (!inDetached) {
+                for (int i = 0; i < list.size(); i++) {
+                    if (list.get(i).kind == PageKind.TERMINAL) { at = i; break; }
+                }
+            }
+            for (int i = homes.size(); i < want; i++) {
+                target.add(at++, new Page(next++, PageKind.HOME, null, null));
+            }
+            return new WallPages(list, pending, kept, homeId, next, homeIsDisplayWindow,
+                lastHomePageId, homeParked);
+        }
+        List<Page> dropped = homes.subList(want, homes.size());
+        (inDetached ? kept : list).removeAll(dropped);
+        return afterDrop(list, kept, dropped);
+    }
+
+    /**
+     * The Home pages after the repository renumbered its pages: {@code mapping[i]} is where its
+     * page i stands now, or {@link #END} (-1) when it is gone. Gone pages are dropped (never the
+     * last Home page), the others take their new order. Pure.
+     */
+    @NonNull
+    public WallPages withHomeMapping(@NonNull int[] mapping) {
+        boolean inDetached = countsDetached();
+        List<Page> homes = inDetached ? detachedHomes() : homePages();
+        if (mapping.length != homes.size()) return this;
+        List<Page> survivors = new ArrayList<>();
+        List<Page> dropped = new ArrayList<>();
+        Page[] byNew = new Page[mapping.length];
+        int live = 0;
+        for (int i = 0; i < mapping.length; i++) if (mapping[i] >= 0) live++;
+        for (int i = 0; i < mapping.length; i++) {
+            int to = mapping[i];
+            if (to >= 0 && to < byNew.length && byNew[to] == null && live > 0) byNew[to] = homes.get(i);
+            else dropped.add(homes.get(i));
+        }
+        for (Page p : byNew) if (p != null) survivors.add(p);
+        if (survivors.isEmpty()) {
+            survivors.add(homes.get(0));
+            dropped.remove(homes.get(0));
+        }
+        List<Page> source = new ArrayList<>(inDetached ? detached : all);
+        List<Page> result = new ArrayList<>(source.size());
+        int fill = 0;
+        for (Page p : source) {
+            if (!homes.contains(p)) result.add(p);
+            else if (fill < survivors.size()) result.add(survivors.get(fill++));
+        }
+        List<Page> list = inDetached ? new ArrayList<>(all) : result;
+        List<Page> kept = inDetached ? result : new ArrayList<>(detached);
+        return afterDrop(list, kept, dropped);
+    }
+
+    private WallPages afterDrop(List<Page> list, List<Page> kept, List<Page> dropped) {
+        List<Integer> marked = new ArrayList<>(pending);
+        int home = homeId;
+        for (Page d : dropped) if (d.id == homeId && !homeIsDisplayWindow) {
+            home = firstVisible(list, marked);
+        }
+        return new WallPages(list, marked, kept, home, nextId, homeIsDisplayWindow,
+            lastHomePageId, homeParked);
+    }
+
+    private static int firstVisible(List<Page> list, List<Integer> marked) {
+        for (Page p : list) if (!marked.contains(p.id)) return p.id;
+        return 0;
+    }
+
     // ---- internals ------------------------------------------------------------------------
 
     private Result replace(Page old, Page now, ChangeType type) {

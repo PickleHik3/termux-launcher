@@ -27142,6 +27142,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mWallPagesStore.current();
     }
 
+    /**
+     * The widget repository's pages and the wall's Home pages are one list: the repository tells
+     * every change of its page numbers (Edit pages, a drop's fresh page, an undo, a trim) and the
+     * wall's pages follow, and at start the wall's count is held to the repository's.
+     */
+    private void followWidgetPagesInWallPages() {
+        final com.termux.app.launcher.widget.LauncherWidgetRepository repository =
+            mWidgetHostController.repository();
+        // Terminal only sets the Home pages aside; the repository keeps them either way.
+        final int count = repository.pageCount();
+        int held = wallPages().homeCount();
+        if (held != count) {
+            // Grow only: a layout for another orientation can hold fewer pages, and the pages it
+            // lacks come back with it. Pages are dropped only by a removal, a move or a trim.
+            Logger.logWarn("WallPages", "Home pages " + held + " in the wall, " + count
+                + " in the widget repository" + (held < count ? ": adding the missing ones"
+                : ": keeping the wall's"));
+            if (held < count) mWallPagesStore.transform(pages -> pages.withHomeCount(count));
+        }
+        repository.setPageListener((oldCount, newCount, mapping) -> {
+            boolean mapped = mapping != null && mapping.length == wallPages().homeCount();
+            if (mapped) mWallPagesStore.transform(pages -> pages.withHomeMapping(mapping));
+            // Without a mapping (an orientation's layout, a drop's page) the pages only grow.
+            if (mapped || newCount > wallPages().homeCount()) {
+                mWallPagesStore.transform(pages -> pages.withHomeCount(newCount));
+            }
+        });
+    }
+
     /** Runs an edit of the wall's pages through the store (saved, announced). */
     private void editWallPages(@NonNull com.termux.app.wall.WallPagesStore.Edit edit) {
         mWallPagesStore.edit(edit);
@@ -27281,24 +27310,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // the widget repository's. Removal is final at once: the undo window comes later.
                 @Override public void movePage(int from, int to) {
                     if (mWidgetPaneController == null) return;
-                    if (!mWidgetPaneController.movePage(from, to)) return;
-                    editWallPages(pages -> pages.moveHomePage(from, to));
+                    mWidgetPaneController.movePage(from, to);
                 }
                 @Override public void removePage(int page) {
                     if (mWidgetPaneController == null) return;
-                    if (!mWidgetPaneController.removePage(page)) return;
-                    com.termux.app.wall.WallPages.Page gone =
-                        wallPages().homePages().size() > page && page >= 0
-                            ? wallPages().homePages().get(page) : null;
-                    editWallPages(pages -> pages.removeHomePage(page));
-                    if (gone != null) mWallPagesStore.commitRemoval(gone.id);
+                    mWidgetPaneController.removePage(page);
                 }
                 @Override public void addPage() {
                     if (mWidgetPaneController == null) return;
-                    // The repository appends after the last page, so the wall's pages do too.
-                    if (mWidgetPaneController.addPage() >= 0) {
-                        editWallPages(pages -> pages.addHomePage(-1));
-                    }
+                    mWidgetPaneController.addPage();
                 }
                 @Override public void chooseHome(
                         @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
@@ -28711,6 +28731,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)
             || mWidgetHostController == null) return;
+        followWidgetPagesInWallPages();
         mWidgetPaneController = new com.termux.app.launcher.widget.WidgetPaneController(
             (com.termux.app.launcher.widget.WidgetPaneView) view, mWidgetHostController,
             new com.termux.app.launcher.widget.WidgetPaneController.Host() {
