@@ -182,6 +182,23 @@ public final class LauncherSound {
         }
     }
 
+    /**
+     * A distro may have appeared since the server started (a {@code proot-distro install} in a
+     * shell): give every installed one its drop-in and the cookie's copy. Cheap when nothing is
+     * missing — the writes are idempotent — so a resume can ask every time. Any thread.
+     */
+    public void onContainersMaybeChanged() {
+        worker.execute(() -> {
+            try {
+                if (!soundEnabled() || status != Status.RUNNING) return;
+                if (Boolean.TRUE.equals(userSetup)) return;
+                refreshDistros();
+            } catch (RuntimeException e) {
+                Logger.logWarn(LOG_TAG, "No sound drop-ins for new distros: " + e.getMessage());
+            }
+        });
+    }
+
     /** One of the two switches changed. Any thread. */
     public void onSettingsChanged() {
         worker.execute(this::ensureRunning);

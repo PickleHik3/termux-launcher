@@ -2588,6 +2588,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState)
             return;
         reopenAppearanceAfterRelaunch();
+        // A distro installed in a shell while we were away still needs its sound drop-in.
+        if (com.termux.BuildConfig.X11_SERVER) {
+            com.termux.app.sound.LauncherSound.get(this).onContainersMaybeChanged();
+        }
         // A return hold opened by the stop starts watching for the layout to settle; it is let
         // go once focus has come too (onWindowFocusChanged) and the size has stopped moving.
         if (mReturnHold.isActive()) {
