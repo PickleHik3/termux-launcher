@@ -350,4 +350,86 @@ public class PaneGlassBackdropViewTest {
         assertEquals(layout[0], after[0]);
         assertEquals(layout[1], after[1]);
     }
+
+    /** A style that answers the veil per rect and counts its questions. */
+    private static final class CountingSource implements PaneSurfaceStyle {
+        final Rect bandRect;
+        final ColorMatrix matrix = new ColorMatrix(new float[] {
+            0.5f, 0, 0, 0, 20, 0, 0.5f, 0, 0, 20, 0, 0, 0.5f, 0, 20, 0, 0, 0, 1, 0});
+        int veilAsks;
+        final java.util.Set<Rect> rects = new java.util.HashSet<>();
+        CountingSource(Rect bandRect) { this.bandRect = bandRect; }
+        @Override public int paneGlassVeil(Rect rootRect) {
+            veilAsks++;
+            rects.add(new Rect(rootRect));
+            return 0;
+        }
+        @Override public ColorMatrix paneGlassEvenOut(Rect rootRect) {
+            return rootRect.equals(bandRect) ? matrix : null;
+        }
+        @Override public boolean isPaneGlassActive() { return true; }
+        @Override public Bitmap paneGlassBlurFrame() { return null; }
+        @Override public Rect paneGlassBlurFrameRect() { return new Rect(); }
+        @Override public ColorFilter paneGlassFrostFilter() { return null; }
+        @Override public int paneGlassTintColor() { return 0; }
+        @Override public Drawable paneGlassGrainLayer() { return null; }
+        @Override public int paneGlassGrainStrength() { return 0; }
+        @Override public float paneGlassCornerRadiusPx() { return 0f; }
+        @Override public int paneGapDp() { return 0; }
+    }
+
+    private static PaneGlassBackdropView slab(Activity activity, FrameLayout paneFrame,
+                                              CountingSource source) {
+        FrameLayout root = new FrameLayout(activity);
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        paneFrame.addView(backdrop);
+        root.addView(paneFrame);
+        activity.setContentView(root);
+        root.measure(0, 0);
+        root.layout(0, 0, 1080, 2000);
+        backdrop.setVeilSource(source);   // dressed before it is laid out, as a switched-to slab is
+        paneFrame.layout(40, 100, 1040, 1900);
+        backdrop.layout(0, 0, 1000, 1800);
+        return backdrop;
+    }
+
+    @Test
+    public void aSlabLaidOutWearsItsRectsEvenOutBeforeItsFirstDraw() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CountingSource source = new CountingSource(new Rect(40, 100, 1040, 1900));
+        PaneGlassBackdropView backdrop = slab(activity, new FrameLayout(activity), source);
+        assertTrue("the matrix is on the frame paint with no draw yet",
+            backdrop.frameFilterForTest() != null);
+    }
+
+    @Test
+    public void aSlideDoesNotAskForANewRectPerPosition() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CountingSource source = new CountingSource(new Rect(40, 100, 1040, 1900));
+        FrameLayout paneFrame = new FrameLayout(activity);
+        PaneGlassBackdropView backdrop = slab(activity, paneFrame, source);
+        int asksAtRest = source.veilAsks;
+        for (int i = 1; i <= 8; i++) {
+            com.termux.app.chrome.GlassAnchor.setMotion(paneFrame, 120f * i, 0f);
+            paneFrame.setTranslationX(120f * i);
+            backdrop.draw(new android.graphics.Canvas(
+                Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)));
+        }
+        assertEquals("no new rect asked while it slid", 1, source.rects.size());
+        assertEquals("no question at all while it slid", asksAtRest, source.veilAsks);
+        assertTrue("still wearing the resting rect's matrix", backdrop.frameFilterForTest() != null);
+    }
+
+    /**
+     * The window-switch card draws the slab on a software canvas, which cannot run the refraction
+     * program: the frame must then be drawn plain, not left out (the departing pane showed bare
+     * wallpaper under its text). A hardware canvas keeps the program; no program is the plain draw.
+     */
+    @Test
+    public void aSoftwareCanvasDrawsARefractingSlabPlainNotNothing() {
+        assertTrue(PaneGlassBackdropView.drawsPlainOnSoftware(true, false));
+        assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(true, true));
+        assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, false));
+        assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, true));
+    }
 }

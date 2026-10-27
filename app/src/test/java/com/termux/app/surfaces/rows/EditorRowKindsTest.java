@@ -216,7 +216,7 @@ public class EditorRowKindsTest {
     }
 
     @Test
-    public void aSwipeThatStartsOnAStripScrollsTheCardAndARestTakesTheStrip() {
+    public void aSwipeOnAStripTrackTakesTheStripAndOffTheTrackItScrollsTheCard() {
         Fixture f = new Fixture(1f);
         List<String> heard = new ArrayList<>();
         StripRow row = StripRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
@@ -234,21 +234,35 @@ public class EditorRowKindsTest {
             ViewGroup.LayoutParams.WRAP_CONTENT));
         f.layOut(scroll);
         StripRow.Column frost = row.columns.get(0);
-        float x = frost.slider.getWidth() / 2f;
+        float x = frost.slider.trackCentreX();
         float handleY = frost.slider.getHeight() * 0.8f;
 
-        // A quick swipe from the handle: the card's scroll, the value untouched.
+        // A quick swipe on the track (decided 2026-10-27): the strip's at once, its value moves.
         long down = SystemClock.uptimeMillis();
         assertTrue(frost.slider.dispatchTouchEvent(event(down, down, MotionEvent.ACTION_DOWN, x,
             handleY)));
+        assertTrue("a touch on the track takes the strip", frost.isDragging());
         frost.slider.dispatchTouchEvent(event(down, down + 16, MotionEvent.ACTION_MOVE, x,
             handleY - f.dp(40)));
         frost.slider.dispatchTouchEvent(event(down, down + 32, MotionEvent.ACTION_UP, x,
-            handleY - f.dp(60)));
-        ShadowLooper.idleMainLooper(200, TimeUnit.MILLISECONDS);
-        assertFalse(frost.isDragging());
-        assertTrue("a swipe changes nothing: " + heard, heard.isEmpty());
-        assertEquals(20f, frost.slider.getValue(), 0f);
+            handleY - f.dp(40)));
+        assertTrue("the value followed the finger: " + heard, heard.contains("up 0"));
+        heard.clear();
+
+        // Off the track's band the card keeps the swipe, as before.
+        float off = 1f;
+        float pad = com.termux.app.surfaces.LegendSlider.TRACK_TOUCH_PAD_DP * f.themed.getResources().getDisplayMetrics().density;
+        if (Math.abs(off - x) > pad + f.dp(8)) {
+            long side = SystemClock.uptimeMillis();
+            frost.slider.dispatchTouchEvent(event(side, side, MotionEvent.ACTION_DOWN, off, handleY));
+            frost.slider.dispatchTouchEvent(event(side, side + 16, MotionEvent.ACTION_MOVE, off,
+                handleY - f.dp(40)));
+            frost.slider.dispatchTouchEvent(event(side, side + 32, MotionEvent.ACTION_UP, off,
+                handleY - f.dp(60)));
+            ShadowLooper.idleMainLooper(200, TimeUnit.MILLISECONDS);
+            assertFalse(frost.isDragging());
+            assertTrue("a swipe off the track changes nothing: " + heard, heard.isEmpty());
+        }
 
         // A rest, then a drag: the strip's, its name beside the track while it drags.
         long next = SystemClock.uptimeMillis();
