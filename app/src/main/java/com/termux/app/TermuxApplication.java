@@ -104,6 +104,13 @@ public class TermuxApplication extends Application {
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
             // An install from before the wall rework takes Start in from its usage mode, once.
             WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
+            // The wall's pages are seeded from Start in, the default Home page, Use as and the
+            // widget repository's page count, once; the count is read before anything changes it.
+            com.termux.app.wall.WallPagesMigration.migrateIfNeeded(
+                surfacePreferences.getSharedPreferences(),
+                () -> com.termux.app.launcher.widget.LauncherWidgetRepository.create(context)
+                    .pageCount(),
+                com.termux.app.wall.WallPagesStore.open(context));
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
