@@ -357,7 +357,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getAppLauncherDockCornerRadius() {
         int value = resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS,
-            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS, TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS);
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS, TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS, WallHalf.WORKSPACE);
         if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
         return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value);
     }
@@ -434,11 +434,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false);
     }
 
-    public int getStatusBarBlurRadius() {
-        return getStatusBarBlurRadius(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getStatusBarBlurRadius()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getStatusBarBlurRadius} answers on one half of the wall (ADR 0013). */
     public int getStatusBarBlurRadius(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
             TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS, half), 0, 48);
@@ -449,11 +445,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, DataUtils.clamp(value, 0, 48));
     }
 
-    public int getStatusBarOpacity() {
-        return getStatusBarOpacity(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getStatusBarOpacity()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getStatusBarOpacity} answers on one half of the wall (ADR 0013). */
     public int getStatusBarOpacity(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
             TERMUX_APP.KEY_STATUS_BAR_OPACITY, TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY, half), 0, 100);
@@ -464,11 +456,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_STATUS_BAR_OPACITY, DataUtils.clamp(value, 0, 100));
     }
 
-    public int getStatusBarTintStrength() {
-        return getStatusBarTintStrength(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getStatusBarTintStrength()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getStatusBarTintStrength} answers on one half of the wall (ADR 0013). */
     public int getStatusBarTintStrength(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
             TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, half), 0, 100);
@@ -482,7 +470,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** How much accent colour the terminal's glass mixes in, percent. */
     public int getTerminalTintStrength() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT,
-            TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+            TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, WallHalf.WORKSPACE), 0, 100);
     }
 
     public void setTerminalTintStrength(int value) {
@@ -490,12 +478,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
     }
 
-    /** How much accent colour the keyboard's glass mixes in, percent. */
-    public int getInAppKeyboardTintStrength() {
-        return getInAppKeyboardTintStrength(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getInAppKeyboardTintStrength()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getInAppKeyboardTintStrength} answers on one half of the wall (ADR 0013). */
     public int getInAppKeyboardTintStrength(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, half),
@@ -507,12 +490,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
     }
 
-    /** How much accent colour the dock's glass mixes in, percent. */
-    public int getDockTintStrength() {
-        return getDockTintStrength(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getDockTintStrength()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getDockTintStrength} answers on one half of the wall (ADR 0013). */
     public int getDockTintStrength(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT,
             TERMUX_APP.KEY_DOCK_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, half), 0, 100);
@@ -523,11 +501,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_DOCK_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
     }
 
-    public int getStatusBarGrain() {
-        return getStatusBarGrain(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getStatusBarGrain()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getStatusBarGrain} answers on one half of the wall (ADR 0013). */
     public int getStatusBarGrain(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
             TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN, half), 0, 100);
@@ -540,7 +514,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getStatusBarCornerRadius() {
         int value = resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.CORNER_RADIUS,
-            TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS);
+            TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS, WallHalf.WORKSPACE);
         return value < 0 ? TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS
             : Math.min(TERMUX_APP.MAX_STATUS_BAR_CORNER_RADIUS, value);
     }
@@ -589,7 +563,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         // The 48dp ceiling is the terminal's own; a larger inherited Base narrows here rather than
         // leaking a value the pane cannot render.
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS), 0, 48);
+            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS, WallHalf.WORKSPACE), 0, 48);
     }
 
     public void setTerminalGlassBlurRadius(int value) {
@@ -600,7 +574,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** Film-grain strength (percent) of the terminal's bordered glass pane; 0 disables. */
     public int getTerminalGlassGrain() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,
-            TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN), 0, 100);
+            TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN, WallHalf.WORKSPACE), 0, 100);
     }
 
     public void setTerminalGlassGrain(int value) {
@@ -666,7 +640,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getDockHorizontalInset() {
         return clampSurfaceHorizontalInset(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP,
-            TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+            TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET, WallHalf.WORKSPACE));
     }
 
     public void setDockHorizontalInset(int value) {
@@ -676,7 +650,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getInAppKeyboardHorizontalInset() {
         return clampSurfaceHorizontalInset(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET));
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET, WallHalf.WORKSPACE));
     }
 
     public void setInAppKeyboardHorizontalInset(int value) {
@@ -686,7 +660,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getStatusBarHorizontalInset() {
         return clampSurfaceHorizontalInset(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.SIDE_GAP,
-            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET));
+            TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET, TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET, WallHalf.WORKSPACE));
     }
 
     public void setStatusBarHorizontalInset(int value) {
@@ -2467,11 +2441,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, value);
     }
 
-    public int getInAppKeyboardBackgroundOpacity() {
-        return getInAppKeyboardBackgroundOpacity(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getInAppKeyboardBackgroundOpacity()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getInAppKeyboardBackgroundOpacity} answers on one half of the wall (ADR 0013). */
     public int getInAppKeyboardBackgroundOpacity(@Nullable WallHalf half) {
         return clampInAppKeyboardBackgroundOpacity(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY, half));
@@ -2491,11 +2461,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * Wallpaper blur radius (dp) of the keyboard's glass: the KEYBOARD slot's BLUR cell, so it
      * follows Base until the editor's row is detached and holds its own number after that.
      */
-    public int getInAppKeyboardBlurRadius() {
-        return getInAppKeyboardBlurRadius(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getInAppKeyboardBlurRadius()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getInAppKeyboardBlurRadius} answers on one half of the wall (ADR 0013). */
     public int getInAppKeyboardBlurRadius(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR, half),
@@ -2509,12 +2475,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS));
     }
 
-    /** Film-grain strength (percent) of the keyboard's glass: the KEYBOARD slot's GRAIN cell. */
-    public int getInAppKeyboardGrain() {
-        return getInAppKeyboardGrain(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getInAppKeyboardGrain()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getInAppKeyboardGrain} answers on one half of the wall (ADR 0013). */
     public int getInAppKeyboardGrain(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN, half),
@@ -2532,14 +2493,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * Opacity (percent) of the keyboard's whole backdrop stack — the blurred wallpaper crop and
      * the tint above it together, applied as one alpha over the finished drawable. {@code -1}
      * (the stored default) renders the stack fully opaque, exactly as every keyboard has until
-     * now. Distinct from {@link #getInAppKeyboardBackgroundOpacity()}, which is only the tint
+     * now. Distinct from {@code getInAppKeyboardBackgroundOpacity}, which is only the tint
      * layer's own colour intensity.
      */
-    public int getInAppKeyboardBackdropOpacity() {
-        return getInAppKeyboardBackdropOpacity(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getInAppKeyboardBackdropOpacity()} answers on one half (ADR 0013). */
+    /** What {@code getInAppKeyboardBackdropOpacity} answers on one half (ADR 0013). */
     public int getInAppKeyboardBackdropOpacity(@Nullable WallHalf half) {
         int raw = readHalfInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, half,
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY);
@@ -2947,7 +2904,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getTerminalBackgroundOpacity() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
-            TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY), 0, 100);
+            TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY, WallHalf.WORKSPACE), 0, 100);
     }
 
     public void setTerminalBackgroundOpacity(int value) {
@@ -3759,12 +3716,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             writeSharedInt(property.baseKey, value);
     }
 
-    /** Which material family the Base triple was last set from. Display state, not a render input. */
-    @NonNull
-    public String getSurfaceMaterial() {
-        return getSurfaceMaterial(WallHalf.WORKSPACE);
-    }
-
     /** The material family a half's Base triple was last set from. */
     @NonNull
     public String getSurfaceMaterial(@Nullable WallHalf half) {
@@ -3792,11 +3743,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferences.Editor editor = mSharedPreferences.edit().putString(key, value);
         removeHalfKeys(editor, key);
         editor.apply();
-    }
-
-    /** Where on the family's curve the Base triple was last set. 0..100. */
-    public int getSurfaceMaterialIntensity() {
-        return getSurfaceMaterialIntensity(WallHalf.WORKSPACE);
     }
 
     /** Where on the family's curve a half's Base triple was last set. 0..100. */
@@ -4001,12 +3947,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * Callers still apply their own clamp, so a Base value outside one surface's range (the
      * terminal's 48dp blur ceiling, say) narrows there instead of leaking.
      */
-    private int resolveSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
-                                    String overrideKey, int overrideDefault) {
-        return resolveSurfaceValue(slot, property, overrideKey, overrideDefault,
-            WallHalf.WORKSPACE);
-    }
-
     /** The number a surface uses on one half: that half's link, Base and own value. */
     private int resolveSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
                                     String overrideKey, int overrideDefault,
@@ -4107,11 +4047,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         }
     }
 
-    public int getExtraKeysBlurRadius() {
-        return getExtraKeysBlurRadius(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getExtraKeysBlurRadius()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getExtraKeysBlurRadius} answers on one half of the wall (ADR 0013). */
     public int getExtraKeysBlurRadius(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
             TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS, half), 0, 48);
@@ -4122,11 +4058,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, DataUtils.clamp(value, 0, 48));
     }
 
-    public int getDockGlassGrain() {
-        return getDockGlassGrain(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getDockGlassGrain()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getDockGlassGrain} answers on one half of the wall (ADR 0013). */
     public int getDockGlassGrain(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
             TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN, half), 0, 100);
@@ -4150,11 +4082,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, value, false);
     }
 
-    public int getAppBarOpacity() {
-        return getAppBarOpacity(WallHalf.WORKSPACE);
-    }
-
-    /** What {@link #getAppBarOpacity()} answers on one half of the wall (ADR 0013). */
+    /** What {@code getAppBarOpacity} answers on one half of the wall (ADR 0013). */
     public int getAppBarOpacity(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY, half), 0, 100);
@@ -4322,11 +4250,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public boolean isExtraKeysBlurEnabled() {
-        return getExtraKeysBlurRadius() > 0;
+        return getExtraKeysBlurRadius(WallHalf.WORKSPACE) > 0;
     }
     
     public void setExtraKeysBlurEnabled(boolean value) {
-        setExtraKeysBlurRadius(value ? Math.max(1, getExtraKeysBlurRadius()) : 0);
+        setExtraKeysBlurRadius(value ? Math.max(1, getExtraKeysBlurRadius(WallHalf.WORKSPACE)) : 0);
     }
     
     public boolean isTerminalDynamicColorsEnabled() {

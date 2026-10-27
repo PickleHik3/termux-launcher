@@ -99,8 +99,8 @@ final class AppearanceSnapshot {
             mRaws[i] = isKeyboardBlur(rows.get(i)) ? prefs.getInAppKeyboardBlurRadiusRaw()
                 : prefs.getSurfaceOverrideValue(rows.get(i).slot, rows.get(i).property);
         }
-        mMaterial = prefs.getSurfaceMaterial();
-        mIntensity = prefs.getSurfaceMaterialIntensity();
+        mMaterial = prefs.getSurfaceMaterial(TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+        mIntensity = prefs.getSurfaceMaterialIntensity(TermuxAppSharedPreferences.WallHalf.WORKSPACE);
         mDockStyle = prefs.getAppLauncherDockStyle();
         mBorder = prefs.isTerminalBorderEnabled();
         mTerminalRadius = prefs.getTerminalCornerRadius();

@@ -98,7 +98,7 @@ public class SurfaceLookResetTest {
         assertEquals(KEYS, preferences.getInAppKeyboardKeyOpacity());
         assertEquals(KEYBOARD_GLASS, preferences.getSurfaceGlassPosition(SurfaceSlot.KEYBOARD));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
-        assertEquals(KEYBOARD_OPACITY, preferences.getInAppKeyboardBackgroundOpacity());
+        assertEquals(KEYBOARD_OPACITY, preferences.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
     }
 
     @Test
@@ -141,11 +141,11 @@ public class SurfaceLookResetTest {
         int clearGrain = (Integer) clear.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN);
         int clearOpacity = (Integer) clear.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY);
         int clearTint = (Integer) clear.values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT);
-        assertEquals(clearBlur, preferences.getInAppKeyboardBlurRadius());
-        assertEquals(clearGrain, preferences.getInAppKeyboardGrain());
-        assertEquals(clearOpacity, preferences.getInAppKeyboardBackgroundOpacity());
-        assertEquals(clearTint, preferences.getInAppKeyboardTintStrength());
-        assertEquals(clearBlur, preferences.getExtraKeysBlurRadius());
+        assertEquals(clearBlur, preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(clearGrain, preferences.getInAppKeyboardGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(clearOpacity, preferences.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(clearTint, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(clearBlur, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY,
             preferences.getInAppKeyboardKeyOpacity());
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS,
@@ -153,7 +153,7 @@ public class SurfaceLookResetTest {
         // The Glass sliders read Clear's position back from the glass they now draw.
         assertEquals(GlassControls.CLEAR, GlassControls.readBack(
             preferences.getSurfaceGlassPosition(SurfaceSlot.KEYBOARD),
-            preferences.getInAppKeyboardBlurRadius(), preferences.getInAppKeyboardGrain()));
+            preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE), preferences.getInAppKeyboardGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE)));
         assertEquals(clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY),
             preferences.getSurfaceGlassVibrancy());
         assertEquals(clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION),

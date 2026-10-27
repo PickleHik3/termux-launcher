@@ -60,13 +60,13 @@ public class GlassStackTest {
 
     /** What the dock draws with the same Base: its own getters, its rim, its refraction rule. */
     private GlassStack.Spec dockSpec(GlassRefraction.Look fancier) {
-        return GlassStack.Spec.of(preferences.getExtraKeysBlurRadius(),
-            preferences.getAppBarOpacity() / 100f, preferences.getDockGlassGrain(), RADIUS_PX,
+        return GlassStack.Spec.of(preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE),
+            preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE) / 100f, preferences.getDockGlassGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE), RADIUS_PX,
             fancier).withRim(true);
     }
 
     private GlassStack.Spec keyboardSpec(GlassRefraction.Look fancier) {
-        return GlassStack.keyboard(preferences, preferences.getAppBarOpacity() / 100f, RADIUS_PX,
+        return GlassStack.keyboard(preferences, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE) / 100f, RADIUS_PX,
             fancier).withRim(true);
     }
 
@@ -350,7 +350,7 @@ public class GlassStackTest {
 
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT, 25);
         assertEquals(25, keyboardSpec(null).tintStrengthPercent);
-        assertEquals("the dock keeps following Base", 60, preferences.getDockTintStrength());
+        assertEquals("the dock keeps following Base", 60, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         assertNotEquals(keyboardSpec(null).withTintStrength(60), keyboardSpec(null));
         assertEquals("the plain spec mixes in no accent", 0, dockSpec(null).tintStrengthPercent);
     }

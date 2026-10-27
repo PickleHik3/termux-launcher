@@ -55,7 +55,7 @@ public class SurfaceHalfTest {
             assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
                 half));
         }
-        assertEquals(40, preferences.getAppBarOpacity());
+        assertEquals(40, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
     }
 
     // ------------------------------------------------------------------ a half's own value
@@ -71,7 +71,7 @@ public class SurfaceHalfTest {
         // Base is wall-wide since the halves became pages: Home's write is the wall's.
         assertEquals(12, preferences.getAppBarOpacity(WallHalf.WORKSPACE));
         // The no-half reads are today's callers: they answer the Workspace.
-        assertEquals(12, preferences.getAppBarOpacity());
+        assertEquals(12, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         // The terminal is only on the Workspace, and reads Base.
         assertEquals(12, preferences.getTerminalBackgroundOpacity());
@@ -84,7 +84,7 @@ public class SurfaceHalfTest {
             80);
 
         assertEquals(80, preferences.getDockTintStrength(WallHalf.WORKSPACE));
-        assertEquals(80, preferences.getDockTintStrength());
+        assertEquals(80, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         assertEquals(30, preferences.getDockTintStrength(WallHalf.HOME));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
             WallHalf.HOME));

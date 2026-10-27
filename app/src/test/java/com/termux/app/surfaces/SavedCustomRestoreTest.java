@@ -149,7 +149,7 @@ public class SavedCustomRestoreTest {
 
         assertEquals(21, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(prefs.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
-        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity());
+        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         assertTrue(prefs.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
         assertEquals("no Keys saved reads as the theme's",
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY, prefs.getInAppKeyboardKeyOpacity());
@@ -245,8 +245,8 @@ public class SavedCustomRestoreTest {
                 assertFalse(slot + " " + property, prefs.isSurfaceInheriting(slot, property));
             assertEquals(slot.toString(), GLASS, prefs.getSurfaceGlassPosition(slot));
         }
-        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity());
-        assertEquals(TINT, prefs.getInAppKeyboardTintStrength());
+        assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(TINT, prefs.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         assertEquals(OPACITY, prefs.getTerminalBackgroundOpacity());
         assertEquals(TINT, prefs.getSurfaceOverrideValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT));
         assertEquals(KEYS, prefs.getInAppKeyboardKeyOpacity());

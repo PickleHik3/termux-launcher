@@ -107,14 +107,14 @@ public class FancierGlassPreferencesTest {
     @Test
     public void everyBlurSettingTakesUpToFortyEightDp() {
         preferences.setStatusBarBlurRadius(99);
-        assertEquals(48, preferences.getStatusBarBlurRadius());
+        assertEquals(48, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         preferences.setTerminalGlassBlurRadius(99);
         assertEquals(48, preferences.getTerminalGlassBlurRadius());
         preferences.setExtraKeysBlurRadius(99);
-        assertEquals(48, preferences.getExtraKeysBlurRadius());
+        assertEquals(48, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         preferences.setInAppKeyboardBlurRadius(99);
-        assertEquals(48, preferences.getInAppKeyboardBlurRadius());
+        assertEquals(48, preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         preferences.setExtraKeysBlurRadius(44);
-        assertEquals(44, preferences.getExtraKeysBlurRadius());
+        assertEquals(44, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
     }
 }
