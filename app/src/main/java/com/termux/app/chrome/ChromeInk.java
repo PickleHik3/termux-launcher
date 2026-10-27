@@ -573,11 +573,12 @@ public final class ChromeInk {
                                            @ColorInt int veilColor, @ColorInt int ink,
                                            @ColorInt int dimInk) {
         readMode();
+        int dim = dimUnder(rootRect);
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         PaneAnswer answer = mPanes.get(rootRect);
         if (answer == null) pruneResized(rootRect);
         if (answer != null && answer.sampled
-                && answer.matches(mDimColor, tint, veilColor, ink, dimInk, target)
+                && answer.matches(dim, tint, veilColor, ink, dimInk, target)
                 && samePolicy(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
             return answer.resolution;
         }
@@ -591,7 +592,7 @@ public final class ChromeInk {
             sampled = Color.alpha(read) != 0;
             wallpaper = sampled ? read : mCache.fallbackWallpaper();
         }
-        int meanFlat = OnGlass.backdrop(wallpaper, mDimColor, tint);
+        int meanFlat = OnGlass.backdrop(wallpaper, dim, tint);
         int flat = meanFlat;
         // Even-out (ADR 0014, wave 2): measured here so the veil, the ground and the palette all
         // see the band that is drawn. A pane that cannot be read keeps the mean, as does the
@@ -609,7 +610,7 @@ public final class ChromeInk {
             if (lightness != null) {
                 // The limit is applied on the composited ground (after frost, dim and tint), and
                 // a side the chain cannot reach is not chosen over one it can.
-                EvenOut.Chain chain = compositeChain(lightness.meanColor, mDimColor, tint);
+                EvenOut.Chain chain = compositeChain(lightness.meanColor, dim, tint);
                 shortPale = EvenOut.shortfall(lightness, policy.pale, Polarity.PALE_INK,
                     policy.level, chain);
                 shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
@@ -623,7 +624,7 @@ public final class ChromeInk {
                     pale ? policy.pale : policy.dark, evenOutPolarity, policy.level, chain);
                 mapping = mapping.toward(policy.strengthPercent / 100d);
                 evenOut = EvenOutMatrix.of(mapping);
-                flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, mDimColor, tint), evenOutPolarity);
+                flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, dim, tint), evenOutPolarity);
             }
         }
         // The normal foreground is body text; the dim one is text a program asked to recede, and
@@ -645,7 +646,7 @@ public final class ChromeInk {
         answer.resolution = resolution;
         answer.wallpaper = wallpaper;
         answer.sampled = sampled;
-        answer.dim = mDimColor;
+        answer.dim = dim;
         answer.tint = tint;
         answer.veilColor = veilColor;
         answer.ink = ink;
@@ -787,23 +788,24 @@ public final class ChromeInk {
                                      @ColorInt int veilColor, @ColorInt int textInk,
                                      @ColorInt int graphicInk) {
         readMode();
+        int dim = dimUnder(rootRect);
         double textTarget = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         double graphicTarget = mLevel.target(OnGlass.TARGET_LARGE_TEXT);
         WidgetAnswer answer = widgetSample(rootRect);
-        if (answer.answered && answer.resolution != null && answer.dim == mDimColor
+        if (answer.answered && answer.resolution != null && answer.dim == dim
                 && answer.body == body && answer.veilColor == veilColor
                 && answer.textInk == textInk && answer.graphicInk == graphicInk
                 && Double.compare(answer.textTarget, textTarget) == 0
                 && Double.compare(answer.graphicTarget, graphicTarget) == 0) {
             return answer.resolution;
         }
-        int under = OnGlass.backdrop(answer.wallpaper, mDimColor, Color.TRANSPARENT);
+        int under = OnGlass.backdrop(answer.wallpaper, dim, Color.TRANSPARENT);
         OnGlass.Resolution resolution = OnGlass.resolveWidget(under, body, textInk, textTarget,
             graphicInk, graphicTarget, veilColor);
         // Answered for good only once the wallpaper was really read; a nominal answer asks again.
         answer.answered = answer.sampled;
         answer.resolution = resolution;
-        answer.dim = mDimColor;
+        answer.dim = dim;
         answer.body = body;
         answer.veilColor = veilColor;
         answer.textInk = textInk;
@@ -821,7 +823,8 @@ public final class ChromeInk {
     @ColorInt
     public int widgetWallpaper(@NonNull Rect rootRect) {
         readMode();
-        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, mDimColor, Color.TRANSPARENT);
+        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, dimUnder(rootRect),
+            Color.TRANSPARENT);
     }
 
     /**
@@ -836,7 +839,7 @@ public final class ChromeInk {
         readMode();
         int read = mCache.sampleUncached(rootRect);
         if (Color.alpha(read) == 0) return Color.TRANSPARENT;
-        return OnGlass.backdrop(read, mDimColor, Color.TRANSPARENT);
+        return OnGlass.backdrop(read, dimUnder(rootRect), Color.TRANSPARENT);
     }
 
     /** What {@link #wallpaperSample} stands for while it reads nothing: the fallback, under the dim. */
@@ -898,8 +901,9 @@ public final class ChromeInk {
     private int meanPaneVote(@ColorInt int tint, boolean plainMean) {
         long red = 0, green = 0, blue = 0;
         int count = 0;
-        for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != mDimColor) continue;
+        for (java.util.Map.Entry<Rect, PaneAnswer> entry : mPanes.entrySet()) {
+            PaneAnswer pane = entry.getValue();
+            if (pane.tint != tint || pane.dim != dimUnder(entry.getKey())) continue;
             int flat = plainMean ? pane.meanFlat : pane.flat;
             red += Color.red(flat);
             green += Color.green(flat);
@@ -919,8 +923,9 @@ public final class ChromeInk {
         boolean pale = polarity == Polarity.PALE_INK;
         int worst = Color.TRANSPARENT;
         double worstLuma = 0d;
-        for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != mDimColor) continue;
+        for (java.util.Map.Entry<Rect, PaneAnswer> entry : mPanes.entrySet()) {
+            PaneAnswer pane = entry.getValue();
+            if (pane.tint != tint || pane.dim != dimUnder(entry.getKey())) continue;
             if (pane.evenOutPolarity != polarity) continue;
             double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
             if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
@@ -1058,8 +1063,9 @@ public final class ChromeInk {
     private int meanPaneSurface(@ColorInt int tint) {
         long red = 0, green = 0, blue = 0;
         int count = 0;
-        for (PaneAnswer pane : mPanes.values()) {
-            if (pane.tint != tint || pane.dim != mDimColor) continue;
+        for (java.util.Map.Entry<Rect, PaneAnswer> entry : mPanes.entrySet()) {
+            PaneAnswer pane = entry.getValue();
+            if (pane.tint != tint || pane.dim != dimUnder(entry.getKey())) continue;
             int surface = pane.resolution.surface;
             red += Color.red(surface);
             green += Color.green(surface);
@@ -1169,7 +1175,7 @@ public final class ChromeInk {
         // part of the tint that gets composited over this, so counting it here too would apply it
         // twice and pick the worst row off a band a shade lighter than the one being drawn.
         int wallpaper = mCache.wallpaperUnder(band, screenRect);
-        int under = OnGlass.backdrop(wallpaper, mDimColor, Color.TRANSPARENT);
+        int under = OnGlass.backdrop(wallpaper, dimUnder(screenRect), Color.TRANSPARENT);
         // The band's flat glass: wallpaper, the launcher's dim, the base layer in its tinted
         // colour. No light model, so the polarity vote is the same number whichever ink is
         // asking.
@@ -1218,7 +1224,7 @@ public final class ChromeInk {
         int baseAlpha = ChromePolicy.dockGlassBaseAlpha(glass.opacity);
         int baseColor = baseOf(glass);
         int wallpaper = mCache.wallpaperUnder(band, contract.rect);
-        int under = OnGlass.backdrop(wallpaper, mDimColor, Color.TRANSPARENT);
+        int under = OnGlass.backdrop(wallpaper, dimUnder(contract.rect), Color.TRANSPARENT);
         vote(band, OnGlass.composite(OnGlass.withAlpha(baseColor, baseAlpha), under));
         int top = DockGlassRendering.topSheenAlpha(glass.opacity);
         int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
@@ -1775,7 +1781,7 @@ public final class ChromeInk {
     @ColorInt
     private int flatFace(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
         BandGlass glass = glassFor(band);
-        return WallpaperInk.faceOf(mCache.wallpaperUnder(band, rootRect), mDimColor, baseOf(glass),
+        return WallpaperInk.faceOf(mCache.wallpaperUnder(band, rootRect), dimUnder(rootRect), baseOf(glass),
             glass.opacity);
     }
 
@@ -1957,6 +1963,16 @@ public final class ChromeInk {
      * new veil, and the targets it scales are part of every memo key, so the invalidate below is
      * only there to drop the veils recorded against the old one.</p>
      */
+    /**
+     * The ground under {@code rootRect} (page-chrome spec C): the wallpaper dim of whichever page,
+     * or both with a seam between, the rect stands on. {@link ChromeRenderer.Surfaces#groundUnder}
+     * answers it; {@link #mDimColor} stays the wall-wide dim for answers that have no rect.
+     */
+    @ColorInt
+    private int dimUnder(@NonNull Rect rootRect) {
+        return mSurfaces.groundUnder(rootRect);
+    }
+
     private void readMode() {
         int base = mSurfaces.glassBaseColor();
         int accent = mSurfaces.accentColor();
