@@ -217,6 +217,9 @@ public final class MaterialTerminalColorScheme {
         Properties props = new Properties();
         ChromeInk.Polarity natural = naturalPolarity(seeds.surface);
         boolean glass = Color.alpha(ground) != 0;
+        // The glass floors belong to the even-out stage: only over a bounded band are they safe.
+        // With the Debugging switch off the ground is the unbounded mean and today's floors hold.
+        boolean glassFloors = glass && sGlassFloors;
         ChromeInk.Polarity ink = glass
             ? inkPolarity(ground, level.bodyTarget, current != null ? current : natural)
             : natural;
@@ -235,7 +238,7 @@ public final class MaterialTerminalColorScheme {
             warmNeutralChroma(Hct.fromInt(seeds.onSurface).getChroma()),
             dark ? level.fgToneDark : level.fgToneLight).toInt();
         foreground = contrastTone(foreground, measuredOn, level.bodyTarget,
-            glass ? level.glassToneReach() : level.toneReach,
+            glassFloors ? level.glassToneReach() : level.toneReach,
             TEXT_TONE_MIN, TEXT_TONE_MAX, 0d);
         int cursor = ink == natural ? seeds.primary
             : Hct.from(primaryHct.getHue(), primaryHct.getChroma(),
@@ -253,7 +256,7 @@ public final class MaterialTerminalColorScheme {
             seeds.error != 0 ? Hct.fromInt(seeds.error).getHue() : ANSI_HUE_ANCHORS[0],
             surfaceHct.getHue(), surfaceHct.getChroma(), dark, level));
 
-        applyAnsiContrastFloor(props, measuredOn, level, glass);
+        applyAnsiContrastFloor(props, measuredOn, level, glassFloors);
 
         return props;
     }
@@ -290,6 +293,25 @@ public final class MaterialTerminalColorScheme {
         double margin = held >= target ? MARKED_POLARITY_MARGIN : ChromeInk.POLARITY_FLIP_MARGIN;
         if (other < held * margin) return current;
         return holdingPale ? ChromeInk.Polarity.DARK_INK : ChromeInk.Polarity.PALE_INK;
+    }
+
+    /** Whether glass grounds use the glass floors; the Debugging switch, set by the host. */
+    private static volatile boolean sGlassFloors = true;
+
+    /**
+     * Glass floors (ADR 0014) apply only while the even-out stage is on: they are safe on a
+     * bounded band and not on the unbounded mean ground, and the switch exists to compare with
+     * today. On by default; the host sets it from the switch before every palette build.
+     */
+    public static void setGlassFloors(boolean on) {
+        sGlassFloors = on;
+    }
+
+    /** The theme roles the recipe palettes read, as a comparable key for a cache of ceilings. */
+    @NonNull
+    public static int[] seedsKey(@NonNull Context context) {
+        Seeds seeds = Seeds.of(context);
+        return new int[] {seeds.surface, seeds.onSurface, seeds.primary, seeds.error};
     }
 
     /**

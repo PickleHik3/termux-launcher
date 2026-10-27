@@ -208,10 +208,10 @@ public final class ChromeInk {
      * hysteresis input of the polarity choice.
      */
     public static final class EvenOutPolicy {
-        @NonNull final com.termux.shared.termux.settings.preferences.TerminalContrastLevel level;
-        @NonNull final EvenOut.Ceiling pale;
-        @NonNull final EvenOut.Ceiling dark;
-        @NonNull final Polarity current;
+        @NonNull public final com.termux.shared.termux.settings.preferences.TerminalContrastLevel level;
+        @NonNull public final EvenOut.Ceiling pale;
+        @NonNull public final EvenOut.Ceiling dark;
+        @NonNull public final Polarity current;
 
         public EvenOutPolicy(
                 @NonNull com.termux.shared.termux.settings.preferences.TerminalContrastLevel level,
@@ -226,6 +226,11 @@ public final class ChromeInk {
         boolean sameStage(@Nullable EvenOutPolicy other) {
             return other != null && level == other.level && pale == other.pale && dark == other.dark;
         }
+
+        /** Same stage and same current polarity: nothing a pane's answer depends on differs. */
+        boolean sameAs(@Nullable EvenOutPolicy other) {
+            return sameStage(other) && current == other.current;
+        }
     }
 
     /** Null while the Debugging switch is off or nobody owns a palette: today's mean ground. */
@@ -239,6 +244,7 @@ public final class ChromeInk {
      */
     public void setEvenOutPolicy(@Nullable EvenOutPolicy policy) {
         EvenOutPolicy previous = mEvenOutPolicy;
+        if (previous == null ? policy == null : previous.sameAs(policy)) return;
         mEvenOutPolicy = policy;
         boolean sameStage = previous == null ? policy == null : previous.sameStage(policy);
         if (sameStage) return;
@@ -544,7 +550,7 @@ public final class ChromeInk {
         PaneAnswer answer = mPanes.get(rootRect);
         if (answer != null && answer.sampled
                 && answer.matches(mDimColor, tint, veilColor, ink, dimInk, target)
-                && answer.evenOutPolicy == mEvenOutPolicy && !polarityMoved(answer)) {
+                && samePolicy(answer.evenOutPolicy, mEvenOutPolicy) && !polarityMoved(answer)) {
             return answer.resolution;
         }
         int wallpaper;
@@ -874,6 +880,10 @@ public final class ChromeInk {
             }
         }
         return Color.alpha(worst) == 0 ? meanPaneVote(tint, true) : worst;
+    }
+
+    private static boolean samePolicy(@Nullable EvenOutPolicy a, @Nullable EvenOutPolicy b) {
+        return a == null ? b == null : a.sameAs(b);
     }
 
     /** Whether the polarity this pane's matrix was built for is no longer the mean's choice. */

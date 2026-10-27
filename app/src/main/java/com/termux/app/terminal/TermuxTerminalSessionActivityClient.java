@@ -985,6 +985,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // What the text stands on: the palette's own background while the terminal is
                 // opaque, the measured glass ground while it is translucent.
                 int ground = mHost.terminalTextGround();
+                // The glass floors follow the Debugging switch, read before the build.
+                MaterialTerminalColorScheme.setGlassFloors(mHost.preferences().isGlassEvenOutEnabled());
                 props = MaterialTerminalColorScheme.create(mContext, level, ground,
                     inkLeaning(ground));
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
