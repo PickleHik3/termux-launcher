@@ -4,7 +4,10 @@ This module is a copy of termux-x11's `lorie` library module, in the same packag
 (`com.termux.x11`) so it stays diffable against upstream. The native half — `libXlorie.so`, the
 Xorg "Xlorie" DDX built against sixteen freedesktop submodules — is not built here: it is a
 committed prebuilt under `app/src/main/jniLibs/<abi>/`, produced by
-`.github/workflows/build_x11_native.yml` (and `../x11-local-build.sh`) from the same commit.
+`.github/workflows/build_x11_native.yml` (and `../x11-local-build.sh`) from the same commit, for
+arm64-v8a, x86_64, armeabi-v7a and x86. The two 32-bit builds were added on 2026-10-27 (built
+locally with the workflow's exact steps and NDK r29, as Actions were unavailable; a local arm64
+build from the same steps exports the same symbols as the CI one), so 32-bit phones get a display.
 
 - upstream: <https://github.com/termux/termux-x11> (GPLv3, the licence this app already ships under)
 - upstream commit: `9df8b767645aa0d0a2f2576767449df55b41962f` (2026-09-04)
