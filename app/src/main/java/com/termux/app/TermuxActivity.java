@@ -1897,8 +1897,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onCreate");
         // The wall's pages, one store for this activity. A removal still pending from a process
         // that was killed becomes final before any owner attaches.
-        mWallPagesStore = com.termux.app.wall.WallPagesStore.open(this);
-        mWallPagesStore.flushPending();
+        wallPagesStore().flushPending();
         com.termux.terminal.LatencyProbe.setDebugBuild(com.termux.BuildConfig.DEBUG);
         mIsOnResumeAfterOnCreate = true;
         mCreatedThisMessage.mark();
@@ -27139,7 +27138,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private com.termux.app.wall.WallPages wallPages() {
-        return mWallPagesStore.current();
+        return wallPagesStore().current();
+    }
+
+    /** The store, opened on first use when something asks before onCreate built it. */
+    @NonNull
+    private com.termux.app.wall.WallPagesStore wallPagesStore() {
+        if (mWallPagesStore == null) {
+            mWallPagesStore = com.termux.app.wall.WallPagesStore.open(this);
+        }
+        return mWallPagesStore;
     }
 
     /**
@@ -27159,21 +27167,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Logger.logWarn("WallPages", "Home pages " + held + " in the wall, " + count
                 + " in the widget repository" + (held < count ? ": adding the missing ones"
                 : ": keeping the wall's"));
-            if (held < count) mWallPagesStore.transform(pages -> pages.withHomeCount(count));
+            if (held < count) wallPagesStore().transform(pages -> pages.withHomeCount(count));
         }
         repository.setPageListener((oldCount, newCount, mapping) -> {
             boolean mapped = mapping != null && mapping.length == wallPages().homeCount();
-            if (mapped) mWallPagesStore.transform(pages -> pages.withHomeMapping(mapping));
+            if (mapped) wallPagesStore().transform(pages -> pages.withHomeMapping(mapping));
             // Without a mapping (an orientation's layout, a drop's page) the pages only grow.
             if (mapped || newCount > wallPages().homeCount()) {
-                mWallPagesStore.transform(pages -> pages.withHomeCount(newCount));
+                wallPagesStore().transform(pages -> pages.withHomeCount(newCount));
             }
         });
     }
 
     /** Runs an edit of the wall's pages through the store (saved, announced). */
     private void editWallPages(@NonNull com.termux.app.wall.WallPagesStore.Edit edit) {
-        mWallPagesStore.edit(edit);
+        wallPagesStore().edit(edit);
     }
 
     /** Whether the display starts with the launcher here: switched on, on a build that has one. */
@@ -27241,7 +27249,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {}
         };
-        mWallPagesStore.addListener(mWallPagesListener);
+        wallPagesStore().addListener(mWallPagesListener);
     }
 
     /**
