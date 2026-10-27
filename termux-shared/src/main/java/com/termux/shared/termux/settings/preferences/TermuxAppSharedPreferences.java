@@ -3702,8 +3702,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void copyLookToOtherHalf(@NonNull WallHalf from) {
         WallHalf to = from.other();
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (isPerHalfProperty(property))
-                setSurfaceBaseValue(property, to, getSurfaceBaseValue(property, from));
+            if (isPerHalfProperty(property)) {
+                // Base is the wall's. A Workspace that was given a Look holds its numbers as its
+                // surfaces' own values, so Home takes what the Workspace's dock shows as Base.
+                boolean pageLook = from == WallHalf.WORKSPACE
+                    && !isSurfaceInheriting(SurfaceSlot.DOCK, property, from);
+                setSurfaceBaseValue(property, to, pageLook
+                    ? getSurfaceValue(SurfaceSlot.DOCK, property, from)
+                    : getSurfaceBaseValue(property, from));
+            }
         }
         setSurfaceMaterial(to, getSurfaceMaterial(from));
         setSurfaceMaterialIntensity(to, getSurfaceMaterialIntensity(from));
@@ -3712,6 +3719,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 if (!isPerHalf(slot, property))
                     continue;
                 boolean follows = isSurfaceInheriting(slot, property, from);
+                String fromOverride = workspaceOverrideKey(slot, property, from);
+                if (fromOverride != null && containsKey(fromOverride))
+                    // The Workspace's own value copies as what shows: Home follows the Base just
+                    // set where that gives the same number, and holds the number otherwise.
+                    follows = getSurfaceValue(slot, property, from)
+                        == getSurfaceBaseValue(property, to);
                 setSurfaceInheriting(slot, property, to, follows);
                 if (!(follows && workspaceOverrideKey(slot, property, to) != null))
                     writeSurfaceRaw(slot, property, to,
