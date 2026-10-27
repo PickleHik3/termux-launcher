@@ -1982,6 +1982,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case FOLDERS:
                     return indexOf(FOLDER_DENSITIES, AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_FOLDER_DENSITY, null), 1);
+                case PAGE_TRANSITION:
+                    return com.termux.app.launcher.home.HomeSettings.pageTransition(context).ordinal();
                 case NUMERALS:
                     return indexOf(NUMERALS, AppearanceSettingsStore.getString(context,
                         "app_launcher_builtin_widget_style", null), 0);
@@ -2178,6 +2180,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case FOLDERS:
                     return strings(R.string.appearance_folders_compact,
                         R.string.appearance_folders_default, R.string.appearance_folders_roomy);
+                case PAGE_TRANSITION:
+                    return strings(R.string.settings_home_page_transition_slide,
+                        R.string.settings_home_page_transition_depth,
+                        R.string.settings_home_page_transition_fade,
+                        R.string.settings_home_page_transition_carousel,
+                        R.string.settings_home_page_transition_stack);
                 case NUMERALS:
                     return strings(R.string.appearance_numerals_sans, R.string.appearance_numerals_mono);
                 case FORM:
@@ -2393,6 +2401,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case FOLDERS:
                 writeHomeString(HomeSettings.KEY_FOLDER_DENSITY, FOLDER_DENSITIES[clamp(value, 0, 2)]);
                 break;
+            case PAGE_TRANSITION: {
+                com.termux.app.launcher.home.HomePageTransition[] effects =
+                    com.termux.app.launcher.home.HomePageTransition.values();
+                writeHomeString(HomeSettings.KEY_PAGE_TRANSITION,
+                    effects[clamp(value, 0, effects.length - 1)].value);
+                break;
+            }
             case NUMERALS:
                 AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style",
                     NUMERALS[clamp(value, 0, 1)]);
@@ -5024,6 +5039,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case FOLDERS:
                 return new int[] {EditorGlyphs.FOLDER_COMPACT, EditorGlyphs.FOLDER_DEFAULT,
                     EditorGlyphs.FOLDER_ROOMY};
+            case PAGE_TRANSITION:
+                return new int[] {EditorGlyphs.TRANSITION_SLIDE, EditorGlyphs.TRANSITION_DEPTH,
+                    EditorGlyphs.TRANSITION_FADE, EditorGlyphs.TRANSITION_CAROUSEL,
+                    EditorGlyphs.TRANSITION_STACK};
             case THEME:
                 return new int[] {R.drawable.ic_ed_theme_system, R.drawable.ic_ed_theme_light,
                     R.drawable.ic_ms_dark_mode};

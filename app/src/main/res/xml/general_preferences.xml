@@ -40,12 +40,11 @@
             app:useSimpleSummaryProvider="true"
             android:defaultValue="normal" />
         <!-- How every page turns: Home's pages, Home to the Workspace, and window to window. Opens
-             the preview, growing out of this row; the summary names the effect in use. Its key is
+             the Appearance editor on its Home card, where the choice lives; the summary names the effect in use. Its key is
              the one it had on Home. -->
         <Preference
             app:key="app_launcher_home_page_transition"
             app:persistent="false"
-            app:fragment="com.termux.app.fragments.settings.termux.HomePageTransitionFragment"
             app:title="@string/settings_home_page_transition_title" />
     </PreferenceCategory>
 

@@ -4,9 +4,6 @@
 <resources>
     <!-- Page transition (F5) -->
     <string name="settings_home_page_transition_title">Page transition</string>
-    <string name="settings_home_page_transition_hint">Tap the preview to play it again</string>
-    <string name="settings_home_page_transition_preview">Preview of the page transition</string>
-    <string name="settings_home_page_transition_apply">Apply</string>
     <string name="settings_home_page_transition_slide">Slide</string>
     <string name="settings_home_page_transition_depth">Depth</string>
     <string name="settings_home_page_transition_fade">Fade</string>

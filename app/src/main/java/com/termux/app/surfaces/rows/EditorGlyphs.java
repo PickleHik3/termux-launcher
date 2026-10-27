@@ -32,6 +32,11 @@ public final class EditorGlyphs {
     @DrawableRes public static final int CLOCK_ALIGN_RIGHT = R.drawable.ic_ed_clock_align_right;
 
     // Folder density.
+    @DrawableRes public static final int TRANSITION_SLIDE = R.drawable.ic_ed_transition_slide;
+    @DrawableRes public static final int TRANSITION_DEPTH = R.drawable.ic_ed_transition_depth;
+    @DrawableRes public static final int TRANSITION_FADE = R.drawable.ic_ed_transition_fade;
+    @DrawableRes public static final int TRANSITION_CAROUSEL = R.drawable.ic_ed_transition_carousel;
+    @DrawableRes public static final int TRANSITION_STACK = R.drawable.ic_ed_transition_stack;
     @DrawableRes public static final int FOLDER_COMPACT = R.drawable.ic_ed_folder_compact;
     @DrawableRes public static final int FOLDER_DEFAULT = R.drawable.ic_ed_folder_default;
     @DrawableRes public static final int FOLDER_ROOMY = R.drawable.ic_ed_folder_roomy;
@@ -75,6 +80,7 @@ public final class EditorGlyphs {
             LABEL_SMALL, LABEL_MEDIUM, LABEL_LARGE, ICON_SMALL, ICON_DEFAULT, ICON_LARGE,
             KB_BACKGROUND_OPACITY, KB_KEY_OPACITY, BOTTOM_PADDING, BARS_REORDER, BAR_SETTINGS,
             GLASS_OFF, AZ_SHOWN, AZ_FAINT, AZ_PULL_TAB, WALLPAPER_COLOURS, SHOW_WALLPAPER, MATERIAL_CRT,
-            LOOK, MONOCHROME};
+            LOOK, MONOCHROME, TRANSITION_SLIDE, TRANSITION_DEPTH, TRANSITION_FADE,
+            TRANSITION_CAROUSEL, TRANSITION_STACK};
     }
 }
