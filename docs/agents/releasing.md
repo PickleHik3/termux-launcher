@@ -73,10 +73,11 @@ or more behind). The last shipped version is the one on `main`, `nix-edition` an
 
 ## Cutting a stable release
 
-First `project-docs/device-checks.md`: run its Agent items, hand its Developer items over, and
-cut only once the list is empty or the developer has accepted what is left. **Accepted items are
+First the owed checks: run `project-docs/device-checks.md` (agent-drivable) and hand
+`project-docs/developer-checks.md` to the developer; cut only once both lists are empty or the
+developer has accepted what is left. **Accepted items are
 recorded** in the body of the `main` `release:` commit, one `Accepted owed: <item>` line each, and
-deleted from `device-checks.md` in the same pass. A minor cut first promotes from `pre`
+deleted from the checks file in the same pass. A minor cut first promotes from `pre`
 ("Promoting from `pre` to a stable" below). Then, per edition, as in `Release v1.0.1 (merge dev into io-vaj-package)` followed by `release: vaj-v1.0.1`:
 merge `dev`, then set `versionName` to the plain `X.Y.Z` in a `release:` commit (it **must** equal
 the tag minus its edition prefix and `v`, or CI aborts), push, tag, `gh release create --draft
@@ -105,13 +106,28 @@ goes away until they do.
 
 Work reaches the channel only after all of these:
 
-1. **Used on pong** as a release-type build (debuggable builds go to the emulator; pong stays on
-   release builds), in normal use, with no crash or freeze.
+1. **Used on pong** for a day in normal use, with no crash or freeze: as a staging build while
+   it is developed, then as a release build of the candidate commit
+   (`BUILD_TYPE=release scripts/dev-install.sh`) before the cut. The release build is the drop
+   candidate's check, and the only place pong runs one.
 2. **Suite green** on the branch with `pre` merged in.
 3. **Within budget**: frame-path work holds the pong baselines in
    [`performance.md`](performance.md); an on-device AI load is admitted at its intended context
    with no `oom_guard` stop in `tai logs`.
 4. **The developer says it goes in the next drop.**
+
+Before each drop is cut, two checks run on the emulator, not pong, because a long-lived phone
+cannot show either:
+
+- **Fresh install**, with no network until the bootstrap step: the download-and-verify path and
+  the first-run flow come up.
+- **Upgrade install** over the previous stable's APK, with a store that has customised surfaces (a
+  Home dock height, Corners or Margin set apart, a non-default dock style): migrations run and
+  the user's look survives. The item for this is the migrations one in
+  `project-docs/device-checks.md`.
+
+The shipped drop itself is installed on pong from the GitHub release through Obtainium, never
+from a local build, so the real signing key, ABI splits and bootstrap download are exercised.
 
 It then gets a line under `## Experimental` in `project-docs/prerelease-notes.md` naming its pull
 request or branch, with the status `<!-- stays: P1 -->`.
@@ -130,7 +146,7 @@ of these hold:
 | | Check | Holds when |
 |---|---|---|
 | P1 | Soak | In at least two published drops, and no behaviour change for 3 days; 7 days for on-device AI, memory-budget, backup or data-format and settings-schema work. A behaviour change restarts the clock; a cosmetic fix does not. |
-| P2 | Device checks | Nothing owed for it in `device-checks.md`, or the developer accepts what is left (recorded as in "Cutting a stable release"). |
+| P2 | Device checks | Nothing owed for it in `device-checks.md` or `developer-checks.md`, or the developer accepts what is left (recorded as in "Cutting a stable release"). |
 | P3 | No open bug | No open issue or known regression against it from the channel. |
 | P4 | Release build | The cherry-picked `dev`, built as `assembleRelease`, installed on pong and the feature used (step 3 below). |
 | P5 | Within budget | As in "From pong to `pre`", measured again on the candidate. Pong's results are enough. |
@@ -157,7 +173,8 @@ The promotion, step by step:
 2. On `dev`, `git cherry-pick -x` each ready feature's commits, oldest first (`-m 1` for a merge
    commit). Keep `dev`'s `versionName`.
 3. Run the full suite on `dev`, build and install it on pong with `BUILD_TYPE=release scripts/dev-install.sh`
-   (it checks the launcher came back up), and use each promoted feature once. This combination never ran
+   (it checks the launcher came back up), and use each promoted feature once; run the two per-drop
+   emulator checks from "From pong to `pre`" too. This combination never ran
    on the channel; without this step the cut is not ready.
 4. Cut the minor as in "Cutting a stable release". The notes' `## New` comes from the promoted
    lines; those lines leave `prerelease-notes.md`.
@@ -169,7 +186,7 @@ The promotion, step by step:
 A second, rolling channel beside the stable releases, and **the first stop for new work**: the
 order is `pre` → `dev` → the release branches. Like a stable, a drop ships all three editions.
 `scripts/cut-prerelease.sh` performs a drop end to end, printing `project-docs/device-checks.md`
-first so a drop never ships an unseen item unknowingly; these are the rules it encodes, and the
+and `project-docs/developer-checks.md` first so a drop never ships an unseen item unknowingly; these are the rules it encodes, and the
 ones to keep if it changes:
 
 - **`pre` is the channel's own, persistent branch.** Feature work and pull requests that are

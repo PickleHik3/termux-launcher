@@ -175,4 +175,21 @@ public class SurfaceEditorControllerSeedTest {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TWEAKED_DOCK_OPACITY);
     }
+
+    @Test
+    public void aScreenCardsFrostWritesItsOwnHalfOnly() {
+        TermuxAppSharedPreferences.WallHalf home = TermuxAppSharedPreferences.WallHalf.HOME;
+        TermuxAppSharedPreferences.WallHalf workspace =
+            TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        preferences.setSurfaceGlassPosition(null, 33);
+        int otherBlur = preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home);
+        int otherGrain = preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home);
+        SurfaceEditorController.writeScreenFrost(preferences, workspace, 90);
+        assertEquals("the shared position is the Appearance card's", 33,
+            preferences.getSurfaceGlassPosition(null));
+        assertEquals(otherBlur, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home));
+        assertEquals(otherGrain, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home));
+        assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, workspace));
+    }
 }

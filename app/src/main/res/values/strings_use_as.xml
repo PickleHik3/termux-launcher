@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Use as (editor-redesign §1): Home screen or Terminal only, asked on the welcome sheet's first
+     page and kept as a setting in Settings › General › Launcher. -->
+<resources>
+    <string name="use_as_title">Use as</string>
+    <string name="use_as_question">How will you use it?</string>
+    <string name="use_as_home">Home screen</string>
+    <string name="use_as_home_summary">Your apps, widgets and a terminal, all in one place</string>
+    <string name="use_as_terminal">Terminal only</string>
+    <string name="use_as_terminal_summary">Terminal is primary focus. Your home launcher unchanged.</string>
+    <string name="use_as_continue">Continue</string>
+    <string name="settings_general_launcher_header">Launcher</string>
+    <string-array name="use_as_entries" translatable="false">
+        <item>@string/use_as_home</item>
+        <item>@string/use_as_terminal</item>
+    </string-array>
+    <string-array name="use_as_values" translatable="false">
+        <item>home</item>
+        <item>terminal</item>
+    </string-array>
+</resources>

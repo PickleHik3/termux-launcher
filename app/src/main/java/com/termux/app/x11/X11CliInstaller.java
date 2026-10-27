@@ -20,6 +20,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -44,7 +46,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 15;
+    @VisibleForTesting static final int VERSION = 21;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -61,6 +63,22 @@ public final class X11CliInstaller {
      * the server is handed one short path. Written only on nix — see {@link X11WindowManager}.
      */
     public static final String WM_SCRIPT_PATH = BIN_DIR + "/termux-x11-wm";
+    /**
+     * The helper that passes fcitx5's own text-field focus on to the launcher (#129): it owns
+     * fcitx5's virtual-keyboard name on a session bus of the display's, and answers fcitx5's
+     * show and hide with {@code launcherctl keyboard show|hide --source focus}. The server script
+     * starts it beside every display, and only when {@link #FCITX5_PATH} is installed.
+     */
+    static final String IM_FOCUS_SCRIPT_PATH = BIN_DIR + "/termux-x11-im";
+    /** fcitx5 itself, from Termux's x11 repository. Its presence is the whole opt-in. */
+    static final String FCITX5_PATH = BIN_DIR + "/fcitx5";
+    /**
+     * Where the helper puts the display's session bus, before the display's number is added: see
+     * {@link #imBusPath}. In the prefix's temporary directory, beside the X sockets themselves.
+     */
+    static final String IM_BUS_PATH_PREFIX =
+        TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-im-bus";
+    private static final String IM_FOCUS_ASSET = "x11/x11-im-focus.sh";
     static final String LOADER_PATH = LIBEXEC_DIR + "/loader.apk";
     /** openbox's configuration for the display: every window maximised, none decorated. */
     public static final String OPENBOX_RC_PATH = LIBEXEC_DIR + "/openbox-rc.xml";
@@ -151,7 +169,7 @@ public final class X11CliInstaller {
      * Whether the XKB keyboard data the server needs is in the prefix. It comes from the
      * {@code xkeyboard-config} package; without it the server exits before it opens a port.
      *
-     * <p>A filesystem probe: cheap, but never call it from a hot path — the Display page re-runs
+     * <p>A filesystem probe: cheap, but never call it from a hot path — the display window re-runs
      * it only on arrival and on a running-state change, never on every frame.
      */
     public static boolean hasKeyboardData() {
@@ -353,6 +371,32 @@ public final class X11CliInstaller {
         return sleep.canExecute() ? sleep.getPath() : "/system/bin/sleep";
     }
 
+    /**
+     * The socket of the session bus the helper runs for {@code display} ({@code :1} and the like).
+     * One per display, because a second display — the GPU setup's test display above all — runs
+     * through the same server script, and two helpers sharing one socket would take each other's
+     * bus away. The helper is handed the display by the server script ({@link #IM_DISPLAY_PICK})
+     * and works the same name out of it; an app's script is handed it by
+     * {@link X11LinuxAppRunner}, so the two meet on one bus.
+     */
+    @NonNull
+    static String imBusPath(@NonNull String display) {
+        String number = display.startsWith(":") ? display.substring(1) : display;
+        int screen = number.indexOf('.');
+        if (screen >= 0) number = number.substring(0, screen);
+        return IM_BUS_PATH_PREFIX + "-" + (number.isEmpty() ? "0" : number);
+    }
+
+    /**
+     * Where the helper for {@code display} keeps its pid while it runs: beside its bus, removed
+     * with it. A helper killed outright leaves its socket behind, so the socket alone does not
+     * say anybody answers on it; a live pid here does.
+     */
+    @NonNull
+    static String imHelperPidPath(@NonNull String display) {
+        return imBusPath(display) + ".pid";
+    }
+
     /** True once this launcher's own commands are in place. */
     public static boolean isInstalled(@NonNull Context context) {
         X11CliInstaller installer = forPrefix(context);
@@ -365,6 +409,7 @@ public final class X11CliInstaller {
     @NonNull File preferenceScript() { return new File(binDir, "termux-x11-preference"); }
     @NonNull File gpuSetupScript() { return new File(binDir, "termux-x11-gpu-setup"); }
     @NonNull File wmScript() { return new File(binDir, "termux-x11-wm"); }
+    @NonNull File imFocusScript() { return new File(binDir, "termux-x11-im"); }
     @NonNull File loaderFile() { return new File(libexecDir, "loader.apk"); }
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
     @NonNull File openboxRc() { return new File(libexecDir, "openbox-rc.xml"); }
@@ -374,8 +419,17 @@ public final class X11CliInstaller {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
         linkKeyboardData();
         writeWindowManagerScript();
+        ensureDiversions();
         String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
-        if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
+        if (marker.equals(read(markerFile()))) {
+            // The marker only says what we once wrote; a package that overwrote the script
+            // after that must not go unnoticed.
+            if (isForeignCommand()) {
+                Logger.logInfo(LOG_TAG, "The termux-x11 we wrote has been replaced");
+                return Result.FOREIGN_COMMAND;
+            }
+            return Result.UP_TO_DATE;
+        }
         if (isForeignCommand()) {
             Logger.logInfo(LOG_TAG, "Leaving a termux-x11 we did not write alone");
             return Result.FOREIGN_COMMAND;
@@ -398,6 +452,7 @@ public final class X11CliInstaller {
             writeAtomically(preferenceScript(),
                 bytes(preferenceScript(applicationId, prefixShellPath())), true, true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
+            writeAtomically(imFocusScript(), bytes(withPrefixShebang(readText(IM_FOCUS_ASSET))), true, true);
             writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
@@ -408,6 +463,7 @@ public final class X11CliInstaller {
     }
 
     void uninstall() {
+        removeDiversions();
         if (isForeignCommand()) return;
         File prefixDir = binDir.getParentFile();
         if (prefixDir != null && isOurKeyboardDataLink(prefixDir)) {
@@ -419,13 +475,117 @@ public final class X11CliInstaller {
             }
         }
         for (File file : new File[]{serverScript(), preferenceScript(), gpuSetupScript(),
-                wmScript(), loaderFile(), openboxRc(), markerFile()}) {
+                imFocusScript(), wmScript(), loaderFile(), openboxRc(), markerFile()}) {
             if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
             file.setWritable(true, true);
             if (!file.delete()) {
                 Logger.logWarn(LOG_TAG, "Failed to remove " + file);
             }
         }
+    }
+
+    /** The package name our dpkg diversions are filed under. */
+    static final String DIVERSION_PACKAGE = "termux-launcher";
+
+    /** dpkg's diversion list: three lines per entry, path, diverted path, package. */
+    @NonNull
+    private File diversionsFile() {
+        File prefixDir = binDir.getParentFile();
+        return new File(prefixDir, "var/lib/dpkg/diversions");
+    }
+
+    /** The two commands the upstream {@code termux-x11-nightly} package also ships. */
+    @NonNull
+    private File[] divertedCommands() {
+        return new File[]{serverScript(), preferenceScript()};
+    }
+
+    /** Whether this prefix is the apt edition: a dpkg database, and no pacman. */
+    private boolean isAptPrefix() {
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir == null || NixProfile.isNix(prefixDir)) return false;
+        return new File(prefixDir, "var/lib/dpkg/status").isFile()
+            && !new File(prefixDir, "etc/pacman.conf").exists();
+    }
+
+    /**
+     * On the apt edition, tell dpkg to set the upstream package's copy of our two commands aside
+     * as {@code <command>.upstream}, so installing {@code termux-x11-nightly} cannot overwrite
+     * them. Only missing entries are added; an entry another package holds is left alone.
+     */
+    @VisibleForTesting
+    void ensureDiversions() {
+        if (!isAptPrefix()) return;
+        File file = diversionsFile();
+        try {
+            List<String> lines = readDiversionLines(file);
+            boolean changed = false;
+            for (File command : divertedCommands()) {
+                String path = command.getAbsolutePath();
+                int at = diversionIndex(lines, path);
+                if (at < 0) {
+                    lines.add(path);
+                    lines.add(path + ".upstream");
+                    lines.add(DIVERSION_PACKAGE);
+                    changed = true;
+                } else if (!DIVERSION_PACKAGE.equals(lines.get(at + 2))) {
+                    Logger.logInfo(LOG_TAG, path + " is already diverted by " + lines.get(at + 2));
+                }
+            }
+            if (changed) writeDiversions(file, lines);
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "Failed to divert the upstream termux-x11: " + e.getMessage());
+        }
+    }
+
+    /** Remove exactly our two diversion entries; every other entry stays. */
+    private void removeDiversions() {
+        if (!isAptPrefix()) return;
+        File file = diversionsFile();
+        try {
+            List<String> lines = readDiversionLines(file);
+            boolean changed = false;
+            for (File command : divertedCommands()) {
+                String path = command.getAbsolutePath();
+                int at = diversionIndex(lines, path);
+                if (at >= 0 && DIVERSION_PACKAGE.equals(lines.get(at + 2))) {
+                    for (int i = 0; i < 3; i++) lines.remove(at);
+                    changed = true;
+                }
+            }
+            if (changed) writeDiversions(file, lines);
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "Failed to remove our diversions: " + e.getMessage());
+        }
+    }
+
+    /** The index of the entry that diverts {@code path}, or -1. Entries come in threes. */
+    private static int diversionIndex(@NonNull List<String> lines, @NonNull String path) {
+        for (int i = 0; i + 2 < lines.size(); i += 3) {
+            if (lines.get(i).equals(path)) return i;
+        }
+        return -1;
+    }
+
+    @NonNull
+    private static List<String> readDiversionLines(@NonNull File file) throws IOException {
+        List<String> lines = new ArrayList<>();
+        if (!file.exists()) return lines;
+        lines.addAll(Files.readAllLines(file.toPath(), StandardCharsets.UTF_8));
+        // A trailing partial entry is not ours to rewrite; keep dpkg's own file as it is.
+        if (lines.size() % 3 != 0) throw new IOException(file + " is not in threes");
+        return lines;
+    }
+
+    private static void writeDiversions(@NonNull File file, @NonNull List<String> lines)
+            throws IOException {
+        File dir = file.getParentFile();
+        if (dir != null && !dir.isDirectory() && !dir.mkdirs()) {
+            throw new IOException("Failed to create " + dir);
+        }
+        StringBuilder text = new StringBuilder();
+        for (String line : lines) text.append(line).append('\n');
+        writeAtomically(file, bytes(text.toString()), true, false);
     }
 
     /**
@@ -498,13 +658,14 @@ public final class X11CliInstaller {
             + "fi\n"
             // The server refuses to start without the XKB data and only knows how to find it in
             // com.termux's own prefix, so point it at this edition's. It is the xkeyboard-config
-            // package's; the Display page says so when it is missing.
+            // package's; the display window says so when it is missing.
             + "if [ -z \"${XKB_CONFIG_ROOT+x}\" ]; then\n"
             + "  for dir in " + PREFIX + "/share/X11/xkb "
             + PREFIX + "/share/xkeyboard-config-2; do\n"
             + "    if [ -d \"$dir\" ]; then export XKB_CONFIG_ROOT=\"$dir\"; break; fi\n"
             + "  done\n"
             + "fi\n"
+            + (nixFontPath ? "" : imFocusStartBlock())
             + "[ -z \"${LD_LIBRARY_PATH+x}\" ] || export XSTARTUP_LD_LIBRARY_PATH=\"$LD_LIBRARY_PATH\"\n"
             + "[ -z \"${LD_PRELOAD+x}\" ] || export XSTARTUP_LD_PRELOAD=\"$LD_PRELOAD\"\n"
             + "[ -z \"${CLASSPATH+x}\" ] || export XSTARTUP_CLASSPATH=\"$CLASSPATH\"\n"
@@ -519,6 +680,58 @@ public final class X11CliInstaller {
                 : "termux-x11 " + applicationId + " $*")
             + "\" com.termux.x11.Loader \"$@\"\n";
     }
+
+    /**
+     * The lines that start the focus helper ({@link #IM_FOCUS_SCRIPT_PATH}) beside the server.
+     * The server script is the one door every display goes through — the page's button, the
+     * start-up opt-in, a {@code termux-x11 :1} typed by hand — so the helper starts here, and only
+     * when fcitx5 is installed: without it there is nothing to start and nothing changes.
+     *
+     * <ul>
+     *   <li>It is handed {@code $$}, which a subshell still expands to this shell's pid: the pid
+     *       the server is about to {@code exec} into, so the helper can leave when the display
+     *       does.</li>
+     *   <li>It runs in a subshell of its own, so it is nobody's child once that subshell has
+     *       gone — not the server's, which would never reap it.</li>
+     *   <li>It starts before the linker environment is taken off for the server: it is a prefix
+     *       shell script, and runs the prefix's own programs.</li>
+     *   <li>{@code TERMUX_X11_IM=0} leaves it out, for a display that only exists to be measured
+     *       (the GPU setup's).</li>
+     * </ul>
+     * Termux only: the nix edition gets fcitx5 as docs, not as a helper.
+     */
+    @NonNull
+    private static String imFocusStartBlock() {
+        String helper = ProotDistro.singleQuote(IM_FOCUS_SCRIPT_PATH);
+        return "if [ \"${TERMUX_X11_IM:-1}\" != 0 ] && [ -x " + ProotDistro.singleQuote(FCITX5_PATH)
+            + " ] && [ -x " + helper + " ]; then\n"
+            + IM_DISPLAY_PICK
+            + "  (" + helper + " \"$$\" " + ProotDistro.singleQuote(IM_BUS_PATH_PREFIX)
+            + " \"$termux_x11_im_display\" < /dev/null > /dev/null 2>&1 &)\n"
+            + "fi\n";
+    }
+
+    /**
+     * The display the server is handed, for the helper: the first argument that is a bare
+     * {@code :N} or {@code :N.S}, the way a display is written first on every command line the
+     * launcher makes and the docs show; {@code :0}, the server's own default, when there is none.
+     * The server script hands the helper this one name rather than its whole argument list, so
+     * an option's value that happens to look like a display is never taken for it. The bus it
+     * leads to is {@link #imBusPath} of the same name.
+     */
+    @VisibleForTesting
+    static final String IM_DISPLAY_PICK = "  termux_x11_im_display=:0\n"
+        + "  for termux_x11_im_arg in \"$@\"; do\n"
+        + "    case \"$termux_x11_im_arg\" in\n"
+        + "      :[0-9]*)\n"
+        + "        termux_x11_im_number=${termux_x11_im_arg#:}\n"
+        + "        case \"${termux_x11_im_number%%.*}\" in\n"
+        + "          *[!0-9]*) ;;\n"
+        + "          *) termux_x11_im_display=$termux_x11_im_arg; break ;;\n"
+        + "        esac\n"
+        + "        ;;\n"
+        + "    esac\n"
+        + "  done\n";
 
     /**
      * The lines that build {@code -fp} out of whatever font packages this phone's nix store has,

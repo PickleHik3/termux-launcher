@@ -543,12 +543,39 @@ public final class GlassRefraction {
     }
 
     /**
+     * The corner radius the program draws a rim rect at: {@code cornerRadiusPx}, held to half the
+     * rect's shorter side, the most a rounded rect can take. The program's distance field
+     * ({@code sdRoundRect}) does not hold it itself, and past half the height it goes wrong in a
+     * way that shows: the two ends' arcs cross into a point folding in from each end, and the
+     * light creases along the centre line. A surface clipped as a capsule (a one-row band under
+     * the keyboard, given the dock's Corners before its own height was known) is cut to the same
+     * half-height, so the rim lands on its outline again.
+     */
+    public static float rectRadiusPx(float left, float top, float right, float bottom,
+                                     float cornerRadiusPx) {
+        float half = Math.min(Math.max(0f, right - left), Math.max(0f, bottom - top)) / 2f;
+        return Math.max(0f, Math.min(cornerRadiusPx, half));
+    }
+
+    /**
      * How far a seam edge is pushed out: past the band (or the gathered light, where a narrow
      * band ends inside its reach; the bold edge's split lies inside the light's reach), the pull
      * and the corner arc, with a little to spare.
      */
     public static float seamReachPx(@NonNull Look look, float density, float cornerRadiusPx) {
-        return Math.max(look.bandPx(density), Look.rimReachPx(density))
+        return seamReachPx(look, density, cornerRadiusPx, 0f);
+    }
+
+    /**
+     * {@link #seamReachPx(Look, float, float)} for a surface wearing the dock's soft rim band
+     * {@code softRimPx} wide ({@link Program#setDockSurface}): the band a seam edge must clear is
+     * the wider of the look's and the soft one, so a soft band deeper than the look's never bends
+     * the picture along a seam.
+     */
+    public static float seamReachPx(@NonNull Look look, float density, float cornerRadiusPx,
+                                    float softRimPx) {
+        return Math.max(Math.max(look.bandPx(density), Math.max(0f, softRimPx)),
+            Look.rimReachPx(density))
             + look.strengthPx(density) + Math.max(0f, cornerRadiusPx) + 2f * density;
     }
 
@@ -607,6 +634,27 @@ public final class GlassRefraction {
         // LIVE_CLARITY while a clearer frame of its own is bound, 0 while sharp is the frost
         // itself (or nothing), so a live rim then reads no extra sample.
         "uniform float uLiveClarity;\n" +
+        // The dock surface's own glass (DockSurfaceSpec), 0 on every other surface, which then
+        // draws exactly as before: the soft rim band's width in px, how much of the lower shelf
+        // the slab wears (0..1). SOFT_RIM_DP and setDockSurface in Java.
+        "uniform float uSoftRim;\n" +
+        "uniform float uShelf;\n" +
+        // Lens beads (DockSurfaceSpec.LENS_BEADS): no slab, one round bead under each icon of the
+        // row. uBead holds the row's centre line y, every bead's radius (0: no beads, the slab
+        // as always) and half the icon's size, all in the surface's px; uBeadXA, uBeadXB and
+        // uBeadXC the beads' centre x, twelve at most (a row at rest holds eight; a page swipe
+        // carries the neighbouring page's in beside them), an unused one far off the surface so
+        // it is never the nearest. setBeads and nearestBeadX in Java.
+        "uniform float4 uBead;\n" +
+        "uniform float4 uBeadXA;\n" +
+        "uniform float4 uBeadXB;\n" +
+        "uniform float4 uBeadXC;\n" +
+        // The Search field's capsule under the beads (#84): its left, top, right and bottom in
+        // the surface's px, a stadium (its corners half its height); right not past left is
+        // none. One more shape of the beads' glass: a pixel is the capsule's where it stands
+        // deeper in it than in its nearest bead, so a melt's swelling beads take it over.
+        // setBeadCapsule in Java.
+        "uniform float4 uBeadCap;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
         // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
@@ -693,6 +741,15 @@ public final class GlassRefraction {
         "const float kTiltMagMaxDp = " + GlassRefraction.TILT_MAG_MAX_DP + ";\n" +
         "const float kTiltLean = " + GlassRefraction.TILT_LEAN_GAIN + ";\n" +
         "const float kTiltLight = " + GlassRefraction.TILT_LIGHT + ";\n" +
+        // The dock surface's glass: the soft band's most pull as a share of its width; how much
+        // thicker the lower edge is per whole shelf; the lower lip's light and how fast it fades
+        // inward, dp. SOFT_RIM_MAX_PULL_SHARE, SHELF_THICKEN, SHELF_LIP and SHELF_LIP_DP in Java.
+        "const float kSoftPull = " + GlassRefraction.SOFT_RIM_MAX_PULL_SHARE + ";\n" +
+        "const float kShelfThick = " + GlassRefraction.SHELF_THICKEN + ";\n" +
+        "const float kShelfLip = " + GlassRefraction.SHELF_LIP + ";\n" +
+        "const float kShelfLipDp = " + GlassRefraction.SHELF_LIP_DP + ";\n" +
+        // The most of a bead's radius its rim band reaches; BEAD_BAND_SHARE in Java.
+        "const float kBeadBandShare = " + GlassRefraction.BEAD_BAND_SHARE + ";\n" +
         "float sdRoundRect(float2 p, float2 b, float r) {\n" +
         "    float2 q = abs(p) - b + float2(r, r);\n" +
         "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
@@ -723,6 +780,42 @@ public final class GlassRefraction {
         "float edgeProfile(float t) {\n" +
         "    float u = 1.0 - t * t;\n" +
         "    return exp(-t / kDecay) * u * u;\n" +
+        "}\n" +
+        // The soft rim band's share of the bend, t 0 at the rim to 1 at the band's inner edge: one
+        // less smootherstep, whole at the rim and gone at the inner edge with no step in its
+        // slope or its curvature at either end, so the band fades into the face with no inner
+        // ring (a kink in a gradient's slope is where a Mach band shows). softProfile in Java.
+        // The centre x of the bead nearest x: twelve compares, no loop and no array, so the
+        // program compiles everywhere AGSL does. nearestBeadX in Java.
+        "float nearestBead(float x) {\n" +
+        "    float bx = uBeadXA.x;\n" +
+        "    float bd = abs(x - uBeadXA.x);\n" +
+        "    float d = abs(x - uBeadXA.y);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXA.y; }\n" +
+        "    d = abs(x - uBeadXA.z);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXA.z; }\n" +
+        "    d = abs(x - uBeadXA.w);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXA.w; }\n" +
+        "    d = abs(x - uBeadXB.x);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.x; }\n" +
+        "    d = abs(x - uBeadXB.y);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.y; }\n" +
+        "    d = abs(x - uBeadXB.z);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.z; }\n" +
+        "    d = abs(x - uBeadXB.w);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXB.w; }\n" +
+        "    d = abs(x - uBeadXC.x);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.x; }\n" +
+        "    d = abs(x - uBeadXC.y);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.y; }\n" +
+        "    d = abs(x - uBeadXC.z);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.z; }\n" +
+        "    d = abs(x - uBeadXC.w);\n" +
+        "    if (d < bd) { bd = d; bx = uBeadXC.w; }\n" +
+        "    return bx;\n" +
+        "}\n" +
+        "float softProfile(float t) {\n" +
+        "    return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
         "}\n" +
         // How much of the colour split a pixel at p (from the centre) of a surface of half size b
         // takes: nothing on the two axes, so nothing at the middle of a straight edge, all of it
@@ -789,13 +882,54 @@ public final class GlassRefraction {
         "half4 main(float2 fragCoord) {\n" +
         "    float2 center = (uRectMin + uRectMax) * 0.5;\n" +
         "    float2 b = (uRectMax - uRectMin) * 0.5;\n" +
+        "    float cr = uRadius;\n" +
+        // Lens beads: the surface is the bead nearest this pixel, a circle about its icon, and
+        // everything below (the rim, its light, the shelf) is that bead's. A
+        // pixel clear of every bead draws nothing and reads no sample.
+        "    bool beads = uBead.y > 0.0;\n" +
+        "    bool onCap = false;\n" +
+        "    if (beads) {\n" +
+        "        center = float2(nearestBead(fragCoord.x), uBead.x);\n" +
+        "        b = float2(uBead.y, uBead.y);\n" +
+        "        cr = uBead.y;\n" +
+        "        if (uBeadCap.z > uBeadCap.x) {\n" +
+        "            float2 capC = (uBeadCap.xy + uBeadCap.zw) * 0.5;\n" +
+        "            float2 capB = (uBeadCap.zw - uBeadCap.xy) * 0.5;\n" +
+        "            float capR = min(capB.x, capB.y);\n" +
+        "            if (sdRoundRect(fragCoord - capC, capB, capR) < sdRoundRect(fragCoord - center, b, cr)) {\n" +
+        "                center = capC;\n" +
+        "                b = capB;\n" +
+        "                cr = capR;\n" +
+        "                onCap = true;\n" +
+        "            }\n" +
+        "        }\n" +
+        "    }\n" +
+        "    float2 rMin = center - b;\n" +
+        "    float2 rMax = center + b;\n" +
         "    float2 p = fragCoord - center;\n" +
-        "    float inside = -sdRoundRect(p, b, uRadius);\n" +
-        // The normal eases round the corner on an arc wider than the drawn one (1.5x, held under the
-        // half size), so the bend never snaps where two edges meet.
-        "    float2 n = rectNormal(p, b, min(uRadius * 1.5, min(b.x, b.y)));\n" +
+        "    float inside = -sdRoundRect(p, b, cr);\n" +
+        "    if (beads && inside < -1.0) {\n" +
+        "        return half4(0.0);\n" +
+        "    }\n" +
+        // The light's normal eases round the corner on an arc wider than the drawn one (1.5x,
+        // held under the half size), so the gathered light never snaps where two edges meet.
+        "    float2 n = rectNormal(p, b, min(cr * 1.5, min(b.x, b.y)));\n" +
+        // Whether the slab moves (its lag) or tips (its tilt); both 0 at rest. Asked here, before
+        // the bend's normal, because a live band reaches deeper (see the live block below).
+        "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
+        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n" +
+        // Every band below is held at half the surface's short side, so a band shorter than its
+        // look's Edge width (a lone one-row strip) still bends to nothing on its centre line:
+        // the two halves' pulls point opposite ways there, and a pull left at the line tears the
+        // picture into a seam. The bend's normal eases round each corner on an arc at least as
+        // deep as the deepest band (bendNormalRadiusPx in Java), so wherever a pixel is still
+        // pulled the pull turns smoothly; snapped round a small corner, it mitred into a crease
+        // that ran in from each corner and met its twin at the centre line as a chevron.
+        "    float hs = min(b.x, b.y);\n" +
+        "    float reach = max(uBand, uSoftRim) * (1.0 + kShelfThick * uShelf) * (live ? 1.0 + kLagBand : 1.0);\n" +
+        "    float2 nb = rectNormal(p, b, min(max(cr * 1.5, reach), hs));\n" +
         // t runs 0 at the rim to 1 at the band's inner edge, and stays 1 across the face.
-        "    float t = clamp(inside / uBand, 0.0, 1.0);\n" +
+        "    float t = clamp(inside / min(uBand, hs), 0.0, 1.0);\n" +
         // The eased pull's width, and how far in from the outline this pixel is across it: 0 at
         // the outline, 1 from that width in.
         "    float rimW = max(kMinRimPx, kRimDp * uDensity);\n" +
@@ -807,6 +941,28 @@ public final class GlassRefraction {
         // vanishes at t 1: a face pixel samples exactly where it is. A seam edge lies past the band
         // (rimRect), so it takes none. pullPx in Java is the same arithmetic.
         "    float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;\n" +
+        // The dock surface's soft rim: the bend spread across a band of at least uSoftRim on the
+        // soft profile, its pull held at kSoftPull of the band so the picture never folds back
+        // (the profile's steepest slope is 15/8), and with the shelf the lower edge thicker,
+        // its band and its bend grown together. softB 0 is every other surface, which keeps the
+        // narrow ring above. softPullPx in Java.
+        "    float softB = 0.0;\n" +
+        "    float softS = 0.0;\n" +
+        "    if (uSoftRim > 0.0) {\n" +
+        "        float lower = uShelf > 0.0 ? max(nb.y, 0.0) * uShelf : 0.0;\n" +
+        "        softB = max(uBand, uSoftRim) * (1.0 + kShelfThick * lower);\n" +
+        // A bead's band is tight: its own width, or half the look's band when that is wider,
+        // never past kBeadBandShare of the bead's radius, so the face keeps its middle. Its
+        // pull is the same held share of that narrower band, which reads as the stronger lens.
+        // beadSoftBandPx in Java.
+        "        if (beads) {\n" +
+        "            softB = min(max(uSoftRim, 0.5 * uBand), kBeadBandShare * cr) * (1.0 + kShelfThick * lower);\n" +
+        "        }\n" +
+        "        softB = min(softB, hs);\n" +
+        "        softS = min(uStrength * (1.0 + kShelfThick * lower), kSoftPull * softB);\n" +
+        "        t = clamp(inside / softB, 0.0, 1.0);\n" +
+        "        pull = softProfile(t) * min(softS, min(b.x, b.y)) * edge;\n" +
+        "    }\n" +
         // Living glass: the slab's bend lags it on a spring. The edge the lag faces is thicker,
         // bending more and reaching deeper; the edge behind it thinner; still held at half the
         // short side. bendV keeps how much further each pixel's picture moved than at rest, for
@@ -817,8 +973,6 @@ public final class GlassRefraction {
         // edge's normal, summed with the lag's lean and held to a whole one. tiltLean keeps the
         // tilt's part alone, for the gathered light below. Flat, uTilt is 0 and the lean is the
         // lag's, expression for expression. liveLean and tiltLean in Java.
-        "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
-        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n" +
         "    float2 bendV = float2(0.0, 0.0);\n" +
         "    float tiltLean = 0.0;\n" +
         "    float liveK = 0.0;\n" +
@@ -834,18 +988,23 @@ public final class GlassRefraction {
         // lag, a twentieth of a degree of tilt) moves it by a few thousandths at most. At 0 the light below
         // is the rest look's, expression for expression. glintWeight in Java.
         "        glintW = smoothstep(0.0, 1.0, liveK);\n" +
-        "        float lean = kLagLean * dot(n, uLag) / (kLagMaxDp * uDensity);\n" +
+        "        float lean = kLagLean * dot(nb, uLag) / (kLagMaxDp * uDensity);\n" +
         "        if (tilted) {\n" +
-        "            tiltLean = clamp(-kTiltLean * dot(n, uTilt), -1.0, 1.0);\n" +
+        "            tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n" +
         "            lean = lean + tiltLean;\n" +
         "        }\n" +
         "        lean = clamp(lean, -1.0, 1.0);\n" +
-        "        float tl = clamp(inside / (uBand * (1.0 + kLagBand * lean)), 0.0, 1.0);\n" +
+        "        float tl = clamp(inside / min(uBand * (1.0 + kLagBand * lean), hs), 0.0, 1.0);\n" +
         "        float bent = edgeProfile(tl) * min(uStrength * (1.0 + kLagBend * lean), min(b.x, b.y)) * edge;\n" +
-        "        bendV = n * max(bent - pull, 0.0);\n" +
+        "        if (softB > 0.0) {\n" +
+        "            float sl = min(softB * (1.0 + kLagBand * lean), hs);\n" +
+        "            tl = clamp(inside / sl, 0.0, 1.0);\n" +
+        "            bent = softProfile(tl) * min(min(softS * (1.0 + kLagBend * lean), kSoftPull * sl), min(b.x, b.y)) * edge;\n" +
+        "        }\n" +
+        "        bendV = nb * max(bent - pull, 0.0);\n" +
         "        pull = bent;\n" +
         "    }\n" +
-        "    float2 sampleCoord = fragCoord - n * pull;\n" +
+        "    float2 sampleCoord = fragCoord - nb * pull;\n" +
         // The tilted slab's face (tiltOffset). It moves the whole face's picture alike, so it
         // takes no colour split of its own: split there, every edge in the wallpaper would wear a
         // fringe, and the face would read three samples instead of one. The rim's extra bend
@@ -874,7 +1033,7 @@ public final class GlassRefraction {
         "            float k = mix(1.0, kFull, uLensActive);\n" +
         "            float fade = smoothstep(0.0, max(uLensFeather, 1.0), ld) * uLensActive;\n" +
         "            float2 lensCoord = uLensCenter + lp * k;\n" +
-        "            float2 lensBent = lensCoord - n * pull;\n" +
+        "            float2 lensBent = lensCoord - nb * pull;\n" +
         "            sampleCoord = mix(sampleCoord, lensBent, fade);\n" +
         "            lensGlow = fade * (1.0 - rr);\n" +
         "        }\n" +
@@ -883,6 +1042,11 @@ public final class GlassRefraction {
         // edge, half way at the band's middle, uClarity under the rim. Zero on the face.
         "    float x = 1.0 - t;\n" +
         "    float clarityK = uClarity > 0.0 && x > 0.0 ? x * x * (3.0 - 2.0 * x) * uClarity : 0.0;\n" +
+        // The soft band clears on the same smootherstep it bends on, so the clearer picture has
+        // no inner edge either.
+        "    if (softB > 0.0 && clarityK > 0.0) {\n" +
+        "        clarityK = x * x * x * (x * (x * 6.0 - 15.0) + 10.0) * uClarity;\n" +
+        "    }\n" +
         // While the slab moves, the rim's picture clears toward the clearer frame, so the bend
         // has detail to move (a bevel is thin glass, so less frosted than the face: de Rousiers
         // et al. 2011), and the clear part reaches a little further in; it eases back as liveK
@@ -901,11 +1065,11 @@ public final class GlassRefraction {
         // Living glass parts the colours where it bends further than at rest, in step with that
         // extra bend and along it (the rim's inward), so the colour follows the glass. sn is the
         // split's way: the normal at rest.
-        "    float2 sn = n;\n" +
+        "    float2 sn = nb;\n" +
         "    if (live) {\n" +
-        "        float2 sv = n * split + bendV * max(uDisp, kLiveDisp);\n" +
+        "        float2 sv = nb * split + bendV * max(uDisp, kLiveDisp);\n" +
         "        split = length(sv);\n" +
-        "        sn = split > 0.0 ? sv / split : n;\n" +
+        "        sn = split > 0.0 ? sv / split : nb;\n" +
         "    }\n" +
         // The same split laid on the gathered light, which is sharp at the outline however frosted
         // the picture is: at the corners only, red's light as it stands a little further in and
@@ -965,6 +1129,14 @@ public final class GlassRefraction {
         "        if (tilted) {\n" +
         "            k = k * (1.0 + kTiltLight * tiltLean);\n" +
         "        }\n" +
+        // The shelf's lip: the lower edge, where the light that came through the slab leaves it,
+        // gathers a little more, over a slightly wider fade than the outline's own, and less over
+        // a pale backdrop as the rest of the light does; held under the headroom below with it.
+        // shelfLipK in Java.
+        "        if (uShelf > 0.0 && n.y > 0.0) {\n" +
+        "            k = k + exp(-max(inside, 0.0) / (kShelfLipDp * uDensity)) * kShelfLip * uShelf\n" +
+        "                * smoothstep(0.2, 1.0, n.y) * (1.0 - kPaleCut * pale) * uEdgeGain;\n" +
+        "        }\n" +
         "        if (glintW > 0.0) {\n" +
         "            col.rgb = col.rgb * half(1.0 - glow * mix(kEdgeShade, kLiveEdgeShade * liveShadeShare(n), glintW));\n" +
         "        } else {\n" +
@@ -1010,6 +1182,10 @@ public final class GlassRefraction {
         "    }\n" +
         // The pressed key's glow and the faint scatter under a finger stay small additive light.
         "    col.rgb = col.rgb + half3(lensGlow * kKeyGlow + 0.045 * touchG * touchG);\n" +
+        // A bead's outline is its own: a pixel wide, anti-aliased, nothing outside it.
+        "    if (beads) {\n" +
+        "        col = col * half(clamp(inside + 0.5, 0.0, 1.0));\n" +
+        "    }\n" +
         "    return col;\n" +
         "}\n";
 
@@ -1131,11 +1307,109 @@ public final class GlassRefraction {
     /**
      * The program's pull, in px, for a pixel {@code insidePx} in from the rim of a surface whose
      * half short side is {@code halfShortPx}: the profile across the band times the strength held
-     * at that half side, eased to nothing across the outermost {@code rimWidthPx}.
+     * at that half side, eased to nothing across the outermost {@code rimWidthPx}. The band is
+     * held at the half short side too ({@link #heldBandPx}), so the pull is gone by the centre
+     * line however short the surface.
      */
     static float pullPx(float insidePx, float bandPx, float strengthPx, float halfShortPx, float rimWidthPx) {
-        float t = Math.max(0f, Math.min(1f, insidePx / bandPx));
+        float t = Math.max(0f, Math.min(1f, insidePx / heldBandPx(bandPx, halfShortPx)));
         return edgeProfile(t) * Math.min(strengthPx, halfShortPx) * smoothstep(0f, rimWidthPx, insidePx);
+    }
+
+    /**
+     * How far in a band reaches on a surface whose half short side is {@code halfShortPx}: its
+     * own width, held at that half side (the program's {@code min(uBand, hs)} and its soft and
+     * live bands alike). The two halves of a surface pull opposite ways across its centre line,
+     * so a band reaching past it leaves a pull there and tears the picture into a seam: a lone
+     * one-row band under a look whose Edge width, or the dock's 24 dp soft rim, is deeper than
+     * half the row. Never under a pixel.
+     */
+    static float heldBandPx(float bandPx, float halfShortPx) {
+        return Math.max(1f, Math.min(bandPx, Math.max(0f, halfShortPx)));
+    }
+
+    /**
+     * The deepest band the program can draw on a surface, before the half-side hold: the look's
+     * band or the soft rim, whichever is wider, grown by a whole shelf and, while the slab is
+     * live, by a whole lean ({@link #LAG_BAND}). The program's {@code reach}.
+     */
+    static float bendReachPx(float bandPx, float softRimPx, float shelf, boolean live) {
+        return Math.max(bandPx, Math.max(0f, softRimPx)) * (1f + SHELF_THICKEN * Math.max(0f, shelf))
+            * (live ? 1f + LAG_BAND : 1f);
+    }
+
+    /**
+     * The radius the bend's normal eases round a corner on: half again the drawn corner, or the
+     * deepest band ({@code reachPx}) where that is more, held at the half short side. The normal
+     * only snaps from one edge's to the other's on the rect inside this radius, and every pixel
+     * there is at least this far in, past every band, so it is never pulled where the normal
+     * snaps. Eased only round the drawn corner, a 3 dp Corners under a 24 dp band snapped across
+     * a 45 degree line from each corner while the pull was still strong: a crease that, on a
+     * one-row band, met its twin at the centre line as a chevron. The program's
+     * {@code min(max(cr * 1.5, reach), hs)}; the gathered light keeps its own, round the drawn
+     * corner.
+     */
+    static float bendNormalRadiusPx(float cornerRadiusPx, float reachPx, float halfShortPx) {
+        return Math.min(Math.max(1.5f * Math.max(0f, cornerRadiusPx), reachPx),
+            Math.max(0f, halfShortPx));
+    }
+
+    /**
+     * The program's {@code sdRoundRect}, negated: how far {@code (px, py)} (from the centre) is
+     * inside a rounded rect of half size {@code (bx, by)} and corner {@code r}; negative outside.
+     */
+    static float insidePx(float px, float py, float bx, float by, float r) {
+        float qx = Math.abs(px) - bx + r;
+        float qy = Math.abs(py) - by + r;
+        float outside = (float) Math.hypot(Math.max(qx, 0f), Math.max(qy, 0f));
+        return -(Math.min(Math.max(qx, qy), 0f) + outside - r);
+    }
+
+    /**
+     * The program's {@code rectNormal} into {@code out}: round the corner arc of radius {@code r},
+     * straight out along an edge, and on the inner rect, where no arc reaches, the axis of the
+     * nearer edge.
+     */
+    static void rectNormal(@NonNull float[] out, float px, float py, float bx, float by, float r) {
+        float qx = Math.abs(px) - bx + r;
+        float qy = Math.abs(py) - by + r;
+        float ox = Math.max(qx, 0f), oy = Math.max(qy, 0f);
+        float len = (float) Math.hypot(ox, oy);
+        float sx = px < 0f ? -1f : 1f, sy = py < 0f ? -1f : 1f;
+        if (len > 0.001f) {
+            out[0] = sx * ox / len;
+            out[1] = sy * oy / len;
+            return;
+        }
+        float useX = qx >= qy ? 1f : 0f;
+        out[0] = sx * useX;
+        out[1] = sy * (1f - useX);
+    }
+
+    /**
+     * Where a resting pixel at {@code (px, py)} (from the centre) of a surface of half size
+     * {@code (bx, by)} and corner {@code cr} samples from, as an offset into {@code out}: the pull
+     * along the bend's normal, the program's {@code -nb * pull}. {@code softRimPx} and
+     * {@code shelf} are the dock surface's ({@link Program#setDockSurface}); 0 and 0 is the
+     * narrow ring every other surface wears.
+     */
+    static void restBendOffset(@NonNull float[] out, float px, float py, float bx, float by,
+                               float cr, float bandPx, float strengthPx, float softRimPx,
+                               float shelf, float rimWidthPx) {
+        float hs = Math.min(bx, by);
+        float inside = insidePx(px, py, bx, by, cr);
+        float[] n = new float[2];
+        rectNormal(n, px, py, bx, by,
+            bendNormalRadiusPx(cr, bendReachPx(bandPx, softRimPx, shelf, false), hs));
+        float pull;
+        if (softRimPx > 0f) {
+            float lower = shelf > 0f ? Math.max(n[1], 0f) * shelf : 0f;
+            pull = softPullPx(inside, bandPx, softRimPx, strengthPx, hs, rimWidthPx, lower);
+        } else {
+            pull = pullPx(inside, bandPx, strengthPx, hs, rimWidthPx);
+        }
+        out[0] = -n[0] * pull;
+        out[1] = -n[1] * pull;
     }
 
     /** The program's {@code cornerWeight}, for a pixel at {@code (px, py)} from the centre of a surface of half size {@code (bx, by)}. */
@@ -1670,6 +1944,126 @@ public final class GlassRefraction {
         return 1f + TILT_LIGHT * tiltLean;
     }
 
+    // The dock surface's glass (com.termux.app.dock.DockSurfaceSpec): what a Home dock style turns
+    // on through {@link Program#setDockSurface}. Every other
+    // surface leaves them off, and the program then draws exactly what it drew before. Each is
+    // the program's constant of the matching name. The numbers are the Home dock styles spec's
+    // shared rules and the research's R10 and R11 (home-dock-ux-research-2026-10-20).
+
+    /**
+     * The soft rim band's width, dp ({@code uSoftRim} once converted): "about 24 dp", the low end
+     * of the research's 24 to 28 dp budget for a monotone bend (R11). A look whose own band is
+     * wider keeps its own; the Edge width knob still reaches past this.
+     */
+    public static final float SOFT_RIM_DP = 24f;
+    /**
+     * The most the soft band's bend pulls the picture, as a share of the band
+     * ({@code kSoftPull}). The soft profile's steepest slope is 15/8 of the band, so at a half the
+     * picture moves at most 15/16 of a px per px walked in and never folds back on itself (R11:
+     * monotone, no fold). The Bend knob still sets the pull under this.
+     */
+    static final float SOFT_RIM_MAX_PULL_SHARE = 0.5f;
+    /**
+     * How much thicker the slab's lower edge is at a whole shelf ({@code kShelfThick}): its band
+     * and its bend grow by this share on the edge facing straight down and by less round the
+     * lower corners, so the slab reads as thick glass seen a little from above.
+     */
+    static final float SHELF_THICKEN = 0.35f;
+    /**
+     * The lower lip's extra light at a whole shelf ({@code kShelfLip}), as a share of the
+     * gathered light, on an edge facing straight down: the light that came through the slab
+     * leaving it at the lower edge. The bottom edge at rest gathers only the ambient quarter; the
+     * lip lifts it to about the top edge's at the outline.
+     */
+    static final float SHELF_LIP = 0.55f;
+    /** How fast the lip fades inward, dp ({@code kShelfLipDp}): a little wider than the outline's 1.4. */
+    static final float SHELF_LIP_DP = 2.4f;
+
+    /**
+     * A Lens bead's own soft rim band, dp ({@code uSoftRim} for a bead): tight, a little under a
+     * third of a 70 dp bead's radius, so the bead reads as a small lens with a stronger pull than
+     * the tray's 24 dp band. Half the look's Edge width counts when it is wider, so the knob still
+     * reaches the beads.
+     */
+    public static final float BEAD_SOFT_RIM_DP = 10f;
+    /** The most of a bead's radius its rim band reaches ({@code kBeadBandShare}). */
+    static final float BEAD_BAND_SHARE = 0.4f;
+    /** Where {@link Program#setBeads} parks a bead slot it does not use: never the nearest. */
+    static final float BEAD_UNUSED_X = -1.0e6f;
+
+    /**
+     * The program's soft band for a bead, px, before the shelf thickens it: the bead's own band
+     * or half the look's, whichever is wider, held under {@link #BEAD_BAND_SHARE} of its radius.
+     */
+    static float beadSoftBandPx(float softRimPx, float lookBandPx, float beadRadiusPx) {
+        return Math.min(Math.max(softRimPx, 0.5f * lookBandPx), BEAD_BAND_SHARE * beadRadiusPx);
+    }
+
+    /** The program's {@code nearestBead}: the centre in {@code centers} nearest {@code x}, the first on a tie. */
+    static float nearestBeadX(float x, @NonNull float[] centers) {
+        float bx = centers[0];
+        float bd = Math.abs(x - centers[0]);
+        for (int i = 1; i < centers.length; i++) {
+            float d = Math.abs(x - centers[i]);
+            if (d < bd) {
+                bd = d;
+                bx = centers[i];
+            }
+        }
+        return bx;
+    }
+
+    /** How many bead centres the program reads ({@code uBeadXA}, {@code uBeadXB}, {@code uBeadXC}). */
+    public static final int BEAD_SLOTS = 12;
+
+    /**
+     * The twelve bead slots the program reads ({@code uBeadXA}, {@code uBeadXB}, then
+     * {@code uBeadXC}) for {@code count} centres: each centre in order, the rest parked at
+     * {@link #BEAD_UNUSED_X}.
+     */
+    @NonNull
+    static float[] beadSlots(@NonNull float[] centers, int count) {
+        float[] slots = new float[BEAD_SLOTS];
+        Arrays.fill(slots, BEAD_UNUSED_X);
+        for (int i = 0; i < Math.min(BEAD_SLOTS, Math.min(count, centers.length)); i++)
+            slots[i] = centers[i];
+        return slots;
+    }
+
+    /** The program's {@code softProfile}: one less smootherstep, 1 at the rim, 0 at the band's inner edge. */
+    static float softProfile(float t) {
+        float c = Math.max(0f, Math.min(1f, t));
+        return 1f - c * c * c * (c * (c * 6f - 15f) + 10f);
+    }
+
+    /**
+     * The program's soft pull, in px, at rest: a pixel {@code insidePx} in from the rim of a
+     * surface whose half short side is {@code halfShortPx}, for the look's band and bend, the
+     * soft band {@code softRimPx} and {@code lower} of the shelf's thickening (the shelf times
+     * how far the edge faces down, 0..1).
+     */
+    static float softPullPx(float insidePx, float bandPx, float softRimPx, float strengthPx,
+                            float halfShortPx, float rimWidthPx, float lower) {
+        float band = heldBandPx(Math.max(bandPx, softRimPx) * (1f + SHELF_THICKEN * lower),
+            halfShortPx);
+        float strength = Math.min(strengthPx * (1f + SHELF_THICKEN * lower),
+            SOFT_RIM_MAX_PULL_SHARE * band);
+        float t = Math.max(0f, Math.min(1f, insidePx / band));
+        return softProfile(t) * Math.min(strength, halfShortPx) * smoothstep(0f, rimWidthPx, insidePx);
+    }
+
+    /**
+     * The program's lip, the extra gathered light's share before the gain and the headroom hold,
+     * for an outline whose normal faces down by {@code ny}, {@code insidePx} in, over a sample of
+     * luma {@code luma}, at {@code shelf} (0..1).
+     */
+    static float shelfLipK(float ny, float insidePx, float density, float luma, float shelf) {
+        if (!(shelf > 0f) || !(ny > 0f)) return 0f;
+        return (float) Math.exp(-Math.max(insidePx, 0f) / (SHELF_LIP_DP * density)) * SHELF_LIP
+            * shelf * smoothstep(0.2f, 1f, ny) * (1f - Look.PALE_CUT * luma);
+    }
+
+
     /**
      * One compiled program and the uniforms it was last given. Every setter compares before it
      * writes, so a draw that re-states an unmoved surface pushes nothing to the GPU. Held only on
@@ -1702,6 +2096,15 @@ public final class GlassRefraction {
         /** Whether {@code sharp} is a clearer frame of its own, not the frost bound in its place. */
         private boolean mSharpDistinct;
         private float mLiveClarityWritten = Float.NaN;
+        /** The dock surface's glass as last written: {@code uSoftRim} in px and {@code uShelf}. */
+        private float mSoftRimWritten = Float.NaN, mShelfWritten = Float.NaN;
+        /**
+         * The beads as last written: {@code uBead}, the twelve slots and {@code uBeadCap};
+         * radius 0 is none.
+         */
+        private final float[] mBeadWritten = new float[3 + BEAD_SLOTS + 4];
+        private boolean mBeadWrittenValid;
+        private final float[] mBeadNext = new float[3 + BEAD_SLOTS + 4];
 
         private Program(float density) {
             mShader = new RuntimeShader(AGSL);
@@ -1718,6 +2121,99 @@ public final class GlassRefraction {
             mTouchOn = true;
             clearTouch();
             clearMotion();
+            setDockSurface(0f, 0f);
+            clearBeads();
+        }
+
+        /**
+         * Lens beads: no slab, one round bead under each icon. {@code centersX} holds
+         * {@code count} bead centres ({@link #BEAD_SLOTS} at most; more is not drawn as beads by
+         * the caller),
+         * all on the line {@code centerY}, each of {@code radiusPx}, around icons
+         * {@code 2 * iconHalfPx} tall, in the surface's own coordinates. The rect set by
+         * {@link #setRect} is then not read. Written only on a change.
+         */
+        public void setBeads(@NonNull float[] centersX, int count, float centerY, float radiusPx,
+                             float iconHalfPx) {
+            if (count <= 0 || !(radiusPx > 0f)) {
+                clearBeads();
+                return;
+            }
+            float[] slots = beadSlots(centersX, count);
+            mBeadNext[0] = centerY;
+            mBeadNext[1] = radiusPx;
+            mBeadNext[2] = Math.max(0f, iconHalfPx);
+            System.arraycopy(slots, 0, mBeadNext, 3, BEAD_SLOTS);
+            writeBeads();
+        }
+
+        /**
+         * The Search field's glass capsule under the beads (#84): a stadium at {@code left..right}
+         * by {@code top..bottom} in the surface's own coordinates, drawn as one more of the
+         * beads' shapes, with their rim, shelf and light.
+         * Read only while beads are on; {@link #clearBeads} and {@link #clearBeadCapsule} take it
+         * off. Written only on a change.
+         */
+        public void setBeadCapsule(float left, float top, float right, float bottom) {
+            if (!(right > left) || !(bottom > top)) {
+                clearBeadCapsule();
+                return;
+            }
+            int at = 3 + BEAD_SLOTS;
+            mBeadNext[at] = left;
+            mBeadNext[at + 1] = top;
+            mBeadNext[at + 2] = right;
+            mBeadNext[at + 3] = bottom;
+            writeBeads();
+        }
+
+        /** No capsule under the beads. */
+        public void clearBeadCapsule() {
+            Arrays.fill(mBeadNext, 3 + BEAD_SLOTS, mBeadNext.length, 0f);
+            writeBeads();
+        }
+
+        /** No beads: the slab, as every surface always drew. */
+        public void clearBeads() {
+            Arrays.fill(mBeadNext, 0f);
+            System.arraycopy(beadSlots(new float[0], 0), 0, mBeadNext, 3, BEAD_SLOTS);
+            writeBeads();
+        }
+
+        /** Whether beads are on: the dock draws one lens per icon rather than its slab. */
+        public boolean hasBeads() {
+            return mBeadWrittenValid && mBeadWritten[1] > 0f;
+        }
+
+        private void writeBeads() {
+            if (mBeadWrittenValid && Arrays.equals(mBeadNext, mBeadWritten)) return;
+            mBeadWrittenValid = true;
+            System.arraycopy(mBeadNext, 0, mBeadWritten, 0, mBeadNext.length);
+            float[] n = mBeadNext;
+            mShader.setFloatUniform("uBead", n[0], n[1], n[2], 0f);
+            mShader.setFloatUniform("uBeadXA", n[3], n[4], n[5], n[6]);
+            mShader.setFloatUniform("uBeadXB", n[7], n[8], n[9], n[10]);
+            mShader.setFloatUniform("uBeadXC", n[11], n[12], n[13], n[14]);
+            mShader.setFloatUniform("uBeadCap", n[15], n[16], n[17], n[18]);
+        }
+
+        /**
+         * The dock surface's own glass ({@code com.termux.app.dock.DockSurfaceSpec}): a soft rim
+         * band at least {@code softRimDp} wide (0 keeps the narrow ring every other surface
+         * wears) and {@code shelf} of the lower shelf, 0..1: the thicker lower edge and the
+         * brighter lip along it. 0, 0 is the program as it always was. Written only on a change.
+         */
+        public void setDockSurface(float softRimDp, float shelf) {
+            float soft = softRimDp > 0f ? softRimDp * mDensity : 0f;
+            float lower = Math.max(0f, Math.min(1f, Float.isNaN(shelf) ? 0f : shelf));
+            if (soft != mSoftRimWritten) {
+                mSoftRimWritten = soft;
+                mShader.setFloatUniform("uSoftRim", soft);
+            }
+            if (lower != mShelfWritten) {
+                mShelfWritten = lower;
+                mShader.setFloatUniform("uShelf", lower);
+            }
         }
 
         /**
@@ -1867,9 +2363,12 @@ public final class GlassRefraction {
             mRight = right;
             mBottom = bottom;
             mRadius = cornerRadiusPx;
+            float drawnRight = Math.max(left + 1f, right);
+            float drawnBottom = Math.max(top + 1f, bottom);
             mShader.setFloatUniform("uRectMin", left, top);
-            mShader.setFloatUniform("uRectMax", Math.max(left + 1f, right), Math.max(top + 1f, bottom));
-            mShader.setFloatUniform("uRadius", Math.max(0f, cornerRadiusPx));
+            mShader.setFloatUniform("uRectMax", drawnRight, drawnBottom);
+            mShader.setFloatUniform("uRadius",
+                rectRadiusPx(left, top, drawnRight, drawnBottom, cornerRadiusPx));
         }
 
         /** The knobs, converted at this program's density. The gathered light is fixed and takes none. */

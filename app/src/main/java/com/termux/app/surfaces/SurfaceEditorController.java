@@ -4,108 +4,109 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.graphics.DashPathEffect;
 import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.text.TextUtils;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
+import android.graphics.RectF;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.BaseAdapter;
-import android.widget.ListPopupWindow;
 import android.widget.TextView;
 
-import androidx.annotation.AttrRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.slider.LabelFormatter;
 
 import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.activities.SettingsActivity;
-import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.chrome.GlassMotion;
-import com.termux.app.fragments.settings.LayoutCanvasView;
+import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.PeekGlassGeometry;
+import com.termux.app.dock.PeekGlassPreferences;
+import com.termux.app.fragments.settings.termux.AppearanceSettingsStore;
+import com.termux.app.fragments.settings.termux.HomePreferencesFragment;
+import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
+import com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment;
+import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
+import com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment;
+import com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment;
+import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
+import com.termux.app.layouteditor.LayoutEditorPlan;
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
-import com.termux.app.statusbar.TopPaneClockForm;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.SeamDress;
 import com.termux.app.surfaces.AppearanceLooks.Control;
-import com.termux.app.surfaces.AppearanceLooks.Door;
-import com.termux.app.surfaces.AppearanceLooks.Target;
+import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.PaneRetroEffect;
-import com.termux.app.terminal.TerminalClockWidget;
+import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.logger.Logger;
 import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
-import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-
 /**
- * The Appearance and Layout editor (appearance-layout-editor SPEC §3.1–3.6): the launcher itself,
- * live, scaled into a frame at the device's corner radius, over a bottom area that never scrolls.
- * The mode pill picks what the frame and the bottom area are for: Appearance tunes the live
- * render; Layout cross-fades the frame to the layout canvas at the frame's full size (Layout is
- * not a miniature) with the orientation toggle, the Style toggle and eye-off below it.
+ * The Appearance editor (appearance-and-settings-rework §2, §3, §7, §8): the launcher itself,
+ * live, scaled into a frame, on one rule: <b>tap the thing</b>. A tap on a surface in the frame
+ * (Home, the status bar, the terminal, the dock, the keyboard) raises its card; the editor bar's
+ * palette raises the Appearance card for what has no surface. A plain horizontal swipe slides
+ * the frame between Home and the Workspace, and a card writes the half the frame shows. Where a
+ * surface sits is its card's Position row (editor-redesign §1: the shrunken Layout mode, its
+ * canvas and its drags, is retired); the editor edits the orientation the phone is in, and turning
+ * the phone turns the editor with it.
  *
- * <p>The frame is {@code terminal_root_container} scaled about a top-centre pivot
- * ({@link AppearanceEditorFrame}); the bottom area is an M3 sheet outside it
- * ({@link AppearanceEditorPanel}). While the editor is up the terminal's own touches are taken by
- * the gesture overlay — one tap target per element, and the bare wallpaper under all of them — the
- * in-app keyboard is raised so it can be tapped, and the pane wall's paging is held.</p>
+ * <p><b>The frame.</b> {@code terminal_root_container} scaled about a top-centre pivot
+ * ({@link AppearanceEditorFrame}), at rest between the top line and the half line over the editor
+ * bar ({@link EditorBar}); every surface wears a quiet outline, and a hidden one comes back from the
+ * Elements list on its screen's card. With a card up the frame shrinks and moves so the selected surface, which alone wears the
+ * primary ring, stays in view ({@link EditorFramePose}). While the editor is up the terminal's own
+ * touches are taken by the gesture overlay, the in-app keyboard is raised so it can be tapped, and
+ * the pane wall's paging is held.</p>
  *
- * <p>Row 1 is the Look slider — Clear · Mist · Tint · Solid · Custom. A stop applies its Look
- * live. At Custom, row 2 is a row of vertical sliders: the global set with nothing tapped, or the
- * tapped element's own ({@link AppearanceLooks#controls}); a tap on a bare area of the frame
- * brings the global set back. Moving to Custom, by the slider or by a tap at a Look stop, starts
- * from the Look on screen and writes nothing. While the Look page is showing the status bar is
- * held expanded. Sliding from Custom back to a Look applies it; this visit's Custom values stay
- * for the way back, and Undo returns to the state at open. Done at Custom also stores the look
- * as the saved Custom.</p>
+ * <p><b>The cards.</b> One sheet ({@link EditorCardSheet}) shows any card: its rows come from
+ * {@link EditorRows}, its values and writes from this class ({@link CardModel}). A slider moved on
+ * a card is the surface's own value on the half the frame shows (a dot after its label); Reset in
+ * the card's menu puts the surface back on that half's Look, and Copy makes the other half look
+ * the same. Moving a surface's slider at any Look stop leaves the half at Custom by itself.</p>
  *
- * <p>Layout mode's bottom area carries what no Look sets: the Style toggle and the global Corners
- * and Margin (SPEC §3.5), shown under both Styles (SPEC §3.7). They write through like every other
- * control, and the one Undo, dirty state and Discard cover them. The layout canvas is told the
- * Style, Corners and Margin and draws every shape from the shape model. Layout editor v2
- * (DECISIONS items 2 to 15): eye-off in the sheet is the only hide target and opens the hidden
- * tiles; the hide zone is gone and its room is the frame's again; Key radius is Layout's, beside
- * the keyboard's type chips. At the Custom stop with nothing tapped the global Blur, Grain and
- * Opacity each re-attach every surface to the base; the keyboard's row carries a "Keyboard theme"
- * door into Settings, from which Back returns to the same session.</p>
- *
- * <p>Everything writes through to preferences live, so the frame is the real thing; Undo and
- * Discard put back the state at open ({@link AppearanceSnapshot}) and the arrangement at open
- * ({@link LayoutEditorController}, whose session opens and closes with the editor). One dirty
- * state, one Undo, one Done and one unsaved-changes question cover both modes; switching modes
- * never asks. The activity keeps the render pipeline; what the editor needs from it crosses
- * {@link Host}.</p>
+ * <p><b>Commit on Done.</b> Everything writes through, so the frame is the real thing; Undo and
+ * Discard put back the state at open: the look on both halves ({@link AppearanceSnapshot}), the
+ * app-wide choices ({@link EditorSettingsSnapshot}), minimal mode, and the arrangement, whose
+ * session ({@link LayoutEditorController}) opens and closes with the editor. One dirty state, one
+ * Undo, one Done and one unsaved-changes question cover all of it.</p>
  */
 public final class SurfaceEditorController implements AppearanceSurfaceController.Editor {
+
+    private static final String LOG_TAG = "SurfaceEditor";
 
     /** What the editor needs from the activity: its views, its prefs, and its render pipeline. */
     public interface Host {
@@ -114,6 +115,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Nullable TermuxAppSharedPreferences preferences();
         /** How the place on screen is arranged: which surfaces the frame has to offer. */
         @NonNull PlaceLayout placeLayout();
+        /** The page the wall rests on, which the editor stands over. */
+        @NonNull PaneWallPage pageOnScreen();
         @Nullable TermuxInAppKeyboard inAppKeyboard();
         boolean isInAppKeyboardShown();
         /**
@@ -124,16 +127,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         /** Takes down a keyboard {@link #showInAppKeyboardForEditor()} raised. */
         void hideInAppKeyboardForEditor();
         boolean isFloatingDock();
-        /**
-         * The pinned-apps row shares its container with nothing, so its icons fill the bar
-         * rather than a share of it: the Icon size slider reads its dp off that icon.
-         */
+        /** The pinned-apps row shares its container with nothing; Height reads its icon off it. */
         boolean isAppsRowAlone();
-        /**
-         * Holds the top status bar expanded for the editor, or lets it rest as it is stored: a
-         * transient state that animates the bar's height like a fold does but never writes the
-         * stored compact/expanded choice. A side-edge bar cannot expand, so there it does nothing.
-         */
+        /** Lets the top status bar rest as it is stored (the editor never holds it open). */
         void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate);
         /** The dock now shows {@code count} app buttons: its row is rebuilt for them, live. */
         void applyDockButtonCount(int count);
@@ -146,75 +142,79 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void applyTerminalSurfaceAppearance();
         /** Dresses all the chrome again from the current state, the way a launch does. */
         void redressChrome();
+        /** The session is over and the chrome is dressed again. */
+        default void editorSessionEnded() { }
         void refreshTerminalWindowBar();
-        /** Rebuilds the terminal palette if the contrast level moved (Legibility drives both). */
+        /** Rebuilds the terminal palette if the contrast level moved. */
         void refreshTerminalPalette();
-        /**
-         * Pushes the cursor-trail on/off and style and retro terminal effect preferences into the panes
-         * (the Trail and Effect menus drive both).
-         */
+        /** Pushes the cursor trail and the terminal effect into the panes. */
         void applyTerminalMotionLook();
         /** Dock geometry changed; with {@code commit} the terminal is also resized. */
         void applyGeometryPreview(boolean commit);
         /** The coalesced glass re-render. */
         void applyGlassPreview();
-        /**
-         * Holds the Tint amount's frame tint for a drag's release while {@code held}: the blurred
-         * frames keep the tint they were baked with, so a Tint or Opacity drag re-bakes them
-         * once, on release, not on every tick.
-         */
+        /** The shared Text size moved; with {@code terminal} the panes too. */
+        default void applyTextSizePreview(boolean terminal) {}
+        /** Holds the frame tint's re-bake for a drag's release while {@code held}. */
         default void holdGlassFrameBakes(boolean held) {}
-        /**
-         * While {@code light}, the glass passes are a Frost, Opacity or Tint drag's ticks: they
-         * dress the layers already up (tint, opacity, grain) and leave what a tick cannot afford
-         * (backdrop re-cuts, the post-layout accessory render, the keyboard's face sampling and
-         * palette, the window bar's full refresh) to the full pass the release asks for.
-         */
+        /** While {@code light}, the glass passes are a drag's ticks. */
         default void setGlassDragPreview(boolean light) {}
-        /**
-         * Keeps the unblurred wallpaper capture while the editor is open, so each re-bake a
-         * release causes blurs it again instead of reading the wallpaper again.
-         */
+        /** Keeps the unblurred wallpaper capture while the editor is open. */
         default void retainGlassCapture(boolean retain) {}
-        /**
-         * Whether the glass edge is drawn now (Android 13, a wallpaper set from inside the
-         * launcher, Lazy mode off): the global set offers Depth only while it is.
-         */
+        /** Whether the glass edge is drawn now: Depth and the glass edge are offered only then. */
         boolean isGlassRefractionActive();
-        /**
-         * The rect the terminal's own frame is drawn at, in {@code terminal_root_container}'s own
-         * unscaled coordinates, as {@code {left, top, right, bottom}}, or null while it cannot be
-         * measured.
-         */
+        /** The terminal's own frame in {@code terminal_root_container}'s unscaled coordinates. */
         @Nullable int[] terminalFrameRectInRoot();
         /** The corner that frame actually draws with. */
         float terminalFrameCornerRadiusPx();
         /** The corner the keyboard surface itself is clipped to. */
         float keyboardSurfaceCornerRadiusPx();
-        /** Layout mode's model and wiring, which the editor lends its canvas and tray to. */
+        /** The layout session: where each bar sits and the sizes the cards write. */
         @Nullable LayoutEditorController layoutEditor();
-        /**
-         * The wallpaper for the editor to paint inside the frame, or null where the launcher
-         * already draws its own (not in passthrough mode) or cannot read the system's. Called off
-         * the main thread.
-         */
+        /** The wallpaper for the editor to paint inside the frame, or null. Off the main thread. */
         @Nullable Drawable readEditorWallpaper();
         /** The dim the window's root paints over the system wallpaper. */
         int editorWallpaperDimColor();
         /**
-         * Whether the frame has to paint the wallpaper itself: only in passthrough mode, where the
-         * system draws it behind a translucent window. Otherwise {@code wallpaper_backdrop} is the
-         * wallpaper and scales with the container, and nothing is read or painted for the editor.
+         * The system's description of the wallpaper the screen shows, as one colour
+         * ({@link com.termux.app.chrome.WallpaperInk#hintColor}); transparent for none. What the
+         * page label stands on when the picture itself cannot be read (no storage permission).
          */
+        default int editorWallpaperHintColor() {
+            return 0;
+        }
+        /** Whether the frame has to paint the wallpaper itself (passthrough mode). */
         boolean editorPaintsWallpaper();
-        /**
-         * Icons mode's content for the sheet: the pack tiles and the Pinned-only switch, built
-         * once per session (shown, hidden and released with the mode). Null where there is none.
-         */
+        /** The icon packs for the Appearance card's Icon pack row, built once per session. */
         @Nullable
         default AppearanceSurfaceController.Page createIconsContent() {
             return null;
         }
+        /** Whether minimal mode is on. */
+        default boolean isMinimalMode() {
+            return false;
+        }
+        /** Turns minimal mode on or off, as the corner tab does. */
+        default void setMinimalMode(boolean minimal) {}
+        /** Home's rows were written: the live Home takes them now. */
+        default void applyHomeSettings() {}
+        /**
+         * The "Glass widgets" switch moved: every built-in widget's own glass choice goes back to
+         * following it. Returns what each cleared widget held, by id, for Undo.
+         */
+        @NonNull
+        default java.util.Map<Integer, String> clearWidgetGlassChoices() {
+            return java.util.Collections.emptyMap();
+        }
+        /** Undo of {@link #clearWidgetGlassChoices}: the widgets get their own choices back. */
+        default void restoreWidgetGlassChoices(@NonNull java.util.Map<Integer, String> choices) {}
+        /**
+         * The window wears {@code mode} (a {@code night-mode} value) without storing it; the
+         * activity relaunches into it when the day or night it shows changes.
+         */
+        default void previewTheme(@NonNull String mode) {}
+        /** Stores {@code mode} as Settings' theme row does, for a window already wearing it. */
+        default void commitTheme(@NonNull String mode) {}
     }
 
     @NonNull private final Host mHost;
@@ -223,25 +223,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mHost = host;
     }
 
-    /**
-     * Whether the editor's session is open: the Appearance surface is up, on whatever page. The
-     * editor's own controls are only on screen while it is {@link #isPresented presented}.
-     */
+    /** Whether the editor's session is open. */
     public boolean isActive() {
         return mSession;
     }
 
-    /** Whether the editor's frame and sheet are on screen (the Look or Layout page is showing). */
+    /** Whether the editor's frame is on screen. */
     @Override
     public boolean isPresented() {
         return mOpen;
     }
 
-    /**
-     * A view's top-left in {@code root}'s own unscaled coordinates — the space the editor's tap
-     * targets are laid out in, which the frame's scale does not change. For the activity's half
-     * of {@link Host#terminalFrameRectInRoot()}.
-     */
+    /** A view's top-left in {@code root}'s own unscaled coordinates. */
     public static boolean offsetInRoot(@NonNull View view, @NonNull View root,
                                        @NonNull int[] out) {
         return AppearanceEditorFrame.offsetIn(view, root, out);
@@ -250,6 +243,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable
     private TermuxAppSharedPreferences prefs() {
         return mHost.preferences();
+    }
+
+    /** Use as, read fresh: Terminal only has no Home half, no Home card and no Match rows. */
+    @NonNull
+    private com.termux.app.wall.UseAs useAs() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return com.termux.app.wall.UseAs.read(prefs == null ? null : prefs.getUseAs());
     }
 
     @Nullable
@@ -279,6 +279,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return Math.round(dpToPx(value));
     }
 
+    private float density() {
+        return getResources().getDisplayMetrics().density;
+    }
+
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }
@@ -289,131 +293,96 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The state at open: what Undo and Discard return to, and what "unsaved" is measured against. */
     @Nullable private AppearanceSnapshot mEntry;
     @Nullable private String mEntrySignature;
-    /** The Custom values of this session, kept while a Look is showing. */
-    @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
+    /** The app-wide choices at open, and their signature as it stands (refreshed on a write). */
+    @Nullable private EditorSettingsSnapshot mEntrySettings;
+    @Nullable private String mSettingsNow;
+    /** Minimal mode at open. */
+    private boolean mEntryMinimal;
     /** The saved Custom blob at open, which Undo and Discard put back; null while closed. */
     @Nullable private String mEntryCustom;
+    /** The Custom values of this session, kept while a Look is showing. */
+    @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
     /**
-     * The last Depth position the user set this session, so a thumb left on a flat stretch of
-     * the curve reads back where it was left ({@link GlassEdgeControls.Edge#depth(int)}). Not
-     * stored: cleared at open, when a Look is picked, and by Undo or Discard.
+     * The widgets' own glass choices the "Glass widgets" switch cleared this visit, by id, as
+     * each first stood: what Undo gives back.
      */
+    @NonNull private final java.util.Map<Integer, String> mClearedWidgetGlass =
+        new java.util.LinkedHashMap<>();
+    /**
+     * The halves the Look slider was put on Custom this visit while their values still match a
+     * Look: Custom then writes nothing (the Look on screen is its seed), so without this the
+     * slider would read the Look again and the All surfaces strip would never show.
+     */
+    @NonNull private final java.util.EnumSet<WallHalf> mHeldCustom =
+        java.util.EnumSet.noneOf(WallHalf.class);
+    /** The last Depth position the user set this session ({@link GlassEdgeControls}). */
     private int mDepthSet = GlassEdgeControls.NONE;
-    private int mEntryStop = AppearanceLooks.CUSTOM_STOP;
-    /** The Look slider's stop. */
-    private int mStop = AppearanceLooks.CUSTOM_STOP;
-    /** What a tap in the frame selected, or null; only ever set at the Custom stop. */
-    @Nullable private Target mTarget;
+    /** The half the frame shows: where a card writes. */
+    @NonNull private WallHalf mHalf = WallHalf.WORKSPACE;
+    /**
+     * Each Match this visit that can still be taken back, by the screen it copied onto (the
+     * Match rows' Undo). Dropped when the editor closes or its Undo puts everything back.
+     */
+    @NonNull private final java.util.EnumMap<WallHalf, ScreenMatch.Undo> mMatchUndos =
+        new java.util.EnumMap<>(WallHalf.class);
+    /** The card that is up, or null. */
+    @Nullable private EditorCard mCard;
     /** Whether the editor raised the in-app keyboard itself, and so owes taking it down. */
     private boolean mRaisedKeyboard;
-    /**
-     * Where the next presentation of its page opens, as the surface remembered it (the person
-     * left from there within the window); used by that presentation and then forgotten.
-     */
-    @Nullable private AppearanceReturnState mRestore;
-    /**
-     * A remembered selection the frame did not offer yet: the keyboard is raised only once the
-     * frame has settled, so its selection is made then.
-     */
-    @Nullable private Target mRestoreTarget;
-    /**
-     * The session of the activity this one replaced in a configuration relaunch: the next
-     * presentation continues it (its Undo, its unsaved state) instead of opening a new one.
-     */
+    /** The session a relaunch handed over, continued by the next presentation. */
     @Nullable private CarriedSession mCarriedNext;
 
     @Nullable private AppearanceEditorFrame mFrame;
-    @Nullable private AppearanceEditorPanel mPanel;
+    @Nullable private EditorBar mBar;
+    @Nullable private EditorCardSheet mSheet;
+    @NonNull private final CardModel mModel = new CardModel();
     private ViewTreeObserver.OnGlobalLayoutListener mLayoutListener;
     private long mLayoutSignature = Long.MIN_VALUE;
-    /**
-     * The tallest the sheet gets in each mode (AppearanceEditorPanel.measureTallest: Appearance
-     * with Row B up), and the taller of the two, which the frame stands above so no sheet covers
-     * it and the frame never moves when Row B comes and goes. Recomputed with the frame. The
-     * sheet's own height follows what shows (applyPanelHeight).
-     */
-    private int mAppearanceHeightPx;
-    private int mLayoutHeightPx;
-    private int mRestHeightPx;
-    /**
-     * The one sheet height of every page and stop (AppearancePreviewArea.reservePx): the tallest
-     * of the three pages, the Custom row's included, as far as the preview's least scale allows.
-     * The preview above it is one size everywhere.
-     */
-    private int mSheetReservePx;
-    private int mNavInsetPx;
-    /** The content width the panel was last measured at, and its running height animation. */
-    private int mPanelWidthPx;
-    @Nullable private android.animation.ValueAnimator mPanelAnimator;
-    private int mPanelTargetPx;
+    @Nullable private AppearanceSurfaceController.Page mIconsPage;
 
-    /** The air round the preview, which the clock popup keeps from the bar too. */
-    private static final int FRAME_GAP_DP = AppearancePreviewArea.GAP_DP;
-    /** The selection outline's stroke. */
-    private static final int OUTLINE_STROKE_DP = 2;
-    private static final long PANEL_MS = 240L;
+    /** The air the clock popup keeps from the window's edges. */
+    private static final int FRAME_GAP_DP = EditorFramePose.GAP_DP;
+    /** The selected surface's ring and every surface's quiet outline, on screen. */
+    private static final int RING_DP = 2;
+    private static final int QUIET_DP = 1;
+    /** The quiet outline's share of colorOutline. */
+    private static final float QUIET_ALPHA = 0.4f;
+    private static final long POSE_MS = 240L;
 
-    /**
-     * The activity resumed with the editor open: the status pane keeps the shape the editor is
-     * holding it in (expanded on the Look page) until the editor closes and hands it back.
-     */
+    /** The activity resumed with the editor open: the status pane rests as it is stored. */
     public void collapseStatusPaneIfLeftExpanded() {
-        applyStatusExpansion(false);
+        mHost.setTopStatusBarExpandedForEditor(false, false);
     }
 
     /**
-     * The activity came back to the front with the editor still open — from the Keyboard theme
-     * page, say (DECISIONS item 15). The session is the same one: nothing is reverted or closed,
-     * and the Undo still measures from the moment the editor opened. What the other page changed
-     * (the keyboard's colours and typeface) is read again so the frame shows it, and the bottom
-     * area is restated from preferences.
+     * The activity came back to the front with the editor still open — from a Settings page a
+     * card's row opened. The session is the same one; what that page changed is read again.
      */
     public void onActivityStarted() {
         if (!mOpen)
             return;
-        applyStatusExpansion(false);
         TermuxInAppKeyboard keyboard = keyboard();
         if (keyboard != null)
             keyboard.onPreferencesReloaded();
-        syncPanel();
-        if (mLayoutMode) syncLayoutCanvas();
-        else positionTargets();
+        refreshSettingsSignature();
+        restateCard();
+        positionTargets();
     }
 
     // ----------------------------------------------------------------------------------- session
-    //
-    // One session spans the Appearance surface, whichever page it shows: the held wall, the
-    // editor's wallpaper (decoded when the surface opens, painted inside the launcher's container
-    // and kept under an opaque window for the whole session), the status pane's borrowed shape.
-    // Look and Layout are the editor's presentation: the frame, the sheet, the tap targets, one
-    // Undo baseline. Presenting and dismissing it moves between the pages without ending the
-    // session, so a hop from the Overview does no setup that is not about the picture on screen.
 
-    /** Whether the session is open: the surface is up, on any page. */
     private boolean mSession;
-    /** Set by the Appearance surface: Done hands the page change to it. */
     @Nullable private Runnable mOnDone;
-    /** The editor wallpaper's load has finished: a picture, none to paint, or a failure. */
     private boolean mWallpaperSettled;
     @Nullable private Runnable mWallpaperWaiter;
-    /** Bumped by every present and dismiss, so a late post of the other one does nothing. */
     private int mPresentToken;
-    /** The sheet's reveal is running; a height change in that time is made without animation. */
-    private boolean mPanelRevealing;
 
-    /**
-     * The surface's Done: it takes the editor off screen itself (to the Overview, or the launcher
-     * for a surface opened straight into an editor). Without one Done only saves.
-     */
     @Override
     public void setOnDone(@Nullable Runnable onDone) {
         mOnDone = onDone;
     }
 
-    /**
-     * Opens the session: holds the wall, remembers the status pane and starts reading the
-     * editor's wallpaper now, so it is painted before any page change needs it.
-     */
+    /** Opens the session: holds the wall and starts reading the editor's wallpaper now. */
     @Override
     public void beginSession() {
         if (mSession || prefs() == null)
@@ -427,19 +396,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mFrame == null || mFrame.root() != rootContainer)
             mFrame = new AppearanceEditorFrame(rootContainer);
         mWallpaperSettled = false;
-        if (mHost.editorPaintsWallpaper()) {
+        if (mHost.editorPaintsWallpaper())
             loadEditorWallpaper(rootContainer);
-        } else {
-            // Self-drawn: the real wallpaper_backdrop scales inside the container; nothing to load.
+        else
             mWallpaperSettled = true;
-        }
     }
 
-    /**
-     * Runs {@code ready} once the editor's wallpaper has been read and painted (or has none to
-     * paint), at most {@link #WALLPAPER_WAIT_MS} from now: a hop that starts before it would scale
-     * the launcher over the system's unscaled wallpaper.
-     */
     @Override
     public void awaitWallpaper(@NonNull Runnable ready) {
         ViewGroup content = mHost.findView(android.R.id.content);
@@ -458,13 +420,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private static final long WALLPAPER_WAIT_MS = 600L;
 
-    /**
-     * Runs {@code ready} once the launcher's container and the content view are laid out with
-     * nothing pending, so the frame is measured from real sizes; {@code failed} when there is no
-     * container, or it is still not laid out {@link #FRAME_WAIT_MS} from now. A cold start
-     * delivers the Appearance door before the first layout pass, and a frame placed then is
-     * placed from a zero-size container.
-     */
     @Override
     public void awaitFrame(@NonNull Runnable ready, @NonNull Runnable failed) {
         final View root = mHost.findView(R.id.terminal_root_container);
@@ -498,7 +453,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return;
             answered[0] = true;
             stopListening.run();
-            // A pass may be pending again by now (a clock's text, say): sizes are what count.
             if (hasSize(root) && hasSize(content))
                 ready.run();
             else
@@ -508,7 +462,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private static final long FRAME_WAIT_MS = 1000L;
 
-    /** Laid out at a real size, with no pass pending (the host the surface just added, say). */
     private static boolean isLaidOut(@NonNull View view) {
         return hasSize(view) && !view.isLayoutRequested();
     }
@@ -526,19 +479,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Shows the editor over the launcher: the frame, the sheet, the tap targets. Layout mode when
-     * {@code mode} is Layout, on {@code place} (the place on screen for null); Icons shows the real
-     * dock in the frame over the pack controls, with no tap targets, no status-bar expansion and
-     * no raised keyboard; {@code initialSection}
-     * may name a surface (a settings deep link), selected at the Custom stop and ignored at a Look
-     * so that opening the editor never changes the look. With {@code fromScale} above zero the
-     * frame starts at that scale and offset (the Overview's Home card) and settles into place;
-     * otherwise it grows from full size. The in-app keyboard is raised once the frame has
-     * settled, and {@code onSettled} runs then. Already presented, it moves to that mode.
+     * Shows the editor over the launcher, with {@code card} up (none for null), on the half of
+     * {@code place} (the page on screen for null). The frame grows from full size; the in-app
+     * keyboard is raised once it has settled, and {@code onSettled} runs then. Already presented,
+     * it slides to {@code place}'s half and raises {@code card} (or puts the card down). Either
+     * way {@code card} is up when this returns, or a warning in the log says why it is not.
      */
     @Override
-    public void present(@NonNull EditorMode mode, @Nullable PaneWallPage place,
-                        @Nullable String initialSection, float fromScale, float fromTranslationY,
+    public void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
                         @Nullable Runnable onSettled) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -546,26 +494,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         beginSession();
         if (!mSession)
             return;
-        final boolean layoutMode = mode == EditorMode.LAYOUT;
+        // Terminal only has no Home: a door to Home's card opens the editor at rest, and says so.
+        com.termux.app.wall.UseAs useAs = useAs();
+        if (!useAs.reaches(card)) {
+            android.util.Log.i(EditorDoor.LOG_TAG, useAs.doorLine(card.key + "-card"));
+            card = null;
+        }
+        // A card that stands on one screen opens on it: Home's card over a Workspace left on
+        // screen would be refused by cardRefusal, leaving the editor with no card.
+        place = useAs.editorPlace(EditorDoor.placeFor(card, place, mHost.pageOnScreen()));
         if (mOpen) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layoutMode) {
-                if (layout != null) {
-                    pushLayoutShape(layout);
-                    layout.begin(place);
-                }
-                if (mFramed) setModeInternal(EditorMode.LAYOUT, true, 0L);
-                else {
-                    mOpenInLayout = true;
-                    if (mIconsMode) setModeInternal(EditorMode.LOOK, false, 0L);
-                }
-            } else if (mode == EditorMode.ICONS) {
-                mOpenInLayout = false;
-                if (!mIconsMode) setModeInternal(EditorMode.ICONS, true, 0L);
+            if (place != null)
+                switchHalf(SeamDress.halfOf(place), true);
+            if (card != null) {
+                raiseOrReport(card);
+                raiseFromPeek();
             } else {
-                if (mLayoutMode || mIconsMode) setModeInternal(EditorMode.LOOK, true, 0L);
-                selectSection(initialSection);
+                collapseCard(true);
             }
+            if (mCard == null)
+                raiseScreenCard();
             if (onSettled != null)
                 onSettled.run();
             return;
@@ -575,885 +523,927 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (rootContainer == null || content == null)
             return;
         final int token = ++mPresentToken;
-        // Where the person left this page, when the surface remembers it: the selection (Look,
-        // at the Custom stop only), the place (Layout), the row's scroll (Icons).
-        AppearanceReturnState restore = mRestore;
-        mRestore = null;
-        if (restore != null && restore.editorMode() != mode)
-            restore = null;
-        if (restore != null && layoutMode && place == null)
-            place = placeNamed(restore.place);
+        // A theme preview no carried session owns (its relaunch lost the handover) is kept, as
+        // every other write of a session that ended without Discard is.
+        if (mCarriedNext == null)
+            commitThemePreview();
         mOpen = true;
         mHost.retainGlassCapture(true);
-        // No Look drag is under way at an open: a preview left behind by one that never saw its
-        // lift (a recreated activity) must not stand between the launcher and its stored look.
         if (mLookDrag == null)
             SharedPreferencesPreview.clear();
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
         mEntryCustom = prefs.getSurfaceCustomPreset();
+        mEntrySettings = EditorSettingsSnapshot.capture(settingsStore());
+        mSettingsNow = mEntrySettings.signature();
+        mEntryMinimal = mHost.isMinimalMode();
         mSessionCustom.clear();
+        mHeldCustom.clear();
+        mClearedWidgetGlass.clear();
         forgetGlassEdgePositions();
-        // The stop the live look stands on, whatever the last visit left the slider at. A Custom
-        // the user made is not a Look, so it opens at Custom by itself. A Custom left as a tap
-        // seeded it over a Look (a tap at Clear, then Done) is that Look: opening there at Custom
-        // would show the Look's values as Custom and leave the slider nowhere to move to, so the
-        // saved Custom could not come back. At the Look, a move to Custom applies it.
-        mStop = matchingStop();
-        mEntryStop = mStop;
-        // A session the activity before this one had open, carried over a relaunch: the same
-        // state at open, the same Custom of this visit and the same stop, so Undo and the
-        // unsaved question are as they were before the system rebuilt the window.
         CarriedSession carried = mCarriedNext;
         mCarriedNext = null;
         if (carried != null) {
             mEntry = carried.entry;
             mEntrySignature = carried.entrySignature;
             mEntryCustom = carried.entryCustom;
-            mEntryStop = carried.entryStop;
-            mStop = carried.stop;
+            mEntrySettings = carried.settings;
+            mEntryMinimal = carried.minimal;
             mSessionCustom.copyFrom(carried.custom);
+            refreshSettingsSignature();
         }
-        mTarget = null;
-        mRestoreTarget = restore == null ? null : targetNamed(restore.target);
-        // The in-app keyboard is one of the things the frame offers; it is raised after the frame
-        // has settled (the relayout and the terminal's resize would land on the animation).
+        PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
+        mHalf = page == null ? WallHalf.WORKSPACE : SeamDress.halfOf(page);
+        mCard = null;
         mRaisedKeyboard = false;
-        mKeyboardOwed = false;
 
         if (mFrame == null || mFrame.root() != rootContainer)
             mFrame = new AppearanceEditorFrame(rootContainer);
-        if (mPanel == null) {
-            mPanel = AppearanceEditorPanel.inflate(mHost.context(), content);
-            mPanel.setListener(new PanelListener());
-        }
-        View panelView = mPanel.view();
-        if (panelView.getParent() != content) {
-            if (panelView.getParent() instanceof ViewGroup)
-                ((ViewGroup) panelView.getParent()).removeView(panelView);
-            content.addView(panelView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM));
-        }
-        mLayoutMode = false;
-        mIconsMode = mode == EditorMode.ICONS;
-        mOpenInLayout = layoutMode;
-        // Icons' content is built now, whatever the mode, while the sheet is still hidden: its
-        // pack listing loads behind the other modes, and a pill switch into Icons later finds
-        // the tiles there and measured instead of building and loading them at the tap.
-        ensureIconsContent();
-        if (restore != null && mIconsMode && mIconsPage != null)
-            mIconsPage.restoreScrollPosition(restore.iconsScrollPx);
-        mPanel.setMode(mIconsMode ? EditorMode.ICONS : EditorMode.LOOK);
-        mPanel.fadeInRows(0L);
-        mPanel.hideRow2();
-        syncPanel();
-        if (mIconsMode) showIconsPage(true);
-        // The bar's title is the mode the page opens in, so it never reads Look for a frame.
-        if (mPageListener != null)
-            mPageListener.onModeChanged(mIconsMode ? EditorMode.ICONS : EditorMode.LOOK);
-        notifyDirty();
-        panelView.setVisibility(View.INVISIBLE);
-
-        // The layout session opens with the presentation, whichever mode it opens in, so the one
-        // Undo and the one dirty state are measured from the same moment for both.
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null) {
-            attachLayoutViews(content, layout);
-            layout.setOnChangedListener(this::syncDirty);
-            // The canvas draws its first frame under the Style and the Corners and Margin the
-            // user already has.
-            pushLayoutShape(layout);
+            layout.setOnChangedListener(this::onArrangementChanged);
+            layout.setOnPlaceShownListener(this::restateCard);
             layout.begin(place, carried == null ? null : carried.arrangement);
         }
+        if (mBar == null) {
+            mBar = new EditorBar(mHost.context());
+            mBar.setListener(new BarListener());
+        }
+        mBar.attach(content);
+        // A picture read before the bar existed is applied now; a new bar starts at the theme's.
+        mLabelInk = 0;
+        if (mLabelPicture == null)
+            mBar.resetHalfNameInk();
+        applyLabelInk();
+        TermuxAppSharedPreferences hintPrefs = prefs();
+        mBar.setThemeHintWanted(hintPrefs != null && !hintPrefs.isAppearanceThemeHintSeen());
+        mBar.setShown(true);
+        mBar.setBarShown(true, false);
+        mBarUp = true;
+        mBar.setHalf(mHalf);
+        mBar.setOrientation(layout != null && layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
+        if (mSheet == null)
+            mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
+        mSheet.attach(content);
+        notifyDirty();
 
         bindTargets();
         setOverlayVisible(true);
         registerLayoutListener(content);
         mFramed = false;
-        if (fromScale > 0f) {
-            pushDisplayInsets(content);
-            mFrame.prime(fromScale, fromTranslationY);
-        }
+        // The card goes up now, not in the frame pass below: that pass is a post, and a post can
+        // wait behind a pending traversal, so a card raised there is not up when this returns.
+        // The sheet waits below the screen for its detents and rises with the frame's first pose.
+        // With no card named (or one that cannot stand here) the screen's card stands at peek:
+        // the sheet is never down while the editor is open.
+        if (card != null)
+            raiseOrReport(card);
+        if (mCard == null)
+            raiseScreenCard();
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
             frameSizeChanged();
-            layoutFrame(true);
             mFramed = true;
-            revealPanel();
-            // The Look page holds the status bar open, animating with the sheet's reveal; the
-            // Layout and Icons pages leave it as it is stored.
-            if (!mOpenInLayout && !mIconsMode)
-                applyStatusExpansion(true);
+            if (!layoutFrame(true))
+                layoutFrameWhenReady(content, token, FRAME_RETRIES);
             positionTargets();
-            if (mOpenInLayout) {
-                mOpenInLayout = false;
-                // The canvas fades in with the frame (not after it): the cross-fade reads as the
-                // same frame changing what it shows.
-                setModeInternal(EditorMode.LAYOUT, true, 0L);
-            } else if (!mIconsMode) {
-                selectSection(initialSection);
-                selectRestoredTarget();
-            }
             long wait = ReducedMotion.isEnabled(mHost.context()) ? 0L
                 : AppearanceEditorFrame.ENTER_MS + 20L;
             content.postDelayed(() -> {
                 if (!mOpen || token != mPresentToken)
                     return;
-                // Icons shows the dock only: the keyboard comes when the editor leaves that mode.
-                if (mIconsMode)
-                    mKeyboardOwed = true;
-                else if (!mHost.isInAppKeyboardShown())
+                // Raised so it can be tapped, where the place shows it; a keyboard the place
+                // keeps down stays down, and its card in the stack is the way to it.
+                LayoutEditorController shown = mHost.layoutEditor();
+                if (!mHost.isInAppKeyboardShown()
+                    && (shown == null || shown.isKeyboardShown()))
                     mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
-                // A remembered keyboard selection is offered only now; past here it is dropped.
-                selectRestoredTarget();
-                mRestoreTarget = null;
                 if (onSettled != null)
                     onSettled.run();
             }, wait);
         });
     }
 
-    // ------------------------------------------------------------------------- Layout mode
-
-    /** Whether the frame is showing the layout canvas. */
-    private boolean mLayoutMode;
-
-    /** The session is on the Icons page: the real dock in the frame over the pack controls. */
-    private boolean mIconsMode;
-    /** The keyboard was not raised for Icons mode: it is raised when another mode shows. */
-    private boolean mKeyboardOwed;
-    /** Icons mode's content, built on first use and released with the session. */
-    @Nullable private AppearanceSurfaceController.Page mIconsPage;
-
-    /** The mode the editor shows. */
+    /** The card that is up, for the surface to remember. */
+    @Nullable
     @Override
+    public EditorCard shownCard() {
+        return mOpen ? mCard : null;
+    }
+
+    /** The half the frame shows. */
     @NonNull
-    public EditorMode mode() {
-        return mIconsMode ? EditorMode.ICONS : mLayoutMode ? EditorMode.LAYOUT : EditorMode.LOOK;
+    @VisibleForTesting
+    WallHalf half() {
+        return mHalf;
     }
-    /** A Layout door opened the editor; Layout mode is shown once the frame is placed. */
-    private boolean mOpenInLayout;
-    /** The layout canvas's host: the frame's rect, over the scaled launcher. */
-    @Nullable private FrameLayout mLayoutFrame;
-    /** The views lent to Layout mode, built with the frame host. */
-    @Nullable private LayoutEditorController.Views mLayoutViews;
-    /** The move control, out of the frame into the editor round it (placeMoveControl). */
-    @Nullable private MaterialButton mLayoutMove;
-    /** The frame's rect in the content view, as {@code {left, top, right, bottom}}. */
-    @Nullable private int[] mFrameRectInContent;
-    /** The frame's corner on screen: the device radius at the frame's scale. */
-    private float mFrameCornerPx;
-    private static final long LAYOUT_FADE_MS = 200L;
+
+    // ---------------------------------------------------------------------- the halves and the bar
 
     /**
-     * Lends Layout mode its views: the canvas in a frame host of its own over the scaled launcher,
-     * with the move control and the keyboard's tools over it, and the bottom area's toggle, eye-off
-     * and hidden tiles.
+     * Slides the frame to {@code half} (the real wall slides inside the scaled container), and a
+     * card up stays when its object stands there too; otherwise it goes down.
      */
-    private void attachLayoutViews(@NonNull ViewGroup content,
-                                   @NonNull LayoutEditorController layout) {
-        AppearanceEditorPanel panel = mPanel;
-        if (panel == null)
-            return;
-        FrameLayout frame = mLayoutFrame;
-        if (frame == null) {
-            View inflated = LayoutInflater.from(mHost.context())
-                .inflate(R.layout.layout_editor_frame, content, false);
-            if (!(inflated instanceof FrameLayout))
-                return;
-            frame = (FrameLayout) inflated;
-            frame.setOutlineProvider(new ViewOutlineProvider() {
-                @Override public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
-                        mFrameCornerPx + RING_PX);
-                }
-            });
-            frame.setClipToOutline(true);
-            mLayoutFrame = frame;
-        }
-        if (frame.getParent() != content) {
-            if (frame.getParent() instanceof ViewGroup)
-                ((ViewGroup) frame.getParent()).removeView(frame);
-            // Over the activity's root, under the bottom area.
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(0, 0,
-                Gravity.TOP | Gravity.LEFT);
-            int panelIndex = content.indexOfChild(panel.view());
-            if (panelIndex >= 0) content.addView(frame, panelIndex, params);
-            else content.addView(frame, params);
-        }
-        placeMoveControl(content, frame);
-        frame.animate().cancel();
-        frame.setAlpha(1f);
-        frame.setVisibility(View.GONE);
-        LayoutCanvasView liftCanvas = frame.findViewById(R.id.layout_editor_canvas);
-        if (liftCanvas != null)
-            // The lifted copy follows the finger over the whole editor, the sheet included.
-            liftCanvas.setLiftOverlayHost(content);
-        LayoutCanvasView shapeCanvas = frame.findViewById(R.id.layout_editor_canvas);
-        if (shapeCanvas != null)
-            shapeCanvas.setOnModelResizedListener(this::onModelShapeChanged);
-        if (mLayoutViews == null) {
-            LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
-            MaterialButton move = mLayoutMove;
-            if (canvas == null || move == null)
-                return;
-            // One set of views per process, like the panel: the controller binds them once. The
-            // keyboard's tools are the sheet's: they take its Row B while the keyboard is selected.
-            mLayoutViews = new LayoutEditorController.Views(frame, canvas, panel.keyboardTools(),
-                panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(), move,
-                panel.orientationToggle(), panel.hiddenControl(), panel.hiddenHighlight(),
-                panel.hiddenTileGroup(), new LayoutEditorController.TilesHost() {
-                    @Override public void setHiddenTilesOpen(boolean open) {
-                        SurfaceEditorController.this.setHiddenTilesOpen(open);
-                    }
-
-                    @Override public void setKeyboardToolsShown(boolean shown) {
-                        if (mPanel != null)
-                            mPanel.setKeyboardToolsShown(shown);
-                    }
-                });
-        }
-        layout.attach(mLayoutViews);
-        layout.setKeyRadius(mKeyRadius);
-        positionLayoutFrame();
+    private void switchHalf(@NonNull WallHalf half, boolean animate) {
+        switchHalf(half, animate, false);
     }
 
-    /**
-     * The move control out of the frame, which clips to the phone's outline, into the editor round
-     * it, just above the frame: so it can stand in the gutter outside the phone and never covers
-     * the canvas (DECISIONS items 4 and 5). It stays under the bottom area.
-     */
-    private void placeMoveControl(@NonNull ViewGroup content, @NonNull FrameLayout frame) {
-        MaterialButton move = mLayoutMove;
-        if (move == null) {
-            move = frame.findViewById(R.id.layout_editor_move);
-            if (move == null)
-                return;
-            mLayoutMove = move;
-        }
-        if (move.getParent() == content
-            && content.indexOfChild(move) == content.indexOfChild(frame) + 1)
+    /** {@code swiped}: the user swiped the preview, so a screen's card follows the page. */
+    private void switchHalf(@NonNull WallHalf half, boolean animate, boolean swiped) {
+        if (!mOpen || half == mHalf)
             return;
-        ViewGroup.LayoutParams old = move.getLayoutParams();
-        int width = old != null ? old.width : ViewGroup.LayoutParams.WRAP_CONTENT;
-        int height = old != null ? old.height : ViewGroup.LayoutParams.WRAP_CONTENT;
-        if (move.getParent() instanceof ViewGroup)
-            ((ViewGroup) move.getParent()).removeView(move);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height,
-            Gravity.TOP | Gravity.LEFT);
-        content.addView(move, content.indexOfChild(frame) + 1, params);
-    }
-
-    /** The bottom area's Row B swapped for the hidden tiles, or back (DECISIONS item 3). */
-    private void setHiddenTilesOpen(boolean open) {
-        if (mPanel != null)
-            mPanel.setHiddenTilesOpen(open);
-    }
-
-    /**
-     * Key radius, as Layout mode shows it beside the keyboard's type chips (DECISIONS item 6): the
-     * key caps' radius alone, written through with the keyboard's live preview, and covered by
-     * the one Undo. Like Corners and Margin it belongs to no Look, so it never moves the slider.
-     */
-    private final LayoutEditorController.KeyRadius mKeyRadius =
-        new LayoutEditorController.KeyRadius() {
-            @Override public int value() {
-                TermuxAppSharedPreferences prefs = prefs();
-                return prefs == null ? 0
-                    : AppearanceLooks.keyCornersValueFor(prefs.getInAppKeyboardKeyCornerRadiusDp());
-            }
-
-            @Override public int max() {
-                return AppearanceLooks.KEY_CORNERS_MAX_DP;
-            }
-
-            @NonNull @Override public String label(int value) {
-                return getString(R.string.appearance_editor_key_corners,
-                    AppearanceLooks.keyCornersDp(value));
-            }
-
-            @Override public void onChanged(int value, boolean dragging) {
-                beginDrag(dragging);
-                writeKeyCorners(value);
-            }
-
-            @Override public void onReleased() {
-                endDrag();
-            }
-        };
-
-    // ---- the other orientation's phone model ------------------------------------------------------
-
-    private static final long MODEL_MS = 250L;
-    private boolean mModelShape;
-    private float mModelProgress;
-    @Nullable private android.animation.ValueAnimator mModelAnimator;
-
-    /**
-     * Layout mode shows the other orientation (landscape in a portrait editor): the canvas draws
-     * a landscape phone model of its own, so the portrait host's ground and the live launcher
-     * under it, which cannot show landscape, fade away beneath it. Cross-fades over 250ms; with
-     * reduced motion it jumps.
-     */
-    private void applyModelShape(boolean resized, boolean animate) {
-        if (resized == mModelShape && mModelAnimator == null && mModelProgress == (resized ? 1f : 0f))
-            return;
-        mModelShape = resized;
-        FrameLayout host = mLayoutFrame;
-        if (mModelAnimator != null) {
-            mModelAnimator.cancel();
-            mModelAnimator = null;
-        }
-        final float to = resized ? 1f : 0f;
-        if (!animate || ReducedMotion.isEnabled(mHost.context()) || host == null || !mOpen) {
-            setModelProgress(to);
+        if (half == WallHalf.HOME && !useAs().showsHomePage()) {
+            android.util.Log.i(EditorDoor.LOG_TAG, useAs().doorLine("editor-home-half"));
             return;
         }
-        android.animation.ValueAnimator animator =
-            android.animation.ValueAnimator.ofFloat(mModelProgress, to);
-        animator.setDuration(MODEL_MS);
-        animator.setInterpolator(Motion.settle());
-        animator.addUpdateListener(a -> setModelProgress((Float) a.getAnimatedValue()));
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator a) {
-                if (mModelAnimator == animator)
-                    mModelAnimator = null;
-            }
-        });
-        mModelAnimator = animator;
-        animator.start();
-    }
-
-    /** 0 is the host's own phone over the launcher, 1 the free-standing model. */
-    private void setModelProgress(float progress) {
-        mModelProgress = progress;
-        AppearanceEditorFrame frame = mFrame;
-        if (frame != null)
-            frame.root().setAlpha(1f - progress);
-        FrameLayout host = mLayoutFrame;
-        if (host != null && host.getBackground() != null)
-            host.getBackground().mutate().setAlpha(Math.round(255f * (1f - progress)));
-    }
-
-    /** The canvas changed between the host's own shape and the other orientation's model. */
-    private void onModelShapeChanged() {
-        if (!mOpen || !mLayoutMode || mLayoutFrame == null)
-            return;
-        LayoutCanvasView canvas = mLayoutFrame.findViewById(R.id.layout_editor_canvas);
-        if (canvas == null)
-            return;
-        applyModelShape(canvas.isModelResized(), true);
-        if (!ReducedMotion.isEnabled(mHost.context())) {
-            // The model itself morphs in: the new outline fades up as the old one leaves.
-            canvas.animate().cancel();
-            canvas.setAlpha(0f);
-            canvas.animate().alpha(1f).setDuration(MODEL_MS).setInterpolator(Motion.settle())
-                .start();
-        }
-    }
-
-    /** Stands the canvas's host exactly over the frame's rect, at the frame's corner. */
-    private void positionLayoutFrame() {
-        FrameLayout frame = mLayoutFrame;
-        int[] rect = mFrameRectInContent;
-        if (frame == null || rect == null)
-            return;
-        ViewGroup.LayoutParams raw = frame.getLayoutParams();
-        if (!(raw instanceof FrameLayout.LayoutParams))
-            return;
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        // One pixel past the scaled launcher on every side: two anti-aliased edges (the launcher's
-        // clip and this host's) never add up to full cover, so the host reaches past instead.
-        int left = rect[0] - RING_PX;
-        int top = rect[1] - RING_PX;
-        int width = Math.max(1, rect[2] - rect[0] + 2 * RING_PX);
-        int height = Math.max(1, rect[3] - rect[1] + 2 * RING_PX);
-        if (params.width != width || params.height != height || params.leftMargin != left
-            || params.topMargin != top) {
-            params.width = width;
-            params.height = height;
-            params.leftMargin = left;
-            params.topMargin = top;
-            params.gravity = Gravity.TOP | Gravity.LEFT;
-            frame.setLayoutParams(params);
-        }
-        frame.invalidateOutline();
-        LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
-        if (canvas != null)
-            canvas.setFrameCornerRadiusPx(mFrameCornerPx + RING_PX);
-    }
-
-    /**
-     * The page bar's mode pill moved. One session for both modes: switching never asks and never
-     * resets anything.
-     */
-    @Override
-    public void setMode(@NonNull EditorMode mode) {
-        if (mode != mode())
-            setModeInternal(mode, true, 0L);
-    }
-
-    /** Builds Icons mode's content once per session and hands it to the sheet. */
-    private void ensureIconsContent() {
-        AppearanceEditorPanel panel = mPanel;
-        if (panel == null || mIconsPage != null)
-            return;
-        AppearanceSurfaceController.Page page = mHost.createIconsContent();
-        if (page == null)
-            return;
-        mIconsPage = page;
-        panel.setIconsContent(page.root());
-        page.setOnContentChanged(this::onIconsContentChanged);
-    }
-
-    /**
-     * The tile row was built again for a listing that landed with other packs: while Icons shows,
-     * the sheet takes the content's new height (a two-line pack name is never cut off), and the
-     * frame follows on the sheet's clock. Another mode measures it on the way in.
-     */
-    private void onIconsContentChanged() {
-        AppearanceEditorPanel panel = mPanel;
-        if (panel != null && mPanelWidthPx > 0) {
-            // The pack listing is part of the reserve every page is held to.
-            mSheetReservePx = measureSheetReserve(panel);
-            mRestHeightPx = Math.max(mRestHeightPx, mSheetReservePx);
-        }
-        if (mOpen && mFramed)
-            applyPanelHeight(true);
-    }
-
-    /**
-     * Icons shows the dock alone, as it does when it opens from the Overview: a keyboard the
-     * editor raised goes down with the switch, and comes back when another mode shows. One the
-     * person had up already stays, as it does on that path.
-     */
-    private void lowerRaisedKeyboardForIcons() {
-        if (!mRaisedKeyboard)
-            return;
-        mHost.hideInAppKeyboardForEditor();
-        mRaisedKeyboard = false;
-        mKeyboardOwed = true;
-    }
-
-    /** The content is on screen (true) or has left it: it re-reads the choice, or stops loading. */
-    private void showIconsPage(boolean shown) {
-        AppearanceSurfaceController.Page page = mIconsPage;
-        if (page == null)
-            return;
-        if (shown) page.onShown();
-        else page.onHidden();
-    }
-
-    /**
-     * Swaps what the frame and the bottom area are for. The frame stays put: the canvas's host
-     * is the frame's own rect, so the cross-fade changes the picture and nothing moves.
-     *
-     * <p>Into or out of Icons nothing covers the frame (Look and Layout hide their change under
-     * the canvas's fade), so the switch lands the state the Overview's hop into Icons lands (the
-     * status pane as stored, no keyboard the editor raised, the frame over the Icons sheet) in
-     * one move: the status pane's fold, the keyboard, the sheet's height and the frame's refit
-     * all start from this call, the sheet's new rows fade in over it, and the Icons content was
-     * built and loaded while the sheet was hidden ({@link #present}).</p>
-     */
-    private void setModeInternal(@NonNull EditorMode mode, boolean animate, long delayMs) {
-        AppearanceEditorPanel panel = mPanel;
-        if (!mOpen || panel == null)
-            return;
-        final boolean layout = mode == EditorMode.LAYOUT;
-        final boolean wasIcons = mIconsMode;
-        mLayoutMode = layout;
-        mIconsMode = mode == EditorMode.ICONS;
-        final boolean iconsSwitch = wasIcons != mIconsMode;
-        if (mIconsMode) ensureIconsContent();
-        panel.setMode(mode);
-        if (iconsSwitch)
-            showIconsPage(mIconsMode);
-        if (mPageListener != null)
-            mPageListener.onModeChanged(mode);
-        // Corners and Margin are the Custom row's too: each page reads what the other wrote.
-        syncLayoutControls();
-        if (mode == EditorMode.LOOK)
-            syncPanel();
-        if (mIconsMode && !wasIcons && mFramed)
-            lowerRaisedKeyboardForIcons();
-        if (!mIconsMode && mKeyboardOwed && mFramed) {
-            mKeyboardOwed = false;
-            if (!mHost.isInAppKeyboardShown())
-                mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
-        }
-        applyStatusExpansion(animate);
-        applyPanelHeight(animate);
-        if (iconsSwitch)
-            panel.fadeInRows(animate && mFramed && !ReducedMotion.isEnabled(mHost.context())
-                ? PANEL_MS : 0L);
-        LayoutEditorController editor = mHost.layoutEditor();
-        if (layout) {
-            dismissClockDropdown();
-            positionLayoutFrame();
-            if (editor != null) {
-                pushLayoutShape(editor);
-                editor.sync();
-            }
-            LayoutCanvasView shown = mLayoutFrame == null ? null
-                : mLayoutFrame.findViewById(R.id.layout_editor_canvas);
-            applyModelShape(shown != null && shown.isModelResized(), animate);
-        } else {
-            applyModelShape(false, animate);
-            positionTargets();
-            // The move control stands outside the frame, so the frame's fade does not take it.
-            if (mLayoutMove != null)
-                mLayoutMove.setVisibility(View.GONE);
-        }
-        fadeLayoutFrame(layout, animate, delayMs);
-        syncDirty();
-    }
-
-    private void fadeLayoutFrame(boolean shown, boolean animate, long delayMs) {
-        FrameLayout frame = mLayoutFrame;
-        if (frame == null)
-            return;
-        frame.animate().cancel();
-        boolean instant = !animate || ReducedMotion.isEnabled(mHost.context());
-        if (shown) {
-            boolean wasShown = frame.getVisibility() == View.VISIBLE;
-            frame.setVisibility(View.VISIBLE);
-            if (instant) {
-                frame.setAlpha(1f);
-                return;
-            }
-            if (!wasShown) frame.setAlpha(0f);
-            frame.animate().alpha(1f).setStartDelay(delayMs).setDuration(LAYOUT_FADE_MS)
-                .setInterpolator(Motion.settle()).start();
-            return;
-        }
-        if (instant || frame.getVisibility() != View.VISIBLE) {
-            frame.setAlpha(1f);
-            frame.setVisibility(View.GONE);
-            return;
-        }
-        frame.animate().alpha(0f).setStartDelay(0L).setDuration(LAYOUT_FADE_MS)
-            .setInterpolator(Motion.settle())
-            .withEndAction(() -> {
-                if (mLayoutMode && mOpen)
-                    return;
-                frame.setVisibility(View.GONE);
-                frame.setAlpha(1f);
-            }).start();
-    }
-
-    // ------------------------------------------------------------------ the editor's wallpaper
-
-    /** Which wallpaper load is current; bumped on every open and close. */
-    private int mWallpaperToken;
-    /** The picture the frame is painting for this session, or null for none. */
-    @Nullable private Drawable mEditorWallpaper;
-
-    /**
-     * In passthrough mode the system draws the wallpaper behind the window, outside the frame's
-     * scale. The picture is read off the main thread and painted inside the container for the
-     * editor's lifetime; the surface's colorSurface scrim (never a window swap) covers what shows
-     * around the scaled frame. Not called in self-drawn mode.
-     */
-    private void loadEditorWallpaper(@NonNull View rootContainer) {
-        final int token = ++mWallpaperToken;
-        Thread reader = new Thread(() -> {
-            Drawable wallpaper;
-            try {
-                wallpaper = mHost.readEditorWallpaper();
-            } catch (RuntimeException e) {
-                wallpaper = null;
-            }
-            final Drawable picture = wallpaper;
-            rootContainer.post(() -> {
-                if (!mSession || token != mWallpaperToken)
-                    return;
-                if (picture != null) {
-                    mEditorWallpaper = picture;
-                    showEditorWallpaper(picture);
-                } else if (mPageListener != null) {
-                    mPageListener.onFrameWallpaperMissing();
-                }
-                wallpaperSettled();
-            });
-        }, "appearance-editor-wallpaper");
-        reader.setDaemon(true);
-        reader.start();
-    }
-
-    private void showEditorWallpaper(@NonNull Drawable picture) {
-        AppearanceEditorFrame frame = mFrame;
-        if (frame == null)
-            return;
-        View root = frame.root();
-        View decor = root.getRootView();
-        int[] parentInDecor = new int[2];
-        if (decor == null || !(root.getParent() instanceof View)
-            || !AppearanceEditorFrame.offsetIn((View) root.getParent(), decor, parentInDecor))
-            return;
-        int rootLeft = parentInDecor[0] + root.getLeft();
-        int rootTop = parentInDecor[1] + root.getTop();
-        frame.showWallpaper(picture, mHost.editorWallpaperDimColor(), -rootLeft, -rootTop,
-            decor.getWidth(), decor.getHeight());
-    }
-
-    private void selectSection(@Nullable String section) {
-        Target target = Target.forSlot(slotForSectionKey(section));
-        if (target != null && AppearanceLooks.isCustomStop(mStop))
-            select(target);
-    }
-
-    /**
-     * The remembered selection, once the frame offers it, at the Custom stop on the Look page;
-     * nothing when a deep link already chose one or the person has moved on.
-     */
-    private void selectRestoredTarget() {
-        Target target = mRestoreTarget;
-        if (target == null || !mOpen || mLayoutMode || mIconsMode || mTarget != null
-            || !AppearanceLooks.isCustomStop(mStop))
-            return;
-        select(target);
-        if (mTarget == target)
-            mRestoreTarget = null;
-    }
-
-    @Nullable
-    private static Target targetNamed(@Nullable String name) {
-        if (name == null)
-            return null;
-        for (Target target : Target.values()) {
-            if (target.name().equals(name))
-                return target;
-        }
-        return null;
-    }
-
-    @Nullable
-    private static PaneWallPage placeNamed(@Nullable String name) {
-        if (name == null)
-            return null;
-        for (PaneWallPage page : PaneWallPage.values()) {
-            if (page.name().equals(name))
-                return page;
-        }
-        return null;
-    }
-
-    @Override
-    public void restoreNext(@Nullable AppearanceReturnState state) {
-        mRestore = state;
-    }
-
-    /**
-     * The presentation's session as it stands, for the next activity after a configuration
-     * relaunch: the state at open (what Undo and Discard return to), the saved Custom at open,
-     * this visit's Custom, the Look stop, and the arrangement at open. The live values themselves
-     * are in the preferences already. While nothing is presented, the session handed over and not
-     * yet presented, if any.
-     */
-    @Nullable
-    @Override
-    public AppearanceSurfaceController.EditorSession carrySession() {
-        AppearanceSnapshot entry = mEntry;
-        String signature = mEntrySignature;
-        if (!mOpen || entry == null || signature == null)
-            return mCarriedNext;
+        mHalf = half;
         LayoutEditorController layout = mHost.layoutEditor();
-        return new CarriedSession(entry, signature, mEntryCustom, mEntryStop, mStop,
-            mSessionCustom.copy(), layout == null ? null : layout.entryArrangement());
-    }
-
-    @Override
-    public void adoptSessionNext(@Nullable AppearanceSurfaceController.EditorSession session) {
-        mCarriedNext = session instanceof CarriedSession ? (CarriedSession) session : null;
-    }
-
-    /** {@link #carrySession}'s content: immutable, and read only by {@link #present}. */
-    static final class CarriedSession implements AppearanceSurfaceController.EditorSession {
-        @NonNull final AppearanceSnapshot entry;
-        @NonNull final String entrySignature;
-        @Nullable final String entryCustom;
-        final int entryStop;
-        final int stop;
-        @NonNull final SessionCustom custom;
-        @Nullable final com.termux.app.place.PlaceArrangeSnapshot arrangement;
-
-        CarriedSession(@NonNull AppearanceSnapshot entry, @NonNull String entrySignature,
-                       @Nullable String entryCustom, int entryStop, int stop,
-                       @NonNull SessionCustom custom,
-                       @Nullable com.termux.app.place.PlaceArrangeSnapshot arrangement) {
-            this.entry = entry;
-            this.entrySignature = entrySignature;
-            this.entryCustom = entryCustom;
-            this.entryStop = entryStop;
-            this.stop = stop;
-            this.custom = custom;
-            this.arrangement = arrangement;
-        }
-    }
-
-    /** Where the editor stands on its page, for the surface to remember. */
-    @Override
-    public void describe(@NonNull AppearanceReturnState.Builder out) {
-        if (!mOpen)
-            return;
-        if (mIconsMode) {
-            AppearanceSurfaceController.Page icons = mIconsPage;
-            out.iconsScroll(icons == null ? 0 : icons.scrollPosition());
-        } else if (mLayoutMode) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            PaneWallPage place = layout == null ? null : layout.editedPlace();
-            out.place(place == null ? null : place.name());
-        } else {
-            out.look(mTarget == null ? null : mTarget.name(), AppearanceLooks.isCustomStop(mStop));
-        }
+        if (layout != null)
+            layout.showHome(half == WallHalf.HOME, animate);
+        if (mBar != null)
+            mBar.setHalf(half);
+        EditorCard followed = EditorDoor.cardAfterSwipe(mCard, half, useAs().showsHomePage());
+        if (followed != null && swiped) {
+            // A screen's card follows the page: same detent, rows rebuilt and scrolled to the top.
+            EditorCardSheet sheet = mSheet;
+            int detent = sheet != null ? sheet.detent() : -1;
+            EditorDoor.EDITOR_PAGE_SWIPE.log(followed);
+            openCard(followed, false);
+            if (sheet != null && detent >= 0 && mCard == followed)
+                sheet.setDetent(detent, false);
+        } else if (mCard != null && !mCard.standsOn(half)) {
+            // The card's object is not on this screen: the screen's own card takes its place, at
+            // the same detent.
+            EditorCard screen = EditorCard.forScreen(half);
+            EditorDoor.EDITOR_PAGE_SWIPE.log(screen);
+            openCard(screen, animate);
+        } else
+            restateCard();
+        positionTargets();
     }
 
     /**
-     * The surface a settings deep link targets, or null for a plain open. "sessions" and "other"
-     * are what older callers and stored intents said before the sessions demotion and the terminal
-     * rename.
+     * The orientation chip names the orientation being edited, which is the phone's: the other
+     * one is edited by turning the phone (editor-redesign §1), and a tap says so.
      */
-    @Nullable
-    private static SurfaceSlot slotForSectionKey(@Nullable String section) {
-        if (section == null)
-            return null;
-        if ("sessions".equals(section))
-            return SurfaceSlot.STATUS;
-        if ("terminal".equals(section) || "other".equals(section))
-            return SurfaceSlot.CANVAS;
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            if (slot.key.equals(section))
-                return slot;
+    private void hintOtherOrientation() {
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (!mOpen || layout == null || layout.shownOrientation() == null)
+            return;
+        boolean landscape = layout.shownOrientation() == PlaceOrientation.LANDSCAPE;
+        // In the theme hint's bubble over the page label, not a toast across it.
+        if (mBar != null)
+            mBar.showNote(landscape ? R.string.appearance_bar_turn_for_portrait
+                : R.string.appearance_bar_turn_for_landscape);
+    }
+
+    /** The chip follows the orientation the session edits, which turns with the phone. */
+    private void restateOrientation() {
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (mBar != null && layout != null && layout.shownOrientation() != null)
+            mBar.setOrientation(layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
+    }
+
+    private final class BarListener implements EditorBar.Listener {
+        @Override public void onOrientation() {
+            hintOtherOrientation();
         }
+
+        @Override public void onUndo() {
+            undo();
+        }
+
+        @Override public void onDone() {
+            done();
+        }
+
+        @Override public void onPalette() {
+            EditorCard card = EditorDoor.EDITOR_PALETTE.route(null, null);
+            if (card == null)
+                return;
+            openCard(card, true);
+            // The palette stands on the card's header at peek: its card rises to be seen.
+            raiseFromPeek();
+        }
+
+        @Override public void onPageLabel() {
+            if (!mOpen)
+                return;
+            EditorCard card = EditorDoor.EDITOR_PAGE_LABEL.route(mHalf == WallHalf.HOME
+                ? com.termux.app.wall.PaneWallPage.WIDGETS
+                : com.termux.app.wall.PaneWallPage.TERMINAL, null);
+            if (card != null) openCard(card, true);
+        }
+
+        @Override public void onThemeHintSeen() {
+            TermuxAppSharedPreferences prefs = prefs();
+            if (prefs != null) prefs.setAppearanceThemeHintSeen(true);
+        }
+    }
+
+    // ------------------------------------------------------------------------------- the cards
+
+    /** Raises the card {@link #present} was asked for, or logs why it cannot stand there. */
+    private void raiseOrReport(@NonNull EditorCard card) {
+        String refusal = cardRefusal(card);
+        if (refusal == null)
+            openCard(card, true);
+        else
+            Logger.logWarn(LOG_TAG, "The " + card + " card was not raised: " + refusal);
+    }
+
+    /** Why {@code card} cannot go up now, or null when it can. */
+    @Nullable
+    private String cardRefusal(@NonNull EditorCard card) {
+        if (!mOpen)
+            return "the editor is not presented";
+        if (mSheet == null)
+            return "the editor has no card sheet";
+        if (!useAs().reaches(card))
+            return "Use as Terminal only has no Home card";
+        if (!card.standsOn(mHalf))
+            return "it does not stand on the " + mHalf + " half";
         return null;
     }
 
-    /** The stop the live look sits on: the Look it matches, or Custom. */
-    private int matchingStop() {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return AppearanceLooks.CUSTOM_STOP;
-        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
-            if (SurfacePresets.matches(prefs, preset))
-                return AppearanceLooks.stopForPresetId(preset.id);
-        }
-        return AppearanceLooks.CUSTOM_STOP;
+    /**
+     * Raises {@code card}, on the half the frame shows: a sheet that is down rises to its half
+     * detent, and a card already up gives way to it at the detent it stands at.
+     */
+    private void openCard(@NonNull EditorCard card, boolean animate) {
+        openCard(card, animate, EditorCardSheet.DETENT_HALF);
     }
 
-    // ------------------------------------------------------------------------------- the frame
+    /** {@link #openCard(EditorCard, boolean)}, a sheet that is down rising to {@code raiseTo}. */
+    private void openCard(@NonNull EditorCard card, boolean animate, int raiseTo) {
+        EditorCardSheet sheet = mSheet;
+        if (sheet == null || cardRefusal(card) != null)
+            return;
+        mCard = card;
+        if (card == EditorCard.APPEARANCE)
+            ensureIconsContent();
+        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
+        restateBar(animate);
+        layoutSheet();
+        applyPose(animate);
+        positionOutline();
+    }
+
+    /** The card of the screen the frame shows, at peek: the editor's resting state. */
+    private void raiseScreenCard() {
+        openCard(EditorCard.forScreen(mHalf), true, EditorCardSheet.DETENT_PEEK);
+    }
 
     /**
-     * Places the frame and sizes the bottom area by the shared preview contract
-     * ({@link AppearancePreviewArea}): the frame's visible top {@code GAP_DP} under the page bar,
-     * its bottom {@code GAP_DP} over the one sheet reserve, so Look (at any stop, Custom
-     * included), Layout and Icon pack show the launcher on the same rect. On a tablet in landscape
-     * ({@link EditorFormFactor}) the sheet is a side pane on the right instead, and the frame is
-     * fit to and centred in the column left of it; a rotation comes back here and re-arranges.
+     * Takes the card to peek, the header alone over the navigation inset, with the editor bar on
+     * it. The card is never put down while the editor is open.
      */
-    private void layoutFrame(boolean animate) {
-        AppearanceEditorFrame frame = mFrame;
-        AppearanceEditorPanel panel = mPanel;
-        ViewGroup content = mHost.findView(android.R.id.content);
-        if (frame == null || panel == null || content == null || content.getHeight() <= 0)
+    private void collapseCard(boolean animate) {
+        EditorCardSheet sheet = mSheet;
+        if (!sheetUp() || sheet == null)
             return;
+        sheet.setDetent(EditorCardSheet.DETENT_PEEK, animate);
+        restateBar(animate);
+        applyPose(animate);
+    }
+
+    /** A card at peek rises to its half detent: a door that names a card means to show it. */
+    private void raiseFromPeek() {
+        EditorCardSheet sheet = mSheet;
+        if (sheetUp() && sheet != null && sheet.detent() == EditorCardSheet.DETENT_PEEK)
+            sheet.setDetent(EditorCardSheet.DETENT_HALF, true);
+    }
+
+    /** Whether a card is up, at any detent. */
+    private boolean sheetUp() {
+        EditorCardSheet sheet = mSheet;
+        return mCard != null && sheet != null && sheet.isShown();
+    }
+
+    /** Whether the card stands at peek with the editor bar on its header. */
+    private boolean barOverSheet() {
+        EditorCardSheet sheet = mSheet;
+        return sheetUp() && sheet != null && sheet.detent() == EditorCardSheet.DETENT_PEEK;
+    }
+
+    /** Whether the editor bar is up: with no card, or on the card's header at peek. */
+    private boolean mBarUp;
+
+    /** The editor bar shows at peek and hides above it; changed only when that changes. */
+    private void restateBar(boolean animate) {
+        EditorBar bar = mBar;
+        if (bar == null || !mOpen)
+            return;
+        boolean up = !sheetUp() || barOverSheet();
+        if (up == mBarUp)
+            return;
+        mBarUp = up;
+        bar.setBarShown(up, animate);
+    }
+
+    @NonNull
+    private EditorRows.Offers offers() {
+        return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available(),
+            useAs().showsHomePage());
+    }
+
+    @NonNull
+    private String resetLabel(@NonNull EditorCard card) {
+        switch (card) {
+            case HOME: return getString(R.string.appearance_reset_home);
+            case WORKSPACE: return getString(R.string.appearance_reset_workspace);
+            case STATUS: return getString(R.string.appearance_reset_status);
+            case TERMINAL: return getString(R.string.appearance_reset_terminal);
+            case DOCK: return getString(R.string.appearance_reset_dock);
+            case KEYBOARD: return getString(R.string.appearance_reset_keyboard);
+            case APPEARANCE:
+            default: return getString(R.string.appearance_reset_look);
+        }
+    }
+
+    /** The card's rows read again (the half may have moved). */
+    private void restateCard() {
+        EditorCardSheet sheet = mSheet;
+        EditorCard card = mCard;
+        if (sheet == null || card == null || !sheet.isShown())
+            return;
+        sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), false);
+        sheet.restate();
+    }
+
+    private final class SheetListener implements EditorCardSheet.Listener {
+        @Override public void onReset() {
+            resetCard();
+        }
+
+        @Override public void onSheetMoved(int detent, float topPx) {
+            onCardMoved(detent, topPx);
+        }
+
+        @Override public void onSheetSettled(int detent, float topPx) {
+            onCardSettled();
+        }
+    }
+
+    /**
+     * The card header's reset, with no question asked: the object's glass back on the half's Look
+     * (a screen's own glass back as it shipped), and every other value the card's rows show back
+     * as it ships ({@link EditorCardReset}); where bars stand stays. Undo, not Reset, returns to
+     * the state the editor opened on.
+     */
+    private void resetCard() {
+        TermuxAppSharedPreferences prefs = prefs();
+        EditorCard card = mCard;
+        if (prefs == null || card == null)
+            return;
+        EditorCardReset.resetStore(prefs, card, mHalf);
+        mScreenFrostPosition.clear();
+        mLinkAnchor = null;
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (card == EditorCard.HOME)
+            resetHome();
+        if (card == EditorCard.DOCK) {
+            // The dock's height, type and the Search field and Drawer icon live in the layout
+            // session, so its Undo covers them.
+            float scale = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+            if (layout != null) {
+                layout.setDockHeightScale(scale);
+                layout.setDockStyle(DockStyle.GLASS_TRAY);
+                layout.setSearchField(false);
+                layout.setDrawerTile(false);
+                layout.setWallStripHeightDp(
+                    com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP);
+            } else {
+                prefs.setAppLauncherBarHeightScale(scale);
+            }
+            writeStyle(false);
+            resetDockOptions();
+        }
+        if (card == EditorCard.KEYBOARD && layout != null) {
+            layout.setKeyboardForm(PlaceLayout.KeyboardForm.DOCKED);
+            layout.setKeyboardHeightScale(prefs.getDefaultInAppKeyboardHeightScale(), false);
+            layout.setKeyboardChinDp(com.termux.shared.termux.settings.preferences
+                .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING, false);
+        }
+        syncAfterBulkWrite();
+    }
+
+    /** The Dock card's options and the apps row's Most used switch back as they ship. */
+    private void resetDockOptions() {
+        Context context = mHost.context();
+        for (String key : new String[] {"app_launcher_notification_dots",
+            "app_launcher_quick_reply_swipe", "app_launcher_bw_icons",
+            "app_launcher_most_used_page"}) {
+            boolean shipped = EditorSettingsSnapshot.defaultOf(key);
+            if (AppearanceSettingsStore.getBoolean(context, key, shipped) != shipped)
+                AppearanceSettingsStore.putBoolean(context, key, shipped);
+        }
+        settingsWritten();
+    }
+
+    /** Home's rows and widget grid back to what they ship with (its glass: EditorCardReset). */
+    private void resetHome() {
+        Context context = mHost.context();
+        for (String key : new String[] {HomeSettings.KEY_ICON_SCALE, HomeSettings.KEY_LABEL_SIZE,
+            HomeSettings.KEY_FOLDER_DENSITY,
+            HomeSettings.KEY_PAGE_INDICATOR})
+            AppearanceSettingsStore.putString(context, key, null);
+        AppearanceSettingsStore.putBoolean(context, HomeSettings.KEY_LABEL_TWO_LINES,
+            EditorSettingsSnapshot.defaultOf(HomeSettings.KEY_LABEL_TWO_LINES));
+        AppearanceSettingsStore.putBoolean(context, HomeSettings.KEY_LABEL_SHADOW,
+            EditorSettingsSnapshot.defaultOf(HomeSettings.KEY_LABEL_SHADOW));
+        AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax",
+            EditorSettingsSnapshot.defaultOf("wallpaper_parallax"));
+        AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style", null);
+        settingsWritten();
+        mHost.applyHomeSettings();
+        // The widget grid lives in the layout session, so its Undo covers it.
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (layout != null)
+            layout.setWidgetGrid(com.termux.shared.termux.settings.preferences
+                    .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
+    }
+
+    // ----------------------------------------------------------------------------- the frame
+
+    private boolean mFrameCtxValid;
+    private int mWindowHeightPx;
+    private int mWindowWidthPx;
+    private int mNavInsetPx;
+    private int mFrameTopPx;
+    private int mTopInsetPx;
+    private int mContainerTopPx;
+    private int mContainerLeftPx;
+    /** The window every pose is computed from; null until the first measure. */
+    @Nullable private EditorFramePose.Window mPoseWindow;
+    private float mTargetScale = -1f;
+    private float mTargetTx;
+    private float mTargetTy;
+    @Nullable private android.animation.ValueAnimator mFrameAnimator;
+
+    /**
+     * Measures the window round the frame (insets, the display's bands, the font scale), sizes
+     * the card's two detents and puts the frame at its pose: at rest, or with the card that is
+     * up. False when the window is not laid out yet; the caller tries again.
+     */
+    private boolean layoutFrame(boolean animate) {
+        AppearanceEditorFrame frame = mFrame;
+        ViewGroup content = mHost.findView(android.R.id.content);
+        if (frame == null || content == null || content.getHeight() <= 0)
+            return false;
         View root = frame.root();
         if (root.getHeight() <= 0 || !(root.getParent() instanceof View))
-            return;
+            return false;
         int windowHeight = content.getHeight();
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
         Insets bars = insets == null ? Insets.NONE
             : insets.getInsets(WindowInsetsCompat.Type.systemBars());
-        // The insets are the window's; the content view may already stand clear of either bar
-        // (a window that fits them), so only the part of each bar over the content counts.
         int[] contentInWindow = new int[2];
         content.getLocationInWindow(contentInWindow);
         int decorHeight = content.getRootView().getHeight();
         mNavInsetPx = Math.max(0, contentInWindow[1] + windowHeight
             - (decorHeight - bars.bottom));
-        panel.setNavInset(mNavInsetPx);
-        // Side insets (landscape navigation bar, camera cutout) over the sheet's content, from
-        // the window's own insets and only where they overlap this content view.
         Insets sides = insets == null ? Insets.NONE : insets.getInsets(
             WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-        // Where the page bar stands: padded by the status bar and the cutout together, exactly as
-        // the surface pads its pages, so the preview is measured from the bar as it is drawn.
-        int pageInsetTop = AppearancePreviewArea.pageInsetTopPx(
+        int topInset = AppearancePreviewArea.pageInsetTopPx(
             insets == null ? mHost.statusBarInsetTop() : sides.top, contentInWindow[1]);
-        int decorWidth = content.getRootView().getWidth();
-        int leftInset = Math.max(0, sides.left - contentInWindow[0]);
-        int rightInset = Math.max(0,
-            sides.right - (decorWidth - (contentInWindow[0] + content.getWidth())));
-        mSidePane = EditorFormFactor.tabletLandscape(
-            mHost.context().getResources().getConfiguration());
-        if (mSidePane) {
-            // The pane stands against the right edge: only the right inset is under it, and the
-            // left one is the preview column's.
-            int paneLeft = AppearancePreviewArea.sidePaneLeftPx(content.getWidth(), rightInset,
-                density());
-            panel.setSideInsets(0, rightInset);
-            mPanelWidthPx = content.getWidth() - paneLeft;
-            int[] column = AppearancePreviewArea.sideColumnPx(leftInset, paneLeft, density());
-            mColumnLeftPx = column[0];
-            mColumnRightPx = column[1];
-        } else {
-            panel.setSideInsets(leftInset, rightInset);
-            mPanelWidthPx = content.getWidth();
-        }
-        placePanel(panel.view());
         int[] parentOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset))
-            return;
-        int containerTop = parentOffset[1] + root.getTop();
-        int containerLeft = parentOffset[0] + root.getLeft();
-        // The page bar (back, the page pill, Undo, Done) stands between the status inset and the
-        // preview; nothing stands between the preview and the sheet (DECISIONS item 2).
-        int frameTop = AppearancePreviewArea.topPx(pageInsetTop, density());
-        mFrameCtxValid = true;
+            return false;
+        mContainerTopPx = parentOffset[1] + root.getTop();
+        mContainerLeftPx = parentOffset[0] + root.getLeft();
         mWindowHeightPx = windowHeight;
-        mFrameTopPx = frameTop;
-        mContainerTopPx = containerTop;
-        mContainerLeftPx = containerLeft;
-        cancelFrameAnimator();
-        // The display bands the frame shows round the container go into the fit, so it is the
-        // visible miniature, not the container alone, that stands between the two lines.
+        mWindowWidthPx = content.getWidth();
+        mTopInsetPx = topInset;
         pushDisplayInsets(content);
-        // Every page's sheet, at every stop, is the one reserve: the tallest of the three pages
-        // with the Custom row up, as far as the preview's least scale allows. The sheet's top
-        // edge and the preview over it never move; a Custom row taller than that scrolls.
-        mSheetReservePx = measureSheetReserve(panel);
-        mAppearanceHeightPx = panel.measureTallest(EditorMode.LOOK, mPanelWidthPx);
-        mLayoutHeightPx = panel.measureTallest(EditorMode.LAYOUT, mPanelWidthPx);
-        mRestHeightPx = Math.max(mSheetReservePx, mLayoutHeightPx);
-        mInLayoutFrame = true;
-        try {
-            applyPanelHeight(false);
-        } finally {
-            mInLayoutFrame = false;
+        refreshPoseWindow();
+        mFrameCtxValid = true;
+        layoutSheet();
+        if (mTargetScale < 0f) {
+            // The first pose: the frame grows into place from full size.
+            EditorFramePose.Pose pose = targetPose();
+            boolean grow = animate && !ReducedMotion.isEnabled(mHost.context());
+            frame.show(pose.scale, pose.translationX, pose.translationY, grow);
+            if (grow)
+                markEntering();
+            setTarget(pose.scale, pose.translationX, pose.translationY);
+            placeBar();
+        } else {
+            applyPose(false);
         }
-        int bottom = previewBottomPx(sheetHeightPx(panel));
-        float scale = previewScale(root, bottom);
-        float tx = previewTranslationX(root, scale);
-        float ty = previewTranslationY(root, frameTop, containerTop, bottom, scale);
-        frame.show(scale, tx, ty, animate);
+        if (mEditorWallpaper != null)
+            showEditorWallpaper(mEditorWallpaper);
+        return true;
+    }
+
+    /** The opening pass found no laid-out window: it tries again on the next frames, a few times. */
+    private void layoutFrameWhenReady(@NonNull View content, int token, int attempts) {
+        if (!mOpen || token != mPresentToken || mFrameCtxValid || attempts <= 0)
+            return;
+        content.postOnAnimation(() -> {
+            if (!mOpen || token != mPresentToken || mFrameCtxValid)
+                return;
+            frameSizeChanged();
+            if (layoutFrame(true))
+                positionTargets();
+            else
+                layoutFrameWhenReady(content, token, attempts - 1);
+        });
+    }
+
+    private static final int FRAME_RETRIES = 30;
+
+    /** The window the poses are computed from, read again after a measure. */
+    private void refreshPoseWindow() {
+        mPoseWindow = new EditorFramePose.Window(mWindowHeightPx, mTopInsetPx, mNavInsetPx,
+            density(), getResources().getConfiguration().fontScale, mContainerTopPx,
+            visibleHeightPx(), mRevealTopPx, dp(EditorBar.BAR_DP), dp(EditorBar.FOOT_GAP_DP));
+        mFrameTopPx = mPoseWindow.topPx();
+        EditorBar bar = mBar;
+        if (bar != null)
+            bar.setHalfRowHeight(mPoseWindow.halfRowPx());
+    }
+
+    /** The launcher's container plus the bands of the display the frame shows round it. */
+    private int visibleHeightPx() {
+        AppearanceEditorFrame frame = mFrame;
+        int root = frame == null ? 0 : frame.root().getHeight();
+        return root + Math.max(0, mRevealTopPx) + Math.max(0, mDisplayInsetBottomPx);
+    }
+
+    /** The card's detents for the window and the card up now. */
+    private void layoutSheet() {
+        EditorCardSheet sheet = mSheet;
+        EditorFramePose.Window window = mPoseWindow;
+        if (sheet == null || !mFrameCtxValid || window == null)
+            return;
+        int full = EditorFramePose.fullSheetPx(window);
+        int half = EditorFramePose.halfSheetPx(window, sheet.minHalfHeightPx(mWindowWidthPx), full);
+        sheet.setGeometry(half, full, mNavInsetPx);
+    }
+
+    /**
+     * The pose the frame is heading for: over the card at the detent it is settling on, and at
+     * peek over the editor bar on the card's header; with no card, over the editor bar.
+     */
+    @NonNull
+    private EditorFramePose.Pose targetPose() {
+        EditorFramePose.Window window = mPoseWindow;
+        EditorCardSheet sheet = mSheet;
+        if (window == null)
+            return new EditorFramePose.Pose(1f, 0f, 0f);
+        if (!sheetUp() || sheet == null)
+            return EditorFramePose.pose(window, Float.MAX_VALUE);
+        return EditorFramePose.pose(window,
+            poseTop(window, window.heightPx - sheet.heightAt(sheet.detent())));
+    }
+
+    /** The top the poses read for a card whose top edge is at {@code sheetTopPx}. */
+    private float poseTop(@NonNull EditorFramePose.Window window, float sheetTopPx) {
+        return barOverSheet() ? EditorFramePose.topOverBar(window, sheetTopPx) : sheetTopPx;
+    }
+
+    /**
+     * Where the frame stands now: at rest, or with the card that is up at its detent. The card
+     * moves on the same clock and curve ({@link #POSE_MS}, {@link Motion#settle()}), so the frame
+     * and the card's top edge keep their gap all the way.
+     */
+    private void applyPose(boolean animate) {
+        applyPose(animate, POSE_MS);
+    }
+
+    private void applyPose(boolean animate, long durationMs) {
+        // Before the first pose (a card raised while the window was being measured) the frame
+        // pass takes the pose itself: it grows the frame in, clipped, straight to the card.
+        if (mFrame == null || !mFrameCtxValid || !mOpen || mTargetScale < 0f)
+            return;
+        EditorFramePose.Pose pose = targetPose();
+        moveFrame(pose.scale, pose.translationX, pose.translationY, animate, durationMs);
+        placeBar();
+    }
+
+    /** Whether the frame stands where its last pose put it (or is on its way there). */
+    private boolean poseHolds() {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null || mTargetScale < 0f)
+            return true;
+        if (mFrameAnimator != null || mEntering || mFollowingSheet)
+            return true;
+        View root = frame.root();
+        return root.getScaleX() == mTargetScale && root.getTranslationX() == mTargetTx
+            && root.getTranslationY() == mTargetTy;
+    }
+
+    /** The frame's grow-in animation is running; a refit leaves it to land. */
+    private boolean mEntering;
+
+    private void markEntering() {
+        mEntering = true;
+        View root = mFrame == null ? null : mFrame.root();
+        if (root != null)
+            root.postDelayed(() -> mEntering = false, AppearanceEditorFrame.ENTER_MS + 20L);
+    }
+
+    private void setTarget(float scale, float tx, float ty) {
         mTargetScale = scale;
         mTargetTx = tx;
         mTargetTy = ty;
         setFrameRect(scale, tx, ty);
-        positionLayoutFrame();
-        // A rotation moved the decor around the container: the picture is cropped to it again.
-        if (mEditorWallpaper != null)
-            showEditorWallpaper(mEditorWallpaper);
+        restyleOutlines();
+    }
+
+    /** Moves the frame to its new pose on the card's clock; the outlines follow at the end. */
+    private void moveFrame(float scale, float tx, float ty, boolean animate, long durationMs) {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null)
+            return;
+        View root = frame.root();
+        boolean onItsWay = mFrameAnimator != null || mEntering;
+        if (scale == mTargetScale && tx == mTargetTx && ty == mTargetTy && !mFollowingSheet
+            && (onItsWay || (root.getScaleX() == scale && root.getTranslationX() == tx
+                && root.getTranslationY() == ty)))
+            return;
+        mFollowingSheet = false;
+        cancelFrameAnimator();
+        mEntering = false;
+        if (!animate || ReducedMotion.isEnabled(mHost.context()) || !mFramed) {
+            root.animate().cancel();
+            frame.show(scale, tx, ty, false);
+            setTarget(scale, tx, ty);
+            return;
+        }
+        root.animate().cancel();
+        final float fromScale = root.getScaleX();
+        final float fromTx = root.getTranslationX();
+        final float fromTy = root.getTranslationY();
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(durationMs);
+        animator.setInterpolator(Motion.settle());
+        animator.addUpdateListener(a -> {
+            float f = (Float) a.getAnimatedValue();
+            float nowScale = fromScale + (scale - fromScale) * f;
+            float nowTx = fromTx + (tx - fromTx) * f;
+            float nowTy = fromTy + (ty - fromTy) * f;
+            frame.setPose(nowScale, nowTx, nowTy);
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override public void onAnimationCancel(android.animation.Animator a) {
+                mCancelled = true;
+            }
+
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                if (mFrameAnimator == animator)
+                    mFrameAnimator = null;
+                if (mCancelled || !mOpen)
+                    return;
+                frame.setPose(scale, tx, ty);
+                setTarget(scale, tx, ty);
+            }
+        });
+        mFrameAnimator = animator;
+        mTargetScale = scale;
+        mTargetTx = tx;
+        mTargetTy = ty;
+        animator.start();
+    }
+
+    private void cancelFrameAnimator() {
+        android.animation.ValueAnimator animator = mFrameAnimator;
+        mFrameAnimator = null;
+        if (animator != null)
+            animator.cancel();
+    }
+
+    /** The scaled container's rect in the content view, as {@code {left, top, right, bottom}}. */
+    @Nullable private int[] mFrameRectInContent;
+
+    /** Works out {@link #mFrameRectInContent} for a pose. */
+    private void setFrameRect(float scale, float translationX, float translationY) {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null)
+            return;
+        View root = frame.root();
+        float scaledLeft = mContainerLeftPx + translationX + root.getWidth() * (1f - scale) / 2f;
+        float top = mContainerTopPx + translationY;
+        mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), (int) Math.floor(top),
+            (int) Math.ceil(scaledLeft + root.getWidth() * scale),
+            (int) Math.ceil(top + root.getHeight() * scale)};
     }
 
     /**
-     * Tells the frame where its clip stands around the container, from the window's own
-     * geometry: the container's rect in the decor against the decor's size, so the navigation bar
-     * below it and any side bar are counted, and the clip's arc is the display's, not the
-     * container's. Above the container it shows only as much of the status-bar band as wraps the
-     * element at the top of the screen ({@link AppearancePreviewArea#topRevealPx}). Unknown
-     * geometry leaves every inset at 0.
+     * The bar on the card's header at peek (over the navigation inset with no card), and the half
+     * line over the bar, or over the card while it stands higher with the bar hidden; the frame
+     * above it either way (the poses leave it the room). By translation, every frame of the
+     * card's motion included.
+     */
+    private void placeBar() {
+        EditorBar bar = mBar;
+        EditorCardSheet sheet = mSheet;
+        if (bar == null || !mFrameCtxValid)
+            return;
+        int gap = dp(EditorFramePose.GAP_DP);
+        boolean up = sheetUp() && sheet != null;
+        float under = up ? mWindowHeightPx - sheet.sheetTopPx() : mNavInsetPx;
+        float barLift = under + dp(EditorBar.FOOT_GAP_DP);
+        float halfLift = !up || barOverSheet() ? barLift + dp(EditorBar.BAR_DP) + gap
+            : under + gap;
+        bar.place(barLift, halfLift);
+        applyLabelInk();
+    }
+
+    // ---------------------------------------------------------------------- the Elements list
+
+    /** The Elements list on the screen card that is up, or null. */
+    @Nullable private com.termux.app.surfaces.cards.ElementsList mElements;
+
+    /** The Elements list for {@code screen}'s card, as the sheet builds it. */
+    @NonNull
+    private View elementsView(@NonNull WallHalf screen) {
+        com.termux.app.surfaces.cards.ElementsList list =
+            com.termux.app.surfaces.cards.ElementsList.build(mHost.context(), new ElementsHost(),
+                com.termux.app.surfaces.cards.ElementRows.rows(screen), true);
+        mElements = list;
+        return list.root;
+    }
+
+    /**
+     * Shows or puts away {@code element}, or the keyboard for null: what the card headers' eyes
+     * write, and the Elements list's for the status bar and the keyboard. Through the layout
+     * session, so Undo and Discard cover it.
+     */
+    private void writeShown(@Nullable Element element, boolean shown) {
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (layout == null)
+            return;
+        if (element == null) {
+            layout.setKeyboardShown(shown);
+            if (shown && !mHost.isInAppKeyboardShown()) {
+                mRaisedKeyboard = mHost.showInAppKeyboardForEditor() || mRaisedKeyboard;
+            } else if (!shown && mHost.isInAppKeyboardShown()) {
+                // The frame stops drawing it: off reads off, and its row in the Elements list
+                // greys out.
+                mHost.hideInAppKeyboardForEditor();
+                mRaisedKeyboard = false;
+            }
+        } else {
+            layout.setShown(element, shown);
+        }
+        positionTargets();
+    }
+
+    /**
+     * What the Elements list reads and writes: the same values as each element's own card (the
+     * header's eye, the Bars list's eye, the Dock card's Options tiles), so the two agree.
+     */
+    private final class ElementsHost implements com.termux.app.surfaces.cards.ElementsList.Host {
+        @NonNull private final DockHost mDock = new DockHost();
+
+        @Override public boolean offers(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (item.element != null)
+                return layout != null && layout.offers(item.element);
+            if (item.ridesTheDock())
+                return layout != null && layout.offers(Element.APPS);
+            return true;
+        }
+
+        @Override public boolean shown(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            switch (item.visibility) {
+                case ELEMENT:
+                    return layout != null && item.element != null && layout.isShown(item.element);
+                case KEYBOARD:
+                    // What the frame draws, as the Keyboard card's eye reads it.
+                    return mHost.isInAppKeyboardShown();
+                case SEARCH_FIELD:
+                    return mDock.option(com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD);
+                case DRAWER_TILE:
+                    return mDock.option(com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON);
+                case COMMAND_PALETTE_BUTTON:
+                    return mDock.option(
+                        com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE);
+                case NONE:
+                default:
+                    return true;
+            }
+        }
+
+        @Override public void setShown(
+                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item, boolean shown) {
+            switch (item.visibility) {
+                case ELEMENT:
+                    if (item.element == null)
+                        return;
+                    if (item.element == Element.STATUS)
+                        writeShown(Element.STATUS, shown);
+                    else
+                        mDock.setBarShown(item.element, shown);
+                    break;
+                case KEYBOARD:
+                    writeShown(null, shown);
+                    break;
+                case SEARCH_FIELD:
+                    mDock.setOption(com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD,
+                        shown);
+                    break;
+                case DRAWER_TILE:
+                    mDock.setOption(com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON,
+                        shown);
+                    break;
+                case COMMAND_PALETTE_BUTTON:
+                    mDock.setOption(
+                        com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE, shown);
+                    break;
+                case NONE:
+                default:
+                    return;
+            }
+            positionTargets();
+            syncDirty();
+            EditorCardSheet sheet = mSheet;
+            if (sheet != null && sheet.isShown())
+                sheet.restate();
+        }
+
+        @Override public void open(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
+            EditorCard card = EditorDoor.ELEMENTS_LIST.route(null, item.card);
+            if (card == null || !mOpen)
+                return;
+            if (card == EditorCard.DOCK)
+                dockCard().expand(item.expandedBar());
+            openCard(card, true);
+            EditorCardSheet sheet = mSheet;
+            if (item.section != null && sheet != null && mCard == card)
+                sheet.scrollTo(item.section);
+        }
+    }
+
+    /** The card stands at a new top edge, or settled on a detent. */
+    private int mLastDetent = -1;
+    /** The frame follows a card the finger is dragging, pose by pose, with no animator. */
+    private boolean mFollowingSheet;
+
+    private void onCardMoved(int detent, float topPx) {
+        placeBar();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.isDragging()) {
+            followSheet(topPx);
+            return;
+        }
+        if (mFollowingSheet) {
+            // The finger let go: the card settles, and the frame goes with it from where it is.
+            mLastDetent = -1;
+        }
+        if (detent != mLastDetent) {
+            mLastDetent = detent;
+            restateBar(true);
+            applyPose(true);
+        }
+    }
+
+    /** The card came to rest: the frame's pose and the outlines are made final. */
+    private void onCardSettled() {
+        mLastDetent = -1;
+        restateBar(true);
+        if (mFrameAnimator == null)
+            applyPose(false);
+    }
+
+    /** Under a dragged card the frame takes the pose for the card's top edge at once. */
+    private void followSheet(float cardTopPx) {
+        AppearanceEditorFrame frame = mFrame;
+        EditorFramePose.Window window = mPoseWindow;
+        if (frame == null || window == null || !mFrameCtxValid || !mOpen)
+            return;
+        cancelFrameAnimator();
+        mEntering = false;
+        frame.root().animate().cancel();
+        mFollowingSheet = true;
+        EditorFramePose.Pose pose = EditorFramePose.pose(window, poseTop(window, cardTopPx));
+        frame.setPose(pose.scale, pose.translationX, pose.translationY);
+    }
+
+    // ---- the display round the frame -----------------------------------------------------------
+
+    private int mDisplayInsetLeftPx;
+    private int mDisplayInsetTopPx;
+    private int mDisplayInsetRightPx;
+    private int mDisplayInsetBottomPx;
+    /** How much of the band above the container the frame shows. */
+    private int mRevealTopPx;
+    private final int[] mTmpOffset = new int[2];
+
+    /**
+     * Tells the frame where its clip stands round the container, from the window's own geometry,
+     * and how much of the status-bar band above it to show.
      */
     private void pushDisplayInsets(@NonNull ViewGroup content) {
         AppearanceEditorFrame frame = mFrame;
@@ -1485,10 +1475,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mDisplayInsetBottomPx);
     }
 
-    /**
-     * The status-bar band the frame shows above the container: enough to wrap the element at the
-     * top of the screen with the air it has beside it, from the element as it is laid out now.
-     */
     private int measureTopReveal(@NonNull View root) {
         int[] element = null;
         float elementRadius = 0f;
@@ -1496,7 +1482,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (status != null && status.getVisibility() == View.VISIBLE && status.getWidth() > 0
             && AppearanceEditorFrame.offsetIn(status, root, mTmpOffset)) {
             element = new int[] {mTmpOffset[0], mTmpOffset[1], mTmpOffset[0] + status.getWidth()};
-            elementRadius = outlineRadiusPx(Target.STATUS);
+            elementRadius = outlineRadiusPx(EditorCard.STATUS);
         }
         int[] terminal = mHost.terminalFrameRectInRoot();
         if (terminal != null && terminal[2] > terminal[0]
@@ -1509,18 +1495,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             AppearanceEditorFrame.deviceCornerRadiusPx(root), element, elementRadius);
     }
 
-    /** The display's edges' distance from the container, for the clip and the ring. */
-    private int mDisplayInsetLeftPx;
-    private int mDisplayInsetTopPx;
-    private int mDisplayInsetRightPx;
-    private int mDisplayInsetBottomPx;
-    /** How much of the band above the container the frame shows; see {@link #measureTopReveal}. */
-    private int mRevealTopPx;
-
     /**
-     * The status bar or the terminal moved under the frame (a Style, Margin or arrangement change
-     * landed): the band above is measured again and, when it changed, the frame takes its new
-     * pose on the sheet's clock. Never mid-drag; the release's layout pass comes back here.
+     * The status bar or the terminal moved under the frame: the band above is measured again
+     * and, when it changed, the frame takes its new pose. Never mid-drag.
      */
     private void refitTopReveal() {
         AppearanceEditorFrame frame = mFrame;
@@ -1530,497 +1507,225 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (measureTopReveal(frame.root()) == mRevealTopPx)
             return;
         pushDisplayInsets(content);
-        AppearanceEditorPanel panel = mPanel;
-        if (panel != null && mPanelWidthPx > 0)
-            mSheetReservePx = measureSheetReserve(panel);
-        applyPanelHeight(true);
+        refreshPoseWindow();
+        layoutSheet();
+        applyPose(true);
+    }
+
+    // ------------------------------------------------------------------ the editor's wallpaper
+
+    private int mWallpaperToken;
+    @Nullable private Drawable mEditorWallpaper;
+
+    /**
+     * The picture the page label stands on, as a small copy centre-cropped to the decor the way
+     * the screen shows it ({@link EditorLabelInk#cropBounds}), for {@link #applyLabelInk}; null
+     * while there is none. Kept for the session: the label moves with the card.
+     */
+    @Nullable private int[] mLabelPicture;
+    private int mLabelPictureWidth;
+    private int mLabelPictureHeight;
+    /** The label's ink as last set, so a placement that did not move it costs nothing. */
+    private int mLabelInk;
+
+    /** Passthrough mode: the picture is read off the main thread and painted inside the container. */
+    private void loadEditorWallpaper(@NonNull View rootContainer) {
+        final int token = ++mWallpaperToken;
+        View decor = rootContainer.getRootView();
+        final int decorWidth = decor != null && decor.getWidth() > 0 ? decor.getWidth()
+            : rootContainer.getResources().getDisplayMetrics().widthPixels;
+        final int decorHeight = decor != null && decor.getHeight() > 0 ? decor.getHeight()
+            : rootContainer.getResources().getDisplayMetrics().heightPixels;
+        Thread reader = new Thread(() -> {
+            Drawable wallpaper;
+            try {
+                wallpaper = mHost.readEditorWallpaper();
+            } catch (RuntimeException e) {
+                wallpaper = null;
+            }
+            final Drawable picture = wallpaper;
+            // The label stands on the wallpaper the screen shows outside the scaled frame, which
+            // is the picture the frame paints (the managed one or the system's), or the system's
+            // still when the editor reads none. Its ink follows that picture, never the theme.
+            final int[] sample = picture != null
+                ? sampleLabelPicture(picture, decorWidth, decorHeight)
+                : sampleSystemLabelPicture(rootContainer.getContext(), decorWidth, decorHeight);
+            final int sampleHeight = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
+            rootContainer.post(() -> {
+                if (!mSession || token != mWallpaperToken)
+                    return;
+                mLabelPicture = sample;
+                mLabelPictureWidth = EditorLabelInk.SAMPLE_WIDTH;
+                mLabelPictureHeight = sampleHeight;
+                // The bar may not be up yet (the first open after a theme relaunch); present()
+                // applies the ink again once it is.
+                applyLabelInk();
+                if (picture != null) {
+                    mEditorWallpaper = picture;
+                    showEditorWallpaper(picture);
+                } else if (mPageListener != null) {
+                    mPageListener.onFrameWallpaperMissing();
+                }
+                wallpaperSettled();
+            });
+        }, "appearance-editor-wallpaper");
+        reader.setDaemon(true);
+        reader.start();
     }
 
     /**
-     * The reserve every page's sheet is: the tallest of the three pages, the Custom row's included,
-     * held under the height that keeps the preview at its least scale. Needs the frame's geometry
-     * ({@link #pushDisplayInsets}) first.
+     * The page label's ink from the picture under it: the sampled rows at the label's height on
+     * the screen ({@link EditorLabelInk#band}), with no theme dim over them. Called when the
+     * picture arrives, when the bar goes up and whenever the label moves; it sets the ink only
+     * when it changed.
      */
-    private int measureSheetReserve(@NonNull AppearanceEditorPanel panel) {
-        int resting = 0;
-        for (EditorMode page : EditorMode.values())
-            resting = Math.max(resting, panel.measureResting(page, mPanelWidthPx));
-        AppearanceEditorFrame frame = mFrame;
-        int cap = frame == null || frame.root().getHeight() <= 0 ? Integer.MAX_VALUE
-            : AppearancePreviewArea.sheetCapPx(mWindowHeightPx, mFrameTopPx,
-                frame.root().getHeight(), mRevealTopPx, mDisplayInsetBottomPx, density());
-        return AppearancePreviewArea.reservePx(resting,
-            panel.measureTallest(EditorMode.LOOK, mPanelWidthPx), cap);
-    }
-
-    /**
-     * The sheet's height on the page showing: the shared reserve. Layout and Icon pack never
-     * stand taller than it; the Look page's Custom row may, and then scrolls inside it.
-     */
-    private int sheetHeightPx(@NonNull AppearanceEditorPanel panel) {
-        // Beside the preview the pane is one height on every page: the top line to the foot.
-        // Row B scrolls inside it where it is taller, as it does in a bottom sheet.
-        if (mSidePane)
-            return AppearancePreviewArea.sidePaneHeightPx(mWindowHeightPx, mFrameTopPx);
-        int content = panel.measureFor(mode(), mPanelWidthPx);
-        if (mode() == EditorMode.LOOK)
-            content = Math.min(content, mSheetReservePx);
-        return AppearancePreviewArea.sheetPx(mSheetReservePx, content);
-    }
-
-    private float density() {
-        return mHost.context().getResources().getDisplayMetrics().density;
-    }
-
-    /**
-     * The preview's bottom line: {@code GAP_DP} over a bottom sheet {@code sheetPx} tall, or,
-     * beside a side pane, over the navigation bar alone.
-     */
-    private int previewBottomPx(int sheetPx) {
-        return AppearancePreviewArea.bottomPx(mWindowHeightPx, mSidePane ? mNavInsetPx : sheetPx,
-            density());
-    }
-
-    /** The frame's scale between the top line and {@code bottomPx}; held to the side column too. */
-    private float previewScale(@NonNull View root, int bottomPx) {
-        if (!mSidePane)
-            return AppearancePreviewArea.scale(root.getHeight(), mRevealTopPx,
-                mDisplayInsetBottomPx, mFrameTopPx, bottomPx);
-        return AppearancePreviewArea.sideScale(root.getWidth(), root.getHeight(), mRevealTopPx,
-            mDisplayInsetBottomPx, mDisplayInsetLeftPx, mDisplayInsetRightPx, mFrameTopPx,
-            bottomPx, mColumnLeftPx, mColumnRightPx);
-    }
-
-    /**
-     * The frame's translation down: the top line, as on a phone, and beside a side pane also the
-     * slack that centres a miniature the column's width left shorter than the lines.
-     */
-    private float previewTranslationY(@NonNull View root, int topPx, int containerTopPx,
-                                      int bottomPx, float scale) {
-        float ty = AppearancePreviewArea.translationY(topPx, containerTopPx, mRevealTopPx, scale);
-        if (!mSidePane)
-            return ty;
-        return ty + AppearancePreviewArea.sideCentreOffsetPx(root.getHeight(), mRevealTopPx,
-            mDisplayInsetBottomPx, topPx, bottomPx, scale);
-    }
-
-    /** The frame's translation across: 0 over a bottom sheet, the column's centre beside a pane. */
-    private float previewTranslationX(@NonNull View root, float scale) {
-        if (!mSidePane)
-            return 0f;
-        return AppearancePreviewArea.translationX(mColumnLeftPx, mColumnRightPx,
-            mContainerLeftPx, root.getWidth(), mDisplayInsetLeftPx, mDisplayInsetRightPx, scale);
-    }
-
-    /**
-     * The sheet docked full width at the foot, or, beside the preview, the side pane's width
-     * against the right edge. Compared before it is set: this runs from the layout listener.
-     */
-    private void placePanel(@NonNull View view) {
-        ViewGroup.LayoutParams raw = view.getLayoutParams();
-        if (!(raw instanceof FrameLayout.LayoutParams))
+    private void applyLabelInk() {
+        EditorBar bar = mBar;
+        if (bar == null)
             return;
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        int width = mSidePane ? mPanelWidthPx : ViewGroup.LayoutParams.MATCH_PARENT;
-        int gravity = mSidePane ? Gravity.BOTTOM | Gravity.RIGHT : Gravity.BOTTOM;
-        if (params.width == width && params.gravity == gravity)
+        int[] picture = mLabelPicture;
+        float fraction = Float.NaN;
+        if (picture != null) {
+            View label = bar.halfRow();
+            View decor = label.getRootView();
+            if (label.getParent() == null || decor == null || decor.getHeight() <= 0)
+                return;
+            label.getLocationOnScreen(mTmpLocation);
+            float centre = mTmpLocation[1] + label.getHeight() / 2f;
+            decor.getLocationOnScreen(mTmpDecorLocation);
+            fraction = (centre - mTmpDecorLocation[1]) / decor.getHeight();
+        }
+        // No picture is what a launcher without storage permission gets for the system's
+        // wallpaper: the system's own description of it stands in, as for Home's labels.
+        int backdrop = EditorLabelInk.backdrop(picture, mLabelPictureWidth, mLabelPictureHeight,
+            fraction, mHost.editorWallpaperHintColor());
+        if (!EditorLabelInk.isKnown(backdrop))
             return;
-        params.width = width;
-        params.gravity = gravity;
-        view.setLayoutParams(params);
+        int[] inks = bar.halfNameInks();
+        int ink = EditorLabelInk.pick(backdrop, inks[0], inks[1]);
+        if (ink == mLabelInk)
+            return;
+        mLabelInk = ink;
+        bar.setHalfNameInk(ink);
     }
 
-    // ---- the frame follows the sheet -------------------------------------------------------------
+    @NonNull private final int[] mTmpLocation = new int[2];
+    @NonNull private final int[] mTmpDecorLocation = new int[2];
 
-    private boolean mFrameCtxValid;
-    private boolean mInLayoutFrame;
-    private int mWindowHeightPx;
-    private int mFrameTopPx;
-    private int mContainerTopPx;
-    private int mContainerLeftPx;
-    private float mTargetScale = -1f;
-    private float mTargetTx;
-    private float mTargetTy;
-    /**
-     * The sheet is a side pane on the right and the preview stands in the column left of it,
-     * {@link #mColumnLeftPx}..{@link #mColumnRightPx} in the content view: a tablet in landscape
-     * ({@link EditorFormFactor}). Decided again on every {@link #layoutFrame}.
-     */
-    private boolean mSidePane;
-    private int mColumnLeftPx;
-    private int mColumnRightPx;
-    @Nullable private android.animation.ValueAnimator mFrameAnimator;
-    /** The layout canvas host reaches this far past the scaled launcher, so no seam shows. */
-    private static final int RING_PX = 1;
-
-    private void cancelFrameAnimator() {
-        android.animation.ValueAnimator animator = mFrameAnimator;
-        mFrameAnimator = null;
-        if (animator != null)
-            animator.cancel();
+    /** The system's still wallpaper, sampled as {@link #sampleLabelPicture}; null for none. */
+    @Nullable
+    private static int[] sampleSystemLabelPicture(@NonNull android.content.Context context,
+                                                  int decorWidth, int decorHeight) {
+        try {
+            android.app.WallpaperManager manager =
+                android.app.WallpaperManager.getInstance(context);
+            if (manager.getWallpaperInfo() != null)
+                return null;
+            Drawable system = manager.getDrawable();
+            return system == null ? null : sampleLabelPicture(system, decorWidth, decorHeight);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /**
-     * The scaled container's rect in the content view at {@code scale}, {@code translationX} and
-     * {@code translationY}, widened to whole pixels: the layout canvas's host. It starts the shown
-     * band below the preview's top line.
+     * {@code picture} drawn into a {@link EditorLabelInk#SAMPLE_WIDTH}-wide bitmap of the decor's
+     * shape, centre-cropped as the frame paints it, and its pixels; null when it cannot be drawn.
+     * Read off the main thread; the bitmap is not kept.
      */
-    private void setFrameRect(float scale, float translationX, float translationY) {
+    @Nullable
+    private static int[] sampleLabelPicture(@NonNull Drawable picture, int decorWidth,
+                                            int decorHeight) {
+        try {
+            int w = EditorLabelInk.SAMPLE_WIDTH;
+            int h = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
+            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(w, h,
+                android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Rect old = picture.copyBounds();
+            int[] bounds = EditorLabelInk.cropBounds(picture.getIntrinsicWidth(),
+                picture.getIntrinsicHeight(), w, h);
+            picture.setBounds(bounds[0], bounds[1], bounds[2], bounds[3]);
+            picture.draw(new android.graphics.Canvas(bmp));
+            picture.setBounds(old);
+            int[] px = new int[w * h];
+            bmp.getPixels(px, 0, w, 0, 0, w, h);
+            bmp.recycle();
+            return px;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private void showEditorWallpaper(@NonNull Drawable picture) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
             return;
         View root = frame.root();
-        float scaledLeft = mContainerLeftPx + translationX + root.getWidth() * (1f - scale) / 2f;
-        float top = mContainerTopPx + translationY;
-        mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), (int) Math.floor(top),
-            (int) Math.ceil(scaledLeft + root.getWidth() * scale),
-            (int) Math.ceil(top + root.getHeight() * scale)};
-        mFrameCornerPx = AppearanceEditorFrame.visibleCornerRadiusPx(
-            AppearanceEditorFrame.deviceCornerRadiusPx(root), mDisplayInsetLeftPx,
-            mRevealTopPx) * scale;
+        View decor = root.getRootView();
+        int[] parentInDecor = new int[2];
+        if (decor == null || !(root.getParent() instanceof View)
+            || !AppearanceEditorFrame.offsetIn((View) root.getParent(), decor, parentInDecor))
+            return;
+        int rootLeft = parentInDecor[0] + root.getLeft();
+        int rootTop = parentInDecor[1] + root.getTop();
+        frame.showWallpaper(picture, mHost.editorWallpaperDimColor(), -rootLeft, -rootTop,
+            decor.getWidth(), decor.getHeight());
     }
 
-    /**
-     * The sheet took a new height: the frame grows into the room a shorter sheet gives it, or
-     * shrinks out of a taller one's way, on the sheet's own clock (same duration and curve), the
-     * layout canvas and the tap targets following every tick.
-     */
-    private void refitFrame(int sheetPx, boolean animate) {
-        AppearanceEditorFrame frame = mFrame;
-        if (frame == null || !mFrameCtxValid || mInLayoutFrame || !mOpen)
-            return;
-        View root = frame.root();
-        if (root.getHeight() <= 0)
-            return;
-        int bottom = previewBottomPx(sheetPx);
-        float scale = previewScale(root, bottom);
-        float tx = previewTranslationX(root, scale);
-        float ty = previewTranslationY(root, mFrameTopPx, mContainerTopPx, bottom, scale);
-        if (scale == mTargetScale && tx == mTargetTx && ty == mTargetTy)
-            return;
-        mTargetScale = scale;
-        mTargetTx = tx;
-        mTargetTy = ty;
-        cancelFrameAnimator();
-        if (!mFramed) {
-            // Still arriving: the opening hop re-aims at the new pose.
-            frame.show(scale, tx, ty, !ReducedMotion.isEnabled(mHost.context()));
-            setFrameRect(scale, tx, ty);
-            positionLayoutFrame();
-            return;
-        }
-        if (!animate || ReducedMotion.isEnabled(mHost.context())) {
-            frame.show(scale, tx, ty, false);
-            setFrameRect(scale, tx, ty);
-            positionLayoutFrame();
-            positionTargets();
-            return;
-        }
-        root.animate().cancel();
-        final float fromScale = root.getScaleX();
-        final float fromTx = root.getTranslationX();
-        final float fromTy = root.getTranslationY();
-        final float toScale = scale;
-        final float toTx = tx;
-        final float toTy = ty;
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(PANEL_MS);
-        animator.setInterpolator(Motion.settle());
-        animator.addUpdateListener(a -> {
-            float f = (Float) a.getAnimatedValue();
-            float s = fromScale + (toScale - fromScale) * f;
-            float x = fromTx + (toTx - fromTx) * f;
-            float y = fromTy + (toTy - fromTy) * f;
-            frame.setPose(s, x, y);
-            setFrameRect(s, x, y);
-            positionLayoutFrame();
-        });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            private boolean mCancelled;
+    // -------------------------------------------------------------- relaunch and the return state
 
-            @Override public void onAnimationCancel(android.animation.Animator a) {
-                mCancelled = true;
-            }
-
-            @Override public void onAnimationEnd(android.animation.Animator a) {
-                if (mFrameAnimator == animator)
-                    mFrameAnimator = null;
-                if (mCancelled || !mOpen)
-                    return;
-                frame.setPose(toScale, toTx, toTy);
-                setFrameRect(toScale, toTx, toTy);
-                positionLayoutFrame();
-                positionTargets();
-            }
-        });
-        mFrameAnimator = animator;
-        animator.start();
+    @Nullable
+    @Override
+    public AppearanceSurfaceController.EditorSession carrySession() {
+        AppearanceSnapshot entry = mEntry;
+        String signature = mEntrySignature;
+        EditorSettingsSnapshot settings = mEntrySettings;
+        if (!mOpen || entry == null || signature == null || settings == null)
+            return mCarriedNext;
+        LayoutEditorController layout = mHost.layoutEditor();
+        return new CarriedSession(entry, signature, mEntryCustom, settings, mEntryMinimal,
+            mSessionCustom.copy(), layout == null ? null : layout.entryArrangement());
     }
 
-    /**
-     * The bottom area's height for what shows now, as measured by the panel: Row A alone until an
-     * element is tapped, then Row A + Row B; it does not change when Undo comes and goes or when
-     * Style flips. A change animates (a jump with reduced motion), the sheet growing up from the
-     * screen's foot while the frame stays where it is.
-     */
-    private void applyPanelHeight(boolean animate) {
-        AppearanceEditorPanel panel = mPanel;
-        if (panel == null || mRestHeightPx <= 0 || mPanelWidthPx <= 0)
-            return;
-        int height = sheetHeightPx(panel);
-        View view = panel.view();
-        ViewGroup.LayoutParams params = view.getLayoutParams();
-        if (params == null)
-            return;
-        if (mPanelAnimator != null) {
-            if (mPanelTargetPx == height) {
-                refitFrame(height, animate);
-                return;
-            }
-            // A change cut short lands where it was going; the new one starts from there.
-            finishPanelAnimation(view);
-        }
-        if (params.height == height) {
-            refitFrame(height, animate);
-            return;
-        }
-        int from = params.height > 0 ? params.height : view.getHeight();
-        boolean instant = !animate || from <= 0 || !view.isAttachedToWindow()
-            || view.getVisibility() != View.VISIBLE || mPanelRevealing
-            || ReducedMotion.isEnabled(mHost.context());
-        if (instant) {
-            params.height = height;
-            view.setLayoutParams(params);
-            refitFrame(height, false);
-            return;
-        }
-        refitFrame(height, true);
-        // One layout pass, then the sheet's top edge travels by translation: growing, the sheet
-        // takes its new height at once and starts pushed down by the difference; shrinking, it
-        // keeps its height and slides down by the difference, and takes the new one at the end,
-        // where the two are the same picture. Nothing is laid out per frame.
-        final boolean grow = height > from;
-        final float startY = grow ? (height - from) : 0f;
-        final float endY = grow ? 0f : (from - height);
-        if (grow) {
-            params.height = height;
-            view.setLayoutParams(params);
-        }
-        view.setTranslationY(startY);
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(PANEL_MS);
-        animator.setInterpolator(Motion.settle());
-        animator.addUpdateListener(a ->
-            view.setTranslationY(startY + (endY - startY) * (Float) a.getAnimatedValue()));
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            private boolean mCancelled;
-
-            @Override public void onAnimationCancel(android.animation.Animator a) {
-                mCancelled = true;
-            }
-
-            @Override public void onAnimationEnd(android.animation.Animator a) {
-                if (mPanelAnimator == animator)
-                    mPanelAnimator = null;
-                if (mCancelled)
-                    return;
-                if (!grow) {
-                    ViewGroup.LayoutParams live = view.getLayoutParams();
-                    if (live != null) {
-                        live.height = height;
-                        view.setLayoutParams(live);
-                    }
-                }
-                view.setTranslationY(0f);
-            }
-        });
-        mPanelAnimator = animator;
-        mPanelTargetPx = height;
-        animator.start();
+    @Override
+    public void adoptSessionNext(@Nullable AppearanceSurfaceController.EditorSession session) {
+        mCarriedNext = session instanceof CarriedSession ? (CarriedSession) session : null;
     }
 
-    /** Puts the sheet where its running height change was going, and stops it. */
-    private void finishPanelAnimation(@NonNull View view) {
-        android.animation.ValueAnimator animator = mPanelAnimator;
-        mPanelAnimator = null;
-        if (animator != null)
-            animator.cancel();
-        ViewGroup.LayoutParams params = view.getLayoutParams();
-        if (params != null && params.height != mPanelTargetPx) {
-            params.height = mPanelTargetPx;
-            view.setLayoutParams(params);
-        }
-        view.setTranslationY(0f);
-    }
+    /** {@link #carrySession}'s content: immutable, and read only by {@link #present}. */
+    static final class CarriedSession implements AppearanceSurfaceController.EditorSession {
+        @NonNull final AppearanceSnapshot entry;
+        @NonNull final String entrySignature;
+        @Nullable final String entryCustom;
+        @NonNull final EditorSettingsSnapshot settings;
+        final boolean minimal;
+        @NonNull final SessionCustom custom;
+        @Nullable final List<com.termux.app.place.PlaceArrangeSnapshot> arrangement;
 
-    private void revealPanel() {
-        AppearanceEditorPanel panel = mPanel;
-        if (panel == null)
-            return;
-        View view = panel.view();
-        view.animate().cancel();
-        view.setVisibility(View.VISIBLE);
-        int height = view.getLayoutParams() != null && view.getLayoutParams().height > 0
-            ? view.getLayoutParams().height : mRestHeightPx;
-        view.setTranslationY(height);
-        mPanelRevealing = true;
-        view.animate().translationY(0f).setDuration(PANEL_MS)
-            .setInterpolator(Motion.settle())
-            .withEndAction(() -> mPanelRevealing = false).start();
-    }
-
-    // ------------------------------------------------------------------------ the bottom area
-
-    /** Restates the bottom area from preferences and the editor's own state. */
-    private void syncPanel() {
-        AppearanceEditorPanel panel = mPanel;
-        TermuxAppSharedPreferences prefs = prefs();
-        if (panel == null || prefs == null)
-            return;
-        panel.setStop(mStop);
-        panel.setFloating(mHost.isFloatingDock());
-        syncLayoutControls();
-        switch (AppearanceLooks.rowFor(mStop, mTarget)) {
-            case ELEMENT:
-            case GLOBAL:
-                showCustomRow();
-                break;
-            case NONE:
-            default:
-                panel.hideRow2();
-                break;
-        }
-        applyPanelHeight(mFramed);
-        syncDirty();
-    }
-
-    /**
-     * The Custom row: the heading, the buttons the selection has, and its vertical sliders at the
-     * stored values. The set is {@link AppearanceLooks#controls}: the global one with nothing
-     * tapped, with Edge and Depth while the glass edge is drawn, or the element's own.
-     */
-    private void showCustomRow() {
-        AppearanceEditorPanel panel = mPanel;
-        TermuxAppSharedPreferences prefs = prefs();
-        if (panel == null || prefs == null)
-            return;
-        panel.showRow2(mTarget == null ? R.string.appearance_editor_target_all : nameOf(mTarget));
-        // Edge and Depth draw nothing while the glass edge is off (below Android 13, no wallpaper
-        // set from the launcher, Lazy mode), so the global set only has them while it is drawn.
-        boolean glassEdge = mTarget == null && mHost.isGlassRefractionActive();
-        List<AppearanceEditorPanel.SliderState> states = new ArrayList<>();
-        for (Control control : AppearanceLooks.controls(mTarget, glassEdge)) {
-            // Every control stays live whatever the others say (developer, 2026-10-17).
-            boolean enabled = true;
-            if (control == Control.ICON_SIZE) {
-                // The icons the dock can give under this Style on this screen, end to end.
-                int[] range = AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
-                    mHost.isAppsRowAlone(), density());
-                states.add(new AppearanceEditorPanel.SliderState(control, valueOf(control, prefs),
-                    enabled, legendFor(control, enabled), range[0], range[1]));
-                continue;
-            }
-            states.add(new AppearanceEditorPanel.SliderState(control, valueOf(control, prefs),
-                enabled, legendFor(control, enabled)));
-        }
-        panel.setSliders(states);
-        List<Door> doors = new ArrayList<>(AppearanceLooks.doors(mTarget));
-        if (!PaneRetroEffect.available())
-            doors.remove(Door.EFFECT);
-        panel.setDoors(doors);
-        if (mTarget == Target.TERMINAL)
-            panel.setTerminalLooks(prefs.isTerminalCursorTrailEnabled(),
-                prefs.getTerminalCursorTrailStyle(),
-                prefs.getTerminalRetroEffect());
-        if (mTarget == null)
-            panel.setGlassLooks(prefs.getSurfaceGlassTintHue());
-    }
-
-
-    /** What a control's slider stands at now, in the control's own units. */
-    private int valueOf(@NonNull Control control, @NonNull TermuxAppSharedPreferences prefs) {
-        switch (control) {
-            case GLASS:
-                // Where it was left, while the blur and grain are still that position's.
-                return mTarget == null
-                    ? GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
-                        prefs.getSurfaceBaseValue(SurfaceProperty.BLUR),
-                        prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN))
-                    : GlassControls.readBack(prefs.getSurfaceGlassPosition(mTarget.slot),
-                        blurOf(prefs, mTarget), grainOf(prefs, mTarget.slot));
-            case VIBRANCY:
-                return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
-                    ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
-            case OPACITY:
-                return AppearanceLooks.opacityPercent(mTarget == null
-                    ? prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY)
-                    : opacityOf(prefs, mTarget));
-            case TINT:
-                return AppearanceLooks.tintPercent(mTarget == null
-                    ? prefs.getSurfaceBaseValue(SurfaceProperty.TINT)
-                    : tintOf(prefs, mTarget.slot));
-            case KEY_OPACITY:
-                return keyOpacityValue(prefs);
-            case KEY_RADIUS:
-                return AppearanceLooks.keyCornersValueFor(
-                    prefs.getInAppKeyboardKeyCornerRadiusDp());
-            case KEY_SPACING:
-                return AppearanceLooks.keySpacingValueFor(prefs.getInAppKeyboardKeyMarginScale());
-            case ICON_SIZE:
-                return AppearanceLooks.iconSizeValueFor(mHost.isFloatingDock(),
-                    mHost.isAppsRowAlone(), dockHeightScale(prefs), density());
-            case APP_ICONS:
-                return AppearanceLooks.appIconsValueFor(prefs.getAppLauncherButtonCount());
-            case EDGE:
-                return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
-            case DEPTH:
-                return glassEdgeOf(prefs).depth(mDepthSet);
-            case CONTRAST:
-            default:
-                return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+        CarriedSession(@NonNull AppearanceSnapshot entry, @NonNull String entrySignature,
+                       @Nullable String entryCustom, @NonNull EditorSettingsSnapshot settings,
+                       boolean minimal, @NonNull SessionCustom custom,
+                       @Nullable List<com.termux.app.place.PlaceArrangeSnapshot> arrangement) {
+            this.entry = entry;
+            this.entrySignature = entrySignature;
+            this.entryCustom = entryCustom;
+            this.settings = settings;
+            this.minimal = minimal;
+            this.custom = custom;
+            this.arrangement = arrangement;
         }
     }
 
-    /**
-     * A control's legend at a slider value: its name and the number, as the slider draws it inside
-     * its track and as accessibility announces the value.
-     */
-    @NonNull
-    private LabelFormatter legendFor(@NonNull Control control, boolean enabled) {
-        return value -> legendText(control, Math.round(value), enabled);
-    }
+    // ---------------------------------------------------------------------------- the dirty state
 
-    @NonNull
-    private String legendText(@NonNull Control control, int value, boolean enabled) {
-        switch (control) {
-            case GLASS: return getString(R.string.appearance_editor_glass, value);
-            case OPACITY: return getString(R.string.appearance_editor_opacity, value);
-            case TINT: return getString(R.string.appearance_editor_tint, value);
-            case VIBRANCY:
-                return getString(R.string.appearance_editor_vibrancy,
-                    String.format(Locale.getDefault(), "%.2f", value / 100f));
-            case KEY_OPACITY: return getString(R.string.appearance_editor_key_opacity, value);
-            case KEY_RADIUS: return getString(R.string.appearance_editor_key_corners, value);
-            case KEY_SPACING:
-                return getString(R.string.appearance_editor_key_spacing,
-                    String.format(Locale.getDefault(), "%.1f", value / 10f));
-            case ICON_SIZE: return getString(R.string.appearance_editor_icon_size, value);
-            case APP_ICONS: return getString(R.string.appearance_editor_app_icons, value);
-            case EDGE: return getString(R.string.appearance_editor_edge, value);
-            case DEPTH: return getString(R.string.appearance_editor_depth, value);
-            case CONTRAST:
-            default:
-                if (!enabled)
-                    return getString(R.string.appearance_editor_legibility_unavailable);
-                return getString(value <= 0 ? R.string.appearance_editor_legibility_low
-                    : value == 1 ? R.string.appearance_editor_legibility_normal
-                    : R.string.appearance_editor_legibility_high);
-        }
+    @Nullable private AppearanceSurfaceController.PageListener mPageListener;
+
+    @Override
+    public void setPageListener(@Nullable AppearanceSurfaceController.PageListener listener) {
+        mPageListener = listener;
     }
 
     private void syncDirty() {
-        if (mPanel == null)
-            return;
         if (mSliderDragActive) {
             mDirtyDeferred = true;
             return;
@@ -2028,357 +1733,1130 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         notifyDirty();
     }
 
-    // ------------------------------------------------------------------- the page bar's wiring
-
-    /** What the surface's page bar over the frame needs to know of the editor. */
-    @Nullable private AppearanceSurfaceController.PageListener mPageListener;
-
-    @Override
-    public void setPageListener(@Nullable AppearanceSurfaceController.PageListener listener) {
-        mPageListener = listener;
-        if (listener != null) {
-            listener.onModeChanged(mode());
-            listener.onDirtyChanged(mOpen && isDirty());
-        }
-    }
-
     private void notifyDirty() {
-        AppearanceSurfaceController.PageListener listener = mPageListener;
-        boolean dirty = mOpen && isDirty();
-        if (listener != null)
-            listener.onDirtyChanged(dirty);
+        EditorBar bar = mBar;
+        if (bar != null)
+            bar.setDirty(mOpen && isDirty());
     }
 
-    /** The bar's Undo: everything back to the state at open. */
+    /** The arrangement moved (a drop, a switch, a height): the dirty state and the card. */
+    private void onArrangementChanged() {
+        syncDirty();
+        if (!mSliderDragActive && mSheet != null && mSheet.isShown())
+            mSheet.restate();
+    }
+
+    /**
+     * Where the app-wide choices are read and written: Settings' own store, and the app's store
+     * for the Dock card's switches Settings has no row for.
+     */
+    @NonNull
+    private EditorSettingsSnapshot.Store settingsStore() {
+        return EditorSettingsSnapshot.settings(mHost.context(), dockPrefs());
+    }
+
+    /** A card wrote an app-wide choice: its signature is read again for the dirty state. */
+    private void settingsWritten() {
+        refreshSettingsSignature();
+        syncDirty();
+    }
+
+    private void refreshSettingsSignature() {
+        if (mEntrySettings != null)
+            mSettingsNow = EditorSettingsSnapshot.signatureOf(settingsStore());
+    }
+
+    // ------------------------------------------------------------------------------- the theme
+    //
+    // The theme is the one choice a window cannot preview in place: its colours are fixed when
+    // it is built. A pick is shown by relaunching into it unstored (ThemePreview); the relaunch
+    // hands this session to the next activity's editor, and the stored theme changes on Done.
+
+    @Nullable
+    private String storedTheme() {
+        return settingsStore().getString("theme_mode");
+    }
+
+    /** The Theme row picked {@code mode}: the window shows it, stored only on Done. */
+    private void previewTheme(@NonNull String mode) {
+        String stored = storedTheme();
+        String shown = ThemePreview.effective(stored);
+        ThemePreview.set(mode, stored);
+        syncDirty();
+        if (!mode.equals(shown))
+            mHost.previewTheme(mode);
+    }
+
+    /** Undo and Discard: the window goes back to the stored theme. */
+    private void dropThemePreview() {
+        if (ThemePreview.pending() == null)
+            return;
+        String stored = storedTheme();
+        ThemePreview.set(null, stored);
+        mHost.previewTheme(ThemePreview.orSystem(stored));
+    }
+
+    /** Done and Save, or a session ending without Discard: the shown theme is stored. */
+    private void commitThemePreview() {
+        String pending = ThemePreview.pending();
+        if (pending == null)
+            return;
+        ThemePreview.set(null, null);
+        mHost.commitTheme(pending);
+        refreshSettingsSignature();
+    }
+
+    /** Saves what the session changed: the look, and the theme it previewed. */
+    private void commitSession() {
+        commitLook();
+        commitThemePreview();
+    }
+
     @Override
     public void undo() {
         if (mOpen)
             revertToEntry();
     }
 
-    /** The bar's Done: saves the look and hands the page change to the surface. */
     @Override
     public void done() {
         if (mOpen)
             commitAndExit();
     }
 
-    @StringRes
-    private static int nameOf(@Nullable Target target) {
-        if (target == null)
-            return R.string.appearance_editor_target_wallpaper;
-        switch (target) {
-            case STATUS: return R.string.appearance_editor_target_status;
-            case TERMINAL: return R.string.appearance_editor_target_terminal;
-            case DOCK: return R.string.appearance_editor_target_dock;
-            case KEYBOARD: return R.string.appearance_editor_target_keyboard;
-            default: return R.string.appearance_editor_target_wallpaper;
-        }
-    }
-
     /**
-     * The status bar is open for the whole of the Look page, so its clock and its media are there
-     * to be tuned; the Layout page leaves it as stored. Transient: nothing is written.
+     * Back inside the editor: a card above peek goes to peek. At peek Back is the surface's, which
+     * leaves the editor as Done and Discard do.
      */
-    private void applyStatusExpansion(boolean animate) {
-        if (prefs() == null || !mOpen)
-            return;
-        mHost.setTopStatusBarExpandedForEditor(mode() == EditorMode.LOOK, animate);
-    }
-
-    /** The bottom area's events, turned into writes. */
-    private final class PanelListener implements AppearanceEditorPanel.Listener {
-        @Override public void onLookStop(int stop, boolean dragging) {
-            if (dragging) {
-                previewStop(stop);
-                return;
-            }
-            // A drag still held lands first, so the stop below moves from what is stored.
-            settleLookDrag();
-            TermuxAppSharedPreferences prefs = prefs();
-            if (prefs != null && moveToStop(prefs, stop))
-                syncAfterBulkWrite();
-        }
-
-        @Override public void onStyle(boolean floating) {
-            TermuxAppSharedPreferences prefs = prefs();
-            if (prefs == null)
-                return;
-            String style = floating ? TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_FLOATING
-                : TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DOCKED;
-            if (style.equals(prefs.getAppLauncherDockStyle()))
-                return;
-            // Style belongs to no Look: it never moves the slider.
-            prefs.setAppLauncherDockStyle(style);
-            // The same dress a launch gives: nothing decided under the old Style is carried over.
-            mHost.redressChrome();
-            applyStructuralPreview();
-            // Corners and Margin show under both Styles and read the same keys.
-            if (mPanel != null)
-                mPanel.setFloating(floating);
-            // Icon size does not: each Style gives its own range of icons, so its slider is
-            // restated for the new one.
-            if (mPanel != null && mPanel.isRow2Shown() && mTarget == Target.DOCK)
-                showCustomRow();
-            syncLayoutControls();
-            // The canvas is told the new Style and morphs from the shape it stood in to the new
-            // one (or jumps, with reduced motion).
-            syncLayoutCanvas();
-            syncDirty();
-        }
-
-        @Override public void onCorners(int value, boolean dragging) {
-            beginDrag(dragging);
-            writeCorners(value);
-        }
-
-        @Override public void onMargin(int value, boolean dragging) {
-            beginDrag(dragging);
-            writeMargin(value);
-        }
-
-        @Override public void onSlider(@NonNull Control control, int value, boolean dragging) {
-            beginDrag(dragging);
-            writeControl(control, value);
-        }
-
-        @Override public void onDoor(@NonNull Door door, @NonNull View anchor) {
-            if (door == Door.KEYBOARD_THEME && mTarget == Target.KEYBOARD)
-                openKeyboardTheme();
-            else if (door == Door.CLOCK && mTarget == Target.STATUS)
-                showClockDropdown(anchor);
-        }
-
-        @Override public void onTrailStyle(@NonNull String id) {
-            if (mTarget == Target.TERMINAL) writeTrailStyle(id);
-        }
-
-        @Override public void onRetroEffect(@NonNull String id) {
-            if (mTarget == Target.TERMINAL) writeRetroEffect(id);
-        }
-
-        @Override public void onTintHue(@NonNull String id) {
-            if (mTarget == null) writeTintHue(id);
-        }
-
-        @Override public void onSliderReleased() {
-            endDrag();
-        }
-    }
-
-    /**
-     * One of the Custom row's sliders moved. Glass, Opacity and Tint are the shared glass with
-     * nothing tapped and the element's own values with one tapped; Vibrancy, Edge and Depth are
-     * global; the rest are the element's.
-     */
-    private void writeControl(@NonNull Control control, int value) {
-        switch (control) {
-            case GLASS:
-                // The radius moves a dp at a time: held, the frames stand in for it until the
-                // release bakes the one radius it settled on.
-                holdFrameBakesForDrag();
-                writeGlass(value);
-                break;
-            case VIBRANCY:
-                writeVibrancy(value);
-                break;
-            case OPACITY:
-                holdFrameBakesForDrag();
-                if (mTarget == null) writeGlobal(SurfaceProperty.OPACITY, value);
-                else writeElement(mTarget, SurfaceProperty.OPACITY, value);
-                break;
-            case TINT:
-                holdFrameBakesForDrag();
-                if (mTarget == null) writeGlobal(SurfaceProperty.TINT, value);
-                else writeElement(mTarget, SurfaceProperty.TINT, value);
-                break;
-            case KEY_OPACITY: writeKeyOpacity(value); break;
-            case KEY_RADIUS: writeKeyCorners(value); break;
-            case KEY_SPACING: writeKeySpacing(value); break;
-            case ICON_SIZE: writeIconSize(value); break;
-            case APP_ICONS: writeAppIcons(value); break;
-            case CONTRAST: writeLegibility(value); break;
-            case EDGE:
-                writeGlassEdge(value);
-                break;
-            case DEPTH:
-                writeGlassDepth(value);
-                break;
-            default: break;
-        }
-    }
-
-    /**
-     * The glass's Depth: one value for every glass surface. It writes only the bend and the edge
-     * width ({@link GlassEdgeControls}), so the other stored edge keys keep what they hold. The
-     * panes' pass re-reads the edge at its head and re-dresses them when it moved; the glass pass
-     * then re-dresses the dock, the keyboard, the strip and the status band with it.
-     */
-    private void writeGlassDepth(int value) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return;
-        int written = Control.DEPTH.clamp(value);
-        GlassEdgeControls.Edge next = glassEdgeOf(prefs).withDepth(written);
-        prefs.setFancierGlassBendDp(next.bend);
-        prefs.setFancierGlassEdgeWidthDp(next.width);
-        mDepthSet = written;
-        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
-    }
-
-    private void forgetGlassEdgePositions() {
-        mDepthSet = GlassEdgeControls.NONE;
-    }
-
-    /**
-     * Glass: blur and grain together along {@link GlassControls}' curve, as the shared glass with
-     * nothing tapped (every surface re-attached, as Blur always did) or the tapped element's own.
-     */
-    private void writeGlass(int value) {
-        int glass = Control.GLASS.clamp(value);
-        int blur = GlassControls.blurForGlass(glass);
-        int grain = GlassControls.grainForGlass(glass);
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs != null)
-            prefs.setSurfaceGlassPosition(mTarget == null ? null : mTarget.slot, glass);
-        if (mTarget == null) {
-            writeBlur(blur);
-            writeGlobal(SurfaceProperty.GRAIN, grain);
-        } else {
-            writeElement(mTarget, SurfaceProperty.BLUR, blur);
-            writeElement(mTarget, SurfaceProperty.GRAIN, grain);
-        }
-    }
-
-    /** True while a slider drag holds the frame tint's re-bake for its release. */
-    private boolean mFrameBakesHeld;
-
-    /**
-     * Tint and Opacity move the frame tint behind clear glass ({@code GlassFrameTint}), and each
-     * new value re-bakes every blurred frame: a drag holds that for its release, as Vibrancy's
-     * does, while the face follows every tick. Glass moves the blur radius, and the hold covers
-     * that too: no capture or blur per tick, one on release.
-     */
-    private void holdFrameBakesForDrag() {
-        if (!defersHeavyPasses() || mFrameBakesHeld)
-            return;
-        mFrameBakesHeld = true;
-        mHost.holdGlassFrameBakes(true);
-    }
-
-    /** Lets a held frame tint bake: once, on the glass pass this asks for. */
-    private void releaseFrameBakes() {
-        if (!mFrameBakesHeld)
-            return;
-        mFrameBakesHeld = false;
-        mHost.holdGlassFrameBakes(false);
-        requestPreview(SurfaceEditorProperties.PREVIEW_BLUR);
-    }
-
-    /** No Vibrancy held for a drag's release. */
-    private static final int NO_HELD_VIBRANCY = Integer.MIN_VALUE;
-    /**
-     * The Vibrancy a slider drag stands at, written on release: every value re-bakes the blurred
-     * frames, which is the work a drag can least afford, so a drag bakes once.
-     */
-    private int mHeldVibrancy = NO_HELD_VIBRANCY;
-
-    private void writeVibrancy(int value) {
-        int clamped = Control.VIBRANCY.clamp(value);
-        if (mSliderDragActive) {
-            mHeldVibrancy = clamped;
-            return;
-        }
-        mHeldVibrancy = NO_HELD_VIBRANCY;
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return;
-        prefs.setSurfaceGlassVibrancy(clamped);
-        requestPreview(SurfaceEditorProperties.PREVIEW_BLUR
-            | SurfaceEditorProperties.PREVIEW_SURFACES);
-    }
-
-    /**
-     * The Tint colour pill: which accent the Tint amount mixes in, global. A pick at Tint 0 also
-     * raises the shared Tint so the hue shows ({@link GlobalGlass#writeTintHue}), and the Tint
-     * column follows.
-     */
-    private void writeTintHue(@NonNull String id) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return;
-        int tint = GlobalGlass.writeTintHue(prefs, id);
-        AppearanceEditorPanel panel = mPanel;
-        if (panel != null)
-            panel.setSliderValue(Control.TINT, AppearanceLooks.tintPercent(tint));
-        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
-            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
-    }
-
-    /**
-     * The Edge slider: the stored dispersion itself, global like Depth. The panes' pass re-reads
-     * the edge and re-dresses every glass surface with it, as Depth's does.
-     */
-    private void writeGlassEdge(int value) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return;
-        prefs.setFancierGlassDispersionPercent(Control.EDGE.clamp(value));
-        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
-    }
-
-    /** The six stored glass edge values. */
-    @NonNull
-    private static GlassEdgeControls.Edge glassEdgeOf(@NonNull TermuxAppSharedPreferences prefs) {
-        return new GlassEdgeControls.Edge(prefs.getFancierGlassBendDp(),
-            prefs.getFancierGlassEdgeWidthDp(), prefs.getFancierGlassEdgeLightPercent(),
-            prefs.getFancierGlassSpecularPercent(), prefs.getFancierGlassDispersionPercent(),
-            prefs.getFancierGlassClarityPercent());
-    }
-
-    // ------------------------------------------------------------------------------ the slider
-
-    /**
-     * The Look slider landed on a stop: its values written into {@code into}, which is the store
-     * itself, or a drag's batch over it. A Look applies at once and resets every surface to it;
-     * leaving a Custom the user touched keeps it for this visit and stores it as the saved Custom,
-     * so returning to Custom brings it back, in this visit and in every later one. With none kept
-     * this visit, Custom applies the saved Custom whole; with none saved either it writes
-     * nothing: the Look on screen is its seed. The caller restates the launcher; false when the
-     * slider was already there and nothing was written.
-     */
-    private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop) {
-        if (stop == mStop)
+    @Override
+    public boolean consumeBack() {
+        EditorCardSheet sheet = mSheet;
+        if (!mOpen || !sheetUp() || sheet == null
+            || sheet.detent() == EditorCardSheet.DETENT_PEEK)
             return false;
-        boolean leavingCustom = AppearanceLooks.isCustomStop(mStop);
-        SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
-            stop);
-        mTarget = null;
-        if (look != null) {
-            if (leavingCustom)
-                mSessionCustom.leave(into);
-            // Every surface back on the Look, its Keys and Glass positions included.
-            SurfacePresets.applyLook(into, look);
-            forgetGlassEdgePositions();
-            mStop = stop;
-            return true;
-        }
-        mSessionCustom.enter(into);
-        mStop = AppearanceLooks.CUSTOM_STOP;
+        collapseCard(true);
         return true;
     }
 
+    /** The Keyboard theme page in Settings, over the editor; Back returns to the same session. */
+    private void openKeyboardTheme() {
+        openSettingsPage(KeyboardColorSchemeFragment.class, R.string.appearance_editor_keyboard_theme);
+    }
+
+    /** A Settings page over the editor; the session stays open under it. */
+    private void openSettingsPage(@NonNull Class<? extends androidx.fragment.app.Fragment> page,
+                                  @StringRes int title) {
+        Context context = mHost.context();
+        try {
+            context.startActivity(SettingsActivity.createFragmentIntent(context, page, title));
+        } catch (RuntimeException e) {
+            // No Settings to open (a stripped build): the editor stays as it is.
+        }
+    }
+
+    // ------------------------------------------------------------------------- the card's model
+
+    /** The half a row of the card up writes, as {@link EditorRows#halfFor} says; null for both. */
+    @Nullable
+    private WallHalf writeHalf(@NonNull Row row) {
+        EditorCard card = mCard;
+        return card == null ? null : EditorRows.halfFor(card, row, mHalf);
+    }
+
+    /** The half a row of the card up reads: its write half, or the Workspace's for a shared one. */
+    @NonNull
+    private WallHalf readHalf(@NonNull Row row) {
+        WallHalf half = writeHalf(row);
+        return half == null ? WallHalf.WORKSPACE : half;
+    }
+
+    /** The Dock designs' names and glyphs, in {@link DockStyle#CHOICES} order. */
+    private static final int[] DESIGN_LABELS = {R.string.layout_editor_dock_style_glass_tray,
+        R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
+        R.string.layout_editor_dock_style_peek_glass};
+    private static final int[] DESIGN_ICONS = {R.drawable.ic_symbol_dock_glass_tray,
+        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
+        R.drawable.ic_symbol_dock_peek_glass};
+
+    /** The keyboard's forms, as the Type segments name them. */
+    private static final PlaceLayout.KeyboardForm[] FORMS = {PlaceLayout.KeyboardForm.DOCKED,
+        PlaceLayout.KeyboardForm.FLOATING, PlaceLayout.KeyboardForm.SPLIT};
+
+    /** Home's stored list values, in segment order. */
+    private static final String[] LABEL_SIZES = {"small", "default", "large"};
+    private static final String[] FOLDER_DENSITIES = {"compact", "default", "comfortable"};
+    private static final String[] NUMERALS = {"sans", "mono"};
+    private static final String[] THEMES = {TermuxPropertyConstants.IVALUE_NIGHT_MODE_SYSTEM,
+        TermuxPropertyConstants.IVALUE_NIGHT_MODE_FALSE,
+        TermuxPropertyConstants.IVALUE_NIGHT_MODE_TRUE};
+
+    /** The element a surface's Visible and Position move; null for the keyboard and the rest. */
+    @Nullable
+    private static Element elementOf(@Nullable EditorCard card) {
+        if (card == EditorCard.STATUS) return Element.STATUS;
+        if (card == EditorCard.DOCK) return Element.APPS;
+        return null;
+    }
+
+    /** Index of {@code value} in {@code values}, or {@code fallback}. */
+    private static int indexOf(@NonNull String[] values, @Nullable String value, int fallback) {
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(value))
+                return i;
+        }
+        return fallback;
+    }
+
+    @NonNull
+    private String[] strings(@NonNull int... res) {
+        String[] out = new String[res.length];
+        for (int i = 0; i < res.length; i++)
+            out[i] = getString(res[i]);
+        return out;
+    }
+
+    /** Every card's values and writes, row by row. */
+    private final class CardModel implements EditorCardSheet.Model, CardBody.Looks {
+
+        @Override public int value(@NonNull Row row) {
+            TermuxAppSharedPreferences prefs = prefs();
+            LayoutEditorController layout = mHost.layoutEditor();
+            EditorCard card = mCard;
+            Context context = mHost.context();
+            if (prefs == null || card == null)
+                return 0;
+            switch (row) {
+                case FROST: return frostValue(prefs, card);
+                case OPACITY:
+                case TINT: {
+                    SurfaceProperty property = row.property();
+                    if (property == null)
+                        return 0;
+                    // The Appearance card's are the shared glass of the half the frame shows.
+                    int stored = card.slot == null
+                        ? prefs.getSurfaceBaseValue(property, readHalf(row))
+                        : prefs.getSurfaceValue(card.slot, property, readHalf(row));
+                    return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
+                        : AppearanceLooks.tintPercent(stored);
+                }
+                case HEIGHT:
+                    if (card == EditorCard.KEYBOARD)
+                        return layout == null ? 100 : Math.round(layout.keyboardHeightScale() * 100f);
+                    return AppearanceLooks.iconSizeValueFor(mHost.isFloatingDock(),
+                        mHost.isAppsRowAlone(), dockHeightScale(prefs), density());
+                case VISIBLE: {
+                    if (layout == null) return 1;
+                    Element element = elementOf(card);
+                    // The keyboard reads what the frame draws: the one answer the switch and the
+                    // preview can share.
+                    if (element == null)
+                        return mHost.isInAppKeyboardShown() ? 1 : 0;
+                    return layout.isShown(element) ? 1 : 0;
+                }
+                case STYLE:
+                    return prefs.getLayoutStyle() == TermuxAppSharedPreferences.LayoutStyle.FLOATING
+                        ? 1 : 0;
+                case DESIGN:
+                    return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
+                case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
+                case MARGIN: return AppearanceLooks.marginDp(prefs.getLayoutMarginDp(false));
+                case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
+                case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
+                case TEXT_SIZE:
+                    return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
+                        / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
+                case CONTRAST: return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+                case SPLIT_GAP: return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
+                case LABEL_SIZE:
+                    return indexOf(LABEL_SIZES, AppearanceSettingsStore.getString(context,
+                        HomeSettings.KEY_LABEL_SIZE, null), 1);
+                case GLASS_WIDGETS:
+                    return AppearanceSettingsStore.getBoolean(context, "widgets_on_glass", false)
+                        ? 1 : 0;
+                case TWO_LINE:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        HomeSettings.KEY_LABEL_TWO_LINES, false) ? 1 : 0;
+                case LABEL_SHADOW:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        HomeSettings.KEY_LABEL_SHADOW, true) ? 1 : 0;
+                case FOLDERS:
+                    return indexOf(FOLDER_DENSITIES, AppearanceSettingsStore.getString(context,
+                        HomeSettings.KEY_FOLDER_DENSITY, null), 1);
+                case PAGE_TRANSITION:
+                    return com.termux.app.launcher.home.HomeSettings.pageTransition(context).ordinal();
+                case NUMERALS:
+                    return indexOf(NUMERALS, AppearanceSettingsStore.getString(context,
+                        "app_launcher_builtin_widget_style", null), 0);
+                case PAGE_DOTS:
+                    return "off".equals(AppearanceSettingsStore.getString(context,
+                        HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
+                case WALLPAPER_SCROLL:
+                    return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
+                        ? 1 : 0;
+                case MATCH_WORKSPACE:
+                case MATCH_HOME:
+                    return mMatchUndos.containsKey(matchTarget(row)) ? 1 : 0;
+                case CLOCK_12H: return prefs.isTopPaneClockAmPmEnabled() ? 1 : 0;
+                case KEY_OPACITY: return keyOpacityValue(prefs);
+                case KEY_CORNERS:
+                    return AppearanceLooks.keyCornersValueFor(prefs.getInAppKeyboardKeyCornerRadiusDp());
+                case KEY_SPACING:
+                    return AppearanceLooks.keySpacingValueFor(prefs.getInAppKeyboardKeyMarginScale());
+                case FORM: {
+                    if (layout == null) return 0;
+                    for (int i = 0; i < FORMS.length; i++)
+                        if (FORMS[i] == layout.keyboardForm()) return i;
+                    return 0;
+                }
+                case LOOK: return lookStop(lookHalf());
+                case CHANGE_WALLPAPER: return 0;
+                case THEME:
+                    return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
+                case WALLPAPER_COLOURS:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        "terminal_dynamic_colors_enabled", false) ? 1 : 0;
+                case FULL_SCREEN:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        AppearanceSettingsStore.KEY_FULLSCREEN, false) ? 1 : 0;
+                case MINIMAL: return mHost.isMinimalMode() ? 1 : 0;
+                case VIBRANCY:
+                    return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
+                        ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
+                case GLASS_EDGE: return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
+                default: return cardRowValue(row);
+            }
+        }
+
+        @Override public int from(@NonNull Row row) {
+            switch (row) {
+                case HEIGHT:
+                    if (mCard == EditorCard.KEYBOARD)
+                        return Math.round(TermuxPreferenceConstants.TERMUX_APP
+                            .MIN_IN_APP_KEYBOARD_HEIGHT_SCALE * 100f);
+                    return AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
+                        mHost.isAppsRowAlone(), density())[0];
+                case DEPTH: return GlassEdgeControls.MIN;
+                case REFLECTION: return PeekGlassGeometry.REFLECTION_MIN;
+                case TEXT_SIZE: return Control.TEXT_SIZE.min;
+                case KEY_OPACITY: return Control.KEY_OPACITY.min;
+                case LOOK: return 0;
+                case VIBRANCY: return Control.VIBRANCY.min;
+                case GLASS_EDGE: return Control.EDGE.min;
+                default: return cardRowFrom(row);
+            }
+        }
+
+        @Override public int to(@NonNull Row row) {
+            switch (row) {
+                case FROST: return Control.GLASS.max;
+                case OPACITY: return AppearanceLooks.OPACITY_MAX;
+                case TINT: return AppearanceLooks.TINT_MAX;
+                case HEIGHT:
+                    if (mCard == EditorCard.KEYBOARD)
+                        return Math.round(TermuxPreferenceConstants.TERMUX_APP
+                            .MAX_IN_APP_KEYBOARD_HEIGHT_SCALE * 100f);
+                    return AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
+                        mHost.isAppsRowAlone(), density())[1];
+                case CORNERS: return AppearanceLooks.CORNERS_MAX_DP;
+                case MARGIN: return AppearanceLooks.MARGIN_MAX_DP;
+                case DEPTH: return GlassEdgeControls.MAX;
+                case REFLECTION: return PeekGlassGeometry.REFLECTION_MAX;
+                case TEXT_SIZE: return Control.TEXT_SIZE.max;
+                case SPLIT_GAP: return Control.SPLIT_GAP.max;
+                case KEY_OPACITY: return Control.KEY_OPACITY.max;
+                case KEY_CORNERS: return AppearanceLooks.KEY_CORNERS_MAX_DP;
+                case KEY_SPACING: return AppearanceLooks.KEY_SPACING_MAX_TENTHS;
+                case LOOK: return AppearanceLooks.CUSTOM_STOP;
+                case VIBRANCY: return Control.VIBRANCY.max;
+                case GLASS_EDGE: return Control.EDGE.max;
+                default: return cardRowTo(row);
+            }
+        }
+
+        @Override public int step(@NonNull Row row) {
+            switch (row) {
+                case TEXT_SIZE: return Control.TEXT_SIZE.step;
+                case REFLECTION: return PeekGlassGeometry.REFLECTION_STEP;
+                default: return 1;
+            }
+        }
+
+        @NonNull @Override public String readout(@NonNull Row row, int value) {
+            switch (row) {
+                case FROST:
+                case OPACITY:
+                case TINT:
+                case DEPTH:
+                case TEXT_SIZE:
+                case KEY_OPACITY:
+                case GLASS_EDGE:
+                case REFLECTION:
+                    return getString(R.string.appearance_readout_percent, value);
+                case HEIGHT:
+                    return mCard == EditorCard.KEYBOARD
+                        ? getString(R.string.appearance_readout_percent, value)
+                        : getString(R.string.appearance_readout_dp, value);
+                case CORNERS:
+                case MARGIN:
+                case SPLIT_GAP:
+                case KEY_CORNERS:
+                    return getString(R.string.appearance_readout_dp, value);
+                case KEY_SPACING:
+                    return String.format(Locale.getDefault(), "%.1f", value / 10f);
+                case VIBRANCY:
+                    return getString(R.string.appearance_readout_times,
+                        String.format(Locale.getDefault(), "%.2f", value / 100f));
+                case LOOK:
+                    return lookStopName(value);
+                case MATCH_WORKSPACE:
+                case MATCH_HOME:
+                    return getString(value != 0 ? R.string.appearance_match_undo
+                        : R.string.appearance_match_copy);
+                default:
+                    return cardRowReadout(row, value);
+            }
+        }
+
+        @Override public boolean ownValue(@NonNull Row row) {
+            TermuxAppSharedPreferences prefs = prefs();
+            EditorCard card = mCard;
+            if (prefs == null || card == null || card.slot == null
+                || !EditorRows.marksOwnValue(card, row))
+                return false;
+            SurfaceProperty property = row.property();
+            if (property == null)
+                return false;
+            WallHalf half = readHalf(row);
+            // Frost is the surface's own while either of the pair it writes is.
+            if (row == Row.FROST)
+                return !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.BLUR, half)
+                    || !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.GRAIN, half);
+            return !prefs.isSurfaceInheriting(card.slot, property, half);
+        }
+
+        @Override public boolean enabled(@NonNull Row row) {
+            return true;
+        }
+
+        @Nullable @Override public CharSequence summary(@NonNull Row row) {
+            TermuxAppSharedPreferences prefs = prefs();
+            if (prefs == null)
+                return null;
+            switch (row) {
+                case CURSOR_TRAIL:
+                    return optionLabel(R.array.appearance_editor_cursor_trail_entries,
+                        R.array.appearance_editor_cursor_trail_values,
+                        CursorTrailChoice.menuId(prefs.isTerminalCursorTrailEnabled(),
+                            prefs.getTerminalCursorTrailStyle()));
+                case EFFECT:
+                    return optionLabel(R.array.settings_terminal_retro_effect_entries,
+                        R.array.settings_terminal_retro_effect_values, prefs.getTerminalRetroEffect());
+                case TINT_HUE:
+                    return optionLabel(R.array.appearance_editor_tint_hue_entries,
+                        R.array.appearance_editor_tint_hue_values, prefs.getSurfaceGlassTintHue());
+                case CLOCK_FACE:
+                    return getString(clockStyleLabel(prefs.getTopPaneClockStyle()));
+                case GLASS_WIDGETS:
+                    return getString(R.string.appearance_glass_widgets_note);
+                case VISIBLE:
+                    return null;
+                default:
+                    return cardRowSummary(row);
+            }
+        }
+
+        @NonNull @Override public String[] choices(@NonNull Row row) {
+            switch (row) {
+                case STYLE:
+                    return strings(R.string.appearance_editor_style_docked,
+                        R.string.appearance_editor_style_floating);
+                case DESIGN: return strings(DESIGN_LABELS);
+                case CONTRAST:
+                    return strings(R.string.appearance_contrast_softer,
+                        R.string.appearance_contrast_default, R.string.appearance_contrast_harder);
+                case LABEL_SIZE:
+                    return strings(R.string.appearance_size_small, R.string.appearance_size_medium,
+                        R.string.appearance_size_large);
+                case FOLDERS:
+                    return strings(R.string.appearance_folders_compact,
+                        R.string.appearance_folders_default, R.string.appearance_folders_roomy);
+                case PAGE_TRANSITION:
+                    return strings(R.string.settings_home_page_transition_slide,
+                        R.string.settings_home_page_transition_depth,
+                        R.string.settings_home_page_transition_fade,
+                        R.string.settings_home_page_transition_carousel,
+                        R.string.settings_home_page_transition_stack);
+                case NUMERALS:
+                    return strings(R.string.appearance_numerals_sans, R.string.appearance_numerals_mono);
+                case FORM:
+                    return strings(R.string.appearance_form_docked, R.string.appearance_form_floating,
+                        R.string.appearance_form_split);
+                case THEME:
+                    return strings(R.string.appearance_theme_system, R.string.appearance_theme_light,
+                        R.string.appearance_theme_dark);
+                case LOOK: {
+                    String[] out = new String[AppearanceLooks.STOP_COUNT];
+                    for (int i = 0; i < out.length; i++)
+                        out[i] = lookStopName(i);
+                    return out;
+                }
+                default:
+                    return cardRowChoices(row);
+            }
+        }
+
+        @Nullable @Override public int[] chipIcons(@NonNull Row row) {
+            return row == Row.DESIGN ? DESIGN_ICONS.clone() : cardRowGlyphs(row);
+        }
+
+        @Nullable @Override public View expanderContent(@NonNull Row row) {
+            if (row != Row.ICON_PACK)
+                return null;
+            ensureIconsContent();
+            return mIconsPage == null ? null : mIconsPage.root();
+        }
+
+        @Override public void onValue(@NonNull Row row, int value, boolean dragging) {
+            beginDrag(dragging);
+            writeRow(row, value, dragging);
+        }
+
+        @Override public void onReleased(@NonNull Row row) {
+            mLinkAnchor = null;
+            endDrag();
+            if ((row == Row.HEIGHT || row == Row.BOTTOM_PADDING) && mCard == EditorCard.KEYBOARD) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                if (layout != null) layout.relayHeldWrites();
+            }
+            if (mSheet != null) mSheet.restate();
+        }
+
+        @Override public void onAction(@NonNull Row row, @NonNull View anchor) {
+            onRowAction(row, anchor);
+        }
+
+        @Override public boolean shown(@NonNull Row row) {
+            // All surfaces is the Custom stop's, as the Look page's Custom row was.
+            if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row)
+                && !com.termux.app.surfaces.cards.GlobalCard.isGlassMaterial(row))
+                return AppearanceLooks.isCustomStop(lookStop(mHalf));
+            // Reflection is Peek glass's own knob: it stands only while that is the design.
+            if (row == Row.REFLECTION) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                return layout != null && layout.dockStyle() == DockStyle.PEEK_GLASS;
+            }
+            return true;
+        }
+
+        @Nullable @Override public CharSequence stripHeading(@NonNull Row first) {
+            if (mCard == EditorCard.DOCK)
+                return com.termux.app.surfaces.cards.DockCard.stripHeading(mHost.context());
+            return mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(first)
+                ? getString(R.string.appearance_strip_all_surfaces) : null;
+        }
+
+        @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
+            EditorCard card = mCard;
+            if (row == Row.ELEMENTS && card != null) {
+                WallHalf screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
+                if (screen != null)
+                    return elementsView(screen);
+            }
+            if (card == EditorCard.DOCK)
+                return dockCard().view(row, widthPx);
+            if (card != null && CardBody.redesigned(card))
+                return cardBody(card).rowView(row, widthPx);
+            return statusTerminalRowView(row, widthPx);
+        }
+
+        @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
+            EditorCard card = mCard;
+            com.termux.app.surfaces.cards.ElementsList elements = mElements;
+            if (row == Row.ELEMENTS && elements != null && elements.root == view) {
+                elements.restate();
+                return;
+            }
+            if (card == EditorCard.DOCK)
+                dockCard().restate(row);
+            else if (card != null && CardBody.redesigned(card)) {
+                CardBody body = mCardBody;
+                if (body != null) body.restate(row, view);
+            } else
+                restateStatusTerminalRow(row, view);
+        }
+
+        @Nullable @Override public CharSequence name(@NonNull Row row) {
+            return cardRowName(row);
+        }
+
+        @Override public int glyph(@NonNull Row row) {
+            return cardRowGlyph(row);
+        }
+
+        @Nullable @Override public int[] swatches(@NonNull Row row) {
+            return cardRowSwatches(row);
+        }
+
+        @Nullable @Override public android.graphics.Typeface choiceTypeface(@NonNull Row row,
+                                                                          int index) {
+            return cardRowTypeface(row, index);
+        }
+    }
+
+
+    @NonNull
+    private String lookStopName(int stop) {
+        switch (AppearanceLooks.presetIdForStop(stop) == null ? "custom"
+            : AppearanceLooks.presetIdForStop(stop)) {
+            case "minimal": return getString(R.string.termux_surface_preset_minimal);
+            case "frost": return getString(R.string.termux_surface_preset_frost);
+            case "stock": return getString(R.string.termux_surface_preset_stock);
+            case "solid": return getString(R.string.termux_surface_preset_solid);
+            default: return getString(R.string.termux_surface_preset_custom);
+        }
+    }
+
+    @NonNull
+    private String optionLabel(int entriesRes, int valuesRes, @NonNull String id) {
+        String[] entries = getResources().getStringArray(entriesRes);
+        String[] values = getResources().getStringArray(valuesRes);
+        for (int i = 0; i < values.length && i < entries.length; i++)
+            if (values[i].equals(id)) return entries[i];
+        return entries.length > 0 ? entries[0] : id;
+    }
+
+    /** One row moved: the write it stands for, on the half or the wall. */
+    private void writeRow(@NonNull Row row, int value, boolean dragging) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        EditorCard card = mCard;
+        Context context = mHost.context();
+        if (prefs == null || card == null)
+            return;
+        switch (row) {
+            case FROST:
+                // Each radius re-blurs the frames: a drag holds that for its release.
+                holdFrameBakesForDrag();
+                writeFrost(card, value);
+                break;
+            case OPACITY:
+            case TINT:
+                // Each value re-bakes the blurred frames: a drag holds that for its release.
+                holdFrameBakesForDrag();
+                if (isScreenCard(card))
+                    writeScreenGlass(row, value);
+                else if (card.slot == null)
+                    writeShared(row, value);
+                else if (!writeLinkedOpacity(row, value, dragging))
+                    writeSurface(card, row, value);
+                break;
+            case HEIGHT:
+                if (card == EditorCard.KEYBOARD) {
+                    if (layout != null) layout.setKeyboardHeightScale(value / 100f, dragging);
+                } else {
+                    writeIconSize(value);
+                }
+                syncDirty();
+                break;
+            case VISIBLE:
+                writeShown(elementOf(card), value != 0);
+                break;
+            case STYLE:
+                writeStyle(value == 1);
+                break;
+            case DESIGN:
+                if (layout != null && value >= 0 && value < DockStyle.CHOICES.size())
+                    layout.setDockStyle(DockStyle.CHOICES.get(value));
+                // Peek glass's Reflection stands with that design alone.
+                if (mSheet != null) mSheet.restate(Row.REFLECTION);
+                break;
+            case REFLECTION:
+                PeekGlassPreferences.setReflection(prefs.getSharedPreferences(), value);
+                break;
+            case CORNERS: writeCorners(value); break;
+            case MARGIN: writeMargin(value); break;
+            case DEPTH: writeGlassDepth(value); break;
+            case TEXT_SIZE: writeTextSize(value); break;
+            case CONTRAST: writeLegibility(value); break;
+            case SPLIT_GAP: writeSplitGap(value); break;
+            case LABEL_SIZE:
+                writeHomeString(HomeSettings.KEY_LABEL_SIZE, LABEL_SIZES[clamp(value, 0, 2)]);
+                break;
+            case GLASS_WIDGETS:
+                AppearanceSettingsStore.putBoolean(context, "widgets_on_glass", value != 0);
+                // A widget's own On or Off overrode the switch, so on a phone whose widgets
+                // predate it (they stored "on") it did nothing: the switch now applies to every
+                // widget, and each can still choose its own look afterwards.
+                for (java.util.Map.Entry<Integer, String> entry
+                        : mHost.clearWidgetGlassChoices().entrySet())
+                    mClearedWidgetGlass.putIfAbsent(entry.getKey(), entry.getValue());
+                settingsWritten();
+                break;
+            case TWO_LINE:
+                writeHomeBoolean(HomeSettings.KEY_LABEL_TWO_LINES, value != 0);
+                break;
+            case LABEL_SHADOW:
+                writeHomeBoolean(HomeSettings.KEY_LABEL_SHADOW, value != 0);
+                break;
+            case FOLDERS:
+                writeHomeString(HomeSettings.KEY_FOLDER_DENSITY, FOLDER_DENSITIES[clamp(value, 0, 2)]);
+                break;
+            case PAGE_TRANSITION: {
+                com.termux.app.launcher.home.HomePageTransition[] effects =
+                    com.termux.app.launcher.home.HomePageTransition.values();
+                writeHomeString(HomeSettings.KEY_PAGE_TRANSITION,
+                    effects[clamp(value, 0, effects.length - 1)].value);
+                break;
+            }
+            case NUMERALS:
+                AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style",
+                    NUMERALS[clamp(value, 0, 1)]);
+                settingsWritten();
+                break;
+            case PAGE_DOTS:
+                writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
+                break;
+            case WALLPAPER_SCROLL:
+                AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
+                settingsWritten();
+                break;
+            case CLOCK_12H:
+                if (prefs.isTopPaneClockAmPmEnabled() != (value != 0)) {
+                    prefs.setTopPaneClockAmPmEnabled(value != 0);
+                    mHost.refreshTerminalWindowBar();
+                    syncDirty();
+                }
+                break;
+            case KEY_OPACITY:
+                if (!writeLinkedOpacity(row, value, dragging))
+                    writeKeyOpacity(value);
+                break;
+            case KEY_CORNERS: writeKeyCorners(value); break;
+            case KEY_SPACING: writeKeySpacing(value); break;
+            case FORM:
+                if (layout != null && value >= 0 && value < FORMS.length)
+                    layout.setKeyboardForm(FORMS[value]);
+                break;
+            case LOOK:
+                writeLook(value, dragging);
+                break;
+            case CHANGE_WALLPAPER:
+                // Never written: the tile is a shortcut and its tap goes to onAction.
+                break;
+            case THEME:
+                previewTheme(THEMES[clamp(value, 0, 2)]);
+                break;
+            case WALLPAPER_COLOURS:
+                AppearanceSettingsStore.putBoolean(context, "terminal_dynamic_colors_enabled",
+                    value != 0);
+                settingsWritten();
+                break;
+            case FULL_SCREEN:
+                AppearanceSettingsStore.putBoolean(context, AppearanceSettingsStore.KEY_FULLSCREEN,
+                    value != 0);
+                settingsWritten();
+                break;
+            case MINIMAL:
+                mHost.setMinimalMode(value != 0);
+                syncDirty();
+                break;
+            case VIBRANCY: writeVibrancy(value); break;
+            case GLASS_EDGE: writeGlassEdge(value); break;
+            default:
+                writeCardRow(row, value, dragging);
+                break;
+        }
+    }
+
+    /** A Home row stored as text: written as Settings writes it, and the live Home takes it. */
+    private void writeHomeString(@NonNull String key, @NonNull String value) {
+        Context context = mHost.context();
+        if (value.equals(AppearanceSettingsStore.getString(context, key, null)))
+            return;
+        AppearanceSettingsStore.putString(context, key, value);
+        settingsWritten();
+        mHost.applyHomeSettings();
+    }
+
+    private void writeHomeBoolean(@NonNull String key, boolean value) {
+        AppearanceSettingsStore.putBoolean(mHost.context(), key, value);
+        settingsWritten();
+        mHost.applyHomeSettings();
+    }
+
+    /** A row that opens something: a menu, a Settings page, the picker, the icon packs. */
+    private void onRowAction(@NonNull Row row, @NonNull View anchor) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        switch (row) {
+            case KEYBOARD_THEME:
+                openKeyboardTheme();
+                break;
+            case CHANGE_WALLPAPER:
+                if (mPageListener != null) mPageListener.onOpenWallpaper();
+                break;
+            case ICON_PACK: {
+                AppearanceSurfaceController.Page page = mIconsPage;
+                if (page != null) {
+                    boolean shown = page.root().isShown();
+                    if (shown) page.onShown();
+                    else page.onHidden();
+                }
+                break;
+            }
+            case TOOL_COLOURS:
+                openSettingsFromEditor(TermuxStylePreferencesFragment.class,
+                    R.string.appearance_row_tool_colours, null, TOOL_COLOURS_KEY);
+                break;
+            case LINK_GESTURES:
+                openSettingsFromEditor(HomePreferencesFragment.class,
+                    R.string.settings_section_home, HOME_GESTURES_SECTION, null);
+                break;
+            case LINK_PAGES:
+                openSettingsFromEditor(HomePreferencesFragment.class,
+                    R.string.settings_section_home, null, HOME_PAGES_SECTION);
+                break;
+            case LINK_LAYOUTS:
+                openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
+                break;
+            case MATCH_WORKSPACE:
+            case MATCH_HOME:
+                toggleMatch(matchTarget(row));
+                break;
+            case LINK_GLOBAL: {
+                EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
+                if (global != null) openCard(global, true);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    // ---- the Match rows ----------------------------------------------------------------------
+
+    /** The screen a Match row copies onto: Home for Match Workspace styling, else the Workspace. */
+    @NonNull
+    private static WallHalf matchTarget(@NonNull Row row) {
+        return row == Row.MATCH_WORKSPACE ? WallHalf.HOME : WallHalf.WORKSPACE;
+    }
+
     /**
-     * The Custom values of one editor visit, and the saved Custom behind them. Leaving a touched
-     * Custom for a Look keeps what is on screen and stores it as the saved Custom
-     * ({@link SurfacePresets#saveCustom}), so comparing against a Look never loses work and the
-     * next visit finds it too; returning to Custom puts the kept values back. With nothing kept the
-     * move to Custom applies the saved Custom whole ({@link SurfacePresets#applyCustom}), and with
-     * none saved it writes nothing: the Look on screen is Custom's seed. Cleared at open and by
-     * Undo, which also puts the saved Custom back as it was at open.
+     * A Match row tapped: Copy takes the other screen's layout and glass ({@link ScreenMatch});
+     * Undo, while the copy is still held this visit, puts this screen back as it was.
      */
+    private void toggleMatch(@NonNull WallHalf target) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        com.termux.app.place.PlaceLayoutStore places = layout == null ? null : layout.places();
+        if (prefs == null || layout == null || places == null)
+            return;
+        ScreenMatch.Undo undo = mMatchUndos.remove(target);
+        if (undo != null) {
+            undo.restore(prefs);
+        } else {
+            undo = ScreenMatch.match(prefs, places, target);
+            if (undo != null) mMatchUndos.put(target, undo);
+        }
+        // The Look slider reads the half's values again rather than a Custom held this visit.
+        mHeldCustom.remove(target);
+        layout.applyStoreWrite();
+        mHost.redressChrome();
+        syncAfterBulkWrite();
+        syncDirty();
+        if (mSheet != null) mSheet.restate();
+    }
+
+    /** Builds the icon packs once per session for the Appearance card's Icon pack row. */
+    private void ensureIconsContent() {
+        if (mIconsPage != null)
+            return;
+        mIconsPage = mHost.createIconsContent();
+    }
+
+    private void releaseIconsContent() {
+        AppearanceSurfaceController.Page page = mIconsPage;
+        mIconsPage = null;
+        if (page != null) {
+            View root = page.root();
+            if (root.getParent() instanceof ViewGroup)
+                ((ViewGroup) root.getParent()).removeView(root);
+            page.release();
+        }
+    }
+
+    // ----------------------------------------------------------------------- the surface writes
+
+    /**
+     * One of a surface's glass numbers: the surface's own value on the half the frame shows (both
+     * halves for the terminal), so the other surfaces and the other half keep theirs. The
+     * terminal's opacity also keeps the copy the wallpaper mode restores from.
+     */
+    private void writeSurface(@NonNull EditorCard card, @NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        SurfaceProperty property = row.property();
+        if (prefs == null || card.slot == null || property == null)
+            return;
+        int written;
+        int scopes = SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD;
+        switch (property) {
+            case TINT:
+                written = AppearanceLooks.tintPercent(value);
+                break;
+            default:
+                written = AppearanceLooks.opacityPercent(value);
+                break;
+        }
+        prefs.detachSurfaceValue(card.slot, property, writeHalf(row), written);
+        if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY)
+            prefs.setTerminalBackgroundOpacity(written);
+        requestPreview(scopes);
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && !mSliderDragActive) {
+            sheet.restate(row);
+            sheet.restate(Row.LOOK);
+        }
+    }
+
+    /**
+     * Where Frost stands on {@code card}: the shared glass of the frame's half on the Appearance
+     * card, else the surface's own pair. The position it was left at reads back while the pair is
+     * still that position's ({@link GlassControls#readBack}).
+     */
+    private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
+        WallHalf half = readHalf(Row.FROST);
+        if (isScreenCard(card) && half != null) {
+            Integer held = mScreenFrostPosition.get(half);
+            return GlassControls.readBack(held == null ? -1 : held,
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+        }
+        if (card.slot == null)
+            return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+        return GlassControls.readBack(prefs.getSurfaceGlassPosition(card.slot),
+            prefs.getSurfaceValue(card.slot, SurfaceProperty.BLUR, half),
+            prefs.getSurfaceValue(card.slot, SurfaceProperty.GRAIN, half));
+    }
+
+    /** Where Frost was left on a screen card this session, per half ({@link #writeFrost}). */
+    private final java.util.EnumMap<WallHalf, Integer> mScreenFrostPosition =
+        new java.util.EnumMap<>(WallHalf.class);
+
+    /**
+     * Frost: blur and grain together along {@link GlassControls}' curve, and the position it was
+     * left at. On the Appearance card it is the shared glass of the frame's half, every surface on
+     * that half put back on it ({@link GlobalGlass}); on a surface's card, that surface's own
+     * pair on the half, as the previous editor's Frost wrote it for a tapped element.
+     */
+    /**
+     * A screen card's Frost: that half's Base alone. A surface that holds its own value there
+     * keeps it, and neither the other half nor the shared glass position is touched.
+     */
+    @VisibleForTesting
+    static void writeScreenFrost(@NonNull TermuxAppSharedPreferences prefs, @NonNull WallHalf half,
+                                 int glass) {
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half,
+            AppearanceLooks.blurDp(GlassControls.blurForGlass(glass)));
+        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
+            AppearanceLooks.grainPercent(GlassControls.grainForGlass(glass)));
+    }
+
+    private void writeFrost(@NonNull EditorCard card, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int glass = Control.GLASS.clamp(value);
+        int blur = GlassControls.blurForGlass(glass);
+        int grain = GlassControls.grainForGlass(glass);
+        WallHalf half = writeHalf(Row.FROST);
+        // The position key is one for every card that holds none of its own (the Appearance
+        // card's); a screen card keeps its position for the session, per half, and writes its
+        // own half's Base only.
+        if (isScreenCard(card) && half != null)
+            mScreenFrostPosition.put(half, glass);
+        else
+            prefs.setSurfaceGlassPosition(card.slot, glass);
+        if (isScreenCard(card) && half != null) {
+            writeScreenFrost(prefs, half, glass);
+        } else if (card.slot == null) {
+            GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
+            GlobalGlass.write(prefs, SurfaceProperty.GRAIN, half, grain);
+        } else {
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.BLUR, half, blur);
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.GRAIN, half, grain);
+        }
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+        restateGlassRow(Row.FROST);
+    }
+
+    /**
+     * The Appearance card's Opacity or Tint: the shared value of the frame's half, every surface
+     * on that half put back on it ({@link GlobalGlass}).
+     */
+    private void writeShared(@NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        SurfaceProperty property = row.property();
+        if (prefs == null || property == null)
+            return;
+        GlobalGlass.write(prefs, property, writeHalf(row), value);
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
+        restateGlassRow(row);
+    }
+
+    /**
+     * A screen card's Opacity or Tint: that half's Base (Home's on the Home card, the
+     * Workspace's on the Workspace card), which the surfaces on it wear while they follow it.
+     * Unlike the Appearance card's shared glass it puts no surface back on the Base: a dock or
+     * status bar given its own value there on its card keeps it.
+     */
+    private void writeScreenGlass(@NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        SurfaceProperty property = row.property();
+        WallHalf half = writeHalf(row);
+        if (prefs == null || property == null || half == null)
+            return;
+        int clamped = row == Row.OPACITY ? AppearanceLooks.opacityPercent(value)
+            : AppearanceLooks.tintPercent(value);
+        prefs.setSurfaceBaseValue(property, half, clamped);
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
+        restateGlassRow(row);
+    }
+
+    /** A glass row and the Look slider read again, unless a drag holds restatement. */
+    private void restateGlassRow(@NonNull Row row) {
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && !mSliderDragActive) {
+            sheet.restate(row);
+            sheet.restate(Row.LOOK);
+        }
+    }
+
+    /** Style: one for both halves; the dress a launch gives, nothing carried over from the old one. */
+    private void writeStyle(boolean floating) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        TermuxAppSharedPreferences.LayoutStyle style = floating
+            ? TermuxAppSharedPreferences.LayoutStyle.FLOATING
+            : TermuxAppSharedPreferences.LayoutStyle.DOCKED;
+        if (style == prefs.getLayoutStyle())
+            return;
+        prefs.setLayoutStyle(style);
+        mHost.redressChrome();
+        applyStructuralPreview();
+        syncLayoutSession();
+        syncDirty();
+        if (mSheet != null) mSheet.restate();
+    }
+
+    // ---- the Look slider ---------------------------------------------------------------------
+
+    /**
+     * The half the Look row of the card up reads and writes, as {@link EditorRows#halfFor} says:
+     * a screen card's own half (Home's, the Workspace's), else the half the frame shows.
+     */
+    @NonNull
+    private WallHalf lookHalf() {
+        return readHalf(Row.LOOK);
+    }
+
+    /**
+     * Where the Look slider stands for a half: Custom where it was put there, else the Look the
+     * half wears in its own values ({@link SurfacePresets#wornOn}), so a Look picked on the other
+     * screen, which writes the values one for the wall, never moves it.
+     */
+    private int lookStop(@NonNull WallHalf half) {
+        if (mHeldCustom.contains(half))
+            return AppearanceLooks.CUSTOM_STOP;
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs == null ? AppearanceLooks.CUSTOM_STOP : wornStop(prefs, half);
+    }
+
+    /** The stop a half wears in its own values in {@code prefs} (the store, or a drag's batch). */
+    private static int wornStop(@NonNull TermuxAppSharedPreferences prefs,
+                                @NonNull WallHalf half) {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
+            if (SurfacePresets.wornOn(prefs, preset, half))
+                return AppearanceLooks.stopForPresetId(preset.id);
+        }
+        return AppearanceLooks.CUSTOM_STOP;
+    }
+
+    /**
+     * The stop a half wears with the values one for the wall compared too: the Look it matches
+     * whole, or Custom. What decides whether Done keeps the saved Custom.
+     */
+    private int matchingStop(@NonNull WallHalf half) {
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs == null ? AppearanceLooks.CUSTOM_STOP : matchingStop(prefs, half);
+    }
+
+    /** The stop a half wears in {@code prefs} (the store, or a drag's batch over it). */
+    private static int matchingStop(@NonNull TermuxAppSharedPreferences prefs,
+                                    @NonNull WallHalf half) {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
+            if (SurfacePresets.matches(prefs, preset, half))
+                return AppearanceLooks.stopForPresetId(preset.id);
+        }
+        return AppearanceLooks.CUSTOM_STOP;
+    }
+
+    /** The Look slider moved: a drag previews each stop it crosses; a release or a tap stores it. */
+    private void writeLook(int stop, boolean dragging) {
+        if (dragging) {
+            previewStop(stop);
+            return;
+        }
+        settleLookDrag();
+        TermuxAppSharedPreferences prefs = prefs();
+        boolean custom = AppearanceLooks.isCustomStop(stop);
+        // Leaving Custom for the Look the values still match writes nothing, but the slider
+        // and the All surfaces strip follow the stop.
+        WallHalf half = lookHalf();
+        boolean held = custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
+        if (prefs != null && moveToStop(prefs, stop, half))
+            syncAfterBulkWrite();
+        else if (held && mSheet != null)
+            mSheet.restate();
+    }
+
+    /**
+     * The Look slider landed on {@code stop} for {@code half} (the Look row's, {@link #lookHalf}),
+     * written into {@code into} (the store, or a drag's batch over it). A Look resets every
+     * surface on that half to it; leaving a Custom the user touched keeps it for this visit and
+     * stores it as the saved Custom ({@link SessionCustom}). Custom brings back this visit's
+     * values, else the saved Custom, else writes nothing: the Look on screen is its seed. False
+     * when the half already wears that stop in its own values ({@link #wornStop}).
+     */
+    private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop,
+                               @NonNull WallHalf half) {
+        int current = wornStop(into, half);
+        if (stop == current)
+            return false;
+        SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
+            stop);
+        if (look != null) {
+            if (AppearanceLooks.isCustomStop(current))
+                mSessionCustom.leave(into);
+            SurfacePresets.applyLook(into, look, half);
+            forgetGlassEdgePositions();
+            return true;
+        }
+        mSessionCustom.enter(into, half);
+        return true;
+    }
+
     static final class SessionCustom {
         @Nullable private AppearanceSnapshot mKept;
+        /** {@link #mKept} half by half: what the Custom stop on one half puts back on it alone. */
+        @Nullable private java.util.Map<WallHalf, SurfacePresets.Preset> mKeptHalves;
         /**
          * What Custom stood at when the slider (or a tap at a Look) moved there, while nothing was
          * kept: the Look on screen, or the saved Custom just applied. Custom left exactly as it was
@@ -2395,9 +2873,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void leave(@NonNull TermuxAppSharedPreferences live) {
             AppearanceSnapshot now = AppearanceSnapshot.capture(live);
             mKept = now.signature().equals(mSeedSignature) ? null : now;
+            mKeptHalves = null;
             mSeedSignature = null;
-            if (mKept != null)
+            if (mKept != null) {
+                mKeptHalves = new java.util.EnumMap<>(WallHalf.class);
+                for (WallHalf half : WallHalf.values())
+                    mKeptHalves.put(half, SurfacePresets.customOf(live, half));
                 SurfacePresets.saveCustom(live);
+            }
         }
 
         /**
@@ -2413,6 +2896,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             SurfacePresets.Preset saved = SurfacePresets.custom(into);
             if (saved != null)
                 SurfacePresets.applyCustom(into, saved);
+            mSeedSignature = AppearanceSnapshot.signatureOf(into);
+        }
+
+        /**
+         * The slider returns to Custom on {@code half}, the half the frame shows: that half's kept
+         * values come back, else its part of the saved Custom, else nothing is written. The other
+         * half is never written: a saved Custom that names Home's own look once brought it back
+         * on Home from the Workspace's slider (pong, 2026-10-25: Home stood on Solid's numbers
+         * nobody chose there).
+         */
+        void enter(@NonNull TermuxAppSharedPreferences into, @NonNull WallHalf half) {
+            java.util.Map<WallHalf, SurfacePresets.Preset> kept = mKeptHalves;
+            if (mKept != null && kept != null && kept.get(half) != null) {
+                SurfacePresets.applyCustom(into, kept.get(half), half);
+                return;
+            }
+            SurfacePresets.Preset saved = SurfacePresets.custom(into);
+            if (saved != null)
+                SurfacePresets.applyCustom(into, saved, half);
             mSeedSignature = AppearanceSnapshot.signatureOf(into);
         }
 
@@ -2434,6 +2936,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         void clear() {
             mKept = null;
+            mKeptHalves = null;
             mSeedSignature = null;
         }
 
@@ -2447,34 +2950,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         void copyFrom(@NonNull SessionCustom other) {
             mKept = other.mKept;
+            mKeptHalves = other.mKeptHalves;
             mSeedSignature = other.mSeedSignature;
         }
     }
 
-    // ---- the Look slider under a finger -------------------------------------------------------
-    //
-    // A drag crosses the Looks faster than one can be stored and the terminal reflowed for it.
-    // While the finger is down every stop it crosses walks the same transition a tap makes (the
-    // session's Custom values included) into one batch over the store, and the batch is shown
-    // through a SharedPreferencesPreview: every surface draws the Look under the finger from it,
-    // and nothing is stored. The release stores the batch as one editor and restates the launcher
-    // once. Undo and Discard compare against the snapshot taken on entry, which the preview never
-    // touches; a revert drops the batch unstored.
-
     /** The drag's writes, held over the store; null while no Look drag is under way. */
     @Nullable private SurfacePresets.Batch mLookDrag;
-    /** The preferences' setters and getters over {@link #mLookDrag}. */
     @Nullable private TermuxAppSharedPreferences mLookDragPrefs;
 
     /** A finger on the Look slider crossed onto {@code stop}: shown, not stored. */
     private void previewStop(int stop) {
         TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null || stop == mStop)
+        if (prefs == null)
             return;
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null) {
-            // Nothing to lay a preview over: the stop is stored, as a tap would.
-            if (moveToStop(prefs, stop))
+            if (moveToStop(prefs, stop, lookHalf()))
                 syncAfterBulkWrite();
             return;
         }
@@ -2483,18 +2975,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mLookDrag = new SurfacePresets.Batch(store);
             mLookDragPrefs = SurfacePresets.writingInto(prefs, mLookDrag);
         }
-        if (!moveToStop(mLookDragPrefs, stop))
+        if (!moveToStop(mLookDragPrefs, stop, lookHalf()))
             return;
         SharedPreferencesPreview.show(store, mLookDrag.frozen());
         previewLook();
     }
 
-    /**
-     * What {@link #syncAfterBulkWrite} restates, for the Look the drag is over, minus the two
-     * things that wait for the release: the pane layout pass and the terminal's resize. A Look's
-     * stops are few and each is a different picture, so the re-blur and the keyboard's glass run
-     * at every stop rather than waiting for the release the way a slider's ticks do.
-     */
+    /** What {@link #syncAfterBulkWrite} restates, less the pane pass and the terminal's resize. */
     private void previewLook() {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2503,18 +2990,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mHost.applyTerminalMotionLook();
         SoftWallpaper.apply(mHost.findView(R.id.wallpaper_backdrop), prefs);
         requestPreview(SurfaceEditorProperties.PREVIEW_ALL);
-        syncPanel();
         positionOutline();
     }
 
-    /** The finger left the Look slider: what it showed is stored, once, and restated once. */
+    /** The finger left the Look slider: what it showed is stored, once. */
     private void settleLookDrag() {
         SurfacePresets.Batch batch = mLookDrag;
         mLookDrag = null;
         mLookDragPrefs = null;
         if (batch == null)
             return;
-        // Stored before the preview goes, so no read in between finds the Look the drag left.
         batch.applyToStore();
         SharedPreferencesPreview.clear();
         syncAfterBulkWrite();
@@ -2529,123 +3014,159 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         SharedPreferencesPreview.clear();
     }
 
-    // ---------------------------------------------------------------------------- the controls
+    // ---- the keyboard's two opacities ----------------------------------------------------------
 
-    /** The grain a surface draws with now, in percent. */
-    private static int grainOf(@NonNull TermuxAppSharedPreferences prefs, @Nullable SurfaceSlot slot) {
-        if (slot == null)
-            return 0;
-        switch (slot) {
-            case STATUS: return AppearanceLooks.grainPercent(prefs.getStatusBarGrain());
-            case CANVAS: return AppearanceLooks.grainPercent(prefs.getTerminalGlassGrain());
-            case KEYBOARD: return AppearanceLooks.grainPercent(prefs.getInAppKeyboardGrain());
-            case DOCK: return AppearanceLooks.grainPercent(prefs.getDockGlassGrain());
-            default: return 0;
-        }
-    }
-
-    /** The tint amount a surface draws with now, in percent. */
-    private static int tintOf(@NonNull TermuxAppSharedPreferences prefs, @Nullable SurfaceSlot slot) {
-        if (slot == null)
-            return 0;
-        switch (slot) {
-            case STATUS: return AppearanceLooks.tintPercent(prefs.getStatusBarTintStrength());
-            case CANVAS: return AppearanceLooks.tintPercent(prefs.getTerminalTintStrength());
-            case KEYBOARD: return AppearanceLooks.tintPercent(prefs.getInAppKeyboardTintStrength());
-            case DOCK: return AppearanceLooks.tintPercent(prefs.getDockTintStrength());
-            default: return 0;
-        }
-    }
-
-    /** The blur a surface draws with now, in dp. */
-    private static int blurOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull Target target) {
-        switch (target.slot) {
-            case STATUS: return AppearanceLooks.blurDp(prefs.getStatusBarBlurRadius());
-            case CANVAS: return AppearanceLooks.blurDp(prefs.getTerminalGlassBlurRadius());
-            case KEYBOARD: return AppearanceLooks.blurDp(prefs.getInAppKeyboardBlurRadius());
-            case DOCK: return AppearanceLooks.blurDp(prefs.getExtraKeysBlurRadius());
-            default: return 0;
-        }
-    }
-
-    /** The opacity a surface draws with now, in percent. */
-    private static int opacityOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull Target target) {
-        switch (target.slot) {
-            case STATUS: return AppearanceLooks.opacityPercent(prefs.getStatusBarOpacity());
-            case CANVAS: return AppearanceLooks.opacityPercent(prefs.getTerminalBackgroundOpacity());
-            case KEYBOARD:
-                return AppearanceLooks.opacityPercent(prefs.getInAppKeyboardBackgroundOpacity());
-            case DOCK: return AppearanceLooks.opacityPercent(prefs.getAppBarOpacity());
-            default: return 0;
-        }
-    }
+    @Nullable private int[] mLinkAnchor;
+    @Nullable private Control mLinkMoved;
 
     /**
-     * Blur, Grain or Opacity on one element: the element's own value, which leaves the shared base
-     * so the other surfaces keep theirs. The terminal's Opacity writes opacity alone: the glass
-     * tint is the Look's and no slider moves it.
+     * The keyboard's two opacities while its link is on (Settings › Keyboard keeps the switch):
+     * a move of either moves the other by the same amount from where it stood when the move
+     * began ({@link OpacityLink}). False when the link does not apply.
      */
-    private void writeElement(@NonNull Target target, @NonNull SurfaceProperty property,
-                              int value) {
+    private boolean writeLinkedOpacity(@NonNull Row row, int value, boolean dragging) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null || mCard != EditorCard.KEYBOARD || !prefs.isInAppKeyboardOpacityLinked()
+            || (row != Row.OPACITY && row != Row.KEY_OPACITY))
+            return false;
+        Control moved = row == Row.KEY_OPACITY ? Control.KEY_OPACITY : Control.OPACITY;
+        Control partner = OpacityLink.partner(moved);
+        if (partner == null)
+            return false;
+        int background = AppearanceLooks.opacityPercent(prefs.getSurfaceValue(SurfaceSlot.KEYBOARD,
+            SurfaceProperty.OPACITY, readHalf(Row.OPACITY)));
+        int keys = keyOpacityValue(prefs);
+        if (mLinkAnchor == null || mLinkMoved != moved) {
+            mLinkAnchor = moved == Control.KEY_OPACITY ? new int[] {keys, background}
+                : new int[] {background, keys};
+            mLinkMoved = moved;
+        }
+        int follow = OpacityLink.follow(mLinkAnchor[0], value, mLinkAnchor[1], partner);
+        if (moved == Control.KEY_OPACITY) {
+            writeKeyOpacity(value);
+            writeSurface(EditorCard.KEYBOARD, Row.OPACITY, follow);
+        } else {
+            writeSurface(EditorCard.KEYBOARD, Row.OPACITY, value);
+            writeKeyOpacity(follow);
+        }
+        if (!dragging)
+            mLinkAnchor = null;
+        if (mSheet != null && !mSliderDragActive) {
+            mSheet.restate(Row.OPACITY);
+            mSheet.restate(Row.KEY_OPACITY);
+        }
+        return true;
+    }
+
+    // ---- the global writes ---------------------------------------------------------------------
+
+    /** Split gap: the gutter between split panes; the release commits the resize once. */
+    private void writeSplitGap(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        int written;
-        int scopes = SurfaceEditorProperties.PREVIEW_SURFACES
-            | SurfaceEditorProperties.PREVIEW_KEYBOARD;
-        switch (property) {
-            case BLUR:
-                written = AppearanceLooks.blurDp(value);
-                scopes |= SurfaceEditorProperties.PREVIEW_BLUR;
-                break;
-            case GRAIN:
-                written = AppearanceLooks.grainPercent(value);
-                break;
-            case TINT:
-                written = AppearanceLooks.tintPercent(value);
-                break;
-            default:
-                written = AppearanceLooks.opacityPercent(value);
-                break;
-        }
-        prefs.detachSurfaceValue(target.slot, property, written);
-        if (target == Target.TERMINAL && property == SurfaceProperty.OPACITY) {
-            // The terminal's opacity also keeps the copy the wallpaper mode restores from.
-            prefs.setTerminalBackgroundOpacity(written);
-        }
-        requestPreview(scopes);
+        int written = Control.SPLIT_GAP.clamp(value);
+        if (prefs.getTerminalPaneGap() == written)
+            return;
+        prefs.setTerminalPaneGap(written);
+        requestGeometryPreview();
     }
 
-    /**
-     * Blur with nothing tapped: one value for every surface, every surface re-attached to it.
-     */
-    private void writeBlur(int value) {
+    /** The shared Text size: the labels and the legends each tick, the terminal on the release. */
+    private void writeTextSize(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        GlobalGlass.write(prefs, SurfaceProperty.BLUR, value);
+        int written = Control.TEXT_SIZE.clamp(value);
+        if (prefs.getTextSizePercent() == written)
+            return;
+        prefs.setTextSizePercent(written);
+        requestPreview(SurfaceEditorProperties.PREVIEW_TEXT
+            | SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL);
+    }
+
+    /** The glass's Depth: one value for every glass surface ({@link GlassEdgeControls}). */
+    private void writeGlassDepth(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int written = Control.DEPTH.clamp(value);
+        GlassEdgeControls.Edge next = glassEdgeOf(prefs).withDepth(written);
+        prefs.setFancierGlassBendDp(next.bend);
+        prefs.setFancierGlassEdgeWidthDp(next.width);
+        mDepthSet = written;
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
+    private void forgetGlassEdgePositions() {
+        mDepthSet = GlassEdgeControls.NONE;
+    }
+
+    /** True while a slider drag holds the frame tint's re-bake for its release. */
+    private boolean mFrameBakesHeld;
+
+    private void holdFrameBakesForDrag() {
+        if (!defersHeavyPasses() || mFrameBakesHeld)
+            return;
+        mFrameBakesHeld = true;
+        mHost.holdGlassFrameBakes(true);
+    }
+
+    private void releaseFrameBakes() {
+        if (!mFrameBakesHeld)
+            return;
+        mFrameBakesHeld = false;
+        mHost.holdGlassFrameBakes(false);
+        requestPreview(SurfaceEditorProperties.PREVIEW_BLUR);
+    }
+
+    private static final int NO_HELD_VIBRANCY = Integer.MIN_VALUE;
+    /** The Vibrancy a slider drag stands at, written on release: every value re-bakes the frames. */
+    private int mHeldVibrancy = NO_HELD_VIBRANCY;
+
+    private void writeVibrancy(int value) {
+        int clamped = Control.VIBRANCY.clamp(value);
+        if (mSliderDragActive) {
+            mHeldVibrancy = clamped;
+            return;
+        }
+        mHeldVibrancy = NO_HELD_VIBRANCY;
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        prefs.setSurfaceGlassVibrancy(clamped);
         requestPreview(SurfaceEditorProperties.PREVIEW_BLUR
             | SurfaceEditorProperties.PREVIEW_SURFACES);
     }
 
-    /**
-     * The global Opacity and Grain (DECISIONS item 14): the base value, every surface, terminal
-     * included, re-attached to it, as Blur has always done. An element's own Opacity or Grain
-     * detaches it again afterwards.
-     */
-    private void writeGlobal(@NonNull SurfaceProperty property, int value) {
+    /** Which accent Tint mixes in, global ({@link GlobalGlass#writeTintHue}). */
+    private void writeTintHue(@NonNull String id) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        GlobalGlass.write(prefs, property, value);
+        GlobalGlass.writeTintHue(prefs, id);
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
-    /**
-     * Key spacing: the key margin scale (0.0 to 8.0), previewed live on the keyboard the way the
-     * height-adjust overlay's slider does.
-     */
+    /** The glass edge's colour split, global like Depth. */
+    private void writeGlassEdge(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        prefs.setFancierGlassDispersionPercent(Control.EDGE.clamp(value));
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
+    @NonNull
+    private static GlassEdgeControls.Edge glassEdgeOf(@NonNull TermuxAppSharedPreferences prefs) {
+        return new GlassEdgeControls.Edge(prefs.getFancierGlassBendDp(),
+            prefs.getFancierGlassEdgeWidthDp(), prefs.getFancierGlassEdgeLightPercent(),
+            prefs.getFancierGlassSpecularPercent(), prefs.getFancierGlassDispersionPercent(),
+            prefs.getFancierGlassClarityPercent());
+    }
+
+    /** Key spacing, previewed live on the keyboard. */
     private void writeKeySpacing(int tenths) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2666,12 +3187,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Icon size: the icon in dp, stored as the dock height scale that draws it, so the dock grows
-     * around the icon. That is the scale Layout mode's dock handle writes, through the layout
-     * session, so its Undo and dirty state cover it. Mid-drag the dock follows on the geometry
-     * preview and the place is re-laid (and the terminal resized) once, on the release. A value
-     * the stored scale already draws writes nothing, which keeps a preset a preset while the
-     * thumb rests on its icon.
+     * The dock's Height: the icon in dp, stored as the dock height scale that draws it, through
+     * the layout session so its Undo and dirty state cover it. Mid-drag the dock follows on the
+     * geometry preview and the place is re-laid once, on the release.
      */
     private void writeIconSize(int iconDp) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -2688,14 +3206,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             requestGeometryPreview();
         } else if (layout != null) {
             layout.setDockHeightScale(scale);
-        } else if (prefs() != null) {
-            prefs().setAppLauncherBarHeightScale(scale);
+        } else if (prefs != null) {
+            prefs.setAppLauncherBarHeightScale(scale);
             requestGeometryPreview();
         }
-        syncDirty();
     }
 
-    /** App icons: how many app buttons the dock shows, rebuilt live. */
+    /** How many app buttons the dock shows, rebuilt live. */
     private void writeAppIcons(int count) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2708,28 +3225,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestGeometryPreview();
     }
 
-    /**
-     * The keyboard's "Keyboard theme" door (DECISIONS item 15): the Keyboard theme page in
-     * Settings, over the editor. The session stays open under it — a stop is not a close
-     * (TermuxActivity's overlay registry keeps the editor across STOP) — and Back returns to it,
-     * where {@link #onActivityStarted} reads the page's changes into the frame. The editor's Undo
-     * does not cover what is changed on that page.
-     */
-    private void openKeyboardTheme() {
-        Context context = mHost.context();
-        try {
-            context.startActivity(SettingsActivity.createFragmentIntent(context,
-                KeyboardColorSchemeFragment.class, R.string.appearance_editor_keyboard_theme));
-        } catch (RuntimeException e) {
-            // No Settings to open (a stripped build): the editor stays as it is.
-        }
-    }
-
-    /**
-     * Legibility: the terminal palette's contrast, rebuilt and repainted at once so the panes'
-     * colours change on the tap. It is the terminal text's legibility control; the surfaces under
-     * it carry no veil of their own.
-     */
+    /** The terminal palette's contrast, rebuilt and repainted at once. */
     private void writeLegibility(int index) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2742,10 +3238,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
     }
 
-    /**
-     * Trail: Off or a cursor-trail style, the same preferences Settings writes, applied on the tap.
-     * Off only clears the on/off preference and keeps the style; a style also turns the trail on.
-     */
+    /** The cursor trail: Off or a style, the same preferences Settings writes. */
     private void writeTrailStyle(@NonNull String id) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2759,22 +3252,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             prefs.setTerminalCursorTrailStyle(choice.style);
         prefs.setTerminalCursorTrailEnabled(choice.enabled);
         mHost.applyTerminalMotionLook();
+        syncDirty();
     }
 
-    /** Effect: the retro terminal effect, the same preference Settings writes. */
+    /** The terminal effect, the same preference Settings writes. */
     private void writeRetroEffect(@NonNull String id) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null || id.equals(prefs.getTerminalRetroEffect()))
             return;
         prefs.setTerminalRetroEffect(id);
         mHost.applyTerminalMotionLook();
+        syncDirty();
     }
 
-    /** Key radius: the key caps' radius, and nothing else; Layout mode's (DECISIONS item 6). */
-    /**
-     * Where Keys stands: the stored cap opacity, or, while the theme owns it (stored -1), the
-     * opacity the theme's caps are drawn at, so the first touch moves from what is on screen.
-     */
+    /** Where Key opacity stands: the stored cap opacity, or the theme's while it owns it. */
     private int keyOpacityValue(@NonNull TermuxAppSharedPreferences prefs) {
         int stored = prefs.getInAppKeyboardKeyOpacity();
         if (stored >= 0)
@@ -2784,11 +3275,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? keyboard.getEffectiveKeyOpacityPercent() : Control.KEY_OPACITY.max);
     }
 
-    /**
-     * Keys: the in-app keyboard's cap opacity, stored as it is (0 to 100 percent). The keyboard
-     * repaints its caps at once and re-chooses the legends on them as drawn; the band's ink and
-     * veil follow on the keyboard pass.
-     */
     private void writeKeyOpacity(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -2810,50 +3296,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxInAppKeyboard keyboard = keyboard();
         if (keyboard != null)
             keyboard.previewSurfaceEditorKeyCornerRadiusDp(radius);
-        // Its label is Layout mode's, beside the type chips, and is restated there.
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
-    /**
-     * Corners: one radius for every surface and the terminal, as the old "All surfaces" Corners
-     * wrote it. The terminal rounds by its own knob in either style, so the shared radius carries
-     * it too — otherwise "round everything" leaves one square hole in the middle of the screen.
-     */
+    /** Corners: one radius for every surface and the terminal, on both halves. */
     private void writeCorners(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
         int corners = AppearanceLooks.cornersDp(value);
-        prefs.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, corners);
+        prefs.setLayoutCornersDp(false, corners);
         prefs.setTerminalCornerRadius(corners);
-        if (mPanel != null)
-            mPanel.setCornersLabel(getString(R.string.appearance_editor_corners, corners));
         requestGeometryPreview();
-        syncLayoutCanvas();
+        syncLayoutSession();
     }
 
-    /**
-     * Margin: one number for all the air on screen, as the old shared Margin wrote it. Under
-     * Floating it is the air round the cards; under Docked it is the gutter of frame glass round
-     * the insert. Both read the same side gap, so flipping Style keeps the number.
-     */
+    /** Margin: one number for all the air on screen, on both halves. */
     private void writeMargin(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
         int margin = AppearanceLooks.marginDp(value);
-        prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, margin);
-        prefs.setTerminalPaneGap(AppearanceLooks.terminalMarginDp(margin));
-        if (mPanel != null)
-            mPanel.setMarginLabel(getString(R.string.appearance_editor_margin, margin));
+        prefs.setLayoutMarginDp(false, margin);
         requestGeometryPreview();
-        syncLayoutCanvas();
+        syncLayoutSession();
     }
 
-    /**
-     * The shape pass for Corners and Margin: everything but a re-blur. Mid-drag the terminal is
-     * not resized (a SIGWINCH per tick); the release commits it once.
-     */
+    /** The shape pass for Corners and Margin; mid-drag the terminal is not resized. */
     private void requestGeometryPreview() {
         int scopes = SurfaceEditorProperties.PREVIEW_ALL & ~SurfaceEditorProperties.PREVIEW_BLUR;
         if (mSliderDragActive) mDragTouchedGeometry = true;
@@ -2861,83 +3330,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(scopes);
     }
 
-    /** Layout mode's Corners and Margin, restated from preferences. */
-    private void syncLayoutControls() {
-        AppearanceEditorPanel panel = mPanel;
-        TermuxAppSharedPreferences prefs = prefs();
-        if (panel == null || prefs == null)
-            return;
-        int corners = AppearanceLooks.cornersDp(
-            prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
-        panel.setCorners(getString(R.string.appearance_editor_corners, corners), corners,
-            AppearanceLooks.CORNERS_MAX_DP);
-        int margin = AppearanceLooks.marginValueFor(mHost.isFloatingDock(),
-            prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP), prefs.getTerminalPaneGap());
-        panel.setMargin(getString(R.string.appearance_editor_margin, margin), margin,
-            AppearanceLooks.MARGIN_MAX_DP);
-    }
-
-    /**
-     * The layout canvas re-read, while it is showing: it draws every shape from the shape model,
-     * asked under the stored Style with the user's Corners and Margin ({@link #pushLayoutShape}).
-     */
-    private void syncLayoutCanvas() {
+    /** The layout session re-read: its Undo and the card follow a Style, Corners or Margin write. */
+    private void syncLayoutSession() {
         LayoutEditorController layout = mHost.layoutEditor();
-        if (mOpen && mLayoutMode && layout != null) {
-            pushLayoutShape(layout);
+        if (mOpen && layout != null)
             layout.sync();
-        }
-    }
-
-    /**
-     * Tells Layout mode the Style, Corners and Margin it draws its shapes from, as preferences
-     * hold them now. Margin is the side gap, spent as air under Floating and as the gutter under
-     * Docked.
-     */
-    private void pushLayoutShape(@NonNull LayoutEditorController layout) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return;
-        layout.setShape(prefs.getLayoutStyle(),
-            AppearanceLooks.cornersDp(prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS)),
-            AppearanceLooks.marginDp(prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)));
-    }
-
-    // ------------------------------------------------------------------------- the selection
-
-    /**
-     * A tap in the frame. At a Look the slider moves to Custom first, seeded from that Look — the
-     * live values are the Look's, so nothing is written — and then the element opens in row 2.
-     */
-    private void select(@NonNull Target target) {
-        if (!mOpen)
-            return;
-        if (!scene().offersSurface(target.slot))
-            return;
-        if (!AppearanceLooks.isCustomStop(mStop)) {
-            mStop = AppearanceLooks.CUSTOM_STOP;
-            TermuxAppSharedPreferences prefs = prefs();
-            if (prefs != null)
-                mSessionCustom.seed(prefs);
-        }
-        mTarget = target;
-        afterSelection();
-    }
-
-    /**
-     * A tap on a bare area of the frame (the wallpaper group): at the Custom stop it deselects
-     * and the global set comes back; at a Look stop it does nothing.
-     */
-    private void tapWallpaper() {
-        if (!mOpen || !AppearanceLooks.wallpaperTapDeselects(mStop))
-            return;
-        mTarget = null;
-        afterSelection();
-    }
-
-    private void afterSelection() {
-        syncPanel();
-        positionOutline();
     }
 
     // ---------------------------------------------------------------------- the frame's targets
@@ -2949,30 +3346,47 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         R.id.surface_tuning_dock_gesture_group,
         R.id.surface_tuning_keyboard_gesture_group};
 
-    /** The element each group selects; null is the wallpaper group, which selects none. */
-    private static final Target[] GROUP_TARGETS = {
-        null, Target.TERMINAL, Target.STATUS, Target.DOCK, Target.KEYBOARD};
+    /** The card each group opens; null is the bare frame, which is Home's on Home. */
+    private static final EditorCard[] GROUP_CARDS = {
+        null, EditorCard.TERMINAL, EditorCard.STATUS, EditorCard.DOCK, EditorCard.KEYBOARD};
+
+    /** The card a group opens on the half the frame shows. */
+    @Nullable
+    private EditorCard cardOfGroup(int index) {
+        EditorCard card = GROUP_CARDS[index];
+        if (card == null)
+            return mHalf == WallHalf.HOME ? EditorCard.HOME : null;
+        return card;
+    }
+
+    /** Where a finger on a group stands: a tap, a slide between halves, or a hold that drags. */
+    private float mDownRawX;
+    private float mDownRawY;
+    private boolean mSwiping;
 
     /**
-     * Every group consumes its touches, so nothing under the frame — the terminal, the dock's
-     * apps, the keyboard's keys — receives them while the editor is up; a tap selects. The
-     * wallpaper group fills the frame under the rest, so a touch between elements lands on it.
+     * Every group takes its touches, so nothing under the frame receives them while the editor is
+     * up. A tap raises the group's card; a plain horizontal swipe slides to the other half. Where a
+     * surface sits is its card's Position row: nothing in the frame is dragged.
      */
     @SuppressLint("ClickableViewAccessibility")
     private void bindTargets() {
+        final int slop = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
         for (int i = 0; i < GROUP_IDS.length; i++) {
             View group = mHost.findView(GROUP_IDS[i]);
             if (group == null)
                 continue;
-            final Target target = GROUP_TARGETS[i];
-            group.setContentDescription(getString(R.string.appearance_editor_target_description,
-                getString(nameOf(target))));
+            final int index = i;
             group.setOnClickListener(view -> {
-                // Icons mode has no targets: the launcher is only to be looked at.
-                if (mIconsMode)
-                    return;
-                if (target == null) tapWallpaper();
-                else select(target);
+                EditorCard card = cardOfGroup(index);
+                if (card != null) {
+                    EditorDoor.EDITOR_OUTLINE.log(card);
+                    if (card == EditorCard.DOCK)
+                        dockCard().expand(dockBarAt(mDownRawX, mDownRawY));
+                    openCard(card, true);
+                } else {
+                    collapseCard(true);
+                }
             });
             group.setOnTouchListener((view, event) -> {
                 if (!mOpen)
@@ -2980,14 +3394,31 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         view.getParent().requestDisallowInterceptTouchEvent(true);
+                        mDownRawX = event.getRawX();
+                        mDownRawY = event.getRawY();
+                        mSwiping = false;
                         return true;
-                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_MOVE: {
+                        float dx = event.getRawX() - mDownRawX;
+                        float dy = event.getRawY() - mDownRawY;
+                        if (!mSwiping && Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy))
+                            mSwiping = true;
+                        return true;
+                    }
+                    case MotionEvent.ACTION_UP: {
                         view.getParent().requestDisallowInterceptTouchEvent(false);
+                        float dx = event.getRawX() - mDownRawX;
+                        if (mSwiping) {
+                            if (Math.abs(dx) >= dp(SWIPE_DP))
+                                switchHalf(dx > 0 ? WallHalf.HOME : WallHalf.WORKSPACE, true, true);
+                            return true;
+                        }
                         float x = event.getX();
                         float y = event.getY();
                         if (x >= 0 && y >= 0 && x <= view.getWidth() && y <= view.getHeight())
                             view.performClick();
                         return true;
+                    }
                     case MotionEvent.ACTION_CANCEL:
                         view.getParent().requestDisallowInterceptTouchEvent(false);
                         return true;
@@ -2997,6 +3428,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             });
         }
     }
+
+    /** A swipe this far across slides the frame to the other half. */
+    private static final int SWIPE_DP = 48;
 
     private void setOverlayVisible(boolean visible) {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
@@ -3017,25 +3451,35 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             }).start();
     }
 
-    /** Where an element stands in the overlay's space, or null when it is not on screen. */
+    /**
+     * Where a card's surface stands in the overlay's space; null when the frame has no such
+     * surface (a hidden one, which comes back from its screen card's Elements list).
+     * Home's is the whole frame.
+     */
     @Nullable
-    private int[] rectOf(@Nullable Target target, @NonNull View overlay) {
+    private int[] targetRect(@Nullable EditorCard card, @NonNull View overlay) {
+        return surfaceRect(card, overlay);
+    }
+
+    /** Where a surface stands in the overlay, or null when it is not on screen. */
+    @Nullable
+    private int[] surfaceRect(@Nullable EditorCard card, @NonNull View overlay) {
         View root = mHost.findView(R.id.terminal_root_container);
         if (root == null)
             return null;
         int[] overlayOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn(overlay, root, overlayOffset))
             return null;
-        if (target == null)
+        if (card == null || isScreenCard(card))
             return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
-        if (target == Target.TERMINAL) {
+        if (card == EditorCard.TERMINAL) {
             int[] frame = mHost.terminalFrameRectInRoot();
             if (frame == null || frame[2] - frame[0] < dp(24) || frame[3] - frame[1] < dp(24))
                 return null;
             return new int[] {frame[0] - overlayOffset[0], frame[1] - overlayOffset[1],
                 frame[2] - overlayOffset[0], frame[3] - overlayOffset[1]};
         }
-        View surface = anchorViewFor(target.slot);
+        View surface = anchorViewFor(card.slot);
         if (surface == null || surface.getVisibility() != View.VISIBLE
             || surface.getWidth() <= 0 || surface.getHeight() <= 0)
             return null;
@@ -3064,7 +3508,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** Lays every tap target over its element, then the outline. */
+    /** Lays every tap target over its surface, dressed, then the ring. */
     private void positionTargets() {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
         if (overlay == null || !mOpen || overlay.getWidth() <= 0)
@@ -3073,21 +3517,29 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             View group = mHost.findView(GROUP_IDS[i]);
             if (group == null)
                 continue;
-            // Icons mode: the bare-wallpaper group alone stands over the whole frame as a touch
-            // sink, so the launcher takes no tap; no element is a target.
-            if (mIconsMode && GROUP_TARGETS[i] != null) {
-                group.setVisibility(View.GONE);
+            EditorCard card = GROUP_CARDS[i];
+            if (card != null && !card.standsOn(mHalf)) {
+                EditorViews.setVisible(group, false);
                 continue;
             }
-            int[] rect = rectOf(GROUP_TARGETS[i], overlay);
+            int[] rect = targetRect(card, overlay);
             if (rect == null) {
-                group.setVisibility(View.GONE);
+                EditorViews.setVisible(group, false);
                 continue;
             }
             placeInOverlay(group, overlay, rect);
-            group.setVisibility(View.VISIBLE);
+            group.setContentDescription(describeGroup(i));
+            EditorViews.setVisible(group, true);
         }
-        positionOutline();
+        restyleOutlines();
+    }
+
+    @NonNull
+    private String describeGroup(int index) {
+        EditorCard card = cardOfGroup(index);
+        if (card == null)
+            return getString(R.string.appearance_half_workspace);
+        return getString(R.string.appearance_target_description, getString(card.titleRes));
     }
 
     private static void placeInOverlay(@NonNull View view, @NonNull View overlay,
@@ -3111,38 +3563,83 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The selection: one 2dp colorPrimary outline on the tapped element, drawn just outside its
-     * edge. Nothing else glows.
+     * Every target's quiet outline (1dp on screen, 40% of colorOutline, along the surface's own
+     * corner); Home's drawn just inside the frame. Rebuilt only when the
+     * frame's scale or a target's state changes, never per frame.
+     */
+    private void restyleOutlines() {
+        View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+        if (overlay == null || !mOpen)
+            return;
+        float scale = mTargetScale > 0f ? mTargetScale : 1f;
+        int outline = mHost.themeColor(com.google.android.material.R.attr.colorOutline,
+            R.color.termux_primary);
+        int quiet = (Math.round(255 * QUIET_ALPHA) << 24) | (outline & 0x00FFFFFF);
+        float stroke = Math.max(1f, dp(QUIET_DP) / scale);
+        for (int i = 0; i < GROUP_IDS.length; i++) {
+            View group = mHost.findView(GROUP_IDS[i]);
+            if (group == null || group.getVisibility() != View.VISIBLE)
+                continue;
+            EditorCard card = cardOfGroup(i);
+            if (card == null) {
+                if (group.getBackground() != null) group.setBackground(null);
+                continue;
+            }
+            boolean ghost = surfaceRect(card, overlay) == null;
+            GradientDrawable ring = new GradientDrawable();
+            ring.setColor(0);
+            if (ghost) {
+                float dash = dp(4) / scale;
+                ring.setStroke(Math.round(stroke), quiet, dash, dash);
+            } else {
+                ring.setStroke(Math.round(stroke), quiet);
+            }
+            ring.setCornerRadius(card == EditorCard.HOME ? 0f : outlineRadiusPx(card));
+            group.setBackground(ring);
+        }
+        positionOutline();
+    }
+
+    /**
+     * The selection: one 2dp primary ring round the card's surface, just
+     * outside its edge, inside the frame for Home. Nothing else glows.
      */
     private void positionOutline() {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
         View outline = mHost.findView(R.id.surface_editor_selection_outline);
         if (overlay == null || outline == null)
             return;
-        Target target = mOpen && !mIconsMode && AppearanceLooks.isCustomStop(mStop) ? mTarget : null;
-        int[] rect = target == null ? null : rectOf(target, overlay);
+        EditorCard card = mOpen ? mCard : null;
+        int[] rect = card == null || card == EditorCard.APPEARANCE ? null
+            : targetRect(card, overlay);
         if (rect == null) {
-            outline.setVisibility(View.GONE);
+            EditorViews.setVisible(outline, false);
             return;
         }
-        int stroke = Math.max(1, dp(OUTLINE_STROKE_DP));
-        // The outline stands just outside its element, so the stroke never covers what it points at.
-        int grow = stroke;
+        float scale = mTargetScale > 0f ? mTargetScale : 1f;
+        int stroke = Math.max(1, Math.round(dp(RING_DP) / scale));
+        int grow = isScreenCard(card) ? -stroke : stroke;
         int[] grown = {rect[0] - grow, rect[1] - grow, rect[2] + grow, rect[3] + grow};
         placeInOverlay(outline, overlay, grown);
         GradientDrawable ring = new GradientDrawable();
         ring.setColor(0);
         ring.setStroke(stroke, mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary));
-        ring.setCornerRadius(Math.max(0f, outlineRadiusPx(target) + grow));
+        ring.setCornerRadius(isScreenCard(card) ? 0f
+            : Math.max(0f, outlineRadiusPx(card) + grow));
         outline.setBackground(ring);
-        outline.setVisibility(View.VISIBLE);
+        EditorViews.setVisible(outline, true);
     }
 
-    /** The radius the outline wears: the element's own, so it reads as that element's edge. */
-    private float outlineRadiusPx(@NonNull Target target) {
+    /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
+    private static boolean isScreenCard(@Nullable EditorCard card) {
+        return card == EditorCard.HOME || card == EditorCard.WORKSPACE;
+    }
+
+    /** The radius a surface's outline wears: the surface's own. */
+    private float outlineRadiusPx(@NonNull EditorCard card) {
         TermuxAppSharedPreferences prefs = prefs();
-        switch (target) {
+        switch (card) {
             case STATUS:
                 return prefs == null ? 0f : dpToPx(clamp(prefs.getStatusBarCornerRadius(), 0, 40));
             case DOCK:
@@ -3151,8 +3648,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case KEYBOARD:
                 return mHost.keyboardSurfaceCornerRadiusPx();
             case TERMINAL:
-            default:
                 return mHost.terminalFrameCornerRadiusPx();
+            default:
+                return 0f;
         }
     }
 
@@ -3163,23 +3661,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mLayoutListener = () -> {
             if (!mOpen)
                 return;
-            // Global layout fires for every text change a slider tick causes; the targets only
-            // care when something they are laid over actually moved.
             long signature = computeLayoutSignature();
             if (signature == mLayoutSignature)
                 return;
             mLayoutSignature = signature;
-            // Refit only once the opening animation has placed the frame, and only when the
-            // frame's own size moved: a rotation or a window resize.
-            if (mFramed && frameSizeChanged())
+            if (mFramed && (frameSizeChanged() || !mFrameCtxValid))
                 layoutFrame(false);
             else if (mFramed)
                 refitTopReveal();
-            // A rotation or a place change can take the selected element off the screen.
-            if (mTarget != null && !scene().offersSurface(mTarget.slot)) {
-                mTarget = null;
-                syncPanel();
-            }
+            if (mFramed && mFrameCtxValid && !poseHolds())
+                applyPose(false);
             positionTargets();
         };
         host.getViewTreeObserver().addOnGlobalLayoutListener(mLayoutListener);
@@ -3191,7 +3682,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mLastRootHeight;
     private int mLastContentHeight;
 
-    /** Whether the frame's own size moved (a rotation, a window resize), so it is refit. */
     private boolean frameSizeChanged() {
         View root = mHost.findView(R.id.terminal_root_container);
         View content = mHost.findView(android.R.id.content);
@@ -3215,15 +3705,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         signature = mix(signature, rectSignature(mHost.findView(R.id.accessory_surface_host)));
         signature = mix(signature, rectSignature(mHost.isInAppKeyboardShown()
             ? mHost.findView(R.id.inapp_keyboard_view_host) : null));
-        signature = mix(signature, rectSignature(mHost.findView(R.id.terminal_clock_widget)));
         int[] frame = mHost.terminalFrameRectInRoot();
         for (int edge : frame == null ? new int[] {-1} : frame)
             signature = mix(signature, edge);
         signature = mix(signature, mHost.isFloatingDock() ? 1 : 0);
+        signature = mix(signature, mHalf.ordinal());
         return mix(signature, scene().signature());
     }
-
-    private final int[] mTmpOffset = new int[2];
 
     private long rectSignature(@Nullable View view) {
         View root = mHost.findView(R.id.terminal_root_container);
@@ -3251,15 +3739,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ------------------------------------------------------------------------- the clock face
     //
-    // The status bar's one control that is a look rather than a number: the Clock button above
-    // the sliders, opening the six faces upward, drawn as themselves, with the face's position
-    // beneath them. Live like every other editor control, and gated by Done.
+    // The status bar's face and its place in the bar, as the Status bar card's face tiles and
+    // Clock position row write them (cards/StatusBarCard). Live like every other editor control,
+    // and gated by Done.
 
-    /** Package-private so a test can hold it against the settings list's own entry values. */
+    /**
+     * Every stored clock style, Minimal's medium weight included. Package-private so a test can
+     * hold it against the settings list's own entry values.
+     */
     static final String[] CLOCK_STYLES = {
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL,
+        TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE,
         TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB};
@@ -3287,6 +3779,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return R.string.termux_top_pane_clock_style_lcd;
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(style))
             return R.string.termux_top_pane_clock_style_minimal;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(style))
+            return R.string.termux_top_pane_clock_style_minimal_medium;
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(style))
             return R.string.termux_top_pane_clock_style_led;
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(style))
@@ -3294,227 +3788,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(style))
             return R.string.termux_top_pane_clock_style_slab;
         return R.string.termux_top_pane_clock_style_flip;
-    }
-
-    /**
-     * A face at the size the collapsed pane draws it, honouring the 12-hour and lazy-mode
-     * preferences so a preview never animates in a build where the real clock does not.
-     */
-    private void applyClockPreview(@NonNull TerminalClockWidget widget, @NonNull String style) {
-        widget.setForm(TopPaneClockForm.COMPACT);
-        widget.setStyle(style);
-        if (prefs() == null)
-            return;
-        widget.setUseAmPm(prefs().isTopPaneClockAmPmEnabled());
-        widget.setLazyMode(prefs().isLazyModeEnabled());
-    }
-
-    @Nullable private ListPopupWindow mClockDropdown;
-
-    /**
-     * The drop-down's rows: the six faces, then one row for the face's place in the pane. A real
-     * list popup, so the theme's popup style gives it its surface, shape and elevation.
-     */
-    private final class ClockDropdownAdapter extends BaseAdapter {
-        private final String mCurrent;
-
-        ClockDropdownAdapter(@NonNull String current) {
-            mCurrent = current;
-        }
-
-        @Override public int getCount() { return CLOCK_STYLES.length + 1; }
-
-        @Override public Object getItem(int position) {
-            return position < CLOCK_STYLES.length ? CLOCK_STYLES[position] : null;
-        }
-
-        @Override public long getItemId(int position) { return position; }
-
-        @Override public int getViewTypeCount() { return 2; }
-
-        @Override public int getItemViewType(int position) {
-            return position < CLOCK_STYLES.length ? 0 : 1;
-        }
-
-        @Override public boolean areAllItemsEnabled() { return false; }
-
-        /** The position row is made of controls of its own; the list only takes the faces. */
-        @Override public boolean isEnabled(int position) { return position < CLOCK_STYLES.length; }
-
-        @Override public View getView(int position, @Nullable View convertView,
-                                      @NonNull ViewGroup parent) {
-            Context context = parent.getContext();
-            if (position >= CLOCK_STYLES.length)
-                return clockPositionRow(context);
-            return clockFaceRow(context, CLOCK_STYLES[position], mCurrent);
-        }
-    }
-
-    /**
-     * The Clock button's popup: the six faces drawn as themselves, over the frame. The button
-     * stands in the sheet at the foot of the screen, so the popup opens upward from its top edge
-     * (a negative vertical offset of the anchor's height plus the popup's own), aligned to the
-     * button's end, and never taller than the room above the button.
-     */
-    private void showClockDropdown(@NonNull View anchor) {
-        if (prefs() == null)
-            return;
-        dismissClockDropdown();
-        Context context = mHost.context();
-        ListPopupWindow popup = new ListPopupWindow(context);
-        popup.setAnchorView(anchor);
-        popup.setModal(true);
-        int windowWidth = Math.min(anchor.getRootView().getWidth(),
-            getResources().getDisplayMetrics().widthPixels);
-        // Beside the preview the sheet is the side pane: the popup takes its share of the pane,
-        // not of the window, so it stands over the pane rather than across the preview.
-        popup.setWidth((mSidePane ? Math.min(windowWidth, mPanelWidthPx) : windowWidth) * 3 / 4);
-        popup.setDropDownGravity(Gravity.END);
-        int[] anchorAt = new int[2];
-        anchor.getLocationInWindow(anchorAt);
-        // The bottom sheet's button is near the foot: the popup opens upward from its top edge.
-        // The side pane's stands near the top of a tall pane: it opens downward under it.
-        int roomAbove = anchorAt[1] - dp(FRAME_GAP_DP);
-        int roomBelow = anchor.getRootView().getHeight() - mNavInsetPx
-            - (anchorAt[1] + anchor.getHeight()) - dp(FRAME_GAP_DP);
-        int room = Math.max(dp(CLOCK_POPUP_MIN_HEIGHT_DP), mSidePane ? roomBelow : roomAbove);
-        int height = Math.min(dp(CLOCK_POPUP_HEIGHT_DP), room);
-        popup.setHeight(height);
-        popup.setVerticalOffset(mSidePane ? 0 : -(anchor.getHeight() + height));
-        popup.setOnDismissListener(() -> mClockDropdown = null);
-        popup.setAdapter(new ClockDropdownAdapter(prefs().getTopPaneClockStyle()));
-        popup.setOnItemClickListener((parent, view, position, id) -> {
-            if (position < CLOCK_STYLES.length) {
-                pickClockStyle(CLOCK_STYLES[position]);
-                popup.dismiss();
-            }
-        });
-        popup.setBackgroundDrawable(EditorM3.surface(anchor,
-            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh));
-        mClockDropdown = popup;
-        popup.show();
-    }
-
-    /** Six 48dp face rows and the position row, as the popup wants to stand. */
-    private static final int CLOCK_POPUP_HEIGHT_DP = 6 * 48 + 56;
-    private static final int CLOCK_POPUP_MIN_HEIGHT_DP = 160;
-
-    private void dismissClockDropdown() {
-        if (mClockDropdown == null)
-            return;
-        mClockDropdown.dismiss();
-        mClockDropdown = null;
-    }
-
-    /** Gives a text view the theme's text appearance behind {@code attr}. */
-    private static void applyTextAppearance(@NonNull TextView view, @AttrRes int attr) {
-        TypedValue value = new TypedValue();
-        if (view.getContext().getTheme().resolveAttribute(attr, value, true)
-            && value.resourceId != 0)
-            view.setTextAppearance(value.resourceId);
-    }
-
-    /** One face in the drop-down: its name, the face itself, and a tick on the one in use. */
-    @NonNull
-    private View clockFaceRow(@NonNull Context context, @NonNull String style,
-                              @NonNull String current) {
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(48));
-        row.setPaddingRelative(dp(16), 0, dp(16), 0);
-        boolean selected = style.equals(current);
-
-        TextView name = new TextView(context);
-        name.setText(clockStyleLabel(style));
-        applyTextAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
-        name.setMaxLines(2);
-        name.setEllipsize(TextUtils.TruncateAt.END);
-        name.setTextColor(EditorM3.color(row, selected
-            ? androidx.appcompat.R.attr.colorPrimary
-            : com.google.android.material.R.attr.colorOnSurface));
-        name.setLayoutParams(new LinearLayout.LayoutParams(
-            dp(84), ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(name);
-
-        TerminalClockWidget preview = new TerminalClockWidget(context, null);
-        applyClockPreview(preview, style);
-        preview.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        preview.setLayoutParams(new LinearLayout.LayoutParams(0, dp(30), 1f));
-        row.addView(preview);
-
-        TextView tick = new TextView(context);
-        tick.setText(R.string.termux_surface_tuning_clock_selected);
-        applyTextAppearance(tick, com.google.android.material.R.attr.textAppearanceTitleMedium);
-        tick.setGravity(Gravity.CENTER);
-        tick.setTextColor(EditorM3.color(row, androidx.appcompat.R.attr.colorPrimary));
-        tick.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
-        tick.setLayoutParams(new LinearLayout.LayoutParams(
-            dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(tick);
-
-        row.setContentDescription(getString(R.string.termux_surface_tuning_clock_face_description,
-            getString(clockStyleLabel(style))));
-        final boolean isSelected = selected;
-        androidx.core.view.ViewCompat.setAccessibilityDelegate(row,
-            new androidx.core.view.AccessibilityDelegateCompat() {
-                @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
-                        @NonNull androidx.core.view.accessibility
-                            .AccessibilityNodeInfoCompat info) {
-                    super.onInitializeAccessibilityNodeInfo(host, info);
-                    info.setClassName(Button.class.getName());
-                    info.setCheckable(true);
-                    info.setChecked(isSelected);
-                }
-            });
-        return row;
-    }
-
-    /**
-     * Where the face sits in the pane, left, centre or right, as the theme's segmented buttons
-     * under the faces. The popup stays open for a second look instead of dismissing like a face
-     * pick does.
-     */
-    @NonNull
-    private View clockPositionRow(@NonNull Context context) {
-        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
-        group.setSingleSelection(true);
-        group.setSelectionRequired(true);
-        group.setContentDescription(getString(R.string.settings_clock_alignment_title));
-        String current = prefs() == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT
-            : prefs().getTopPaneClockAlignment();
-        final java.util.Map<Integer, String> alignmentOf = new java.util.HashMap<>();
-        int currentId = View.NO_ID;
-        for (String alignment : CLOCK_ALIGNMENTS) {
-            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
-                .inflate(R.layout.segment_button, group, false);
-            button.setId(View.generateViewId());
-            button.setText(clockAlignmentLabel(alignment));
-            button.setMaxLines(1);
-            button.setContentDescription(getString(
-                R.string.termux_surface_tuning_clock_position_description,
-                getString(clockAlignmentLabel(alignment))));
-            button.setLayoutParams(new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            group.addView(button);
-            alignmentOf.put(button.getId(), alignment);
-            if (alignment.equals(current))
-                currentId = button.getId();
-        }
-        if (currentId != View.NO_ID)
-            group.check(currentId);
-        group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
-            String alignment = alignmentOf.get(checkedId);
-            if (isChecked && alignment != null)
-                pickClockAlignment(alignment);
-        });
-        FrameLayout holder = new FrameLayout(context);
-        holder.setPadding(dp(16), dp(4), dp(16), dp(4));
-        holder.addView(group, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return holder;
     }
 
     private void pickClockAlignment(@NonNull String alignment) {
@@ -3535,18 +3808,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ------------------------------------------------------------------------- unsaved and exit
 
-    /** One dirty state for the whole editor: the look or the arrangement moved since open. */
+    /**
+     * One dirty state for the whole editor: the look on either half, an app-wide choice, minimal
+     * mode or the arrangement moved since open.
+     */
     private boolean isDirty() {
         TermuxAppSharedPreferences prefs = prefs();
         boolean look = prefs != null && mEntrySignature != null
             && !mEntrySignature.equals(AppearanceSnapshot.signatureOf(prefs));
+        boolean settings = mEntrySettings != null && mSettingsNow != null
+            && !mEntrySettings.signature().equals(mSettingsNow);
+        boolean minimal = mHost.isMinimalMode() != mEntryMinimal;
+        boolean theme = ThemePreview.pending() != null;
         LayoutEditorController layout = mHost.layoutEditor();
-        return look || (layout != null && layout.isDirty());
+        return look || settings || minimal || theme || (layout != null && layout.isDirty());
     }
 
-    /** Undo: everything — the look and the arrangement — back to the state at open. */
+    /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
     private void revertToEntry() {
         dropLookDrag();
+        // A Match onto a layout the session did not take on entry (Home's, opened in minimal
+        // mode) is put back by its own Undo; the session's revert covers the rest.
+        TermuxAppSharedPreferences matched = prefs();
+        if (matched != null) {
+            for (ScreenMatch.Undo undo : mMatchUndos.values())
+                undo.restore(matched);
+        }
+        mMatchUndos.clear();
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.isDirty())
             layout.revert();
@@ -3554,46 +3842,62 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || mEntry == null)
             return;
         mEntry.restore(prefs);
-        // The saved Custom as it was at open: a Custom left during the visit stored it.
         if (mEntryCustom != null)
             prefs.setSurfaceCustomPreset(mEntryCustom);
+        if (mEntrySettings != null) {
+            List<String> written = mEntrySettings.restore(settingsStore());
+            refreshSettingsSignature();
+            if (!written.isEmpty())
+                mHost.applyHomeSettings();
+        }
+        dropThemePreview();
+        if (mHost.isMinimalMode() != mEntryMinimal)
+            mHost.setMinimalMode(mEntryMinimal);
         mSessionCustom.clear();
+        mHeldCustom.clear();
+        if (!mClearedWidgetGlass.isEmpty()) {
+            mHost.restoreWidgetGlassChoices(new java.util.LinkedHashMap<>(mClearedWidgetGlass));
+            mClearedWidgetGlass.clear();
+        }
         forgetGlassEdgePositions();
-        mStop = mEntryStop;
-        mTarget = null;
         syncAfterBulkWrite();
     }
 
     /**
-     * Saves the look. At a Custom the user changed it is also stored as the saved Custom; a Custom
-     * left as seeded (a tap at Clear, then Done) is the Look on screen and changes nothing. A Look
-     * saved at its stop is the user's new starting point, so the saved Custom goes: the next visit's
-     * Custom starts from that Look's values (the developer's rule, 2026-10-18).
+     * Saves the look. A half left at a Custom the user made stores it as the saved Custom; with
+     * both halves on Looks the saved Custom goes, and the next Custom starts from those Looks. A
+     * visit that changed no look leaves it alone.
      */
     private void commitLook() {
         TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null) return;
-        if (!AppearanceLooks.isCustomStop(mStop)) {
+        if (prefs == null)
+            return;
+        // A visit that changed no look keeps the saved Custom as it found it.
+        if (mEntrySignature != null
+            && mEntrySignature.equals(AppearanceSnapshot.signatureOf(prefs)))
+            return;
+        boolean custom = AppearanceLooks.isCustomStop(matchingStop(WallHalf.HOME))
+            || AppearanceLooks.isCustomStop(matchingStop(WallHalf.WORKSPACE));
+        if (!custom)
             prefs.setSurfaceCustomPreset(null);
-        } else if (mSessionCustom.isTouched(prefs)) {
+        else if (mSessionCustom.isTouched(prefs))
             SurfacePresets.saveCustom(prefs);
-        }
     }
 
     /** Done: the look is saved, and the surface takes the editor off screen. */
     private void commitAndExit() {
-        commitLook();
+        if (mSliderDragActive)
+            endDrag();
+        commitSession();
         Runnable onDone = mOnDone;
         if (onDone != null)
             onDone.run();
     }
 
     /**
-     * Leaving the editor page, by Back or by a HOME press. Nothing to lose: {@code proceed} runs
-     * at once. Otherwise it asks, once for the look and the arrangement together — Keep editing
-     * (nothing runs) / Discard / Save — rather than choosing for the user; the live write-through
-     * means "leave" would otherwise mean "keep" by accident. Back with a bar in the air cancels
-     * the lift and nothing else (DECISIONS item 4); {@code proceed} does not run then either.
+     * Leaving the editor. Nothing to lose: {@code proceed} runs at once. Otherwise it asks, once
+     * for everything — Keep editing / Discard / Save. Back with an element in the air cancels the
+     * lift and nothing else.
      */
     @Override
     public void requestLeave(@NonNull Runnable proceed) {
@@ -3601,37 +3905,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             proceed.run();
             return;
         }
-        LayoutEditorController layoutEditor = mHost.layoutEditor();
-        if (mLayoutMode && layoutEditor != null && layoutEditor.cancelGesture())
-            return;
         if (!isDirty()) {
             proceed.run();
             return;
         }
         showUnsavedDialog(() -> {
-            commitLook();
+            commitSession();
             proceed.run();
         }, proceed);
     }
 
-    /**
-     * Leaving with something besides the editor unsaved (the Overview's pending wallpaper): the
-     * one question, asked whether or not the editor is dirty. Discard reverts the editor when it
-     * is up; Save keeps the look.
-     */
+    /** Leaving with the picker's choice pending as well: the one question, always. */
     @Override
     public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard) {
-        LayoutEditorController layoutEditor = mHost.layoutEditor();
-        if (mOpen && mLayoutMode && layoutEditor != null && layoutEditor.cancelGesture())
-            return;
         showUnsavedDialog(() -> {
             if (mOpen)
-                commitLook();
+                commitSession();
             onSave.run();
         }, onDiscard);
     }
 
-    /** Keep editing (nothing runs) / Discard (the editor back to how it was at open, then {@code discard}) / Save. */
     private void showUnsavedDialog(@NonNull Runnable save, @NonNull Runnable discard) {
         new MaterialAlertDialogBuilder(mHost.context())
             .setTitle(R.string.termux_surface_tuning_unsaved_title)
@@ -3648,33 +3941,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             .show();
     }
 
-    /** The phone turned: Layout mode's canvas default and next write turn with it. */
+    /**
+     * The phone turned: the editor stays open and edits the orientation the phone is in now
+     * (editor-redesign §1, rotate to edit); the chip names it, and the open card reads it.
+     */
     public void onPlaceOrientationChanged() {
         LayoutEditorController layout = mHost.layoutEditor();
-        if (mOpen && layout != null)
+        View content = mHost.findView(android.R.id.content);
+        if (!mOpen || layout == null || content == null)
+            return;
+        // Posted: the configuration lands before the window is laid out in it.
+        content.post(() -> {
+            if (!mOpen)
+                return;
             layout.onPlaceOrientationChanged();
+            restateOrientation();
+            restateCard();
+        });
     }
 
-    /**
-     * Takes the editor off screen and keeps the session. The frame goes to {@code toScale} and
-     * {@code toTranslationY} (the Overview's Home card) when {@code toScale} is above zero, else to
-     * full size; {@code onHidden} runs when it has arrived. The launcher is left at that pose and
-     * the keyboard up: {@link #restoreLauncher} puts both right once the Overview covers it.
-     */
-    @Override
-    public void dismiss(float toScale, float toTranslationY, @Nullable Runnable onHidden) {
+    /** Takes the editor off screen: the card, the bar, then the frame back to size. */
+    private void dismiss(@Nullable Runnable onHidden) {
         if (!mOpen) {
             if (onHidden != null)
                 onHidden.run();
             return;
         }
-        dismissClockDropdown();
-        // A drag cut short by the leave keeps what it showed, as every editor write is kept.
         if (mSliderDragActive)
             endDrag();
-        // The bar goes back to its stored shape as the editor leaves, from the same moment.
-        mHost.setTopStatusBarExpandedForEditor(false, true);
         mOpen = false;
+        mMatchUndos.clear();
         mHost.retainGlassCapture(false);
         mFramed = false;
         mPresentToken++;
@@ -3682,47 +3978,35 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry = null;
         mEntryCustom = null;
         mEntrySignature = null;
-        mTarget = null;
-        mRestoreTarget = null;
-        mOpenInLayout = false;
-        mPanelRevealing = false;
+        mEntrySettings = null;
+        mSettingsNow = null;
+        mCard = null;
+        mLastDetent = -1;
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null) {
             layout.end();
             layout.setOnChangedListener(null);
+            layout.setOnPlaceShownListener(null);
         }
-        boolean wasLayout = mLayoutMode;
-        if (mIconsMode)
-            showIconsPage(false);
-        mLayoutMode = false;
-        mIconsMode = false;
+        mElements = null;
         cancelFrameAnimator();
         mFrameCtxValid = false;
         mTargetScale = -1f;
-        applyModelShape(false, false);
-        fadeLayoutFrame(false, wasLayout, 0L);
+        mFollowingSheet = false;
+        mEntering = false;
         setOverlayVisible(false);
         unregisterLayoutListener();
         View outline = mHost.findView(R.id.surface_editor_selection_outline);
         if (outline != null)
             outline.setVisibility(View.GONE);
-        final AppearanceEditorPanel panel = mPanel;
-        if (panel != null) {
-            View view = panel.view();
-            view.animate().cancel();
-            if (mPanelAnimator != null)
-                finishPanelAnimation(view);
-            view.animate().translationY(Math.max(view.getHeight(), mRestHeightPx))
-                .setDuration(AppearanceEditorFrame.EXIT_MS).setInterpolator(Motion.settle())
-                .withEndAction(() -> {
-                    if (mOpen)
-                        return;
-                    view.setVisibility(View.GONE);
-                    view.setTranslationY(0f);
-                    if (view.getParent() instanceof ViewGroup)
-                        ((ViewGroup) view.getParent()).removeView(view);
-                })
-                .start();
+        clearOutlines();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null)
+            sheet.hide(true, sheet::detach);
+        EditorBar bar = mBar;
+        if (bar != null) {
+            bar.setShown(false);
+            bar.detach();
         }
         AppearanceEditorFrame frame = mFrame;
         if (frame == null) {
@@ -3730,59 +4014,67 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 onHidden.run();
             return;
         }
-        if (toScale > 0f)
-            frame.moveTo(toScale, toTranslationY, onHidden);
-        else
-            frame.hide(true, onHidden);
+        frame.hide(true, onHidden);
     }
 
-    /**
-     * The launcher back at full size and repainted, the keyboard the editor raised taken down:
-     * run while the Overview fully covers it, never under the hop. The chrome is not dressed again
-     * here; only the end of the session does that.
-     */
-    @Override
-    public void restoreLauncher() {
-        if (mOpen || !mSession)
-            return;
-        AppearanceEditorFrame frame = mFrame;
-        if (frame != null) {
-            frame.hide(false, null);
-            frame.repaintAll();
+    /** The targets' outlines taken off, so the launcher wears none after the editor. */
+    private void clearOutlines() {
+        for (int id : GROUP_IDS) {
+            View group = mHost.findView(id);
+            if (group != null && group.getBackground() != null)
+                group.setBackground(null);
         }
-        if (mRaisedKeyboard)
-            mHost.hideInAppKeyboardForEditor();
-        mRaisedKeyboard = false;
     }
 
     /**
-     * Ends the session: the editor goes down first when it is up, then the editor's wallpaper and
-     * the opaque window go, and the chrome is dressed as a launch would — only now, with the root
-     * at identity: a pass run while it was scaled aimed every glass surface at the scaled frame,
-     * and nothing draws them again.
+     * Ends the session: the editor goes down first when it is up, then the editor's wallpaper,
+     * and the chrome is dressed as a launch would.
      */
     @Override
     public void endSession() {
         if (!mSession)
             return;
         if (mOpen) {
-            dismiss(-1f, 0f, this::finishSession);
+            dismiss(this::finishSession);
+            lowerRaisedKeyboardAtEnd();
             return;
         }
         finishSession();
     }
 
+    /** Set while {@link #lowerRaisedKeyboardAtEnd} asks the host: the session's end is under way. */
+    private boolean mEndingSession;
+
+    /** Whether the session is ending: the host keeps a keyboard the place wants at the end. */
+    public boolean isEndingSession() {
+        return mEndingSession;
+    }
+
+    private void lowerRaisedKeyboardAtEnd() {
+        if (!mRaisedKeyboard || !mSession)
+            return;
+        mEndingSession = true;
+        try {
+            mHost.hideInAppKeyboardForEditor();
+        } finally {
+            mEndingSession = false;
+        }
+        mRaisedKeyboard = false;
+    }
+
     private void finishSession() {
         if (mOpen || !mSession)
             return;
+        // Every write here is kept unless Discard or Undo put it back, and so is the theme.
+        commitThemePreview();
         mSession = false;
-        mRestore = null;
         mCarriedNext = null;
         mWallpaperToken++;
         mWallpaperSettled = false;
         mWallpaperWaiter = null;
         mEditorWallpaper = null;
-        mKeyboardOwed = false;
+        mLabelPicture = null;
+        mLabelInk = 0;
         releaseIconsContent();
         AppearanceEditorFrame frame = mFrame;
         if (frame != null) {
@@ -3798,22 +4090,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mRaisedKeyboard = false;
         mHost.holdPaneWall(false);
         mHost.setTopStatusBarExpandedForEditor(false, false);
+        mHost.editorSessionEnded();
     }
 
-    private void releaseIconsContent() {
-        AppearanceSurfaceController.Page page = mIconsPage;
-        mIconsPage = null;
-        AppearanceEditorPanel panel = mPanel;
-        if (panel != null)
-            panel.setIconsContent(null);
-        if (page != null)
-            page.release();
-    }
-
-    /** The activity stopped with the surface up: the status pane's borrowed shape goes back. */
+    /** The activity stopped with the surface up. */
     @Override
     public void onStopWhileOpen() {
-        // A drag the stop cut short (no lift will come) keeps what it showed.
         if (mSliderDragActive)
             endDrag();
         mHost.setTopStatusBarExpandedForEditor(false, false);
@@ -3831,6 +4113,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private boolean mSliderDragActive;
     private boolean mDragTouchedBlur;
     private boolean mDragTouchedKeyboard;
+    /** A Text size drag moved the terminal's size; its panes take it on the release. */
+    private boolean mDragTouchedTerminalText;
     /** A Corners or Margin drag moved the shape; the release resizes the terminal once. */
     private boolean mDragTouchedGeometry;
     /** An Icon size drag wrote through the layout session; the release re-lays the place once. */
@@ -3884,6 +4168,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mDragTouchedKeyboard = false;
             requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
         }
+        if (mDragTouchedTerminalText) {
+            mDragTouchedTerminalText = false;
+            requestPreview(SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL);
+        }
         if (mDirtyDeferred) {
             mDirtyDeferred = false;
             syncDirty();
@@ -3899,6 +4187,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // A re-blur is the frame a drag can least afford; the release settles it once.
             mDragTouchedBlur = true;
             scopes &= ~SurfaceEditorProperties.PREVIEW_BLUR;
+        }
+        if (defersHeavyPasses()
+                && (scopes & SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL) != 0) {
+            // The panes' resize waits for the release, like the geometry's.
+            mDragTouchedTerminalText = true;
+            scopes &= ~SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL;
         }
         mPendingPreviewScopes |= scopes | SurfaceEditorProperties.PREVIEW_GLASS;
         if (mPreviewScheduled)
@@ -3937,6 +4231,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (defersHeavyPasses()) mDragTouchedKeyboard = true;
             else keyboard().onPreferencesReloaded();
         }
+        if ((scopes & (SurfaceEditorProperties.PREVIEW_TEXT
+                | SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL)) != 0)
+            mHost.applyTextSizePreview(
+                (scopes & SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL) != 0);
         mHost.applyGlassPreview();
         if (mOpen && !mSliderDragActive)
             positionOutline();
@@ -3969,10 +4267,926 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         SoftWallpaper.apply(mHost.findView(R.id.wallpaper_backdrop), prefs);
         if (keyboard() != null)
             keyboard().onPreferencesReloaded();
+        mHost.applyTextSizePreview(true);
         applyStructuralPreview();
-        syncPanel();
-        // An Undo can move Style or Corners under a showing canvas.
-        syncLayoutCanvas();
+        restateCard();
+        // An Undo can move Style or Corners: the layout session's dirty state follows.
+        syncLayoutSession();
         positionOutline();
+    }
+
+    // ------------------------------------------------------- Status bar and Terminal cards
+
+    /** The rows the Status bar and Terminal cards drew themselves, for their restates. */
+    @NonNull private final java.util.Map<Row, com.termux.app.surfaces.cards.CardRowView> mOwnRows =
+        new java.util.EnumMap<>(Row.class);
+
+    /**
+     * The Status bar or Terminal card's own row for {@code row} ({@link
+     * EditorCardSheet.Model#rowView}), or null for a row the sheet draws.
+     */
+    @Nullable
+    private View statusTerminalRowView(@NonNull Row row, int widthPx) {
+        EditorCard card = mCard;
+        Context context = mHost.context();
+        com.termux.app.surfaces.cards.CardRowView built = null;
+        if (card == EditorCard.STATUS)
+            built = com.termux.app.surfaces.cards.StatusBarCard.view(context, row, widthPx,
+                mStatusCardHost);
+        else if (card == EditorCard.TERMINAL)
+            built = com.termux.app.surfaces.cards.TerminalCard.view(context, row, widthPx,
+                mTerminalCardHost);
+        if (built == null) {
+            mOwnRows.remove(row);
+            return null;
+        }
+        mOwnRows.put(row, built);
+        return built.view;
+    }
+
+    /**
+     * The Keyboard, Home, Global or Workspace card's rows ({@link CardBody}), for the card being
+     * built. Asked only while the sheet builds a card (through {@link EditorCardSheet.Model#rowView}),
+     * so a restatement keeps reading the views it built; a card whose rows changed (the glass edge
+     * came or went) gets a body of its own.
+     */
+    @Nullable private CardBody mCardBody;
+
+    @NonNull
+    private CardBody cardBody(@NonNull EditorCard card) {
+        java.util.List<EditorRows.Spec> specs = EditorRows.rows(card, offers());
+        CardBody body = mCardBody;
+        if (body == null || !body.drawsFor(card, specs)) {
+            body = new CardBody(mHost.context(), mModel, mModel, card, specs, () -> {
+                EditorCardSheet sheet = mSheet;
+                if (sheet != null) sheet.setDetent(EditorCardSheet.DETENT_FULL, true);
+            });
+            mCardBody = body;
+        }
+        return body;
+    }
+
+    /** Reads a row {@link #statusTerminalRowView} built again from the values. */
+    private void restateStatusTerminalRow(@NonNull Row row, @NonNull View view) {
+        com.termux.app.surfaces.cards.CardRowView built = mOwnRows.get(row);
+        if (built != null && built.view == view)
+            built.restate();
+    }
+
+    /** The Status bar card's reads and writes, through the paths its old rows and Settings take. */
+    @NonNull private final com.termux.app.surfaces.cards.StatusBarCard.Host mStatusCardHost =
+        new com.termux.app.surfaces.cards.StatusBarCard.Host() {
+            @Override public int position() {
+                LayoutEditorController layout = mHost.layoutEditor();
+                return com.termux.app.surfaces.cards.StatusBarCard.positionIndex(
+                    layout == null ? null : layout.edgeOf(Element.STATUS));
+            }
+
+            @Override public void setPosition(int index) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                PlaceLayout.Edge[] edges = com.termux.app.surfaces.cards.StatusBarCard.POSITIONS;
+                if (layout == null || index < 0 || index >= edges.length)
+                    return;
+                layout.moveTo(Element.STATUS, edges[index]);
+                positionTargets();
+                syncDirty();
+            }
+
+            @Override public int clockFace() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.faceIndex(
+                    prefs == null ? null : prefs.getTopPaneClockStyle());
+            }
+
+            @Override public void setClockFace(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return;
+                pickClockStyle(com.termux.app.surfaces.cards.StatusBarCard.faceStyle(index,
+                    prefs.getTopPaneClockStyle()));
+            }
+
+            @Override public int clockPosition() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.alignmentIndex(
+                    prefs == null ? null : prefs.getTopPaneClockAlignment());
+            }
+
+            @Override public void setClockPosition(int index) {
+                String[] alignments = com.termux.app.surfaces.cards.StatusBarCard.ALIGNMENTS;
+                if (index >= 0 && index < alignments.length)
+                    pickClockAlignment(alignments[index]);
+            }
+
+            @Override public boolean option(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return false;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_12H:
+                        return prefs.isTopPaneClockAmPmEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_SECONDS:
+                        return prefs.isStatusClockSecondsEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_FAHRENHEIT:
+                        return prefs.isStatusWidgetWeatherFahrenheit();
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_CAMERA_GAP:
+                        return com.termux.app.surfaces.cards.StatusBarCard.cameraGapOn(
+                            prefs.getStatusBarCutoutMode());
+                    default:
+                        return false;
+                }
+            }
+
+            @Override public void setOption(int index, boolean on) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || option(index) == on)
+                    return;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_12H:
+                        // The old 12-hour row's write, so the bar and the Wall strip follow.
+                        mModel.onValue(Row.CLOCK_12H, on ? 1 : 0, false);
+                        return;
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_SECONDS:
+                        prefs.setStatusClockSecondsEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.OPTION_FAHRENHEIT:
+                        prefs.setStatusWidgetWeatherFahrenheit(on);
+                        break;
+                    default:
+                        return;
+                }
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
+            @Override public boolean indicator(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null)
+                    return false;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
+                        return prefs.isStatusWidgetCpuEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
+                        return prefs.isStatusWidgetRamEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
+                        return prefs.isStatusWidgetWeatherEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_NOTIFICATIONS:
+                        return prefs.isStatusWidgetNotificationsEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
+                        return prefs.isStatusWidgetMediaEnabled();
+                    default:
+                        return false;
+                }
+            }
+
+            @Override public void setIndicator(int index, boolean on) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || indicator(index) == on)
+                    return;
+                switch (index) {
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
+                        prefs.setStatusWidgetCpuEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
+                        prefs.setStatusWidgetRamEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
+                        prefs.setStatusWidgetWeatherEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_NOTIFICATIONS:
+                        prefs.setStatusWidgetNotificationsEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
+                        prefs.setStatusWidgetMediaEnabled(on);
+                        break;
+                    default:
+                        return;
+                }
+                // The bar's refresh ends in its widgets' pass, which reads every indicator.
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
+            @Override public void openCameraGap() {
+                Context context = mHost.context();
+                try {
+                    context.startActivity(SettingsActivity.createFragmentIntent(context,
+                        StatusBarPreferencesFragment.class,
+                        R.string.settings_destination_status_bar, null,
+                        TermuxPreferenceConstants.TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE));
+                } catch (RuntimeException e) {
+                    // No Settings to open (a stripped build): the editor stays as it is.
+                }
+            }
+        };
+
+    /** The Terminal card's reads and writes, through the paths its old rows and Settings take. */
+    @NonNull private final com.termux.app.surfaces.cards.TerminalCard.Host mTerminalCardHost =
+        new com.termux.app.surfaces.cards.TerminalCard.Host() {
+            @Override public int contrast() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 1
+                    : AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+            }
+
+            @Override public void setContrast(int index) {
+                // The old Contrast row's write: the palette rebuilds at the new level.
+                mModel.onValue(Row.CONTRAST, index, false);
+                syncDirty();
+            }
+
+            @Override public int trail() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 1
+                    : com.termux.app.surfaces.cards.TerminalCard.trailIndex(
+                        prefs.isTerminalCursorTrailEnabled(), prefs.getTerminalCursorTrailStyle());
+            }
+
+            @Override public void setTrail(int index) {
+                List<String> trails = com.termux.app.surfaces.cards.TerminalCard.TRAILS;
+                if (index >= 0 && index < trails.size())
+                    writeTrailStyle(trails.get(index));
+            }
+
+            @Override public int effect() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 0
+                    : com.termux.app.surfaces.cards.TerminalCard.effectIndex(
+                        prefs.getTerminalRetroEffect());
+            }
+
+            @Override public void setEffect(int index) {
+                List<String> effects = com.termux.app.surfaces.cards.TerminalCard.EFFECTS;
+                if (index >= 0 && index < effects.size())
+                    writeRetroEffect(effects.get(index));
+            }
+
+            @Override public void openFont() {
+                // The old Font link's page.
+                openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
+            }
+        };
+
+    // ------------------------------------------------------------------------------ Dock card
+    //
+    // The Dock card's Style, Bars, Dock type and Options rows (editor-redesign §2 Dock), built by
+    // cards/DockCard and read and written here.
+
+    @Nullable private com.termux.app.surfaces.cards.DockCard mDockCard;
+
+    @NonNull
+    private com.termux.app.surfaces.cards.DockCard dockCard() {
+        if (mDockCard == null)
+            mDockCard = new com.termux.app.surfaces.cards.DockCard(new DockHost());
+        return mDockCard;
+    }
+
+    /**
+     * The Dock card opens next on {@code bar}'s settings, or with every bar's closed for null: a
+     * door from outside the editor that names the bar pressed (the long-press popup's Edit).
+     */
+    public void expandDockBar(@Nullable Element bar) {
+        dockCard().expand(bar);
+    }
+
+    /** The bar a tap at a raw screen point landed on: the A–Z strip, the extra keys, or neither. */
+    @Nullable
+    private Element dockBarAt(float rawX, float rawY) {
+        if (dockViewHit(R.id.apps_bar_az_row, rawX, rawY)
+            || dockViewHit(R.id.place_az_bar_host, rawX, rawY))
+            return Element.AZ;
+        if (dockViewHit(R.id.place_extra_keys_host, rawX, rawY)
+            || dockViewHit(R.id.terminal_toolbar_view_pager, rawX, rawY))
+            return Element.EXTRA_KEYS;
+        return null;
+    }
+
+    private boolean dockViewHit(int id, float rawX, float rawY) {
+        View view = mHost.findView(id);
+        if (view == null || !view.isShown() || view.getWidth() <= 0 || view.getHeight() <= 0)
+            return false;
+        android.graphics.Rect rect = new android.graphics.Rect();
+        if (!view.getGlobalVisibleRect(rect))
+            return false;
+        int[] window = new int[2];
+        view.getRootView().getLocationOnScreen(window);
+        return rect.contains(Math.round(rawX) - window[0], Math.round(rawY) - window[1]);
+    }
+
+    /** Where the A–Z strip's and the dock's new switches are stored, beside the app's own. */
+    @Nullable
+    private SharedPreferences dockPrefs() {
+        TermuxAppSharedPreferences prefs = prefs();
+        return prefs == null ? null : prefs.getSharedPreferences();
+    }
+
+    /** The bars stacked in {@code order} where they share an edge, written when anything moved. */
+    private void restackBars(@NonNull java.util.List<Element> order) {
+        LayoutEditorController layout = mHost.layoutEditor();
+        PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+        if (layout == null || arranged == null)
+            return;
+        PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(arranged, order);
+        if (!next.equals(arranged)) {
+            layout.writeSlots(next);
+            positionTargets();
+        }
+    }
+
+    private final class DockHost implements com.termux.app.surfaces.cards.DockCard.Host {
+        @NonNull @Override public Context context() {
+            return mHost.context();
+        }
+
+        @Override public boolean floating() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs != null
+                && prefs.getLayoutStyle() == TermuxAppSharedPreferences.LayoutStyle.FLOATING;
+        }
+
+        @Override public void setFloating(boolean floating) {
+            writeStyle(floating);
+            // The Height strip's range follows the style.
+            if (mSheet != null) mSheet.restate();
+        }
+
+        @NonNull @Override public java.util.List<Element> barOrder() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
+            java.util.List<Element> stored =
+                com.termux.app.surfaces.cards.BarOrder.parse(layout.barOrder());
+            PlaceLayout arranged = layout.arrangedLayout();
+            return arranged == null ? stored
+                : com.termux.app.surfaces.cards.BarOrder.reconcile(stored, arranged);
+        }
+
+        @Override public void setBarOrder(@NonNull java.util.List<Element> order) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            layout.setBarOrder(com.termux.app.surfaces.cards.BarOrder.format(order));
+            restackBars(order);
+            // The order alone (bars on edges of their own) moves no slot: Undo still holds it.
+            syncDirty();
+        }
+
+        @Override public boolean offers(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.offers(bar);
+        }
+
+        @Override public boolean barShown(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.isShown(bar);
+        }
+
+        @Override public void setBarShown(@NonNull Element bar, boolean shown) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            java.util.List<Element> order = barOrder();
+            layout.setShown(bar, shown);
+            // Back in the list's place among the bars it now shares an edge with.
+            if (shown)
+                restackBars(order);
+            positionTargets();
+        }
+
+        @NonNull @Override
+        public com.termux.app.surfaces.cards.BarOrder.Position position(@NonNull Element bar) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+            if (arranged == null)
+                return bar == Element.AZ
+                    ? com.termux.app.surfaces.cards.BarOrder.Position.RIDES_APPS_ROW
+                    : com.termux.app.surfaces.cards.BarOrder.Position.ABOVE_KEYBOARD;
+            return com.termux.app.surfaces.cards.BarOrder.positionOf(bar, arranged.slot(bar));
+        }
+
+        @Override public void setPosition(@NonNull Element bar,
+                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+            if (layout == null || arranged == null)
+                return;
+            java.util.List<Element> order = barOrder();
+            PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(
+                com.termux.app.surfaces.cards.BarOrder.withPosition(arranged, bar, position),
+                order);
+            layout.writeSlots(next);
+            positionTargets();
+        }
+
+        @Override public int appIcons() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs == null ? AppearanceLooks.APP_ICONS_MIN
+                : Control.APP_ICONS.clamp(prefs.getAppLauncherButtonCount());
+        }
+
+        @Override public int appIconsFrom() {
+            return AppearanceLooks.APP_ICONS_MIN;
+        }
+
+        @Override public int appIconsTo() {
+            return AppearanceLooks.APP_ICONS_MAX;
+        }
+
+        @Override public void setAppIcons(int count) {
+            writeAppIcons(count);
+        }
+
+        @Override public boolean mostUsed() {
+            return AppearanceSettingsStore.getBoolean(mHost.context(),
+                "app_launcher_most_used_page", false);
+        }
+
+        @Override public void setMostUsed(boolean on) {
+            AppearanceSettingsStore.putBoolean(mHost.context(), "app_launcher_most_used_page", on);
+            settingsWritten();
+        }
+
+        @NonNull @Override public CharSequence iconPack() {
+            String pack = com.termux.app.launcher.data.IconPackChoices.current(prefs(),
+                com.termux.app.launcher.data.IconPackChoices.KEY_PINNED);
+            if (pack.isEmpty())
+                return getString(R.string.editor_dock_icon_pack_global);
+            android.content.pm.PackageManager manager = mHost.context().getPackageManager();
+            try {
+                return manager.getApplicationLabel(manager.getApplicationInfo(pack, 0));
+            } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+                return getString(R.string.editor_dock_icon_pack_global);
+            }
+        }
+
+        @Override public void pickIconPack() {
+            Context context = mHost.context();
+            CharSequence global = getString(R.string.editor_dock_icon_pack_global);
+            TermuxAppSharedPreferences prefs = prefs();
+            android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+            // Listing the packs asks the package manager: off the main thread.
+            new Thread(() -> {
+                com.termux.app.launcher.data.IconPackChoices.Listing listing =
+                    com.termux.app.launcher.data.IconPackChoices.listing(context, prefs,
+                        com.termux.app.launcher.data.IconPackChoices.KEY_PINNED, global);
+                main.post(() -> showIconPacks(listing));
+            }, "dock-icon-packs").start();
+        }
+
+        @Override public boolean azGlass() {
+            SharedPreferences store = dockPrefs();
+            return store == null
+                ? com.termux.app.surfaces.cards.DockCard.DEFAULT_AZ_GLASS_BACKGROUND
+                : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND,
+                    com.termux.app.surfaces.cards.DockCard.DEFAULT_AZ_GLASS_BACKGROUND);
+        }
+
+        @Override public void setAzGlass(boolean on) {
+            SharedPreferences store = dockPrefs();
+            if (store != null)
+                store.edit().putBoolean(
+                    com.termux.app.surfaces.cards.DockCard.KEY_AZ_GLASS_BACKGROUND, on).apply();
+            settingsWritten();
+            azWritten();
+        }
+
+        @Override public int azShow() {
+            SharedPreferences store = dockPrefs();
+            String stored = store == null ? null
+                : store.getString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW, null);
+            return indexOf(com.termux.app.surfaces.cards.DockCard.AZ_SHOW_VALUES, stored, 0);
+        }
+
+        @Override public void setAzShow(int index) {
+            SharedPreferences store = dockPrefs();
+            String[] values = com.termux.app.surfaces.cards.DockCard.AZ_SHOW_VALUES;
+            if (store != null)
+                store.edit().putString(com.termux.app.surfaces.cards.DockCard.KEY_AZ_SHOW,
+                    values[Math.max(0, Math.min(values.length - 1, index))]).apply();
+            settingsWritten();
+            azWritten();
+        }
+
+        /**
+         * The A–Z strip's look moved: the live chrome is arranged again, since the pull tab gives
+         * the strip's band back and Faint and the glass are applied with the bar's host.
+         */
+        private void azWritten() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null) layout.applyStoreWrite();
+        }
+
+        @Override public void openExtraKeysEditor() {
+            openSettingsPage(
+                com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment.class,
+                R.string.settings_edit_extra_keys_title);
+        }
+
+        @Override public int stripHeightDp() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            int dp = layout == null ? -1 : layout.wallStripHeightDp();
+            return dp > 0 ? dp : com.termux.app.dock.WallStripRowPolicy.DEFAULT_HEIGHT_DP;
+        }
+
+        @Override public void setStripHeightDp(int dp) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null)
+                layout.setWallStripHeightDp(dp);
+        }
+
+        @Override public int dockType() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
+        }
+
+        @Override public void setDockType(int index) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null && index >= 0 && index < DockStyle.CHOICES.size())
+                layout.setDockStyle(DockStyle.CHOICES.get(index));
+            // Peek's Reflection stands with that type alone.
+            if (mSheet != null) mSheet.restate(Row.REFLECTION);
+        }
+
+        @Override public boolean option(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            Context context = mHost.context();
+            switch (option) {
+                case SEARCH_FIELD: return layout != null && layout.searchField();
+                case DRAWER_ICON: return layout != null && layout.drawerTile();
+                case COMMAND_PALETTE: {
+                    SharedPreferences store = dockPrefs();
+                    return store == null
+                        ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
+                        : store.getBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+                            com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
+                }
+                case NOTIFICATION_DOTS:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        "app_launcher_notification_dots", false);
+                case QUICK_REPLY:
+                    return AppearanceSettingsStore.getBoolean(context,
+                        "app_launcher_quick_reply_swipe", true);
+                case MONOCHROME:
+                default:
+                    return AppearanceSettingsStore.getBoolean(context, "app_launcher_bw_icons",
+                        false);
+            }
+        }
+
+        @Override public void setOption(
+                @NonNull com.termux.app.surfaces.cards.DockCard.Option option, boolean on) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            Context context = mHost.context();
+            switch (option) {
+                case SEARCH_FIELD:
+                    if (layout != null) layout.setSearchField(on);
+                    break;
+                case DRAWER_ICON:
+                    if (layout != null) layout.setDrawerTile(on);
+                    break;
+                case COMMAND_PALETTE: {
+                    SharedPreferences store = dockPrefs();
+                    if (store != null)
+                        store.edit().putBoolean(
+                            com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on)
+                            .apply();
+                    settingsWritten();
+                    break;
+                }
+                case NOTIFICATION_DOTS:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_notification_dots",
+                        on);
+                    settingsWritten();
+                    break;
+                case QUICK_REPLY:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_quick_reply_swipe",
+                        on);
+                    settingsWritten();
+                    break;
+                case MONOCHROME:
+                default:
+                    AppearanceSettingsStore.putBoolean(context, "app_launcher_bw_icons", on);
+                    settingsWritten();
+                    break;
+            }
+        }
+    }
+
+    /** The apps row's icon packs to pick from; a pick lands at once, as Global's does. */
+    private void showIconPacks(
+            @NonNull com.termux.app.launcher.data.IconPackChoices.Listing listing) {
+        if (!mOpen)
+            return;
+        Context context = mHost.context();
+        CharSequence[] labels = new CharSequence[listing.entries.size()];
+        for (int i = 0; i < labels.length; i++)
+            labels[i] = listing.entries.get(i).label;
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.editor_dock_icon_pack)
+            .setSingleChoiceItems(labels, listing.checked, (dialog, which) -> {
+                if (which >= 0 && which < listing.entries.size()) {
+                    com.termux.app.launcher.data.IconPackChoices.applyLive(context, prefs(),
+                        com.termux.app.launcher.data.IconPackChoices.KEY_PINNED,
+                        listing.entries.get(which).value);
+                    settingsWritten();
+                    if (mSheet != null) mSheet.restate();
+                }
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    // Keyboard, Home and Global cards ---------------------------------------------------------
+    //
+    // The rows those cards added (editor-redesign §2): read, ranged, named and written here, so
+    // the card model's switches only hand their default case on.
+
+    /** Settings › Home's Gestures section, which the Home card's Gestures chip opens on. */
+    private static final String HOME_GESTURES_SECTION = "home_gestures";
+    /** Settings › Home's Pages section, which the Home card's Edit pages chip scrolls to. */
+    private static final String HOME_PAGES_SECTION = "home_pages";
+    /** The tools that follow the terminal's colours, on the page the Tool colours chip opens. */
+    private static final String TOOL_COLOURS_KEY = "theme_templates_enabled";
+
+    /** The Tint colour swatches' stored values, in order. */
+    private String[] tintHueValues() {
+        return getResources().getStringArray(R.array.appearance_editor_tint_hue_values);
+    }
+
+    /** A value for a row the card model's own switch does not name; 0 for none. */
+    private int cardRowValue(@NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        Context context = mHost.context();
+        if (prefs == null)
+            return 0;
+        switch (row) {
+            case BOTTOM_PADDING: {
+                int chin = layout == null ? -1 : layout.keyboardChinDp();
+                return chin >= 0 ? chin : prefs.getSharedInAppKeyboardBottomPadding();
+            }
+            case OPACITY_LINK:
+                return prefs.isInAppKeyboardOpacityLinked() ? 1 : 0;
+            case HOME_COLUMNS:
+            case HOME_ROWS: {
+                int[] grid = layout == null ? null : layout.widgetGrid();
+                if (grid == null)
+                    return row == Row.HOME_COLUMNS ? prefs.getAppLauncherWidgetGridColumns()
+                        : prefs.getAppLauncherWidgetGridRows();
+                return row == Row.HOME_COLUMNS ? grid[0] : grid[1];
+            }
+            case HOME_ICON_SIZE:
+                return com.termux.app.launcher.widget.HomeIconSize.fromStored(
+                    AppearanceSettingsStore.getString(context, HomeSettings.KEY_ICON_SCALE, null))
+                    .ordinal();
+            case SHOW_WALLPAPER:
+                return AppearanceSettingsStore.getBoolean(context, "use_system_wallpaper", false)
+                    ? 1 : 0;
+            case TINT_HUE:
+                return indexOf(tintHueValues(), prefs.getSurfaceGlassTintHue(), 0);
+            default:
+                return 0;
+        }
+    }
+
+    private int cardRowFrom(@NonNull Row row) {
+        switch (row) {
+            case BOTTOM_PADDING:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING;
+            case HOME_COLUMNS:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
+            case HOME_ROWS:
+                return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            default:
+                return 0;
+        }
+    }
+
+    private int cardRowTo(@NonNull Row row) {
+        switch (row) {
+            case BOTTOM_PADDING:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
+            case HOME_COLUMNS:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
+            case HOME_ROWS:
+                return TermuxPreferenceConstants.TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            case HOME_ICON_SIZE:
+            case TINT_HUE:
+                return 2;
+            default:
+                return 1;
+        }
+    }
+
+    @NonNull
+    private String cardRowReadout(@NonNull Row row, int value) {
+        if (row == Row.BOTTOM_PADDING)
+            return getString(R.string.appearance_readout_dp, value);
+        return String.valueOf(value);
+    }
+
+    /** A section's note, Glass widgets' explanation; null for the rest. */
+    @Nullable
+    private CharSequence cardRowSummary(@NonNull Row row) {
+        EditorCard card = mCard;
+        switch (row) {
+            case SECTION_LOOK:
+                if (card == EditorCard.HOME) return getString(R.string.editor_note_home_only);
+                if (card == EditorCard.WORKSPACE)
+                    return getString(R.string.editor_note_workspace_only);
+                return null;
+            case SECTION_GLASS:
+                if (card == EditorCard.HOME) return getString(R.string.editor_note_home_glass);
+                if (card == EditorCard.WORKSPACE)
+                    return getString(R.string.editor_note_workspace_glass);
+                return null;
+            case SECTION_GLASS_MATERIAL:
+                return getString(R.string.editor_note_both_screens);
+            default:
+                return null;
+        }
+    }
+
+    @NonNull
+    private String[] cardRowChoices(@NonNull Row row) {
+        switch (row) {
+            case HOME_ICON_SIZE:
+                return strings(R.string.editor_home_icon_small, R.string.editor_home_icon_default,
+                    R.string.editor_home_icon_large);
+            case TINT_HUE:
+                return getResources().getStringArray(R.array.appearance_editor_tint_hue_entries);
+            default:
+                return new String[0];
+        }
+    }
+
+    /** The glyphs a choice row shows instead of its words; null for words. */
+    @Nullable
+    private int[] cardRowGlyphs(@NonNull Row row) {
+        switch (row) {
+            case FORM:
+                return new int[] {EditorGlyphs.KB_DOCKED, EditorGlyphs.KB_FLOATING,
+                    EditorGlyphs.KB_SPLIT};
+            case LABEL_SIZE:
+                return new int[] {EditorGlyphs.LABEL_SMALL, EditorGlyphs.LABEL_MEDIUM,
+                    EditorGlyphs.LABEL_LARGE};
+            case HOME_ICON_SIZE:
+                return new int[] {EditorGlyphs.ICON_SMALL, EditorGlyphs.ICON_DEFAULT,
+                    EditorGlyphs.ICON_LARGE};
+            case FOLDERS:
+                return new int[] {EditorGlyphs.FOLDER_COMPACT, EditorGlyphs.FOLDER_DEFAULT,
+                    EditorGlyphs.FOLDER_ROOMY};
+            case PAGE_TRANSITION:
+                return new int[] {EditorGlyphs.TRANSITION_SLIDE, EditorGlyphs.TRANSITION_DEPTH,
+                    EditorGlyphs.TRANSITION_FADE, EditorGlyphs.TRANSITION_CAROUSEL,
+                    EditorGlyphs.TRANSITION_STACK};
+            case THEME:
+                return new int[] {R.drawable.ic_ed_theme_system, R.drawable.ic_ed_theme_light,
+                    R.drawable.ic_ms_dark_mode};
+            default:
+                return null;
+        }
+    }
+
+    /** The name a redesigned card gives a row where it is not the row's own. */
+    @Nullable
+    private CharSequence cardRowName(@NonNull Row row) {
+        if (row == Row.OPACITY && mCard == EditorCard.KEYBOARD)
+            return getString(R.string.editor_row_background_opacity);
+        if (row == Row.KEYBOARD_THEME)
+            return getString(R.string.editor_chip_keyboard_theme);
+        if (row == Row.LINK_PAGES)
+            return getString(R.string.editor_chip_edit_pages);
+        return null;
+    }
+
+    /**
+     * The glyph a redesigned card gives a row (editor-redesign §8, one icon per idea: the palette
+     * is Global's alone, Wallpaper colours has its own); 0 keeps the row's own.
+     */
+    private int cardRowGlyph(@NonNull Row row) {
+        switch (row) {
+            case OPACITY:
+                return mCard == EditorCard.KEYBOARD ? EditorGlyphs.KB_BACKGROUND_OPACITY : 0;
+            case KEY_OPACITY: return EditorGlyphs.KB_KEY_OPACITY;
+            case KEY_SPACING: return R.drawable.ic_ms_space_bar;
+            case KEYBOARD_THEME: return R.drawable.ic_ms_brush;
+            case LINK_LAYOUTS: return R.drawable.ic_ms_keyboard_alt;
+            case LABEL_SIZE: return R.drawable.ic_ms_text_fields;
+            case NUMERALS: return R.drawable.ic_ms_tag;
+            case GLASS_WIDGETS: return R.drawable.ic_ms_widgets;
+            case TWO_LINE: return R.drawable.ic_ms_wrap_text;
+            case LABEL_SHADOW: return R.drawable.ic_ms_blur_on;
+            case PAGE_DOTS: return R.drawable.ic_ms_more_horiz;
+            case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
+            case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;
+            case LINK_GESTURES: return R.drawable.ic_ms_swipe;
+            case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
+            case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
+            case TINT_HUE: return R.drawable.ic_ms_format_color_fill;
+            case VIBRANCY: return R.drawable.ic_ms_auto_awesome;
+            case DEPTH: return R.drawable.ic_ms_layers;
+            case FULL_SCREEN: return R.drawable.ic_ms_fullscreen;
+            case MINIMAL: return R.drawable.ic_ms_crop_free;
+            case TOOL_COLOURS: return R.drawable.ic_ms_format_paint;
+            default: return 0;
+        }
+    }
+
+    /** Tint colour's three swatches: the theme's primary, secondary and tertiary. */
+    @Nullable
+    private int[] cardRowSwatches(@NonNull Row row) {
+        if (row != Row.TINT_HUE)
+            return null;
+        Context context = mHost.context();
+        return new int[] {
+            EditorViews.color(context, androidx.appcompat.R.attr.colorPrimary),
+            EditorViews.color(context, com.google.android.material.R.attr.colorSecondary),
+            EditorViews.color(context, com.google.android.material.R.attr.colorTertiary)};
+    }
+
+    /** Numerals' words, each written in its own font. */
+    @Nullable
+    private android.graphics.Typeface cardRowTypeface(@NonNull Row row, int index) {
+        if (row != Row.NUMERALS)
+            return null;
+        return index == 1 ? android.graphics.Typeface.MONOSPACE
+            : android.graphics.Typeface.SANS_SERIF;
+    }
+
+    /** A write for a row the card model's own switch does not name. */
+    private void writeCardRow(@NonNull Row row, int value, boolean dragging) {
+        TermuxAppSharedPreferences prefs = prefs();
+        LayoutEditorController layout = mHost.layoutEditor();
+        Context context = mHost.context();
+        if (prefs == null)
+            return;
+        switch (row) {
+            case BOTTOM_PADDING:
+                if (layout != null) layout.setKeyboardChinDp(value, dragging);
+                syncDirty();
+                break;
+            case OPACITY_LINK:
+                if (prefs.isInAppKeyboardOpacityLinked() != (value != 0)) {
+                    prefs.setInAppKeyboardOpacityLinked(value != 0);
+                    mLinkAnchor = null;
+                    syncDirty();
+                }
+                break;
+            case HOME_COLUMNS:
+            case HOME_ROWS: {
+                int[] grid = layout == null ? null : layout.widgetGrid();
+                if (grid == null)
+                    break;
+                if (row == Row.HOME_COLUMNS) grid[0] = value;
+                else grid[1] = value;
+                layout.setWidgetGrid(grid[0], grid[1]);
+                syncDirty();
+                break;
+            }
+            case HOME_ICON_SIZE: {
+                com.termux.app.launcher.widget.HomeIconSize[] sizes =
+                    com.termux.app.launcher.widget.HomeIconSize.values();
+                writeHomeString(HomeSettings.KEY_ICON_SCALE,
+                    sizes[clamp(value, 0, sizes.length - 1)].value);
+                break;
+            }
+            case SHOW_WALLPAPER:
+                AppearanceSettingsStore.putBoolean(context, "use_system_wallpaper", value != 0);
+                settingsWritten();
+                break;
+            case TINT_HUE: {
+                String[] values = tintHueValues();
+                String id = values[clamp(value, 0, values.length - 1)];
+                if (!id.equals(prefs.getSurfaceGlassTintHue()))
+                    writeTintHue(id);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    /**
+     * A Settings page over the editor, opened on one of its sections or scrolled to a row, and
+     * told the editor is under it (so its own door back into the editor returns here instead).
+     */
+    private void openSettingsFromEditor(@NonNull Class<? extends androidx.fragment.app.Fragment> page,
+                                        @StringRes int title, @Nullable String section,
+                                        @Nullable String scrollToKey) {
+        Context context = mHost.context();
+        try {
+            android.content.Intent intent = SettingsActivity.createFragmentIntent(context, page,
+                title, null, scrollToKey);
+            intent.putExtra(SettingsActivity.EXTRA_FROM_EDITOR, true);
+            if (section != null)
+                intent.putExtra(SettingsActivity.EXTRA_SECTION_KEY, section);
+            context.startActivity(intent);
+        } catch (RuntimeException e) {
+            // No Settings to open (a stripped build): the editor stays as it is.
+        }
     }
 }

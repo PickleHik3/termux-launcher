@@ -98,7 +98,7 @@ public final class AppDrawerAccessoryChoreography {
     }
 
     /**
-     * @param roundedDockStyle {@code TermuxActivity.isRoundedDockStyle()}
+     * @param roundedDockStyle the Floating Style ({@code ResolvedArrangement#floating})
      * @param progress         0 = dock, 1 = full drawer
      * @param extraKeys        measured extra-keys band, captured at drag begin
      * @param keyboard         measured in-app keyboard band, captured at drag begin

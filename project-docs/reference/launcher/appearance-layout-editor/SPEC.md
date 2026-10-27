@@ -139,9 +139,10 @@ Rules:
 
 #### Amended 2026-10-02: layout editor v2 (DECISIONS items 13–15)
 
-- **The global row.** At the Custom stop with nothing tapped, row 2 is **Blur · Grain · Opacity ·
-  Tint · Margin · Corner radius** (heading "All surfaces"), writing the base
-  `SurfaceProperty.BLUR / GRAIN / OPACITY / TINT`. Each write
+- **The global row.** At the Custom stop with nothing tapped, row 2 is **Frost · Opacity · Tint**
+  and the glass edge's sliders (heading "All surfaces"; Frost writes blur and grain together, the
+  base `SurfaceProperty.BLUR / GRAIN`, beside `OPACITY / TINT`; this row's first draft had Blur and
+  Grain apart, folded into Frost by 2026-10-17 and kept so in the 2026-10-25 cards). Each write
   re-attaches every surface, terminal included, to the base, as Blur always did; the terminal's own
   Opacity (Darkness) then detaches it again for fine-tuning. Opacity and Grain run 0–100%, the
   stored values' own range, which covers every Look. There is no global row on the Look stops, and
@@ -235,6 +236,54 @@ hide" and no empty-state line. Eye-off in the bottom area is the drop target and
 tap opens the hidden tiles in Row B's place, each with the restore arrow; a tile tapped returns
 its element to its last edge, a tile dragged onto the canvas puts it on the edge it is dropped on
 (§3.5, v2). The glossary term is **Hidden elements**.
+
+### 3.6a Dragging in the editor frame, and the hidden items' rail (2026-10-24)
+
+Settled by the developer in a grilling session on 2026-10-24, and the open points in a second
+round the same day, for the Appearance editor's frame (SurfaceEditorController, the hidden items'
+rail beside the frame). Supersedes §3.5's drop-target drawing and §3.6 where they differ. Built on
+the 2026-10-24 branch; not yet seen on a device.
+
+1. **Live drag, a snapshot layer.** No rewrite of the place pass. At a hold the frame is copied
+   once off the window (`PixelCopy`, so glass, frost and refraction come with it) and cut into one
+   picture per element at its real rect (status bar, pinned apps, A–Z, extra keys, keyboard;
+   `LiveDragCapture`). The real views and what stands behind them (the dock's glass, the status
+   band, the off-dock plank, the selection outline) go transparent, alpha only: nothing is laid
+   out, re-hosted or resized, and the terminal never resizes. The layout canvas keeps its slots and
+   hit tests and draws nothing schematic over a transparent host: the pictures and the targets.
+   On a hover change the others move (translation, 150ms) to where the shape model puts them in
+   the arrangement the drop would commit, mapped by the frame's own scale (`LiveDragPolicy`); the
+   held picture follows the finger, slightly raised. Drop: committed once through the existing
+   path; the held picture goes to its capsule, and after two frames every picture settles on its
+   real view's new rect, then the pictures go and the real views show. Cancel: the pictures go
+   back, then go. The pane (terminal or Home's grid) is not a picture and does not move. The
+   other orientation keeps the schematic, the live frame cannot show it.
+   *Lining up:* the pictures start exactly on the real views, and the settle ends exactly on them;
+   in between they stand where the model puts the elements, which is where the real views land as
+   far as the model's thicknesses (the launcher's own dp figures at the frame's scale) are the
+   live ones.
+2. **Rail chip into the preview.** A chip stays a chip over the rail; over a slot in the frame it
+   hides and the element shows at its size there and the others reflow, as in 1. A hidden element
+   has no real render, so it is a tinted stand-in of its model size for the status bar, pinned
+   apps, A–Z and extra keys (no offscreen render is attempted: their views are gone or hosted for
+   another edge). The keyboard and Search field cards stay chips and keep their old drop.
+3. **Offset rule** (`EditorFramePose.railPose`). Something hidden: the rail shows and the frame
+   keeps one offset and scale in every state (the reserve's, as before). Nothing hidden: no
+   reserve, the frame centred at rest; at a lift it slides (200ms, same scale, translation only,
+   the canvas carried with it) to the rail's offset, where the rail shows its empty drop slot in
+   its border; after the drop it stays offset if something is now hidden (at the reserve's scale),
+   otherwise it slides back. A card that is up stays up through the drag.
+4. **Rail border.** The rail is one geometry (`HiddenStackPolicy.rail`): the cards, one empty drop
+   slot after the last, and the dotted border round both with the same 4dp of air on every side.
+   Cards are always sized for the one extra slot. The border hugs its content and is the drop
+   target; corners concentric with the cards (12 + 4dp).
+5. **Capsules** (`DropCapsulePolicy`). Every valid slot shows a slim marker (4dp, fully rounded,
+   dotted) on its gap line, running the slot's length. Side-strip slots show only where the held
+   element may stand on a side; where one shows, every row marker starts after it; markers never
+   meet and never cross the frame's edge (1.5dp inside it). The hovered slot opens to the held
+   element's full size there as the shape model gives it, at its own corners, solid with a light
+   tint, and the pictures beside it move aside (1).
+6. **States.** Valid slots dotted; the hovered one solid and tinted. The rail's border likewise.
 
 ### 3.7 Style (2026-10-01)
 

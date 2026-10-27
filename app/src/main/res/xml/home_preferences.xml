@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home: the Appearance editor first, then the rows that shape the Home half. Every key is the
+     one it always was (the old Apps page and Appearance). Use as Terminal only hides the whole
+     section. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:key="home_layout_editor"
+        app:persistent="false"
+        app:title="@string/settings_layout_editor_title"
+        app:summary="@string/settings_appearance_door_summary" />
+
+    <!-- How the app icons and folders on Home pages are drawn; the dock draws its own. -->
+    <PreferenceCategory app:key="home_icons" app:title="@string/settings_home_icons_header">
+        <ListPreference
+            app:key="app_launcher_home_icon_scale"
+            app:title="@string/settings_home_icon_scale_title"
+            app:dialogTitle="@string/settings_home_icon_scale_title"
+            app:entries="@array/editor_home_icon_size_entries"
+            app:entryValues="@array/editor_home_icon_size_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="small" />
+        <ListPreference
+            app:key="app_launcher_home_label_size"
+            app:title="@string/settings_home_label_size_title"
+            app:dialogTitle="@string/settings_home_label_size_title"
+            app:entries="@array/settings_home_label_size_entries"
+            app:entryValues="@array/settings_home_label_size_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="default" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_home_label_two_lines"
+            app:title="@string/settings_home_label_two_lines_title"
+            app:summary="@string/settings_home_label_two_lines_summary"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_home_label_shadow"
+            app:title="@string/settings_home_label_shadow_title"
+            app:summary="@string/settings_home_label_shadow_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <!-- Folders on Home pages; the dock's folders keep their own popup. -->
+    <PreferenceCategory app:key="home_folders" app:title="@string/settings_home_folders_header">
+        <ListPreference
+            app:key="app_launcher_home_folder_density"
+            app:title="@string/settings_home_folder_density_title"
+            app:dialogTitle="@string/settings_home_folder_density_title"
+            app:entries="@array/settings_home_folder_density_entries"
+            app:entryValues="@array/settings_home_folder_density_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="default" />
+    </PreferenceCategory>
+
+    <!-- Every gesture in one place (spec §4): first the five on a Home page's free area, whose
+         choices are filled in code (HomeGesturesRows; the actions that need the accessibility
+         service or Shizuku are listed only while one is there, and Swipe up keeps the old palette
+         gesture's key and values), then the ones elsewhere: double-tap A–Z to lock (its page holds
+         the method picker), swipe down for the drawer, swipe on the terminal. Keys unchanged. -->
+    <PreferenceCategory app:key="home_gestures" app:title="@string/settings_home_gestures_header">
+        <ListPreference
+            app:key="app_launcher_home_palette_gesture"
+            app:title="@string/settings_home_gesture_swipe_up"
+            app:dialogTitle="@string/settings_home_gesture_swipe_up" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_swipe_down"
+            app:title="@string/settings_home_gesture_swipe_down"
+            app:dialogTitle="@string/settings_home_gesture_swipe_down" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_double_tap"
+            app:title="@string/settings_home_gesture_double_tap"
+            app:dialogTitle="@string/settings_home_gesture_double_tap" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_two_finger_up"
+            app:title="@string/settings_home_gesture_two_finger_up"
+            app:dialogTitle="@string/settings_home_gesture_two_finger_up" />
+        <ListPreference
+            app:key="app_launcher_home_gesture_two_finger_down"
+            app:title="@string/settings_home_gesture_two_finger_down"
+            app:dialogTitle="@string/settings_home_gesture_two_finger_down" />
+        <Preference
+            app:key="home_gestures_helper"
+            app:persistent="false"
+            app:isPreferenceVisible="false"
+            app:title="@string/settings_home_gestures_helper_title"
+            app:summary="@string/settings_home_gestures_helper_summary" />
+        <Preference
+            app:key="app_launcher_sub_lock"
+            app:persistent="false"
+            app:title="@string/settings_apps_sub_lock_title"
+            app:summary="@string/settings_apps_sub_lock_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.LauncherLockPreferencesFragment" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_quick_reply_swipe"
+            app:title="@string/settings_quick_reply_swipe_title"
+            app:summary="@string/settings_quick_reply_swipe_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_body_swipe"
+            app:title="@string/settings_terminal_body_swipe_title"
+            app:summary="@string/settings_terminal_body_swipe_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="home_widgets" app:title="@string/settings_home_widgets_header">
+        <SwitchPreferenceCompat
+            app:key="app_launcher_widget_pane_enabled"
+            app:title="@string/settings_widget_pane_enabled_title"
+            app:summary="@string/settings_widget_pane_enabled_summary"
+            android:defaultValue="true" />
+        <ListPreference
+            app:key="app_launcher_builtin_widget_style"
+            app:title="@string/settings_builtin_widget_style_title"
+            app:summary="@string/settings_builtin_widget_style_summary"
+            app:entries="@array/settings_builtin_widget_style_entries"
+            app:entryValues="@array/settings_builtin_widget_style_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="sans" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="home_pages" app:title="@string/settings_home_pages_header">
+        <ListPreference
+            app:key="app_launcher_home_page_indicator"
+            app:title="@string/settings_home_page_indicator_title"
+            app:dialogTitle="@string/settings_home_page_indicator_title"
+            app:entries="@array/settings_home_page_indicator_entries"
+            app:entryValues="@array/settings_home_page_indicator_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="dots" />
+        <!-- Opens Edit pages over Home, as the Home sheet's Edit pages does. -->
+        <Preference
+            app:key="home_edit_pages"
+            app:persistent="false"
+            app:title="@string/settings_home_edit_pages_title"
+            app:summary="@string/settings_home_edit_pages_summary" />
+        <SwitchPreferenceCompat
+            app:key="wallpaper_parallax"
+            app:title="@string/settings_wallpaper_parallax_title"
+            app:summary="@string/settings_wallpaper_parallax_summary"
+            android:defaultValue="true" />
+        <!-- The Home sheet's Lock and Unlock write the same key. -->
+        <SwitchPreferenceCompat
+            app:key="app_launcher_home_layout_locked"
+            app:title="@string/settings_home_layout_locked_title"
+            app:summary="@string/settings_home_layout_locked_summary"
+            android:defaultValue="false" />
+        <!-- Start in moved to General › Launcher, beside Use as. -->
+    </PreferenceCategory>
+</PreferenceScreen>

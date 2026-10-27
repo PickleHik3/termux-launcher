@@ -68,4 +68,18 @@ public final class AzBarHostGeometry {
     public static int columnLengthPx(int containerHeightPx) {
         return Math.max(0, containerHeightPx);
     }
+
+    /**
+     * Where a column's letters are centred across it, from its leading side: the middle of the
+     * whole bar, glass and chin together, carried {@code waveLiftPx} away from the rim it stands on
+     * — rightwards on the left edge, leftwards on the right one. The chin stays dead space a thumb
+     * can land in; it is no longer where the letters are measured from. Measured from the letter
+     * band alone they sat half a chin off the pill's middle, towards the content.
+     */
+    public static float columnLetterCentrePx(int columnWidthPx, float waveLiftPx,
+                                             boolean onLeftEdge) {
+        float centre = Math.max(0, columnWidthPx) * 0.5f;
+        float lift = Float.isNaN(waveLiftPx) ? 0f : waveLiftPx;
+        return onLeftEdge ? centre + lift : centre - lift;
+    }
 }

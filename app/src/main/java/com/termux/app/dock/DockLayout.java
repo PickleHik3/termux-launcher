@@ -107,13 +107,131 @@ public final class DockLayout {
      */
     public final int appsRowTickSideAirPx;
 
+    /**
+     * The width the pinned-apps row lying down shares between its slots: the host's width less
+     * the row's side inset on each side (the design's, {@link #appsRowSideInsetPx()} on the dock;
+     * the plain one along the top). Zero for a rail, and while the host's width is not known.
+     * A row this layout puts away has the width of the half that shows it.
+     */
+    public final int appsRowUsableWidthPx;
+
+    /**
+     * The icon one of the row's slots draws, final: {@link #appsRowIconPx} held to its slot
+     * ({@link DockLayoutPolicy#slotFitIconPx}) and, under Lens beads, to what a bead covers
+     * ({@link LensBeadGeometry#fitIconPx}); the rail's own icon for a rail. The row renders
+     * exactly this and works nothing out of its own. Zero while no half shows the row.
+     */
+    public final int slotIconPx;
+
+    /**
+     * The side inset of the row lying down on each side, as {@link #appsRowUsableWidthPx} was
+     * measured with it: {@link #appsRowSideInsetPx()} on the dock, the plain one along the top.
+     */
+    public final int appsRowEdgeInsetPx;
+
+    /**
+     * The side inset the dock's apps row takes under Peek glass (the row on the dock, either
+     * Style): the card's inset from the screen's side and the clearance inside it
+     * ({@link PeekGlassGeometry#rowSideInsetPx}), so the end icons stand on the card; the row
+     * keeps the larger of this and its Style's own inset. Zero for every other surface.
+     */
+    public final int peekRowSideInsetPx;
+
+    /** The air a rail keeps around its icons on every side: a lone row's, standing up. */
+    public final int railAirPx;
+
+    /**
+     * What the dock's style asked of its slab ({@link DockSurfaceSpec}), so the glass and the
+     * shelf read the same answer the geometry was laid out for.
+     */
+    public final DockSurfaceSpec surface;
+
+    /**
+     * How far below the top of the dock's stack its glass starts, for a style whose page dashes
+     * float above the slab: the dashes' band, which is then the strip standing on the wallpaper
+     * with a small gap over the glass ({@link DockLayoutPolicy#dashesAboveSlab}). Zero on the plain
+     * dock.
+     */
+    public final int slabTopInsetPx;
+
     /** The top pane's compact height in the active style, read by the drawer's top-band clip. */
     public final int compactStatusBarHeightPx;
 
     /** Configured dock corner radius in dp, or a negative value for the follow-the-style radius. */
     private final int mConfiguredCornerRadiusDp;
 
+    // --- The Search field (#96), under the apps row of any design; all zero while it is off ---
+    /**
+     * The band the field takes under the apps row on the same slab, as laid out now: the field
+     * view and the slab's padding under it. It eases between 0 and
+     * {@link #promptFieldFullBandPx} while a style switch grows or shrinks the slab.
+     */
+    public final int promptFieldBandPx;
+    /** The band once the field is wholly in, whatever the ease has reached. */
+    public final int promptFieldFullBandPx;
+    /** The field view's own height, its share of {@link #promptFieldBandPx}. */
+    public final int promptFieldHeightPx;
+    /** The slab's padding under the field view, the rest of the band. */
+    public final int promptFieldBottomPadPx;
+    /**
+     * The air over the field view, the head of the band: none on a slab; under Lens beads the
+     * capsule's air ({@link LensBeadGeometry#CAPSULE_TOP_PAD_DP}), so the field's capsule stands
+     * the beads' own gap under them.
+     */
+    public final int promptFieldTopPadPx;
+    /**
+     * The visible gap between the well and the slab's lower edge: the air over the icons, so
+     * the slab's outer padding is equal top and bottom. The well's radius nests by it.
+     */
+    public final int promptFieldWellGapPx;
+    /**
+     * The field's side inset from the screen edge: the slab's margin and the row's 14 dp; under
+     * Lens beads the apps row's own ({@link #appsRowSideInsetPx}), so its capsule is as wide as
+     * the row.
+     */
+    public final int promptFieldSideInsetPx;
+
+    // --- The Wall strip's first row (DockSurfaceSpec.WALL_STRIP); all zero on every other dock ---
+    /**
+     * The band the Wall strip's first row takes over the apps row on the same slab, as laid out
+     * now: the slab's padding over the row and the row view. It eases between 0 and
+     * {@link #wallStripFullBandPx} while a style switch grows or shrinks the slab.
+     */
+    public final int wallStripBandPx;
+    /** The band once the row is wholly in, whatever the ease has reached. */
+    public final int wallStripFullBandPx;
+    /** The row view's own height, its share of {@link #wallStripBandPx}. */
+    public final int wallStripHeightPx;
+    /**
+     * The slab's padding over the row view, the rest of the band: the air under the icons, so
+     * the slab's outer padding is equal top and bottom. The tiles' radius nests by it.
+     */
+    public final int wallStripTopPadPx;
+    /**
+     * The row's side inset from the screen edge where the icons cannot be measured: the slab's
+     * margin and the row's 14 dp.
+     */
+    public final int wallStripSideInsetPx;
+    /**
+     * The visible air between the slab's upper edge and the tiles once the row is wholly in: the
+     * air under the icons. The tiles' radius nests by it, whatever the ease has reached.
+     */
+    public final int wallStripWellGapPx;
+
     DockLayout(Builder b) {
+        this.wallStripWellGapPx = Math.max(0, b.wallStripWellGapPx);
+        this.wallStripBandPx = Math.max(0, b.wallStripBandPx);
+        this.wallStripFullBandPx = Math.max(0, b.wallStripFullBandPx);
+        this.wallStripHeightPx = Math.max(0, b.wallStripHeightPx);
+        this.wallStripTopPadPx = Math.max(0, b.wallStripTopPadPx);
+        this.wallStripSideInsetPx = Math.max(0, b.wallStripSideInsetPx);
+        this.promptFieldBandPx = Math.max(0, b.promptFieldBandPx);
+        this.promptFieldFullBandPx = Math.max(0, b.promptFieldFullBandPx);
+        this.promptFieldHeightPx = Math.max(0, b.promptFieldHeightPx);
+        this.promptFieldBottomPadPx = Math.max(0, b.promptFieldBottomPadPx);
+        this.promptFieldTopPadPx = Math.max(0, b.promptFieldTopPadPx);
+        this.promptFieldWellGapPx = Math.max(0, b.promptFieldWellGapPx);
+        this.promptFieldSideInsetPx = Math.max(0, b.promptFieldSideInsetPx);
         this.capsule = b.capsule;
         this.appsRowOnEdge = b.appsRowOnEdge;
         this.density = b.density;
@@ -155,6 +273,13 @@ public final class DockLayout {
         this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
         this.appsRowStripBandPx = Math.max(0, b.appsRowStripBandPx);
         this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
+        this.appsRowUsableWidthPx = Math.max(0, b.appsRowUsableWidthPx);
+        this.slotIconPx = Math.max(0, b.slotIconPx);
+        this.appsRowEdgeInsetPx = Math.max(0, b.appsRowEdgeInsetPx);
+        this.peekRowSideInsetPx = Math.max(0, b.peekRowSideInsetPx);
+        this.railAirPx = Math.max(0, b.railAirPx);
+        this.surface = b.surface != null ? b.surface : DockSurfaceSpec.PLAIN;
+        this.slabTopInsetPx = Math.max(0, b.slabTopInsetPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
         this.mConfiguredCornerRadiusDp = b.configuredCornerRadiusDp;
     }
@@ -185,19 +310,53 @@ public final class DockLayout {
         return Math.max(0, appsRowTickSideAirPx - appsRowStripBandPx);
     }
 
-    /** The dock's stacked height for the given extra-keys toolbar height. */
+    /**
+     * The extra side inset the dock's apps row takes under {@link DockSurfaceSpec#LENS_BEADS}, on
+     * each side ({@link LensBeadGeometry#ROW_SIDE_INSET_DP}): it narrows the row's slots so the
+     * end beads stand clear of the screen's edges. Zero for every other surface.
+     */
+    public int appsRowExtraSideInsetPx() {
+        return surface.beads ? LensBeadGeometry.rowSideInsetPx(density) : 0;
+    }
+
+    /**
+     * The dock's apps row's side inset from the screen edge, on each side
+     * ({@link DockLayoutPolicy#appsRowSideInsetPx}).
+     */
+    public int appsRowSideInsetPx() {
+        return Math.max(peekRowSideInsetPx, DockLayoutPolicy.appsRowSideInsetPx(
+            capsule ? capsuleContentInsetPx : horizontalInsetPx, surface.beads, density));
+    }
+
+    /**
+     * The dock's stacked height for the given extra-keys toolbar height: its rows, the Prompt
+     * line's field band under the apps row and the Wall strip's row over it.
+     */
     public int combinedHeight(int toolbarHeightPx, boolean extraKeysRowEnabled) {
         return AccessoryStackLayoutPolicy.computeCombinedHeight(
             appsBarHeightPx > 0,
             azRowHeightPx > 0,
             extraKeysRowEnabled,
-            appsBarHeightPx,
+            appsBarHeightPx + promptFieldBandPx + wallStripBandPx,
             azRowHeightPx,
             toolbarHeightPx,
             indicatorBandHeightPx);
     }
 
     static final class Builder {
+        int wallStripBandPx;
+        int wallStripFullBandPx;
+        int wallStripHeightPx;
+        int wallStripTopPadPx;
+        int wallStripSideInsetPx;
+        int wallStripWellGapPx;
+        int promptFieldBandPx;
+        int promptFieldFullBandPx;
+        int promptFieldHeightPx;
+        int promptFieldBottomPadPx;
+        int promptFieldTopPadPx;
+        int promptFieldWellGapPx;
+        int promptFieldSideInsetPx;
         boolean capsule;
         boolean appsRowOnEdge;
         float density;
@@ -239,6 +398,13 @@ public final class DockLayout {
         int appsRowIconPx;
         int appsRowStripBandPx;
         int appsRowTickSideAirPx;
+        int appsRowUsableWidthPx;
+        int slotIconPx;
+        int appsRowEdgeInsetPx;
+        int peekRowSideInsetPx;
+        int railAirPx;
+        DockSurfaceSpec surface = DockSurfaceSpec.PLAIN;
+        int slabTopInsetPx;
         int compactStatusBarHeightPx;
         int configuredCornerRadiusDp;
 

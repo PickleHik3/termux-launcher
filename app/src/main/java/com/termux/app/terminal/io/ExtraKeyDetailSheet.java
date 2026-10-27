@@ -31,10 +31,11 @@ import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 /**
- * Everything about one key, in a bottom sheet over the editor page: what a tap does, what a swipe
- * up does, and the label each of them shows. Edits land on the draft {@link ExtraKeysLayoutModel.Key}
- * as they happen and the page is told after each one, so its live row keeps up while the sheet is
- * open. Removing the key is the one action that closes the sheet by itself.
+ * The Edit key sheet, over the editor page: what a tap does, what a swipe up does, the label and
+ * colour the cap wears, and where the key sits in its row. Edits land on the draft
+ * {@link ExtraKeysLayoutModel.Key} as they happen and the page is told after each one, so its caps
+ * keep up while the sheet is open; Done only puts the sheet down. Removing the key is the one
+ * action that closes the sheet by itself.
  */
 public final class ExtraKeyDetailSheet {
 
@@ -45,6 +46,12 @@ public final class ExtraKeyDetailSheet {
 
         /** The user asked for this key to go. */
         void onRemoveKey();
+
+        /** Whether the key has a neighbour to swap with in that direction (-1 left, 1 right). */
+        boolean canMoveKey(int delta);
+
+        /** Swaps the key with its neighbour; the sheet stays open. */
+        void onMoveKey(int delta);
     }
 
     private final Context context;
@@ -60,9 +67,6 @@ public final class ExtraKeyDetailSheet {
 
     private BottomSheetDialog dialog;
     private LinearLayout body;
-    private TextView headerCap;
-    private TextView headerTitle;
-    private TextView headerDetail;
 
     public ExtraKeyDetailSheet(@NonNull Context context, @NonNull ExtraKeysLayoutModel.Key key,
                                @NonNull ExtraKeysConstants.ExtraKeyDisplayMap displayMap,
@@ -106,43 +110,25 @@ public final class ExtraKeyDetailSheet {
         dialog.show();
     }
 
-    /** Cap, action title and identifier; retitled in place as the fields below change. */
+    /** "Edit key" and the close control; the cap and action title live in the On tap row. */
     private View header() {
         LinearLayout header = row();
-        header.setPadding(0, dp(8), 0, dp(12));
-        headerCap = cap(64, 44, 20);
-        header.addView(headerCap);
-
-        LinearLayout titles = column();
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        titleParams.setMarginStart(dp(16));
-        titles.setLayoutParams(titleParams);
-        headerTitle = new TextView(context);
-        headerTitle.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
-        headerTitle.setTextColor(colorText);
-        headerTitle.setMaxLines(2);
-        headerTitle.setEllipsize(TextUtils.TruncateAt.END);
-        titles.addView(headerTitle);
-        headerDetail = new TextView(context);
-        headerDetail.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
-        headerDetail.setTextColor(colorSubtle);
-        headerDetail.setSingleLine(true);
-        headerDetail.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        titles.addView(headerDetail);
-        header.addView(titles);
-        refreshHeader();
+        header.setPadding(0, dp(4), 0, dp(4));
+        TextView title = new TextView(context);
+        title.setText(R.string.settings_extra_keys_sheet_title);
+        M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleLarge);
+        title.setTextColor(colorText);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        header.addView(title, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        MaterialButton close = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        close.setIconResource(R.drawable.ic_symbol_close);
+        close.setContentDescription(context.getString(R.string.settings_extra_keys_sheet_done));
+        close.setOnClickListener(v -> dialog.dismiss());
+        header.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
         return header;
-    }
-
-    private void refreshHeader() {
-        headerCap.setText(NerdFontSpans.span(context, ExtraKeyActionLabels.capText(key, displayMap)));
-        headerTitle.setText(ExtraKeyActionLabels.title(context, key));
-        String detail = ExtraKeyActionLabels.detail(key);
-        headerDetail.setText(detail == null ? "" : detail);
-        headerDetail.setVisibility(detail == null ? View.GONE : View.VISIBLE);
     }
 
     /** The editable part. Rebuilt whenever an action changes; label typing updates in place. */
@@ -150,7 +136,9 @@ public final class ExtraKeyDetailSheet {
         body.removeAllViews();
 
         body.addView(sectionLabel(context.getString(R.string.settings_extra_keys_sheet_tap)));
-        body.addView(selectorRow(ExtraKeyActionLabels.title(context, key), null, () ->
+        body.addView(selectorRow(NerdFontSpans.span(context,
+                ExtraKeyActionLabels.capText(key, displayMap)),
+            ExtraKeyActionLabels.title(context, key), null, () ->
             openActionPicker(picked -> {
                 key.key = picked.key;
                 key.macro = picked.macro;
@@ -159,25 +147,17 @@ public final class ExtraKeyDetailSheet {
                 key.display = picked.display;
                 changed(true);
             })));
-        body.addView(labelField(context.getString(R.string.settings_extra_keys_sheet_label),
-            context.getString(R.string.settings_extra_keys_sheet_label_hint), key));
-
-        body.addView(sectionLabel(context.getString(R.string.settings_extra_keys_color)));
-        body.addView(ExtraKeyColorSwatches.build(context, key.color, role -> {
-            key.color = role;
-            changed(false);
-        }));
 
         body.addView(sectionLabel(context.getString(R.string.settings_extra_keys_sheet_swipe_up)));
         if (key.popup == null) {
-            body.addView(selectorRow(context.getString(R.string.settings_extra_keys_sheet_none),
+            body.addView(selectorRow(null, context.getString(R.string.settings_extra_keys_sheet_none),
                 null, () -> openActionPicker(picked -> {
                     key.popup = picked;
                     changed(true);
                 })));
         } else {
             final ExtraKeysLayoutModel.Key popup = key.popup;
-            body.addView(selectorRow(ExtraKeyActionLabels.title(context, popup), () -> {
+            body.addView(selectorRow(null, ExtraKeyActionLabels.title(context, popup), () -> {
                 key.popup = null;
                 changed(true);
             }, () -> openActionPicker(picked -> {
@@ -187,10 +167,76 @@ public final class ExtraKeyDetailSheet {
             body.addView(labelField(context.getString(R.string.settings_extra_keys_sheet_swipe_label),
                 context.getString(R.string.settings_extra_keys_sheet_swipe_label_hint), popup));
         }
+
+        body.addView(sectionLabel(context.getString(R.string.settings_extra_keys_sheet_label)));
+        body.addView(labelField(context.getString(R.string.settings_extra_keys_sheet_label),
+            context.getString(R.string.settings_extra_keys_sheet_label_hint), key));
+        TextView note = new TextView(context);
+        note.setText(R.string.settings_extra_keys_sheet_label_note);
+        M3.textAppearance(note, com.google.android.material.R.attr.textAppearanceBodySmall);
+        note.setTextColor(colorSubtle);
+        note.setPaddingRelative(dp(2), 0, 0, 0);
+        body.addView(note);
+
+        body.addView(sectionLabel(context.getString(R.string.settings_extra_keys_color)));
+        body.addView(ExtraKeyColorSwatches.build(context, key.color, role -> {
+            key.color = role;
+            changed(false);
+        }));
+
+        body.addView(moveRow());
+    }
+
+    /** "Move key" with a left and a right arrow, each dimmed at its end of the row. */
+    private View moveRow() {
+        LinearLayout moveRow = row();
+        moveRow.setPadding(0, dp(12), 0, 0);
+        TextView label = new TextView(context);
+        label.setText(R.string.settings_extra_keys_sheet_move);
+        M3.textAppearance(label, com.google.android.material.R.attr.textAppearanceLabelLarge);
+        label.setTextColor(colorSubtle);
+        label.setSingleLine(true);
+        label.setEllipsize(TextUtils.TruncateAt.END);
+        moveRow.addView(label, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        MaterialButton left = moveButton("\u2190", R.string.settings_extra_keys_sheet_move_left, -1);
+        MaterialButton right = moveButton("\u2192", R.string.settings_extra_keys_sheet_move_right, 1);
+        moveRow.addView(left);
+        moveRow.addView(right);
+        Runnable refresh = () -> {
+            left.setEnabled(host.canMoveKey(-1));
+            right.setEnabled(host.canMoveKey(1));
+        };
+        left.setOnClickListener(v -> {
+            host.onMoveKey(-1);
+            refresh.run();
+        });
+        right.setOnClickListener(v -> {
+            host.onMoveKey(1);
+            refresh.run();
+        });
+        refresh.run();
+        return moveRow;
+    }
+
+    private MaterialButton moveButton(@NonNull String arrow, int descriptionRes, int delta) {
+        MaterialButton button = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        button.setText(arrow);
+        button.setContentDescription(context.getString(descriptionRes));
+        button.setMinWidth(dp(48));
+        button.setMinimumWidth(dp(48));
+        button.setMinHeight(dp(48));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setPadding(0, 0, 0, 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(56), dp(48));
+        params.setMarginStart(dp(8));
+        button.setLayoutParams(params);
+        return button;
     }
 
     private void changed(boolean rebuild) {
-        refreshHeader();
         host.onKeyChanged();
         if (rebuild) renderBody();
     }
@@ -285,15 +331,26 @@ public final class ExtraKeyDetailSheet {
         return fieldRow;
     }
 
-    /** A tappable value row with a trailing chevron, and an optional clear control before it. */
-    private View selectorRow(@NonNull String value, @Nullable Runnable onClear,
-                             @NonNull Runnable onClick) {
+    /**
+     * A tappable value row with a trailing chevron, an optional cap in front of the value and an
+     * optional clear control before the chevron.
+     */
+    private View selectorRow(@Nullable CharSequence capText, @NonNull String value,
+                             @Nullable Runnable onClear, @NonNull Runnable onClick) {
         MaterialCardView card = M3.clickableCard(context, true);
         card.setOnClickListener(v -> onClick.run());
         LinearLayout rowView = row();
         rowView.setMinimumHeight(dp(52));
         rowView.setPaddingRelative(dp(14), dp(6), dp(8), dp(6));
         card.addView(rowView);
+
+        if (capText != null) {
+            TextView cap = cap(44, 36, 16);
+            cap.setText(capText);
+            LinearLayout.LayoutParams capParams = (LinearLayout.LayoutParams) cap.getLayoutParams();
+            capParams.setMarginEnd(dp(12));
+            rowView.addView(cap);
+        }
 
         TextView valueView = new TextView(context);
         valueView.setText(value);
@@ -317,7 +374,7 @@ public final class ExtraKeyDetailSheet {
         }
 
         TextView chevron = new TextView(context);
-        chevron.setText("›");
+        chevron.setText("\u203a");
         M3.textAppearance(chevron, com.google.android.material.R.attr.textAppearanceTitleLarge);
         chevron.setTextColor(colorSubtle);
         chevron.setPadding(dp(6), 0, dp(6), 0);
@@ -334,7 +391,7 @@ public final class ExtraKeyDetailSheet {
         return view;
     }
 
-    /** A key cap drawn the way the list draws one, at the size the header wants. */
+    /** A key cap drawn the way the page draws one, at the size the row wants. */
     private TextView cap(int widthDp, int heightDp, int maxSp) {
         TextView view = new TextView(context);
         view.setGravity(Gravity.CENTER);
@@ -347,7 +404,10 @@ public final class ExtraKeyDetailSheet {
         MaterialShapeDrawable background = M3.surface(context,
             com.google.android.material.R.attr.shapeAppearanceCornerMedium, colorCap);
         view.setBackground(background);
-        view.setLayoutParams(new LinearLayout.LayoutParams(dp(widthDp), dp(heightDp)));
+        view.setLayoutParams(new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(heightDp)));
+        view.setMinWidth(dp(widthDp));
+        view.setMaxWidth(dp(2 * widthDp));
         return view;
     }
 

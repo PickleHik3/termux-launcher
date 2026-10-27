@@ -2,11 +2,15 @@ package com.termux.app.launcher.notifications;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.ColorUtils;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -41,10 +45,23 @@ public final class NotificationBadgeFrame extends FrameLayout {
 
         /** Display density, for the dot's dp-based geometry. */
         float density();
+
+        /** Dot, or the number of notifications; the dot until the host says otherwise. */
+        @NonNull
+        default NotificationBadgeStyle badgeStyle() {
+            return NotificationBadgeStyle.DOT;
+        }
+
+        /** Active notifications across {@code packages}, asked only while the style is a count. */
+        default int badgeCount(@NonNull Set<String> packages) {
+            return 0;
+        }
     }
 
     private final Paint badgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint badgeStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint badgeTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF badgeRect = new RectF();
     @NonNull private final Style style;
     @NonNull private Set<String> badgePackages = Collections.emptySet();
 
@@ -57,6 +74,8 @@ public final class NotificationBadgeFrame extends FrameLayout {
         badgePaint.setStyle(Paint.Style.FILL);
         badgeStrokePaint.setStyle(Paint.Style.STROKE);
         badgeStrokePaint.setStrokeWidth(dp(1.6f));
+        badgeTextPaint.setTextAlign(Paint.Align.CENTER);
+        badgeTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
     }
 
     /** The packages this cell stands for: one app, or every app inside a folder. */
@@ -105,8 +124,37 @@ public final class NotificationBadgeFrame extends FrameLayout {
         cy = clampFloat(cy, radius + dp(1f), getHeight() - radius - dp(1f));
         badgePaint.setColor(style.badgeFillColor());
         badgeStrokePaint.setColor(style.badgeStrokeColor());
+        if (style.badgeStyle() == NotificationBadgeStyle.COUNT) {
+            String label = NotificationBadgeStyle.countLabel(style.badgeCount(badgePackages));
+            if (!label.isEmpty()) {
+                drawCount(canvas, label, cx, cy, iconSizePx);
+                return;
+            }
+        }
         canvas.drawCircle(cx, cy, radius + dp(1.1f), badgeStrokePaint);
         canvas.drawCircle(cx, cy, radius, badgePaint);
+    }
+
+    /**
+     * The count as a pill on the icon's corner, grown from the dot's own centre: a circle for one
+     * digit, wider for more, its text sized from the icon (not the font scale) so it never outgrows
+     * the cell.
+     */
+    private void drawCount(@NonNull Canvas canvas, @NonNull String label, float cx, float cy,
+                           int iconSizePx) {
+        float radius = Math.max(dp(7f), iconSizePx * 0.16f);
+        badgeTextPaint.setTextSize(radius * 1.15f);
+        float width = Math.max(radius * 2f, badgeTextPaint.measureText(label) + radius * 0.9f);
+        float left = clampFloat(cx - width * 0.5f, dp(1f), getWidth() - width - dp(1f));
+        float top = clampFloat(cy - radius, dp(1f), getHeight() - radius * 2f - dp(1f));
+        badgeRect.set(left, top, left + width, top + radius * 2f);
+        canvas.drawRoundRect(badgeRect, radius, radius, badgeStrokePaint);
+        canvas.drawRoundRect(badgeRect, radius, radius, badgePaint);
+        badgeTextPaint.setColor(ColorUtils.calculateLuminance(badgePaint.getColor()) > 0.5
+            ? Color.BLACK : Color.WHITE);
+        Paint.FontMetrics metrics = badgeTextPaint.getFontMetrics();
+        canvas.drawText(label, badgeRect.centerX(),
+            badgeRect.centerY() - (metrics.ascent + metrics.descent) * 0.5f, badgeTextPaint);
     }
 
     private float dp(float value) {

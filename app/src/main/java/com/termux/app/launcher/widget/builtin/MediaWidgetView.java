@@ -3,6 +3,8 @@ package com.termux.app.launcher.widget.builtin;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
@@ -10,14 +12,8 @@ import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
-import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.TextPaint;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.MetricAffectingSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -40,41 +36,27 @@ import com.termux.app.statusbar.TopPaneMediaState;
 /**
  * What is playing, with its transport: the media session the notification listener already
  * follows for the status bar, at five spans — a play button over the art at 1×1, the full deck at
- * 4×2. The body opens the playing app. Without notification access the card asks for it, and a
- * tap opens the switch.
+ * 4×2. The words and the boxes of the art, the buttons and the progress come from the layout
+ * plan ({@link MediaLayoutPlanner}); the art and the buttons are views placed in them. When
+ * nothing is playing the card offers to resume the last app that was. The body opens the
+ * playing app. Without notification access the card asks for it, and a tap opens the switch.
  */
 public class MediaWidgetView extends BuiltinWidgetView {
-    private static final String GLYPH_PLAY = "\uf04b";
-    private static final String GLYPH_PAUSE = "\uf04c";
-    private static final String GLYPH_PREVIOUS = "\uf048";
-    private static final String GLYPH_NEXT = "\uf051";
-    private static final String GLYPH_SHUFFLE = "\uf074";
-    private static final String GLYPH_HEART = "\uf004";
-    private static final String GLYPH_MUSIC = "\uf001";
-    private static final String GLYPH_ACCESS = "\uf0f3";
+    private static final String GLYPH_PLAY = "";
+    private static final String GLYPH_PAUSE = "";
+    private static final String GLYPH_PREVIOUS = "";
+    private static final String GLYPH_NEXT = "";
+    private static final String GLYPH_ACCESS = "";
 
-    private static final int TOUCH_DP = 48;
-    /** The touch target of a control whose row is a little short of 48dp. */
+    private static final int TOUCH_DP = WidgetTokens.TOUCH_TARGET_DP;
+    /** The disc a transport glyph sits on, inside its 48 dp target. */
+    private static final int DISC_DP = 40;
     private static final int TOUCH_MID_DP = 40;
-    /** The smallest touch target; below this room a control takes what there is. */
     private static final int TOUCH_MIN_DP = 36;
-    /** The 2x2 and 4x2 art is not drawn at less than this: below it the art is left out. */
-    private static final int ART_MIN_DP = 40;
-    /** The least visible space kept between the marks of a spread control row. */
-    private static final int SPREAD_GAP_DP = 4;
-    /** The narrowest a control in a spread row is made, to fit three of them in 89dp. */
-    private static final int CONTROL_MIN_DP = 32;
-    /**
-     * The 4×2 text column at its narrowest beside the art: the deck's five marks spread at their
-     * narrowest (13 + 32 + 38 + 32 + 13 with four 4dp gaps). The art gives up width to keep it.
-     */
-    private static final int DECK_COLUMN_MIN_DP = 144;
-    /** The air above and below the 1-row art. */
-    private static final int ROW_ART_AIR_DP = 12;
-    /** The previous and next controls, which go from a narrow row after the decorations. */
-    private static final int CONTROL_RANK = 30;
-    private static final int DECORATION_RANK = 10;
     private static final long TICK_MS = 1000L;
+
+    private static final String PREFS = "builtin_media_widget";
+    private static final String KEY_LAST_PACKAGE = "last_package";
 
     private final TopPaneFeed.Observer feedObserver = () -> syncFeed(false);
     private final Runnable progressTick = new Runnable() {
@@ -100,21 +82,36 @@ public class MediaWidgetView extends BuiltinWidgetView {
     private boolean anchorPlaying;
     private long anchorDurationMs;
 
+    /** The app that last played, for the resume offer; null until read from the preferences. */
+    @Nullable private String lastPackage;
+
     // The views the current layout binds; null where the span has no such view.
     private boolean playerBuilt;
+    /** What the words on the card were planned from; a change of it is a new plan. */
+    @NonNull private String builtSignature = "";
+    @NonNull private MediaLayoutPlanner.Mode mode = MediaLayoutPlanner.Mode.IDLE;
+    @Nullable private ResumeTarget resume;
     @Nullable private ImageView art;
     @Nullable private View artPlaceholder;
     @Nullable private Bitmap shownArt;
-    @Nullable private TextView title;
-    @Nullable private TextView artist;
-    @Nullable private TextView sourceLabel;
-    @Nullable private TextView elapsedOfTotal;
+    @Nullable private Drawable shownIcon;
     @Nullable private TextView elapsed;
     @Nullable private TextView total;
     @Nullable private BuiltinWidgetUi.BarView bar;
     @Nullable private TextView playButton;
     @Nullable private TextView previousButton;
     @Nullable private TextView nextButton;
+
+    /** The app the resume offer opens. */
+    private static final class ResumeTarget {
+        @NonNull final String packageName;
+        @NonNull final String label;
+        @NonNull final Intent launch;
+
+        ResumeTarget(@NonNull String packageName, @NonNull String label, @NonNull Intent launch) {
+            this.packageName = packageName; this.label = label; this.launch = launch;
+        }
+    }
 
     public MediaWidgetView(@NonNull Context context, @NonNull BuiltinWidgetServices services,
                            @NonNull BuiltinWidgetStyle style) {
@@ -135,6 +132,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
         services.main().removeCallbacks(progressTick);
         if (art != null) art.setImageDrawable(null);
         shownArt = null;
+        shownIcon = null;
         state = null;
     }
 
@@ -148,7 +146,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
         boolean layoutChanged = nextAccess != access || playerBuilt != nextAccess;
         access = nextAccess;
         setState(next);
-        if (layoutChanged) {
+        if (layoutChanged || (access && !signature().equals(builtSignature))) {
             FrameLayout frame = content();
             frame.removeAllViews();
             layout(frame, span(), ui());
@@ -186,8 +184,43 @@ public class MediaWidgetView extends BuiltinWidgetView {
             reportedPositionMs = next.positionMs;
             anchorPlaying = next.playing;
             anchorDurationMs = next.durationMs;
+            remember(next.packageName);
         }
         state = next;
+    }
+
+    // ----- the last app ---------------------------------------------------------------------
+
+    /** Keeps {@code packageName} as the app to offer to resume, once per change. */
+    private void remember(@NonNull String packageName) {
+        if (isPreview() || packageName.isEmpty() || packageName.equals(lastPackage())) return;
+        lastPackage = packageName;
+        prefs().edit().putString(KEY_LAST_PACKAGE, packageName).apply();
+    }
+
+    @NonNull private String lastPackage() {
+        if (lastPackage == null) lastPackage = prefs().getString(KEY_LAST_PACKAGE, "");
+        return lastPackage == null ? "" : lastPackage;
+    }
+
+    @NonNull private SharedPreferences prefs() {
+        return getContext().getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    /** The last app when it is still installed and can be opened, else null. */
+    @Nullable private ResumeTarget findResume() {
+        if (isPreview()) return null;
+        String packageName = lastPackage();
+        if (packageName.isEmpty()) return null;
+        PackageManager pm = getContext().getPackageManager();
+        Intent launch = pm.getLaunchIntentForPackage(packageName);
+        if (launch == null) return null;
+        try {
+            CharSequence label = pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0));
+            return new ResumeTarget(packageName, label.toString(), launch);
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        }
     }
 
     private long currentPositionMs() {
@@ -221,7 +254,11 @@ public class MediaWidgetView extends BuiltinWidgetView {
             return;
         }
         TopPaneMediaState current = state;
-        if (current == null || current.packageName.isEmpty()) return;
+        if (current == null) {
+            resumeLastApp();
+            return;
+        }
+        if (current.packageName.isEmpty()) return;
         Intent launch = getContext().getPackageManager()
             .getLaunchIntentForPackage(current.packageName);
         if (launch != null) start(launch);
@@ -237,9 +274,17 @@ public class MediaWidgetView extends BuiltinWidgetView {
         }
     }
 
+    private void resumeLastApp() {
+        ResumeTarget target = resume;
+        if (target != null) start(new Intent(target.launch));
+    }
+
     private void onPlayPause() {
         TopPaneMediaState current = state;
-        if (current == null) return;
+        if (current == null) {
+            resumeLastApp();
+            return;
+        }
         boolean play = !current.playing;
         TopPaneFeed.togglePlayPause(play);
         // Flips the glyph now; the session's own callback reconciles it moments later.
@@ -272,161 +317,101 @@ public class MediaWidgetView extends BuiltinWidgetView {
             setContentDescription(getContext().getString(R.string.bw_feeds_media_cd_access));
             return;
         }
-        View root;
-        switch (span) {
-            case ONE_BY_ONE: root = buildOneByOne(ui); break;
-            case TWO_BY_TWO: root = buildTwoByTwo(ui); break;
-            case FOUR_BY_ONE: root = buildFourByOne(ui); break;
-            case FOUR_BY_TWO: root = buildFourByTwo(ui); break;
-            case TWO_BY_ONE:
-            default: root = buildTwoByOne(ui); break;
-        }
-        frame.addView(root, matchParent());
+        resume = state == null ? findResume() : null;
+        mode = state != null ? MediaLayoutPlanner.Mode.PLAYING
+            : resume != null ? MediaLayoutPlanner.Mode.RESUME : MediaLayoutPlanner.Mode.IDLE;
+        builtSignature = signature();
+        frame.addView(buildPlayer(span, ui), matchParent());
         playerBuilt = true;
         bind();
     }
 
     private void clearRefs() {
         playerBuilt = false;
-        art = null; artPlaceholder = null; shownArt = null;
-        title = null; artist = null; sourceLabel = null;
-        elapsedOfTotal = null; elapsed = null; total = null; bar = null;
+        art = null; artPlaceholder = null; shownArt = null; shownIcon = null;
+        elapsed = null; total = null; bar = null;
         playButton = null; previousButton = null; nextButton = null;
     }
 
-    @NonNull private View buildOneByOne(@NonNull BuiltinWidgetUi ui) {
-        FrameLayout root = new FrameLayout(getContext());
-        root.addView(artFrame(ui, 8, 6), matchParent());
-        playButton = control(ui, GLYPH_PAUSE, 15, style().onPrimary, 40, this::onPlayPause);
-        root.addView(playButton, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
-        inset(root, 8, 8, 8, 8, ui);
-        return root;
+    /** What decides the plan's words and parts: a change of any of it is a new layout. */
+    @NonNull private String signature() {
+        TopPaneMediaState current = state;
+        if (current != null) {
+            return "p|" + current.title + '|' + current.artist + '|' + current.appLabel + '|'
+                + (current.durationMs > 0L);
+        }
+        ResumeTarget target = findResume();
+        return target != null ? "r|" + target.packageName : "i";
     }
 
-    @NonNull private View buildTwoByOne(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 10, 6);
-        artView.setLayoutParams(rowArtParams(ui));
-        title = ui.text("", 12.5f, style().sansBold, style().onSurface);
-        artist = ui.text("", 11, style().sansMedium, style().onSurfaceVariant);
-        playButton = control(ui, GLYPH_PAUSE, 11, style().onPrimary, 28, this::onPlayPause);
-        nextButton = control(ui, GLYPH_NEXT, 12, style().onSurfaceVariant, 0, TopPaneFeed::skipNext);
-        FitStack controls = controlRow(ui, false, 10, playButton, 28, nextButton, 12);
-        // At 56dp the title and the controls fill the card: the artist goes first. At 109dp
-        // wide the card has no room for the art beside two controls, so the art goes too. In a
-        // card taller than the design the art grows with it, and narrows to keep the column.
-        FitStack column = FitStack.column(getContext()).centerAlong()
-            .add(title, FitStack.ESSENTIAL, 0)
-            .add(artist, 20, 0)
-            .addShrink(controls, 30, controlGap(ui, 6, 28), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
-        FitStack row = FitStack.row(getContext()).centerAcross()
-            .addSquareOrNarrower(artView, 10, 0, ui.dp(ART_MIN_DP))
-            .addFlex(column, FitStack.ESSENTIAL, ui.dp(10),
-                Math.max(ui.dp(2 * TOUCH_MIN_DP), naturalWidth(controls)));
-        inset(row, 10, 0, 10, 0, ui);
-        return row;
+    @NonNull private MediaLayoutPlanner.Content planContent() {
+        TopPaneMediaState current = state;
+        Context context = getContext();
+        if (current != null) {
+            String title = current.title.isEmpty() ? current.appLabel : current.title;
+            String artist = current.title.isEmpty() ? ""
+                : current.artist.isEmpty() ? current.appLabel : current.artist;
+            return new MediaLayoutPlanner.Content(MediaLayoutPlanner.Mode.PLAYING, title, artist,
+                current.appLabel, current.durationMs > 0L);
+        }
+        ResumeTarget target = resume;
+        if (target != null) {
+            return new MediaLayoutPlanner.Content(MediaLayoutPlanner.Mode.RESUME,
+                context.getString(R.string.bw_feeds_media_resume, target.label), "", target.label,
+                false);
+        }
+        return new MediaLayoutPlanner.Content(MediaLayoutPlanner.Mode.IDLE,
+            context.getString(R.string.bw_feeds_media_nothing_playing), "", "", false);
     }
 
-    @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 10, 6);
-        title = ui.text("", 13, style().sansBold, style().onSurface);
-        artist = ui.text("", 11, style().sansMedium, style().onSurfaceVariant);
-        bar = ui.bar(0f, style().primary, 4);
-        LinearLayout.LayoutParams barParams = (LinearLayout.LayoutParams) bar.getLayoutParams();
-        barParams.leftMargin = ui.dp(4);
-        barParams.rightMargin = ui.dp(4);
-        previousButton = control(ui, GLYPH_PREVIOUS, 13, style().onSurfaceVariant, 0,
-            TopPaneFeed::skipPrevious);
-        playButton = control(ui, GLYPH_PAUSE, 13, style().onPrimary, 34, this::onPlayPause);
-        nextButton = control(ui, GLYPH_NEXT, 13, style().onSurfaceVariant, 0, TopPaneFeed::skipNext);
-        FitStack controls = controlRow(ui, true, 0, previousButton, 13, playButton, 34,
-            nextButton, 13);
-        // At 115dp the card cannot hold the art, the bar, the artist and the transport together:
-        // the art goes first, then the bar, then the artist; the title and the controls stay.
-        artView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
-        FitStack column = FitStack.column(getContext())
-            .addFlex(artView, 5, 0, ui.dp(ART_MIN_DP))
-            .add(indented(title, ui, 4), FitStack.ESSENTIAL, ui.dp(8))
-            .add(indented(artist, ui, 4), 20, 0)
-            .add(bar, 10, ui.dp(8))
-            .addShrink(controls, 40, controlGap(ui, 8, 34), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
-        inset(column, 10, 10, 10, 10, ui);
-        return column;
+    @NonNull private View buildPlayer(@NonNull BuiltinWidgetSpan span, @NonNull BuiltinWidgetUi ui) {
+        MediaLayoutPlanner.Content content = planContent();
+        float fontScale = WidgetTokens.typeScale(getResources());
+        return new WidgetPlanHost(getContext(), style(), (widthDp, heightDp, measure) ->
+            MediaLayoutPlanner.plan(span, widthDp, heightDp, fontScale, content, measure),
+            new WidgetPlanHost.ViewSource() {
+                @Nullable @Override public View view(@NonNull WidgetLayoutPlan.Part part) {
+                    return partView(part, span, ui, fontScale);
+                }
+                @Override public void onPlanned(@NonNull WidgetLayoutPlan plan) { bind(); }
+            });
     }
 
-    @NonNull private View buildFourByOne(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 10, 6);
-        artView.setLayoutParams(rowArtParams(ui));
-        title = ui.text("", 13, style().sansBold, style().onSurface);
-        elapsedOfTotal = ui.mono("", 10.5f);
-        LinearLayout head = ui.row(8, BuiltinWidgetUi.flex(title), elapsedOfTotal);
-        bar = ui.bar(0f, style().primary, 4);
-        previousButton = control(ui, GLYPH_PREVIOUS, 12, style().onSurface, 0,
-            TopPaneFeed::skipPrevious);
-        playButton = control(ui, GLYPH_PAUSE, 11, style().onPrimary, 28, this::onPlayPause);
-        nextButton = control(ui, GLYPH_NEXT, 12, style().onSurface, 0, TopPaneFeed::skipNext);
-        FitStack controls = controlRow(ui, false, 18,
-            decoration(ui, GLYPH_SHUFFLE, 12), 12, previousButton, 12, playButton, 28,
-            nextButton, 12, decoration(ui, GLYPH_HEART, 12), 12);
-        // At 56dp the title line and the controls fill the card: the progress bar goes. The
-        // column keeps the whole control row; the art narrows for it, and goes before it would.
-        FitStack column = FitStack.column(getContext()).centerAlong()
-            .add(BuiltinWidgetUi.size(head, ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT), FitStack.ESSENTIAL, 0)
-            .add(bar, 10, ui.dp(7))
-            .addShrink(controls, 20, controlGap(ui, 7, 28), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
-        FitStack row = FitStack.row(getContext()).centerAcross()
-            .addSquareOrNarrower(artView, 10, 0, ui.dp(ART_MIN_DP))
-            .addFlex(column, FitStack.ESSENTIAL, ui.dp(12),
-                Math.max(ui.dp(3 * TOUCH_MIN_DP), naturalWidth(controls)));
-        inset(row, 12, 0, 12, 0, ui);
-        return row;
-    }
-
-    @NonNull private View buildFourByTwo(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 12, 7);
-
-        sourceLabel = ui.mono("", 10.5f);
-        LinearLayout source = ui.row(5, ui.glyph(GLYPH_MUSIC, 10.5f, style().onSurfaceVariant),
-            BuiltinWidgetUi.flex(sourceLabel));
-        title = ui.text("", 17, style().sansBold, style().onSurface);
-        artist = ui.text("", 12, style().sansMedium, style().onSurfaceVariant);
-
-        bar = ui.bar(0f, style().primary, 4);
-        elapsed = ui.mono("", 10.5f);
-        total = ui.mono("", 10.5f);
-        LinearLayout times = wide(ui.row(8, BuiltinWidgetUi.flex(elapsed), total));
-        LinearLayout progress = wide(ui.column(5, bar, times));
-
-        previousButton = control(ui, GLYPH_PREVIOUS, 13, style().onSurface, 0,
-            TopPaneFeed::skipPrevious);
-        playButton = control(ui, GLYPH_PAUSE, 14, style().onPrimary, 38, this::onPlayPause);
-        nextButton = control(ui, GLYPH_NEXT, 13, style().onSurface, 0, TopPaneFeed::skipNext);
-        FitStack controls = controlRow(ui, true, 0,
-            decoration(ui, GLYPH_SHUFFLE, 13), 13, previousButton, 13, playButton, 38,
-            nextButton, 13, decoration(ui, GLYPH_HEART, 13), 13);
-
-        // At 115dp the column holds the title, the artist and the controls and no more: the
-        // progress goes first, then the source, then the artist. The title stays; the 12dp
-        // gap under the source and the progress's own 12dp are the design's.
-        FitStack column = FitStack.column(getContext())
-            .add(BuiltinWidgetUi.size(source, ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT), 20, 0)
-            .add(title, FitStack.ESSENTIAL, ui.dp(12))
-            .add(artist, 30, ui.dp(6))
-            .addElastic(progress, 15, ui.dp(12))
-            .addShrink(controls, 25, controlGap(ui, 6, 38), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
-        inset(column, 0, 4, 4, 4, ui);
-        column.setLayoutParams(new ViewGroup.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        // The art is square to the card's height while the column keeps the deck; past that it
-        // gives up width, as tall as ever, rather than being left out of a tall card whose
-        // height alone would make it wider than the row.
-        FitStack row = FitStack.row(getContext())
-            .addSquareOrNarrower(artView, 10, 0, ui.dp(ART_MIN_DP))
-            .addFlex(column, FitStack.ESSENTIAL, ui.dp(16), ui.dp(DECK_COLUMN_MIN_DP));
-        inset(row, 12, 12, 12, 12, ui);
-        return row;
+    /** The view for a TOUCH part of the plan. */
+    @Nullable private View partView(@NonNull WidgetLayoutPlan.Part part,
+                                    @NonNull BuiltinWidgetSpan span, @NonNull BuiltinWidgetUi ui,
+                                    float fontScale) {
+        switch (part.id) {
+            case "art":
+                return artFrame(ui, WidgetTokens.insetDp(span), 6);
+            case "bar":
+                bar = ui.bar(0f, style().primary, 4);
+                bar.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+                return bar;
+            case "elapsed":
+                elapsed = ui.mono("", WidgetTokens.Role.LABEL.sp * fontScale);
+                return elapsed;
+            case "total":
+                total = ui.mono("", WidgetTokens.Role.LABEL.sp * fontScale);
+                total.setGravity(Gravity.END);
+                return total;
+            case "prev":
+                previousButton = control(ui, GLYPH_PREVIOUS, 14, style().onSurface, true,
+                    TopPaneFeed::skipPrevious);
+                return previousButton;
+            case "next":
+                nextButton = control(ui, GLYPH_NEXT, 14, style().onSurface, true,
+                    TopPaneFeed::skipNext);
+                return nextButton;
+            case "play":
+                playButton = control(ui, GLYPH_PAUSE, 15, style().onPrimary, false,
+                    this::onPlayPause);
+                playButton.setBackground(new DiscDrawable(style().primary, ui.dp(DISC_DP)));
+                return playButton;
+            default:
+                return null;
+        }
     }
 
     @NonNull private View buildAccess(@NonNull BuiltinWidgetSpan span, @NonNull BuiltinWidgetUi ui) {
@@ -437,7 +422,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
         message.setMaxLines(small ? 3 : 2);
         message.setGravity(Gravity.CENTER);
         TextView hint = ui.mono(getContext().getString(R.string.bw_feeds_media_allow_access_hint),
-            10.5f);
+            11f);
         hint.setVisibility(small ? GONE : VISIBLE);
         LinearLayout column = ui.column(6,
             ui.glyph(GLYPH_ACCESS, small ? 20 : 24, style().onSurfaceVariant), message, hint);
@@ -452,46 +437,51 @@ public class MediaWidgetView extends BuiltinWidgetView {
         if (!playerBuilt) return;
         TopPaneMediaState current = state;
         boolean has = current != null;
-
-        String titleText = has ? (current.title.isEmpty() ? current.appLabel : current.title)
-            : getContext().getString(R.string.bw_feeds_media_nothing_playing);
-        String artistText = has && !current.title.isEmpty()
-            ? (current.artist.isEmpty() ? current.appLabel : current.artist) : "";
-        if (artist != null) {
-            artist.setText(artistText);
-            artist.setVisibility(artistText.isEmpty() ? GONE : VISIBLE);
-        }
-        if (title != null) {
-            // 4×1 has one line for both: the artist follows the title in the quieter weight.
-            title.setText(artist == null && !artistText.isEmpty()
-                ? titleWithArtist(titleText, artistText) : titleText);
-        }
-        if (sourceLabel != null) {
-            sourceLabel.setText(has && !current.appLabel.isEmpty() ? current.appLabel
-                : getContext().getString(kind.label));
-        }
+        boolean resuming = !has && mode == MediaLayoutPlanner.Mode.RESUME && resume != null;
 
         Bitmap bitmap = has ? current.art : null;
-        if (art != null && bitmap != shownArt) {
-            // The feed's own bitmap, never a copy: the art costs nothing beyond what the feed holds.
-            art.setImageBitmap(bitmap);
-            shownArt = bitmap;
+        Drawable icon = null;
+        if (resuming) {
+            try {
+                icon = getContext().getPackageManager().getApplicationIcon(resume.packageName);
+            } catch (PackageManager.NameNotFoundException e) {
+                icon = null;
+            }
         }
-        if (art != null) art.setVisibility(bitmap != null ? VISIBLE : GONE);
-        if (artPlaceholder != null) artPlaceholder.setVisibility(bitmap != null ? GONE : VISIBLE);
+        if (art != null) {
+            if (resuming) {
+                if (icon != shownIcon) {
+                    art.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                    art.setImageDrawable(icon);
+                    shownIcon = icon;
+                    shownArt = null;
+                }
+            } else if (bitmap != shownArt || shownIcon != null) {
+                // The feed's own bitmap, never a copy: the art costs nothing beyond what the feed holds.
+                art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                art.setImageBitmap(bitmap);
+                shownArt = bitmap;
+                shownIcon = null;
+            }
+            boolean shows = resuming ? icon != null : bitmap != null;
+            art.setVisibility(shows ? VISIBLE : GONE);
+            if (artPlaceholder != null) artPlaceholder.setVisibility(shows ? GONE : VISIBLE);
+        }
 
         if (playButton != null) {
             boolean playing = has && current.playing;
             playButton.setText(playing ? GLYPH_PAUSE : GLYPH_PLAY);
-            playButton.setContentDescription(getContext().getString(playing
-                ? R.string.bw_feeds_media_pause : R.string.bw_feeds_media_play));
-            enable(playButton, has);
+            playButton.setContentDescription(resuming
+                ? getContext().getString(R.string.bw_feeds_media_resume, resume.label)
+                : getContext().getString(playing
+                    ? R.string.bw_feeds_media_pause : R.string.bw_feeds_media_play));
+            enable(playButton, has || resuming);
         }
         if (previousButton != null) enable(previousButton, has);
         if (nextButton != null) enable(nextButton, has);
 
         updateProgress();
-        setContentDescription(describe(current, titleText));
+        setContentDescription(describe(current, resuming));
         scheduleTick();
     }
 
@@ -504,18 +494,19 @@ public class MediaWidgetView extends BuiltinWidgetView {
         if (bar != null) {
             bar.set(known ? MediaWidgetFormats.fraction(position, duration) : 0f, style().primary);
         }
-        if (elapsedOfTotal != null) {
-            setTextIfChanged(elapsedOfTotal,
-                known ? MediaWidgetFormats.elapsedOfTotal(position, duration) : "");
-        }
         if (elapsed != null) {
             setTextIfChanged(elapsed, known ? MediaWidgetFormats.clock(position) : "");
         }
         if (total != null) setTextIfChanged(total, known ? MediaWidgetFormats.clock(duration) : "");
     }
 
-    @NonNull private String describe(@Nullable TopPaneMediaState current, @NonNull String titleText) {
-        if (current == null) return getContext().getString(R.string.bw_feeds_media_cd_nothing);
+    @NonNull private String describe(@Nullable TopPaneMediaState current, boolean resuming) {
+        if (current == null) {
+            return resuming && resume != null
+                ? getContext().getString(R.string.bw_feeds_media_resume, resume.label)
+                : getContext().getString(R.string.bw_feeds_media_cd_nothing);
+        }
+        String titleText = current.title.isEmpty() ? current.appLabel : current.title;
         boolean byArtist = !current.artist.isEmpty() && !current.title.isEmpty();
         int format = current.playing
             ? (byArtist ? R.string.bw_feeds_media_cd_playing : R.string.bw_feeds_media_cd_playing_title)
@@ -524,29 +515,19 @@ public class MediaWidgetView extends BuiltinWidgetView {
             : getContext().getString(format, titleText);
     }
 
-    @NonNull private CharSequence titleWithArtist(@NonNull String titleText, @NonNull String artistText) {
-        SpannableStringBuilder text = new SpannableStringBuilder(titleText);
-        int start = text.length();
-        text.append(" · ").append(artistText);
-        text.setSpan(new ForegroundColorSpan(style().onSurfaceVariant), start, text.length(),
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        text.setSpan(new FaceSpan(style().sansMedium), start, text.length(),
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        return text;
-    }
-
     // ----- pieces ---------------------------------------------------------------------------
 
     /**
      * The art well: the striped stand-in with the session's artwork over it when there is some,
-     * rounded to the card's corner less {@code insetDp}. It fills what its parent gives it.
+     * cut at the inner radius ({@link WidgetTokens#innerRadius}): the card's corner less
+     * {@code insetDp}. It fills the box the plan gives it.
      */
     @NonNull private ArtFrame artFrame(@NonNull BuiltinWidgetUi ui, int insetDp, int bandDp) {
-        ArtFrame frame = new ArtFrame(getContext());
-        float radius = ui.innerRadius(insetDp);
+        ArtFrame frame = ui.followCorner(new ArtFrame(getContext()));
         frame.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                    ui.innerRadius(insetDp));
             }
         });
         frame.setClipToOutline(true);
@@ -560,37 +541,19 @@ public class MediaWidgetView extends BuiltinWidgetView {
         frame.addView(image, matchParent());
         artPlaceholder = placeholder;
         art = image;
+        shownArt = null;
+        shownIcon = null;
         return frame;
     }
 
-    /** {@code view}'s width given all the room it wants: what a column keeps to show it whole. */
-    private static int naturalWidth(@NonNull View view) {
-        int open = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        view.measure(open, open);
-        return view.getMeasuredWidth();
-    }
-
     /**
-     * The 1-row art's place in its row: the card's height less the design's 12dp above and below,
-     * which is the design's 68dp square in a 92dp card.
-     */
-    @NonNull private static ViewGroup.MarginLayoutParams rowArtParams(@NonNull BuiltinWidgetUi ui) {
-        ViewGroup.MarginLayoutParams params = new ViewGroup.MarginLayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        params.topMargin = ui.dp(ROW_ART_AIR_DP);
-        params.bottomMargin = ui.dp(ROW_ART_AIR_DP);
-        return params;
-    }
-
-    /**
-     * A transport control: a glyph, on a {@code discDp} primary disc when that is non-zero, in a
-     * touch target of up to 48dp whose extra room is transparent; the target is 40dp, then
-     * 36dp, as its room shrinks, and never past its parent.
+     * A transport control: a glyph in a 48 dp target, on a {@link #DISC_DP} container disc when
+     * {@code container} (the play button gets its primary disc from the caller).
      */
     @NonNull private TextView control(@NonNull BuiltinWidgetUi ui, @NonNull String glyph, float sp,
-                                      @ColorInt int color, int discDp, @NonNull Runnable action) {
+                                      @ColorInt int color, boolean container, @NonNull Runnable action) {
         ControlButton view = new ControlButton(ui, glyph, sp, color);
-        if (discDp > 0) view.setBackground(new DiscDrawable(style().primary, ui.dp(discDp)));
+        if (container) view.setBackground(new DiscDrawable(style().containerHigh, ui.dp(DISC_DP)));
         int description = GLYPH_PREVIOUS.equals(glyph) ? R.string.bw_feeds_media_previous
             : GLYPH_NEXT.equals(glyph) ? R.string.bw_feeds_media_next
             : R.string.bw_feeds_media_pause;
@@ -602,84 +565,6 @@ public class MediaWidgetView extends BuiltinWidgetView {
         return view;
     }
 
-    /** A glyph the design draws in the deck that the session does not offer: shown, not pressed. */
-    @NonNull private TextView decoration(@NonNull BuiltinWidgetUi ui, @NonNull String glyph, float sp) {
-        TextView view = ui.glyph(glyph, sp, style().onSurfaceVariant);
-        view.setClickable(false);
-        view.setFocusable(false);
-        view.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        return view;
-    }
-
-    /**
-     * Lays {@code items} (a view, then the dp it visibly occupies, repeated) in a row whose visible
-     * gaps are the design's {@code gapDp} — or spread edge to edge, at least
-     * {@link #SPREAD_GAP_DP} apart, when {@code spread}. Each control keeps its touch target; the
-     * transparent margin of a target is taken out of the gap beside it, so neighbours' targets
-     * overlap a little rather than the visible marks drifting apart. In a spread row the targets
-     * also give up width, down to {@link #CONTROL_MIN_DP}, before anything is left out; when it
-     * is still too narrow the decorations go first, then the previous and next controls, and the
-     * play control stays.
-     */
-    @NonNull private FitStack controlRow(@NonNull BuiltinWidgetUi ui, boolean spread, int gapDp,
-                                         @NonNull Object... items) {
-        FitStack row = FitStack.row(getContext()).centerAcross();
-        View before = null;
-        int beforeVisible = 0;
-        for (int i = 0; i < items.length / 2; i++) {
-            View view = (View) items[i * 2];
-            int visible = (Integer) items[i * 2 + 1];
-            int rank = view == playButton ? FitStack.ESSENTIAL
-                : view instanceof ControlButton ? CONTROL_RANK : DECORATION_RANK;
-            int gap = before == null ? 0 : ui.dp((spread ? SPREAD_GAP_DP : gapDp)
-                - overhang(before, beforeVisible, spread) - overhang(view, visible, spread));
-            boolean control = view instanceof ControlButton;
-            if (!spread) {
-                row.add(view, rank, gap);
-            } else if (control) {
-                // A spread row keeps its marks apart however far the targets shrink to fit.
-                row.addShrinkElastic(view, rank, gap, ui.dp(TOUCH_DP),
-                    ui.dp(Math.max(visible, CONTROL_MIN_DP)));
-            } else {
-                row.addElastic(view, rank, gap);
-            }
-            before = view;
-            beforeVisible = visible;
-        }
-        row.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        return row;
-    }
-
-    /**
-     * What a control's target adds either side of the {@code visibleDp} it shows: at the design's
-     * 48dp in a row that keeps the design's gaps, at the narrowest it shrinks to in a spread one.
-     */
-    private static float overhang(@NonNull View view, int visibleDp, boolean spread) {
-        if (!(view instanceof ControlButton)) return 0f;
-        int target = spread ? Math.max(visibleDp, CONTROL_MIN_DP) : TOUCH_DP;
-        return Math.max(0f, (target - visibleDp) / 2f);
-    }
-
-    /**
-     * The gap above a control row for the design's {@code gapDp} between what is visible: the
-     * row's target is taller than the {@code visibleDp} it shows, and the difference sits above it.
-     */
-    private static int controlGap(@NonNull BuiltinWidgetUi ui, int gapDp, int visibleDp) {
-        return Math.max(0, ui.dp(gapDp - (TOUCH_DP - visibleDp) / 2f));
-    }
-
-    /** {@code view} across its column, {@code insetDp} in from either side. */
-    @NonNull private static <V extends View> V indented(@NonNull V view, @NonNull BuiltinWidgetUi ui,
-                                                        int insetDp) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = ui.dp(insetDp);
-        params.rightMargin = ui.dp(insetDp);
-        view.setLayoutParams(params);
-        return view;
-    }
-
     private static void enable(@NonNull View view, boolean enabled) {
         view.setEnabled(enabled);
         view.setAlpha(enabled ? 1f : 0.38f);
@@ -687,18 +572,6 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     private static void setTextIfChanged(@NonNull TextView view, @NonNull String text) {
         if (!text.contentEquals(view.getText())) view.setText(text);
-    }
-
-    @NonNull private static <V extends View> V wide(@NonNull V view) {
-        ViewGroup.LayoutParams existing = view.getLayoutParams();
-        if (existing instanceof LinearLayout.LayoutParams) {
-            existing.width = ViewGroup.LayoutParams.MATCH_PARENT;
-            view.setLayoutParams(existing);
-        } else {
-            view.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        }
-        return view;
     }
 
     @NonNull private static FrameLayout.LayoutParams matchParent() {
@@ -722,7 +595,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     /**
      * A glyph button that is 48dp square where the room allows, 40dp where it does not, and 36dp
-     * below that, never larger than the room it is given.
+     * below that, never larger than the room it is given. The plan gives it 48.
      */
     private static final class ControlButton extends TextView {
         private final int touchPx, midPx, minPx;
@@ -748,9 +621,9 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
         @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY) {
-                // A row that shrinks its targets for width: as tall as the room allows.
                 setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),
-                    target(room(heightMeasureSpec)));
+                    MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+                        ? MeasureSpec.getSize(heightMeasureSpec) : target(room(heightMeasureSpec)));
                 return;
             }
             int side = target(Math.min(room(widthMeasureSpec), room(heightMeasureSpec)));
@@ -777,13 +650,5 @@ public class MediaWidgetView extends BuiltinWidgetView {
         @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
         @Override public void setColorFilter(@Nullable ColorFilter filter) { paint.setColorFilter(filter); }
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-    }
-
-    /** A typeface for part of a line, on every API level the launcher runs on. */
-    private static final class FaceSpan extends MetricAffectingSpan {
-        @NonNull private final Typeface face;
-        FaceSpan(@NonNull Typeface face) { this.face = face; }
-        @Override public void updateDrawState(@NonNull TextPaint paint) { paint.setTypeface(face); }
-        @Override public void updateMeasureState(@NonNull TextPaint paint) { paint.setTypeface(face); }
     }
 }

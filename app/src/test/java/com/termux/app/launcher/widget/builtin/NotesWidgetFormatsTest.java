@@ -84,4 +84,21 @@ public class NotesWidgetFormatsTest {
         assertTrue(NotesWidgetFormats.isBlank(" \n\t"));
         assertFalse(NotesWidgetFormats.isBlank(" x "));
     }
+
+    @Test public void aLeadingHeadingIsTheTitle() {
+        assertEquals("Launcher ideas", NotesWidgetFormats.title("# Launcher ideas\n\n# Next steps\n- a"));
+        assertEquals(java.util.Arrays.asList("# Next steps", "- a"),
+            NotesWidgetFormats.bodyLines("# Launcher ideas\n\n# Next steps\n- a", 10));
+    }
+
+    @Test public void plainOpeningTextIsAllBody() {
+        assertEquals(null, NotesWidgetFormats.title("buy milk\n# later"));
+        assertEquals(java.util.Arrays.asList("buy milk", "# later"),
+            NotesWidgetFormats.bodyLines("\nbuy milk\n# later", 10));
+    }
+
+    @Test public void bodyIsCappedAndAnEmptyHeadingIsNoTitle() {
+        assertEquals(null, NotesWidgetFormats.title("#\nx"));
+        assertEquals(1, NotesWidgetFormats.bodyLines("# t\na\nb", 1).size());
+    }
 }

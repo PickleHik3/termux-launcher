@@ -42,36 +42,19 @@ public class X11GpuProbeTest {
         assertEquals(Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"), best.env);
         assertNull("nothing to keep running for Turnip", best.serverCommand);
         assertEquals("Adreno 730", result.gpu);
-        assertTrue(result.headline(), result.headline().contains("turnip-zink"));
+        assertTrue(result.toEnv(), result.toEnv().startsWith("# Adreno 730: turnip-zink"));
         assertTrue(result.toEnv().contains("export MESA_LOADER_DRIVER_OVERRIDE=zink\n"));
     }
 
-    /** The Setup GUI Apps screen's second command: the install first, the exports after it. */
-    @Test public void theGraphicsCommandInstallsFirstAndEndsWithoutANewline() {
-        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
-        in.kgsl = true;
-        in.kgslModel = "Adreno730v2";
-
-        String command = X11GpuProbe.evaluate(in).toCommand();
-
-        String[] lines = command.split("\n", -1);
-        assertEquals("# Adreno730v2: turnip-zink", lines[0]);
-        assertEquals("pkg install -y mesa mesa-vulkan-icd-freedreno", lines[1]);
-        assertEquals("export MESA_LOADER_DRIVER_OVERRIDE=zink", lines[lines.length - 2]);
-        assertEquals("export TU_DEBUG=noconform", lines[lines.length - 1]);
-        assertFalse("the user's own Enter runs the last line", command.endsWith("\n"));
-    }
-
-    /** virgl needs a helper alive in Termux, and the command has to say so. */
-    @Test public void theGraphicsCommandNamesTheHelperWhenTheProfileNeedsOne() {
+    /** virgl needs a helper alive in Termux, and the exports have to say so. */
+    @Test public void theExportsNameTheHelperWhenTheProfileNeedsOne() {
         X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
         in.eglVendor = "mali";
         in.glRenderer = "Mali-G78";
 
-        String command = X11GpuProbe.evaluate(in).toCommand();
+        String env = X11GpuProbe.evaluate(in).toEnv();
 
-        assertTrue(command, command.contains("# then keep this running in Termux: "
-            + "virgl_test_server_android --angle-gl &"));
+        assertTrue(env, env.contains("# keep running in Termux: virgl_test_server_android --angle-gl &"));
     }
 
     @Test public void adrenoWithoutThePackagesStillRecommendsZinkAndNamesThem() {
@@ -144,7 +127,7 @@ public class X11GpuProbeTest {
 
         assertEquals(Arrays.asList("software"), order(result));
         assertNull(result.recommended());
-        assertTrue(result.headline().contains("software"));
+        assertTrue(result.toEnv().contains(": software"));
         assertEquals(Arrays.asList("LIBGL_ALWAYS_SOFTWARE=1", "GALLIUM_DRIVER=llvmpipe",
             "MESA_LOADER_DRIVER_OVERRIDE=llvmpipe"), result.ranked.get(0).env);
     }
@@ -178,6 +161,7 @@ public class X11GpuProbeTest {
     @Test public void aKnownFreezeGpuRanksSoftwareFirstAndWarnsOnVirgl() {
         X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
         in.eglVendor = "mali";
+        in.vulkanVendor = "mali";
         in.glRenderer = "Mali-G52 MC2";
         in.virglServer = true;
         in.angle = true;
@@ -192,16 +176,84 @@ public class X11GpuProbeTest {
             if (r.profile == X11GpuProbe.Profile.VIRGL_ANGLE || r.profile == X11GpuProbe.Profile.VIRGL) {
                 assertTrue(r.reason, r.reason.contains("frozen the whole phone"));
                 warned = true;
+            } else if (r.profile == X11GpuProbe.Profile.VULKAN_WRAPPER) {
+                assertTrue("no GPU profile goes unwarned there", r.reason.contains("untested on this GPU"));
             }
         }
         assertTrue(warned);
         assertTrue(X11GpuProbe.knownFreeze(in));
         in.glRenderer = "Mali-G78";
         assertFalse(X11GpuProbe.knownFreeze(in));
-        // The GL probe may say nothing (a failed throwaway context): the chip name still matches.
-        in.glRenderer = "";
-        in.board = "mt6768";
-        assertTrue(X11GpuProbe.knownFreeze(in));
-        assertEquals("software", X11GpuProbe.evaluate(in).ranked.get(0).profile.id);
+    }
+
+    /** No GL context, so no renderer string: the SoC name still tells the phone. */
+    @Test public void aKnownFreezeSocIsCaughtWithoutARendererString() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "mali";
+        in.platform = "mt6768 mt6768";
+        in.virglServer = true;
+        in.angle = true;
+        in.mesaDri = true;
+
+        X11GpuProbe.Result result = X11GpuProbe.evaluate(in);
+
+        assertTrue(result.knownFreeze);
+        assertEquals("software", result.ranked.get(0).profile.id);
+        in.platform = "mt6789";
+        assertFalse(X11GpuProbe.knownFreeze(in));
+    }
+
+    @Test public void theWrapperIsSkippedOnlyWhenTheVulkanDriverIsKnownOlderThan13() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "adreno";
+        in.vulkanVendor = "adreno";
+        in.kgsl = true;
+        in.vulkanApiVersion = 0x401000;
+        X11GpuProbe.Result old = X11GpuProbe.evaluate(in);
+        assertNotNull(old.find(X11GpuProbe.Profile.VULKAN_WRAPPER));
+        assertTrue(old.toTable().contains("\nSKIP['vulkan-wrapper']="));
+        assertFalse(old.toTable().contains("SKIP['turnip-zink']"));
+        assertFalse(old.toTable().contains("SKIP['virgl']"));
+
+        in.vulkanApiVersion = 0x403000;
+        assertFalse(X11GpuProbe.evaluate(in).toTable().contains("SKIP["));
+        in.vulkanApiVersion = 0;
+        assertFalse(X11GpuProbe.evaluate(in).toTable().contains("SKIP["));
+    }
+
+    /** The benchmark script's table is this class's ranking, quoted for bash. */
+    @Test public void theTableListsTheRankingAndSkipsVirglOnAKnownFreezeGpu() {
+        X11GpuProbe.Inputs in = new X11GpuProbe.Inputs();
+        in.eglVendor = "mali";
+        in.glRenderer = "Mali-G52 MC2";
+        X11GpuProbe.Result result = X11GpuProbe.evaluate(in);
+
+        String table = result.toTable();
+
+        assertTrue(table, table.contains("\nGPU_NAME='Mali-G52 MC2'\n"));
+        assertTrue(table, table.contains("\nCANDIDATES=('virgl-angle' 'virgl')\n"));
+        assertTrue(table, table.contains("\nPKGS['software']='mesa'\n"));
+        assertTrue(table, table.contains("\nHELPER['virgl-angle']='virgl_test_server_android --angle-gl'\n"));
+        assertTrue(table, table.contains("\nSKIP['virgl']="));
+        assertTrue(table, table.contains("\nSKIP['virgl-angle']="));
+        in.vulkanVendor = "mali";
+        assertTrue("every GPU profile is skipped there",
+            X11GpuProbe.evaluate(in).toTable().contains("\nSKIP['vulkan-wrapper']="));
+        in.vulkanVendor = "";
+        assertTrue("an apostrophe in a reason survives the quoting", table.contains("GPU'\\''s"));
+        assertTrue(result.knownFreeze);
+
+        in.glRenderer = "Mali-G78";
+        assertFalse(X11GpuProbe.evaluate(in).toTable().contains("SKIP["));
+    }
+
+    @Test
+    public void theWrapperIsInstalledThroughTheScriptNeverByName() {
+        assertEquals("termux-x11-gpu-setup --install-wrapper && pkg install mesa",
+            X11GpuProbe.installCommand(Arrays.asList("vulkan-wrapper-android", "mesa")));
+        assertEquals("termux-x11-gpu-setup --install-wrapper",
+            X11GpuProbe.installCommand(Arrays.asList("vulkan-wrapper-android")));
+        assertEquals("pkg install virglrenderer-android mesa",
+            X11GpuProbe.installCommand(Arrays.asList("virglrenderer-android", "mesa")));
     }
 }

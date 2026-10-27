@@ -70,6 +70,15 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         flushes++;
     }
 
+    /** What the activity's one stack pass does to the test's tree; null leaves the tree alone. */
+    @Nullable Runnable stackLayoutForRaisedKeyboard;
+    int stackLayoutsForRaisedKeyboard;
+
+    @Override public void layOutAccessoryStackForRaisedKeyboard() {
+        stackLayoutsForRaisedKeyboard++;
+        if (stackLayoutForRaisedKeyboard != null) stackLayoutForRaisedKeyboard.run();
+    }
+
     @Override public void setInterceptorActive(boolean active) {
         interceptorActive = active;
     }

@@ -228,6 +228,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // every attached client goes.
         for (TermuxTerminalSessionActivityClient client : detachAllActivityClients())
             unsetTermuxTerminalSessionClient(client);
+        // An empty service kept running for the Home it showed has no reason to stay once the
+        // activity is gone: it stops, as plain Termux's does with its last shell.
+        updateNotification();
         return false;
     }
 
@@ -260,6 +263,14 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      */
     private void actionStopService() {
         mWantsToStop = true;
+        // Exit is itself the arrangement (wall rework slice 9): the next cold start shows exactly
+        // what Exit leaves, an empty Workspace. Written before the shells die; the activity's
+        // autosave stands down once mWantsToStop is set.
+        try {
+            new com.termux.app.terminal.TerminalWorkspaceStore().saveAutosave(null);
+        } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+            Logger.logWarn(LOG_TAG, "Could not autosave the empty arrangement on exit: " + e.getMessage());
+        }
         killAllTermuxExecutionCommands();
         requestStopService();
     }
@@ -566,7 +577,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         executionCommand.setShellCommandShellEnvironment = true;
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
-        AppShell newTermuxTask = AppShell.execute(this, executionCommand, this, new TermuxShellEnvironment(), null, false);
+        // The launcher's sound server and bus, for a task that plays sound (a Linux app above all).
+        AppShell newTermuxTask = AppShell.execute(this, executionCommand, this, new TermuxShellEnvironment(),
+            com.termux.app.sound.LauncherSound.get(this).environmentForNewShell(), false);
         if (newTermuxTask == null) {
             Logger.logError(LOG_TAG, "Failed to execute new TermuxTask command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error
@@ -680,7 +693,11 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // If the execution command was started for a plugin, only then will the stdout be set
         // Otherwise if command was manually started by the user like by adding a new terminal session,
         // then no need to set stdout
-        TermuxSession newTermuxSession = TermuxSession.execute(this, executionCommand, getTermuxTerminalSessionClient(), this, new TermuxShellEnvironment(), null, executionCommand.isPluginExecutionCommand);
+        // A session is a first need for sound: the launcher's server starts on its own worker,
+        // and the shell gets the server's address now, which never changes.
+        com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(this);
+        TermuxSession newTermuxSession = TermuxSession.execute(this, executionCommand, getTermuxTerminalSessionClient(), this, new TermuxShellEnvironment(), sound.environmentForNewShell(), executionCommand.isPluginExecutionCommand);
+        sound.onNeed();
         if (newTermuxSession == null) {
             Logger.logError(LOG_TAG, "Failed to execute new TermuxSession command for:\n" + executionCommand.getCommandIdAndLabelLogString());
             // If the execution command was started for a plugin, then process the error
@@ -924,7 +941,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // Refresh the text only while something keeps the service alive. The activity pushes this
         // during startup before the first session exists — entering updateNotification()'s empty
         // state there would requestStopService() and tear the whole app down mid-launch.
-        if (!mShellManager.mTermuxSessions.isEmpty() || !mShellManager.mTermuxTasks.isEmpty() || mWakeLock != null)
+        if (!mShellManager.mTermuxSessions.isEmpty() || !mShellManager.mTermuxTasks.isEmpty() || mWakeLock != null
+            || activityKeepsServiceWhenEmpty())
             updateNotification();
     }
 
@@ -988,12 +1006,25 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * Update the shown foreground service notification after making any changes that affect it.
      */
     private synchronized void updateNotification() {
-        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()) {
+        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()
+            && !activityKeepsServiceWhenEmpty()) {
             // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
+            // Not while the launcher shows Home over an empty Workspace: the activity binds without
+            // BIND_AUTO_CREATE, so a stopped service disconnects it (onServiceDisconnected) and it
+            // finishes, dropping the user to another launcher (WallRow.lastShellClosedShowsHome).
             requestStopService();
         } else {
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
         }
+    }
+
+    /**
+     * Whether the attached activity outlives the last shell: Home stays on screen over an empty
+     * Workspace, and the activity finishes when this service stops. False with no activity attached.
+     */
+    private boolean activityKeepsServiceWhenEmpty() {
+        TermuxTerminalSessionActivityClient client = mTermuxTerminalSessionActivityClient;
+        return client != null && client.keepsServiceWhenEmpty();
     }
 
     private void setCurrentStoredTerminalSession(TerminalSession terminalSession) {

@@ -3,15 +3,18 @@ package com.termux.app.activities;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.SystemClock;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewGroupCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
@@ -25,9 +28,16 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
 import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.fragments.settings.SettingsMotion;
+import com.termux.app.fragments.settings.SettingsMotionPolicy;
+import com.termux.app.fragments.settings.SettingsTransitions;
 import com.termux.app.fragments.settings.SettingsMaterialDialogs;
+import com.termux.app.fragments.settings.SettingsRowRing;
+import com.termux.app.fragments.settings.SettingsSearchFragment;
 import com.termux.app.fragments.settings.SettingsSearchPreference;
-import com.termux.app.launcher.LauncherUseCaseMode;
+import com.termux.app.fragments.settings.SettingsSearchResults;
+import com.termux.app.fragments.settings.SettingsTree;
+import com.termux.app.fragments.settings.SettingsUnsavedChanges;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -37,12 +47,10 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
-public class SettingsActivity extends AppCompatActivity implements PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
+public class SettingsActivity extends AppCompatActivity implements
+    PreferenceFragmentCompat.OnPreferenceStartFragmentCallback, SettingsSearchResults.Navigator {
 
     private static final String LOG_TAG = "SettingsActivity";
     private static final String SETTINGS_FRAGMENT_PACKAGE_PREFIX = "com.termux.app.fragments.settings.";
@@ -59,6 +67,16 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      */
     public static final String EXTRA_INITIAL_PLACE = "settings_initial_place";
     public static final String EXTRA_SCROLL_TO_KEY = "settings_scroll_to_key";
+    /**
+     * Which section chip a page should open on: a {@code PreferenceCategory}'s key. The
+     * Appearance editor's chips land on a section this way (Home's Gestures).
+     */
+    public static final String EXTRA_SECTION_KEY = "settings_section_key";
+    /**
+     * The page was opened from the Appearance editor, which is still open under Settings: a
+     * row that would open the editor goes back to it instead of opening it again.
+     */
+    public static final String EXTRA_FROM_EDITOR = "settings_from_editor";
 
     /** SharedPreferences key for the JSON stack {@link SettingsBackStackState} serializes. */
     static final String PREFS_KEY_BACK_STACK_STATE = "settings_back_stack_state_v1";
@@ -74,8 +92,27 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      */
     private final List<SettingsBackStackState.Entry> mPushedScreens = new ArrayList<>();
 
-    /** Set in {@link #onStop}; read by {@link #onNewIntent} to judge whether the stack is stale. */
-    private long mLastStoppedAtEpochMs = 0;
+    /** {@code Bundle} key for whether the saved state was laid out with two panes. */
+    private static final String STATE_KEY_TWO_PANE = "settings_two_pane_v1";
+
+    /**
+     * Two panes (F4, a smallest width of 600 dp: tablets, never a phone in landscape): the root list stands in {@code settings_list} and the
+     * open section in {@code settings}, whose back stack {@link #mPushedScreens} mirrors as on a
+     * phone. On a phone the root is the base of {@code settings} itself.
+     */
+    private boolean mTwoPane;
+
+    /**
+     * When Settings last closed (elapsedRealtime), set in {@link #onStop}. Static so a reopen after
+     * the window finished sees it; read by {@link #onCreate} and {@link #onNewIntent} through
+     * {@link SettingsReopenPolicy}. After process death it is empty and Settings opens at the root.
+     */
+    private static long sLastClosedAtMs = SettingsReopenPolicy.NO_CLOSE;
+
+    @androidx.annotation.VisibleForTesting
+    static void setLastClosedAtMs(long closedAtMs) {
+        sLastClosedAtMs = closedAtMs;
+    }
 
     public static Intent createFragmentIntent(@NonNull Context context, @NonNull Class<? extends Fragment> fragmentClass, int titleResId) {
         Intent intent = new Intent(context, SettingsActivity.class);
@@ -98,94 +135,32 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
     }
 
     /**
-     * The deep-link arguments an Intent carries, or null when it carries none. Read by the
-     * initial fragment; nothing else in the Intent reaches it.
-     */
-    private static final String PAGES = "com.termux.app.fragments.settings.termux.";
-
-    /**
-     * A deep link that names an old page and a row that has since moved to a focused subpage
-     * (an external Intent, a saved Back stack, a search hit) is sent to the page that holds the row,
-     * with the same scroll key, so the row is still found. Any other class or key is returned as
-     * given, so a link without a key keeps opening the overview it always named.
+     * Where a link that names an old page and a row should land in today's tree: an old page name
+     * that folded into another gives that one, and a row that moved to another page sends the link
+     * there with the same scroll key, so the row is still found (an external Intent, a saved Back
+     * stack, a search hit). See {@link SettingsTree#redirect}.
      */
     @NonNull
     static String redirectLegacyPage(@NonNull String className, @Nullable String scrollToKey) {
-        if (scrollToKey == null) return className;
-        String page = null;
-        if ((PAGES + "KeyboardPreferencesFragment").equals(className)) {
-            if (scrollToKey.startsWith("keyboard_voice") || scrollToKey.equals("keyboard_docs_voice"))
-                page = "KeyboardVoicePreferencesFragment";
-            else if (scrollToKey.equals("in_app_keyboard_hide_on_hardware")
-                || scrollToKey.equals("pass_ctrl_space_to_android"))
-                page = "KeyboardHardwarePreferencesFragment";
-            else if (scrollToKey.equals("keyboard_layout") || scrollToKey.equals("in_app_keyboard_extra_keys")
-                || scrollToKey.equals("in_app_keyboard_layouts")
-                || scrollToKey.startsWith("keyboard_docs_") || scrollToKey.startsWith("keyboard_credits"))
-                page = "KeyboardLayoutPreferencesFragment";
-            else if (scrollToKey.equals("keyboard_shapes") || scrollToKey.startsWith("in_app_keyboard_floating_")
-                || scrollToKey.equals("in_app_keyboard_split_gap"))
-                page = "KeyboardSizePreferencesFragment";
-            else if (scrollToKey.equals("keyboard_typing") || scrollToKey.equals("keyboard_feedback")
-                || scrollToKey.startsWith("in_app_keyboard_tap_correction")
-                || scrollToKey.equals("in_app_keyboard_key_sound_enabled")
-                || scrollToKey.equals("in_app_keyboard_key_popup"))
-                page = "KeyboardTypingPreferencesFragment";
-            else if (scrollToKey.equals("in_app_keyboard_haptics_enabled"))
-                page = "AppBehaviorPreferencesFragment";
-        } else if ((PAGES + "LauncherPreferencesFragment").equals(className)) {
-            if (scrollToKey.equals("app_launcher_input_char") || scrollToKey.equals("app_launcher_reset_usage_ranking"))
-                page = "LauncherSearchPreferencesFragment";
-            else if (scrollToKey.equals("app_launcher_az_lock_method")
-                || scrollToKey.equals("app_launcher_az_double_tap_lock"))
-                page = "LauncherLockPreferencesFragment";
-            else if (scrollToKey.equals("app_launcher_most_used_page"))
-                page = "LauncherDockPreferencesFragment";
-            else if (scrollToKey.equals("app_haptics_enabled") || scrollToKey.equals("app_launcher_row_haptics")
-                || scrollToKey.equals("show_in_recents_when_not_default"))
-                page = "AppBehaviorPreferencesFragment";
-        } else if ((PAGES + "X11DisplayPreferencesFragment").equals(className)) {
-            switch (scrollToKey) {
-                case "touchMode": case "x11_android_keyboard": case "x11_keyboard_follows_text":
-                case "clipboardEnable":
-                    page = "X11DisplayInputPreferencesFragment"; break;
-                case "displayResolutionMode": case "displayScale": case "displayResolutionExact":
-                case "displayResolutionCustom": case "displayFilteringMode": case "x11_display_dpi":
-                    page = "X11DisplayResolutionPreferencesFragment"; break;
-                case "x11_display_autostart": case "x11_display_command": case "x11_set_display_env":
-                    page = "X11DisplayStartupPreferencesFragment"; break;
-                case "x11_legacy_drawing": case "x11_force_bgra":
-                    page = "X11DisplayTroubleshootingPreferencesFragment"; break;
-                case "x11_drawer_apps": case "x11_gui_apps_setup": case "x11_hidden_apps":
-                case "x11_window_manager": case "x11_runtime_badge": case "x11_window_manager_hint":
-                    page = "X11DisplayLinuxAppsPreferencesFragment"; break;
-                default: break;
-            }
-        } else if ((PAGES + "TaiPreferencesFragment").equals(className)) {
-            switch (scrollToKey) {
-                case "tai_runtime_actions": case "tai_runtime_stop": case "tai_runtime_unload":
-                case "tai_runtime_logs":
-                    page = "TaiRuntimePreferencesFragment"; break;
-                case "tai_server_category": case "tai_openai_auto_load": case "tai_endpoint_copy":
-                case "tai_api_auth_required": case "tai_lan_enabled":
-                    page = "TaiApiPreferencesFragment"; break;
-                case "tai_advanced_category": case "tai_parameters_defaults": case "tai_runtime_overrides":
-                case "tai_memory_limits": case "tai_share_diagnostics":
-                    page = "TaiAdvancedPreferencesFragment"; break;
-                default: break; // tai_remote_category and tai_remote_provider stay on the overview.
-            }
-        }
-        return page == null ? className : PAGES + page;
+        return SettingsTree.redirect(className, scrollToKey);
     }
 
+    /**
+     * The deep-link arguments an Intent carries, or null when it carries none. Read by the
+     * initial fragment; nothing else in the Intent reaches it.
+     */
     @Nullable
     static Bundle deepLinkArguments(@NonNull Intent intent) {
         String place = intent.getStringExtra(EXTRA_INITIAL_PLACE);
         String scrollToKey = intent.getStringExtra(EXTRA_SCROLL_TO_KEY);
-        if (place == null && scrollToKey == null) return null;
+        String section = intent.getStringExtra(EXTRA_SECTION_KEY);
+        boolean fromEditor = intent.getBooleanExtra(EXTRA_FROM_EDITOR, false);
+        if (place == null && scrollToKey == null && section == null && !fromEditor) return null;
         Bundle arguments = new Bundle();
         if (place != null) arguments.putString(EXTRA_INITIAL_PLACE, place);
         if (scrollToKey != null) arguments.putString(EXTRA_SCROLL_TO_KEY, scrollToKey);
+        if (section != null) arguments.putString(EXTRA_SECTION_KEY, section);
+        if (fromEditor) arguments.putBoolean(EXTRA_FROM_EDITOR, true);
         return arguments;
     }
 
@@ -199,6 +174,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         registerSettingsStyleCallbacks();
         setContentView(R.layout.activity_settings);
         applySettingsSystemBars();
+        View list = findViewById(R.id.settings_list);
+        mTwoPane = list != null && list.getVisibility() == View.VISIBLE;
         if (savedInstanceState == null) {
             // QA deep-link entry path:
             // adb shell am start -n com.termux/.app.activities.SettingsActivity --ez open_tai_settings true
@@ -213,12 +190,21 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             // user was somewhere other than the root; put them back where they were instead of
             // starting over. restoreSavedStackIfFresh returns false, doing nothing, whenever
             // there is nothing to restore, it has expired, or it fails validation.
-            if (!(isPlainEntryIntent(intent) && restoreSavedStackIfFresh())) {
-                Fragment initialFragment = buildInitialFragment();
-                getSupportFragmentManager().beginTransaction().replace(R.id.settings, initialFragment).commit();
+            if (mTwoPane) {
+                getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.settings_list, new RootPreferencesFragment()).commit();
+            }
+            boolean plain = isPlainEntryIntent(intent);
+            boolean keepPage = plain && sLastClosedAtMs != SettingsReopenPolicy.NO_CLOSE
+                && !SettingsReopenPolicy.shouldReset(sLastClosedAtMs, SystemClock.elapsedRealtime(), false);
+            if (!(keepPage && restoreSavedStackIfFresh())) {
+                showInitialFragment(buildInitialFragment());
             }
         } else {
             restorePushedScreensBookkeeping(savedInstanceState);
+            // The smallest width crossed 600 dp (a fold, a window resize): the restored
+            // fragments sit in the other shape's containers, so the stack is rebuilt for this one.
+            if (savedInstanceState.getBoolean(STATE_KEY_TWO_PANE, false) != mTwoPane) rebuildForPaneChange();
         }
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
@@ -233,6 +219,15 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // The launcher's app-only picture can be set, replaced or ended while this page sits
+        // behind it (Appearance opened from here), and Android sends no configuration change for
+        // a picture it never got: re-theme here when the colours it gave no longer apply.
+        TermuxThemeManager.recreateIfWallpaperColorsMoved(this);
+    }
+
+    @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         // The FragmentManager saves the fragments and its own back stack by itself; this saves
@@ -241,6 +236,114 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         // with the Activity coming straight back, not a stale re-entry) so it is left at 0.
         outState.putString(STATE_KEY_PUSHED_SCREENS,
             new SettingsBackStackState(new ArrayList<>(mPushedScreens), 0).serialize());
+        outState.putBoolean(STATE_KEY_TWO_PANE, mTwoPane);
+    }
+
+    /**
+     * The first screen, without motion. With two panes the root is the list already, so where a
+     * phone would show the root the detail opens on the first section, Home.
+     */
+    private void showInitialFragment(@NonNull Fragment initial) {
+        if (mTwoPane && initial instanceof RootPreferencesFragment) {
+            openSectionPage(firstSection(), SettingsMotionPolicy.Move.RESTORE, null);
+            return;
+        }
+        getSupportFragmentManager().beginTransaction()
+            .replace(R.id.settings, initial, screenTag(0)).commit();
+    }
+
+    /**
+     * The tag of the screen at {@code position} of the detail: 0 for the base (the root on a phone,
+     * a deep-linked page), then one per pushed screen. A screen under the top one is found by it,
+     * though the FragmentManager no longer lists it as added.
+     */
+    @NonNull
+    static String screenTag(int position) {
+        return "settings_screen_" + position;
+    }
+
+    /**
+     * The section a two-pane detail opens on where a phone would show the root: the first one,
+     * Home, or the Terminal under Use as Terminal only, which has no Home section.
+     */
+    @NonNull
+    private SettingsTree.Section firstSection() {
+        return homeSectionHidden(this) ? SettingsTree.Section.TERMINAL : SettingsTree.Section.HOME;
+    }
+
+    /** Whether Use as Terminal only hides Home's section: its root row, its pages, its hits. */
+    static boolean homeSectionHidden(@NonNull Context context) {
+        return !com.termux.app.settings.UseAsSetting.read(context).showsHomeSettings();
+    }
+
+    /**
+     * Whether {@code className} is a page of Home's section that Use as Terminal only took away;
+     * a door to it is refused, and logs its line.
+     */
+    private boolean refusedByUseAs(@NonNull String className) {
+        SettingsTree.Screen screen = SettingsTree.find(className);
+        if (screen == null || screen.section != SettingsTree.Section.HOME || !homeSectionHidden(this))
+            return false;
+        Logger.logInfo(com.termux.app.wall.UseAs.LOG_TAG,
+            com.termux.app.settings.UseAsSetting.read(this).doorLine("settings-" + className));
+        return true;
+    }
+
+    /** Pushes a section's own page as the detail's first screen. */
+    private void openSectionPage(@NonNull SettingsTree.Section section, @NonNull SettingsMotionPolicy.Move move,
+                                 @Nullable Fragment out) {
+        SettingsTree.Screen page = SettingsTree.sectionPage(section);
+        pushScreen(loadScreenClass(page.className), page.titleRes, null, null, move, null, out);
+    }
+
+    /**
+     * Moves a restored stack into this shape's containers: the root into or out of the list, the
+     * deep-linked base (if any) kept, every pushed screen replayed on top without motion.
+     */
+    private void rebuildForPaneChange() {
+        FragmentManager fm = getSupportFragmentManager();
+        List<SettingsBackStackState.Entry> entries = new ArrayList<>(mPushedScreens);
+        mPushedScreens.clear();
+        fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        Fragment base = fm.findFragmentById(R.id.settings);
+        Fragment listed = fm.findFragmentById(R.id.settings_list);
+        androidx.fragment.app.FragmentTransaction transaction = fm.beginTransaction();
+        Fragment out;
+        if (mTwoPane) {
+            if (listed == null) transaction.replace(R.id.settings_list, new RootPreferencesFragment());
+            if (base instanceof RootPreferencesFragment) {
+                transaction.remove(base);
+                out = null;
+            } else {
+                out = base;
+            }
+        } else {
+            if (listed != null) transaction.remove(listed);
+            if (base == null) {
+                base = new RootPreferencesFragment();
+                transaction.replace(R.id.settings, base, screenTag(0));
+            }
+            out = base;
+        }
+        transaction.commitNow();
+        for (SettingsBackStackState.Entry entry : entries) {
+            Class<? extends Fragment> screen;
+            try {
+                screen = loadScreenClass(entry.className);
+            } catch (IllegalStateException e) {
+                break;
+            }
+            Bundle args = null;
+            if (entry.place != null || entry.scrollToKey != null) {
+                args = new Bundle();
+                if (entry.place != null) args.putString(EXTRA_INITIAL_PLACE, entry.place);
+                if (entry.scrollToKey != null) args.putString(EXTRA_SCROLL_TO_KEY, entry.scrollToKey);
+                SettingsRowRing.markRung(args);
+            }
+            out = pushScreen(screen, entry.titleResId, entry.titleText, args,
+                SettingsMotionPolicy.Move.RESTORE, null, out);
+        }
+        if (mTwoPane && out == null) openSectionPage(firstSection(), SettingsMotionPolicy.Move.RESTORE, null);
     }
 
     @Override
@@ -252,17 +355,32 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 "com.termux.app.fragments.settings.termux.TaiPreferencesFragment");
             intent.putExtra(EXTRA_INITIAL_TITLE_RES, R.string.termux_ai_preferences_title);
         }
-        if (isPlainEntryIntent(intent) && isWithinRetainWindow()) {
-            // The user tapped Settings again from the launcher shortly after leaving it (this
-            // instance was never killed - it just went to the background); keep whatever screen
-            // and back stack they had instead of popping to root.
+        boolean plainEntry = isPlainEntryIntent(intent);
+        if (plainEntry && !SettingsReopenPolicy.shouldReset(
+                sLastClosedAtMs, SystemClock.elapsedRealtime(), false)) {
+            // Opened again within three minutes of closing (or still open): keep the page and back
+            // stack. Later than that a plain open pops to the root below, before the page shows.
             return;
         }
+        // A deep link into an open Settings crosses the tree: whatever is on show fades through
+        // to the page it names, in one batch, so nothing in between is drawn.
+        FragmentManager fm = getSupportFragmentManager();
+        if (askAboutUnsavedChanges()) return;
+        Fragment base = buildInitialFragment();
+        if (mTwoPane && base instanceof RootPreferencesFragment) {
+            jumpTo(SettingsTree.path(SettingsTree.sectionPage(firstSection()).className), null);
+            return;
+        }
+        // A timed reset is not a navigation the user should see: no fade through the old page.
+        boolean instant = SettingsMotion.isInstant(this) || plainEntry;
+        Fragment visible = fm.findFragmentById(R.id.settings);
+        if (visible != null) SettingsTransitions.leaveByJump(this, visible, instant);
         mPushedScreens.clear();
-        getSupportFragmentManager().popBackStackImmediate(null,
-            FragmentManager.POP_BACK_STACK_INCLUSIVE);
-        getSupportFragmentManager().beginTransaction()
-            .replace(R.id.settings, buildInitialFragment())
+        fm.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        SettingsTransitions.arriveByJump(this, base, instant);
+        fm.beginTransaction()
+            .setReorderingAllowed(true)
+            .replace(R.id.settings, base, screenTag(0))
             .commit();
         setTitleFromIntent(intent);
     }
@@ -270,14 +388,19 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
     @Override
     protected void onStop() {
         super.onStop();
-        mLastStoppedAtEpochMs = System.currentTimeMillis();
-        if (isFinishing() && mPushedScreens.isEmpty()) {
+        long stoppedAtEpochMs = System.currentTimeMillis();
+        sLastClosedAtMs = SystemClock.elapsedRealtime();
+        if (isFinishing() && (mPushedScreens.isEmpty() || (mTwoPane && isSectionPageAlone()))) {
             // A deliberate exit from the root screen (Back/Up with nothing left to pop): the next
             // open should start fresh at root, not resume a stack that no longer exists.
             getSettingsBackStackPreferences().edit().remove(PREFS_KEY_BACK_STACK_STATE).apply();
         } else {
-            SettingsBackStackState state =
-                new SettingsBackStackState(new ArrayList<>(mPushedScreens), mLastStoppedAtEpochMs);
+            // The search screen is a moment, not a place: a reopen lands where it was opened from.
+            List<SettingsBackStackState.Entry> kept = new ArrayList<>();
+            for (SettingsBackStackState.Entry entry : mPushedScreens) {
+                if (!SettingsSearchFragment.class.getName().equals(entry.className)) kept.add(entry);
+            }
+            SettingsBackStackState state = new SettingsBackStackState(kept, stoppedAtEpochMs);
             getSettingsBackStackPreferences().edit()
                 .putString(PREFS_KEY_BACK_STACK_STATE, state.serialize()).apply();
         }
@@ -294,14 +417,6 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             && !intent.getBooleanExtra(EXTRA_OPEN_TAI_SETTINGS, false)
             && intent.getStringExtra(EXTRA_INITIAL_PLACE) == null
             && intent.getStringExtra(EXTRA_SCROLL_TO_KEY) == null;
-    }
-
-    private boolean isWithinRetainWindow() {
-        // 0 means this instance has not been stopped yet (e.g. onNewIntent while still resumed,
-        // which the platform allows for a singleTask Activity); treat that as still fresh.
-        if (mLastStoppedAtEpochMs == 0) return true;
-        long elapsed = System.currentTimeMillis() - mLastStoppedAtEpochMs;
-        return elapsed >= 0 && elapsed < SettingsBackStackState.RETAIN_WINDOW_MS;
     }
 
     private SharedPreferences getSettingsBackStackPreferences() {
@@ -324,18 +439,24 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         SettingsBackStackState saved = SettingsBackStackState.parse(raw);
         if (saved == null || !saved.isFresh(System.currentTimeMillis())) return false;
 
-        getSupportFragmentManager().beginTransaction()
-            .replace(R.id.settings, new RootPreferencesFragment())
-            .commit();
+        Fragment out = null;
+        if (!mTwoPane) {
+            out = new RootPreferencesFragment();
+            getSupportFragmentManager().beginTransaction()
+                .replace(R.id.settings, out, screenTag(0))
+                .commit();
+        }
 
-        for (SettingsBackStackState.Entry entry : saved.entries) {
+        // A stack saved before the restructure names pages that moved: replay it in today's tree,
+        // stopping short of an editor (a reopen lands on the page that opened it).
+        for (SettingsBackStackState.Entry entry : saved.entriesToRestore()) {
             Class<?> fragmentClass;
             try {
                 fragmentClass = getClassLoader().loadClass(entry.className);
             } catch (ClassNotFoundException e) {
                 break;
             }
-            if (!isAllowedInitialFragment(fragmentClass)) break;
+            if (!isAllowedInitialFragment(fragmentClass) || refusedByUseAs(entry.className)) break;
             @SuppressWarnings("unchecked")
             Class<? extends Fragment> screenClass = (Class<? extends Fragment>) fragmentClass;
             Bundle args = null;
@@ -343,9 +464,17 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 args = new Bundle();
                 if (entry.place != null) args.putString(EXTRA_INITIAL_PLACE, entry.place);
                 if (entry.scrollToKey != null) args.putString(EXTRA_SCROLL_TO_KEY, entry.scrollToKey);
+                // It rang when it was first opened.
+                SettingsRowRing.markRung(args);
             }
-            pushScreen(screenClass, entry.titleResId, entry.titleText, args);
+            // The tree's own title where it knows the page: a saved resource id belongs to the
+            // build that saved it.
+            SettingsTree.Screen known = SettingsTree.find(entry.className);
+            out = pushScreen(screenClass, known != null ? known.titleRes : entry.titleResId,
+                known != null ? null : entry.titleText, args, SettingsMotionPolicy.Move.RESTORE, null, out);
         }
+        // Left at the root: with two panes the root is the list, and the detail opens on Home.
+        if (mTwoPane && out == null) openSectionPage(firstSection(), SettingsMotionPolicy.Move.RESTORE, null);
         return true;
     }
 
@@ -363,6 +492,153 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             mPushedScreens.remove(mPushedScreens.size() - 1);
         }
         updateTitleForCurrentStack();
+        invalidateOptionsMenu();
+    }
+
+    /** True when the list and the page stand side by side (smallest width 600 dp). */
+    public boolean isTwoPane() {
+        return mTwoPane;
+    }
+
+    // ---- Search from every screen (F1) ----
+
+    private static final int MENU_SEARCH = 1;
+
+    @Override
+    public boolean onCreateOptionsMenu(@NonNull android.view.Menu menu) {
+        android.view.MenuItem item = menu.add(android.view.Menu.NONE, MENU_SEARCH, android.view.Menu.NONE,
+            R.string.settings_search_hint);
+        item.setIcon(R.drawable.ic_symbol_search);
+        item.setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+        return true;
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(@NonNull android.view.Menu menu) {
+        android.view.MenuItem item = menu.findItem(MENU_SEARCH);
+        if (item != null) item.setVisible(showsSearchAction());
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull android.view.MenuItem item) {
+        if (item.getItemId() == MENU_SEARCH) {
+            openSearch();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    /**
+     * The toolbar's search action shows on every screen except where a search box already is:
+     * the root (its first row), the search screen itself, and every screen of the two-pane layout,
+     * whose list keeps the root's box in view.
+     */
+    boolean showsSearchAction() {
+        if (isTwoPane()) return false;
+        FragmentManager fm = getSupportFragmentManager();
+        Fragment shown = fm.findFragmentById(R.id.settings);
+        if (shown == null || shown instanceof RootPreferencesFragment || shown instanceof SettingsSearchFragment)
+            return false;
+        // An editor is a task of its own; a search from it would jump away from its edits.
+        SettingsTree.Screen screen = SettingsTree.find(shown.getClass().getName());
+        if (screen != null && screen.editor) return false;
+        if (shown instanceof SettingsUnsavedChanges && ((SettingsUnsavedChanges) shown).hasUnsavedChanges())
+            return false;
+        // With nothing to pop the FragmentManager's own Back handler is off, so an enabled one is
+        // the screen's.
+        return !(fm.getBackStackEntryCount() == 0 && getOnBackPressedDispatcher().hasEnabledCallbacks());
+    }
+
+    /**
+     * Before a jump away from the screen on show: when it holds unsaved edits, Back goes to it
+     * instead (its own handler asks to discard them) and the jump is dropped. True when it was.
+     */
+    private boolean askAboutUnsavedChanges() {
+        Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
+        if (!(shown instanceof SettingsUnsavedChanges) || !((SettingsUnsavedChanges) shown).hasUnsavedChanges())
+            return false;
+        getOnBackPressedDispatcher().onBackPressed();
+        return true;
+    }
+
+    /** Opens the search screen, its placeholder naming the section on screen. */
+    void openSearch() {
+        Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
+        SettingsTree.Section scope = shown == null ? null : SettingsTree.sectionOf(shown.getClass().getName());
+        pushScreen(SettingsSearchFragment.class, R.string.settings_search_hint, null,
+            SettingsSearchFragment.arguments(scope), SettingsMotionPolicy.Move.JUMP, null, shown);
+    }
+
+    /**
+     * A search result: its page opens in the tree (the path from its section down, so Back walks
+     * up), scrolled to the row, which rings once. Whatever was open, the search screen included,
+     * gives way to it.
+     */
+    @Override
+    public void openSearchResult(@NonNull String screenClass, @Nullable String key) {
+        List<SettingsTree.Screen> path = SettingsTree.path(screenClass);
+        if (path.isEmpty()) return;
+        hideKeyboard();
+        if (path.get(path.size() - 1).door) {
+            // A row the Appearance editor holds: the editor opens over the launcher on its card.
+            startActivity(com.termux.app.fragments.settings.termux.SettingsEditorDoors.editorIntent(
+                this, com.termux.app.fragments.settings.termux.SettingsEditorDoors.cardForSearchKey(key),
+                com.termux.app.surfaces.EditorDoor.SETTINGS_SEARCH));
+            return;
+        }
+        jumpTo(path, key);
+    }
+
+    /**
+     * Replaces whatever is open with {@code path} (a section's page down to one of its screens),
+     * the last one scrolled to {@code key}. The screen on show fades through to the last one; the
+     * screens between are pushed paired with shared-axis motion, so Back walks up the tree as if
+     * the reader had come down it. One batch: nothing in between is drawn.
+     */
+    private void jumpTo(@NonNull List<SettingsTree.Screen> path, @Nullable String key) {
+        if (askAboutUnsavedChanges()) return;
+        FragmentManager fm = getSupportFragmentManager();
+        boolean instant = SettingsMotion.isInstant(this);
+        Fragment visible = fm.findFragmentById(R.id.settings);
+        // The base stays under the new stack: paired with its first screen, it slides back in
+        // when Back reaches it.
+        Fragment out = fm.getBackStackEntryCount() == 0 ? visible : fm.findFragmentByTag(screenTag(0));
+        mPushedScreens.clear();
+        fm.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        for (int i = 0; i < path.size(); i++) {
+            SettingsTree.Screen screen = path.get(i);
+            Bundle args = null;
+            if (i == path.size() - 1 && key != null) {
+                args = new Bundle();
+                args.putString(EXTRA_SCROLL_TO_KEY, key);
+            }
+            out = pushScreen(loadScreenClass(screen.className), screen.titleRes, null, args,
+                SettingsMotionPolicy.Move.PUSH, null, out);
+        }
+        // After the pairing above, which may have given the base (when it is the visible one)
+        // a slide: the screen on show fades through.
+        if (visible != null) SettingsTransitions.leaveByJump(this, visible, instant);
+        if (out != null) SettingsTransitions.arriveByJump(this, out, instant);
+        fm.executePendingTransactions();
+    }
+
+    @SuppressWarnings("unchecked")
+    @NonNull
+    private Class<? extends Fragment> loadScreenClass(@NonNull String className) {
+        try {
+            return (Class<? extends Fragment>) getClassLoader().loadClass(className);
+        } catch (ClassNotFoundException e) {
+            // SettingsTreeTest holds every name in the tree to an existing class.
+            throw new IllegalStateException(className, e);
+        }
+    }
+
+    private void hideKeyboard() {
+        android.view.inputmethod.InputMethodManager ime = (android.view.inputmethod.InputMethodManager)
+            getSystemService(Context.INPUT_METHOD_SERVICE);
+        View focus = getCurrentFocus();
+        if (ime != null && focus != null) ime.hideSoftInputFromWindow(focus.getWindowToken(), 0);
     }
 
     private void updateTitleForCurrentStack() {
@@ -397,11 +673,20 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      */
     public void openScreen(@NonNull Class<? extends Fragment> fragmentClass, @StringRes int titleResId,
                            @Nullable Bundle args) {
-        pushScreen(fragmentClass, titleResId, null, args);
+        pushScreen(fragmentClass, titleResId, null, args, SettingsMotionPolicy.Move.PUSH, null,
+            getSupportFragmentManager().findFragmentById(R.id.settings));
     }
 
-    private void pushScreen(@NonNull Class<? extends Fragment> fragmentClass, int titleResId,
-                            @Nullable String titleText, @Nullable Bundle args) {
+    /**
+     * Pushes one screen. {@code out} is the screen it replaces (the one on show, or the previous
+     * one of a batch); {@code fromRow} the row it was opened from, when on screen. The motion is
+     * {@link SettingsMotionPolicy}'s choice for {@code move}. Returns the pushed fragment.
+     */
+    @NonNull
+    private Fragment pushScreen(@NonNull Class<? extends Fragment> fragmentClass, int titleResId,
+                                @Nullable String titleText, @Nullable Bundle args,
+                                @NonNull SettingsMotionPolicy.Move move, @Nullable View fromRow,
+                                @Nullable Fragment out) {
         String place = args == null ? null : args.getString(EXTRA_INITIAL_PLACE);
         String scrollToKey = args == null ? null : args.getString(EXTRA_SCROLL_TO_KEY);
         // A saved or external entry for an old page, scrolled to a row that moved, opens the
@@ -412,13 +697,22 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         if (args != null) fragment.setArguments(args);
         mPushedScreens.add(new SettingsBackStackState.Entry(
             className, titleResId, titleText, place, scrollToKey));
+        SettingsMotionPolicy.Kind kind = SettingsMotionPolicy.choose(move,
+            out == null ? null : out.getClass().getName(), className, fromRow != null,
+            SettingsMotion.isInstant(this));
+        // Reordering lets a batch (a jump, a restored stack) run as one move from the screen on
+        // show to the last one, skipping the screens in between.
+        androidx.fragment.app.FragmentTransaction transaction =
+            getSupportFragmentManager().beginTransaction().setReorderingAllowed(true);
+        SettingsTransitions.apply(this, kind, out, fragment, transaction, fromRow);
         // Named by its position so it always pops exactly one entry at a time, staying aligned
         // with mPushedScreens (see onBackStackChanged).
-        getSupportFragmentManager().beginTransaction()
-            .replace(R.id.settings, fragment)
+        transaction
+            .replace(R.id.settings, fragment, screenTag(mPushedScreens.size()))
             .addToBackStack(String.valueOf(mPushedScreens.size()))
             .commit();
         updateTitleForCurrentStack();
+        return fragment;
     }
 
     /**
@@ -453,17 +747,26 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 public void onFragmentViewCreated(@NonNull androidx.fragment.app.FragmentManager fm,
                                                   @NonNull Fragment fragment, @NonNull View view,
                                                   Bundle savedInstanceState) {
+                    // The toolbar's search action depends on which screen is showing.
+                    invalidateOptionsMenu();
+                    // An editor growing out of its row takes the row's transition name.
+                    SettingsTransitions.nameContainer(fragment, view);
                     if (!(fragment instanceof PreferenceFragmentCompat)) return;
                     PreferenceFragmentCompat preferenceFragment = (PreferenceFragmentCompat) fragment;
-                    if (fragment instanceof RootPreferencesFragment) {
-                        // Root rows rely on the category header hairline; a list divider here
-                        // creates the unwanted double-line seen between sections.
-                        preferenceFragment.setDivider(null);
-                        preferenceFragment.setDividerHeight(0);
-                    } else {
-                        preferenceFragment.setDivider(null);
-                        preferenceFragment.setDividerHeight(0);
-                    }
+                    // The page moves as one: the transition targets its root rather than the
+                    // rows it finds. An arriving list has no rows yet when the move captures its
+                    // views (they come with its first layout), so they escaped the fade-through
+                    // and drew at full strength over the leaving page's last rows.
+                    if (view instanceof ViewGroup) ViewGroupCompat.setTransitionGroup((ViewGroup) view, true);
+                    // Root rows rely on the category header hairline, sub-screens on theirs; a
+                    // list divider creates the unwanted double line between sections.
+                    preferenceFragment.setDivider(null);
+                    preferenceFragment.setDividerHeight(0);
+                    // Each section's rows share one rounded tonal card instead.
+                    SettingsLayoutUtils.applyGroups(preferenceFragment);
+                    // A page opened on a row (a search result, a link with a scroll key) lands on
+                    // it and rings it once.
+                    SettingsRowRing.ringIfAsked(preferenceFragment);
                 }
             }, true);
     }
@@ -511,6 +814,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 Logger.logWarn(LOG_TAG, "Refusing to open non-settings fragment: " + fragmentClassName);
                 return new RootPreferencesFragment();
             }
+            if (refusedByUseAs(fragmentClassName)) return new RootPreferencesFragment();
             Fragment fragment = getSupportFragmentManager().getFragmentFactory()
                 .instantiate(getClassLoader(), fragmentClassName);
             Bundle arguments = deepLinkArguments(getIntent());
@@ -552,11 +856,40 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      */
     @Override
     public void onBackPressed() {
+        if (SettingsMotion.isInstant(this)) cutBackMotion();
+        // With two panes a section's page is the detail's first screen, the list beside it: Back
+        // there leaves Settings rather than emptying the detail.
+        if (mTwoPane && isSectionPageAlone()) {
+            finish();
+            return;
+        }
         if (getOnBackPressedDispatcher().hasEnabledCallbacks()) {
             super.onBackPressed();
             return;
         }
         finish();
+    }
+
+    /** The screen leaving and the one coming back move with no transition. */
+    private void cutBackMotion() {
+        FragmentManager fm = getSupportFragmentManager();
+        int count = fm.getBackStackEntryCount();
+        if (count == 0) return;
+        Fragment top = fm.findFragmentById(R.id.settings);
+        if (top != null) {
+            top.setReturnTransition(null);
+            top.setSharedElementReturnTransition(null);
+        }
+        Fragment below = fm.findFragmentByTag(screenTag(count - 1));
+        if (below != null) below.setReenterTransition(null);
+    }
+
+    private boolean isSectionPageAlone() {
+        FragmentManager fm = getSupportFragmentManager();
+        if (fm.getBackStackEntryCount() != 1) return false;
+        Fragment top = fm.findFragmentById(R.id.settings);
+        SettingsTree.Screen screen = top == null ? null : SettingsTree.find(top.getClass().getName());
+        return screen != null && screen.isSectionPage();
     }
 
     @Override
@@ -579,8 +912,21 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             }
             @SuppressWarnings("unchecked")
             Class<? extends Fragment> screenClass = (Class<? extends Fragment>) fragmentClass;
+            if (mTwoPane && caller instanceof RootPreferencesFragment) {
+                // The list picks the section the detail shows: a jump across the tree, unless
+                // that section is already open on its own page.
+                Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
+                List<SettingsTree.Screen> path = SettingsTree.path(fragmentClassName);
+                boolean alreadyOpen = shown != null && isSectionPageAlone()
+                    && SettingsTree.canonical(shown.getClass().getName()).equals(SettingsTree.canonical(fragmentClassName));
+                if (!path.isEmpty() && !alreadyOpen) jumpTo(path, null);
+                return true;
+            }
             CharSequence title = preference.getTitle();
-            pushScreen(screenClass, 0, title == null ? null : title.toString(), preference.getExtras());
+            Bundle extras = preference.getExtras();
+            pushScreen(screenClass, 0, title == null ? null : title.toString(),
+                extras.isEmpty() ? null : new Bundle(extras), SettingsMotionPolicy.Move.PUSH,
+                SettingsTransitions.rowView(caller, preference), caller);
             return true;
         } catch (ClassNotFoundException e) {
             return false;
@@ -589,392 +935,60 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
 
     public static class RootPreferencesFragment extends PreferenceFragmentCompat {
 
-        /**
-         * Maps each root destination row key to the XML preference resources that are reachable
-         * underneath it (including nested sub-screens), used to build the lazily-computed child
-         * search index below.
-         */
-        private static final Map<String, int[]> CHILD_XML_RESOURCES = new HashMap<>();
-        static {
-            CHILD_XML_RESOURCES.put("wallpaper_style", new int[]{
-                R.xml.termux_style_preferences, R.xml.termux_fonts_preferences});
-            CHILD_XML_RESOURCES.put("terminal", new int[]{
-                R.xml.terminal_preferences});
-            CHILD_XML_RESOURCES.put("status_bar", new int[]{
-                R.xml.status_bar_preferences});
-            CHILD_XML_RESOURCES.put("notifications", new int[]{
-                R.xml.notifications_preferences});
-            CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
-                R.xml.termux_keyboard_preferences, R.xml.termux_keyboard_layout_preferences,
-                R.xml.termux_keyboard_size_preferences, R.xml.termux_keyboard_typing_preferences,
-                R.xml.termux_keyboard_voice_preferences, R.xml.termux_keyboard_voice_details_preferences,
-                R.xml.termux_keyboard_hardware_preferences,
-                R.xml.speech_model_preferences});
-            CHILD_XML_RESOURCES.put("display", new int[]{
-                R.xml.x11_display_preferences, R.xml.x11_display_input_preferences,
-                R.xml.x11_display_resolution_preferences, R.xml.x11_display_linux_apps_preferences,
-                R.xml.x11_display_startup_preferences, R.xml.x11_display_troubleshooting_preferences});
-            CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
-                R.xml.launcher_preferences, R.xml.launcher_dock_preferences,
-                R.xml.launcher_search_preferences, R.xml.launcher_lock_preferences,
-                R.xml.app_drawer_preferences});
-            CHILD_XML_RESOURCES.put("app_behavior", new int[]{
-                R.xml.app_behavior_preferences});
-            CHILD_XML_RESOURCES.put("backup_restore", new int[]{
-                R.xml.backup_restore_preferences});
-            CHILD_XML_RESOURCES.put("services_permissions", new int[]{
-                R.xml.services_permissions_preferences,
-                R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
-            CHILD_XML_RESOURCES.put("on_device_ai", new int[]{
-                R.xml.termux_ai_preferences, R.xml.tai_runtime_preferences, R.xml.tai_api_preferences,
-                R.xml.tai_advanced_preferences, R.xml.tai_remote_preferences});
-            CHILD_XML_RESOURCES.put("advanced_diagnostics", new int[]{
-                R.xml.advanced_diagnostics_preferences});
-            CHILD_XML_RESOURCES.put("about_support", new int[]{
-                R.xml.about_support_preferences});
-        }
-
-        /**
-         * The focused subpage that holds each XML resource's rows, so a search hit can open the
-         * page the setting is on rather than only the overview above it. A resource not listed
-         * here belongs to the destination row's own page.
-         */
-        private static final String TERMUX_PAGES = "com.termux.app.fragments.settings.termux.";
-        private static final Map<Integer, String> CHILD_XML_PAGES = new HashMap<>();
-        static {
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_layout_preferences, TERMUX_PAGES + "KeyboardLayoutPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_size_preferences, TERMUX_PAGES + "KeyboardSizePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_typing_preferences, TERMUX_PAGES + "KeyboardTypingPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_preferences, TERMUX_PAGES + "KeyboardVoicePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_details_preferences, TERMUX_PAGES + "KeyboardVoiceDetailsPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.termux_keyboard_hardware_preferences, TERMUX_PAGES + "KeyboardHardwarePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.speech_model_preferences, TERMUX_PAGES + "SpeechModelPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.launcher_dock_preferences, TERMUX_PAGES + "LauncherDockPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.launcher_search_preferences, TERMUX_PAGES + "LauncherSearchPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.launcher_lock_preferences, TERMUX_PAGES + "LauncherLockPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.app_drawer_preferences, TERMUX_PAGES + "AppDrawerPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_input_preferences, TERMUX_PAGES + "X11DisplayInputPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_resolution_preferences, TERMUX_PAGES + "X11DisplayResolutionPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_linux_apps_preferences, TERMUX_PAGES + "X11DisplayLinuxAppsPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_startup_preferences, TERMUX_PAGES + "X11DisplayStartupPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.x11_display_troubleshooting_preferences, TERMUX_PAGES + "X11DisplayTroubleshootingPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_runtime_preferences, TERMUX_PAGES + "TaiRuntimePreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_api_preferences, TERMUX_PAGES + "TaiApiPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_advanced_preferences, TERMUX_PAGES + "TaiAdvancedPreferencesFragment");
-            CHILD_XML_PAGES.put(R.xml.tai_remote_preferences, TERMUX_PAGES + "TaiRemotePreferencesFragment");
-        }
-
-        /** One indexed child preference: its display title, lowercase searchable text and page. */
-        private static final class ChildSearchEntry {
-            final String title;
-            final String searchable;
-            /** The subpage that holds it, or null when it is on the destination row's own page. */
-            @Nullable final String fragment;
-            ChildSearchEntry(String title, String searchable, @Nullable String fragment) {
-                this.title = title;
-                this.searchable = searchable;
-                this.fragment = fragment;
-            }
-        }
-
-        // Each destination row's own fragment, captured before a search may point it at a subpage.
-        private final Map<String, String> mOriginalFragments = new HashMap<>();
-
-        // Lazily built on first non-empty query; key -> indexed child preferences under it.
-        private final Map<String, List<ChildSearchEntry>> mChildSearchIndex = new HashMap<>();
-        private boolean mChildSearchIndexBuilt = false;
-
-        // Stashed original summaries for destination rows, keyed by preference key, so a
-        // "Contains: X, Y, Z" summary swapped in during a search can be restored afterwards.
-        private final Map<String, CharSequence> mOriginalSummaries = new HashMap<>();
-
-        /** The usage mode row, which is the one root row that writes a preference. */
-        private static final String KEY_USE_AS = "app_launcher_use_case_mode";
+        @Nullable private SettingsSearchResults mSearch;
 
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             Context context = getContext();
             if (context == null)
                 return;
-            // The mode row reads and writes through the launcher's store, the same path the
-            // Appearance and Launcher pages take; every other root row only navigates.
-            getPreferenceManager().setPreferenceDataStore(
-                com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment
-                    .dataStore(context));
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
-            // A build made without the X server has no display to set up.
-            Preference display = findPreference("display");
-            if (display != null && !com.termux.app.x11.X11ServerSupport.isAvailable(context)) display.setVisible(false);
             SettingsLayoutUtils.applyRootLayout(this);
-            configureUseAsRow(context);
-            configureSearch();
+            // A build made without the X server has no Linux apps to set up.
+            Preference linuxApps = findPreference(SettingsTree.Section.LINUX_APPS.rootKey);
+            if (linuxApps != null && !com.termux.app.x11.X11ServerSupport.isAvailable(context)) linuxApps.setVisible(false);
+            showHomeRow(context);
+            // Appearance is the editor itself, over the live launcher, not a page of rows.
+            Preference appearance = findPreference(SettingsTree.Section.APPEARANCE.rootKey);
+            if (appearance != null) appearance.setOnPreferenceClickListener(row -> {
+                com.termux.app.fragments.settings.termux.SettingsEditorDoors.openEditor(this, row,
+                    com.termux.app.surfaces.EditorDoor.SETTINGS_LOOK);
+                return true;
+            });
+            SettingsSearchPreference search = findPreference("settings_search");
+            // The root searches everything: no section is ranked first.
+            if (search != null) mSearch = SettingsSearchResults.attach(this, search, null);
         }
 
         @Override
         public void onResume() {
             super.onResume();
-            if (getActivity() != null) {
+            if (getActivity() instanceof SettingsActivity && !((SettingsActivity) getActivity()).isTwoPane()) {
                 getActivity().setTitle(R.string.title_activity_termux_settings);
             }
-            // A switch on a page below can have moved the surfaces off the preset.
-            refreshUseAsSummary();
+            // Use as may have moved on General since this list was built.
+            Context context = getContext();
+            if (context != null) showHomeRow(context);
+        }
+
+        /** Home's row, gone under Use as Terminal only. */
+        private void showHomeRow(@NonNull Context context) {
+            Preference home = findPreference(SettingsTree.Section.HOME.rootKey);
+            boolean shown = !homeSectionHidden(context);
+            if (home != null && home.isVisible() != shown) home.setVisible(shown);
         }
 
         @Override
-        public void onDisplayPreferenceDialog(@NonNull Preference preference) {
-            // The mode picker is the rich radio list the other pages' choices use: a bold name
-            // with its one line under it, rather than the platform's plain single-choice list.
-            if (getContext() != null && SettingsMaterialDialogs.show(getContext(), preference)) {
-                return;
-            }
-            super.onDisplayPreferenceDialog(preference);
+        public void onDestroyView() {
+            // A result opened from here replaced the root: Back returns to the root, not the search.
+            if (mSearch != null) mSearch.onViewDestroyed();
+            super.onDestroyView();
         }
 
-        /**
-         * The "Use as" row: a quiet row above the destinations, whose summary names the preset
-         * the launcher is in — or "Custom" once a switch below has moved it off one. Its picker
-         * lists the modes this build offers, each with its one-line description.
-         */
-        private void configureUseAsRow(@NonNull Context context) {
-            ListPreference row = findPreference(KEY_USE_AS);
-            if (row == null) return;
-            // A destination row carries an icon tile; this one is a setting, so it takes the
-            // plain row every page below uses, with the chevron a chooser promises.
-            row.setLayoutResource(R.layout.preference_settings_row);
-            row.setWidgetLayoutResource(R.layout.preference_widget_chevron);
-            List<String> modes = LauncherUseCaseMode.offeredModes(com.termux.app.x11.X11ServerSupport.isAvailable(context));
-            CharSequence[] entries = new CharSequence[modes.size()];
-            CharSequence[] values = new CharSequence[modes.size()];
-            for (int i = 0; i < modes.size(); i++) {
-                String mode = modes.get(i);
-                values[i] = mode;
-                // A choice with nothing to add is the bare title: no empty second line.
-                String description = context.getString(LauncherUseCaseMode.descriptionRes(mode));
-                entries[i] = description.isEmpty()
-                    ? context.getString(LauncherUseCaseMode.titleRes(mode))
-                    : context.getString(LauncherUseCaseMode.titleRes(mode)) + "\n" + description;
-            }
-            row.setEntries(entries);
-            row.setEntryValues(values);
-            row.setOnPreferenceChangeListener((preference, newValue) -> {
-                boolean terminal = LauncherUseCaseMode.MODE_TERMINAL.equals(newValue);
-                // The store applies the preset as the value lands; the summary is read back
-                // after that write, and the home-screen question is asked once the picker is down.
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                    refreshUseAsSummary();
-                    if (terminal && isDefaultHomeApp(context)) offerAnotherHomeApp(context);
-                });
-                return true;
-            });
-            refreshUseAsSummary();
+        @androidx.annotation.VisibleForTesting
+        @Nullable
+        public SettingsSearchResults searchResults() {
+            return mSearch;
         }
-
-        private void refreshUseAsSummary() {
-            ListPreference row = findPreference(KEY_USE_AS);
-            Context context = getContext();
-            if (row == null || context == null) return;
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
-                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
-                    .build(context, true);
-            if (preferences == null) return;
-            String mode = LauncherUseCaseMode.summaryMode(preferences, com.termux.app.x11.X11ServerSupport.isAvailable(context));
-            CharSequence summary = context.getString(LauncherUseCaseMode.titleRes(mode));
-            row.setSummary(summary);
-            // The search box restores this when a query is cleared, so it has to follow the mode.
-            mOriginalSummaries.put(KEY_USE_AS, summary);
-        }
-
-        /**
-         * Terminal mode was picked while this launcher is the phone's home app. Nothing is forced:
-         * the terminal keeps answering Home, and the way to another home screen is offered once.
-         */
-        private void offerAnotherHomeApp(@NonNull Context context) {
-            if (!isAdded()) return;
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.settings_use_as_still_home_title)
-                .setMessage(R.string.settings_use_as_still_home_message)
-                .setNegativeButton(R.string.settings_use_as_keep_home, null)
-                .setPositiveButton(R.string.settings_use_as_choose_home,
-                    (dialog, which) -> com.termux.app.HomeAppChooser.open(context))
-                .show();
-        }
-
-        /** Whether this package answers the phone's Home intent right now. */
-        private static boolean isDefaultHomeApp(@NonNull Context context) {
-            Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
-            android.content.pm.ResolveInfo resolved = context.getPackageManager()
-                .resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
-            return resolved != null && resolved.activityInfo != null
-                && context.getPackageName().equals(resolved.activityInfo.packageName);
-        }
-
-        private void configureSearch() {
-            SettingsSearchPreference search = findPreference("settings_search");
-            if (search == null) return;
-            stashOriginalSummaries();
-            search.setOnQueryChangedListener(query -> {
-                String needle = query.trim().toLowerCase(Locale.ROOT);
-                PreferenceScreen screen = getPreferenceScreen();
-                if (screen == null) return;
-                if (!needle.isEmpty()) {
-                    ensureChildSearchIndexBuilt();
-                }
-                for (int i = 0; i < screen.getPreferenceCount(); i++) {
-                    Preference top = screen.getPreference(i);
-                    if (top == search) continue;
-                    if (top instanceof PreferenceCategory) {
-                        PreferenceGroup category = (PreferenceGroup) top;
-                        boolean anyChildVisible = false;
-                        for (int j = 0; j < category.getPreferenceCount(); j++) {
-                            if (filterDestinationRow(category.getPreference(j), needle)) {
-                                anyChildVisible = true;
-                            }
-                        }
-                        top.setVisible(needle.isEmpty() || anyChildVisible);
-                    } else {
-                        filterDestinationRow(top, needle);
-                    }
-                }
-            });
-        }
-
-        /**
-         * Captures each row's original summary before the search box mutates it: the destination
-         * rows under their headers, and the mode row that stands above them on its own.
-         */
-        private void stashOriginalSummaries() {
-            PreferenceScreen screen = getPreferenceScreen();
-            if (screen == null) return;
-            for (int i = 0; i < screen.getPreferenceCount(); i++) {
-                Preference top = screen.getPreference(i);
-                if (top instanceof PreferenceCategory) {
-                    PreferenceGroup category = (PreferenceGroup) top;
-                    for (int j = 0; j < category.getPreferenceCount(); j++) {
-                        Preference row = category.getPreference(j);
-                        if (row.getKey() != null) {
-                            mOriginalSummaries.put(row.getKey(), row.getSummary());
-                            mOriginalFragments.put(row.getKey(), row.getFragment());
-                        }
-                    }
-                } else if (top.getKey() != null && !(top instanceof SettingsSearchPreference)) {
-                    mOriginalSummaries.put(top.getKey(), top.getSummary());
-                }
-            }
-        }
-
-        /**
-         * Shows/hides a single destination row for the given lowercase query and returns whether
-         * it should be visible. Matches on the row's own title/summary first; if that fails, falls
-         * back to the indexed child preferences reachable under it (see {@link #CHILD_XML_RESOURCES}),
-         * swapping in a "Contains: ..." summary so the match reason is visible.
-         */
-        private boolean filterDestinationRow(@NonNull Preference row, @NonNull String needle) {
-            String key = row.getKey();
-            CharSequence originalSummary = key == null ? row.getSummary() : mOriginalSummaries.get(key);
-
-            if (key != null && mOriginalFragments.containsKey(key)) {
-                row.setFragment(mOriginalFragments.get(key));
-            }
-
-            if (needle.isEmpty()) {
-                row.setSummary(originalSummary);
-                row.setVisible(true);
-                return true;
-            }
-
-            CharSequence title = row.getTitle();
-            String ownSearchable = ((title == null ? "" : title.toString()) + " "
-                + (originalSummary == null ? "" : originalSummary.toString()))
-                .toLowerCase(Locale.ROOT);
-            if (ownSearchable.contains(needle)) {
-                row.setSummary(originalSummary);
-                row.setVisible(true);
-                return true;
-            }
-
-            List<ChildSearchEntry> childEntries = key == null ? null : mChildSearchIndex.get(key);
-            if (childEntries != null) {
-                List<String> matchedTitles = new ArrayList<>();
-                boolean anyChildMatch = false;
-                // The subpage every hit lives on, when they all live on the same one.
-                java.util.Set<String> matchedPages = new java.util.HashSet<>();
-                for (ChildSearchEntry entry : childEntries) {
-                    if (entry.searchable.contains(needle)) {
-                        anyChildMatch = true;
-                        matchedPages.add(entry.fragment == null ? "" : entry.fragment);
-                        if (!entry.title.isEmpty() && matchedTitles.size() < 3) {
-                            matchedTitles.add(entry.title);
-                        }
-                    }
-                }
-                if (anyChildMatch) {
-                    if (matchedPages.size() == 1) {
-                        String page = matchedPages.iterator().next();
-                        if (!page.isEmpty()) row.setFragment(page);
-                    }
-                    row.setSummary(row.getContext().getString(R.string.settings_search_contains,
-                        TextUtils.join(", ", matchedTitles)));
-                    row.setVisible(true);
-                    return true;
-                }
-            }
-
-            row.setSummary(originalSummary);
-            row.setVisible(false);
-            return false;
-        }
-
-        /**
-         * Inflates the XML resources reachable under each destination row into a scratch
-         * {@link PreferenceScreen} and walks them to build a searchable index of child titles and
-         * summaries. Runs once, lazily, on the first non-empty search query. A fresh
-         * {@link PreferenceManager} is used per inflate (rather than this fragment's own manager)
-         * so keys in these sub-screen XMLs cannot collide with the live root screen's preferences.
-         * Each XML is inflated in its own try/catch so a single misbehaving custom Preference
-         * constructor cannot break search for the rest.
-         */
-        private void ensureChildSearchIndexBuilt() {
-            if (mChildSearchIndexBuilt) return;
-            mChildSearchIndexBuilt = true;
-            Context context = getContext();
-            if (context == null) return;
-            for (Map.Entry<String, int[]> destination : CHILD_XML_RESOURCES.entrySet()) {
-                List<ChildSearchEntry> entries = new ArrayList<>();
-                for (int xmlRes : destination.getValue()) {
-                    try {
-                        PreferenceManager scratchManager = new PreferenceManager(context);
-                        PreferenceScreen inflated = scratchManager.inflateFromResource(context, xmlRes, null);
-                        if (inflated != null) {
-                            collectChildSearchEntries(inflated, entries, CHILD_XML_PAGES.get(xmlRes));
-                        }
-                    } catch (Exception e) {
-                        // Skip this XML; search degrades gracefully instead of crashing the screen.
-                    }
-                }
-                mChildSearchIndex.put(destination.getKey(), entries);
-            }
-        }
-
-        private static void collectChildSearchEntries(@NonNull PreferenceGroup group,
-                                                       @NonNull List<ChildSearchEntry> out,
-                                                       @Nullable String page) {
-            for (int i = 0; i < group.getPreferenceCount(); i++) {
-                Preference child = group.getPreference(i);
-                // A preference hidden in the XML is not offered, so search must not find it either.
-                if (!child.isVisible()) continue;
-                CharSequence title = child.getTitle();
-                CharSequence summary = child.getSummary();
-                String titleText = title == null ? "" : title.toString();
-                String searchable = (titleText + " " + (summary == null ? "" : summary.toString()))
-                    .trim().toLowerCase(Locale.ROOT);
-                if (!searchable.isEmpty()) {
-                    out.add(new ChildSearchEntry(titleText, searchable, page));
-                }
-                if (child instanceof PreferenceGroup) {
-                    collectChildSearchEntries((PreferenceGroup) child, out, page);
-                }
-            }
-        }
-
     }
 }

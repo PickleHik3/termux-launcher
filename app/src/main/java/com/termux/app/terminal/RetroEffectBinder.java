@@ -30,6 +30,19 @@ public final class RetroEffectBinder {
     }
 
     /**
+     * A card with a screen inside it: the effect is drawn on the screen only, and the card between
+     * the two (a pane's bezel, {@link PaneBezel}) is drawn as it is.
+     */
+    public interface ScreenShape extends Shape {
+        /**
+         * Writes {@code left, top, right, bottom} of the screen, and the bottom it is laid out to
+         * (the bend's, below the drawn bottom while a travel shortens it), into {@code rect}, and
+         * returns its corner radius.
+         */
+        float screen(@NonNull View view, @NonNull float[] rect);
+    }
+
+    /**
      * The view's own bounds, square: for a container whose children clip their own shapes. The
      * effect keeps every pixel's coverage, so the corners those children cut stay cut.
      */
@@ -57,6 +70,7 @@ public final class RetroEffectBinder {
     @NonNull private final RetroUniforms mScratch = new RetroUniforms();
     @NonNull private final int[] mLocation = new int[2];
     @NonNull private final float[] mCard = new float[4];
+    @NonNull private final float[] mScreen = new float[5];
 
     /**
      * @param bend     the CRT's barrel bend: {@link PaneRetroEffect#CRT_BEND} on a pane card, 0 on
@@ -92,6 +106,7 @@ public final class RetroEffectBinder {
         PaneRetroStyle next = style == null || !PaneRetroEffect.available()
             ? PaneRetroStyle.NONE : style;
         mStyle = next;
+        if (next != PaneRetroStyle.NONE) RetroEffectPrewarm.request(next);
         mHook.setOn(next != PaneRetroStyle.NONE);
         refresh();
     }
@@ -107,6 +122,15 @@ public final class RetroEffectBinder {
      * what {@link Shape} answers. Cheap when nothing moved.
      */
     public void refresh() {
+        android.os.Trace.beginSection("Effect.retro.refresh");
+        try {
+            refreshInternal();
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
+
+    private void refreshInternal() {
         if (mStyle == PaneRetroStyle.NONE || !PaneRetroEffect.available()) {
             clear();
             return;
@@ -132,6 +156,11 @@ public final class RetroEffectBinder {
         mScratch.set(width, height, mLocation[0], mLocation[1], scaleX, scaleY,
             mView.getResources().getDisplayMetrics().density,
             mCard[0], mCard[1], mCard[2], mCard[3], radius, mBend, mVignette);
+        if (mShape instanceof ScreenShape) {
+            float screenRadius = ((ScreenShape) mShape).screen(mView, mScreen);
+            mScratch.screen(mScreen[0], mScreen[1], mScreen[2], mScreen[3], screenRadius,
+                mScreen[4]);
+        }
         if (mApplied && mOnScreenStyle == mStyle && mOnScreen.equals(mScratch)) return;
         mOnScreen.copyFrom(mScratch);
         mOnScreenStyle = mStyle;

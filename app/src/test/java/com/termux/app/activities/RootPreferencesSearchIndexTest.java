@@ -2,6 +2,7 @@ package com.termux.app.activities;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -16,6 +17,7 @@ import androidx.preference.PreferenceScreen;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.SettingsSearchPreference;
+import com.termux.app.fragments.settings.SettingsTree;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -27,27 +29,24 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
 /**
- * Phase 6 restructured the settings root into one destination per question and split the old
- * combined "Terminal & status" page in two. The root row order and keys must match that map, and
- * the lazily-built child search index (keyed by destination row, see
- * {@code SettingsActivity.RootPreferencesFragment.CHILD_XML_RESOURCES}) must cover the new
- * "terminal" and "status_bar" destinations and no longer carry the retired "terminal_status" one.
+ * The settings root by the wall's halves (settings restructure 10-19, refiled 10-24): the search
+ * box, then Your launcher (Home, Dock, Terminal, Linux apps), Everywhere (Appearance,
+ * Keyboard, Notifications, On-device AI) and System (General). Each row opens its section's page,
+ * as SettingsTree names it; Appearance opens the editor.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class RootPreferencesSearchIndexTest {
 
-    private static final String[] EXPECTED_GROUPS = {
-        "root_personalization", "root_workspace", "root_app"
-    };
+    private static final String[] EXPECTED_GROUPS = {"root_your_launcher", "root_shared", "root_system"};
     private static final String[][] EXPECTED_ROWS = {
-        {"wallpaper_style", "launcher_apps", "status_bar", "notifications"},
-        {"terminal", "keyboard_input", "display", "on_device_ai"},
-        {"app_behavior", "backup_restore", "services_permissions", "advanced_diagnostics", "about_support"}
+        {"home", "dock_drawer", "terminal", "linux_apps"},
+        {"look", "keyboard_input", "notifications", "on_device_ai"},
+        {"general"}
     };
 
-    private SettingsActivity.RootPreferencesFragment launch() {
+    static SettingsActivity.RootPreferencesFragment launch() {
         Application app = RuntimeEnvironment.getApplication();
         Intent intent = new Intent(app, SettingsActivity.class);
         ActivityController<SettingsActivity> controller =
@@ -59,119 +58,56 @@ public class RootPreferencesSearchIndexTest {
         return (SettingsActivity.RootPreferencesFragment) fragment;
     }
 
-    /** The search box, then the usage mode row on its own, then the first task group. */
     @Test
-    public void theUsageModeRowStandsAboveTheLauncherHeader() {
+    public void theRootIsSearchThenTheThreeGroupsInPlanOrder() {
         SettingsActivity.RootPreferencesFragment root = launch();
         PreferenceScreen screen = root.getPreferenceScreen();
         assertEquals("settings_search", screen.getPreference(0).getKey());
-        Preference useAs = screen.getPreference(1);
-        assertEquals("app_launcher_use_case_mode", useAs.getKey());
-        assertTrue(useAs instanceof androidx.preference.ListPreference);
-        assertEquals("a fresh install is the terminal with the home screen",
-            useAs.getContext().getString(R.string.settings_use_as_home),
-            String.valueOf(useAs.getSummary()));
-        assertTrue(screen.getPreference(2) instanceof PreferenceCategory);
-    }
-
-    @Test
-    public void searchingForModeFindsTheUsageModeRow() {
-        SettingsActivity.RootPreferencesFragment root = launch();
-        SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("mode");
-
-        assertTrue(isVisible(root, "app_launcher_use_case_mode"));
-        assertFalse("no page below carries the words", isVisible(root, "status_bar"));
-
-        search.getOnQueryChangedListener().onQueryChanged("");
-        Preference useAs = root.findPreference("app_launcher_use_case_mode");
-        assertEquals("the summary survives a cleared search",
-            useAs.getContext().getString(R.string.settings_use_as_home),
-            String.valueOf(useAs.getSummary()));
-    }
-
-    @Test
-    public void taskGroupRowsAreInTheSpecOrder() {
-        SettingsActivity.RootPreferencesFragment root = launch();
-        PreferenceScreen screen = root.getPreferenceScreen();
+        assertEquals(1 + EXPECTED_GROUPS.length, screen.getPreferenceCount());
         for (int g = 0; g < EXPECTED_GROUPS.length; g++) {
-            PreferenceCategory group = (PreferenceCategory) screen.getPreference(2 + g);
+            PreferenceCategory group = (PreferenceCategory) screen.getPreference(1 + g);
             assertEquals(EXPECTED_GROUPS[g], group.getKey());
             assertEquals(EXPECTED_ROWS[g].length, group.getPreferenceCount());
             for (int i = 0; i < EXPECTED_ROWS[g].length; i++) {
-                assertEquals("group " + g + " row " + i, EXPECTED_ROWS[g][i],
-                    group.getPreference(i).getKey());
+                assertEquals("group " + g + " row " + i, EXPECTED_ROWS[g][i], group.getPreference(i).getKey());
             }
+        }
+        assertNull("Start in is General's now", root.findPreference("app_launcher_start_in"));
+        assertNull("Display is a window of the Terminal now", root.findPreference("display"));
+    }
+
+    @Test
+    public void everySectionRowOpensTheSectionPageTheTreeNames() {
+        SettingsActivity.RootPreferencesFragment root = launch();
+        for (SettingsTree.Section section : SettingsTree.Section.values()) {
+            Preference row = findAnywhere(root.getPreferenceScreen(), section.rootKey);
+            if (SettingsTree.sectionPage(section).door) {
+                // Appearance opens the editor itself: no page to push.
+                assertNull(section.name(), row.getFragment());
+                assertTrue(section.name(), row.getOnPreferenceClickListener() != null);
+                continue;
+            }
+            assertEquals(section.name(), SettingsTree.sectionPage(section).className, row.getFragment());
         }
     }
 
     @Test
-    public void searchingASubpageSettingFindsItsDestination() {
+    public void typingInTheRootBoxSwapsTheSectionsForResultsAndClearingBringsThemBack() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("vibration");
-        assertTrue("App behavior holds the vibration switches", isVisible(root, "app_behavior"));
-        assertTrue("so does the keyboard's typing page", isVisible(root, "keyboard_input"));
-        search.getOnQueryChangedListener().onQueryChanged("dpi");
-        assertTrue("the Display resolution page is indexed", isVisible(root, "display"));
-        search.getOnQueryChangedListener().onQueryChanged("");
-        assertEquals("a cleared search restores the row's own page",
-            "com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment",
-            root.findPreference("keyboard_input").getFragment());
-        // "LAN" alone also matches the remote model's "free plan" note, a second page.
-        search.getOnQueryChangedListener().onQueryChanged("LAN access");
-        assertTrue("the Local API page is indexed under On-device AI", isVisible(root, "on_device_ai"));
-        assertEquals("a hit on one subpage opens that page",
-            "com.termux.app.fragments.settings.termux.TaiApiPreferencesFragment",
-            root.findPreference("on_device_ai").getFragment());
-        search.getOnQueryChangedListener().onQueryChanged("");
-        assertEquals("a cleared search restores the overview",
-            "com.termux.app.fragments.settings.termux.TaiPreferencesFragment",
-            root.findPreference("on_device_ai").getFragment());
-    }
-
-    @Test
-    public void searchingALazyModeTermFindsAppBehaviorNotStatusBar() {
-        SettingsActivity.RootPreferencesFragment root = launch();
-        SettingsSearchPreference search = root.findPreference("settings_search");
-        assertTrue(search.getOnQueryChangedListener() != null);
         search.getOnQueryChangedListener().onQueryChanged("lazy mode");
+        assertFalse(isVisible(root, "root_your_launcher"));
+        assertFalse(isVisible(root, "root_system"));
+        PreferenceGroup results = root.findPreference("settings_search_results");
+        assertTrue(results != null && results.isVisible() && results.getPreferenceCount() > 0);
+        assertEquals("Reduce idle activity", String.valueOf(results.getPreference(0).getTitle()));
+        assertEquals("found by its old name, on Battery & performance",
+            "General › Battery & performance", String.valueOf(results.getPreference(0).getSummary()));
 
-        assertTrue("Lazy mode lives on App behavior now", isVisible(root, "app_behavior"));
-        assertFalse("status bar page has no lazy mode row", isVisible(root, "status_bar"));
-    }
-
-    @Test
-    public void searchingAClockTermFindsTheStatusBarDestinationOnly() {
-        SettingsActivity.RootPreferencesFragment root = launch();
-        SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("12-hour");
-
-        assertTrue("status bar page contains the 12-hour clock", isVisible(root, "status_bar"));
-        assertFalse("terminal page has no clock row", isVisible(root, "terminal"));
-    }
-
-    @Test
-    public void searchingATypefaceTermFindsTheLookDestination() {
-        SettingsActivity.RootPreferencesFragment root = launch();
-        SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("typeface");
-
-        assertTrue("keyboard look moved onto the Look page, indexed under Appearance",
-            isVisible(root, "wallpaper_style"));
-    }
-
-    @Test
-    public void appearanceOpensItsSettingsPageBeforeAndAfterASearch() {
-        SettingsActivity.RootPreferencesFragment root = launch();
-        String page = com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment.class.getName();
-        assertEquals(page, findAnywhere(root.getPreferenceScreen(), "wallpaper_style").getFragment());
-
-        SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("typeface");
         search.getOnQueryChangedListener().onQueryChanged("");
-        assertEquals("a cleared search gives the row its page back",
-            page, findAnywhere(root.getPreferenceScreen(), "wallpaper_style").getFragment());
+        assertTrue(isVisible(root, "root_your_launcher"));
+        assertTrue(isVisible(root, "root_system"));
+        assertNull(root.findPreference("settings_search_results"));
     }
 
     private static boolean isVisible(SettingsActivity.RootPreferencesFragment root, String key) {
@@ -179,7 +115,7 @@ public class RootPreferencesSearchIndexTest {
         return preference != null && preference.isVisible();
     }
 
-    private static Preference findAnywhere(PreferenceGroup group, String key) {
+    static Preference findAnywhere(PreferenceGroup group, String key) {
         for (int i = 0; i < group.getPreferenceCount(); i++) {
             Preference child = group.getPreference(i);
             if (key.equals(child.getKey())) return child;

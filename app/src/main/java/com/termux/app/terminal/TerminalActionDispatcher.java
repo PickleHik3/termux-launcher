@@ -174,6 +174,11 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_SHARE_TRANSCRIPT = "terminal.share_transcript";
     public static final String TOOL_CLIPBOARD_PASTE = "clipboard.paste";
     public static final String TOOL_WINDOW_SELECT = "window.select";
+    public static final String TOOL_WINDOW_MOVE = LauncherToolRegistry.TOOL_WINDOW_MOVE;
+    public static final String TOOL_WINDOW_MOVE_LEFT = LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT;
+    public static final String TOOL_WINDOW_MOVE_RIGHT = LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT;
+    public static final String TOOL_PANE_CONSUME = LauncherToolRegistry.TOOL_PANE_CONSUME;
+    public static final String TOOL_PANE_EXPEL = LauncherToolRegistry.TOOL_PANE_EXPEL;
     public static final String TOOL_WINDOW_RENAME = "window.rename";
     public static final String TOOL_SESSION_RENAME = "session.rename";
     public static final String TOOL_SESSION_RENAME_AT_INDEX = "session.rename_at_index";
@@ -188,6 +193,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
     public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
     public static final String TOOL_VOICE_DICTATE = "voice.dictate";
+    public static final String TOOL_MINIMAL_TOGGLE = "minimal.toggle";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -370,6 +376,7 @@ public final class TerminalActionDispatcher {
             case TOOL_KEYBOARD_CLIPBOARD:
             case TOOL_KEYBOARD_TOGGLE_ENABLED:
             case TOOL_VOICE_DICTATE:
+            case TOOL_MINIMAL_TOGGLE:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -381,6 +388,11 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_SHARE_TRANSCRIPT:
             case TOOL_CLIPBOARD_PASTE:
             case TOOL_WINDOW_SELECT:
+            case TOOL_WINDOW_MOVE:
+            case TOOL_WINDOW_MOVE_LEFT:
+            case TOOL_WINDOW_MOVE_RIGHT:
+            case TOOL_PANE_CONSUME:
+            case TOOL_PANE_EXPEL:
             case TOOL_WINDOW_RENAME:
             case TOOL_SESSION_RENAME:
             case TOOL_PANE_RENAME:
@@ -758,7 +770,10 @@ public final class TerminalActionDispatcher {
                             "No window could be opened: there is no active terminal session, the"
                                 + " terminal limit is reached, or the window could never be given a size");
                     }
-                    AgentPaneRegistry.getInstance().register(opened.mHandle, "", command);
+                    // Tagged like pane.open's, so pane.list finds the window's pane again (a
+                    // Terminal=true Linux app's second tap).
+                    AgentPaneRegistry.getInstance().register(opened.mHandle,
+                        arguments.optString("tag", "").trim(), command);
                     int columns = 0, rows = 0;
                     if (opened.getEmulator() != null) {
                         columns = opened.getEmulator().mColumns;
@@ -878,7 +893,7 @@ public final class TerminalActionDispatcher {
                     // With the launcher on screen the switch is the window strip's, travel and
                     // all; stopped, there is nobody to animate for, as with pane.focus.
                     if (host.isVisible()) {
-                        host.selectWindow(index);
+                        host.selectWindow(host.rowIndexOf(index));
                     } else {
                         TerminalSession focused = controller.windowActiveSession(window);
                         if (focused != null) host.activateSessionInPanes(focused);
@@ -1141,7 +1156,11 @@ public final class TerminalActionDispatcher {
                     TermuxTerminalSessionActivityClient client = host.sessionClient();
                     if (client == null) return error(503, "unavailable", "Session client is not ready");
                     String name = arguments.optString("name", "").trim();
-                    client.addNewSession(arguments.optBoolean("failsafe", false), name.isEmpty() ? null : name);
+                    boolean failsafe = arguments.optBoolean("failsafe", false);
+                    // From Home, a Home float; a failsafe shell always gets its own session.
+                    if (!failsafe && host.openNewTerminalOnHome(name.isEmpty() ? null : name))
+                        return ok();
+                    client.addNewSession(failsafe, name.isEmpty() ? null : name);
                     return ok();
                 }
                 case TOOL_SESSION_BROWSER:
@@ -1368,6 +1387,75 @@ public final class TerminalActionDispatcher {
                     return ok().put("index", index);
                 }
 
+                case TOOL_WINDOW_MOVE:
+                case TOOL_WINDOW_MOVE_LEFT:
+                case TOOL_WINDOW_MOVE_RIGHT: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    String to = TOOL_WINDOW_MOVE_LEFT.equals(toolName) ? "left"
+                        : TOOL_WINDOW_MOVE_RIGHT.equals(toolName) ? "right"
+                        : arguments.has("to") ? arguments.optString("to", "") : null;
+                    if (to == null) return error(400, "bad_request", "Missing 'to'");
+                    int count = host.currentWindowCount();
+                    int from = host.currentWindowIndex();
+                    if (count <= 0 || from < 0 || from >= count) {
+                        return error(409, "no_window", "There is no window to move");
+                    }
+                    int target = WindowReorderPolicy.targetIndex(to, from, count);
+                    if (target == WindowReorderPolicy.INVALID) {
+                        return error(400, "bad_request", "Invalid 'to'; expected left, right, or a"
+                            + " place from 1 to " + count);
+                    }
+                    if (!host.moveWindow(from, target)) {
+                        return error(409, "no_window", "There is no window to move");
+                    }
+                    // Places counted from 1, as 'to' takes them.
+                    return ok().put("from", from + 1).put("to", target + 1);
+                }
+
+                case TOOL_PANE_CONSUME: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    int side = ColumnPolicy.side(
+                        arguments.has("from") ? arguments.optString("from", "") : null);
+                    if (side == ColumnPolicy.INVALID) {
+                        return error(400, "bad_request", "Invalid 'from'; expected left or right");
+                    }
+                    boolean fromLeft = side == ColumnPolicy.LEFT;
+                    String named = fromLeft ? "left" : "right";
+                    int source = ColumnPolicy.consumeSource(host.currentWindowIndex(),
+                        host.currentWindowCount(), fromLeft);
+                    if (source == ColumnPolicy.INVALID || !host.consumeWindow(fromLeft)) {
+                        return error(409, "no_window",
+                            "There is no window to the " + named + " to consume");
+                    }
+                    // Places counted from 1, as window.move counts them.
+                    return ok().put("from", named).put("consumed", source + 1)
+                        .put("window", host.currentWindowIndex() + 1);
+                }
+
+                case TOOL_PANE_EXPEL: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    int side = ColumnPolicy.side(
+                        arguments.has("to") ? arguments.optString("to", "") : null);
+                    if (side == ColumnPolicy.INVALID) {
+                        return error(400, "bad_request", "Invalid 'to'; expected left or right");
+                    }
+                    boolean toLeft = side == ColumnPolicy.LEFT;
+                    if (host.isDisplayWindowInFront()) {
+                        return error(409, "display_window",
+                            "The display window is in front; it has no pane to expel");
+                    }
+                    if (ColumnPolicy.expelTarget(host.currentWindowIndex(),
+                            host.currentWindowCount(), toLeft) == ColumnPolicy.INVALID) {
+                        return error(409, "no_window", "There is no window to expel a pane from");
+                    }
+                    if (!host.expelPane(toLeft)) {
+                        return error(409, "single_pane",
+                            "Expelling requires a window with more than one pane");
+                    }
+                    return ok().put("to", toLeft ? "left" : "right")
+                        .put("window", host.currentWindowIndex() + 1);
+                }
+
                 case TOOL_WINDOW_RENAME: {
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     // An explicit empty name restores the automatic tab label; only an absent key
@@ -1494,6 +1582,9 @@ public final class TerminalActionDispatcher {
                     if (viewClient == null) return error(503, "unavailable", "Terminal view client is not ready");
                     return ok().put("enabled", viewClient.toggleKeyboardTurnedOff());
                 }
+                case TOOL_MINIMAL_TOGGLE:
+                    // The corner tab's button, so Home toggles the one flag as a window does.
+                    return ok().put("minimal", host.toggleMinimalMode());
                 case TOOL_VOICE_DICTATE:
                     // Start or stop; the text waits in the dictation panel, never typed on its own.
                     return ok().put("listening", host.toggleVoiceDictation());
@@ -2063,10 +2154,13 @@ public final class TerminalActionDispatcher {
         TerminalPaneController controller = host.paneController();
         JSONObject record = new JSONObject();
         record.put("index", index);
+        // Where the window stands in the row the window chips show, which window.select and
+        // window.move count: one more than index when the display window stands before it.
+        record.put("rowIndex", host.rowIndexOf(index));
         record.put("id", window.id);
         String windowName = controller == null ? null : controller.windowName(window);
         record.put("name", windowName == null ? JSONObject.NULL : windowName);
-        record.put("current", index == host.currentWindowIndex());
+        record.put("current", host.rowIndexOf(index) == host.currentWindowIndex());
         TerminalSession focused = controller == null ? null : controller.windowActiveSession(window);
         record.put("focusedPane", focused == null ? JSONObject.NULL : focused.mHandle);
         record.put("owned", controller != null && isWindowOwned(controller, window));

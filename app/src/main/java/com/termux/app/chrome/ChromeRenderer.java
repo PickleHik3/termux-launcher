@@ -50,6 +50,21 @@ public final class ChromeRenderer {
 
         @Nullable TermuxAppSharedPreferences preferences();
 
+        /**
+         * The half of the wall whose look values the stack (the dock, its sheets and bands, the
+         * extra keys and the keyboard) wears now (ADR 0013): the half whose rows it stands.
+         */
+        @NonNull
+        default TermuxAppSharedPreferences.WallHalf stackLookHalf() {
+            return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        }
+
+        /** The half of the wall whose look values the status bar wears now (ADR 0013). */
+        @NonNull
+        default TermuxAppSharedPreferences.WallHalf statusLookHalf() {
+            return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        }
+
         /** The frames' Vibrancy: the stored glass Vibrancy, today's frame without preferences. */
         @Override
         default int glassVibrancyPercent() {
@@ -101,6 +116,15 @@ public final class ChromeRenderer {
          * Transparent when the slider is at 0. Read, never changed: the slider is the user's.
          */
         default int wallpaperDimColor() {
+            return android.graphics.Color.TRANSPARENT;
+        }
+
+        /**
+         * The wallpaper as the system describes it ({@link WallpaperInk#hintColor}), for the ink
+         * to assume until a sample is read; transparent when the launcher shows its own picture
+         * or the system says nothing. Read, never changed.
+         */
+        default int wallpaperHintColor() {
             return android.graphics.Color.TRANSPARENT;
         }
 

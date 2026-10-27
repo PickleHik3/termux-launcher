@@ -32,10 +32,12 @@ final class CommandPaletteStrip {
 
     /**
      * Tools the strip never offers. A "search" chip under a search box reads as the box itself;
-     * scrollback search stays one query away in the palette.
+     * scrollback search stays one query away in the palette. Home's jump rows name a window by
+     * its index or id, which no longer means the same window by the next show.
      */
-    static final Set<String> EXCLUDED_TOOLS =
-        Collections.singleton(LauncherToolRegistry.TOOL_TERMINAL_SEARCH_SCROLLBACK);
+    static final Set<String> EXCLUDED_TOOLS = Collections.unmodifiableSet(new HashSet<>(
+        java.util.Arrays.asList(LauncherToolRegistry.TOOL_TERMINAL_SEARCH_SCROLLBACK,
+            LauncherToolRegistry.TOOL_WINDOW_SELECT, CommandPaletteHomeSet.TOOL_RESTORE_FLOAT)));
 
     /** Longest argument value used as a chip label as it stands; anything longer uses the title. */
     private static final int MAX_VALUE_LABEL = 12;

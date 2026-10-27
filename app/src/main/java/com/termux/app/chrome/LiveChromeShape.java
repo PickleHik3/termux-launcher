@@ -86,9 +86,21 @@ public final class LiveChromeShape {
         public final float topRight;
         public final float bottomRight;
         public final float bottomLeft;
+        /**
+         * Whether the outline draws each corner at its own radius (a path) rather than all at the
+         * largest: only a clip a screen corner raised asks for it ({@link #atLeast}).
+         */
+        public final boolean perCorner;
 
         Clip(int reachLeft, int reachTop, int reachRight, int reachBottom, float topLeft,
              float topRight, float bottomRight, float bottomLeft) {
+            this(reachLeft, reachTop, reachRight, reachBottom, topLeft, topRight, bottomRight,
+                bottomLeft, false);
+        }
+
+        Clip(int reachLeft, int reachTop, int reachRight, int reachBottom, float topLeft,
+             float topRight, float bottomRight, float bottomLeft, boolean perCorner) {
+            this.perCorner = perCorner;
             this.reachLeft = reachLeft;
             this.reachTop = reachTop;
             this.reachRight = reachRight;
@@ -106,6 +118,22 @@ public final class LiveChromeShape {
     public static Clip cardClip(float radiusPx) {
         float r = Math.max(0f, radiusPx);
         return new Clip(0, 0, 0, 0, r, r, r, r);
+    }
+
+    /**
+     * {@code clip} with its top and bottom corners rounded at least to {@code topPx} and
+     * {@code bottomPx}: a screen corner it stands in (FullScreenCornerPolicy). The same clip
+     * when neither asks for more.
+     */
+    @NonNull
+    public static Clip atLeast(@NonNull Clip clip, float topPx, float bottomPx) {
+        float t = Math.max(0f, topPx);
+        float b = Math.max(0f, bottomPx);
+        if (clip.topLeft >= t && clip.topRight >= t && clip.bottomLeft >= b
+            && clip.bottomRight >= b) return clip;
+        return new Clip(clip.reachLeft, clip.reachTop, clip.reachRight, clip.reachBottom,
+            Math.max(clip.topLeft, t), Math.max(clip.topRight, t),
+            Math.max(clip.bottomRight, b), Math.max(clip.bottomLeft, b), true);
     }
 
     /**

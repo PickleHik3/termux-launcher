@@ -1,9 +1,11 @@
 package com.termux.app.launcher.drawer;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
+import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewParent;
 import android.widget.ScrollView;
@@ -11,6 +13,7 @@ import android.widget.ScrollView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.launcher.notifications.NotificationSwipePolicy;
 
 /**
@@ -27,6 +30,12 @@ import com.termux.app.launcher.notifications.NotificationSwipePolicy;
  * {@code onInterceptTouchEvent}: a sideways drag that starts on an icon is consumed by that child
  * and never reaches either of those, and the rail would only ever see the vertical drags it
  * already scrolls with.
+ *
+ * <p>Standing as a rail ({@link #setRailSlotLengthPx}), it holds every pin in one column and
+ * stands as many whole slots long as its band holds ({@link DockLayoutPolicy#railFit}); the rest
+ * scroll. It draws nothing past its own bounds there, so a column longer than the band can never
+ * run on through the side stack's padding to stand under the dock's glass. The same view hosts a
+ * row lying along the top edge, where it is neither shortened nor clipped.
  */
 public final class DockRailScrollView extends ScrollView {
 
@@ -61,6 +70,14 @@ public final class DockRailScrollView extends ScrollView {
         boolean isBadgedIconAt(float rawX, float rawY);
     }
 
+    /**
+     * The column this scroll carries, told when the scroll has moved it: a rail's page ticks follow
+     * its scroll rather than a page turn.
+     */
+    public interface ScrollFollower {
+        void onRailScrolled();
+    }
+
     @Nullable private DrawerPullListener mListener;
     @Nullable private QuickReplyProbe mQuickReplyProbe;
     private boolean mQuickReplyHoldsPull;
@@ -70,6 +87,8 @@ public final class DockRailScrollView extends ScrollView {
     @Nullable private VelocityTracker mVelocityTracker;
     private final float mSlopPx;
     private float mDownRawX;
+    /** One rail slot's pitch while this stands as a rail; 0 for a row lying down. */
+    private int mRailSlotLengthPx;
 
     public DockRailScrollView(@NonNull Context context) {
         this(context, null);
@@ -86,6 +105,64 @@ public final class DockRailScrollView extends ScrollView {
 
     public void setQuickReplyProbe(@Nullable QuickReplyProbe probe) {
         mQuickReplyProbe = probe;
+    }
+
+    /**
+     * Stands this as a rail whose slots are {@code slotLengthPx} long, or as a row lying down with
+     * 0. Never called from a layout pass; a pitch that did not change asks for nothing.
+     */
+    public void setRailSlotLengthPx(int slotLengthPx) {
+        int slot = Math.max(0, slotLengthPx);
+        if (slot == mRailSlotLengthPx) return;
+        mRailSlotLengthPx = slot;
+        requestLayout();
+        invalidate();
+    }
+
+    public int getRailSlotLengthPx() {
+        return mRailSlotLengthPx;
+    }
+
+    /**
+     * A rail longer than its band stands only the whole slots the band holds, so none is cut at
+     * rest; one that fits keeps the band, as a row always does. The measured length is the
+     * policy's answer, applied here rather than as a layout param so nothing asks for a layout.
+     */
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (mRailSlotLengthPx <= 0 || getChildCount() == 0) return;
+        int padding = getPaddingTop() + getPaddingBottom();
+        int band = getMeasuredHeight() - padding;
+        DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(band,
+            getChildAt(0).getMeasuredHeight(), mRailSlotLengthPx);
+        int height = fit.viewportLengthPx + padding;
+        if (height != getMeasuredHeight()) setMeasuredDimension(getMeasuredWidthAndState(), height);
+    }
+
+    @Override
+    protected void onScrollChanged(int l, int t, int oldl, int oldt) {
+        super.onScrollChanged(l, t, oldl, oldt);
+        if (t == oldt || getChildCount() == 0) return;
+        View column = getChildAt(0);
+        if (column instanceof ScrollFollower) ((ScrollFollower) column).onRailScrolled();
+    }
+
+    /**
+     * A rail clips its column to its own bounds — the slots' air at each end included — so what
+     * scrolls out of it is gone rather than drawn on through the padding around it.
+     */
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (mRailSlotLengthPx <= 0) {
+            super.dispatchDraw(canvas);
+            return;
+        }
+        int save = canvas.save();
+        canvas.clipRect(getScrollX(), getScrollY(), getScrollX() + getWidth(),
+            getScrollY() + getHeight());
+        super.dispatchDraw(canvas);
+        canvas.restoreToCount(save);
     }
 
     @Override

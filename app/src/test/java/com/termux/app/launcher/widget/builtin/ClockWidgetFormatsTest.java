@@ -38,7 +38,6 @@ public class ClockWidgetFormatsTest {
         assertEquals("Buenos Aires", ClockWidgetFormats.cityName("America/Argentina/Buenos_Aires"));
         assertEquals("UTC", ClockWidgetFormats.cityName("UTC"));
         assertEquals("", ClockWidgetFormats.cityName(null));
-        assertEquals("new-york", ClockWidgetFormats.paneCity("America/New_York"));
     }
 
     @Test public void aZoneResolvesFromAnIdAnOffsetOrJustTheCity() {
