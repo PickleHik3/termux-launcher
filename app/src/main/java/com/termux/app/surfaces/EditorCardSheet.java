@@ -289,7 +289,7 @@ final class EditorCardSheet {
         headerRow.addView(mEye, headerButtonParams(1));
         bindHeaderDrag();
 
-        mScroll = new ScrollView(context);
+        mScroll = new SheetScrollView(context);
         mScroll.setClipToPadding(false);
         mScroll.setVerticalScrollBarEnabled(true);
         mColumn.addView(mScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -720,6 +720,131 @@ final class EditorCardSheet {
         if (detent == DETENT_PEEK) return DETENT_HALF;
         if (detent == DETENT_HALF) return DETENT_FULL;
         return DETENT_PEEK;
+    }
+
+    // ---------------------------------------------------------------------------- content drag
+
+    /**
+     * The card's content, which hands a clearly vertical drag to the sheet the way a standard
+     * bottom sheet does: up while the sheet is below its full detent, and down while the content
+     * stands at its top and the sheet is above peek. The claimed drag moves the sheet by the
+     * header's maths and lands by {@link #releaseDetent}, so a tab drag and a content drag stop
+     * at the same detents. Any other drag, and every tap, is the ScrollView's own; a horizontal
+     * drag (sliders, strips) is never claimed.
+     */
+    private final class SheetScrollView extends ScrollView {
+        private final int mSlop;
+        private final float mFlingPxPerS;
+        private float mDownX;
+        private float mDownY;
+        private float mStartTranslation;
+        private boolean mClaimed;
+        @Nullable private VelocityTracker mTracker;
+
+        SheetScrollView(@NonNull Context context) {
+            super(context);
+            ViewConfiguration config = ViewConfiguration.get(context);
+            mSlop = config.getScaledTouchSlop();
+            mFlingPxPerS = config.getScaledMinimumFlingVelocity() * 4f;
+        }
+
+        private boolean wants(float dy) {
+            if (!mShown || mFullPx <= 0)
+                return false;
+            if (dy < 0)
+                return mDetent != DETENT_FULL;
+            return mDetent != DETENT_PEEK && !canScrollVertically(-1);
+        }
+
+        private void end() {
+            mClaimed = false;
+            if (mTracker != null) {
+                mTracker.recycle();
+                mTracker = null;
+            }
+        }
+
+        private void follow(@NonNull MotionEvent event) {
+            mSheet.setTranslationY(Math.max(0f, Math.min(translationFor(DETENT_PEEK),
+                mStartTranslation + event.getRawY() - mDownY)));
+            mListener.onSheetMoved(mDetent, sheetTopPx());
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent event) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    end();
+                    mDownX = event.getRawX();
+                    mDownY = event.getRawY();
+                    mTracker = VelocityTracker.obtain();
+                    trackRaw(mTracker, event);
+                    break;
+                case MotionEvent.ACTION_MOVE: {
+                    if (mClaimed)
+                        return true;
+                    if (mTracker == null)
+                        break;
+                    trackRaw(mTracker, event);
+                    float dy = event.getRawY() - mDownY;
+                    float dx = event.getRawX() - mDownX;
+                    if (Math.abs(dy) > mSlop && Math.abs(dy) > Math.abs(dx) && wants(dy)) {
+                        mClaimed = true;
+                        mDragging = true;
+                        mSheet.animate().cancel();
+                        // The slop is not spent: the sheet takes the finger from here.
+                        mStartTranslation = mSheet.getTranslationY();
+                        mDownY = event.getRawY();
+                        if (getParent() != null)
+                            getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    }
+                    break;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (!mClaimed)
+                        end();
+                    break;
+                default:
+                    break;
+            }
+            return super.onInterceptTouchEvent(event);
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            if (!mClaimed)
+                return super.onTouchEvent(event);
+            if (mTracker != null)
+                trackRaw(mTracker, event);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_MOVE:
+                    follow(event);
+                    break;
+                case MotionEvent.ACTION_UP: {
+                    mDragging = false;
+                    float velocity = 0f;
+                    if (mTracker != null) {
+                        mTracker.computeCurrentVelocity(1000);
+                        velocity = mTracker.getYVelocity();
+                    }
+                    end();
+                    settle(releaseDetent(mSheet.getTranslationY(), translationFor(DETENT_HALF),
+                        translationFor(DETENT_PEEK), velocity, mFlingPxPerS), true);
+                    break;
+                }
+                case MotionEvent.ACTION_CANCEL:
+                    mDragging = false;
+                    end();
+                    settle(mDetent, true);
+                    break;
+                default:
+                    break;
+            }
+            return true;
+        }
     }
 
     // ------------------------------------------------------------------------------------ rows
