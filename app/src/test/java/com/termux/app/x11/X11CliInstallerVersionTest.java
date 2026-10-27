@@ -16,7 +16,7 @@ import java.security.MessageDigest;
  */
 public class X11CliInstallerVersionTest {
 
-    private static final int VERSION_OF_THESE_ASSETS = 21;
+    private static final int VERSION_OF_THESE_ASSETS = 22;
     private static final String GPU_SETUP_SHA256 =
         "b2199bc57990082b7ead929984247dc4d2a8b335071c09dc40e497a7ff90b240";
     private static final String IM_FOCUS_SHA256 =

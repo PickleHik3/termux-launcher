@@ -46,7 +46,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 21;
+    @VisibleForTesting static final int VERSION = 22;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -447,10 +447,12 @@ public final class X11CliInstaller {
             // by the user from inside the environment. On nix those are two different shells.
             File prefixDir = binDir.getParentFile();
             boolean nix = prefixDir != null && NixProfile.isNix(prefixDir);
+            String appProcess = appProcessPath(android.os.Process.is64Bit(),
+                path -> new File(path).exists());
             writeAtomically(serverScript(),
-                bytes(serverScript(applicationId, hostShellPath(), nix)), true, true);
+                bytes(serverScript(applicationId, hostShellPath(), nix, appProcess)), true, true);
             writeAtomically(preferenceScript(),
-                bytes(preferenceScript(applicationId, prefixShellPath())), true, true);
+                bytes(preferenceScript(applicationId, prefixShellPath(), appProcess)), true, true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
             writeAtomically(imFocusScript(), bytes(withPrefixShebang(readText(IM_FOCUS_ASSET))), true, true);
             writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
@@ -650,6 +652,26 @@ public final class X11CliInstaller {
     @NonNull
     static String serverScript(@NonNull String applicationId, @NonNull String shell,
                                boolean nixFontPath) {
+        return serverScript(applicationId, shell, nixFontPath, APP_PROCESS);
+    }
+
+    static final String APP_PROCESS = "/system/bin/app_process";
+    static final String APP_PROCESS_32 = "/system/bin/app_process32";
+
+    /**
+     * The zygote binary the loader runs under. It must be the launcher's own bitness: a 32-bit
+     * install on a 64-bit phone only carries 32-bit libraries, and {@code app_process} there is
+     * the 64-bit binary, which cannot load them.
+     */
+    @NonNull
+    static String appProcessPath(boolean launcherIs64Bit,
+                                 @NonNull java.util.function.Predicate<String> exists) {
+        return !launcherIs64Bit && exists.test(APP_PROCESS_32) ? APP_PROCESS_32 : APP_PROCESS;
+    }
+
+    @NonNull
+    static String serverScript(@NonNull String applicationId, @NonNull String shell,
+                               boolean nixFontPath, @NonNull String appProcess) {
         return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/getprop ] || [ ! -e /system/bin/app_process ]; then\n"
@@ -675,7 +697,7 @@ public final class X11CliInstaller {
             // either way (no handler, no notification), so only the complaint is silenced.
             + "[ -n \"$(trap -p USR1 2>/dev/null)\" ] && export TERMUX_X11_NOTIFY_PARENT=1\n"
             + (nixFontPath ? nixFontPathBlock(applicationId) : "")
-            + "exec /system/bin/app_process -Xnoimage-dex2oat / "
+            + "exec " + appProcess + " -Xnoimage-dex2oat / "
             + "--nice-name=\"" + (nixFontPath ? "$TERMUX_X11_NICE_NAME"
                 : "termux-x11 " + applicationId + " $*")
             + "\" com.termux.x11.Loader \"$@\"\n";
@@ -776,6 +798,12 @@ public final class X11CliInstaller {
     /** {@link #preferenceScript(String)} with the shell spelled out; see the server script's. */
     @NonNull
     static String preferenceScript(@NonNull String applicationId, @NonNull String shell) {
+        return preferenceScript(applicationId, shell, APP_PROCESS);
+    }
+
+    @NonNull
+    static String preferenceScript(@NonNull String applicationId, @NonNull String shell,
+                                   @NonNull String appProcess) {
         return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/app_process ]; then\n"
@@ -790,7 +818,7 @@ public final class X11CliInstaller {
             + "export CLASSPATH=" + LOADER_PATH + "\n"
             + "export TERMUX_X11_LOADER_OVERRIDE_CMDENTRYPOINT_CLASS="
             + "com.termux.x11.LoriePreferences\\$Receiver\n"
-            + "exec /system/bin/app_process -Xnoimage-dex2oat / com.termux.x11.Loader \"$@\"\n";
+            + "exec " + appProcess + " -Xnoimage-dex2oat / com.termux.x11.Loader \"$@\"\n";
     }
 
     /**

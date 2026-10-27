@@ -359,7 +359,27 @@ public final class GuiAppsSetup {
     public static String command(@NonNull Route route, @NonNull Distro distro,
                                  @NonNull Set<StarterApp> starters, @NonNull TourEdition edition) {
         return route == Route.X11_REPO
-            ? x11Command(starters, edition) : distroCommand(distro, starters);
+            ? x11Command(starters, edition) + " && " + markerStep(route, distro)
+            : distroCommand(distro, starters);
+    }
+
+    /** Where the command's last step records that it finished (Termux side, outside the container). */
+    public static final String MARKER_DIR = "$PREFIX/var/lib/termux-launcher";
+    public static final String MARKER_FILE_NAME = "gui-apps-setup";
+
+    /** The marker file as the app sees it. */
+    @NonNull
+    public static java.io.File markerFile() {
+        return new java.io.File(
+            com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH
+                + "/var/lib/termux-launcher/" + MARKER_FILE_NAME);
+    }
+
+    /** The last step: runs only when everything before it succeeded; the file holds route and distro. */
+    @NonNull
+    static String markerStep(@NonNull Route route, @NonNull Distro distro) {
+        return "mkdir -p \"" + MARKER_DIR + "\" && printf '%s\\n' '" + (route == Route.DISTRO ? route.key + " " + distro.alias : route.key)
+            + "' > \"" + MARKER_DIR + "/" + MARKER_FILE_NAME + "\"";
     }
 
     /**
@@ -464,6 +484,7 @@ public final class GuiAppsSetup {
             .append(singleQuote(insideScript(distro, starters))).append('\n');
         // Written after the login returns, so the file only ever names an account that exists.
         out.append("printf '%s\\n' \"$LUSER\" > \"").append(recordPath(distro)).append("\"\n");
+        out.append(markerStep(Route.DISTRO, distro)).append('\n');
         out.append("printf '%s\\n' ").append(singleQuote(DONE_LINE)).append('\n');
         out.append(')');
         return out.toString();

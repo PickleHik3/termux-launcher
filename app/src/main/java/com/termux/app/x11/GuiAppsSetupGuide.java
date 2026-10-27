@@ -26,7 +26,10 @@ public final class GuiAppsSetupGuide {
     public static final String KEY_ROUTE = "gui_apps_route";
     public static final String KEY_DISTRO = "gui_apps_distro";
     public static final String KEY_STARTER_PREFIX = "gui_apps_starter_";
-    /** Set once the command has been copied: what the Linux apps row means by "set up". */
+    /**
+     * Set once the command has been copied: only "the command is in hand". "Set up" means the
+     * command's done marker ({@link GuiAppsSetup#markerFile()}) exists.
+     */
     public static final String KEY_COPIED = "gui_apps_setup_copied";
 
     private GuiAppsSetupGuide() {}
@@ -36,16 +39,50 @@ public final class GuiAppsSetupGuide {
         () -> new java.io.File(X11CliInstaller.FCITX5_PATH).exists();
     public static java.util.function.BooleanSupplier fcitx5Installed = FCITX5_ON_DISK;
 
+    /** Whether the command's done marker is on disk. Tests replace it. */
+    public static final java.util.function.BooleanSupplier MARKER_ON_DISK =
+        () -> GuiAppsSetup.markerFile().exists();
+    public static java.util.function.BooleanSupplier markerPresent = MARKER_ON_DISK;
+
+    /** Whether the distro's root filesystem exists, for migrating pre-marker installs. Tests replace it. */
+    public static final java.util.function.Predicate<GuiAppsSetup.Distro> ROOTFS_ON_DISK =
+        d -> new java.io.File(com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH
+            + "/var/lib/proot-distro/installed-rootfs/" + d.alias).isDirectory();
+    public static java.util.function.Predicate<GuiAppsSetup.Distro> rootfsInstalled = ROOTFS_ON_DISK;
+
     /**
-     * Whether Linux apps are set up as far as fcitx5-backed features care: the guide's command was
-     * copied (the same fact the Linux apps row's "Not set up yet" reads) and fcitx5 is installed.
+     * Whether the setup command finished: its marker exists. An install from before the marker
+     * (command copied, fcitx5 installed, and the chosen distro's rootfs present on the distro
+     * route) is taken as finished once, and gets its marker written then.
+     */
+    public static boolean finished(@NonNull SharedPreferences prefs, @NonNull TourEdition edition) {
+        if (markerPresent.getAsBoolean()) return true;
+        if (!prefs.getBoolean(KEY_COPIED, false) || !fcitx5Installed.getAsBoolean()) return false;
+        Choices choices = read(prefs, edition);
+        if (choices.route == GuiAppsSetup.Route.DISTRO && !rootfsInstalled.test(choices.distro)) return false;
+        try {
+            java.io.File file = GuiAppsSetup.markerFile();
+            if (file.getParentFile().mkdirs() || file.getParentFile().isDirectory()) {
+                java.nio.file.Files.write(file.toPath(),
+                    (choices.route.key + " " + choices.distro.alias + "\n")
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        } catch (java.io.IOException | RuntimeException ignored) {
+            // Best effort: the answer is still yes this time.
+        }
+        return true;
+    }
+
+    /**
+     * Whether Linux apps are set up as far as fcitx5-backed features care: the guide's command finished
+     * (its done marker exists, the fact the Linux apps row reads) and fcitx5 is installed.
      * A stray fcitx5 left in the prefix alone does not count. An edition with no guide (nix) has nothing to wait
      * for, so it counts as set up.
      */
     public static boolean isSetUp(@NonNull Context context) {
         TourEdition edition = TourEdition.of(context.getPackageName());
         if (GuiAppsSetup.routesFor(edition).isEmpty()) return true;
-        return preferences(context).getBoolean(KEY_COPIED, false) && fcitx5Installed.getAsBoolean();
+        return finished(preferences(context), edition) && fcitx5Installed.getAsBoolean();
     }
 
     /** One screen of the guide. */
@@ -152,7 +189,7 @@ public final class GuiAppsSetupGuide {
 
     /**
      * The Linux apps row's summary: "Debian with a browser and a file manager" once the command has
-     * been copied, "Not set up yet" until then.
+     * finished, "Command copied" until it has, "Not set up yet" before the copy.
      */
     @NonNull
     public static String rowSummary(@NonNull Context context, @NonNull SharedPreferences prefs,
@@ -160,8 +197,9 @@ public final class GuiAppsSetupGuide {
         if (GuiAppsSetup.routesFor(edition).isEmpty()) {
             return context.getString(R.string.settings_gui_apps_row_summary_nix);
         }
-        if (!prefs.getBoolean(KEY_COPIED, false)) {
-            return context.getString(R.string.settings_gui_apps_row_summary);
+        if (!finished(prefs, edition)) {
+            return context.getString(prefs.getBoolean(KEY_COPIED, false)
+                ? R.string.settings_gui_apps_row_summary_copied : R.string.settings_gui_apps_row_summary);
         }
         Choices choices = read(prefs, edition);
         String name = systemName(context, choices);

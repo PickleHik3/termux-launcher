@@ -165,6 +165,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private boolean mWatchMoved;
     private boolean mWatchIsDisplays;
     private boolean mRunning;
+    /** Why the last Start died before a display connected; null until one does, and after Start. */
+    @Nullable private String mStartFailure;
     /** True while the wall is showing this place; the place it has left is INVISIBLE. */
     private boolean mPageOnScreen = true;
     /** The Linux display setting. Off, the page is still a place — it just says so. */
@@ -253,6 +255,10 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         });
         View guide = findViewById(R.id.x11_pane_guide);
         if (guide != null) guide.setOnClickListener(v -> openKeyboardDataGuide());
+        View support = findViewById(R.id.x11_pane_support);
+        if (support != null) support.setOnClickListener(v -> {
+            if (mHost != null) mHost.openDisplaySettings();
+        });
         View install = findViewById(R.id.x11_pane_install);
         if (install != null) install.setOnClickListener(v -> installKeyboardData());
         View setup = findViewById(R.id.x11_pane_setup);
@@ -725,17 +731,35 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     }
 
     /**
+     * Say why the last Start ended before a display connected, in place of "No display is
+     * running"; null clears it (the next Start, or a display that connected).
+     */
+    public void setStartFailure(@Nullable String reason) {
+        mStartFailure = reason;
+        if (!mRunning) applyEmptyState();
+    }
+
+    /**
      * Apply {@link DisplayEmptyStatePolicy}'s answer to the message and the start control. The
      * probe behind it is disk I/O, so this must only ever run off a user arrival or a
      * running-state change — never a hot path.
      */
     private void applyEmptyState() {
         DisplayEmptyStatePolicy.State state = DisplayEmptyStatePolicy.decide(mEnabled,
-            X11CliInstaller.hasKeyboardData(), TourEdition.of(getContext().getPackageName()));
+            X11CliInstaller.hasKeyboardData(), TourEdition.of(getContext().getPackageName()),
+            mStartFailure);
         View message = findViewById(R.id.x11_pane_empty_message);
         if (message instanceof android.widget.TextView) {
-            ((android.widget.TextView) message).setText(state.messageRes);
+            if (state.failed()) {
+                ((android.widget.TextView) message).setText(
+                    getContext().getString(R.string.termux_x11_start_failed) + "\n"
+                        + state.failureReason);
+            } else {
+                ((android.widget.TextView) message).setText(state.messageRes);
+            }
         }
+        View support = findViewById(R.id.x11_pane_support);
+        if (support != null) support.setVisibility(state.failed() ? VISIBLE : GONE);
         View start = findViewById(R.id.x11_pane_start);
         if (start instanceof android.widget.TextView) {
             ((android.widget.TextView) start).setText(mEnabled
