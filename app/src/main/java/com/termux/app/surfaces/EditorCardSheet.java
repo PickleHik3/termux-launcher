@@ -770,6 +770,32 @@ final class EditorCardSheet {
             mListener.onSheetMoved(mDetent, sheetTopPx());
         }
 
+        /**
+         * Takes the finger for the sheet when it moved far enough, mostly vertically, and the
+         * sheet can use it. Run from the intercept and, when no child took the touch (a label,
+         * a gap: the scroll view is then the target and is never asked to intercept), from
+         * {@link #onTouchEvent}.
+         */
+        private boolean claim(@NonNull MotionEvent event) {
+            if (mTracker == null)
+                return false;
+            trackRaw(mTracker, event);
+            float dy = event.getRawY() - mDownY;
+            float dx = event.getRawX() - mDownX;
+            if (Math.abs(dy) > mSlop && Math.abs(dy) > Math.abs(dx) && wants(dy)) {
+                mClaimed = true;
+                mDragging = true;
+                mSheet.animate().cancel();
+                // The slop is not spent: the sheet takes the finger from here.
+                mStartTranslation = mSheet.getTranslationY();
+                mDownY = event.getRawY();
+                if (getParent() != null)
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                return true;
+            }
+            return false;
+        }
+
         @Override
         public boolean onInterceptTouchEvent(MotionEvent event) {
             switch (event.getActionMasked()) {
@@ -780,27 +806,10 @@ final class EditorCardSheet {
                     mTracker = VelocityTracker.obtain();
                     trackRaw(mTracker, event);
                     break;
-                case MotionEvent.ACTION_MOVE: {
-                    if (mClaimed)
+                case MotionEvent.ACTION_MOVE:
+                    if (mClaimed || claim(event))
                         return true;
-                    if (mTracker == null)
-                        break;
-                    trackRaw(mTracker, event);
-                    float dy = event.getRawY() - mDownY;
-                    float dx = event.getRawX() - mDownX;
-                    if (Math.abs(dy) > mSlop && Math.abs(dy) > Math.abs(dx) && wants(dy)) {
-                        mClaimed = true;
-                        mDragging = true;
-                        mSheet.animate().cancel();
-                        // The slop is not spent: the sheet takes the finger from here.
-                        mStartTranslation = mSheet.getTranslationY();
-                        mDownY = event.getRawY();
-                        if (getParent() != null)
-                            getParent().requestDisallowInterceptTouchEvent(true);
-                        return true;
-                    }
                     break;
-                }
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     if (!mClaimed)
@@ -815,8 +824,14 @@ final class EditorCardSheet {
         @SuppressLint("ClickableViewAccessibility")
         @Override
         public boolean onTouchEvent(MotionEvent event) {
-            if (!mClaimed)
+            if (!mClaimed) {
+                if (event.getActionMasked() == MotionEvent.ACTION_MOVE && claim(event))
+                    return true;
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+                    end();
                 return super.onTouchEvent(event);
+            }
             if (mTracker != null)
                 trackRaw(mTracker, event);
             switch (event.getActionMasked()) {
