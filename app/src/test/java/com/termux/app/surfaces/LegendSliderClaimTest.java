@@ -51,4 +51,14 @@ public class LegendSliderClaimTest {
         assertFalse(LegendSlider.onHandle(125f, 100f, 24f));
         assertFalse(LegendSlider.onHandle(70f, 100f, 24f));
     }
+
+    @Test
+    public void aTouchOnTheTrackBandIsOnTheTrackAndBesideItIsNot() {
+        float pad = 12f;
+        assertEquals(true, LegendSlider.onTrack(105f, 100f, 16f, pad));
+        assertEquals(true, LegendSlider.onTrack(90f, 100f, 16f, pad));
+        assertEquals(true, LegendSlider.onTrack(127f, 100f, 16f, pad));
+        assertEquals(false, LegendSlider.onTrack(86f, 100f, 16f, pad));
+        assertEquals(false, LegendSlider.onTrack(130f, 100f, 16f, pad));
+    }
 }

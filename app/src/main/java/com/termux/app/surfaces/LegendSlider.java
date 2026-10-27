@@ -147,6 +147,8 @@ public final class LegendSlider extends View {
     private final float mHandleTouchHalfPx;
     /** A touch on the handle drags at once ({@link #setHandleGrabs}). */
     private boolean mHandleGrabs = true;
+    /** A touch anywhere on the track's band drags at once ({@link #setTrackGrabs}). */
+    private boolean mTrackGrabs;
     private final Runnable mHoldClaim = () -> {
         if (mClaimPending)
             claimGesture(mLastY);
@@ -200,6 +202,23 @@ public final class LegendSlider extends View {
      */
     public void setHandleGrabs(boolean grabs) {
         mHandleGrabs = grabs;
+    }
+
+    /**
+     * Whether a touch that lands on the track's band (the track and a finger's width either side)
+     * drags at once, at any height. The glass strips ask for it (decided 2026-10-27): a vertical
+     * swipe on a slider moves the slider, and the card scrolls from everywhere off the tracks.
+     */
+    public void setTrackGrabs(boolean grabs) {
+        mTrackGrabs = grabs;
+    }
+
+    /** How far beyond the track's edges a touch still counts as on it, in dp. */
+    public static final float TRACK_TOUCH_PAD_DP = 12f;
+
+    /** Whether a touch at {@code x} lands on the track's band. */
+    static boolean onTrack(float x, float trackLeft, float trackWidth, float padPx) {
+        return x >= trackLeft - padPx && x <= trackLeft + trackWidth + padPx;
     }
 
     /** Whether a touch at {@code y} lands on the handle's touch target. */
@@ -645,8 +664,12 @@ public final class LegendSlider extends View {
                 mDownY = event.getY();
                 mLastY = mDownY;
                 mDownTimeMs = event.getEventTime();
-                Claim decision = claim(onHandle(mDownY, handleCentreY(), mHandleTouchHalfPx),
-                    mHandleGrabs, isInScrollingContainer(), 0f, mTouchSlopPx, 0L);
+                float trackWidth = trackWidthPx();
+                boolean onTrack = mTrackGrabs && onTrack(mDownX, trackLeftPx(trackWidth),
+                    trackWidth, TRACK_TOUCH_PAD_DP * getResources().getDisplayMetrics().density);
+                Claim decision = onTrack ? Claim.CLAIM
+                    : claim(onHandle(mDownY, handleCentreY(), mHandleTouchHalfPx), mHandleGrabs,
+                        isInScrollingContainer(), 0f, mTouchSlopPx, 0L);
                 if (decision == Claim.CLAIM) {
                     claimGesture(mDownY);
                 } else {

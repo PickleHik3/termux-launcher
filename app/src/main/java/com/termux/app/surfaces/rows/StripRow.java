@@ -310,8 +310,9 @@ public final class StripRow {
         slider.setStepSize(strip.step);
         slider.setValue(strip.from);
         slider.setContentDescription(strip.name);
-        // A swipe that starts on the handle scrolls the card too (editor-redesign §9).
-        slider.setHandleGrabs(false);
+        // A swipe on the track moves the slider at once; the card scrolls from off the tracks
+        // (decided 2026-10-27, replacing editor-redesign §9's handle that scrolled the card).
+        slider.setTrackGrabs(true);
         TextView value = RowKit.caption(context, strip.readout.format(strip.from));
         value.setGravity(Gravity.CENTER_HORIZONTAL);
         value.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
