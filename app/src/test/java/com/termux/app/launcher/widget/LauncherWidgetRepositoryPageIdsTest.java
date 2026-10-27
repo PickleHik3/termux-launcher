@@ -136,11 +136,11 @@ public final class LauncherWidgetRepositoryPageIdsTest {
         LauncherWidgetRepository repository =
             new LauncherWidgetRepository(new WidgetTestFixtures.Memory(), owner);
         assertTrue(repository.putRecord(record(11, 0, 2)));
-        int[] renumbered = repository.trimEmptyPagesRenumbering();
+        List<Integer> trimmed = repository.trimEmptyPageIds();
         assertEquals(Collections.singletonList(3), owner.pages);
         assertEquals(1, repository.pageCount());
         assertEquals(0, repository.get(11).page);
-        assertEquals(4, renumbered.length);
+        assertEquals(Arrays.asList(1, 2, 4), trimmed);
 
         Owner empty = new Owner(5, 6);
         LauncherWidgetRepository none =

@@ -27410,6 +27410,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPageOverview != null) mPageOverview.refresh();
                 // The widget repository lines its pages up with the Home pages by id.
                 if (mWidgetHostController != null) mWidgetHostController.repository().onHomePagesChanged();
+                followHomePageOrderForFloats();
             }
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
                 // The removal is final: the page's own look goes with it, and what stood on it.
@@ -27419,6 +27420,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
         };
+        mHomePageIdsSeen = new java.util.ArrayList<>(wallPages().homePageIdsForRepository());
         wallPagesStore().addListener(mWallPagesListener);
         // Once at start: page looks whose page is not on the wall or kept aside are dead keys.
         mPageLookPruner = new com.termux.app.look.PageLook(
@@ -27498,13 +27500,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // Each edit of Home's pages is mirrored in the wall's pages, so their order stays
                 // the widget repository's. Removal is final at once: the undo window comes later.
+                // The overview shows the Home pages in order; its cards are positions in that
+                // order, and the page operations name the page by id.
                 @Override public void movePage(int from, int to) {
                     if (mWidgetPaneController == null) return;
-                    mWidgetPaneController.movePage(from, to);
+                    java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
+                    if (from < 0 || from >= ids.size()) return;
+                    mWidgetPaneController.movePage(ids.get(from), to);
                 }
                 @Override public void removePage(int page) {
                     if (mWidgetPaneController == null) return;
-                    mWidgetPaneController.removePage(page);
+                    java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
+                    if (page < 0 || page >= ids.size()) return;
+                    mWidgetPaneController.removePage(ids.get(page));
                 }
                 @Override public void addPage() {
                     if (mWidgetPaneController == null) return;
@@ -27697,13 +27705,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
     }
 
+    /** The Home page ids the last change of the wall's pages left, to see what moved by id. */
+    @NonNull private java.util.List<Integer> mHomePageIdsSeen = new java.util.ArrayList<>();
+
     /**
-     * Edit pages moved or removed pages: the floats follow their pages and the default page its
-     * page, by the same mapping the pages took.
+     * The Home pages changed in the wall's pages (Edit pages, a drop's page, a trim, an undo): the
+     * floats still name a Home page by position until they are keyed by id, so each follows its
+     * page to where the ids now stand ({@code remapHomeFloatPages}). Appended pages move nothing.
      */
-    private void onHomePagesRenumbered(@NonNull int[] mapping) {
-        if (mPaneController != null) mPaneController.remapHomeFloatPages(mapping);
-        // The home page follows its page by id, in the wall's pages.
+    private void followHomePageOrderForFloats() {
+        java.util.List<Integer> now = wallPages().homePageIdsForRepository();
+        java.util.List<Integer> was = mHomePageIdsSeen;
+        mHomePageIdsSeen = new java.util.ArrayList<>(now);
+        if (was.isEmpty() || mPaneController == null) return;
+        int[] mapping = new int[was.size()];
+        boolean changed = false;
+        for (int i = 0; i < mapping.length; i++) {
+            mapping[i] = now.indexOf(was.get(i));
+            changed |= mapping[i] != i;
+        }
+        if (changed) mPaneController.remapHomeFloatPages(mapping);
     }
 
     /** Each row runs what the corner tab, the palette and Settings already run for it. */
@@ -29040,9 +29061,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
                     if (isWidgetsPageShowing()) runHomeSwipe(up);
-                }
-                @Override public void onHomePagesRenumbered(@NonNull int[] mapping) {
-                    TermuxActivity.this.onHomePagesRenumbered(mapping);
                 }
                 @Override public void onHomeDoubleTap() {
                     if (isWidgetsPageShowing()) runHomeGesture(

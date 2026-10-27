@@ -82,31 +82,16 @@ public class LauncherWidgetRepositoryEditPagesTest {
     }
 
     @Test
-    public void theTrimSaysHowItRenumbered() {
+    public void theTrimSaysWhichPagesItTook() {
         LauncherWidgetRepository repository = new LauncherWidgetRepository(new WidgetTestFixtures.Memory());
         assertEquals(1, repository.addPage());
         assertEquals(2, repository.addPage());
         assertTrue(repository.putRecord(widget(10, 0)));
         assertTrue(repository.putRecord(widget(12, 2)));
-        assertArrayEquals(new int[] {0, HomePageEdits.REMOVED, 1},
-            repository.trimEmptyPagesRenumbering());
+        assertEquals(java.util.Collections.singletonList(2), repository.trimEmptyPageIds());
         assertEquals(1, repository.get(12).page);
-        assertNull("nothing left to trim", repository.trimEmptyPagesRenumbering());
+        assertTrue("nothing left to trim", repository.trimEmptyPageIds().isEmpty());
         assertTrue(repository.trimEmptyPages());
-    }
-
-    @Test
-    public void aLayoutWithMorePagesThanTheMappingRenumbersPastIt() {
-        int[] removal = HomePageEdits.removeMapping(3, 1);
-        assertEquals(0, HomePageEdits.renumber(0, removal));
-        assertEquals(HomePageEdits.REMOVED, HomePageEdits.renumber(1, removal));
-        assertEquals("a page past the mapping moves down with the rest", 3,
-            HomePageEdits.renumber(4, removal));
-        assertEquals(4, HomePageEdits.pageCountAfter(5, removal));
-        assertEquals(1, HomePageEdits.pageCountAfter(1, HomePageEdits.removeMapping(2, 0)));
-        int[] move = HomePageEdits.moveMapping(3, 0, 2);
-        assertEquals(5, HomePageEdits.renumber(5, move));
-        assertEquals(6, HomePageEdits.pageCountAfter(6, move));
     }
 
     @Test
