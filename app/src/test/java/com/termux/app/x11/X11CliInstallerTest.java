@@ -530,4 +530,25 @@ public class X11CliInstallerTest {
         assertFalse(new File(temp.getRoot(), "usr/share/X11/xkb").exists());
         assertFalse(installer.wmScript().exists());
     }
+
+    @Test
+    public void a32BitLauncherWithAnAppProcess32ExecsThatBinary() {
+        String path = X11CliInstaller.appProcessPath(false, "/system/bin/app_process32"::equals);
+        assertEquals("/system/bin/app_process32", path);
+        assertTrue(X11CliInstaller.serverScript("com.termux.test", "/system/bin/sh", false, path)
+            .contains("exec /system/bin/app_process32 -Xnoimage-dex2oat"));
+        assertTrue(X11CliInstaller.preferenceScript("com.termux.test", "/system/bin/sh", path)
+            .contains("exec /system/bin/app_process32 -Xnoimage-dex2oat"));
+    }
+
+    @Test
+    public void otherwiseTheScriptsExecAppProcess() {
+        // 32-bit launcher on a phone without app_process32, and every 64-bit launcher.
+        assertEquals("/system/bin/app_process", X11CliInstaller.appProcessPath(false, p -> false));
+        assertEquals("/system/bin/app_process", X11CliInstaller.appProcessPath(true, p -> true));
+        assertTrue(X11CliInstaller.serverScript("com.termux.test", "/system/bin/sh")
+            .contains("exec /system/bin/app_process -Xnoimage-dex2oat"));
+        assertTrue(X11CliInstaller.preferenceScript("com.termux.test", "/system/bin/sh")
+            .contains("exec /system/bin/app_process -Xnoimage-dex2oat"));
+    }
 }
