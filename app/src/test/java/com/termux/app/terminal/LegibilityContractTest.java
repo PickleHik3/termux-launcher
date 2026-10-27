@@ -6,6 +6,10 @@ import android.app.Application;
 import android.graphics.Color;
 import android.os.Build;
 
+import com.google.android.material.color.utilities.Hct;
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.EvenOut;
+import com.termux.app.chrome.GlassBackdropCache;
 import com.termux.app.chrome.OnGlass;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 
@@ -25,10 +29,11 @@ import java.util.Properties;
  * here, and a failure names the seed, ground, level, pair, both colours and the ratio, so a miss
  * can't ship silently.
  *
- * <p>The background pairs are not asserted on the mid glass ground yet. Over a mid-tone wallpaper
- * no accent reaches 4.5:1 in either ink, and the solver keeps the panel pairs and the best
- * background ratio left. Wave 2 of the legibility contract (ADR 0014) bounds the glass ground so
- * that case cannot arise, and it turns those rows back on.
+ * <p>The mid glass grounds are the even-out stage's worst ends (ADR 0014, wave 2) for a mid-tone
+ * wallpaper like pong's cloud pane under pale ink and a light one under dark ink, not the raw mid
+ * colour: over a raw mid-tone no accent reaches its floor in either ink, which is what the stage
+ * exists to prevent. On glass the floors are the glass ones, and red and blue are held by the
+ * panel pair only (best effort on the ground).
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -59,13 +64,35 @@ public class LegibilityContractTest {
     private static final int GLASS_DARK = 0xFF1B1A17;
     private static final int GLASS_MID = 0xFF7D7A78;
     private static final int GLASS_LIGHT = 0xFFE9E6E2;
-    private static final int[] GROUNDS = {OPAQUE, GLASS_DARK, GLASS_MID, GLASS_LIGHT};
+    /** Stand-ins resolved per seed and level into the even-out worst end. */
+    private static final int MID_PALE = 1;
+    private static final int MID_DARK = 2;
+    private static final int[] GROUNDS = {OPAQUE, GLASS_DARK, GLASS_LIGHT, MID_PALE, MID_DARK};
 
     private static String groundName(int ground) {
         if (ground == OPAQUE) return "opaque";
         if (ground == GLASS_DARK) return "glass-dark";
-        if (ground == GLASS_MID) return "glass-mid";
+        if (ground == MID_PALE) return "glass-mid-pale";
+        if (ground == MID_DARK) return "glass-mid-dark";
         return "glass-light";
+    }
+
+    /**
+     * The worst end of a mid wallpaper's evened-out band: the recipe's ground limit for the
+     * polarity, the 2a mapping of pong's cloud-pane statistics (or a light wallpaper's under dark
+     * ink), and the band end the ink reads worst on, with the pane's tint transparent.
+     */
+    private static int midWorstEnd(Seed seed, TerminalContrastLevel level, boolean pale) {
+        Properties recipe = MaterialTerminalColorScheme.build(seed.seeds, level,
+            pale ? 0xFF0A0A0A : 0xFFF5F5F5, null);
+        ChromeInk.Polarity polarity = pale ? ChromeInk.Polarity.PALE_INK : ChromeInk.Polarity.DARK_INK;
+        EvenOut.Ceiling ceiling = EvenOut.ceiling(recipe, polarity, level);
+        GlassBackdropCache.Lightness stats = pale
+            ? new GlassBackdropCache.Lightness(13.5d, 39.5d, 67.8d, Hct.from(250d, 6d, 39.5d).toInt())
+            : new GlassBackdropCache.Lightness(40d, 75d, 95d, Hct.from(250d, 6d, 75d).toInt());
+        EvenOut.Mapping mapping = EvenOut.map(stats, ceiling, polarity, level);
+        return EvenOut.worstEnd(EvenOut.bandEnds(mapping, Color.TRANSPARENT, Color.TRANSPARENT),
+            polarity);
     }
 
     private static int slotColor(Properties p, int slot) {
@@ -77,8 +104,12 @@ public class LegibilityContractTest {
     public void everyPairInTheTableHoldsOnTheGrid() {
         StringBuilder failures = new StringBuilder();
         for (Seed seed : SEEDS) {
-            for (int ground : GROUNDS) {
+            for (int groundCase : GROUNDS) {
                 for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+                    int ground = groundCase == MID_PALE ? midWorstEnd(seed, level, true)
+                        : groundCase == MID_DARK ? midWorstEnd(seed, level, false) : groundCase;
+                    boolean glass = ground != OPAQUE;
+                    boolean band = groundCase == MID_PALE || groundCase == MID_DARK;
                     Properties p = MaterialTerminalColorScheme.build(seed.seeds, level, ground, null);
                     int background = ground == OPAQUE
                         ? Color.parseColor(p.getProperty("background")) : OnGlass.opaque(ground);
@@ -89,14 +120,24 @@ public class LegibilityContractTest {
                         double ratio = MaterialTerminalColorScheme.contrastRatio(ink, under);
                         double floor = pair.ground == LegibilityPairs.BACKGROUND
                             && pair.ink != LegibilityPairs.FOREGROUND
-                            ? LegibilityPairs.backgroundFloor(pair.ink, level, slotColor(p, 7),
-                                background)
-                            : pair.floor(level);
+                            ? (glass && pair.ink != 1 && pair.ink != 4
+                                ? pair.floor(level, true)
+                                : LegibilityPairs.backgroundFloor(pair.ink, level, slotColor(p, 7),
+                                    background))
+                            : pair.floor(level, glass);
                         String row = String.format("%s %s %s %s %s on %s = %.2f (floor %.1f)",
-                            seed.name, groundName(ground), level.value, pair.label(),
+                            seed.name, groundName(groundCase), level.value, pair.label(),
                             hex(ink), hex(under), ratio, floor);
                         boolean panel = pair.ground != LegibilityPairs.BACKGROUND;
-                        boolean asserted = panel || ground != GLASS_MID;
+                        // Red and blue on the evened band: the panel pair holds them, the ground
+                        // is best effort (ADR 0014, decided 2026-10-27).
+                        boolean bestEffort = band && !panel && (pair.ink == 1 || pair.ink == 4);
+                        boolean asserted = !bestEffort;
+                        if (band && seed.name.equals("pong") && !panel
+                            && (pair.ink == LegibilityPairs.FOREGROUND || pair.ink == 8
+                                || pair.ink == 1 || pair.ink == 2)) {
+                            System.out.println("[legibility-mid] " + row);
+                        }
                         if (asserted && ratio + .01 < floor) failures.append(row).append('\n');
                         if (pair.ground == 7 && pair.ink == 1
                             || pair.ink == 4 && pair.ground == 7) {

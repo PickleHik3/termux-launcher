@@ -1857,6 +1857,15 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
 
+        /**
+         * Whether a glass terminal pane's wallpaper lightness is evened out (ADR 0014, wave 2).
+         * Off restores the mean-ground drawing for before/after shots; removed one release after
+         * wave 2 ships.
+         */
+        public static final String KEY_GLASS_EVEN_OUT_ENABLED = "glass_even_out_enabled";
+
+        public static final boolean DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED = true;
+
         /*
          * There is no key for the launcher chrome's colour source any more. It was a second name
          * for a decision the wallpaper-colours switch already makes, and the two could disagree —

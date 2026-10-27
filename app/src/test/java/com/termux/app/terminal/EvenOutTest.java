@@ -67,7 +67,7 @@ public class EvenOutTest {
         assertEquals(log.toString(), 34d, ceiling.tone, 1d);
         assertFalse(mapping.isIdentity());
         assertTrue(log.toString(), mapping.dstHi <= ceiling.tone + 1e-9);
-        assertTrue(log.toString(), mapping.dstLo >= ceiling.tone - level.evenOutWidth - 0.5d - 1e-9);
+        assertTrue(log.toString(), mapping.dstLo >= ceiling.tone - level.evenOutWidth - 1.0d - 1e-9);
         assertEquals(level.evenOutWidth, mapping.dstHi - mapping.dstLo, 1e-9);
         assertTrue(ColorUtils.lstarFromArgb(ends.lightest) <= ceiling.tone + 1d);
         // The mean sits 48% of the way up [p2, p98], so it maps to about 26.7 in a band of

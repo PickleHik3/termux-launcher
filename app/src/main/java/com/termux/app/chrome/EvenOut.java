@@ -36,10 +36,11 @@ public final class EvenOut {
 
     /**
      * How far inside the ceiling the band's limiting end is placed, in tone: the composited band
-     * end is rounded to 8 bits, which can move its tone by a few tenths, and the end must not land
-     * past the limit the palette is solved for.
+     * end and the solved ink are each rounded to 8 bits, which together cost up to a few
+     * hundredths of a contrast ratio, and the palette at its ink's last tone must still clear its
+     * floor. Half a tone was not enough on the grid (2.96 against 3.0); one is.
      */
-    static final double BAND_MARGIN = 0.5d;
+    static final double BAND_MARGIN = 1.0d;
 
     /** One pair's limit: the ground tone past which this ink, at its most extreme tone, fails. */
     public static final class PairLimit {

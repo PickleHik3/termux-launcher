@@ -162,6 +162,7 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
             if (app == null || key == null) return;
             switch (key) {
                 case "terminal_view_key_logging_enabled": app.setTerminalViewKeyLoggingEnabled(value); break;
+                case "glass_even_out_enabled": app.setGlassEvenOutEnabled(value); break;
                 case "plugin_error_notifications_enabled": app.setPluginErrorNotificationsEnabled(value); break;
                 case "crash_report_notifications_enabled": app.setCrashReportNotificationsEnabled(value); break;
                 default: break;
@@ -172,6 +173,7 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
             if (app == null || key == null) return fallback;
             switch (key) {
                 case "terminal_view_key_logging_enabled": return app.isTerminalViewKeyLoggingEnabled();
+                case "glass_even_out_enabled": return app.isGlassEvenOutEnabled();
                 case "plugin_error_notifications_enabled": return app.arePluginErrorNotificationsEnabled(false);
                 case "crash_report_notifications_enabled": return app.areCrashReportNotificationsEnabled(false);
                 default: return fallback;

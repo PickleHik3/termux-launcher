@@ -12,6 +12,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.app.DockGlassRendering;
+import com.termux.app.terminal.MaterialTerminalColorScheme;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -177,6 +178,15 @@ public final class ChromeInk {
         int dimInk;
         double target;
         int flat;
+        /** The plain mean flat glass, the polarity's input; {@link #flat} is the band's worst end when even-out is on. */
+        int meanFlat;
+        /** The pane's lightness statistics, read once per wallpaper, or null (none read, or switch off). */
+        @Nullable GlassBackdropCache.Lightness lightness;
+        /** The even-out matrix this pane is drawn with, or null for none; see {@link #evenOutMatrix}. */
+        @Nullable android.graphics.ColorMatrix evenOut;
+        /** The polarity and policy the matrix was built for. */
+        @Nullable Polarity evenOutPolarity;
+        @Nullable EvenOutPolicy evenOutPolicy;
         @NonNull OnGlass.Resolution resolution;
 
         PaneAnswer(@NonNull OnGlass.Resolution resolution) {
@@ -188,6 +198,64 @@ public final class ChromeInk {
                 && this.ink == ink && this.dimInk == dimInk
                 && Double.compare(this.target, target) == 0;
         }
+    }
+
+    /**
+     * What the even-out stage needs from the terminal palette's side, handed in by whoever owns
+     * the palette ({@link #setEvenOutPolicy}): the Contrast level, the ground limit for each ink
+     * polarity (from the recipe palette, never the band-solved one, so the palette cannot feed
+     * back into the band it is solved against), and the polarity the palette wears now, the
+     * hysteresis input of the polarity choice.
+     */
+    public static final class EvenOutPolicy {
+        @NonNull final com.termux.shared.termux.settings.preferences.TerminalContrastLevel level;
+        @NonNull final EvenOut.Ceiling pale;
+        @NonNull final EvenOut.Ceiling dark;
+        @NonNull final Polarity current;
+
+        public EvenOutPolicy(
+                @NonNull com.termux.shared.termux.settings.preferences.TerminalContrastLevel level,
+                @NonNull EvenOut.Ceiling pale, @NonNull EvenOut.Ceiling dark,
+                @NonNull Polarity current) {
+            this.level = level;
+            this.pale = pale;
+            this.dark = dark;
+            this.current = current;
+        }
+
+        boolean sameStage(@Nullable EvenOutPolicy other) {
+            return other != null && level == other.level && pale == other.pale && dark == other.dark;
+        }
+    }
+
+    /** Null while the Debugging switch is off or nobody owns a palette: today's mean ground. */
+    @Nullable private EvenOutPolicy mEvenOutPolicy;
+
+    /**
+     * Turns the even-out stage on for terminal panes (a policy) or off (null). Off is today's
+     * behaviour exactly: no statistics are read, no matrix is built, the pane band's ground is the
+     * mean of its panes. A change of stage re-measures every pane and tells the ground listener so
+     * the palette is rebuilt; a change of only the current polarity does neither.
+     */
+    public void setEvenOutPolicy(@Nullable EvenOutPolicy policy) {
+        EvenOutPolicy previous = mEvenOutPolicy;
+        mEvenOutPolicy = policy;
+        boolean sameStage = previous == null ? policy == null : previous.sameStage(policy);
+        if (sameStage) return;
+        mPanes.clear();
+        if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
+    }
+
+    /**
+     * The even-out matrix for the pane laid out at {@code rootRect}, or null when the stage is off,
+     * the pane is not measured or its mapping is the identity. Read only: {@link #terminalPane}
+     * builds it. The caller composes it ahead of the frost filter.
+     */
+    @Nullable
+    public android.graphics.ColorMatrix evenOutMatrix(@NonNull Rect rootRect) {
+        if (mEvenOutPolicy == null) return null;
+        PaneAnswer answer = mPanes.get(rootRect);
+        return answer == null ? null : answer.evenOut;
     }
 
     /** Panes a window can hold at once, and then some; an older rect is dropped, not an error. */
@@ -281,6 +349,11 @@ public final class ChromeInk {
 
             @Override public int sampleWallpaper(@NonNull Rect screenRect, int blurRadiusDp) {
                 return ChromeInk.this.sampleWallpaper(screenRect, Math.max(0, blurRadiusDp));
+            }
+
+            @Nullable @Override
+            public GlassBackdropCache.Lightness sampleLightness(@NonNull Rect screenRect) {
+                return ChromeInk.this.sampleWallpaperLightness(screenRect);
             }
         });
     }
@@ -470,7 +543,8 @@ public final class ChromeInk {
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         PaneAnswer answer = mPanes.get(rootRect);
         if (answer != null && answer.sampled
-                && answer.matches(mDimColor, tint, veilColor, ink, dimInk, target)) {
+                && answer.matches(mDimColor, tint, veilColor, ink, dimInk, target)
+                && answer.evenOutPolicy == mEvenOutPolicy && !polarityMoved(answer)) {
             return answer.resolution;
         }
         int wallpaper;
@@ -483,7 +557,29 @@ public final class ChromeInk {
             sampled = Color.alpha(read) != 0;
             wallpaper = sampled ? read : mCache.fallbackWallpaper();
         }
-        int flat = OnGlass.backdrop(wallpaper, mDimColor, tint);
+        int meanFlat = OnGlass.backdrop(wallpaper, mDimColor, tint);
+        int flat = meanFlat;
+        // Even-out (ADR 0014, wave 2): measured here so the veil, the ground and the palette all
+        // see the band that is drawn. A pane that cannot be read keeps the mean, as does the
+        // switch being off. A bare pane (no slab) draws no frame, so it never has a matrix and
+        // keeps today's mean ground.
+        EvenOutPolicy policy = mEvenOutPolicy;
+        GlassBackdropCache.Lightness lightness = null;
+        android.graphics.ColorMatrix evenOut = null;
+        Polarity evenOutPolarity = null;
+        if (policy != null && sampled) {
+            lightness = answer != null && answer.lightness != null
+                ? answer.lightness : mCache.sampleLightnessUncached(rootRect);
+            if (lightness != null) {
+                evenOutPolarity = MaterialTerminalColorScheme.inkPolarity(meanFlat,
+                    policy.level.bodyTarget, policy.current);
+                boolean pale = evenOutPolarity == Polarity.PALE_INK;
+                EvenOut.Mapping mapping = EvenOut.map(lightness, pale ? policy.pale : policy.dark,
+                    evenOutPolarity, policy.level);
+                evenOut = EvenOutMatrix.of(mapping);
+                flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, mDimColor, tint), evenOutPolarity);
+            }
+        }
         // The normal foreground is body text; the dim one is text a program asked to recede, and
         // is held to the large-text tier, scaled by the same level.
         // The veil never takes the pane past its own opacity plus 15 points (20% to 55%): a pane
@@ -510,8 +606,16 @@ public final class ChromeInk {
         answer.dimInk = dimInk;
         answer.target = target;
         answer.flat = flat;
-        int ground = meanPaneVote(tint);
-        vote(GlassBackdropCache.Band.TERMINAL_PANE, ground);
+        answer.meanFlat = meanFlat;
+        answer.lightness = lightness;
+        answer.evenOut = evenOut;
+        answer.evenOutPolarity = evenOutPolarity;
+        answer.evenOutPolicy = policy;
+        // The chrome's vote stays the mean (the keyboard, dock and status bar are not evened out
+        // yet); the palette's ground is the worst end across panes when the stage is on.
+        vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote(tint, true));
+        int ground = policy != null ? worstPaneGround(tint, evenOutPolarity != null
+            ? evenOutPolarity : policy.current) : meanPaneVote(tint, true);
         int surface = meanPaneSurface(tint);
         if (ground != mPaneGround || surface != mPaneSurface) {
             mPaneGround = ground;
@@ -732,17 +836,74 @@ public final class ChromeInk {
      */
     @ColorInt
     private int meanPaneVote(@ColorInt int tint) {
+        return meanPaneVote(tint, false);
+    }
+
+    /** {@link #meanPaneVote(int)}, optionally of the plain mean glass rather than the band's end. */
+    @ColorInt
+    private int meanPaneVote(@ColorInt int tint, boolean plainMean) {
         long red = 0, green = 0, blue = 0;
         int count = 0;
         for (PaneAnswer pane : mPanes.values()) {
             if (pane.tint != tint || pane.dim != mDimColor) continue;
-            red += Color.red(pane.flat);
-            green += Color.green(pane.flat);
-            blue += Color.blue(pane.flat);
+            int flat = plainMean ? pane.meanFlat : pane.flat;
+            red += Color.red(flat);
+            green += Color.green(flat);
+            blue += Color.blue(flat);
             count++;
         }
         count = Math.max(1, count);
         return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+    }
+
+    /**
+     * The ground the palette is solved against with the stage on: the worst band end across the
+     * panes counted as in {@link #meanPaneVote} — the lightest for pale ink, the darkest for dark.
+     */
+    @ColorInt
+    private int worstPaneGround(@ColorInt int tint, @NonNull Polarity polarity) {
+        boolean pale = polarity == Polarity.PALE_INK;
+        int worst = Color.TRANSPARENT;
+        double worstLuma = 0d;
+        for (PaneAnswer pane : mPanes.values()) {
+            if (pane.tint != tint || pane.dim != mDimColor) continue;
+            double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
+            if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
+                worst = pane.flat;
+                worstLuma = luma;
+            }
+        }
+        return Color.alpha(worst) == 0 ? meanPaneVote(tint, true) : worst;
+    }
+
+    /** Whether the polarity this pane's matrix was built for is no longer the mean's choice. */
+    private boolean polarityMoved(@NonNull PaneAnswer pane) {
+        EvenOutPolicy policy = mEvenOutPolicy;
+        if (policy == null || pane.evenOutPolarity == null) return false;
+        return pane.evenOutPolarity != MaterialTerminalColorScheme.inkPolarity(pane.meanFlat,
+            policy.level.bodyTarget, policy.current);
+    }
+
+    /**
+     * The mapped band's two ends as the matrix really draws them: the mean colour's hue and chroma
+     * at the p2 and p98 tones, through the matrix, then the frost filter's arithmetic, then the
+     * dim and tint as {@link OnGlass#backdrop} lays them. The palette is solved against these, so
+     * what is on screen and what is measured cannot drift apart.
+     */
+    @NonNull
+    private static EvenOut.BandEnds bandEnds(@NonNull EvenOut.Mapping mapping,
+                                             @Nullable android.graphics.ColorMatrix matrix,
+                                             @ColorInt int dim, @ColorInt int tint) {
+        com.google.android.material.color.utilities.Hct mean =
+            com.google.android.material.color.utilities.Hct.fromInt(mapping.meanColor);
+        int low = OnGlass.backdrop(frostColor(EvenOutMatrix.applyTo(matrix,
+            com.google.android.material.color.utilities.Hct.from(mean.getHue(), mean.getChroma(),
+                mapping.srcLo).toInt())), dim, tint);
+        int high = OnGlass.backdrop(frostColor(EvenOutMatrix.applyTo(matrix,
+            com.google.android.material.color.utilities.Hct.from(mean.getHue(), mean.getChroma(),
+                mapping.srcHi).toInt())), dim, tint);
+        return com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(low) <= com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(high)
+            ? new EvenOut.BandEnds(low, high) : new EvenOut.BandEnds(high, low);
     }
 
     /** {@link #meanPaneVote} of each pane's veiled surface rather than its bare glass. */
@@ -1771,6 +1932,51 @@ public final class ChromeInk {
             // A Sampler never throws: a band that cannot be read is a band that keeps the mode's
             // nominal glass and asks again next frame.
             return GlassBackdropCache.UNREADABLE;
+        }
+    }
+
+    /**
+     * {@link #sampleWallpaper(Rect, int)}'s sibling for the even-out stage: the lightness
+     * percentiles and mean colour of the same frame at the same rect, read before the frost
+     * filter because the even-out matrix is composed ahead of it. Null when unreadable.
+     */
+    @Nullable
+    private GlassBackdropCache.Lightness sampleWallpaperLightness(@NonNull Rect screenRect) {
+        try {
+            Bitmap frame = residentFrame();
+            if (frame == null || frame.isRecycled()) return null;
+            Rect frameRect = mBlurCache.frameRectRef();
+            if (frameRect.isEmpty()) return null;
+            float scaleX = frame.getWidth() / (float) frameRect.width();
+            float scaleY = frame.getHeight() / (float) frameRect.height();
+            Rect region = new Rect(
+                Math.round((screenRect.left - frameRect.left) * scaleX),
+                Math.round((screenRect.top - frameRect.top) * scaleY),
+                Math.round((screenRect.right - frameRect.left) * scaleX),
+                Math.round((screenRect.bottom - frameRect.top) * scaleY));
+            if (readableInSoftware(frame.getConfig())) {
+                return GlassBackdropCache.sampleBitmapLightness(frame, region);
+            }
+            int left = Math.max(0, region.left);
+            int top = Math.max(0, region.top);
+            int right = Math.min(frame.getWidth(), region.right);
+            int bottom = Math.min(frame.getHeight(), region.bottom);
+            if (right <= left || bottom <= top) return null;
+            int width = Math.min(GlassBackdropCache.SAMPLE_GRID, right - left);
+            int height = Math.min(GlassBackdropCache.SAMPLE_GRID, bottom - top);
+            Bitmap scratch = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            try {
+                android.graphics.Canvas canvas = new android.graphics.Canvas(scratch);
+                canvas.drawBitmap(frame, new Rect(left, top, right, bottom),
+                    new Rect(0, 0, width, height),
+                    new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+                return GlassBackdropCache.sampleBitmapLightness(scratch,
+                    new Rect(0, 0, width, height));
+            } finally {
+                scratch.recycle();
+            }
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 

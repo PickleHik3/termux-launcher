@@ -51,9 +51,21 @@ public final class LegibilityPairs {
         }
 
         public double floor(@NonNull TerminalContrastLevel level) {
+            return floor(level, false);
+        }
+
+        /**
+         * The floor on glass or off it. On glass (kitty parity, decided 2026-10-27) the normal
+         * accents, slots 1-6, hold the level's {@code glassAnsiRatio}; everything else, and the
+         * opaque terminal, keeps today's floor. Red and blue stay in the table at that floor but
+         * on glass are held by the panel pair first and the ground on a best-effort basis
+         * (ADR 0014).
+         */
+        public double floor(@NonNull TerminalContrastLevel level, boolean glass) {
             switch (kind) {
                 case BODY: return level.bodyTarget;
-                case ANSI: return level.ansiRatio;
+                case ANSI:
+                    return glass && ink >= 1 && ink <= 6 ? level.glassAnsiRatio : level.ansiRatio;
                 case DIM: return level.dimRatio;
                 default: return fixed;
             }
@@ -99,8 +111,14 @@ public final class LegibilityPairs {
 
     /** The floor {@code slot} is held to on the background, or 0 when it has no such row. */
     static double backgroundFloor(int slot, @NonNull TerminalContrastLevel level) {
+        return backgroundFloor(slot, level, false);
+    }
+
+    /** {@link #backgroundFloor(int, TerminalContrastLevel)} on glass or off it. */
+    public static double backgroundFloor(int slot, @NonNull TerminalContrastLevel level,
+                                         boolean glass) {
         for (Pair pair : ALL) {
-            if (pair.ink == slot && pair.ground == BACKGROUND) return pair.floor(level);
+            if (pair.ink == slot && pair.ground == BACKGROUND) return pair.floor(level, glass);
         }
         return 0d;
     }

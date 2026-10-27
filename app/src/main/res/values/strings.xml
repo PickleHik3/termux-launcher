@@ -664,6 +664,8 @@
     <string name="whats_new_none">The notes for this version are not bundled with the app.</string>
     <string name="settings_version_build_title">Version and build</string>
     <string name="settings_diagnostics_header">Diagnostics</string>
+    <string name="settings_glass_even_out_title">Even out glass</string>
+    <string name="settings_glass_even_out_summary">Narrows a glass terminal pane\'s wallpaper to the range its text can read on. Turn off to compare with the plain glass.</string>
     <string name="settings_log_terminal_keys_title">Log keyboard input</string>
     <string name="settings_log_terminal_keys_summary">Typed input may include passwords and other sensitive text. Leave off unless you are debugging, and review logs before sharing.</string>
     <string name="settings_plugin_error_alerts_title">Plugin error alerts</string>

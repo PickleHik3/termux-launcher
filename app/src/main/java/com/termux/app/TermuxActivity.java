@@ -4132,12 +4132,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // and nothing is measured; a pane with no slab is asked too (PaneGlass), so the
                 // ground follows its tint under every Look.
                 if (mChrome == null || !shouldUseWallpaperPassthroughMode()) return Color.TRANSPARENT;
+                updateEvenOutPolicy();
                 int foreground = com.termux.terminal.TerminalColors.COLOR_SCHEME
                     .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND];
                 return mChrome.ink().terminalPane(rootRect, paneGlassTintColor(),
                     com.termux.app.chrome.OnGlass.opaque(resolveTerminalSurfaceColor()),
                     com.termux.app.chrome.OnGlass.opaque(foreground),
                     com.termux.app.terminal.PaneGlass.dimTerminalInk(foreground)).veil;
+            }
+
+            @Override @Nullable
+            public android.graphics.ColorMatrix paneGlassEvenOut(@NonNull Rect rootRect) {
+                if (mChrome == null) return null;
+                return mChrome.ink().evenOutMatrix(rootRect);
             }
 
             @Override public boolean paneGlassRimWanted() {
@@ -22882,6 +22889,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * What terminal text on the default background stands on (TerminalHost#terminalTextSurface):
      * transparent off the wallpaper, where the palette's own background is the answer.
      */
+    @Nullable private com.termux.shared.termux.settings.preferences.TerminalContrastLevel mEvenOutLevel;
+    @Nullable private com.termux.app.chrome.EvenOut.Ceiling[] mEvenOutCeilings;
+
+    /**
+     * Tells the pane band whether to even the wallpaper out and to what (ADR 0014): the Debugging
+     * switch, the Contrast level, and the recipe ceilings for that level (kept per level, which
+     * is all they depend on). Off is null, which is today's mean ground exactly.
+     */
+    private void updateEvenOutPolicy() {
+        if (mChrome == null) return;
+        if (mPreferences == null || !mPreferences.isGlassEvenOutEnabled()) {
+            mChrome.ink().setEvenOutPolicy(null);
+            return;
+        }
+        com.termux.shared.termux.settings.preferences.TerminalContrastLevel level =
+            com.termux.app.chrome.LegibilityLevel.terminalContrast(mPreferences);
+        if (mEvenOutCeilings == null || mEvenOutLevel != level) {
+            mEvenOutCeilings = com.termux.app.terminal.MaterialTerminalColorScheme
+                .evenOutCeilings(this, level);
+            mEvenOutLevel = level;
+        }
+        int background = com.termux.terminal.TerminalColors.COLOR_SCHEME
+            .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND];
+        com.termux.app.chrome.ChromeInk.Polarity current =
+            com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(background) < 50d
+                ? com.termux.app.chrome.ChromeInk.Polarity.PALE_INK
+                : com.termux.app.chrome.ChromeInk.Polarity.DARK_INK;
+        mChrome.ink().setEvenOutPolicy(new com.termux.app.chrome.ChromeInk.EvenOutPolicy(level,
+            mEvenOutCeilings[0], mEvenOutCeilings[1], current));
+    }
+
     private int terminalTextSurface() {
         if (mPreferences == null || mChrome == null || !shouldUseWallpaperPassthroughMode()) {
             return Color.TRANSPARENT;

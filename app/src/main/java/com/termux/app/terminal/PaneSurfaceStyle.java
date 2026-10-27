@@ -41,6 +41,16 @@ public interface PaneSurfaceStyle {
     default int paneGlassVeil(@NonNull android.graphics.Rect rootRect) {
         return android.graphics.Color.TRANSPARENT;
     }
+    /**
+     * The even-out matrix a terminal pane laid out at {@code rootRect} draws its frame through,
+     * ahead of {@link #paneGlassFrostFilter()} ({@code ChromeInk#evenOutMatrix}); null when the
+     * stage is off or the pane needs none. Asked right after {@link #paneGlassVeil}, which is what
+     * measures the pane.
+     */
+    @androidx.annotation.Nullable
+    default android.graphics.ColorMatrix paneGlassEvenOut(@NonNull android.graphics.Rect rootRect) {
+        return null;
+    }
     /** Film grain layer for one pane, or null while grain is off. */
     @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
     /**

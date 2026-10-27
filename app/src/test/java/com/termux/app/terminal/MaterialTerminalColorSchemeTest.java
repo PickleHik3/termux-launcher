@@ -869,8 +869,9 @@ public class MaterialTerminalColorSchemeTest {
                 // their floor is what still leaves 3:1 on ANSI white.
                 assertTrue("ANSI " + i + " at " + level.value,
                     ratio(color(palette, "color" + i), DUSK) + .01
-                        >= LegibilityPairs.backgroundFloor(i, level, color(palette, "color7"),
-                            DUSK));
+                        >= Math.min(LegibilityPairs.backgroundFloor(i, level, true),
+                            LegibilityPairs.backgroundFloor(i, level, color(palette, "color7"),
+                                DUSK)));
             }
         }
     }
