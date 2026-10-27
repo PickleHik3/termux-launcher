@@ -146,6 +146,7 @@ lifted once into Floats pinned to their window; Home floats keep their page.
 ## Consequences
 
 - `WallHalf` and every getter pair with and without a half go; a look value is asked for a page.
+  Designed as `PageLook` in `project-docs/active/page-look-2026-10-27.md`.
   The getters that silently answer the Workspace, and so dress Home's drawer and corner tab in the
   Workspace dock's glass, cannot survive this.
 - Page storage gains a list of pages (kind, name, binding, look overrides, dress) beside Home's

@@ -438,6 +438,12 @@ The look surface for widget cards on a Home page, following **Base** or detached
 widget only chooses Card or **Bare**.
 _Avoid_: widget glass (in prose)
 
+**Page override**:
+A look value one page holds instead of the wall's: stored as the surface's key plus `@<page id>`,
+resolved page override → the surface's wall-wide value → **Base**. Reset under the page's scope
+drops it.
+_Avoid_: half value, per-page setting
+
 **Scope chip**:
 The Appearance card's **Global | <page name>** switch: Global writes **Base**, the page's name
 detaches that page's values. "Global" is the UI label; in prose and code say Base.
