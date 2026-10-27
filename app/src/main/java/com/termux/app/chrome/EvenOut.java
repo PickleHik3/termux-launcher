@@ -187,6 +187,19 @@ public final class EvenOut {
             return srcLo == dstLo && srcHi == dstHi;
         }
 
+        /**
+         * This map blended toward the identity: {@code k} 1 is this map, 0 leaves every tone
+         * where it was. Both ends move linearly, so the band ends and the matrix built from the
+         * result are what is drawn.
+         */
+        @NonNull
+        public Mapping toward(double k) {
+            if (k >= 1d) return this;
+            double c = Math.max(0d, k);
+            return new Mapping(srcLo, srcHi, srcLo + c * (dstLo - srcLo),
+                srcHi + c * (dstHi - srcHi), meanColor);
+        }
+
         /** The mapped tone of {@code tone}; tones outside the source range extend the line. */
         public double apply(double tone) {
             if (srcHi <= srcLo) return dstLo;

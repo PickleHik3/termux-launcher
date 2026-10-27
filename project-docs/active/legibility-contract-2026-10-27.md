@@ -167,6 +167,9 @@ with (`GlassFilters.frost`, used in `TermuxActivity` and set on `PaneGlassBackdr
 Developer → "Even out glass", on by default. Off restores today's drawing and today's mean
 ground, for before/after shots. It is removed one release after wave 2 ships.
 
+The terminal Opacity scales it: strength = clamp(Opacity / 34, 0, 1); 0% is the switch-off path, and
+between 0% and 34% the mapping is blended toward the identity (ChromeInk.EvenOutPolicy.strengthPercent).
+
 ### Wave 2 pass state
 
 - The grid gains band-end cases and is green.
