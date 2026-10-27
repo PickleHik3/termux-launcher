@@ -120,6 +120,17 @@ public final class ChromeRenderer {
         }
 
         /**
+         * The ground under {@code screenRect}: the dim of the wall page (or pages, at a seam)
+         * the rect stands on, which on a Terminal page folds in the canvas tint when it is not
+         * glass. Home never carries the terminal's tint. Asked by the ink for a band, a widget or
+         * a pane instead of one wall-wide dim; the default is {@link #wallpaperDimColor()} for
+         * hosts that have no per-page ground.
+         */
+        default int groundUnder(@androidx.annotation.NonNull android.graphics.Rect screenRect) {
+            return wallpaperDimColor();
+        }
+
+        /**
          * The wallpaper as the system describes it ({@link WallpaperInk#hintColor}), for the ink
          * to assume until a sample is read; transparent when the launcher shows its own picture
          * or the system says nothing. Read, never changed.

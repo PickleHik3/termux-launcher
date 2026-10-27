@@ -1724,6 +1724,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return resolveWallpaperBackdropDimColor();
         }
 
+        @Override public int groundUnder(@NonNull Rect screenRect) {
+            return groundUnderRect(screenRect);
+        }
+
         @Override public int wallpaperHintColor() {
             return resolveWallpaperHintColor();
         }
@@ -3281,10 +3285,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // and around the panes show the wallpaper, or under Docked the frame glass, at whatever
             // opacity the Wallpaper control asks for. Without it the tint is folded into the dim.
             // Settled before the panes are dressed: they read this colour for their corner arcs.
+            // Page-chrome C: each page paints its own ground on the ground strip (Home its dim
+            // alone, the Terminal page this fold), so the root carries none and the backdrop
+            // frame wears none of its own. mWallGroundColor stays the Terminal page's ground.
             mWallGroundColor = com.termux.app.terminal.TerminalSurfacePolicy.wallGround(glassPane,
                 terminalSurfaceColor, wallpaperDim);
             mWallGroundPainted = true;
-            applyUnifiedBackgroundDim(mWallGroundColor);
+            mGroundGlassPane = glassPane;
+            mGroundCanvasTint = terminalSurfaceColor;
+            applyUnifiedBackgroundDim(Color.TRANSPARENT);
+            refreshGroundStrip();
             applyTerminalBorderAppearance();
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             applyTerminalBodySurface(terminalBodySurface, Color.TRANSPARENT, false);
@@ -3306,6 +3316,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Opaque (non-wallpaper) mode keeps the bounded terminal surface; no full-screen dim needed.
         applyFrameGutterGlass(frameGlassHost(), false);
         applyUnifiedBackgroundDim(Color.TRANSPARENT);
+        refreshGroundStrip();   // hides the strip: opaque mode keeps the terminal's own surface
         boolean showSurface = true;
         int terminalSurfaceColor = resolveTerminalSurfaceColor();
         // Behind the wall here is the terminal surface over the window's base colour.
@@ -4618,7 +4629,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap frame = mChrome.blurCache().obtain(0, wallpaperFrame);
         boolean crossfade = mChrome.blurCache().isCrossfadedRadius(0) && !ReducedMotion.isEnabled(this);
         Rect captureRect = getWallpaperCaptureFrameRect();
-        backdrop.showFrame(frame, captureRect, wallGroundColor(), crossfade);
+        // In wallpaper mode the ground strip, above this view, carries every page's dim, so a
+        // crossfade's two frames are both dimmed by the same layer and never by one that lags;
+        // opaque mode never gets here (SELF_DRAWN is a wallpaper mode).
+        backdrop.showFrame(frame, captureRect, Color.TRANSPARENT, crossfade);
     }
 
     /**
@@ -4628,7 +4642,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * paints it over the system wallpaper.
      */
     private int wallGroundColor() {
-        if (mWallGroundPainted) return mWallGroundColor;
+        if (mWallGroundPainted) {
+            if (!shouldUseWallpaperPassthroughMode()) return mWallGroundColor;
+            // The page in front wears its own ground (corner arcs, the editor's label ink).
+            com.termux.app.wall.PaneWallLayout wall = groundWall();
+            return groundOfWallPage(wall == null
+                ? com.termux.app.wall.PaneWallPage.TERMINAL : wall.currentPage());
+        }
         return shouldUseWallpaperPassthroughMode() ? resolveWallpaperBackdropDimColor()
             : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
                 R.color.termux_surface_base);
@@ -4656,6 +4676,120 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         mPaneController.dispatchPaneGlassTouch(ev, isReducedMotionEnabled());
+    }
+
+    // ---- the ground strip (page-chrome spec C)
+
+    @Nullable private com.termux.app.chrome.GroundStripView mGroundStrip;
+    @Nullable private com.termux.app.wall.PaneWallLayout mGroundWall;
+    @Nullable private com.termux.app.look.PageLook mGroundLook;
+    private final int[] mGroundScratch = new int[8];
+    /** The Terminal page's canvas tint and whether its panes are glass, as last dressed. */
+    private boolean mGroundGlassPane;
+    private int mGroundCanvasTint = Color.TRANSPARENT;
+    private int mGroundInkKey;
+
+    @Nullable
+    private com.termux.app.wall.PaneWallLayout groundWall() {
+        if (mGroundWall == null) {
+            View wall = findViewById(R.id.terminal_pane_wall);
+            if (wall instanceof com.termux.app.wall.PaneWallLayout)
+                mGroundWall = (com.termux.app.wall.PaneWallLayout) wall;
+        }
+        return mGroundWall;
+    }
+
+    @Nullable
+    private com.termux.app.look.PageLook groundLook() {
+        if (mGroundLook == null && mPreferences != null) {
+            mGroundLook = new com.termux.app.look.PageLook(
+                new com.termux.app.look.PrefsLookStore(mPreferences.getSharedPreferences()));
+            mGroundLook.addListener(ids -> runOnUiThread(this::refreshGroundStrip));
+        }
+        return mGroundLook;
+    }
+
+    /** A page's wallpaper dim: black at its own Look's alpha. */
+    private int pageDimColor(@Nullable com.termux.app.wall.WallPages.Page page) {
+        com.termux.app.look.PageLook look = groundLook();
+        if (page == null || look == null) return resolveWallpaperBackdropDimColor();
+        int dim = look.of(page).wallpaperDim();
+        return Math.round(Math.max(0, Math.min(100, dim)) / 100f * 255f) << 24;
+    }
+
+    /**
+     * One wall page's ground in wallpaper mode: Home's is its dim alone (never the terminal's
+     * tint); the Terminal page's (and a display window's) folds the canvas tint in when the panes
+     * are not glass. Opaque mode has the one ground it always had.
+     */
+    private int groundOfWallPage(@NonNull com.termux.app.wall.PaneWallPage wallPage) {
+        if (!shouldUseWallpaperPassthroughMode()) return mWallGroundColor;
+        com.termux.app.wall.WallPages pages = wallPages();
+        boolean terminal = wallPage != com.termux.app.wall.PaneWallPage.WIDGETS;
+        com.termux.app.wall.WallPages.Page page = null;
+        if (terminal) {
+            page = pages.terminal();
+        } else {
+            java.util.List<com.termux.app.wall.WallPages.Page> homes = pages.homePages();
+            if (!homes.isEmpty()) page = homes.get(Math.min(homes.size() - 1, pages.homeIndex()));
+        }
+        return com.termux.app.terminal.TerminalSurfacePolicy.pageGround(terminal, mGroundGlassPane,
+            mGroundCanvasTint, pageDimColor(page));
+    }
+
+    private static int groundStopOf(@NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages,
+                                    @NonNull com.termux.app.wall.PaneWallPage current) {
+        int at = pages.indexOf(current);
+        if (at < 0) at = pages.indexOf(com.termux.app.wall.PaneWallPage.TERMINAL);
+        return Math.max(0, at);
+    }
+
+    /** Dresses the strip's grounds, position and visibility; hides it in opaque mode. */
+    private void refreshGroundStrip() {
+        if (mGroundStrip == null) mGroundStrip = findViewById(R.id.ground_strip);
+        com.termux.app.chrome.GroundStripView strip = mGroundStrip;
+        com.termux.app.wall.PaneWallLayout wall = groundWall();
+        if (strip == null) return;
+        if (wall == null || !shouldUseWallpaperPassthroughMode()) {
+            strip.setVisibility(View.GONE);
+            return;
+        }
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = wall.pages();
+        int count = Math.min(pages.size(), mGroundScratch.length);
+        for (int i = 0; i < count; i++) mGroundScratch[i] = groundOfWallPage(pages.get(i));
+        if (count == 0) {
+            mGroundScratch[0] = groundOfWallPage(wall.currentPage());
+            count = 1;
+        }
+        int current = Math.min(count - 1, groundStopOf(pages, wall.currentPage()));
+        strip.setWall(wall);
+        strip.setCover(getManagedWallpaperFrameRect());
+        strip.setGrounds(mGroundScratch, count, current);
+        strip.setPosition(current, wall.getWidth(), wall.offsetPx());
+        strip.setVisibility(View.VISIBLE);
+        // What the ink stands on changed with the page in front: the memoised answers go.
+        int key = mGroundScratch[current];
+        if (key != mGroundInkKey) {
+            mGroundInkKey = key;
+            if (mChrome != null) mChrome.ink().invalidate();
+        }
+    }
+
+    /** Per frame of a slide: only the wall's position moves, nothing is allocated. */
+    private void syncGroundStrip(float offsetPx) {
+        com.termux.app.chrome.GroundStripView strip = mGroundStrip;
+        com.termux.app.wall.PaneWallLayout wall = mGroundWall;
+        if (strip == null || wall == null || strip.getVisibility() != View.VISIBLE) return;
+        strip.setPosition(groundStopOf(wall.pages(), wall.currentPage()), wall.getWidth(),
+            offsetPx);
+    }
+
+    /** The ground under a screen rect, for the ink: the strip's, else the wall-wide dim. */
+    private int groundUnderRect(@NonNull Rect screenRect) {
+        com.termux.app.chrome.GroundStripView strip = mGroundStrip;
+        if (strip != null && strip.getVisibility() == View.VISIBLE)
+            return strip.groundUnder(screenRect);
+        return resolveWallpaperBackdropDimColor();
     }
 
     /** Black dim over the wallpaper, behind every surface: 0% shows the wallpaper untouched. */
@@ -13811,7 +13945,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The strip draws no glass of its own — its background is transparent, see
         // applyAzScrubRowOverlayLayering — so a veil it asked for would be drawn by nobody.
         return GlassInk.bareBandInk(mChrome.ink(), GlassBackdropCache.Band.AZ_STRIP, mAzGlassRect,
-            resolveWallpaperBackdropDimColor(), candidates[0], candidates[1],
+            groundUnderRect(mAzGlassRect), candidates[0], candidates[1],
             OnGlass.TARGET_LARGE_TEXT);
     }
 
@@ -25331,6 +25465,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The place the Workspace's page shows: the display's while the display
                     // window is in front of it.
                     com.termux.app.wall.PaneWallPage page = placeOf(wallPage);
+                    refreshGroundStrip();
                     // Everything a place change moves apart from the bar runs here, once the wall
                     // has stopped: the layout and the look are every place's, so the slide never
                     // has anything to re-lay, and what is left — the keyboard, the touchpad, who
@@ -25380,6 +25515,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                         Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
                     syncPlaceBarOffset(offsetPx);
+                    syncGroundStrip(offsetPx);
                     // Off its rest on the Workspace, the canvas reaches up under the bar so Home's
                     // page stands at its own top from this frame on (PageTopInsets).
                     syncCanvasTopReach();
@@ -27306,6 +27442,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWallPagesListener = null;
         if (mPageLookPruner != null) mPageLookPruner.close();
         mPageLookPruner = null;
+        if (mGroundLook != null) mGroundLook.close();
+        mGroundLook = null;
     }
 
     /** The display window's card key in the page overview: there is only ever one display. */
