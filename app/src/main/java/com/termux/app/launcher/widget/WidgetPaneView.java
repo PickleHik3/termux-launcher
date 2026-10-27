@@ -834,6 +834,9 @@ public final class WidgetPaneView extends FrameLayout {
                         break;
                     }
                     pagingDragging = true;
+                    // The move that claims the stream is not delivered to onTouchEvent: the
+                    // page follows the finger from this move, not the next one.
+                    setContentTranslationX(resistedDrag(event.getX() - pagingDownX));
                     return true;
                 }
                 break;

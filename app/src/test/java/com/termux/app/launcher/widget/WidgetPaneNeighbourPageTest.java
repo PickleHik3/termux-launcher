@@ -107,6 +107,42 @@ public class WidgetPaneNeighbourPageTest {
         assertEquals(shift, pane.grid().getTranslationX(), 1f);
     }
 
+    @Test public void slideKeepsTheGridTheFloatsAndTheNeighbourInLockstepFromTheFirstMove() {
+        setUp();
+        Pinned pinned = new Pinned(activity);
+        pane.setPagePinnedLayer(pinned);
+        shadowOf(Looper.getMainLooper()).idle();
+        int w = pane.getWidth();
+        float y = pane.getHeight() / 2f;
+        float x0 = w * 0.9f;
+        touch(MotionEvent.ACTION_DOWN, 1000L, x0, y);
+        float[] shares = {0.1f, 0.3f, 0.6f};
+        long time = 1000L;
+        for (float share : shares) {
+            float drag = -w * share;
+            time += 16L;
+            touch(MotionEvent.ACTION_MOVE, time, x0 + drag, y + 1);
+            WidgetGridView layer = pane.neighbourGrid();
+            assertNotNull("a neighbour at " + share, layer);
+            assertEquals("grid at " + share, pane.contentShiftFraction() * w,
+                pane.grid().getTranslationX(), 1f);
+            assertEquals("floats at " + share, pane.grid().getTranslationX(),
+                pinned.getTranslationX(), 1f);
+            assertEquals("neighbour at " + share, pane.grid().getTranslationX() + w,
+                layer.getTranslationX(), 1f);
+            assertTrue("the drag has moved the page at " + share,
+                pane.grid().getTranslationX() < -1f);
+        }
+    }
+
+    private static final class Pinned extends android.widget.FrameLayout
+            implements WidgetPaneView.PagePinnedLayer {
+        Pinned(Activity activity) { super(activity); }
+        @Override public void onHomePageShown(int page) { }
+        @Override public boolean holdsPoint(float x, float y) { return false; }
+        @Override public boolean yieldsSidewaysSwipe(float x, float y) { return true; }
+    }
+
     @Test public void aPullAgainstTheEndHasNoNeighbour() {
         setUp();
         controller.setCurrentPage(1);
