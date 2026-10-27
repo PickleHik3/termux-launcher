@@ -988,7 +988,13 @@ public final class SurfacePresets {
             for (SurfaceProperty property : properties)
                 workspace[slot.ordinal()][property.ordinal()] =
                     prefs.getSurfaceValue(slot, property, WallHalf.WORKSPACE);
+        String workspaceMaterial = prefs.getSurfaceMaterial(WallHalf.WORKSPACE);
+        int workspaceIntensity = prefs.getSurfaceMaterialIntensity(WallHalf.WORKSPACE);
         applyHalf(prefs, halfOf(preset, WallHalf.HOME), WallHalf.HOME, true);
+        if (!workspaceMaterial.equals(prefs.getSurfaceMaterial(WallHalf.WORKSPACE)))
+            prefs.setSurfaceMaterial(WallHalf.WORKSPACE, workspaceMaterial);
+        if (workspaceIntensity != prefs.getSurfaceMaterialIntensity(WallHalf.WORKSPACE))
+            prefs.setSurfaceMaterialIntensity(WallHalf.WORKSPACE, workspaceIntensity);
         for (SurfaceSlot slot : slots) {
             for (SurfaceProperty property : properties) {
                 if (!TermuxAppSharedPreferences.isPerHalf(slot, property)) continue;
@@ -1042,10 +1048,16 @@ public final class SurfacePresets {
         }
         for (Map.Entry<String, Object> entry : look.values.entrySet()) {
             String key = entry.getKey();
-            if (isLayoutOwned(key) || isHalfKey(key))
+            if (isLayoutOwned(key) || (isHalfKey(key) && !isMaterialKey(key)))
                 continue;
             applyOne(prefs, key, entry.getValue(), half);
         }
+    }
+
+    /** The material point and its intensity: held per page as strings and numbers of their own. */
+    private static boolean isMaterialKey(@NonNull String key) {
+        return TERMUX_APP.KEY_SURFACE_MATERIAL.equals(key)
+            || TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY.equals(key);
     }
 
     /** The number a look gives a surface's property: its own cell, else the look's Base. */
@@ -1223,7 +1235,8 @@ public final class SurfacePresets {
                 return false;
         }
         for (Map.Entry<String, Object> entry : look.values.entrySet()) {
-            if (isLayoutOwned(entry.getKey()) || (scoped && isHalfKey(entry.getKey())))
+            if (isLayoutOwned(entry.getKey()) || (scoped && isHalfKey(entry.getKey())
+                    && !isMaterialKey(entry.getKey())))
                 continue;
             Object current = currentOne(prefs, entry.getKey(), half);
             if (current != null && !current.equals(entry.getValue()))
@@ -1261,7 +1274,8 @@ public final class SurfacePresets {
         }
         for (Map.Entry<String, Object> entry : look.values.entrySet()) {
             String key = entry.getKey();
-            if (isLayoutOwned(key) || !isOwnKey(key, half) || (scoped && isHalfKey(key)))
+            if (isLayoutOwned(key) || !isOwnKey(key, half)
+                    || (scoped && isHalfKey(key) && !isMaterialKey(key)))
                 continue;
             Object current = currentOne(prefs, key, half);
             if (current != null && !current.equals(entry.getValue()))

@@ -26,8 +26,9 @@ public final class PageLookKeys {
 
     /**
      * The keys a page may hold its own value of: blur, opacity, grain and tint of the dock, status
-     * bar, keyboard and canvas, the keyboard backdrop opacity and the wallpaper dim. Everything
-     * else (Base, the inherit flags, shapes, material, intensity) is wall-wide only.
+     * bar, keyboard and canvas, the keyboard backdrop opacity, the wallpaper dim, and the material
+     * (a string) with its intensity. Everything else (Base, the inherit flags, shapes) is
+     * wall-wide only.
      */
     public static final Set<String> DETACHABLE;
 
@@ -42,6 +43,8 @@ public final class PageLookKeys {
         }
         keys.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
         keys.add(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM);
+        keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL);
+        keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY);
         DETACHABLE = Collections.unmodifiableSet(keys);
     }
 
