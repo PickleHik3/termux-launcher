@@ -93,6 +93,19 @@ public class WallPagesStoreTest {
     }
 
     @Test
+    public void transformFiresRemovedOnceForPagesThatAreGone() {
+        WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        store.replace(WallPagesMigration.seed("home", 0, "home", 3));
+        Recorder rec = new Recorder();
+        store.addListener(rec);
+        store.transform(p -> p.withHomeCount(1));
+        assertEquals(2, rec.removed.size());
+        store.transform(p -> p.withHomeCount(1));
+        assertEquals(2, rec.removed.size());
+        assertEquals(1, store.current().homeCount());
+    }
+
+    @Test
     public void unreadableOrNewerJsonIsTreatedAsAbsent() {
         WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
         storage.write("{not json");

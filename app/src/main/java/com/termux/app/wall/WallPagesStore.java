@@ -151,6 +151,31 @@ public final class WallPagesStore {
         return result;
     }
 
+    /** A change to the value that is not one {@link WallPages.Result} describes. */
+    public interface Transform {
+        @NonNull WallPages apply(@NonNull WallPages pages);
+    }
+
+    /**
+     * Replaces the value with {@code transform}'s answer. A page that is gone from it (neither on
+     * the wall nor detached) was removed for good: {@code onRemoved} fires for it once.
+     */
+    public void transform(@NonNull Transform transform) {
+        WallPages before = current;
+        WallPages after = transform.apply(before);
+        if (after.equals(before)) return;
+        replace(after);
+        List<Page> held = new ArrayList<>(after.allPages());
+        held.addAll(after.detached());
+        List<Page> was = new ArrayList<>(before.allPages());
+        was.addAll(before.detached());
+        for (Page p : was) {
+            boolean still = false;
+            for (Page h : held) if (h.id == p.id) still = true;
+            if (!still) for (Listener l : listeners) l.onRemoved(p);
+        }
+    }
+
     /** Commits one pending removal. */
     @NonNull
     public WallPages.Result commitRemoval(final int id) {

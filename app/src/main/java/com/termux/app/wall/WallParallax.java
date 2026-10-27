@@ -66,15 +66,33 @@ public final class WallParallax {
      */
     public static int rowIndex(@NonNull PaneWallPage kind, int index, int homeCount,
                                int windowCount) {
-        int homes = Math.max(1, homeCount);
+        return rowIndex(WallPages.seed(Math.max(1, homeCount)), kind, index, windowCount);
+    }
+
+    /**
+     * {@link #rowIndex(PaneWallPage, int, int, int)} answered from the wall's stops: the stop of
+     * Home page {@code index}, or of the Terminal page's window {@code index} (or its one
+     * shell-starting stop when there are no windows). Not {@code rowCount}: that counts no stop
+     * for an empty Workspace, where the wall still lands on one.
+     */
+    public static int rowIndex(@NonNull WallPages pages, @NonNull PaneWallPage kind, int index,
+                               int windowCount) {
         int windows = Math.max(0, windowCount);
+        WallPages.Stop stop;
         switch (kind) {
-            case WIDGETS:
-                return clamp(index, 0, homes - 1);
+            case WIDGETS: {
+                java.util.List<WallPages.Page> homes = pages.homePages();
+                stop = WallPages.Stop.of(homes.get(clamp(index, 0, homes.size() - 1)).id);
+                break;
+            }
             case TERMINAL:
-            default:
-                return homes + clamp(index, 0, Math.max(0, windows - 1));
+            default: {
+                WallPages.Page terminal = pages.terminal();
+                stop = windows == 0 ? new WallPages.Stop(terminal.id, 0, true)
+                    : WallPages.Stop.window(terminal.id, clamp(index, 0, windows - 1));
+            }
         }
+        return pages.indexOf(stop, windows);
     }
 
     /** {@link #innerPosition}'s departure when it is simply the page next door. */

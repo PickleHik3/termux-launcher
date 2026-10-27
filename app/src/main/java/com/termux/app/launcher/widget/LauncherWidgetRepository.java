@@ -71,6 +71,23 @@ public final class LauncherWidgetRepository {
     private static final String PREFS = "launcher_widget_repository";
     private static final String KEY_STATE = "state";
 
+    /**
+     * Told when the Home pages change, by index: {@code mapping} gives where each old page stands
+     * now ({@link com.termux.app.launcher.home.HomePageEdits#REMOVED} for one gone) when a
+     * removal, move or trim did it, else null for pages added or dropped at the end.
+     */
+    public interface PageListener {
+        void onPagesChanged(int oldCount, int newCount, @Nullable int[] mapping);
+    }
+
+    @Nullable private PageListener pageListener;
+    /** What the edit being committed does to the page numbers; null for a plain count change. */
+    @Nullable private int[] pageMapping;
+
+    public synchronized void setPageListener(@Nullable PageListener listener) {
+        pageListener = listener;
+    }
+
     private final Storage storage;
     private LinkedHashMap<Integer, LauncherWidgetRecord> records = new LinkedHashMap<>();
     @Nullable private WidgetAddTransaction pending;
@@ -718,7 +735,9 @@ public final class LauncherWidgetRepository {
                 nextFresh.add(renumbered[page]);
             }
         }
-        if (!commitValidated(next, nextPending, grid, target, nextFresh, revision + 1)) {
+        final int targetCount = target;
+        if (!commitWithMapping(renumbered, () -> commitValidated(next, nextPending, grid,
+                targetCount, nextFresh, revision + 1))) {
             trimFailed = true;
             return null;
         }
@@ -763,7 +782,18 @@ public final class LauncherWidgetRepository {
             if (fresh == page) continue;
             nextFresh.add(fresh > page ? fresh - 1 : fresh);
         }
-        return commitValidated(next, nextPending, grid, pageCount - 1, nextFresh, revision + 1);
+        return commitWithMapping(com.termux.app.launcher.home.HomePageEdits.removeMapping(
+            pageCount, page), () -> commitValidated(next, nextPending, grid, pageCount - 1,
+            nextFresh, revision + 1));
+    }
+
+    private boolean commitWithMapping(int[] mapping, java.util.function.BooleanSupplier commit) {
+        pageMapping = mapping;
+        try {
+            return commit.getAsBoolean();
+        } finally {
+            pageMapping = null;
+        }
     }
 
     /**
@@ -786,8 +816,8 @@ public final class LauncherWidgetRepository {
             if (fresh >= 0 && fresh < pageCount) nextFresh.add(mapping[fresh]);
         }
         // Edit pages acts on both orientations: the shelved one's pages move the same way.
-        return commitValidated(next, nextPending, grid, pageCount, nextFresh, orientation,
-            shelfRenumbered(mapping), revision + 1);
+        return commitWithMapping(mapping, () -> commitValidated(next, nextPending, grid, pageCount,
+            nextFresh, orientation, shelfRenumbered(mapping), revision + 1));
     }
 
     /**
@@ -1024,12 +1054,18 @@ public final class LauncherWidgetRepository {
         records = new LinkedHashMap<>(next);
         pending = nextPending;
         grid = nextGrid;
+        int oldPageCount = pageCount;
         pageCount = nextPageCount;
         freshPages = fresh;
         orientation = nextOrientation;
         layouts = shelf;
         rowSnapshot = nextSnapshot;
         revision = nextRevision;
+        int[] mapping = pageMapping;
+        pageMapping = null;
+        if (pageListener != null && (mapping != null || oldPageCount != nextPageCount)) {
+            pageListener.onPagesChanged(oldPageCount, nextPageCount, mapping);
+        }
         return true;
     }
 
