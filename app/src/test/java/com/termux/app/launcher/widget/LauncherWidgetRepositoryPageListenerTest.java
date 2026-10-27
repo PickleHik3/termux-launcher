@@ -45,10 +45,11 @@ public class LauncherWidgetRepositoryPageListenerTest {
             @Override public void onRemoved(WallPages.Page page) { removed.add(page.id); }
         });
         repository.setPageListener((oldCount, newCount, mapping) -> {
-            if (mapping != null && mapping.length == store.current().homeCount()) {
-                store.transform(pages -> pages.withHomeMapping(mapping));
+            boolean mapped = mapping != null && mapping.length == store.current().homeCount();
+            if (mapped) store.transform(pages -> pages.withHomeMapping(mapping));
+            if (mapped || newCount > store.current().homeCount()) {
+                store.transform(pages -> pages.withHomeCount(newCount));
             }
-            store.transform(pages -> pages.withHomeCount(newCount));
         });
     }
 
@@ -92,6 +93,24 @@ public class LauncherWidgetRepositoryPageListenerTest {
         assertTrue(repository.trimEmptyPages());
         assertEquals(repository.pageCount(), store.current().homeCount());
         assertEquals(Arrays.asList(4), homeIds());
+    }
+
+    @Test
+    public void aCountChangeWithoutAMappingNeverDropsHomePages() {
+        repository.addPage();
+        repository.addPage();
+        store.transform(p -> p.setHome(4).pages);
+        // An orientation's layout with fewer pages, then back to three.
+        assertTrue(repository.setPageCount(1));
+        assertEquals(Arrays.asList(1, 3, 4), homeIds());
+        assertEquals(4, store.current().home().id);
+        assertTrue(repository.setPageCount(3));
+        assertEquals(Arrays.asList(1, 3, 4), homeIds());
+        assertEquals(4, store.current().home().id);
+        assertTrue(removed.isEmpty());
+        // More pages than the wall holds still append.
+        assertTrue(repository.setPageCount(4));
+        assertEquals(Arrays.asList(1, 3, 4, 5), homeIds());
     }
 
     @Test

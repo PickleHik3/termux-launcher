@@ -27154,15 +27154,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final int count = repository.pageCount();
         int held = wallPages().homeCount();
         if (held != count) {
+            // Grow only: a layout for another orientation can hold fewer pages, and the pages it
+            // lacks come back with it. Pages are dropped only by a removal, a move or a trim.
             Logger.logWarn("WallPages", "Home pages " + held + " in the wall, " + count
-                + " in the widget repository: following the repository");
-            mWallPagesStore.transform(pages -> pages.withHomeCount(count));
+                + " in the widget repository" + (held < count ? ": adding the missing ones"
+                : ": keeping the wall's"));
+            if (held < count) mWallPagesStore.transform(pages -> pages.withHomeCount(count));
         }
         repository.setPageListener((oldCount, newCount, mapping) -> {
-            if (mapping != null && mapping.length == wallPages().homeCount()) {
-                mWallPagesStore.transform(pages -> pages.withHomeMapping(mapping));
+            boolean mapped = mapping != null && mapping.length == wallPages().homeCount();
+            if (mapped) mWallPagesStore.transform(pages -> pages.withHomeMapping(mapping));
+            // Without a mapping (an orientation's layout, a drop's page) the pages only grow.
+            if (mapped || newCount > wallPages().homeCount()) {
+                mWallPagesStore.transform(pages -> pages.withHomeCount(newCount));
             }
-            mWallPagesStore.transform(pages -> pages.withHomeCount(newCount));
         });
     }
 
