@@ -110,6 +110,16 @@ public enum TerminalContrastLevel {
         this.evenOutWidth = evenOutWidth;
     }
 
+    /**
+     * How far, in HCT tone, an ink may move from its recipe tone on glass: at least 10 at every
+     * level. On glass the ink, not the ground, absorbs the difference between wallpapers, so
+     * Softer's 4-tone {@link #toneReach} would otherwise give it a lower even-out band than Default
+     * and invert what Softer means. The opaque terminal keeps {@link #toneReach}.
+     */
+    public double glassToneReach() {
+        return Math.max(toneReach, 10d);
+    }
+
     /** {@code sourceChroma} as this level spends it: scaled, then held inside the level's band. */
     public double accentChroma(double sourceChroma) {
         return Math.max(chromaMin, Math.min(chromaMax, sourceChroma * chromaScale));

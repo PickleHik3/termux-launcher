@@ -67,7 +67,7 @@ public class EvenOutTest {
         assertEquals(log.toString(), 34d, ceiling.tone, 1d);
         assertFalse(mapping.isIdentity());
         assertTrue(log.toString(), mapping.dstHi <= ceiling.tone + 1e-9);
-        assertTrue(log.toString(), mapping.dstLo >= ceiling.tone - level.evenOutWidth - 1e-9);
+        assertTrue(log.toString(), mapping.dstLo >= ceiling.tone - level.evenOutWidth - 0.5d - 1e-9);
         assertEquals(level.evenOutWidth, mapping.dstHi - mapping.dstLo, 1e-9);
         assertTrue(ColorUtils.lstarFromArgb(ends.lightest) <= ceiling.tone + 1d);
         // The mean sits 48% of the way up [p2, p98], so it maps to about 26.7 in a band of
@@ -83,6 +83,14 @@ public class EvenOutTest {
         EvenOut.Mapping mapping = EvenOut.map(stats(8d, 14d, 20d), ceiling, PALE, level);
         assertTrue(mapping.isIdentity());
         assertEquals(8d, mapping.apply(8d), 1e-9);
+    }
+
+    @Test
+    public void aDarkButWideRangeThatFitsIsLeftAloneToo() {
+        TerminalContrastLevel level = TerminalContrastLevel.DEFAULT;
+        EvenOut.Ceiling ceiling = EvenOut.ceiling(pong(level), PALE, level);
+        EvenOut.Mapping mapping = EvenOut.map(stats(2d, 15d, 30d), ceiling, PALE, level);
+        assertTrue(mapping.isIdentity());
     }
 
     @Test
@@ -116,8 +124,9 @@ public class EvenOutTest {
         double standard = bandTop(TerminalContrastLevel.DEFAULT);
         double harder = bandTop(TerminalContrastLevel.HARDER);
         System.out.println("band tops " + softer + " " + standard + " " + harder);
-        // With red and blue no longer limiting, Softer's pastel accents (tone 52 + reach 4) set a
-        // lower ceiling than Default's (55 + 10), so its band top is NOT higher; it is wider.
+        // On glass every level's ink reaches at least 10 tones (glassToneReach), so Softer's
+        // pastel recipe no longer lowers its ceiling below Default's.
+        assertTrue(softer > standard);
         assertTrue(standard > harder);
         assertTrue(widthOf(TerminalContrastLevel.SOFTER) > widthOf(TerminalContrastLevel.DEFAULT));
         assertTrue(widthOf(TerminalContrastLevel.DEFAULT) > widthOf(TerminalContrastLevel.HARDER));
@@ -154,7 +163,7 @@ public class EvenOutTest {
                     // Hct rounds to an 8-bit colour, which moves a tone by a few tenths.
                     double ratio = EvenOut.toneRatio(limit.inkTone, groundTone);
                     assertTrue(level + " " + polarity + " " + limit + " ground " + groundTone
-                        + " ratio " + ratio, ratio >= limit.floor * 0.98d);
+                        + " ratio " + ratio, ratio >= limit.floor);
                 }
             }
         }

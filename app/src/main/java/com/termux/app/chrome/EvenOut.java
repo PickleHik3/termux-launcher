@@ -34,6 +34,13 @@ public final class EvenOut {
 
     private EvenOut() {}
 
+    /**
+     * How far inside the ceiling the band's limiting end is placed, in tone: the composited band
+     * end is rounded to 8 bits, which can move its tone by a few tenths, and the end must not land
+     * past the limit the palette is solved for.
+     */
+    static final double BAND_MARGIN = 0.5d;
+
     /** One pair's limit: the ground tone past which this ink, at its most extreme tone, fails. */
     public static final class PairLimit {
         @NonNull public final String label;
@@ -111,8 +118,8 @@ public final class EvenOut {
             if (foreground) {
                 floor = level.bodyTarget;
                 tone = pale
-                    ? Math.min(MaterialTerminalColorScheme.TEXT_TONE_MAX, slotTone + level.toneReach)
-                    : Math.max(MaterialTerminalColorScheme.TEXT_TONE_MIN, slotTone - level.toneReach);
+                    ? Math.min(MaterialTerminalColorScheme.TEXT_TONE_MAX, slotTone + level.glassToneReach())
+                    : Math.max(MaterialTerminalColorScheme.TEXT_TONE_MIN, slotTone - level.glassToneReach());
             } else if (pair.ink == 8) {
                 floor = level.dimRatio;
                 tone = pale ? level.glassDimToneMax
@@ -120,8 +127,8 @@ public final class EvenOut {
             } else {
                 floor = pair.ink <= 6 ? level.glassAnsiRatio : level.ansiRatio;
                 tone = pale
-                    ? Math.min(MaterialTerminalColorScheme.ACCENT_TONE_MAX, slotTone + level.toneReach)
-                    : Math.max(MaterialTerminalColorScheme.ACCENT_TONE_MIN, slotTone - level.toneReach);
+                    ? Math.min(MaterialTerminalColorScheme.ACCENT_TONE_MAX, slotTone + level.glassToneReach())
+                    : Math.max(MaterialTerminalColorScheme.ACCENT_TONE_MIN, slotTone - level.glassToneReach());
                 double onWhite = LegibilityPairs.onWhiteFloor(pair.ink);
                 if (pale && onWhite > 0d) {
                     tone = Math.min(tone, toneAtRatio(MaterialTerminalColorScheme.WHITE_TONE_MAX,
@@ -191,9 +198,9 @@ public final class EvenOut {
      * [c - w/2, c + w/2] with {@code w} the level's {@code evenOutWidth} and
      * {@code c = min(mean, ceiling - w/2)} for pale ink; mirrored for dark ink,
      * {@code c = max(mean, floor + w/2)}. When the range already sits on the ink's side of the
-     * limit and is no wider than {@code w}, the map is the identity, so a dark wallpaper under
-     * pale ink is untouched. It never widens: a range narrower than {@code w} keeps its own width
-     * and is only shifted.
+     * limit, whatever its span, the map is the identity, so a dark wallpaper under pale ink is
+     * untouched. Only a range that crosses the limit is narrowed, to the smaller of {@code w} and
+     * its own span (it never widens), and placed {@link #BAND_MARGIN} inside the limit.
      */
     @NonNull
     public static Mapping map(@NonNull GlassBackdropCache.Lightness stats, @NonNull Ceiling ceiling,
@@ -201,13 +208,14 @@ public final class EvenOut {
                               @NonNull TerminalContrastLevel level) {
         boolean pale = polarity == ChromeInk.Polarity.PALE_INK;
         double span = Math.max(0d, stats.p98 - stats.p2);
-        boolean fits = pale ? stats.p98 <= ceiling.tone : stats.p2 >= ceiling.tone;
-        if (fits && span <= level.evenOutWidth) {
+        double limit = pale ? ceiling.tone - BAND_MARGIN : ceiling.tone + BAND_MARGIN;
+        boolean fits = pale ? stats.p98 <= limit : stats.p2 >= limit;
+        if (fits) {
             return new Mapping(stats.p2, stats.p98, stats.p2, stats.p98, stats.meanColor);
         }
         double width = Math.min(level.evenOutWidth, span);
-        double center = pale ? Math.min(stats.mean, ceiling.tone - width / 2d)
-            : Math.max(stats.mean, ceiling.tone + width / 2d);
+        double center = pale ? Math.min(stats.mean, limit - width / 2d)
+            : Math.max(stats.mean, limit + width / 2d);
         return new Mapping(stats.p2, stats.p98, center - width / 2d, center + width / 2d,
             stats.meanColor);
     }
