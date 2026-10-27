@@ -765,7 +765,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
         // line there is nothing for it to sit inside.
         if (mControls != null) {
             mControls.setPaneBorder(radiusPx, strokePx);
-            PaneGlass.dressTab(style, mControls);
+            PaneGlass.dressTab(style, mControls, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.HOME);
         }
         // A page is never a divided pane, so its radius is the surface's own. The frame clips to
         // it under any line, as the lone terminal pane's host does under the plain border: a

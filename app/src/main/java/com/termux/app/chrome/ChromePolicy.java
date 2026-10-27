@@ -180,8 +180,8 @@ public final class ChromePolicy {
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
         } else {
             preferences.setWallpaperEnabledTerminalBackgroundOpacity(preferences.getTerminalBackgroundOpacity());
-            preferences.setWallpaperEnabledAppBarOpacity(preferences.getAppBarOpacity());
-            preferences.setWallpaperEnabledExtraKeysBlurRadius(preferences.getExtraKeysBlurRadius());
+            preferences.setWallpaperEnabledAppBarOpacity(preferences.getAppBarOpacity(TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+            preferences.setWallpaperEnabledExtraKeysBlurRadius(preferences.getExtraKeysBlurRadius(TermuxAppSharedPreferences.WallHalf.WORKSPACE));
             preferences.setUseSystemWallpaperEnabled(false);
             // Opaque and unblurred is a uniform state, so it belongs on the shared layer: every
             // surface goes opaque, including the ones this policy never named individually.

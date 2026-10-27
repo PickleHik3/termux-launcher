@@ -30,8 +30,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class WallPagesStore {
 
     static final int VERSION = 1;
-    static final String PREFS = "wall_pages";
-    static final String KEY_STATE = "state";
+    public static final String PREFS = "wall_pages";
+    public static final String KEY_STATE = "state";
 
     /** Where the JSON lives. */
     public interface Storage {

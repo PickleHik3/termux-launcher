@@ -1321,7 +1321,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             mControls.setPaneBorder(radiusPx, glass
                 ? com.termux.app.GlassRimRenderer.strokePx(density)
                 : border ? PaneRim.stockStrokePx(density) : 0f);
-            PaneGlass.dressTab(style, mControls);
+            PaneGlass.dressTab(style, mControls, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE);
         }
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
         // rounded outline, so a clipping frame cut away the very paint that rounds the surface,

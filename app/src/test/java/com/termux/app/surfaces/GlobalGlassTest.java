@@ -69,7 +69,7 @@ public class GlobalGlassTest {
                 assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.GRAIN));
         }
         assertEquals(9, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
-        assertEquals(9, preferences.getInAppKeyboardGrain());
+        assertEquals(9, preferences.getInAppKeyboardGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
     }
 
     @Test
@@ -108,7 +108,7 @@ public class GlobalGlassTest {
             assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.TINT));
         assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
         assertEquals(40, preferences.getTerminalTintStrength());
-        assertEquals(40, preferences.getDockTintStrength());
+        assertEquals(40, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
     }
 
     /** A Hue picked while the shared Tint is 0 raises it to 40 in the same edit. */
@@ -122,7 +122,7 @@ public class GlobalGlassTest {
         assertEquals(40, GlobalGlass.TINT_ON_HUE_PICK);
         assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
         assertEquals("every surface wears it, as the Tint slider writes it", 40,
-            preferences.getDockTintStrength());
+            preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
         assertEquals("tertiary", preferences.getSurfaceGlassTintHue());
     }
 
