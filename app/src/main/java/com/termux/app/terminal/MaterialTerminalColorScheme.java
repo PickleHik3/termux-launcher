@@ -450,9 +450,9 @@ public final class MaterialTerminalColorScheme {
      * recipe tone that satisfies every pair they appear in; the other accents, and the bright
      * ones, only need the background and take the level's ordinary search.
      *
-     * <p>When no tone satisfies both pairs the background wins, since it is what text is drawn on
-     * most, and the colour is left where the background floor puts it; the contract test reports
-     * that miss rather than letting it ship silently. When the background floor cannot be reached
+     * <p>When no tone satisfies both pairs the panel wins (ADR 0014): white goes to the top of its
+     * range and red and blue take the best background ratio that still reads on it, so a dialog
+     * box is never unreadable at any level. When the background floor cannot be reached
      * at all in the window — any accent on a mid-tone wallpaper at 4.5:1 — it drops out of the
      * search and the panel pair is met with the best background ratio left.
      */
@@ -460,7 +460,10 @@ public final class MaterialTerminalColorScheme {
     static void applyAnsiContrastFloor(@NonNull Properties props, @ColorInt int background,
                                        @NonNull TerminalContrastLevel level) {
         Hct white = Hct.fromInt(Color.parseColor(props.getProperty("color7")));
-        int whiteColor = Color.parseColor(props.getProperty("color7"));
+        // No white that fits both pairs: go as high as the ladder allows, which leaves the panel
+        // inks the most background contrast they can have while they still read on it.
+        int whiteColor = Hct.from(white.getHue(), white.getChroma(),
+            Math.max(white.getTone(), WHITE_TONE_MAX)).toInt();
         for (double tone = white.getTone(); tone <= WHITE_TONE_MAX; tone++) {
             int candidate = Hct.from(white.getHue(), white.getChroma(), tone).toInt();
             if (panelAccentsFit(props, background, level, candidate)) {
@@ -484,7 +487,8 @@ public final class MaterialTerminalColorScheme {
             boolean dimText = slot == 8;
             double onWhite = LegibilityPairs.onWhiteFloor(slot);
             if (onWhite > 0d) {
-                int fitted = panelTone(color, background, floor, whiteColor, onWhite, level.toneReach);
+                int fitted = panelTone(color, background, floor, whiteColor, onWhite, level.toneReach,
+                    false);
                 if (fitted != 0) {
                     props.setProperty(key, hex(fitted));
                     continue;
@@ -503,7 +507,7 @@ public final class MaterialTerminalColorScheme {
             double onWhite = LegibilityPairs.onWhiteFloor(slot);
             if (onWhite <= 0d) continue;
             if (panelTone(Color.parseColor(props.getProperty("color" + slot)), background,
-                ansiFloor(slot, level), white, onWhite, level.toneReach) == 0) {
+                ansiFloor(slot, level), white, onWhite, level.toneReach, true) == 0) {
                 return false;
             }
         }
@@ -513,14 +517,16 @@ public final class MaterialTerminalColorScheme {
     /**
      * The tone of {@code color}, nearest where it stands, that reads at {@code groundFloor} on the
      * background and at {@code whiteFloor} on {@code white}; 0 (never a valid opaque colour) when
-     * none does. Searched in the window {@link #contrastTone} uses. If the background floor is out
-     * of reach everywhere in the window it is dropped and the tone with the best background ratio
-     * among those that read on white wins; if it is in reach somewhere but not together with white,
-     * the answer is none and the caller keeps the background.
+     * none does. Searched in the window {@link #contrastTone} uses. When no tone meets both, the
+     * panel wins (ADR 0014): the tone with the best background ratio among those that read on
+     * white is taken. Harder over very dark glass is that case — 6:1 on a tone-10 ground and 3:1
+     * on white would need a white brighter than white. {@code strict} asks only whether both can
+     * be met, for the search that places white, and answers none instead.
      */
     @ColorInt
     private static int panelTone(@ColorInt int color, @ColorInt int background, double groundFloor,
-                                 @ColorInt int white, double whiteFloor, double reach) {
+                                 @ColorInt int white, double whiteFloor, double reach,
+                                 boolean strict) {
         Hct source = Hct.fromInt(color);
         int from = (int) Math.ceil(Math.max(ACCENT_TONE_MIN, source.getTone() - reach));
         int to = (int) Math.floor(Math.min(ACCENT_TONE_MAX, source.getTone() + reach));
@@ -549,7 +555,7 @@ public final class MaterialTerminalColorScheme {
             }
         }
         if (best != 0) return best;
-        return groundReachable ? 0 : bestOnGround;
+        return strict && groundReachable ? 0 : bestOnGround;
     }
 
     /**

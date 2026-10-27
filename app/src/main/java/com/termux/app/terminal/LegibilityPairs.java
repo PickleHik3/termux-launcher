@@ -105,6 +105,29 @@ final class LegibilityPairs {
         return 0d;
     }
 
+    /**
+     * How close to the ideal bound a panel ink lands when the panel outranks the background. The
+     * search moves in whole tones and keeps most of the colour's chroma, so the tone it takes sits
+     * up to one step under the exact bound.
+     */
+    static final double PANEL_BOUND_KEPT = 0.95d;
+
+    /**
+     * The floor {@code slot} really answers to on the background once the panel outranks it
+     * (ADR 0014). Where reading at {@link #PANEL_INK_FLOOR} on {@code white} and at the level's
+     * ratio on {@code background} cannot both hold — Harder over very dark glass, where 6:1 on a
+     * tone-10 ground would need a white brighter than white — the background floor drops to the
+     * most that still leaves the panel pair, which is white's own ratio on the ground over the
+     * panel floor. Every other slot, and every feasible case, keeps {@link #backgroundFloor}.
+     */
+    static double backgroundFloor(int slot, @NonNull TerminalContrastLevel level,
+                                  int white, int background) {
+        double floor = backgroundFloor(slot, level);
+        if (onWhiteFloor(slot) <= 0d) return floor;
+        double bound = MaterialTerminalColorScheme.contrastRatio(white, background) / PANEL_INK_FLOOR;
+        return bound >= floor ? floor : bound * PANEL_BOUND_KEPT;
+    }
+
     /** The floor {@code slot} is held to on ANSI white, or 0 when it is exempt. */
     static double onWhiteFloor(int slot) {
         for (Pair pair : ALL) {

@@ -865,9 +865,12 @@ public class MaterialTerminalColorSchemeTest {
             assertTrue(level.value + " is more legible than the level below", body > previous);
             previous = body;
             for (int i = 0; i < 16; i++) {
+                // Red and blue answer to the panel first (ADR 0014): on Harder over this ground
+                // their floor is what still leaves 3:1 on ANSI white.
                 assertTrue("ANSI " + i + " at " + level.value,
                     ratio(color(palette, "color" + i), DUSK) + .01
-                        >= MaterialTerminalColorScheme.ansiFloor(i, level));
+                        >= LegibilityPairs.backgroundFloor(i, level, color(palette, "color7"),
+                            DUSK));
             }
         }
     }

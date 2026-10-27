@@ -87,13 +87,16 @@ public class LegibilityContractTest {
                         int under = pair.ground == LegibilityPairs.BACKGROUND
                             ? background : slotColor(p, pair.ground);
                         double ratio = MaterialTerminalColorScheme.contrastRatio(ink, under);
-                        double floor = pair.floor(level);
+                        double floor = pair.ground == LegibilityPairs.BACKGROUND
+                            && pair.ink != LegibilityPairs.FOREGROUND
+                            ? LegibilityPairs.backgroundFloor(pair.ink, level, slotColor(p, 7),
+                                background)
+                            : pair.floor(level);
                         String row = String.format("%s %s %s %s %s on %s = %.2f (floor %.1f)",
                             seed.name, groundName(ground), level.value, pair.label(),
                             hex(ink), hex(under), ratio, floor);
                         boolean panel = pair.ground != LegibilityPairs.BACKGROUND;
-                        boolean asserted = panel ? !panelInfeasible(pair, level, background)
-                            : ground != GLASS_MID;
+                        boolean asserted = panel || ground != GLASS_MID;
                         if (asserted && ratio + .01 < floor) failures.append(row).append('\n');
                         if (pair.ground == 7 && pair.ink == 1
                             || pair.ink == 4 && pair.ground == 7) {
@@ -104,21 +107,6 @@ public class LegibilityContractTest {
             }
         }
         assertTrue("pairs under their floor:\n" + failures, failures.length() == 0);
-    }
-
-    /**
-     * A panel ink that must read at 3:1 on white and at the level's ratio on the ground needs a
-     * white brighter than white: the ratio chain ground, ink, white must fit inside white on the
-     * ground. Harder (6:1) on the dark
-     * glass ground (tone 10) is that case; the solver keeps the background pair there, and the
-     * grid names the case instead of failing on it.
-     */
-    private static boolean panelInfeasible(LegibilityPairs.Pair pair, TerminalContrastLevel level,
-                                           int background) {
-        if (pair.ink == 0) return false;
-        // (ink + .05) >= ratio * (ground + .05) and (1 + .05) >= floor * (ink + .05).
-        double whiteOnGround = MaterialTerminalColorScheme.contrastRatio(Color.WHITE, background);
-        return pair.floor(level) * level.ansiRatio > whiteOnGround;
     }
 
     private static String hex(int color) {
