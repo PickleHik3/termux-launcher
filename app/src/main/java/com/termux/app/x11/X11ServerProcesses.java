@@ -43,6 +43,35 @@ public final class X11ServerProcesses {
     }
 
     /**
+     * Whether {@code cmdline} (see {@link #isServer}) carries its own session: a {@code -xstartup}
+     * argument, which is how the launcher starts one, or upstream's {@code --} separator before a
+     * command ({@code termux-x11 :1 -- cmd}). A server with neither has nobody to start a window
+     * manager for it.
+     */
+    public static boolean startsOwnSession(@Nullable String cmdline) {
+        if (cmdline == null) return false;
+        String padded = cmdline + " ";
+        return padded.contains(" -xstartup ") || padded.contains(" -- ");
+    }
+
+    /**
+     * Whether some server of {@code packageName} was started without a session of its own. File
+     * work: call off the main thread.
+     */
+    public static boolean anyWithoutSession(@NonNull String packageName) {
+        File[] entries = new File("/proc").listFiles();
+        if (entries == null) return false;
+        int self = android.os.Process.myPid();
+        for (File entry : entries) {
+            int pid = pidOf(entry.getName());
+            if (pid <= 0 || pid == self) continue;
+            String cmdline = readCmdline(new File(entry, "cmdline"));
+            if (isServer(cmdline, packageName) && !startsOwnSession(cmdline)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Ask every display server of {@code packageName} to stop (SIGTERM, what {@code pkill} sends).
      * File work: call off the main thread. Answers how many were signalled.
      */
@@ -80,7 +109,7 @@ public final class X11ServerProcesses {
     /** The command line up to its first NUL, or null when it cannot be read. */
     @Nullable
     private static String readCmdline(@NonNull File file) {
-        byte[] buffer = new byte[256];
+        byte[] buffer = new byte[1024];
         try (FileInputStream in = new FileInputStream(file)) {
             int read = in.read(buffer);
             if (read <= 0) return null;

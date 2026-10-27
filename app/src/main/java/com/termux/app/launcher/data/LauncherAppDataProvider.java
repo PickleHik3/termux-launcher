@@ -220,7 +220,11 @@ public final class LauncherAppDataProvider {
     public void refreshIfLinuxAppsChanged(@Nullable Runnable onChanged) {
         if (!com.termux.BuildConfig.X11_SERVER) return;
         executor.execute(() -> {
-            if (linuxAppsStale()) refreshAsync(null, onChanged);
+            if (linuxAppsStale()) {
+                // The same change may be a distro that was just installed: it needs its sound.
+                com.termux.app.sound.LauncherSound.get(context).onContainersMaybeChanged();
+                refreshAsync(null, onChanged);
+            }
         });
     }
 

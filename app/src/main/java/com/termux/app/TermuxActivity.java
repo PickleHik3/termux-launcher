@@ -2588,6 +2588,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState)
             return;
         reopenAppearanceAfterRelaunch();
+        // A distro installed in a shell while we were away still needs its sound drop-in.
+        if (com.termux.BuildConfig.X11_SERVER) {
+            com.termux.app.sound.LauncherSound.get(this).onContainersMaybeChanged();
+        }
         // A return hold opened by the stop starts watching for the layout to settle; it is let
         // go once focus has come too (onWindowFocusChanged) and the size has stopped moving.
         if (mReturnHold.isActive()) {
@@ -18310,7 +18314,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (chipIndex > 0) items.add(Menu.NONE, 1, 1, R.string.tool_window_move_left);
             if (chipIndex < count - 1) items.add(Menu.NONE, 2, 2, R.string.tool_window_move_right);
             items.add(Menu.NONE, 3, 3, R.string.tool_window_close);
+            // On the display's chip, the other apps open on it, to switch between.
+            java.util.List<com.termux.app.x11.X11WindowList.Window> others = new java.util.ArrayList<>();
+            if (com.termux.app.wall.DisplaySlot.isDisplay(chipIndex, displayRowSlot())) {
+                int front = com.termux.app.x11.DisplayWindowName.frontIndex(
+                    mDisplayWindows.size(), mDisplayActiveWindow);
+                com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                String display = getString(R.string.launcher_entry_display);
+                for (int i = 0; i < mDisplayWindows.size(); i++) {
+                    if (i == front) continue;
+                    com.termux.app.x11.X11WindowList.Window window = mDisplayWindows.get(i);
+                    String name = com.termux.app.x11.DisplayWindowName.of(
+                        apps == null ? null : apps.nameFor(window.wmClass), window.label, display);
+                    items.add(Menu.NONE, 100 + others.size(), 100 + others.size(),
+                        getString(R.string.display_window_switch_to, name));
+                    others.add(window);
+                }
+            }
             menu.setOnMenuItemClickListener(item -> {
+                int other = item.getItemId() - 100;
+                if (other >= 0 && other < others.size()) {
+                    if (mX11Windows != null) mX11Windows.activate(others.get(other).id);
+                    return true;
+                }
                 switch (item.getItemId()) {
                     case 0:
                         onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
@@ -25801,7 +25827,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void killEmbeddedDisplayServer() {
         final String packageName = getPackageName();
         new Thread(() -> {
-            if (com.termux.app.x11.X11ServerProcesses.stopAll(packageName) > 0) return;
+            int stopped = com.termux.app.x11.X11ServerProcesses.stopAll(packageName);
+            // A SIGTERMed server leaves its socket; looking at the sockets drops the dead ones.
+            com.termux.app.x11.X11Sockets.liveDisplays(com.termux.app.x11.X11Sockets.socketDir(),
+                com.termux.app.x11.X11Sockets.LOCAL_SOCKET);
+            if (stopped > 0) return;
             runOnUiThread(() -> {
                 if (mTermuxService == null) return;
                 mTermuxService.createTermuxTask(
@@ -27487,6 +27517,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void showDisplayWindow() {
                     // The runner starts the display itself, with the app queued behind it.
                     openDisplayWindow(false);
+                }
+                @Override public boolean raiseWindowFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+                    if (mX11Windows == null) return false;
+                    int id = com.termux.app.x11.DisplayWindowMatch.windowFor(
+                        mDisplayWindows, app.startupWmClass, app.exec, app.id);
+                    if (id < 0) return false;
+                    mX11Windows.activate(id);
+                    return true;
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }
                 @Override public void askBeforeReplacingSession(@NonNull String message,

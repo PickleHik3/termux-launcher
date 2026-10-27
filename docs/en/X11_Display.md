@@ -41,6 +41,10 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 `termux-x11` alone and tells you so. That package can only talk to the separate Termux:X11 app;
 `pkg uninstall termux-x11-nightly` and reopen the launcher to use the built-in display instead.
 
+On the default (apt) edition, installing `termux-x11-nightly` afterwards no longer replaces the
+launcher's command: the package's copy is set aside as `termux-x11.upstream`. On the pacman
+edition that package can't be installed beside the launcher's, and isn't needed.
+
 ## Every day
 
 - **Get to it** like any window: drag along the Workspace from a window's border, or tap its chip

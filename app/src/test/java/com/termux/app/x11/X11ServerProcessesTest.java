@@ -29,4 +29,18 @@ public class X11ServerProcessesTest {
         assertFalse(X11ServerProcesses.isServer("", "com.termux"));
         assertFalse(X11ServerProcesses.isServer(null, "com.termux"));
     }
+
+    @Test public void aServerWithAnXstartupOrADashDashOwnsASession() {
+        assertTrue(X11ServerProcesses.startsOwnSession(
+            "termux-x11 com.termux :0 -dpi 232 -xstartup /data/data/com.termux/files/usr/bin/termux-x11-wm"));
+        assertTrue(X11ServerProcesses.startsOwnSession("termux-x11 com.termux :1 -- xterm"));
+    }
+
+    @Test public void aBareServerOwnsNoSession() {
+        assertFalse(X11ServerProcesses.startsOwnSession("termux-x11 com.termux :0"));
+        assertFalse(X11ServerProcesses.startsOwnSession("termux-x11 com.termux :0 -dpi 232"));
+        assertFalse(X11ServerProcesses.startsOwnSession(
+            "termux-x11 com.termux :0 /usr/share/xstartup/thing"));
+        assertFalse(X11ServerProcesses.startsOwnSession(null));
+    }
 }

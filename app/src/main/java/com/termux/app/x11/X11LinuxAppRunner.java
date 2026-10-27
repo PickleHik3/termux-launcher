@@ -109,6 +109,11 @@ public final class X11LinuxAppRunner {
          * The display may not be running yet; {@link #startDisplay} starts it.
          */
         void showDisplayWindow();
+        /**
+         * Bring the display window of {@code app} to the front if it has one open. Answers whether
+         * there was one; the tap then needs nothing started.
+         */
+        boolean raiseWindowFor(@NonNull LinuxAppCatalog.LinuxApp app);
         void showNotice(@NonNull String message);
         /**
          * Ask the user {@code message} — one plain sentence, already built — before a second
@@ -178,6 +183,8 @@ public final class X11LinuxAppRunner {
     @Nullable private LinuxAppCatalog.LinuxApp runningSession;
     /** The desktop waiting for {@link #runningSession} to be stopped so it can have the display. */
     @Nullable private LinuxAppCatalog.LinuxApp takeOver;
+    /** Whether this server start has already been looked at for a missing window manager. */
+    private boolean bareStartChecked;
     private final Runnable giveUp = this::giveUp;
 
     private void giveUp() {
@@ -300,6 +307,9 @@ public final class X11LinuxAppRunner {
         // not running (ADR 0008).
         current.showDisplayWindow();
         if (current.isDisplayRunning()) {
+            // A second tap on an app that already has a window brings it forward; another copy
+            // would only be one more window to lose.
+            if (!app.session && current.raiseWindowFor(app)) return;
             launch(app, false);
             return;
         }
@@ -312,13 +322,46 @@ public final class X11LinuxAppRunner {
 
     /** The controller's running state changed. */
     public void onDisplayRunningChanged(boolean running) {
-        if (!running || pending == null) return;
+        if (!running) {
+            bareStartChecked = false;
+            return;
+        }
+        if (pending == null) {
+            manageBareDisplay();
+            return;
+        }
         LinuxAppCatalog.LinuxApp app = pending;
         pending = null;
         handler.removeCallbacks(giveUp);
         // The display is up because this runner just asked for it: the manager it starts may not
         // be there yet, and a desktop must wait for it rather than race it.
         launch(app, true);
+    }
+
+    /**
+     * A display the user started from a shell, upstream's way, has no window manager: nothing
+     * passed it {@code -xstartup}. Give it the configured one, once per server start. The wait
+     * lets a desktop started some other way take the screen first; a manager that finds the
+     * screen taken exits, and {@link #windowManagerScript} leaves the pid file alone then.
+     */
+    private void manageBareDisplay() {
+        if (bareStartChecked || runningSession != null) return;
+        bareStartChecked = true;
+        EXECUTOR.execute(() -> {
+            if (!X11ServerProcesses.anyWithoutSession(context.getPackageName())) return;
+            String startWm = X11WindowManager.startCommand(configuredWindowManager());
+            if (startWm == null) return;
+            String pidFile = ProotDistro.singleQuote(X11WindowManager.WM_PID_PATH);
+            // A manager of ours that is already running means there is nothing to do.
+            String script = "wm=$(cat " + pidFile + " 2>/dev/null)\n"
+                + "[ -n \"$wm\" ] && kill -0 \"$wm\" 2>/dev/null && exit 0\n"
+                + "sleep 5\n"
+                + windowManagerScript(startWm, X11DisplayHostController.displayName());
+            handler.post(() -> {
+                Logger.logInfo(LOG_TAG, "Starting the window manager on a display started from a shell");
+                runScript(script, ignored -> { });
+            });
+        });
     }
 
     /**
