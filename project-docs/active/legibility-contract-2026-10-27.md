@@ -117,6 +117,7 @@ L\*), the ink polarity, and the Contrast level.
   (Softer 60, Default 65, Harder 70), still clearly below the foreground. Red and blue stay capped by
   the panel pair (wave 1), and the opaque terminal keeps today's floors. With the floor at 4.5,
   bright wallpapers would come out nearly opaque (band top near tone 23 at Default).
+  Red and blue on glass: held by the panel pair only and best effort on the ground; they do not set the even-out ceiling (decided 2026-10-27).
 - **The ceiling is computed, not tabled:** for each pair, take the most extreme tone its ink may
   reach on glass (recipe tone ± `toneReach`, the grey's `glassDimToneMax`, and for red and blue
   the panel cap given white's top tone). The ceiling is the highest ground tone at which that ink

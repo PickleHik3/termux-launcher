@@ -115,11 +115,11 @@ public final class MaterialTerminalColorScheme {
      * foreground — stops short of pure black and white; dim text (slot 8) keeps clear of both ends
      * so it never passes for ordinary text or for the ground.
      */
-    private static final double ACCENT_TONE_MIN = 20d;
-    private static final double ACCENT_TONE_MAX = 90d;
-    private static final double TEXT_TONE_MIN = 5d;
-    private static final double TEXT_TONE_MAX = 97d;
-    private static final double DIM_TONE_MIN = 10d;
+    public static final double ACCENT_TONE_MIN = 20d;
+    public static final double ACCENT_TONE_MAX = 90d;
+    public static final double TEXT_TONE_MIN = 5d;
+    public static final double TEXT_TONE_MAX = 97d;
+    public static final double DIM_TONE_MIN = 10d;
     /**
      * The share of its own chroma an accent must keep at a tone for the search to take it. HCT's
      * gamut narrows toward both ends and unevenly by hue — red at tone 90 holds about 15 — so a
@@ -437,7 +437,7 @@ public final class MaterialTerminalColorScheme {
     private static final double WHITE_TONE_DARK = 88d;
 
     /** How far up the ladder ANSI white may rise to leave the panel inks room, in HCT tone. */
-    private static final double WHITE_TONE_MAX = 98d;
+    public static final double WHITE_TONE_MAX = 98d;
 
     /**
      * The pair-table pass over the sixteen slots, in place.

@@ -23,23 +23,23 @@ import java.util.List;
  * own white): holding them to 3:1 as well would push all six accents to a tone where the palette
  * stops looking like one.
  */
-final class LegibilityPairs {
+public final class LegibilityPairs {
 
     /** The ink is the terminal's foreground rather than an ANSI slot. */
-    static final int FOREGROUND = -1;
+    public static final int FOREGROUND = -1;
     /** The ground is what the text stands on: the palette background, or the measured glass. */
-    static final int BACKGROUND = -2;
+    public static final int BACKGROUND = -2;
 
     /** Where a pair's floor comes from. */
-    enum Kind { BODY, ANSI, DIM, FIXED }
+    public enum Kind { BODY, ANSI, DIM, FIXED }
 
     /** One ink on one ground, with its floor. */
-    static final class Pair {
+    public static final class Pair {
         /** An ANSI slot, or {@link #FOREGROUND}. */
-        final int ink;
+        public final int ink;
         /** An ANSI slot, or {@link #BACKGROUND}. */
-        final int ground;
-        final Kind kind;
+        public final int ground;
+        public final Kind kind;
         /** The floor of a {@link Kind#FIXED} pair, at every level. */
         final double fixed;
 
@@ -50,7 +50,7 @@ final class LegibilityPairs {
             this.fixed = fixed;
         }
 
-        double floor(@NonNull TerminalContrastLevel level) {
+        public double floor(@NonNull TerminalContrastLevel level) {
             switch (kind) {
                 case BODY: return level.bodyTarget;
                 case ANSI: return level.ansiRatio;
@@ -60,7 +60,7 @@ final class LegibilityPairs {
         }
 
         @NonNull
-        String label() {
+        public String label() {
             return name(ink) + " on " + name(ground);
         }
 
@@ -72,11 +72,11 @@ final class LegibilityPairs {
     }
 
     /** Black, red and blue on ANSI white: dialog's items, tag hotkeys and bold tags. */
-    static final double PANEL_INK_FLOOR = 3.0d;
+    public static final double PANEL_INK_FLOOR = 3.0d;
     /** White and bright white on black: the panel's own two fills must read against each other. */
     static final double PANEL_FILL_FLOOR = 4.5d;
 
-    static final List<Pair> ALL;
+    public static final List<Pair> ALL;
 
     static {
         List<Pair> rows = new ArrayList<>();
@@ -129,7 +129,7 @@ final class LegibilityPairs {
     }
 
     /** The floor {@code slot} is held to on ANSI white, or 0 when it is exempt. */
-    static double onWhiteFloor(int slot) {
+    public static double onWhiteFloor(int slot) {
         for (Pair pair : ALL) {
             if (pair.ink == slot && pair.ground == 7) return pair.fixed;
         }
