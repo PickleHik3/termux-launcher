@@ -830,11 +830,13 @@ public final class OnGlass {
     // ---------------------------------------------------------------- the Bare widget
 
     /**
-     * The most a Bare widget dims the wallpaper behind it (spec #101, "Bare"): a widget drawn
-     * without its card may lay a soft dim of its card's colour under its ink, never thicker than
-     * this. Past it the ink moves instead, as a chrome band's does at {@link #MAX_VEIL_ALPHA}.
+     * The most a Bare widget dims the wallpaper behind it: none (decided 2026-10-27). Bare means
+     * nothing at all is drawn behind the widget; it used to lay a soft dim of its card's colour
+     * up to 35% over its whole cell, which read as a tinted card on a busy wallpaper. Its
+     * legibility is now its ink's alone: the ladder below tones the ink, flips it, and reports a
+     * shortfall where neither reads (ADR 0014's one exception).
      */
-    public static final float BARE_MAX_DIM = 0.35f;
+    public static final float BARE_MAX_DIM = 0f;
 
     /** {@link #BARE_MAX_DIM} as an 8-bit alpha. */
     public static final int BARE_MAX_DIM_255 = Math.round(BARE_MAX_DIM * 255f);

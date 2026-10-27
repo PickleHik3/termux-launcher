@@ -557,8 +557,10 @@ The launcher's own Home widgets after the redesign (ADR 0010, decided 2026-10-21
 and the picker still have the twelve older kinds, whose names are kept under _Avoid_.
 
 **Bare**:
-A widget drawn without its card: its ink sits straight on the wallpaper, dimmed only where it would
-not read. It is an opt-in per widget, offered by the Clock, **Glance** and Weather. The **Look**'s
+A widget drawn without its card: its ink sits straight on the wallpaper and nothing is drawn behind
+it (decided 2026-10-27; it used to lay a soft dim where the ink would not read). Only the ink adapts:
+its tone moves, or it flips to the other side, and on a wallpaper where neither reads the text may
+fall short. It is an opt-in per widget, offered by the Clock, **Glance** and Weather. The **Look**'s
 Clear stop does not turn it on.
 _Avoid_: Clear (that is a Look stop), transparent, no card
 

@@ -570,9 +570,9 @@ public abstract class BuiltinWidgetView extends FrameLayout
 
     /**
      * Whether this widget asks to be drawn Bare (glossary: Bare): no card, rim or slab, its ink
-     * straight on the wallpaper behind it, measured there on the widget band, with a soft dim of
-     * at most {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM} only where the measurement says
-     * the ink would not read without one ({@link com.termux.app.chrome.OnGlass#resolveBareWidget}).
+     * straight on the wallpaper behind it, measured there on the widget band, and nothing drawn
+     * behind it: only the ink adapts ({@link com.termux.app.chrome.OnGlass#resolveBareWidget};
+     * {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM} is none).
      * A kind that is always Bare says yes; one that offers it reads its own setting, which a bind
      * re-dresses. The Look never answers this: its Clear stop is glass, not Bare.
      */
@@ -825,9 +825,9 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /**
      * A Bare widget's ink, measured on the widget band against the wallpaper behind it
      * ({@link com.termux.app.chrome.WidgetInkSource#widgetWallpaper}, the band's one memoised
-     * sample): the page's inks where they read, under the least soft dim of the card's colour up
-     * to {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM} where they need one, moved where even
-     * that is short ({@link com.termux.app.chrome.OnGlass#resolveBareWidget}). Text and the
+     * sample): the page's inks where they read, moved on their side or flipped where they do not
+     * ({@link com.termux.app.chrome.OnGlass#resolveBareWidget}; Bare lays no dim,
+     * {@link com.termux.app.chrome.OnGlass#BARE_MAX_DIM}). Text and the
      * caution ink are held to 4.5:1, the accent's graphics to 3:1. With nothing to measure (a
      * picker card) the theme's own inks stand. Settles the drawn style on the inks.
      *
