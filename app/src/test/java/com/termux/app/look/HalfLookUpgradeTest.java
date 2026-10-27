@@ -142,14 +142,29 @@ public class HalfLookUpgradeTest {
     }
 
     @Test
-    public void materialIsWallWideAndHomesWins() {
+    public void aDifferingMaterialGoesToTheTerminalPage() {
         store.putString(TERMUX_APP.KEY_SURFACE_MATERIAL + "_home", "stone");
         store.putString(TERMUX_APP.KEY_SURFACE_MATERIAL + "_workspace", "other");
         store.putInt(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY + "_home", 70);
         assertTrue(upgrade());
-        assertEquals("stone", snapshot(TERMINAL_ID, PageKind.TERMINAL).surfaceMaterial());
-        assertFalse(store.has(LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_MATERIAL, TERMINAL_ID)));
+        assertEquals("stone", store.getString(TERMUX_APP.KEY_SURFACE_MATERIAL, ""));
+        assertEquals("other", store.getString(
+            LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_MATERIAL, TERMINAL_ID), ""));
+        assertEquals("other", snapshot(TERMINAL_ID, PageKind.TERMINAL).surfaceMaterial());
+        assertEquals("stone", snapshot(1, PageKind.HOME).surfaceMaterial());
         assertEquals(70, snapshot(1, PageKind.HOME).surfaceMaterialIntensity());
+        // The Workspace's intensity was the default, which differs from Home's 70.
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY,
+            snapshot(TERMINAL_ID, PageKind.TERMINAL).surfaceMaterialIntensity());
+    }
+
+    @Test
+    public void equalMaterialsMakeNoOverride() {
+        store.putString(TERMUX_APP.KEY_SURFACE_MATERIAL + "_home", "stone");
+        store.putString(TERMUX_APP.KEY_SURFACE_MATERIAL + "_workspace", "stone");
+        assertTrue(upgrade());
+        assertEquals("stone", store.getString(TERMUX_APP.KEY_SURFACE_MATERIAL, ""));
+        assertFalse(store.has(LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_MATERIAL, TERMINAL_ID)));
     }
 
     @Test

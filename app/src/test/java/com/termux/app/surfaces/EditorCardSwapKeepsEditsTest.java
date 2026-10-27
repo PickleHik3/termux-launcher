@@ -52,6 +52,7 @@ public class EditorCardSwapKeepsEditsTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         places = new PlaceLayoutStore(preferences);
         places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
@@ -88,7 +89,8 @@ public class EditorCardSwapKeepsEditsTest {
         swipe(editor, WallHalf.HOME);
         moveStrip(editor, Row.OPACITY, 33);
         swipe(editor, WallHalf.WORKSPACE);
-        assertWorkspaceKept(editor);
+        // Base is wall-wide: Home's 33 is the wall's opacity, which the Workspace wears too.
+        assertWorkspaceKept(editor, 33);
         assertEquals("Home's edit is kept too", 33,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
 
@@ -96,7 +98,7 @@ public class EditorCardSwapKeepsEditsTest {
         editor.setOnDone(() -> done[0] = true);
         editor.done();
         assertTrue(done[0]);
-        assertEquals(65,
+        assertEquals("Base is wall-wide: Home's 33 stands", 33,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
         assertEquals(GlassControls.blurForGlass(70),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
@@ -146,7 +148,11 @@ public class EditorCardSwapKeepsEditsTest {
     // ------------------------------------------------------------------------------- the checks
 
     private void assertWorkspaceKept(SurfaceEditorController editor) {
-        assertEquals(65,
+        assertWorkspaceKept(editor, 65);
+    }
+
+    private void assertWorkspaceKept(SurfaceEditorController editor, int opacity) {
+        assertEquals(opacity,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
         assertEquals(GlassControls.blurForGlass(70),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));

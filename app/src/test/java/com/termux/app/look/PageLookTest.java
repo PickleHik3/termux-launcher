@@ -154,16 +154,25 @@ public class PageLookTest {
     }
 
     @Test
-    public void materialAndIntensityAreWallWideOnly() {
+    public void materialAndIntensityAreDetachable() {
         String material = TERMUX_APP.KEY_SURFACE_MATERIAL;
-        assertFalse(PageLook.isDetachable(material));
-        assertFalse(PageLook.isDetachable(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY));
+        String intensity = TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
+        assertTrue(PageLook.isDetachable(material));
+        assertTrue(PageLook.isDetachable(intensity));
         store.putString(material, "stone");
-        store.putInt(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, 70);
-        store.putString(LookKeys.pageKey(material, 3), "other");
-        store.putInt(LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, 3), 1);
+        store.putInt(intensity, 70);
         assertEquals("stone", look.of(HOME_B).surfaceMaterial());
         assertEquals(70, look.of(HOME_B).surfaceMaterialIntensity());
+
+        assertTrue(look.writeString(PageLook.Scope.page(3), material, "frost"));
+        assertTrue(look.write(PageLook.Scope.page(3), intensity, 20));
+        assertEquals("frost", look.of(HOME_B).surfaceMaterial());
+        assertEquals(20, look.of(HOME_B).surfaceMaterialIntensity());
+        assertEquals("stone", look.of(HOME).surfaceMaterial());
+        assertEquals(70, look.of(HOME).surfaceMaterialIntensity());
+
+        look.reset(PageLook.Scope.page(3), material);
+        assertEquals("stone", look.of(HOME_B).surfaceMaterial());
     }
 
     @Test

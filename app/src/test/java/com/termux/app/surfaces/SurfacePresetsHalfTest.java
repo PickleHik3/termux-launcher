@@ -40,6 +40,7 @@ public class SurfacePresetsHalfTest {
             context.getSharedPreferences("surface-presets-half-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static SurfacePresets.Preset preset(String id) {
@@ -63,9 +64,33 @@ public class SurfacePresetsHalfTest {
     }
 
     @Test
+    public void oldCustomWithHalfKeys_loadsHomesWallValuesAndTheWorkspacesOverrides() {
+        Map<String, Object> look =
+            new java.util.LinkedHashMap<>(SurfacePresets.captureLook(preferences));
+        look.put(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 70);
+        look.put(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_SURFACE_BASE_OPACITY + "_home", 15);
+        look.put(SurfacePresets.KEY_HOME_LOOK, Boolean.TRUE);
+        SurfacePresets.apply(preferences, saved(look));
+
+        // Base is wall-wide: Home's value is the wall's, for both halves.
+        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE));
+        // The dock follows Base: Home shows the wall's 15, the Terminal page keeps its 70.
+        assertEquals(15, preferences.getAppBarOpacity(WallHalf.HOME));
+        assertEquals(70, preferences.getAppBarOpacity(WallHalf.WORKSPACE));
+        assertTrue(preferences.getSharedPreferences().contains("app_bar_opacity@"
+            + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID));
+    }
+
+    @Test
     public void differingHalves_saveAndLoadBoth() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 70);
+        // Base is wall-wide, so the halves differ by the Terminal page's own values.
         preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 15);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+            WallHalf.WORKSPACE, 70);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, WallHalf.HOME, 60);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
             WallHalf.WORKSPACE, 30);
@@ -79,7 +104,7 @@ public class SurfacePresetsHalfTest {
         assertEquals(70, preferences.getAppBarOpacity(WallHalf.WORKSPACE));
         assertEquals(15, preferences.getAppBarOpacity(WallHalf.HOME));
         assertEquals(60, preferences.getDockTintStrength(WallHalf.HOME));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
+        assertFalse("the detach is wall-wide, so the Terminal page holds it too", preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
             WallHalf.WORKSPACE));
         assertEquals(30, preferences.getStatusBarBlurRadius(WallHalf.WORKSPACE));
         // Home's cells are all named, so the status bar Home never detached follows Home's Base.
@@ -91,8 +116,9 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void oneHalfsLook_appliesToBoth() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME, 40);
+        // Base is wall-wide: the Workspace's 2 is replaced by Home's 40 on the one wall value.
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE, 2);
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME, 40);
         SurfacePresets.Preset home = saved(SurfacePresets.captureLook(preferences, WallHalf.HOME));
         assertFalse(SurfacePresets.hasHomeLook(home));
 
@@ -113,8 +139,14 @@ public class SurfacePresetsHalfTest {
 
         assertTrue(SurfacePresets.matches(preferences, solid, WallHalf.WORKSPACE));
         assertFalse(SurfacePresets.matches(preferences, solid, WallHalf.HOME));
+        // Base is the wall's, so the Look lands on the Workspace as the Terminal page's own
+        // surface values: its dock shows Solid's number, Home's dock keeps Clear's.
         assertEquals(solid.values.get(SurfaceProperty.OPACITY.baseKey),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
+            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+                WallHalf.WORKSPACE));
+        assertEquals(clear.values.get(SurfaceProperty.OPACITY.baseKey),
+            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+                WallHalf.HOME));
         assertEquals(clear.values.get(SurfaceProperty.OPACITY.baseKey),
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
         // Today's callers read the Workspace's stop.

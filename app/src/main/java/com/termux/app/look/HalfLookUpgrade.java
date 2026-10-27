@@ -107,9 +107,9 @@ public final class HalfLookUpgrade {
         ENTRIES.add(new Entry(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, Write.Type.INT,
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY, true));
         ENTRIES.add(new Entry(TERMUX_APP.KEY_SURFACE_MATERIAL, Write.Type.STRING,
-            TERMUX_APP.DEFAULT_SURFACE_MATERIAL, false));
+            TERMUX_APP.DEFAULT_SURFACE_MATERIAL, true));
         ENTRIES.add(new Entry(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, Write.Type.INT,
-            TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY, false));
+            TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY, true));
     }
 
     /** Whether the upgrade has run on this store. */
@@ -168,6 +168,16 @@ public final class HalfLookUpgrade {
                 Page page = new Page(id, kind, null, null);
                 PageLook.Snapshot shown = before.of(page);
                 PageLook.Snapshot got = now.of(page);
+                if (!got.surfaceMaterial().equals(shown.surfaceMaterial())) {
+                    String key = LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_MATERIAL, id);
+                    writes.put(key, new Write(key, Write.Type.STRING, 0, false,
+                        shown.surfaceMaterial()));
+                }
+                if (got.surfaceMaterialIntensity() != shown.surfaceMaterialIntensity()) {
+                    String key = LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, id);
+                    writes.put(key, new Write(key, Write.Type.INT,
+                        shown.surfaceMaterialIntensity(), false, null));
+                }
                 for (SurfaceSlot slot : SurfaceSlot.values()) {
                     for (SurfaceProperty property : SurfaceProperty.values()) {
                         if (!LookKeys.detachable(slot, property, kind)) continue;

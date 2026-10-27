@@ -35,6 +35,7 @@ public class SurfaceLooksReadoptTest {
         store = context.getSharedPreferences("surface-looks-readopt-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static SurfacePresets.Preset preset(String id) {

@@ -38,6 +38,7 @@ public class EditorCardResetTest {
         store = context.getSharedPreferences("editor-card-reset-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         prefs = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(prefs);
     }
 
     @Test
@@ -56,7 +57,9 @@ public class EditorCardResetTest {
         prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME, 40);
         prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE, 41);
         EditorCardReset.resetStore(prefs, EditorCard.WORKSPACE, WallHalf.WORKSPACE);
-        assertEquals(40, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
+        // Base is wall-wide: the reset is the wall's, so Home reads the default as well.
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+            prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
             prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
     }

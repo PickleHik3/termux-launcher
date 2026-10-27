@@ -44,6 +44,7 @@ public class SurfaceEditorCardsTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
     }
 
@@ -57,7 +58,8 @@ public class SurfaceEditorCardsTest {
         model(editor).onReleased(Row.OPACITY);
 
         assertEquals(23, opacity(WallHalf.HOME));
-        assertEquals("the Workspace keeps its dock", workspace, opacity(WallHalf.WORKSPACE));
+        // Home's value is the wall's: the Workspace's dock wears it unless it holds its own.
+        assertEquals("the Workspace's dock follows the wall", 23, opacity(WallHalf.WORKSPACE));
         assertTrue("the dot: Home's own value", model(editor).ownValue(Row.OPACITY));
     }
 
@@ -147,7 +149,8 @@ public class SurfaceEditorCardsTest {
             SurfaceSlot.STATUS, SurfaceProperty.BLUR, WallHalf.HOME));
         assertEquals(GlassControls.grainForGlass(40), preferences.getSurfaceValue(
             SurfaceSlot.STATUS, SurfaceProperty.GRAIN, WallHalf.HOME));
-        assertEquals("the Workspace keeps its status bar", workspaceBlur,
+        assertEquals("the Workspace's status bar wears the wall's value",
+            GlassControls.blurForGlass(40),
             preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
                 WallHalf.WORKSPACE));
         assertEquals("Frost reads back where it was left", 40, model(editor).value(Row.FROST));
@@ -176,7 +179,7 @@ public class SurfaceEditorCardsTest {
         assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY,
             WallHalf.WORKSPACE));
         assertEquals("every surface on the half wears it", 33, opacity(WallHalf.WORKSPACE));
-        assertEquals("Home keeps its own", home,
+        assertEquals("Base is wall-wide, so Home wears it too", 33,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
 
         model.onValue(Row.FROST, 75, false);
@@ -287,11 +290,12 @@ public class SurfaceEditorCardsTest {
     /** Every key the store holds for Home's half alone, with its value. */
     private java.util.Map<String, Object> homeKeys() {
         java.util.Map<String, Object> out = new java.util.TreeMap<>();
-        String suffix = TermuxAppSharedPreferences.surfaceHalfKey("", WallHalf.HOME);
-        for (java.util.Map.Entry<String, ?> entry
-                : preferences.getSharedPreferences().getAll().entrySet()) {
-            if (entry.getKey().endsWith(suffix))
-                out.put(entry.getKey(), entry.getValue());
+        // Home is the wall now: its own look is the plain per-half keys (Base, the surfaces'
+        // cells and links, the material point), which a Workspace edit must leave alone.
+        java.util.Map<String, ?> all = preferences.getSharedPreferences().getAll();
+        for (String key : AppearanceSnapshot.halfAbleKeys()) {
+            if (all.containsKey(key))
+                out.put(key, all.get(key));
         }
         assertFalse("Home holds its own look", out.isEmpty());
         return out;

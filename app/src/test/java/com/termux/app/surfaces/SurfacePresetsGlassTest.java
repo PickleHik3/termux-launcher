@@ -37,6 +37,7 @@ public class SurfacePresetsGlassTest {
             context.getSharedPreferences("surface-presets-glass-test", Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
     }
 
     private static SurfacePresets.Preset preset(String id) {
@@ -214,7 +215,13 @@ public class SurfacePresetsGlassTest {
     @Test
     public void aFreshInstallOpensExactlyOnClear() {
         // The store is empty, as on a first run; adoption writes the shipped look into it.
+        // (The fixture's Terminal page id is a stored key, so it is taken out for the first run
+        // and given back after adoption.)
+        preferences.getSharedPreferences().edit()
+            .remove(com.termux.shared.termux.settings.preferences.PageLookKeys
+                .KEY_TERMINAL_PAGE_ID).commit();
         preferences.migrateSurfaceInheritance();
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
         for (String id : new String[] {"frost", "stock", "solid"})
             assertFalse(id, SurfacePresets.matches(preferences, preset(id)));

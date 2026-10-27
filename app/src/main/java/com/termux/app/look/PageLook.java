@@ -84,11 +84,16 @@ public final class PageLook {
                 ? store.getInt(pageKey, -1)
                 : store.getInt(backdropKey, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY));
             wallpaperDim = LookKeys.wallpaperDim(store, pageId);
-            material = store.getString(TERMUX_APP.KEY_SURFACE_MATERIAL,
-                TERMUX_APP.DEFAULT_SURFACE_MATERIAL);
-            materialIntensity = Math.max(0, Math.min(100, store.getInt(
-                TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY,
-                TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY)));
+            String materialKey = TERMUX_APP.KEY_SURFACE_MATERIAL;
+            String pageMaterial = LookKeys.pageKey(materialKey, pageId);
+            material = store.has(pageMaterial)
+                ? store.getString(pageMaterial, TERMUX_APP.DEFAULT_SURFACE_MATERIAL)
+                : store.getString(materialKey, TERMUX_APP.DEFAULT_SURFACE_MATERIAL);
+            String intensityKey = TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
+            String pageIntensity = LookKeys.pageKey(intensityKey, pageId);
+            materialIntensity = Math.max(0, Math.min(100, store.has(pageIntensity)
+                ? store.getInt(pageIntensity, TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY)
+                : store.getInt(intensityKey, TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY)));
         }
 
         /**
@@ -120,10 +125,10 @@ public final class PageLook {
         public int appBarOpacity() { return value(SurfaceSlot.DOCK, SurfaceProperty.OPACITY); }
         public int extraKeysBlurRadius() { return value(SurfaceSlot.DOCK, SurfaceProperty.BLUR); }
 
-        /** The material family of the Base triple. Wall-wide. */
+        /** The material family of the Base triple: the page's own, else the wall's. */
         @NonNull public String surfaceMaterial() { return material; }
 
-        /** Where on the family's curve the Base triple was set, 0..100. Wall-wide. */
+        /** Where on the family's curve the Base triple was set, 0..100: the page's own, else the wall's. */
         public int surfaceMaterialIntensity() { return materialIntensity; }
 
         // Ground inputs.
@@ -180,6 +185,18 @@ public final class PageLook {
         }
         if (!LookKeys.OVERRIDABLE.contains(key)) return false;
         store.putInt(LookKeys.pageKey(key, scope.pageId()), value);
+        return true;
+    }
+
+    /** Writes a Look string (the material) at a scope; the same rules as {@link #write}. */
+    public boolean writeString(@NonNull Scope scope, @NonNull String key, @NonNull String value) {
+        if (!LookKeys.KNOWN.contains(key)) return false;
+        if (scope.isGlobal()) {
+            store.putString(key, value);
+            return true;
+        }
+        if (!LookKeys.OVERRIDABLE.contains(key)) return false;
+        store.putString(LookKeys.pageKey(key, scope.pageId()), value);
         return true;
     }
 
