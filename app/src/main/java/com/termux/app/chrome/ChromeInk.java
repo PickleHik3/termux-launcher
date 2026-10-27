@@ -215,11 +215,24 @@ public final class ChromeInk {
         @NonNull public final EvenOut.Ceiling pale;
         @NonNull public final EvenOut.Ceiling dark;
         @NonNull public final Polarity current;
+        /**
+         * How much of the even-out is drawn, in whole percent: the terminal Opacity over its
+         * default 34%, clamped to 0..100. Part of the stage's identity.
+         */
+        public final int strengthPercent;
 
         public EvenOutPolicy(
                 @NonNull com.termux.shared.termux.settings.preferences.TerminalContrastLevel level,
                 @NonNull EvenOut.Ceiling pale, @NonNull EvenOut.Ceiling dark,
                 @NonNull Polarity current) {
+            this(level, pale, dark, current, 100);
+        }
+
+        public EvenOutPolicy(
+                @NonNull com.termux.shared.termux.settings.preferences.TerminalContrastLevel level,
+                @NonNull EvenOut.Ceiling pale, @NonNull EvenOut.Ceiling dark,
+                @NonNull Polarity current, int strengthPercent) {
+            this.strengthPercent = Math.max(0, Math.min(100, strengthPercent));
             this.level = level;
             this.pale = pale;
             this.dark = dark;
@@ -227,13 +240,23 @@ public final class ChromeInk {
         }
 
         boolean sameStage(@Nullable EvenOutPolicy other) {
-            return other != null && level == other.level && pale == other.pale && dark == other.dark;
+            return other != null && level == other.level && pale == other.pale && dark == other.dark
+                && strengthPercent == other.strengthPercent;
         }
 
         /** Same stage and same current polarity: nothing a pane's answer depends on differs. */
         boolean sameAs(@Nullable EvenOutPolicy other) {
             return sameStage(other) && current == other.current;
         }
+    }
+
+    /**
+     * The even-out strength for a terminal Opacity percent (the slider stays the user's): 0% is
+     * clear glass and no even-out, 34% (the default) and above is full, linear between.
+     */
+    public static int evenOutStrengthPercent(int opacityPercent) {
+        double k = Math.max(0d, Math.min(1d, opacityPercent / 34d));
+        return (int) Math.round(k * 100d);
     }
 
     /** Null while the Debugging switch is off or nobody owns a palette: today's mean ground. */
@@ -598,6 +621,7 @@ public final class ChromeInk {
                 boolean pale = evenOutPolarity == Polarity.PALE_INK;
                 EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
                     pale ? policy.pale : policy.dark, evenOutPolarity, policy.level, chain);
+                mapping = mapping.toward(policy.strengthPercent / 100d);
                 evenOut = EvenOutMatrix.of(mapping);
                 flat = EvenOut.worstEnd(bandEnds(mapping, evenOut, mDimColor, tint), evenOutPolarity);
             }

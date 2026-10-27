@@ -335,6 +335,11 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mPreviousFramePaint.setColorFilter(filter);
     }
 
+    /** The filter the frame is drawn through right now, for tests. */
+    @Nullable ColorFilter frameFilterForTest() {
+        return mFramePaint.getColorFilter();
+    }
+
     /** The even-out matrix last asked of the veil source, or null. */
     @Nullable private android.graphics.ColorMatrix mEvenOut;
 
@@ -357,7 +362,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         int veil = android.graphics.Color.TRANSPARENT;
         android.graphics.ColorMatrix evenOut = null;
         if (mVeilSource != null && getWidth() > 0 && getHeight() > 0) {
-            GlassAnchor.layoutOriginOnScreen(this, mVeilLocation, mVeilRootLocation);
+            restingOriginOnScreen(mVeilLocation, mVeilRootLocation);
             mVeilRect.set(mVeilLocation[0], mVeilLocation[1],
                 mVeilLocation[0] + getWidth(), mVeilLocation[1] + getHeight());
             veil = mVeilSource.paneGlassVeil(mVeilRect);
@@ -376,9 +381,48 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         return true;
     }
 
+    /**
+     * Where this slab rests on screen: the laid-out position, without the wall page's slide and
+     * without any motion an owner published ({@link GlassAnchor#setMotion}: a window sliding in,
+     * a FLIP move). The veil and the even-out matrix belong to the resting rect, so a slide asks
+     * once and draws with that answer on every frame, rather than treating each position as a new
+     * pane and sampling the wallpaper for it.
+     */
+    private void restingOriginOnScreen(@NonNull int[] out, @NonNull int[] rootScratch) {
+        float x = 0f;
+        float y = 0f;
+        android.view.View current = this;
+        while (true) {
+            x += current.getLeft();
+            y += current.getTop();
+            android.view.ViewParent parent = current.getParent();
+            if (!(parent instanceof android.view.View)) break;
+            android.view.View parentView = (android.view.View) parent;
+            x -= parentView.getScrollX();
+            y -= parentView.getScrollY();
+            current = parentView;
+        }
+        current.getLocationOnScreen(rootScratch);
+        out[0] = Math.round(x) + rootScratch[0];
+        out[1] = Math.round(y) + rootScratch[1];
+    }
+
+    /**
+     * A slab shown by a window switch is asked for its veil and even-out matrix as soon as it is
+     * laid out, so its first drawn frame already wears the matrix its pane band has.
+     */
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        if (mVeilSource != null && mCornerMaskRadiusPx <= 0f
+                && (veilRectMoved() || veilGenerationMoved())) {
+            if (refreshVeil()) invalidate();
+        }
+    }
+
     /** True when this slab has moved or resized since its veil was asked for. */
     private boolean veilRectMoved() {
-        GlassAnchor.layoutOriginOnScreen(this, mVeilLocation, mVeilRootLocation);
+        restingOriginOnScreen(mVeilLocation, mVeilRootLocation);
         return mVeilRect.left != mVeilLocation[0] || mVeilRect.top != mVeilLocation[1]
             || mVeilRect.width() != getWidth() || mVeilRect.height() != getHeight();
     }
@@ -727,11 +771,51 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         return mCrossfade.isFinished() ? null : mPreviousFrame;
     }
 
+
+    /**
+     * True when this draw is a software canvas (the window-switch card is one) and the slab wears
+     * a refraction program: AGSL needs the GPU, so the card shows the slab as the plain frosted
+     * frame instead of leaving the frame out, which left the departing pane bare.
+     */
+    static boolean drawsPlainOnSoftware(boolean hasProgram, boolean hardwareCanvas) {
+        return hasProgram && !hardwareCanvas;
+    }
+
+    @Nullable private BitmapShader mSoftShader;
+    @Nullable private Bitmap mSoftShaderFrame;
+    private final Paint mSoftPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Matrix mSoftMatrix = new Matrix();
+
+    /** The frame through the frost and even-out filter, aimed as the plain draw aims it. */
+    private void drawFramePlain(@NonNull Canvas canvas, int width, int height) {
+        Bitmap frame = mFrame;
+        if (frame == null) return;
+        if (mSoftShader == null || mSoftShaderFrame != frame) {
+            mSoftShader = new BitmapShader(frame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            mSoftShaderFrame = frame;
+        }
+        GlassAnchor.place(this, mPlacement);
+        mAim.set(mPlacement.toScreen, mFrameRect, frame.getWidth(), frame.getHeight(),
+            mParallax == null ? 0f : mParallax.offsetPx());
+        mAim.shaderMatrix(mSoftMatrix);
+        mSoftShader.setLocalMatrix(mSoftMatrix);
+        mSoftPaint.setShader(mSoftShader);
+        mSoftPaint.setColorFilter(GlassFilters.undimmed(
+            GlassFilters.withEvenOut(mEvenOut, mFrostFilter), mPlacement.keptBrightness));
+        canvas.drawRect(0f, 0f, width, height, mSoftPaint);
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int width = getWidth();
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
+        // Before the frame is drawn, so a pane moved or newly shown draws its first frame with
+        // the even-out matrix its rect already has.
+        if (mCornerMaskRadiusPx <= 0f && mVeilSource != null
+                && (veilRectMoved() || veilGenerationMoved())) {
+            refreshVeil();
+        }
         int save = canvas.save();
         if (mCornerMaskRadiusPx > 0f) {
             // Everything outside the rounded page, which is exactly the four arcs.
@@ -747,6 +831,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (liveFrame != null && !canvas.isHardwareAccelerated()) return;
         // The scene went off: the still frame goes back on the paint.
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
+        if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
+                && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated())) {
+            drawFramePlain(canvas, width, height);
+        }
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && (mProgram == null || canvas.isHardwareAccelerated())) {
             BitmapShader aimShader = mFrameShader;
@@ -875,9 +963,6 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
             // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
             // that did not move costs one walk up the tree.
-            if (mVeilSource != null && (veilRectMoved() || veilGenerationMoved())) {
-                if (refreshVeil()) postInvalidateOnAnimation();
-            }
             if (android.graphics.Color.alpha(mVeilColor) > 0) {
                 mTintPaint.setColor(mVeilColor);
                 canvas.drawRect(0f, 0f, width, height, mTintPaint);

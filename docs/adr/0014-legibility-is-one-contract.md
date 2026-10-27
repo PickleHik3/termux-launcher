@@ -68,3 +68,8 @@ Amendment (2026-10-27): **Bare widgets are the one exception.** A widget the use
 draws nothing behind itself, so the contract cannot bound its ground. Its ink is still toned and
 flipped against the wallpaper it stands on, but on a busy wallpaper it may fall short of the floor.
 The user chose fully clear over the soft dim that used to keep it legible.
+
+Amendment (2026-10-27): **The terminal's Opacity slider stays the user's.** At 0% even-out is off
+(plain glass, today's mean ground and floors), and below the default 34% its strength scales down
+linearly with Opacity; the text may then fall short of the floor, which is the user's choice.
+Decided 2026-10-27.
