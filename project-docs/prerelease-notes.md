@@ -39,6 +39,8 @@ Latest stable: v1.2.1.
 - Linux apps play sound in a distro you installed while the launcher was running, without an "Access denied" from the sound server.
 - Tapping an app that is already open, in the drawer or Home, raises its window instead of starting a second copy, and the Display chip's menu lists the other open windows under Switch to.
 - The Linux display now works on 32-bit phones and with the 32-bit APK; before, it could not start there at all.
+- When the display can't start, its window now says why, with a link to Startup and support, instead of showing Start display again as if nothing happened.
+- Settings › Linux apps says Linux apps are set up only once the setup command has finished; after copying it, the row tells you to run it.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
