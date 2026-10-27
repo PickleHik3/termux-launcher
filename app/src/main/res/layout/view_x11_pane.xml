@@ -118,5 +118,19 @@
             android:textSize="12sp"
             android:visibility="gone"
             android:text="@string/termux_x11_read_guide" />
+
+        <!-- Shown only with the reason a Start died; opens Settings > Linux apps. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/x11_pane_support"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
+            android:visibility="gone"
+            android:text="@string/termux_x11_start_failed_help" />
     </LinearLayout>
 </com.termux.app.x11.X11PaneFrame>
