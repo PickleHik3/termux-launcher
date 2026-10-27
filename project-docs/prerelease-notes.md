@@ -18,6 +18,7 @@ Latest stable: v1.2.1.
 - Grey and normal text stays readable on a glass terminal over a bright wallpaper: the glass evens out the wallpaper under the text. It is on by default; Settings › Debugging › Even out glass turns it off so you can compare.
 - Switching terminal windows with Fancier Glass on no longer flashes the bare wallpaper behind the window that is leaving.
 - The terminal's Opacity stays yours: at 0% the glass is exactly as clear as you set it, with no evening-out, and below the default it evens out less.
+- A terminal window whose shell Android kills (its child-process limit, often hit with a Linux desktop on the display) stays open with "Process completed (signal 9)" instead of vanishing; Enter closes it, and a notice says how to lift the limit.
 
 ### Home
 - Bare widgets draw nothing behind themselves: the soft dim behind a Bare clock is gone, and only its ink changes tone to stay readable.
@@ -38,6 +39,9 @@ Latest stable: v1.2.1.
 - On the apt edition, installing termux-x11-nightly no longer replaces the launcher's termux-x11 command.
 - Linux apps play sound in a distro you installed while the launcher was running, without an "Access denied" from the sound server.
 - Tapping an app that is already open, in the drawer or Home, raises its window instead of starting a second copy, and the Display chip's menu lists the other open windows under Switch to.
+- The Linux display now works on 32-bit phones and with the 32-bit APK; before, it could not start there at all.
+- When the display can't start, its window now says why, with a link to Startup and support, instead of showing Start display again as if nothing happened.
+- Settings › Linux apps says Linux apps are set up only once the setup command has finished; after copying it, the row tells you to run it.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
