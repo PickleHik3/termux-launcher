@@ -27149,6 +27149,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The wall's pages and its home (ADR 0015): the one source of Start in and the Home page. */
     private com.termux.app.wall.WallPagesStore mWallPagesStore;
     @Nullable private com.termux.app.wall.WallPagesStore.Listener mWallPagesListener;
+    /** Prunes and drops page looks; no other work (readers build their own PageLook). */
+    @Nullable private com.termux.app.look.PageLook mPageLookPruner;
 
     @NonNull
     private com.termux.app.wall.WallPages wallPages() {
@@ -27261,9 +27263,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void onChanged(@NonNull com.termux.app.wall.WallPages pages) {
                 if (mPageOverview != null) mPageOverview.refresh();
             }
-            @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {}
+            @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
+                // The removal is final: the page's own look goes with it.
+                if (mPageLookPruner != null) mPageLookPruner.dropPage(page.id);
+            }
         };
         wallPagesStore().addListener(mWallPagesListener);
+        // Once at start: page looks whose page is not on the wall or kept aside are dead keys.
+        mPageLookPruner = new com.termux.app.look.PageLook(
+            new com.termux.app.look.PrefsLookStore(store));
+        java.util.Set<Integer> liveIds = new java.util.HashSet<>();
+        com.termux.app.wall.WallPages held = wallPages();
+        for (com.termux.app.wall.WallPages.Page p : held.allPages()) liveIds.add(p.id);
+        for (com.termux.app.wall.WallPages.Page p : held.detached()) liveIds.add(p.id);
+        mPageLookPruner.pruneUnknown(liveIds);
     }
 
     /**
@@ -27291,6 +27304,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWallPagesStore.removeListener(mWallPagesListener);
         }
         mWallPagesListener = null;
+        if (mPageLookPruner != null) mPageLookPruner.close();
+        mPageLookPruner = null;
     }
 
     /** The display window's card key in the page overview: there is only ever one display. */
