@@ -358,11 +358,16 @@ public class TerminalPaneController {
          */
         float focusShareH, focusShareV;
         /**
-         * The Home page this window floats over, counting from 0, while it is a <b>Home float</b>;
+         * The id of the Home page this window floats over while it is a <b>Home float</b>;
          * {@link HomeFloatPolicy#NOT_HOME_FLOAT} while it is in the Workspace's row. A Home float
          * has no tiled tree: its one pane is its only float.
          */
-        int homePage = HomeFloatPolicy.NOT_HOME_FLOAT;
+        int homePageId = HomeFloatPolicy.NOT_HOME_FLOAT;
+        /**
+         * Where its page stands in the Home order (counting from 0), kept by the controller each
+         * time the pages change; where it last stood while the page is set aside.
+         */
+        int lastHomeIndex;
         /** A Home float tucked into its chip in the status bar. */
         boolean minimised;
         /**
@@ -381,7 +386,7 @@ public class TerminalPaneController {
          * Whether this window is a Home float rather than a window of the Workspace's row: a free
          * one over a Home page, or one a terminal widget hosts.
          */
-        public boolean isHomeFloat() { return homePage >= 0 || isHostedFloat(); }
+        public boolean isHomeFloat() { return homePageId >= 0 || isHostedFloat(); }
 
         /** Whether a terminal widget hosts this float ({@link #hostedWidgetId}). */
         public boolean isHostedFloat() { return hostedWidgetId != NOT_HOSTED; }
@@ -389,8 +394,14 @@ public class TerminalPaneController {
         /** The terminal widget hosting this float, or {@link #NOT_HOSTED}. */
         public int hostedWidgetId() { return hostedWidgetId; }
 
-        /** The Home page a Home float is pinned to, or {@link HomeFloatPolicy#NOT_HOME_FLOAT}. */
-        public int homePage() { return homePage; }
+        /** The id of the Home page a Home float is pinned to, or {@link HomeFloatPolicy#NOT_HOME_FLOAT}. */
+        public int homePageId() { return homePageId; }
+
+        /**
+         * The position in the pager of the Home page a Home float is pinned to (counting from 0),
+         * or {@link HomeFloatPolicy#NOT_HOME_FLOAT}.
+         */
+        public int homePage() { return homePageId < 0 ? homePageId : lastHomeIndex; }
 
         /** Whether a Home float is tucked into its chip. */
         public boolean isMinimised() { return minimised; }
@@ -944,7 +955,7 @@ public class TerminalPaneController {
             RectF[] shapes = HomeFloatPolicy.savedShapes(window.active.shapeMemory,
                 window.active.floatFrac, isLandscapeScreen());
             return new TerminalWorkspace.Window(0, capture.capture(window.active.session), null,
-                window.name, new TerminalWorkspace.HomeFloat(window.homePage, window.minimised,
+                window.name, new TerminalWorkspace.HomeFloat(window.homePageId, window.minimised,
                     savedShape(shapes[0]), savedShape(shapes[1])));
         }
         List<Leaf> panes = allLeavesOf(window);
@@ -1033,7 +1044,7 @@ public class TerminalPaneController {
         Window w = new Window(leaf);
         w.root = null;
         w.floating.add(leaf);
-        w.homePage = floatPage;
+        setHomePage(w, floatPage);
         w.minimised = saved != null && saved.minimised;
         w.name = TerminalNamePolicy.normalizeWindow(definition.name);
         mWindows.add(w);
@@ -1164,7 +1175,7 @@ public class TerminalPaneController {
         Leaf leaf = window.active;
         if (leaf == null) return state;
         state.putString(STATE_NODE_SESSION, leaf.session.mHandle);
-        state.putInt(STATE_HOME_FLOAT_PAGE, Math.max(0, window.homePage));
+        state.putInt(STATE_HOME_FLOAT_PAGE, Math.max(0, window.homePage()));
         state.putBoolean(STATE_HOME_FLOAT_MINIMISED, window.minimised);
         if (window.name != null) state.putString(STATE_WINDOW_NAME, window.name);
         if (leaf.fontSize > 0) state.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
@@ -1227,7 +1238,7 @@ public class TerminalPaneController {
         boolean landscapeNow = isLandscapeScreen();
         TerminalWorkspace.Window definition = new TerminalWorkspace.Window(0,
             new TerminalWorkspace.Pane(null, session.mSessionName, null), null,
-            state.getString(STATE_WINDOW_NAME), new TerminalWorkspace.HomeFloat(page,
+            state.getString(STATE_WINDOW_NAME), new TerminalWorkspace.HomeFloat(homePageIdAt(page),
                 state.getBoolean(STATE_HOME_FLOAT_MINIMISED, false),
                 landscapeNow ? left : now, landscapeNow ? now : left));
         Window window = newWorkspaceHomeFloat(definition,
@@ -3077,7 +3088,7 @@ public class TerminalPaneController {
         Window w = new Window(leaf);
         w.root = null;
         w.floating.add(leaf);
-        w.homePage = Math.max(0, page);
+        setHomePage(w, Math.max(0, page));
         mWindows.add(w);
         mHomeFloats.add(w);
         mPendingFloatEntryLeaf = leaf;
@@ -3096,11 +3107,12 @@ public class TerminalPaneController {
      * float never hides the first one's titlebar. Read before the new float joins the floats.
      */
     @NonNull
-    private RectF homeFloatBirthFrac(int page) {
+    private RectF homeFloatBirthFrac(int pageIndex) {
+        int page = homePageIdAt(pageIndex);
         RectF under = null;
         for (int i = mHomeFloats.size() - 1; i >= 0 && under == null; i--) {
             Window other = mHomeFloats.get(i);
-            if (other.active != null && HomeFloatPolicy.shownOn(other.homePage, other.minimised, page))
+            if (other.active != null && HomeFloatPolicy.shownOn(other.homePageId, other.minimised, page))
                 under = other.active.floatFrac;
         }
         Rect room = homeFloatRoom();
@@ -3247,7 +3259,7 @@ public class TerminalPaneController {
         leaf.appliedFloatFrac = null;
         w.root = leaf;
         w.active = leaf;
-        w.homePage = HomeFloatPolicy.NOT_HOME_FLOAT;
+        w.homePageId = HomeFloatPolicy.NOT_HOME_FLOAT;
         w.minimised = false;
         w.layoutPolicy = mDefaultLayoutPolicy;
         if (wasFocused) mFocusedHomeFloat = null;
@@ -3277,7 +3289,7 @@ public class TerminalPaneController {
         leaf.floatRestoreFrac = null;
         w.floating.add(leaf);
         w.active = leaf;
-        w.homePage = Math.max(0, page);
+        setHomePage(w, Math.max(0, page));
         w.minimised = false;
         w.layoutPolicy = null;
         mHomeFloats.add(w);
@@ -3331,7 +3343,8 @@ public class TerminalPaneController {
         mHomeFloatContainers.put(leaf, container);
         layer.addView(container, new FrameLayout.LayoutParams(0, 0));
         applyFloatBounds(leaf, container);
-        container.setVisibility(HomeFloatPolicy.shownOn(w.homePage, w.minimised, layer.page())
+        container.setVisibility(HomeFloatPolicy.shownOn(w.homePageId, w.minimised,
+            homePageIdAt(layer.page()))
             ? View.VISIBLE : View.GONE);
         if (container.getVisibility() == View.VISIBLE) maybeAnimateFloatEntry(leaf, container);
         updateHomeFloatBorders();
@@ -3340,22 +3353,66 @@ public class TerminalPaneController {
     /** How many Home floats stand on Home page {@code page}, minimised ones included. */
     public int homeFloatCountOn(int page) {
         int count = 0;
-        for (Window w : mHomeFloats) if (w.homePage == page) count++;
+        int id = homePageIdAt(page);
+        for (Window w : mHomeFloats) if (w.homePageId == id) count++;
         return count;
     }
 
+    /** The Home page ids in order, from the host; empty before it says (a position is then its id). */
+    @NonNull private java.util.function.Supplier<List<Integer>> mHomePageIds =
+        java.util.Collections::emptyList;
+
+    /** Where the Home pages' ids come from: the wall's page store, in pager order. */
+    public void setHomePageIds(@NonNull java.util.function.Supplier<List<Integer>> ids) {
+        mHomePageIds = ids;
+        onHomePagesChanged();
+    }
+
+    /** The id of the Home page at pager position {@code index} (the last page when past it). */
+    private int homePageIdAt(int index) {
+        List<Integer> ids = mHomePageIds.get();
+        if (ids.isEmpty()) return Math.max(0, index);
+        return ids.get(Math.max(0, Math.min(index, ids.size() - 1)));
+    }
+
+    private void setHomePage(@NonNull Window w, int pageIndex) {
+        w.homePageId = homePageIdAt(pageIndex);
+        List<Integer> ids = mHomePageIds.get();
+        w.lastHomeIndex = ids.isEmpty() ? Math.max(0, pageIndex)
+            : Math.max(0, Math.min(pageIndex, ids.size() - 1));
+    }
+
     /**
-     * Edit pages moved or removed Home pages: each float follows its page to its new number
-     * ({@link com.termux.app.launcher.home.HomePageEdits#remap}); a float whose page went stands on
-     * the page now in its place, its shell kept.
+     * The Home pages changed (moved, added, set aside or back): each float stays on its page by
+     * id, so only the positions are read again, and the floats shown follow the page on screen.
      */
-    public void remapHomeFloatPages(@NonNull int[] mapping) {
+    public void onHomePagesChanged() {
+        List<Integer> ids = mHomePageIds.get();
+        boolean moved = false;
+        if (!ids.isEmpty()) {
+            for (Window w : mHomeFloats) {
+                int at = ids.indexOf(w.homePageId);
+                if (at >= 0 && at != w.lastHomeIndex) {
+                    w.lastHomeIndex = at;
+                    moved = true;
+                }
+            }
+        }
+        applyHomeFloatPage();
+        if (moved) mHost.onHomeFloatsChanged();
+    }
+
+    /**
+     * Home page {@code removedId} is gone for good: a float on it stands on the page now in its
+     * position (the new last when that was the last), its shell kept.
+     */
+    public void homePageRemoved(int removedId) {
+        List<Integer> ids = mHomePageIds.get();
+        if (ids.isEmpty()) return;
         boolean moved = false;
         for (Window w : mHomeFloats) {
-            if (w.homePage < 0) continue;
-            int next = com.termux.app.launcher.home.HomePageEdits.remap(w.homePage, mapping);
-            if (next == w.homePage) continue;
-            w.homePage = next;
+            if (w.homePageId != removedId) continue;
+            setHomePage(w, w.lastHomeIndex);
             moved = true;
         }
         if (!moved) return;
@@ -3367,12 +3424,12 @@ public class TerminalPaneController {
     private void applyHomeFloatPage() {
         HomeFloatLayer layer = mHomeFloatLayer;
         if (layer == null) return;
-        int page = layer.page();
+        int page = homePageIdAt(layer.page());
         boolean focusedHidden = false;
         for (Window w : mHomeFloats) {
             FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
             if (container == null) continue;
-            boolean shown = HomeFloatPolicy.shownOn(w.homePage, w.minimised, page);
+            boolean shown = HomeFloatPolicy.shownOn(w.homePageId, w.minimised, page);
             int visibility = shown ? View.VISIBLE : View.GONE;
             if (container.getVisibility() != visibility) container.setVisibility(visibility);
             if (!shown && w == mFocusedHomeFloat) focusedHidden = true;

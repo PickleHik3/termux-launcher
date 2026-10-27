@@ -45,19 +45,6 @@ public final class HomePageEdits {
         return items > 0;
     }
 
-    /**
-     * Where something on page {@code page} stands after {@code mapping}: its page's new number,
-     * or, for a page that is gone, the page now in its place (the one after it, or the new last).
-     * A shell in a float is never lost with its page.
-     */
-    public static int remap(int page, @NonNull int[] mapping) {
-        if (page < 0 || page >= mapping.length) return page;
-        if (mapping[page] != REMOVED) return mapping[page];
-        int remaining = 0;
-        for (int value : mapping) if (value != REMOVED) remaining++;
-        return Math.max(0, Math.min(page, remaining - 1));
-    }
-
     @NonNull
     private static int[] identity(int count) {
         int[] mapping = new int[Math.max(0, count)];

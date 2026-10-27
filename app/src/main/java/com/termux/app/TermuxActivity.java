@@ -11534,7 +11534,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean cold = !sFirstShellStarted;
         boolean asks = asksForSession(intent);
         com.termux.app.terminal.TerminalWorkspaceStore.Autosave autosave = cold && !asks
-            ? new com.termux.app.terminal.TerminalWorkspaceStore().loadAutosave() : null;
+            ? new com.termux.app.terminal.TerminalWorkspaceStore().loadAutosave(homePagesForWorkspace())
+            : null;
         com.termux.app.terminal.ArrangementRecovery.Start start =
             com.termux.app.terminal.ArrangementRecovery.decide(false, false, cold, asks,
                 autosave == null ? com.termux.app.terminal.ArrangementRecovery.Saved.NONE
@@ -14109,6 +14110,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
         mPaneController.setGeometryScheduler(mGeometry);
+        mPaneController.setHomePageIds(() -> wallPages().homePageIdsForRepository());
         mAppliedPaneStyleKey = null;
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         applyTrailStyleAndRetroEffect();
@@ -22683,7 +22685,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.terminal.TerminalPaneController.Window window =
                             mPaneController.newWorkspaceHomeFloat(savedWindow, shells,
                                 com.termux.app.terminal.HomeFloatPolicy.restoredPage(
-                                    savedWindow.homeFloat.page, homePageCount));
+                                    homePagePositionOf(savedWindow.homeFloat.pageId),
+                                    homePageCount));
                         restoredWindows.add(window);
                         restoredFloats.add(window);
                         continue;
@@ -27410,17 +27413,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPageOverview != null) mPageOverview.refresh();
                 // The widget repository lines its pages up with the Home pages by id.
                 if (mWidgetHostController != null) mWidgetHostController.repository().onHomePagesChanged();
-                followHomePageOrderForFloats();
+                if (mPaneController != null) mPaneController.onHomePagesChanged();
             }
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
                 // The removal is final: the page's own look goes with it, and what stood on it.
                 if (mPageLookPruner != null) mPageLookPruner.dropPage(page.id);
+                if (mPaneController != null && page.kind == com.termux.app.wall.WallPages.PageKind.HOME) {
+                    mPaneController.homePageRemoved(page.id);
+                }
                 if (mWidgetHostController != null && page.kind == com.termux.app.wall.WallPages.PageKind.HOME) {
                     mWidgetHostController.repository().pageRemoved(page.id);
                 }
             }
         };
-        mHomePageIdsSeen = new java.util.ArrayList<>(wallPages().homePageIdsForRepository());
         wallPagesStore().addListener(mWallPagesListener);
         // Once at start: page looks whose page is not on the wall or kept aside are dead keys.
         mPageLookPruner = new com.termux.app.look.PageLook(
@@ -27705,26 +27710,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
     }
 
-    /** The Home page ids the last change of the wall's pages left, to see what moved by id. */
-    @NonNull private java.util.List<Integer> mHomePageIdsSeen = new java.util.ArrayList<>();
+    /** The Home pages as the workspace file's v4 float positions are read against them. */
+    @NonNull
+    private com.termux.app.terminal.TerminalWorkspace.HomePages homePagesForWorkspace() {
+        com.termux.app.wall.WallPages pages = wallPages();
+        return new com.termux.app.terminal.TerminalWorkspace.HomePages(
+            pages.homePageIdsForRepository(), pages.homeId());
+    }
 
-    /**
-     * The Home pages changed in the wall's pages (Edit pages, a drop's page, a trim, an undo): the
-     * floats still name a Home page by position until they are keyed by id, so each follows its
-     * page to where the ids now stand ({@code remapHomeFloatPages}). Appended pages move nothing.
-     */
-    private void followHomePageOrderForFloats() {
-        java.util.List<Integer> now = wallPages().homePageIdsForRepository();
-        java.util.List<Integer> was = mHomePageIdsSeen;
-        mHomePageIdsSeen = new java.util.ArrayList<>(now);
-        if (was.isEmpty() || mPaneController == null) return;
-        int[] mapping = new int[was.size()];
-        boolean changed = false;
-        for (int i = 0; i < mapping.length; i++) {
-            mapping[i] = now.indexOf(was.get(i));
-            changed |= mapping[i] != i;
-        }
-        if (changed) mPaneController.remapHomeFloatPages(mapping);
+    /** Where Home page {@code id} stands in the pager; past the last when it is not one. */
+    private int homePagePositionOf(int id) {
+        int at = wallPages().homePageIdsForRepository().indexOf(id);
+        return at >= 0 ? at : Integer.MAX_VALUE;
     }
 
     /** Each row runs what the corner tab, the palette and Settings already run for it. */
