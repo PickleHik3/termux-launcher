@@ -182,8 +182,15 @@ public final class CommandPaletteFilter {
             if (isSubmenu()) return "›";
             if (isArgumentPrompt()) return "args";
             if (!bindings.isEmpty()) return compactStroke(bindings.get(0));
-            if (LauncherToolRegistry.CATEGORY_APPS.equals(category)) return "app";
+            if (isAppRow()) return "app";
             return "";
+        }
+
+        /** Whether the row launches an app, Android or Linux, by the stable id in its query. */
+        public boolean isAppRow() {
+            // Both are compile-time constants, so this loads nothing Android.
+            return LauncherToolRegistry.CATEGORY_APPS.equals(category)
+                || CommandPaletteHomeSet.CATEGORY_LINUX_APPS.equals(category);
         }
     }
 

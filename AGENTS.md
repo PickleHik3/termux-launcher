@@ -141,7 +141,8 @@ everywhere else. Before calling a change done, walk this list and say which entr
     installer, dock/glass rendering views.
   - `app/terminal/` — terminal hosting, clients, panes, find/copy modes, `inappkeyboard/`.
   - `app/surfaces/` — the Appearance editor, inheritance row table, presets, materials, outlines.
-  - `app/layouteditor/` — the Layout editor: the miniature, the orientation toggle, the size rows.
+  - `app/layouteditor/` — the layout session under the editor's cards (`LayoutEditorController`,
+    policy in `LayoutEditorPlan`): Undo, the dirty state and every Position and size write.
   - `app/launcher/` — app catalogue, icons, paging, popups, A–Z scrub, notifications.
   - `app/chrome/`, `app/dock/`, `app/statusbar/`, `app/notice/`, `app/theme/`, `app/settings/`,
     `app/tour/` — the named chrome subsystems.
@@ -197,14 +198,28 @@ compatible with AGP 8.13.2; the code targets Java 11.
 - `./gradlew :app:verifyReleaseHardening` — release build safety settings.
 - `scripts/dev-install.sh` — installs the arm64 staging APK, fresh or as an upgrade. Target the
   device with `DEVICE=<serial>`; `BUILD_TYPE=debug` installs the debug APK instead.
-- **Installing on pong** (only when the developer asks): pong runs release builds.
-  `BUILD_TYPE=release DEVICE=<pong> scripts/dev-install.sh` builds one versioned
-  `<versionName>+dev.<sha>` from HEAD and installs it. Do not `adb install` the release
-  APK by hand: a local release build has no ABI splits (one ~100 MB universal APK with every
-  ABI's native libraries) and is **unsigned** unless the CI's `TERMUX_RELEASE_*` variables are
-  set, which fails as `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. The script keeps only arm64-v8a,
-  signs with the test key every build shares, installs with `--no-incremental` and checks the
-  launcher came back up.
+- **Installing on pong** (only when the developer asks), in three tiers:
+  1. *Development* runs a **staging** build, `DEVICE=<pong> scripts/dev-install.sh` (the default),
+     named `<versionName>+dev.<sha>` so tlstore's `min-launcher` gating sees the same version
+     string a release dev build shows. `run-as` works and stack traces are readable.
+  2. A *drop candidate* gets a **release** build of the candidate commit,
+     `BUILD_TYPE=release DEVICE=<pong> scripts/dev-install.sh`, for a day of real use before a
+     pre-release cut. It builds one versioned `<versionName>+dev.<sha>` from HEAD. Do not
+     `adb install` the release APK by hand: a local release build has no ABI splits (one ~100 MB
+     universal APK with every ABI's native libraries) and is **unsigned** unless the CI's
+     `TERMUX_RELEASE_*` variables are set, which fails as `INSTALL_PARSE_FAILED_NO_CERTIFICATES`.
+  3. A *shipped* build is the **CI artifact from the GitHub release**, installed through
+     Obtainium, never a local build: only that exercises the real signing key, the ABI splits
+     and the bootstrap download on the phone.
+
+  The script keeps only arm64-v8a, signs with the test key every build shares, installs with
+  `--no-incremental` and checks the launcher came back up. Why staging is enough for
+  development: it differs from release only in `debuggable` and the signing key (the sixteen
+  branches on `BuildConfig.DEBUG` / the debuggable flag are the only behaviour a release build
+  adds), and the user bugs that never showed on pong came from fresh installs, upgrades across
+  migrations, other densities and font scales and other editions, which a release build on one
+  long-lived phone cannot show either. Those are checked on the emulator per drop
+  (`docs/agents/releasing.md`).
 - `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug or staging
   build.
 
@@ -218,6 +233,12 @@ compatible with AGP 8.13.2; the code targets Java 11.
 Smallest proof that the change works, then stop. Run the tests you touched; run the module suite
 before you hand work over. CI owns the rest.
 
+- **Reproduce before you fix.** A bug fix starts from the failing state reproduced in your tree:
+  a failing test, a measured value, a log line, a screenshot. No reproduction, no fix; report what
+  you tried instead. A fix on a plausible cause ships a regression test for the wrong cause
+  (2026-10-26: one ink bug was "fixed" four times before a reproduction showed a missing
+  permission).
+
 - **Unit tests.** JUnit 4, Robolectric where Android behaviour is needed, AndroidX Test for
   instrumentation. Tests sit beside their module in `src/test/java` / `src/androidTest/java`,
   mirror the production package, and end in `Test`. Bug fixes ship with a focused regression test.
@@ -226,18 +247,27 @@ before you hand work over. CI owns the rest.
   test *name lists* against a clean worktree**, never counts.
   `TerminalIOPreferencesDataStoreLazyModeTest` is a known order-dependent flake (static singleton
   in `TerminalIOPreferencesFragment`) — it passes alone.
-- **Emulator first, for anything visual.** The Android emulator is the test platform. If your
-  host has an emulator skill or driver, use it rather than re-deriving the setup; drive the app
-  through Mobilerun Portal where the host provides it. The non-negotiables: an AVD such as
+- **The developer's phone is the truth for layout and motion; the emulator is for throwaway
+  shots.** Width, font scale, wallpaper and permissions differ on the phone, and the emulator
+  cannot judge motion. When the developer has allowed the phone for a named piece of work, a build
+  goes on it after the skeleton and after each wave, not at the end (2026-10-26: six waves were
+  emulator-checked before the first phone build; the phone showed clipped tiles and wrong ink the
+  emulator never did). The emulator stays the platform for screenshots and drivable checks when
+  the phone is not offered. If your host has an emulator skill or driver, use it rather than
+  re-deriving the setup; drive the app through Mobilerun Portal where the host provides it. The
+  non-negotiables: an AVD such as
   `tl16`, `-gpu angle_indirect` (the default swiftshader segfaults on this app's blur), stop the
   Gradle daemon first on a small host, install the **x86_64** split, and always pass
   `-s emulator-5554` — if qemu dies, adb silently falls back to the phone.
-- **Device checks run through the `device-checker` agent** where the host has one: it gets the
-  user-facing summary and the `device-checks.md` items, never the diff, and reports pass or fail
-  with crops. Take the device's lease for the whole session, and batch pong items into one ask.
+- **Batched functional checks run through the `device-checker` agent** where the host has one:
+  it gets the user-facing summary and the `device-checks.md` items, never the diff, and reports
+  pass or fail with crops. **Visual work is seen by whoever read the diff:** the session that
+  merges opens the before/after shots itself and says so in the merge; a checker's "passed" is a
+  claim, not a check. Take the device's lease for the whole session, and batch pong items into one
+  ask.
   This launcher becomes the emulator's home screen when installed: set the stock launcher back
-  as home before you hand the emulator over. Swap checks (stable → drop → stable) need release
-  builds of both, which install over each other because every build shares one signing key.
+  as home before you hand the emulator over. Swap checks (stable → drop → stable) still need
+  release builds of both, which install over each other because every build shares one signing key.
 - **Tear the test setup down when you are done.** The emulator holds this host's RAM and GPU for
   as long as it runs. When the testing is finished, force-stop the app, release the lease (which
   stops an emulator it started), and stop any background monitor or logcat loop you left behind.
@@ -248,8 +278,10 @@ before you hand work over. CI owns the rest.
   old dp scale.
 - **Be honest about the boundary.** Say which items you verified, on what, and which are reasoned
   from the code and still owe a device check. "Device-verified" means you saw it. Whatever still
-  owes one goes on `project-docs/device-checks.md` in the same commit, under Agent (drivable over
-  adb) or Developer (a hand on the phone); it is deleted there once seen.
+  owes one lands in the same commit: an item an agent can drive over adb goes on
+  `project-docs/device-checks.md`; one that needs the developer's hand (feel, frame timing, a
+  thumb mid-gesture, a lock screen, taste, a container they install, Perfetto) goes on
+  `project-docs/developer-checks.md`. Either is deleted once seen.
 - Do not verify with browsers or computer use unless the developer asks.
 - Compile-check any API claim before you rely on it. `UserHandle.getIdentifier` looks public and is
   `@SystemApi`; a worker asserted otherwise and was wrong.
@@ -295,10 +327,13 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
 - **Negative / concave corner radius was proposed and fully dropped.** Do not reintroduce it.
 - **The Sessions sidebar is legacy.** It loses its purpose with split tabs and its edge-swipe
   fights the keyboard's. No Sessions tab in the editor, no dot tab badges.
-- **The Appearance editor commits only on Done.** It rests as the outlines plus a floating
-  palette/✓ pill; the card is raised by the palette (shared layer) or by touching a surface, and its
-  ✕ only puts the card down. Back puts an open card down first; from the resting state it routes
-  through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken on entry.
+- **The Appearance editor commits only on Done.** Its card sheet is always present at one of
+  three detents, peek (handle plus header), half or full; there is no ✕. A drag or a tap on the
+  header moves between detents, touching a surface or a chip swaps the card at the current detent,
+  and the page swipe swaps Home ⇄ Workspace cards. Back above peek collapses to peek; at peek it
+  routes through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken
+  on entry. The sheet and the editor bar carry elevation, so anything raised over the editor in
+  the same parent (the wallpaper picker) takes a Z above them; `bringToFront` alone draws under.
 - **A stored `-1` corner radius is the "follow the style" sentinel**, resolved in one place
   (`resolveAutoCornerRadiusDp`). Never set `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
   `DEFAULT_STATUS_BAR_CORNER_RADIUS` to a real number — the shipped default rides on

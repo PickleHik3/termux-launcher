@@ -1,11 +1,18 @@
 package com.termux.app.place;
 
+import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.chrome.DressResolver;
+import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.DrawerTilePolicy;
+import com.termux.app.dock.WallStripRowPolicy;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -38,13 +45,42 @@ import java.util.concurrent.atomic.AtomicInteger;
  * #forVariant} pins it to one. The minimal layout is seeded from the normal one the first time it
  * is used ({@link MinimalMode#apply}), and is the user's from then on.
  *
+ * <p>One layout dresses both halves of the wall (ADR 0009): a Home page wears the Workspace's
+ * layout, normal or minimal, less what Home leaves out ({@link #resolve(PlaceOrientation,
+ * PaneWallPage)}), unless Home holds a <b>Home layout</b> of its own ({@link #hasHomeLayout},
+ * {@code place.home_layout}). That is a third arrangement ({@link LayoutVariant#HOME}), under
+ * {@code layout.home.<portrait|landscape>.<key>}: the status bar, the dock's rows and the keyboard
+ * are its elements, so the extra keys always resolve put away there. Turned on, it
+ * starts as a copy of what Home wore ({@link #setHomeLayout}). The sizes are not its own: the
+ * apps row's height, the Strip row's, and the keyboard's height and chin are <b>linked</b> keys
+ * ({@link #LINKED_KEYS}), which the Home layout reads and writes in the normal layout's scope,
+ * so both halves stand at one size and nothing resizes on the swipe (#84). Style, Corners and
+ * Margin are linked the same way, in the preferences' per-half accessors. Home's keyboard element is its own
+ * whichever layout Home wears ({@code layout.home.keyboard_shown}, absent is put away): shown, it
+ * is always on ({@link #isHomeKeyboardAlwaysOn}). The widget grid is Home's alone, so its columns
+ * and rows live in the Home layout's keys whichever variant asks for them.
+ *
+ * <p>Each layout holds its own Dock design, Search field and Drawer tile with its position, one
+ * value for both orientations: {@code layout.<variant scope>dock_design}, {@code search_field},
+ * {@code drawer_tile} and {@code drawer_tile_position} ({@link #dockStyle}). An absent or unknown
+ * design reads as the glass tray.
+ *
  * <p>The arrangement used to be kept per place as well as per orientation. Version 6 of the
  * migration folds that into the shared keys, seeding each orientation from the place the value
  * showed on — the terminal's for everything the terminal draws — and then drops every place's own
  * copy. The same step folds the place-scoped look overrides into the shared look, since those were
  * kept in this file's key scheme too. Version 7 folds the per-place minimal flags into the one
  * launcher-wide flag. Version 8 drops the alphabets index's minimised flag: the pull tab is gone,
- * and an index that was minimised reads as shown.
+ * and an index that was minimised reads as shown. Version 9 moves Home onto the shared layout,
+ * keeping a Home that differed as a Home layout ({@link #migrateToOneLayout}). Version 10 gives a
+ * kept Home layout the Workspace's status bar, which Home now wears ({@link
+ * #migrateHomeLayoutToTheBar}). Version 11 turns the Prompt line design into the Tray with the
+ * Search field on ({@link #migratePromptLineToTheSearchField}). Version 12 turns the Taskbar
+ * design into the Tray with the Drawer tile on where it stood ({@link
+ * #migrateTaskbarToTheDrawerTile}). Version 13 drops the Home layout's own sizes and shape, which
+ * it now reads linked from the Workspace's ({@link #migrateToLinkedKeys}). Version 14 gives every
+ * install a Home layout: the switch is gone, and Home and the Workspace each keep their own
+ * arrangement ({@link #migrateToHomeLayoutAlways}).
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -52,9 +88,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 8;
+    @VisibleForTesting static final int MIGRATION_VERSION = 14;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
+
+    /**
+     * Set once {@link #resetPortraitKeyboardResizeOnce} has run, on every install, fresh ones
+     * included. A flag of its own and not a {@link #MIGRATION_VERSION} step: the pre-release line
+     * ships the same reset under this same key at a lower version number, and a version bump there
+     * would make a later move to this line skip its own steps. One key for both, so it runs once
+     * across them.
+     */
+    @VisibleForTesting static final String KEY_KEYBOARD_OVERLAY_RESET_DONE =
+        "place_keyboard_overlay_reset_done";
 
     private static final String PREFIX = "place.";
     private static final String LAYOUT_PREFIX = "layout.";
@@ -111,6 +157,13 @@ public final class PlaceLayoutStore {
     private static final String KEY_DOCK_HEIGHT = "dock_height";
     private static final String KEY_KEYBOARD_HEIGHT = "keyboard_height";
     private static final String KEY_KEYBOARD_CHIN = "keyboard_chin";
+    /**
+     * The Wall strip's first row's height in dp, beside the dock's: {@code
+     * layout.<orientation>.wall_strip_height}, per layout like every size. Absent is the shipped
+     * row ({@link WallStripRowPolicy#DEFAULT_HEIGHT_DP}); nothing is written until the Layout
+     * editor's Strip handle is dragged.
+     */
+    private static final String KEY_WALL_STRIP_HEIGHT = "wall_strip_height";
 
     private static final String KEY_STATUS_COMPACT = "status_compact";
 
@@ -122,10 +175,67 @@ public final class PlaceLayoutStore {
 
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
     /**
+     * The Home layout's keyboard element, one value for both orientations like the Workspace's:
+     * {@code layout.home.keyboard_shown}. Shown is always on; absent is put away, which is what the
+     * Home layout is seeded with.
+     */
+    private static final String KEY_HOME_KEYBOARD = "keyboard_shown";
+    /**
+     * How many rows always on took from the widget grid when it was turned on, so the grid is
+     * applied at the same height on every later pass: {@code layout.home.keyboard_rows}.
+     */
+    private static final String KEY_HOME_KEYBOARD_ROWS = "keyboard_rows";
+    /**
+     * Home's dock style before version 9, one value for both orientations:
+     * {@code layout.home.dock_style}. Version 9 moves it to every layout's {@link #KEY_DOCK_DESIGN}.
+     */
+    private static final String LEGACY_KEY_HOME_DOCK_STYLE = "dock_style";
+    /**
+     * Where the Taskbar's Home tile stood in Home's dock row before version 9:
+     * {@code layout.home.taskbar_home_tile}. Version 9 moves it to every layout's
+     * {@link #KEY_DRAWER_TILE_POSITION}.
+     */
+    private static final String LEGACY_KEY_HOME_TASKBAR_HOME_TILE = "taskbar_home_tile";
+    /**
+     * A layout's Dock design, one value for both orientations: {@code layout.dock_design},
+     * {@code layout.minimal.dock_design}, {@code layout.home.dock_design}, a {@link DockStyle}
+     * id. Absent or unknown is the glass tray; a new install's first run writes
+     * {@link DockStyle#NEW_INSTALL_DEFAULT} into each ({@link #startsOnNewInstallDefault}).
+     */
+    private static final String KEY_DOCK_DESIGN = "dock_design";
+    /**
+     * Whether a layout's dock carries the Search field, a toggle of its own beside the design
+     * (#96): {@code layout.search_field}, {@code layout.minimal.search_field},
+     * {@code layout.home.search_field}. Absent is off, unless the layout still holds the Prompt
+     * line design the field came from (version 11 of the migration turns that into the Tray
+     * with the field on).
+     */
+    private static final String KEY_SEARCH_FIELD = "search_field";
+    /**
+     * Whether a layout's dock carries the Drawer tile among its apps, a toggle of its own beside
+     * the design (#97), as {@link #KEY_SEARCH_FIELD} is the Search field: {@code
+     * layout.drawer_tile}, {@code layout.minimal.drawer_tile}, {@code layout.home.drawer_tile}.
+     * Absent is off, unless the layout still holds the Taskbar design the tile came from (version
+     * 12 of the migration turns that into the Tray with the tile on).
+     */
+    private static final String KEY_DRAWER_TILE = "drawer_tile";
+    /**
+     * Where a layout's Drawer tile stands in the dock row, a
+     * {@link DrawerTilePolicy.Position} value. Absent is the start.
+     */
+    private static final String KEY_DRAWER_TILE_POSITION = "drawer_tile_position";
+    /**
      * Minimal mode, one flag for the whole launcher: {@code place.minimal}. Before version 7 each
      * place kept its own under {@code place.<p>.minimal}, which is the same unscoped key.
      */
     private static final String KEY_MINIMAL = "minimal";
+    /**
+     * Whether Home holds a layout of its own, one flag for the whole launcher:
+     * {@code place.home_layout}. Version 14 sets it on every install and nothing turns it off
+     * any more (the editor's Own layout switch is gone); absent is the old shared layout, which
+     * only a store not yet migrated reads.
+     */
+    private static final String KEY_HOME_LAYOUT = "home_layout";
     private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
     private static final String KEY_KEYBOARD_FLOAT_Y = "keyboard_float_y";
     /** Where the dictation pill was dragged to, beside the floating keyboard's place. */
@@ -152,7 +262,7 @@ public final class PlaceLayoutStore {
         KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS,
         KEY_KEYBOARD_MODE,
         KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
-        KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN,
+        KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN, KEY_WALL_STRIP_HEIGHT,
         // The stack positions ride with the placements they belong to, so the Layout editor's
         // Discard and its reset put a re-order back the same way they put a move back.
         orderKeyName(Element.STATUS), orderKeyName(Element.APPS), orderKeyName(Element.AZ),
@@ -160,7 +270,8 @@ public final class PlaceLayoutStore {
         underKeyboardKeyName(Element.APPS), underKeyboardKeyName(Element.AZ),
         underKeyboardKeyName(Element.EXTRA_KEYS),
         restoreEdgeKeyName(Element.STATUS), restoreEdgeKeyName(Element.APPS),
-        restoreEdgeKeyName(Element.EXTRA_KEYS)
+        restoreEdgeKeyName(Element.EXTRA_KEYS),
+        PlaceLayoutStore.KEY_BAR_ORDER
     };
 
     /**
@@ -170,6 +281,36 @@ public final class PlaceLayoutStore {
      */
     private static final String[] FOLDED_KEYS = concat(ARRANGEMENT_KEYS,
         KEY_STATUS_COMPACT, KEY_KEYBOARD_FLOAT_X, KEY_KEYBOARD_FLOAT_Y);
+
+    /**
+     * The <b>linked</b> keys (#84): arrangement keys the Home layout never holds of its own. A
+     * store on the Home layout reads and writes them in the normal layout's scope ({@link
+     * #variantKey}), so with Home's own layout on, the apps row's height, the Strip row's height
+     * and the keyboard's height and chin are still one value on both halves of the wall, edited
+     * from either. The normal layout's and not the minimal one's: minimal mode never dresses
+     * Home. The keyboard's form is an arrangement, not a size, and stays Home's own.
+     */
+    private static final String[] LINKED_KEYS = {
+        KEY_DOCK_HEIGHT, KEY_WALL_STRIP_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN
+    };
+
+    /**
+     * Whether two layouts read their sizes from the same keys: the Home layout and the normal one,
+     * through the {@link #LINKED_KEYS}. What a holder of two snapshots asks, so a size edited
+     * through one is not taken as the other's starting value.
+     */
+    public static boolean sizesLinked(@NonNull LayoutVariant a, @NonNull LayoutVariant b) {
+        return (a == LayoutVariant.HOME && b == LayoutVariant.NORMAL)
+            || (a == LayoutVariant.NORMAL && b == LayoutVariant.HOME);
+    }
+
+    /** Whether {@code key} is one of the {@link #LINKED_KEYS}. */
+    private static boolean isLinkedKey(@NonNull String key) {
+        for (String linked : LINKED_KEYS) {
+            if (linked.equals(key)) return true;
+        }
+        return false;
+    }
 
     /** The unscoped key one element's stack position is stored under. */
     @VisibleForTesting
@@ -204,8 +345,42 @@ public final class PlaceLayoutStore {
      */
     @Nullable private final LayoutVariant mFixedVariant;
 
-    /** Per orientation, whether the minimal layout has been checked for its first seeding. */
-    @NonNull private final boolean[] mMinimalSeeded;
+    /**
+     * Per variant and orientation, whether a seeded layout (the minimal one, the Home one) has
+     * been checked for its first seeding. Shared by every view of one store.
+     */
+    @NonNull private final boolean[][] mSeeded;
+
+    /** The views {@link #forVariant} hands out, one per variant, shared by every view. */
+    @NonNull private final PlaceLayoutStore[] mVariantViews;
+
+    /**
+     * The Home layout switch and this view's Dock design as last read, and the revision (and for
+     * the design the variant) they were read at: the travel's per-frame reads (the bead melt, the
+     * shape each surface wears) compare an int rather than read and parse preferences.
+     */
+    private int mHomeLayoutRevision = Integer.MIN_VALUE;
+    private boolean mHomeLayout;
+    /**
+     * Minimal mode as last read, cached as the Home layout switch is: a window's Dock design is
+     * the minimal layout's or the normal one's, and the key lens asks that design every frame.
+     */
+    private int mMinimalRevision = Integer.MIN_VALUE;
+    private boolean mMinimal;
+    private int mDockDesignRevision = Integer.MIN_VALUE;
+    @Nullable private LayoutVariant mDockDesignVariant;
+    @NonNull private DockStyle mDockDesign = DockStyle.GLASS_TRAY;
+    /** This view's Search field as last read, cached as the design is: the dock's pass asks it. */
+    private int mSearchFieldRevision = Integer.MIN_VALUE;
+    @Nullable private LayoutVariant mSearchFieldVariant;
+    private boolean mSearchField;
+    /** This view's Drawer tile as last read, cached as the Search field is: the row asks it. */
+    private int mDrawerTileRevision = Integer.MIN_VALUE;
+    @Nullable private LayoutVariant mDrawerTileVariant;
+    private boolean mDrawerTile;
+
+    /** What each page wears, over this view; made the first time a page asks. */
+    @Nullable private DressResolver mDresses;
 
     /**
      * Any write to the launcher's preferences can change what the layout resolves to — the shared
@@ -224,8 +399,10 @@ public final class PlaceLayoutStore {
         mStore = preferences.getSharedPreferences();
         mRevision = new AtomicInteger();
         mFixedVariant = null;
-        mMinimalSeeded = new boolean[PlaceOrientation.values().length];
+        mSeeded = new boolean[LayoutVariant.values().length][PlaceOrientation.values().length];
+        mVariantViews = new PlaceLayoutStore[LayoutVariant.values().length];
         migrateIfNeeded();
+        resetPortraitKeyboardResizeOnce();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
     }
 
@@ -234,7 +411,8 @@ public final class PlaceLayoutStore {
         mStore = root.mStore;
         mRevision = root.mRevision;
         mFixedVariant = variant;
-        mMinimalSeeded = root.mMinimalSeeded;
+        mSeeded = root.mSeeded;
+        mVariantViews = root.mVariantViews;
     }
 
     /**
@@ -253,7 +431,236 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public PlaceLayoutStore forVariant(@NonNull LayoutVariant variant) {
-        return mFixedVariant == variant ? this : new PlaceLayoutStore(this, variant);
+        if (mFixedVariant == variant) return this;
+        PlaceLayoutStore view = mVariantViews[variant.ordinal()];
+        if (view == null) {
+            view = new PlaceLayoutStore(this, variant);
+            mVariantViews[variant.ordinal()] = view;
+        }
+        return view;
+    }
+
+    /**
+     * The variant a page's chrome is arranged by, and the one the Layout editor opened on it
+     * edits: the layout the page's dress wears ({@link DressResolver#layoutOf}), the Workspace's
+     * (normal or minimal) on a window, the normal one or Home's own on a Home page while it holds a Home layout.
+     */
+    @NonNull
+    public LayoutVariant variantFor(@NonNull PaneWallPage page) {
+        if (mDresses == null) mDresses = DressResolver.of(this);
+        return mDresses.layoutOf(page);
+    }
+
+    // ---------------------------------------------------------------- the Home layout
+
+    /**
+     * Whether Home holds a Home layout of its own (the glossary's <b>Home layout</b>): off, Home
+     * wears the shared layout; on, its own copy of which rows show, where and in what order, and
+     * its own Dock design and toggles. The sizes and Style, Corners and Margin are the shared
+     * layout's either way ({@link #LINKED_KEYS}). The same answer from every view. Read on travel
+     * frames, so it is read once per revision.
+     */
+    public boolean hasHomeLayout() {
+        int revision = mRevision.get();
+        if (mHomeLayoutRevision != revision) {
+            mHomeLayout = mStore != null && mStore.getBoolean(homeLayoutKey(), false);
+            mHomeLayoutRevision = revision;
+        }
+        return mHomeLayout;
+    }
+
+    /** {@link #hasHomeLayout()} for a reader that holds the launcher's preferences but not the store. */
+    public static boolean hasHomeLayout(@Nullable TermuxAppSharedPreferences preferences) {
+        SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
+        return store != null && store.getBoolean(homeLayoutKey(), false);
+    }
+
+    /**
+     * Turns the Home layout on or off. Turned on, Home's copy starts as what Home wore on the
+     * shared layout (the Workspace's normal layout, its Dock design and toggles), so nothing on
+     * screen moves until the user edits it; the linked sizes and Style, Corners and Margin are
+     * the shared layout's either way and are not copied, and the widget grid and always on are
+     * Home's either way and are left alone. Turned off, Home wears the shared layout again and its
+     * copy is no longer read.
+     */
+    public void setHomeLayout(boolean on) {
+        if (mStore == null || hasHomeLayout() == on) return;
+        if (on) copyIntoHomeLayout(LayoutVariant.NORMAL);
+        writeBoolean(homeLayoutKey(), on);
+    }
+
+    /** The Home layout's arrangement and design set to what {@code worn} gives Home. */
+    private void copyIntoHomeLayout(@NonNull LayoutVariant worn) {
+        PlaceLayoutStore source = forVariant(worn);
+        // A minimal layout never used is seeded first, so the copy is what Home showed. A source
+        // with nothing stored leaves the Home layout empty, to be seeded on first use as before.
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            source.variantKey(orientation, KEY_DOCK_HEIGHT);
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (isGridKey(key)) continue;
+                String home = layoutKey(LayoutVariant.HOME, orientation, key);
+                // A linked key is read from the normal layout; a stale copy is only dropped.
+                if (isLinkedKey(key)) editor.remove(home);
+                else copy(editor, all, layoutKey(worn, orientation, key), home);
+            }
+        }
+        for (String key : LAYOUT_WIDE_KEYS)
+            copy(editor, all, layoutWideKey(worn, key), layoutWideKey(LayoutVariant.HOME, key));
+        editor.apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Copies {@code from}'s arrangement over {@code to}'s: the Match rows' layout half (Match
+     * Workspace Styling on the Home card, Match Home Styling on the Workspace card). Where every
+     * bar stands in either orientation, which are put away and their order, the keyboard's form,
+     * and the Dock design with its Search field and Drawer tile. Not copied: the widget grid
+     * (Home's alone), the linked sizes when Home is either side (one value already, {@link
+     * #LINKED_KEYS}), and when Home is either side the extra keys, which only the Workspace wears
+     * ({@link DressResolver#wornOn}). A key {@code from} does not hold is removed from {@code to},
+     * so the copy reads exactly as the source did. {@link #arrangementKeys} names every key this
+     * writes, for an undo snapshot taken before it.
+     */
+    public void copyArrangement(@NonNull LayoutVariant from, @NonNull LayoutVariant to) {
+        if (mStore == null || from == to) return;
+        // A layout never used is seeded first, so the copy is what that screen showed.
+        seed(from);
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (copiesArrangementKey(key, from, to))
+                    copy(editor, all, layoutKey(from, orientation, key),
+                        layoutKey(to, orientation, key));
+            }
+        }
+        for (String key : LAYOUT_WIDE_KEYS)
+            copy(editor, all, layoutWideKey(from, key), layoutWideKey(to, key));
+        editor.apply();
+        // The target is whole now: it must not be seeded over on its next read.
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            mSeeded[to.ordinal()][orientation.ordinal()] = true;
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Gives {@code variant}'s layout its starting point in every orientation it has not been used
+     * in yet ({@link #seedIfNeeded}), so what is read or copied from it, or taken before a copy
+     * over it, is what that screen shows. Nothing for the normal layout, which is never seeded.
+     */
+    public void seed(@NonNull LayoutVariant variant) {
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            seedIfNeeded(variant, orientation);
+    }
+
+    /** Every key {@link #copyArrangement copyArrangement(from, to)} may write or remove. */
+    @NonNull
+    public java.util.List<String> arrangementKeys(@NonNull LayoutVariant from,
+                                                  @NonNull LayoutVariant to) {
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        if (from == to) return keys;
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (copiesArrangementKey(key, from, to))
+                    keys.add(layoutKey(to, orientation, key));
+            }
+        }
+        for (String key : LAYOUT_WIDE_KEYS)
+            keys.add(layoutWideKey(to, key));
+        return keys;
+    }
+
+    /** Whether a copy between two layouts carries {@code key} ({@link #copyArrangement}). */
+    private static boolean copiesArrangementKey(@NonNull String key, @NonNull LayoutVariant from,
+                                                @NonNull LayoutVariant to) {
+        if (isGridKey(key)) return false;
+        boolean home = from == LayoutVariant.HOME || to == LayoutVariant.HOME;
+        return !home || (!isLinkedKey(key) && !isWorkspaceOnlyKey(key));
+    }
+
+    /** The extra keys' placement keys: the one element only the Workspace wears. */
+    private static boolean isWorkspaceOnlyKey(@NonNull String key) {
+        return KEY_EXTRA_KEYS.equals(key) || orderKeyName(Element.EXTRA_KEYS).equals(key)
+            || underKeyboardKeyName(Element.EXTRA_KEYS).equals(key)
+            || restoreEdgeKeyName(Element.EXTRA_KEYS).equals(key);
+    }
+
+    /** {@code to} set to what {@code all} holds under {@code from}, or removed where it holds none. */
+    private static void copy(@NonNull SharedPreferences.Editor editor, @NonNull Map<String, ?> all,
+                             @NonNull String from, @NonNull String to) {
+        Object value = all.get(from);
+        if (value != null) put(editor, to, value);
+        else editor.remove(to);
+    }
+
+    /**
+     * Whether two layouts arrange what both of them wear differently, in either orientation:
+     * where each such element stands (its edge, whether it is put away, its place in the stack,
+     * whether it is under the keyboard) and the dock's and the Strip row's heights. The Home
+     * layout wears only the dock's rows and the bar, so against it only those count, and its
+     * heights are linked to the normal layout's ({@link #LINKED_KEYS}), so against that one they
+     * never differ. The Dock design is not an arrangement and never counts; neither do the
+     * keyboard's sizes and form.
+     */
+    public boolean arrangementsDiffer(@NonNull LayoutVariant a, @NonNull LayoutVariant b) {
+        return arrangementsDiffer(a, b, null);
+    }
+
+    /** {@link #arrangementsDiffer(LayoutVariant, LayoutVariant)}, {@code ignored} left out too. */
+    private boolean arrangementsDiffer(@NonNull LayoutVariant a, @NonNull LayoutVariant b,
+                                       @Nullable Element ignored) {
+        PlaceLayoutStore first = forVariant(a);
+        PlaceLayoutStore second = forVariant(b);
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (Element element : Element.values()) {
+                if (element == ignored || !DressResolver.wornOn(a, element)
+                    || !DressResolver.wornOn(b, element))
+                    continue;
+                if (!first.slot(orientation, element).equals(second.slot(orientation, element)))
+                    return true;
+            }
+            if (Float.compare(first.dockHeightScale(orientation),
+                    second.dockHeightScale(orientation)) != 0
+                || first.wallStripHeightDp(orientation) != second.wallStripHeightDp(orientation))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether two layouts hold the keyboard in a different form, in either orientation. Apart
+     * from {@link #arrangementsDiffer}, which leaves it out, since only the migration to one
+     * layout asks, and only while Home's keyboard is always on. The keyboard's height and chin
+     * are linked ({@link #LINKED_KEYS}), so they are no difference.
+     */
+    private boolean keyboardFormsDiffer(@NonNull LayoutVariant a, @NonNull LayoutVariant b) {
+        PlaceLayoutStore first = forVariant(a);
+        PlaceLayoutStore second = forVariant(b);
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            if (first.keyboardForm(orientation) != second.keyboardForm(orientation))
+                return true;
+        }
+        return false;
+    }
+
+    /** {@code place.home_layout}: the launcher's, not a layout's. */
+    @VisibleForTesting
+    @NonNull
+    static String homeLayoutKey() {
+        return PREFIX + KEY_HOME_LAYOUT;
+    }
+
+    /**
+     * One half's Style, Corners and Margin as the preferences hold them now ({@link
+     * WallHalfShape#read}): what the Dress resolver shapes a page by. Linked like the sizes, so
+     * Home's half answers the Workspace's and a Home layout brings no shape of its own (#84).
+     */
+    @NonNull
+    public WallHalfShape halfShape(boolean home) {
+        return WallHalfShape.read(mPreferences, home);
     }
 
     /**
@@ -276,11 +683,49 @@ public final class PlaceLayoutStore {
         return forVariant(variant).resolve(orientation);
     }
 
+    /**
+     * The layout {@code page} wears in an orientation, as its dress has it: the variant {@link
+     * #variantFor} names, resolved for that page ({@link #resolve(PlaceOrientation,
+     * LayoutVariant, PaneWallPage)}).
+     */
+    @NonNull
+    public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull PaneWallPage page) {
+        return resolve(orientation, variantFor(page), page);
+    }
+
+    /**
+     * {@code variant}'s layout as {@code page} wears it. A window wears it whole, its dock in the
+     * Dock design the layout holds (#93). A Home page on the shared layout leaves out what Home
+     * never wears (the extra keys, {@link DressResolver#wornBy}), its keyboard element is always
+     * on, Home's own whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock
+     * draws the design the layout holds too. On the Home layout it is that layout as it resolves.
+     */
+    @NonNull
+    public PlaceLayout resolve(@NonNull PlaceOrientation orientation,
+                               @NonNull LayoutVariant variant, @NonNull PaneWallPage page) {
+        PlaceLayoutStore layout = forVariant(variant);
+        PlaceLayout resolved = layout.resolve(orientation);
+        if (page != PaneWallPage.WIDGETS || variant == LayoutVariant.HOME) return resolved;
+        for (Element element : Element.values()) {
+            Slot slot = resolved.slot(element);
+            if (!DressResolver.wornBy(page, element) && !slot.hidden)
+                resolved = resolved.withSlot(element, slot.withHidden(true));
+        }
+        return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
+            .withDockStyle(DockStyle.effectiveStyle(layout.dockStyle()));
+    }
+
     /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation) {
+        LayoutVariant variant = activeVariant();
         EnumMap<Element, Slot> slots = new EnumMap<>(Element.class);
-        for (Element element : Element.values()) slots.put(element, slot(orientation, element));
+        for (Element element : Element.values()) {
+            Slot slot = slot(orientation, element);
+            // An element the variant does not offer is never shown on it, whatever is stored: the
+            // Home layout has no extra keys.
+            slots.put(element, variant.offers(element) ? slot : slot.withHidden(true));
+        }
         // The terminal's own toolbar switch can still have put the extra keys away everywhere.
         if (!mPreferences.shouldShowTerminalToolbar()) {
             slots.put(Element.EXTRA_KEYS, slots.get(Element.EXTRA_KEYS).withHidden(true));
@@ -290,7 +735,11 @@ public final class PlaceLayoutStore {
             keyboardForm(orientation),
             isKeyboardShown(),
             widgetColumns(orientation),
-            widgetRows(orientation));
+            widgetRows(orientation),
+            // The Dock design the variant draws: the one it holds, on either half.
+            DockStyle.effectiveStyle(dockStyle()),
+            // The Dock card's A–Z Show: the pull tab claims no band (editor-redesign §4).
+            !com.termux.app.launcher.az.AzShowMode.of(mStore).claimsBand());
     }
 
     /**
@@ -303,6 +752,7 @@ public final class PlaceLayoutStore {
      * that stance holds until it is switched on again.
      */
     public boolean isKeyboardShown() {
+        if (activeVariant() == LayoutVariant.HOME) return isHomeKeyboardAlwaysOn();
         return !mPreferences.isKeyboardTurnedOff();
     }
 
@@ -313,9 +763,185 @@ public final class PlaceLayoutStore {
      * the next tap when shown again.
      */
     public void setKeyboardShown(boolean shown) {
+        if (activeVariant() == LayoutVariant.HOME) {
+            setHomeKeyboardAlwaysOn(shown);
+            return;
+        }
         if (mPreferences.isKeyboardTurnedOff() == !shown) return;
         mPreferences.setKeyboardTurnedOff(!shown);
         mRevision.incrementAndGet();
+    }
+
+    /**
+     * Always on (the Home keyboard): Home's keyboard element shown rather than put away, which
+     * keeps the keyboard up on every Home page and gives it rows of the widget grid. Off until the
+     * user shows the element in the Layout editor opened on a Home page. Whether the keyboard is
+     * up is each half's own, not dress, so this is Home's whichever layout Home wears.
+     */
+    public boolean isHomeKeyboardAlwaysOn() {
+        return mStore != null && mStore.getBoolean(homeKey(KEY_HOME_KEYBOARD), false);
+    }
+
+    /** Turns always on on or off: Home's keyboard element shown or put away, on any layout. */
+    public void setHomeKeyboardAlwaysOn(boolean on) {
+        if (isHomeKeyboardAlwaysOn() != on) writeBoolean(homeKey(KEY_HOME_KEYBOARD), on);
+    }
+
+    /** The rows always on took from the grid when it was turned on; 0 while it is off. */
+    public int homeKeyboardRows() {
+        return mStore == null ? 0 : Math.max(0, mStore.getInt(homeKey(KEY_HOME_KEYBOARD_ROWS), 0));
+    }
+
+    public void setHomeKeyboardRows(int rows) {
+        writeInt(homeKey(KEY_HOME_KEYBOARD_ROWS), Math.max(0, rows));
+    }
+
+    /**
+     * The Dock design this view's layout holds, whether or not it is drawn yet; what the Layout
+     * editor's picker shows. What a page's dock draws is its dress's ({@link
+     * DockStyle#effectiveStyle} of it), on the resolved layout as {@link PlaceLayout#dockStyle}. Read
+     * on travel frames (the bead melt), so it is read once per revision.
+     */
+    @NonNull
+    public DockStyle dockStyle() {
+        if (mStore == null) return DockStyle.GLASS_TRAY;
+        LayoutVariant variant = activeVariant();
+        int revision = mRevision.get();
+        if (mDockDesignRevision != revision || mDockDesignVariant != variant) {
+            mDockDesign = DockStyle.parse(
+                mStore.getString(layoutWideKey(variant, KEY_DOCK_DESIGN), null));
+            mDockDesignRevision = revision;
+            mDockDesignVariant = variant;
+        }
+        return mDockDesign;
+    }
+
+    /**
+     * A design picked for this view's layout. The Search field and the Drawer tile are toggles of
+     * their own and stay as they are ({@link #setSearchField}, {@link #setDrawerTile}).
+     */
+    public void setDockStyle(@NonNull DockStyle style) {
+        if (mStore == null || style == dockStyle()) return;
+        mStore.edit().putString(layoutWideKey(activeVariant(), KEY_DOCK_DESIGN),
+            style.storageValue()).apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * One layout's design as version 9 moved it, with the Drawer tile the Taskbar brought then:
+     * version 12 turns that Taskbar into the Tray and keeps the tile.
+     */
+    private static void putDockDesign(@NonNull SharedPreferences.Editor editor,
+                                      @NonNull LayoutVariant variant, @NonNull DockStyle style) {
+        editor.putString(layoutWideKey(variant, KEY_DOCK_DESIGN), style.storageValue())
+            .putBoolean(layoutWideKey(variant, KEY_DRAWER_TILE), style == DockStyle.TASKBAR);
+    }
+
+    /**
+     * Whether this view's layout carries the Search field under the dock's apps row, with
+     * whichever design it holds (#96). A layout that never stored the toggle reads it off the
+     * design: on only for a Prompt line the migration has not turned into the Tray yet.
+     */
+    public boolean searchField() {
+        if (mStore == null) return false;
+        LayoutVariant variant = activeVariant();
+        int revision = mRevision.get();
+        if (mSearchFieldRevision != revision || mSearchFieldVariant != variant) {
+            mSearchField = toggle(KEY_SEARCH_FIELD, DockStyle.PROMPT_LINE);
+            mSearchFieldRevision = revision;
+            mSearchFieldVariant = variant;
+        }
+        return mSearchField;
+    }
+
+    /** The Search field turned on or off for this view's layout, its design left as it is. */
+    public void setSearchField(boolean on) {
+        if (mStore == null || on == searchField()) return;
+        mStore.edit().putBoolean(layoutWideKey(activeVariant(), KEY_SEARCH_FIELD), on).apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Whether this view's layout carries the Drawer tile among the dock's apps, with whichever
+     * design it holds (#97); read and cached as {@link #searchField} is. A layout that never
+     * stored the toggle reads it off the design: on only for a Taskbar the migration has not
+     * turned into the Tray yet.
+     */
+    public boolean drawerTile() {
+        if (mStore == null) return false;
+        LayoutVariant variant = activeVariant();
+        int revision = mRevision.get();
+        if (mDrawerTileRevision != revision || mDrawerTileVariant != variant) {
+            mDrawerTile = toggle(KEY_DRAWER_TILE, DockStyle.TASKBAR);
+            mDrawerTileRevision = revision;
+            mDrawerTileVariant = variant;
+        }
+        return mDrawerTile;
+    }
+
+    /**
+     * The Drawer tile turned on or off for this view's layout, its design and the tile's place
+     * ({@link #drawerTilePosition}) left as they are.
+     */
+    public void setDrawerTile(boolean on) {
+        if (mStore == null || on == drawerTile()) return;
+        mStore.edit().putBoolean(layoutWideKey(activeVariant(), KEY_DRAWER_TILE), on).apply();
+        mRevision.incrementAndGet();
+    }
+
+    private boolean toggle(@NonNull String key, @NonNull DockStyle bringer) {
+        if (mStore == null) return false;
+        String stored = layoutWideKey(activeVariant(), key);
+        if (mStore.contains(stored)) return mStore.getBoolean(stored, false);
+        return dockStyle() == bringer;
+    }
+
+    /**
+     * Where the Drawer tile stands in this view's layout's dock row, whether or not the tile is
+     * on, so it comes back where it was; the start until the user drags it.
+     */
+    @NonNull
+    public DrawerTilePolicy.Position drawerTilePosition() {
+        if (mStore == null) return DrawerTilePolicy.DEFAULT;
+        return DrawerTilePolicy.parse(mStore.getString(
+            layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION), null));
+    }
+
+    /**
+     * The tile dropped at {@code position}. Not a layout change: the dock row re-lays its slots
+     * itself.
+     */
+    public void setDrawerTilePosition(@NonNull DrawerTilePolicy.Position position) {
+        if (mStore == null || position == drawerTilePosition()) return;
+        mStore.edit().putString(layoutWideKey(activeVariant(), KEY_DRAWER_TILE_POSITION),
+            DrawerTilePolicy.persisted(position)).apply();
+    }
+
+    /** {@code layout.home.<key>}: the Home layout's own, for both orientations. */
+    @VisibleForTesting
+    @NonNull
+    static String homeKey(@NonNull String key) {
+        return layoutWideKey(LayoutVariant.HOME, key);
+    }
+
+    /**
+     * One layout's value for both orientations: {@code layout.<key>} for the normal layout,
+     * {@code layout.minimal.<key>} and {@code layout.home.<key>} for the others.
+     */
+    @VisibleForTesting
+    @NonNull
+    static String layoutWideKey(@NonNull LayoutVariant variant, @NonNull String key) {
+        return LAYOUT_PREFIX + variant.keyScope() + key;
+    }
+
+    /** What each layout holds once for both orientations: its design and the dock's toggles. */
+    private static final String[] LAYOUT_WIDE_KEYS = {
+        KEY_DOCK_DESIGN, KEY_SEARCH_FIELD, KEY_DRAWER_TILE, KEY_DRAWER_TILE_POSITION
+    };
+
+    /** The widget grid's keys, which live in the Home layout's scope but are Home's whatever it wears. */
+    private static boolean isGridKey(@NonNull String key) {
+        return KEY_WIDGET_COLUMNS.equals(key) || KEY_WIDGET_ROWS.equals(key);
     }
 
     // ---------------------------------------------------------------- slots
@@ -541,18 +1167,35 @@ public final class PlaceLayoutStore {
     /**
      * Whether an open keyboard floats over the Linux display or shrinks it. Only the display reads
      * this ({@link KeyboardOverlayPolicy}): it has a fixed screen of its own and nothing to reflow,
-     * so in landscape it floats until the user asks otherwise. The terminal's text always takes the
-     * room, whatever is stored here.
+     * so it floats in both orientations until the user asks otherwise. A stored Resize is kept,
+     * whichever orientation it was set for. The terminal's text always takes the room, whatever
+     * is stored here.
      */
     @NonNull
     public KeyboardMode keyboardMode(@NonNull PlaceOrientation orientation) {
-        KeyboardMode fallback = orientation == PlaceOrientation.LANDSCAPE
-            ? KeyboardMode.OVERLAY : KeyboardMode.RESIZE;
-        return KeyboardMode.parse(readString(orientation, KEY_KEYBOARD_MODE), fallback);
+        return KeyboardMode.parse(readString(orientation, KEY_KEYBOARD_MODE), KeyboardMode.OVERLAY);
     }
 
     public void setKeyboardMode(@NonNull PlaceOrientation orientation, @NonNull KeyboardMode mode) {
         writeString(orientation, KEY_KEYBOARD_MODE, mode.storageValue());
+    }
+
+    /**
+     * Whether this orientation's keyboard mode has a key of its own, rather than reading the
+     * Overlay every layout falls back to. The Layout editor's snapshot asks, so its revert puts an
+     * absent mode back as absent instead of pinning the default it answered with: a pinned
+     * default outlives a change of default, which is how portrait kept Resize after Overlay
+     * became the default.
+     */
+    public boolean hasStoredKeyboardMode(@NonNull PlaceOrientation orientation) {
+        return mStore != null && mStore.contains(variantKey(orientation, KEY_KEYBOARD_MODE));
+    }
+
+    /** Drops this orientation's keyboard mode, so it reads the default again. */
+    public void clearKeyboardMode(@NonNull PlaceOrientation orientation) {
+        if (mStore == null) return;
+        mStore.edit().remove(variantKey(orientation, KEY_KEYBOARD_MODE)).apply();
+        mRevision.incrementAndGet();
     }
 
     /**
@@ -570,27 +1213,27 @@ public final class PlaceLayoutStore {
     }
 
     public int widgetColumns(@NonNull PlaceOrientation orientation) {
-        return clamp(readInt(orientation, KEY_WIDGET_COLUMNS,
+        return clamp(readGridInt(orientation, KEY_WIDGET_COLUMNS,
                 mPreferences.getAppLauncherWidgetGridColumns()),
             TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
             TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS);
     }
 
     public void setWidgetColumns(@NonNull PlaceOrientation orientation, int columns) {
-        writeInt(variantKey(orientation, KEY_WIDGET_COLUMNS),
+        writeInt(gridKey(orientation, KEY_WIDGET_COLUMNS),
             clamp(columns, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS));
     }
 
     public int widgetRows(@NonNull PlaceOrientation orientation) {
-        return clamp(readInt(orientation, KEY_WIDGET_ROWS,
+        return clamp(readGridInt(orientation, KEY_WIDGET_ROWS,
                 mPreferences.getAppLauncherWidgetGridRows()),
             TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
             TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS);
     }
 
     public void setWidgetRows(@NonNull PlaceOrientation orientation, int rows) {
-        writeInt(variantKey(orientation, KEY_WIDGET_ROWS),
+        writeInt(gridKey(orientation, KEY_WIDGET_ROWS),
             clamp(rows, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS));
     }
@@ -650,6 +1293,23 @@ public final class PlaceLayoutStore {
     }
 
     /**
+     * How tall the Wall strip's first row stands over the apps row, in dp: the layout's own, the
+     * shipped row while it has none. Read only where a dock wears the Wall strip.
+     */
+    public int wallStripHeightDp(@NonNull PlaceOrientation orientation) {
+        String key = variantKey(orientation, KEY_WALL_STRIP_HEIGHT);
+        int value = mStore != null && mStore.contains(key)
+            ? mStore.getInt(key, WallStripRowPolicy.DEFAULT_HEIGHT_DP)
+            : WallStripRowPolicy.DEFAULT_HEIGHT_DP;
+        return WallStripRowPolicy.clampHeightDp(value);
+    }
+
+    public void setWallStripHeightDp(@NonNull PlaceOrientation orientation, int dp) {
+        writeInt(variantKey(orientation, KEY_WALL_STRIP_HEIGHT),
+            WallStripRowPolicy.clampHeightDp(dp));
+    }
+
+    /**
      * Puts one orientation of the variant this store is on back to whatever the global values and
      * defaults say. For the minimal layout that is its seed again - the normal layout with minimal
      * mode taken off it - which the next read writes afresh.
@@ -660,7 +1320,7 @@ public final class PlaceLayoutStore {
         SharedPreferences.Editor editor = mStore.edit();
         for (String key : ARRANGEMENT_KEYS) editor.remove(layoutKey(variant, orientation, key));
         editor.apply();
-        mMinimalSeeded[orientation.ordinal()] = false;
+        mSeeded[variant.ordinal()][orientation.ordinal()] = false;
         mRevision.incrementAndGet();
     }
 
@@ -713,7 +1373,12 @@ public final class PlaceLayoutStore {
      * remembered.
      */
     public boolean isMinimal() {
-        return mStore != null && mStore.getBoolean(minimalKey(), false);
+        int revision = mRevision.get();
+        if (mMinimalRevision != revision) {
+            mMinimal = mStore != null && mStore.getBoolean(minimalKey(), false);
+            mMinimalRevision = revision;
+        }
+        return mMinimal;
     }
 
     public void setMinimal(boolean minimal) {
@@ -819,41 +1484,79 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * Where this store keeps one arrangement value: the key of the variant it is on. The minimal
-     * layout is seeded before its first key is read, so no caller sees it empty.
+     * Where this store keeps one arrangement value: the key of the variant it is on, or for a
+     * linked key on the Home layout the normal layout's ({@link #LINKED_KEYS}), so every reader
+     * and writer of a size, the Layout editor's handles and the snapshot included, lands on the
+     * one value both halves share. The minimal layout is seeded before its first key is read, so
+     * no caller sees it empty.
      */
     @NonNull
     private String variantKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
-        LayoutVariant variant = activeVariant();
-        if (variant == LayoutVariant.MINIMAL) seedMinimalIfNeeded(orientation);
+        LayoutVariant variant = scopeOf(key);
+        seedIfNeeded(variant, orientation);
         return layoutKey(variant, orientation, key);
     }
 
+    /** The variant whose scope holds {@code key} for this view: the normal one for a linked key on Home's. */
+    @NonNull
+    private LayoutVariant scopeOf(@NonNull String key) {
+        LayoutVariant variant = activeVariant();
+        return variant == LayoutVariant.HOME && isLinkedKey(key) ? LayoutVariant.NORMAL : variant;
+    }
+
     /**
-     * Gives the minimal layout of an orientation its starting point, the first time it is used and
-     * has stored nothing: the normal layout as it stands, with {@link MinimalMode#apply} taken
-     * off it, which is what minimal mode looked like before it had a layout of its own. Only what
-     * the normal layout has actually stored is copied, so a default that still moves - the dock's
-     * height with its style - keeps moving. Written once; from then on the user's edits are the
-     * layout, and {@link #clear} puts it back to this.
+     * Where the widget grid's columns and rows are kept: the Home layout's keys, whichever variant
+     * asks. The grid is Home's content and nothing else draws one, so a Workspace variant changing
+     * underneath (minimal mode) never re-cuts it.
      */
-    private void seedMinimalIfNeeded(@NonNull PlaceOrientation orientation) {
-        if (mStore == null || mMinimalSeeded[orientation.ordinal()]) return;
-        mMinimalSeeded[orientation.ordinal()] = true;
+    @NonNull
+    private String gridKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
+        seedIfNeeded(LayoutVariant.HOME, orientation);
+        return layoutKey(LayoutVariant.HOME, orientation, key);
+    }
+
+    private int readGridInt(@NonNull PlaceOrientation orientation, @NonNull String key,
+                            int fallback) {
+        String home = gridKey(orientation, key);
+        return mStore != null && mStore.contains(home) ? mStore.getInt(home, fallback) : fallback;
+    }
+
+    /**
+     * Gives a seeded layout of an orientation its starting point, the first time it is used and
+     * has stored nothing: the normal layout as it stands, with the variant's own changes taken off
+     * it. The minimal layout is the normal one with {@link MinimalMode#apply}, which is what
+     * minimal mode looked like before it had a layout of its own; the Home layout is the normal
+     * one with the element it does not offer (the extra keys) put away, its
+     * keyboard element put away by having no key yet. Only what the normal layout has actually
+     * stored is copied, so a default that still moves - the dock's height with its style - keeps
+     * moving. Written once; from then on the user's edits are the layout, and {@link #clear} puts
+     * it back to this.
+     */
+    private void seedIfNeeded(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
+        if (mStore == null || variant == LayoutVariant.NORMAL
+            || mSeeded[variant.ordinal()][orientation.ordinal()]) return;
+        mSeeded[variant.ordinal()][orientation.ordinal()] = true;
         for (String key : ARRANGEMENT_KEYS) {
-            if (mStore.contains(layoutKey(LayoutVariant.MINIMAL, orientation, key))) return;
+            if (mStore.contains(layoutKey(variant, orientation, key))) return;
         }
         Map<String, ?> all = mStore.getAll();
         SharedPreferences.Editor editor = mStore.edit();
         for (String key : ARRANGEMENT_KEYS) {
+            // The Home layout reads its linked keys from the normal layout; a copy would be dead.
+            if (variant == LayoutVariant.HOME && isLinkedKey(key)) continue;
             Object value = all.get(layoutKey(LayoutVariant.NORMAL, orientation, key));
-            if (value != null) put(editor, layoutKey(LayoutVariant.MINIMAL, orientation, key), value);
+            if (value != null) put(editor, layoutKey(variant, orientation, key), value);
         }
         editor.apply();
-        PlaceLayoutStore minimal = forVariant(LayoutVariant.MINIMAL);
-        PlaceLayout seeded = MinimalMode.apply(minimal.resolve(orientation));
+        PlaceLayoutStore seededStore = forVariant(variant);
+        // The Home layout's resolve already puts away what it does not offer.
+        PlaceLayout seeded = variant == LayoutVariant.MINIMAL
+            ? MinimalMode.apply(seededStore.resolve(orientation))
+            : seededStore.resolve(orientation);
         for (Element element : Element.values()) {
-            if (seeded.slot(element).hidden) minimal.setSlot(orientation, element, seeded.slot(element));
+            Slot stored = seededStore.slot(orientation, element);
+            if (seeded.slot(element).hidden && !stored.hidden)
+                seededStore.setSlot(orientation, element, stored.withHidden(true));
         }
     }
 
@@ -905,9 +1608,260 @@ public final class PlaceLayoutStore {
         if (fromVersion < 6) migrateToSharedLayout(editor);
         if (fromVersion < 7) migrateToOneMinimalMode(editor);
         if (fromVersion < 8) migrateAwayFromAzTab(editor);
-        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
+        // Version 9 compares the layouts through the store's own reads, which see only what the
+        // steps before it have applied.
+        if (fromVersion < 9) migrateToOneLayout();
+        if (fromVersion < 10) migrateHomeLayoutToTheBar();
+        if (fromVersion < 11) migratePromptLineToTheSearchField();
+        if (fromVersion < 12) migrateTaskbarToTheDrawerTile();
+        if (fromVersion < 13) migrateToLinkedKeys();
+        if (fromVersion < 14) migrateToHomeLayoutAlways();
+        // A new install starts on the new default design; an install that ran this store before
+        // (fromVersion above 0) or was updated from an earlier build keeps the absent key's tray.
+        if (startsOnNewInstallDefault(fromVersion, installTimes())) seedNewInstallDockDesign();
+        mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
+    }
+
+    /**
+     * Whether this first run of the store is a new install's, which starts on
+     * {@link DockStyle#NEW_INSTALL_DEFAULT} rather than the tray an absent design reads as. Only
+     * an install the store has never migrated ({@code migratedFrom} 0: no build since 2026-09-06
+     * has run on it) whose package was installed and never updated (the two install times equal,
+     * as Android sets them on a fresh install). An install updated from an older build has
+     * {@code migratedFrom} 0 too when that build predates the store, but its last update is later
+     * than its first install, so it keeps the tray. {@code installTimes} is null where the
+     * package manager cannot answer, which keeps the tray.
+     */
+    @VisibleForTesting
+    static boolean startsOnNewInstallDefault(int migratedFrom, @Nullable long[] installTimes) {
+        if (migratedFrom != 0 || installTimes == null || installTimes.length < 2) return false;
+        long first = installTimes[0];
+        long last = installTimes[1];
+        return first > 0L && first == last;
+    }
+
+    /** This package's first install and last update times, or null where they cannot be read. */
+    @Nullable
+    private long[] installTimes() {
+        try {
+            Context context = mPreferences.getContext();
+            PackageManager manager = context == null ? null : context.getPackageManager();
+            if (manager == null) return null;
+            PackageInfo info = manager.getPackageInfo(context.getPackageName(), 0);
+            return info == null ? null : new long[] {info.firstInstallTime, info.lastUpdateTime};
+        } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * A new install's layouts hold {@link DockStyle#NEW_INSTALL_DEFAULT}, each written where
+     * nothing is stored yet, so the absent key goes on reading as the tray for every install that
+     * predates the new default.
+     */
+    private void seedNewInstallDockDesign() {
+        SharedPreferences.Editor editor = mStore.edit();
+        boolean wrote = false;
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String key = layoutWideKey(variant, KEY_DOCK_DESIGN);
+            if (mStore.contains(key)) continue;
+            editor.putString(key, DockStyle.NEW_INSTALL_DEFAULT.storageValue());
+            wrote = true;
+        }
+        if (wrote) editor.apply();
+    }
+
+    /**
+     * Once per install, after the migration: a portrait keyboard mode stored as Resize goes, so the
+     * display reads the Overlay default. Before Overlay was the portrait default, the Layout
+     * editor's revert wrote back the Resize it was falling back to, so a stored portrait Resize
+     * is far more often that visit than a choice; the touchpad's mode button switches it back.
+     * Every layout's portrait key, since the minimal and Home layouts seed from the normal one and
+     * the display wears the normal or the minimal one. A stored Overlay and landscape are left
+     * alone: landscape always defaulted to Overlay, so what it holds was chosen. The flag is set
+     * whether or not anything was removed, so a fresh install never runs it and a Resize picked
+     * after it is kept.
+     */
+    private void resetPortraitKeyboardResizeOnce() {
+        if (mStore == null || mStore.getBoolean(KEY_KEYBOARD_OVERLAY_RESET_DONE, false)) return;
+        String resize = KeyboardMode.RESIZE.storageValue();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String key = layoutKey(variant, PlaceOrientation.PORTRAIT, KEY_KEYBOARD_MODE);
+            if (resize.equals(mStore.getString(key, null))) editor.remove(key);
+        }
+        editor.putBoolean(KEY_KEYBOARD_OVERLAY_RESET_DONE, true).apply();
+        mRevision.incrementAndGet();
+    }
+
+    /**
+     * Version 9: one layout dresses both halves (ADR 0009). Home's saved arrangement (in either
+     * orientation, where the dock's rows stand, whether each is put away, their order and which
+     * stand under the keyboard: {@link #arrangementsDiffer}; and, only while Home's keyboard is
+     * always on, the keyboard's form: {@link #keyboardFormsDiffer}) is compared with the
+     * Workspace's normal one. Where anything differs the Home layout is turned on and Home keeps
+     * its arrangement, so its rows stand where they stood. Where nothing does, Home wears the
+     * shared layout and its own arrangement keys go; the widget grid and always on are Home's
+     * either way and stay. The linked sizes (the dock's and the Strip row's heights, the
+     * keyboard's height and chin) and Style, Corners and Margin are no difference (#84): Home
+     * reads them from the Workspace's whatever it stored, and version 13 drops its copies. The
+     * Dock design is no difference either: Home's pick becomes the design of the shared layout,
+     * normal and minimal, and of the Home layout, with the Taskbar's tile position beside it,
+     * under every layout's own keys; Home's old keys for them go.
+     */
+    private void migrateToOneLayout() {
+        String legacyStyle = homeKey(LEGACY_KEY_HOME_DOCK_STYLE);
+        String legacyTile = homeKey(LEGACY_KEY_HOME_TASKBAR_HOME_TILE);
+        String style = mStore.getString(legacyStyle, null);
+        String tile = mStore.getString(legacyTile, null);
+        // The status bar is no difference: Home wore none before version 10, so what its layout
+        // held for the bar was only ever the seed's "put away" (#90). The sizes are no difference
+        // because the Home layout reads them linked, from the normal layout.
+        boolean differs = homeHoldsArrangement()
+            && (arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL, Element.STATUS)
+                || (isHomeKeyboardAlwaysOn()
+                    && keyboardFormsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL)));
+
+        SharedPreferences.Editor editor = mStore.edit();
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            if (style != null) putDockDesign(editor, variant, DockStyle.parse(style));
+            if (tile != null)
+                editor.putString(layoutWideKey(variant, KEY_DRAWER_TILE_POSITION), tile);
+        }
+        editor.remove(legacyStyle).remove(legacyTile);
+        if (differs) {
+            editor.putBoolean(homeLayoutKey(), true);
+        } else {
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                for (String key : ARRANGEMENT_KEYS) {
+                    if (!isGridKey(key))
+                        editor.remove(layoutKey(LayoutVariant.HOME, orientation, key));
+                }
+            }
+        }
+        editor.apply();
+    }
+
+    /**
+     * Version 13: the linked keys (#84). The Home layout holds no sizes and no shape of its own
+     * any more: its stored dock and Strip row heights and keyboard height and chin go, in both
+     * orientations, and so do Home's own Style, Corners and Margin, so Home wears the Workspace's
+     * values for all of them. The Home layout switch is left as it is, since it may be the user's
+     * choice; whatever else Home's own layout holds (its rows, their order and edge, its design
+     * and toggles, its keyboard form) stays. A step of its own rather than a change to version 9,
+     * so a store this branch has already taken to version 12 drops its copies too.
+     */
+    private void migrateToLinkedKeys() {
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : LINKED_KEYS)
+                editor.remove(layoutKey(LayoutVariant.HOME, orientation, key));
+        }
+        editor.remove(TERMUX_APP.KEY_HOME_LAYOUT_STYLE)
+            .remove(TERMUX_APP.KEY_HOME_SURFACE_CORNER_RADIUS)
+            .remove(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP);
+        editor.apply();
+    }
+
+    /**
+     * Version 14: Home and the Workspace each keep their own layout (editor-redesign §1, §9). A
+     * Home that wore the shared layout gets a copy of the Workspace's normal one, the layout it
+     * was wearing, so nothing on screen moves: where every bar stands, which are put away (the
+     * hidden stack) and their order, the Dock design and its toggles ({@link #setHomeLayout}).
+     * The keyboard's height and chin (Bottom padding) and the other linked sizes need no copy:
+     * the Home layout reads them from the normal one ({@link #LINKED_KEYS}). A Home layout
+     * already on is left as it is.
+     */
+    private void migrateToHomeLayoutAlways() {
+        // The widget grid is Home's alone and read only from Home's keys. A grid still held in
+        // the shared (normal) keys, where the older steps put it, moves to Home's, unless Home
+        // already holds its own.
+        Map<String, ?> stored = mStore.getAll();
+        SharedPreferences.Editor gridEditor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (!isGridKey(key)) continue;
+                String home = layoutKey(LayoutVariant.HOME, orientation, key);
+                Object shared = stored.get(layoutKey(LayoutVariant.NORMAL, orientation, key));
+                if (shared != null && !stored.containsKey(home)) put(gridEditor, home, shared);
+            }
+        }
+        gridEditor.apply();
+        if (mStore.getBoolean(homeLayoutKey(), false)) return;
+        copyIntoHomeLayout(LayoutVariant.NORMAL);
+        mStore.edit().putBoolean(homeLayoutKey(), true).apply();
+    }
+
+    /**
+     * Version 10: Home wears the status bar (#90). A Home layout held the bar only as its seed
+     * put it away, never as the user placed it, so it takes the Workspace's normal bar instead:
+     * where the bar stands, whether it is put away, its place in the stack and the edge it comes
+     * back to, in either orientation. A Home layout that holds nothing yet is seeded on first use
+     * as before, now with the bar.
+     */
+    private void migrateHomeLayoutToTheBar() {
+        if (!homeHoldsArrangement()) return;
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : new String[] {KEY_STATUS_BAR, orderKeyName(Element.STATUS),
+                    restoreEdgeKeyName(Element.STATUS)}) {
+                copy(editor, all, layoutKey(LayoutVariant.NORMAL, orientation, key),
+                    layoutKey(LayoutVariant.HOME, orientation, key));
+            }
+        }
+        editor.apply();
+    }
+
+    /**
+     * Version 11: the Prompt line design is the Search field now (#96). Every layout that holds
+     * it, normal, minimal or Home's, holds the Tray instead with the field on, so its search
+     * field stays where it was. Every other layout keeps its design and its stored toggle.
+     */
+    private void migratePromptLineToTheSearchField() {
+        SharedPreferences.Editor editor = mStore.edit();
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String design = layoutWideKey(variant, KEY_DOCK_DESIGN);
+            if (!DockStyle.PROMPT_LINE.storageValue().equals(mStore.getString(design, null)))
+                continue;
+            editor.putString(design, DockStyle.GLASS_TRAY.storageValue())
+                .putBoolean(layoutWideKey(variant, KEY_SEARCH_FIELD), true);
+        }
+        editor.apply();
+    }
+
+    /**
+     * Version 12: the Taskbar design is the Drawer tile now (#97). Every layout that holds it,
+     * normal, minimal or Home's, holds the Tray instead with the tile on, and the tile stays where
+     * the user had dragged it ({@link #KEY_DRAWER_TILE_POSITION} is untouched). Every other layout
+     * keeps its design and its stored toggle.
+     */
+    private void migrateTaskbarToTheDrawerTile() {
+        SharedPreferences.Editor editor = mStore.edit();
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            String design = layoutWideKey(variant, KEY_DOCK_DESIGN);
+            if (!DockStyle.TASKBAR.storageValue().equals(mStore.getString(design, null)))
+                continue;
+            editor.putString(design, DockStyle.GLASS_TRAY.storageValue())
+                .putBoolean(layoutWideKey(variant, KEY_DRAWER_TILE), true);
+        }
+        editor.apply();
+    }
+
+    /**
+     * Whether the Home layout holds any arrangement of its own, beyond the widget grid. One that
+     * never did has nothing to differ by, and is not seeded only to be compared.
+     */
+    private boolean homeHoldsArrangement() {
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (String key : ARRANGEMENT_KEYS) {
+                if (!isGridKey(key) && mStore.contains(layoutKey(LayoutVariant.HOME, orientation, key)))
+                    return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1219,5 +2173,32 @@ public final class PlaceLayoutStore {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    // ---------------------------------------------------------------- Dock card
+
+    /**
+     * The Dock card's Bars list, top to bottom, beside the slots it stacks:
+     * {@code layout.<orientation>.bar_order}, the bars' storage keys comma separated. Only bars
+     * on edges of their own need it; where bars share an edge their slots' order is the truth.
+     */
+    private static final String KEY_BAR_ORDER = "bar_order";
+
+    /** The Bars list as stored for {@code orientation}, or null where it never was. */
+    @Nullable
+    public String barOrder(@NonNull PlaceOrientation orientation) {
+        return readString(orientation, KEY_BAR_ORDER);
+    }
+
+    /** Stores the Bars list for {@code orientation}; null drops it (the default list). */
+    public void setBarOrder(@NonNull PlaceOrientation orientation, @Nullable String order) {
+        if (java.util.Objects.equals(order, barOrder(orientation))) return;
+        if (order != null) {
+            writeString(orientation, KEY_BAR_ORDER, order);
+            return;
+        }
+        if (mStore == null) return;
+        mStore.edit().remove(variantKey(orientation, KEY_BAR_ORDER)).apply();
+        mRevision.incrementAndGet();
     }
 }

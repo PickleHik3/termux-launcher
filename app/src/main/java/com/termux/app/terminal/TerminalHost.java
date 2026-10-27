@@ -88,6 +88,16 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void finishActivityIfNotFinishing();
 
+    /**
+     * Whether Home stays on screen once the Workspace's last shell has closed, and so whether the
+     * terminal service keeps running with no shell
+     * ({@link com.termux.app.wall.WallRow#lastShellClosedShowsHome}). False, plain Termux's end,
+     * for a host with no Home.
+     */
+    default boolean staysWhenWorkspaceEmpty() {
+        return false;
+    }
+
     void runOnUiThread(@NonNull Runnable runnable);
 
     // --- Font size ---
@@ -468,15 +478,62 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void createNewWindow();
 
+    /**
+     * A new terminal asked for while Home is in front opens as a Home float on the page in view,
+     * the first one too, never as a window that takes the screen. True when it was handled so
+     * (shell named {@code sessionName}, null for unnamed); false leaves the launch to the caller.
+     */
+    default boolean openNewTerminalOnHome(@Nullable String sessionName) { return false; }
+
     void closeCurrentWindow();
 
     void switchWindow(boolean forward);
 
+    /**
+     * Brings the row's window at place {@code index} in front, counted from 0 along the row as
+     * the window chips stand — the display window's place included while it is in the row.
+     */
     boolean selectWindow(int index);
 
+    /**
+     * Moves the window at {@code from} to {@code to} in the current session's row, both row
+     * places counted from 0 as {@link #selectWindow} counts them; the window in front stays in
+     * front. False when either is outside the row.
+     */
+    boolean moveWindow(int from, int to);
+
+    /**
+     * Consume ({@link ColumnPolicy}): the current window's neighbour in the row, on the left when
+     * {@code fromLeft} and on the right otherwise, joins it as panes beside its focused pane and
+     * leaves the row; the current window stays current. False when there is no such neighbour.
+     */
+    boolean consumeWindow(boolean fromLeft);
+
+    /**
+     * Expel ({@link ColumnPolicy}): the current window's focused pane leaves into a new window of
+     * its own, right after the current one (right before it when {@code toLeft}), which becomes
+     * current. False for a window of one pane, or while a Home float has the focus.
+     */
+    boolean expelPane(boolean toLeft);
+
+    /** How many windows the current row has, the display window's included. */
     int currentWindowCount();
 
+    /** The row place of the window in front, as {@link #selectWindow} counts it, or -1. */
     int currentWindowIndex();
+
+    /**
+     * The row place of the session's terminal window {@code window}, as
+     * {@link #currentSessionWindows()} and {@code pane.list} count them: the same number unless
+     * the display window stands before it in the row.
+     */
+    default int rowIndexOf(int window) { return window; }
+
+    /**
+     * Whether the window in front of the current row is the display window, which has no panes:
+     * the pane and window-content actions answer that plainly rather than acting behind it.
+     */
+    default boolean isDisplayWindowInFront() { return false; }
 
     boolean promptCurrentWindowRename();
 
@@ -508,6 +565,10 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     // --- Appearance ---
 
+    /**
+     * appearance.set_wallpaper: the Appearance editor on its Appearance card, whose Wallpaper row
+     * is in view; its Change raises the picker. The picker is no door of its own.
+     */
     void openWallpaperPicker();
 
     boolean toggleWallpaperMode();
@@ -526,7 +587,18 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     }
 
     /**
-     * Runs {@code listener} whenever {@link #terminalTextGround()} may have moved: a wallpaper,
+     * What the terminal's default text really stands on, which its contrast floor is held against
+     * ({@code TerminalView#setContrastBackdrop}): {@link android.graphics.Color#TRANSPARENT} while
+     * the terminal stands on its own opaque background, otherwise {@link #terminalTextGround()}
+     * with the panes' legibility veil over it. Cheap: it reads what the chrome last measured.
+     */
+    default int terminalTextSurface() {
+        return android.graphics.Color.TRANSPARENT;
+    }
+
+    /**
+     * Runs {@code listener} whenever {@link #terminalTextGround()} or
+     * {@link #terminalTextSurface()} may have moved: a wallpaper,
      * opacity or tint change, a pane resized by the keyboard or a split. It can run from inside a
      * draw, so it must only post. Null removes it.
      */
@@ -604,6 +676,14 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      * is listening now.
      */
     default boolean toggleVoiceDictation() {
+        return false;
+    }
+
+    /**
+     * Turns minimal mode on or off, as the corner tab's minimal button does, from any page.
+     * Answers whether minimal mode is on now.
+     */
+    default boolean toggleMinimalMode() {
         return false;
     }
 

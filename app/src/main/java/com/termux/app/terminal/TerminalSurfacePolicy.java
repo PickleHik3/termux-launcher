@@ -1,5 +1,9 @@
 package com.termux.app.terminal;
 
+import androidx.annotation.Nullable;
+
+import com.termux.app.chrome.ChromeInk;
+
 /**
  * Whether the terminal paints its own surface — the "terminal opacity" tint — over what is behind
  * it. Pure, so the rule can be tested without an activity.
@@ -39,6 +43,37 @@ public final class TerminalSurfacePolicy {
      */
     public static int wallGround(boolean glassPane, int terminalSurfaceColor, int wallpaperDim) {
         return glassPane ? wallpaperDim : over(terminalSurfaceColor, wallpaperDim);
+    }
+
+    /**
+     * The terminal opacity below which the pane is more wallpaper than glass, and the theme's dark
+     * text cannot be trusted to read on it. A light pane needs about 46% of its tint over a black
+     * wallpaper before black text reaches 4.5:1 (WCAG AA) on it; a Material surface is a little
+     * darker than white, so the line sits at 50.
+     */
+    public static final int PALE_INK_BELOW_OPACITY = 50;
+
+    /**
+     * The ink the terminal's default text leans to before its ground is weighed: the glass's, not
+     * the theme's. On a pane thinner than {@link #PALE_INK_BELOW_OPACITY} it is pale ink on dark,
+     * whatever the theme and whatever the terminal wore before, so a light theme over a dark or
+     * busy wallpaper no longer holds dark text on it. Thicker glass, and a terminal on its own
+     * opaque background, keep {@code held}.
+     *
+     * <p>It is a leaning, not the verdict: the measured ground still turns it over where the other
+     * ink reads clearly better, so a bright wallpaper behind clear glass keeps dark text.
+     *
+     * @param onGlass whether the text stands on glass (wallpaper mode), rather than on the
+     *     palette's own opaque background
+     * @param terminalOpacity the resolved terminal opacity, 0–100
+     * @param held the ink the terminal wears now, or null for the theme's own
+     */
+    @Nullable
+    public static ChromeInk.Polarity inkLeaning(boolean onGlass, int terminalOpacity,
+                                                @Nullable ChromeInk.Polarity held) {
+        if (onGlass && terminalOpacity < PALE_INK_BELOW_OPACITY)
+            return ChromeInk.Polarity.PALE_INK;
+        return held;
     }
 
     /** {@code top} laid over {@code bottom}, both ARGB, straight alpha. */

@@ -35,6 +35,8 @@ public final class PaneStyleKey {
     private final int mWallBehindColor;
     @Nullable private final com.termux.app.chrome.GlassRefraction.Look mRefraction;
     @Nullable private final Bitmap mClearFrame;
+    /** The Look's glass the widgets wear ({@link PaneSurfaceStyle#lookGlass}), or null. */
+    @Nullable private final Object mLookGlass;
 
     private PaneStyleKey(@NonNull PaneSurfaceStyle style) {
         mGlass = style.isPaneGlassActive();
@@ -53,6 +55,8 @@ public final class PaneStyleKey {
         mWallBehindColor = style.wallBehindColor();
         mRefraction = style.paneGlassRefraction();
         mClearFrame = style.paneGlassClearFrame();
+        com.termux.app.chrome.LookGlassStyle look = style.lookGlass();
+        mLookGlass = look == null ? null : look.key();
     }
 
     @NonNull
@@ -80,7 +84,8 @@ public final class PaneStyleKey {
             && mWallBehind == that.mWallBehind
             && mWallBehindColor == that.mWallBehindColor
             && Objects.equals(mRefraction, that.mRefraction)
-            && mClearFrame == that.mClearFrame;
+            && mClearFrame == that.mClearFrame
+            && Objects.equals(mLookGlass, that.mLookGlass);
     }
 
     @Override
@@ -88,6 +93,6 @@ public final class PaneStyleKey {
         return Objects.hash(mGlass, mBorder, System.identityHashCode(mFrame), mFrameRect,
             System.identityHashCode(mFrostFilter), mTint, mRim, mOpeningLine, mGrainStrength, mCornerRadiusPx,
             mCornerRadiusDp, mGapDp, System.identityHashCode(mWallBehind), mWallBehindColor,
-            mRefraction, System.identityHashCode(mClearFrame));
+            mRefraction, System.identityHashCode(mClearFrame), mLookGlass);
     }
 }

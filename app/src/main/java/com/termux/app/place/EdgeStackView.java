@@ -55,6 +55,17 @@ public class EdgeStackView extends LinearLayout {
     /** The draw pass's own buffer for {@link #separatorCenters}, so a frame allocates nothing. */
     @Nullable private int[] mSeparatorScratch;
 
+    /** The band a fold across the seam shuts ({@link #holdOutside}), null while none runs. */
+    @Nullable private View mFoldRow;
+    private float mFoldSinkPx;
+    /** How far {@link #mFoldRow} is cut at its own bottom: its hidden part. */
+    private float mFoldCutPx;
+    /** The bands outside the fold, drawn back where they are laid out; reused fold to fold. */
+    @NonNull private final java.util.ArrayList<View> mFoldHeld = new java.util.ArrayList<>(2);
+    /** The first gap, counted from the first child, whose hairline goes back with them. */
+    private int mFoldGapFrom = Integer.MAX_VALUE;
+    @NonNull private final android.graphics.Rect mFoldClip = new android.graphics.Rect();
+
     public EdgeStackView(@NonNull Context context) {
         this(context, null);
     }
@@ -131,6 +142,33 @@ public class EdgeStackView extends LinearLayout {
     }
 
     /**
+     * Lets {@code content}, the weighted sibling after this stack in a vertical
+     * {@link LinearLayout} column, reach up under the stack by {@code overlapPx}
+     * ({@link EdgeStackPolicy#topOverlapPx}), with the stack raised one Z step so it draws and takes
+     * touches over what it covers. 0 gives the content its own row back.
+     *
+     * <p>A negative top margin alone only slides the content up: {@code LinearLayout} clamps a
+     * negative margin out of the length it hands the weighted children, so the content kept losing
+     * the stack's height at its bottom. The content therefore asks for the overlap as its base
+     * height as well — base plus margin cost the column nothing, and the weight adds the rest — so
+     * it keeps exactly the bounds it has without the stack.
+     *
+     * @return whether the content's layout changed
+     */
+    public boolean overlayFollowing(@NonNull View content, int overlapPx) {
+        int overlap = Math.max(0, overlapPx);
+        float z = overlap > 0 ? 1f : 0f;
+        if (getTranslationZ() != z) setTranslationZ(z);
+        if (!(content.getLayoutParams() instanceof LinearLayout.LayoutParams)) return false;
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) content.getLayoutParams();
+        if (params.topMargin == -overlap && params.height == overlap) return false;
+        params.topMargin = -overlap;
+        params.height = overlap;
+        content.setLayoutParams(params);
+        return true;
+    }
+
+    /**
      * The hairline's look: the dock's own outline colour at the material's alpha, a hairline thick,
      * and held off the sheet's sides by the same inset the bands themselves keep.
      */
@@ -142,6 +180,59 @@ public class EdgeStackView extends LinearLayout {
         mSeparatorColor = color;
         mSeparatorThicknessPx = thickness;
         mSeparatorInsetPx = inset;
+        invalidate();
+    }
+
+    /**
+     * A fold across the seam (#94) on a bottom stack the caller draws {@code sinkPx} lower than it
+     * lays it out, cut at its own bottom: the bands outside {@code fold} — between it and the
+     * screen's edge — are drawn back up by the sink, so they stand where they are laid out, and so
+     * are the hairlines in the gaps beside them; {@code fold} itself is cut at its laid-out bottom
+     * less the sink, so it shuts into its outer edge instead of over them. Where {@code fold} is
+     * the outermost band there is nothing to hold and nothing here changes. Null or 0 puts
+     * everything back. Transforms and a clip only: nothing is laid out again.
+     */
+    public void holdOutside(@Nullable View fold, float sinkPx) {
+        holdOutside(fold, sinkPx, sinkPx);
+    }
+
+    /**
+     * {@link #holdOutside(View, float)} where the bands outside {@code fold} are drawn back up by
+     * {@code holdPx} and {@code fold} is cut by {@code cutPx}, which differ where the fold's rows
+     * travel more than the fold's hidden part (SeamTravel.foldRowsSinkPx): the fold still shuts by
+     * its own hidden part, and the bands outside it go down by the rest.
+     */
+    public void holdOutside(@Nullable View fold, float holdPx, float cutPx) {
+        int index = fold != null && mEdge == Edge.BOTTOM ? indexOfChild(fold) : -1;
+        boolean inside = index >= 0 && index < getChildCount() - 1;
+        float hold = inside ? holdPx : 0f;
+        float cut = inside ? Math.max(0f, cutPx) : 0f;
+        View row = hold != 0f || cut > 0f ? fold : null;
+        if (row == null) {
+            hold = 0f;
+            cut = 0f;
+        }
+        if (row == mFoldRow && hold == mFoldSinkPx && cut == mFoldCutPx) return;
+        if (mFoldRow != null && mFoldRow != row) mFoldRow.setClipBounds(null);
+        for (View held : mFoldHeld) held.setTranslationY(0f);
+        mFoldHeld.clear();
+        mFoldRow = row;
+        mFoldSinkPx = hold;
+        mFoldCutPx = cut;
+        mFoldGapFrom = Integer.MAX_VALUE;
+        if (row != null) {
+            for (int i = index + 1; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                mFoldHeld.add(child);
+                if (child.getTranslationY() != -hold) child.setTranslationY(-hold);
+            }
+            int width = Math.max(1, row.getWidth());
+            // Generous above and to the sides, as the stack's own clip is: only the bottom is cut.
+            mFoldClip.set(-width,
+                -Math.max(row.getHeight(), getResources().getDisplayMetrics().heightPixels),
+                2 * width, Math.max(0, row.getHeight() - Math.round(cut)));
+            row.setClipBounds(mFoldClip);
+        }
         invalidate();
     }
 
@@ -168,8 +259,9 @@ public class EdgeStackView extends LinearLayout {
         if (mSeparatorScratch == null || mSeparatorScratch.length < mSeparatorCount)
             mSeparatorScratch = new int[mSeparatorCount];
         int count = fillSeparatorCenters(mSeparatorScratch);
+        int held = Math.round(mFoldSinkPx);
         for (int at = 0; at < count; at++) {
-            int gap = mSeparatorScratch[at];
+            int gap = mSeparatorScratch[at] - (at >= mFoldGapFrom ? held : 0);
             int from = gap - (mSeparatorThicknessPx / 2);
             int to = from + mSeparatorThicknessPx;
             if (column) {
@@ -210,11 +302,15 @@ public class EdgeStackView extends LinearLayout {
         int wanted = Math.min(out.length, Math.max(0, mSeparatorCount));
         View previous = null;
         int drawn = 0;
+        int foldIndex = mFoldRow != null ? indexOfChild(mFoldRow) : -1;
+        mFoldGapFrom = Integer.MAX_VALUE;
         for (int index = 0; index < getChildCount() && drawn < wanted; index++) {
             View child = getChildAt(index);
             if (child.getVisibility() == GONE) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (previous != null) {
+                if (foldIndex >= 0 && index > foldIndex && mFoldGapFrom == Integer.MAX_VALUE)
+                    mFoldGapFrom = drawn;
                 int center = (contentEnd(previous, column) + contentStart(child, column)) / 2;
                 center = clearOfAirMarks(center, previous, column, true);
                 out[drawn++] = clearOfAirMarks(center, child, column, false);

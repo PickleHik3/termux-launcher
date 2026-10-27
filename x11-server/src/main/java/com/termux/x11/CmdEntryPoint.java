@@ -31,15 +31,17 @@ import java.net.URL;
 @Keep @SuppressLint({"StaticFieldLeak", "UnsafeDynamicallyLoadedCode"})
 public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     public static final String ACTION_START = "com.termux.x11.CmdEntryPoint.ACTION_START";
+    /**
+     * {@code TERMUX_X11_HEADLESS=1}: a server only for X clients, never offered to the launcher.
+     * The GPU benchmark starts one to measure in; announced, the launcher's display window would
+     * adopt it and be torn down when the benchmark stops it. X clients connect through the socket
+     * as usual, the screen keeps the server's default size, and nothing ever draws it.
+     */
+    static final boolean HEADLESS = "1".equals(System.getenv("TERMUX_X11_HEADLESS"));
     static final Handler handler;
     public static Context ctx;
     private final Intent intent = createIntent();
     private boolean broadcastPending;
-    /**
-     * A throwaway server (the launcher's graphics setup test) sets this so no app adopts it as the
-     * display: with it, nothing is ever announced.
-     */
-    static final boolean HEADLESS = "1".equals(System.getenv("TERMUX_X11_HEADLESS"));
 
     /**
      * Command-line entry point.
@@ -76,10 +78,10 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     }
 
     private void sendBroadcast() {
-        if (HEADLESS)
-            return;
         // Called from native (the X server thread) on every knock on the port; coalesce
         // bursts into a single broadcast fired 250ms later.
+        if (HEADLESS)
+            return;
         synchronized (this) {
             if (broadcastPending)
                 return;
@@ -92,7 +94,7 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     }
 
     static void sendBroadcast(Intent intent) {
-        if (HEADLESS)
+        if (HEADLESS && ACTION_START.equals(intent.getAction()))
             return;
         try {
             ctx.sendBroadcast(intent);
@@ -143,7 +145,10 @@ public class CmdEntryPoint extends ICmdEntryInterface.Stub {
     // In some cases Android Activity part can not connect opened port.
     // In this case opened port works like a lock file.
     private void sendBroadcastDelayed() {
-        if (!HEADLESS && !connected())
+        // Headless: no announcement, and no timer left polling for a connection that never comes.
+        if (HEADLESS)
+            return;
+        if (!connected())
             sendBroadcast(intent);
 
         handler.postDelayed(this::sendBroadcastDelayed, 1000);

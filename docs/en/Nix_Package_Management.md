@@ -393,7 +393,7 @@ nix-on-droid rollback
 Graphical Linux apps work on this edition, and they arrive the same way
 everything else does: name them in the config and switch. There is no
 `pkg install`, no extra repository, and nothing to copy from the
-launcher's **Setup GUI Apps** screen — that screen builds a command for the
+launcher's **Set up Linux apps** screen — that screen builds a command for the
 Termux edition's two routes, neither of which exists here.
 
 Add the app, and `xkeyboard-config` alongside it:
@@ -471,10 +471,38 @@ modern Xft font instead of a server one — can say so in the `Exec=` line
 of a `.desktop` file you write yourself, and then needs no font package
 at all.
 
+### Exact text-field focus
+
+On the Termux edition the keyboard follows text fields exactly once fcitx5 is installed
+([how that works](X11_Display.md#the-keyboard-follows-text-fields)). **That does not work on this
+edition yet, and installing fcitx5 does not change it.** The launcher starts its focus helper
+(`termux-x11-im`) from the display's start script only on the Termux edition, and it looks for
+fcitx5 at `$PREFIX/bin/fcitx5`, which a nix profile never fills. Apps you start from the drawer are
+given the input-method variables and the display's session bus by that same check, so they get
+neither. Making it work here takes a change in the launcher, not lines in your config; until then
+the keyboard follows text fields by the pointer's shape alone, which needs nothing and works as
+described there.
+
+You can still put the pieces in your config now, so they are there when the launcher learns to use
+them:
+
+```nix
+environment.packages = with pkgs; [
+  fcitx5               # the input method itself
+  fcitx5-gtk           # the GTK 2/3/4 modules
+  qt6Packages.fcitx5-qt  # the Qt 6 module (libsForQt5.fcitx5-qt for Qt 5 apps)
+];
+```
+
+Those attribute names are the current ones in nixpkgs. Switching on them changes nothing you can see
+today, and the helper's log, `$PREFIX/tmp/termux-x11-im-bus-0.log`, will not appear. Do not set
+`GTK_IM_MODULE` or `QT_IM_MODULE` yourself in the meantime: an app told to use fcitx5 with no fcitx5
+running types nothing.
+
 A few notes:
 
-- **Enable the display first.** **Settings → Display → Linux display**
-  turns it on. The Display place is where the apps open.
+- **Start the display first.** The display window is where the apps open; see
+  [The Linux display](X11_Display.md).
 - **Every switch is picked up on its own.** The store path changes each
   time; return to the launcher and the drawer is already right.
 - **Terminal programs with a menu entry** — `vim`, for instance, ships

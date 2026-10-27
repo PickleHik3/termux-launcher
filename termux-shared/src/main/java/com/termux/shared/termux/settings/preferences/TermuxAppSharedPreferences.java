@@ -280,6 +280,45 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setAppLauncherDockStyle(style.storageValue());
     }
 
+    // ---- Style, Corners and Margin per half of the wall (ADR 0008) ----
+    //
+    // Linked across the wall since #84: both halves wear the Workspace's values, the keys every
+    // surface always read, a Home layout of its own included, so crossing between the halves
+    // never changes the chrome's shape. A half is still named so callers that ask for one keep
+    // reading and writing the right value; Home's old keys beside them (TERMUX_APP.KEY_HOME_*)
+    // are dropped by the layout store's migration and never read.
+
+    /** The Style a half wears: the Workspace's {@link #getLayoutStyle()} on either half. */
+    @NonNull
+    public LayoutStyle getLayoutStyle(boolean home) {
+        return getLayoutStyle();
+    }
+
+    /** Sets the Style both halves wear, from either half. */
+    public void setLayoutStyle(boolean home, @NonNull LayoutStyle style) {
+        setLayoutStyle(style);
+    }
+
+    /** Corners for a half, in dp as stored (-1 is auto): Base's on either half. */
+    public int getLayoutCornersDp(boolean home) {
+        return getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
+    }
+
+    /** Sets the Corners both halves wear, from either half. */
+    public void setLayoutCornersDp(boolean home, int dp) {
+        setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, dp);
+    }
+
+    /** Margin for a half, in dp as stored: Base's side gap on either half. */
+    public int getLayoutMarginDp(boolean home) {
+        return getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
+    }
+
+    /** Sets the Margin both halves wear, from either half. */
+    public void setLayoutMarginDp(boolean home, int dp) {
+        setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, dp);
+    }
+
     /**
      * The Style of the whole chrome: Docked joins every piece flush into one frame around the
      * pane's opening; Floating sets each card apart with Margin's air between.
@@ -328,13 +367,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 : Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS, value));
     }
 
-    public boolean isAppLauncherDrawerEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ENABLED);
+    public boolean isAppLauncherQuickReplySwipeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_QUICK_REPLY_SWIPE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_QUICK_REPLY_SWIPE);
     }
 
-    public void setAppLauncherDrawerEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ENABLED, value, false);
+    public void setAppLauncherQuickReplySwipeEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_QUICK_REPLY_SWIPE, value, false);
     }
 
     public String getAppLauncherDrawerViewType() {
@@ -395,8 +434,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getStatusBarBlurRadius() {
+        return getStatusBarBlurRadius(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getStatusBarBlurRadius()} answers on one half of the wall (ADR 0013). */
+    public int getStatusBarBlurRadius(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS), 0, 48);
+            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS, half), 0, 48);
     }
 
     public void setStatusBarBlurRadius(int value) {
@@ -405,8 +449,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getStatusBarOpacity() {
+        return getStatusBarOpacity(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getStatusBarOpacity()} answers on one half of the wall (ADR 0013). */
+    public int getStatusBarOpacity(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
-            TERMUX_APP.KEY_STATUS_BAR_OPACITY, TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY), 0, 100);
+            TERMUX_APP.KEY_STATUS_BAR_OPACITY, TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY, half), 0, 100);
     }
 
     public void setStatusBarOpacity(int value) {
@@ -415,8 +464,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getStatusBarTintStrength() {
+        return getStatusBarTintStrength(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getStatusBarTintStrength()} answers on one half of the wall (ADR 0013). */
+    public int getStatusBarTintStrength(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
-            TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+            TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, half), 0, 100);
     }
 
     public void setStatusBarTintStrength(int value) {
@@ -437,8 +491,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** How much accent colour the keyboard's glass mixes in, percent. */
     public int getInAppKeyboardTintStrength() {
+        return getInAppKeyboardTintStrength(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getInAppKeyboardTintStrength()} answers on one half of the wall (ADR 0013). */
+    public int getInAppKeyboardTintStrength(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT),
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, half),
             0, 100);
     }
 
@@ -449,8 +508,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** How much accent colour the dock's glass mixes in, percent. */
     public int getDockTintStrength() {
+        return getDockTintStrength(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getDockTintStrength()} answers on one half of the wall (ADR 0013). */
+    public int getDockTintStrength(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT,
-            TERMUX_APP.KEY_DOCK_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+            TERMUX_APP.KEY_DOCK_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, half), 0, 100);
     }
 
     public void setDockTintStrength(int value) {
@@ -459,8 +523,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getStatusBarGrain() {
+        return getStatusBarGrain(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getStatusBarGrain()} answers on one half of the wall (ADR 0013). */
+    public int getStatusBarGrain(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
-            TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN), 0, 100);
+            TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN, half), 0, 100);
     }
 
     public void setStatusBarGrain(int value) {
@@ -576,25 +645,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return "nothing".equalsIgnoreCase(manufacturer)
             ? TERMUX_APP.DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS
             : TERMUX_APP.DEFAULT_WALLPAPER_RENDER_ZOOM;
-    }
-
-    public static int clampWallpaperRenderZoom(int value) {
-        return DataUtils.clamp(value, TERMUX_APP.MIN_WALLPAPER_RENDER_ZOOM,
-            TERMUX_APP.MAX_WALLPAPER_RENDER_ZOOM);
-    }
-
-    /**
-     * Magnification of the wallpaper copy behind the glass surfaces, as a percent of its unzoomed
-     * size; see {@link TERMUX_APP#KEY_WALLPAPER_RENDER_ZOOM} for why the user owns it.
-     */
-    public int getWallpaperRenderZoom() {
-        return clampWallpaperRenderZoom(SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM, defaultWallpaperRenderZoom(Build.MANUFACTURER)));
-    }
-
-    public void setWallpaperRenderZoom(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM,
-            clampWallpaperRenderZoom(value), false);
     }
 
     /** Gap between tiled terminal panes, in dp. */
@@ -783,6 +833,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_FANCIER_GLASS_MOTION_LIGHT, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
+    public boolean isWidgetsOnGlassEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WIDGETS_ON_GLASS, TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
+    public void setWidgetsOnGlassEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WIDGETS_ON_GLASS, value, false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
     public boolean isShowKeyHintsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
@@ -818,6 +880,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setAgentPanesEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_AGENT_PANES_ENABLED, value, false);
+    }
+
+    public boolean isTerminalBodySwipeEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_BODY_SWIPE, TERMUX_APP.DEFAULT_TERMINAL_BODY_SWIPE);
+    }
+
+    public void setTerminalBodySwipeEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BODY_SWIPE, value, false);
     }
 
     public boolean isStatusWidgetCpuEnabled() {
@@ -863,6 +934,75 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setStatusWidgetWeatherFahrenheit(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, value, false);
+    }
+
+    public boolean isStatusWidgetNotificationsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
+    }
+
+    public void setStatusWidgetNotificationsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, value, false);
+    }
+
+    public boolean isStatusClockSecondsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, TERMUX_APP.DEFAULT_STATUS_CLOCK_SECONDS);
+    }
+
+    public void setStatusClockSecondsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, value, false);
+    }
+
+    /** Whose box the status row's camera gap follows: auto, custom or off; unknown reads as auto. */
+    @NonNull
+    public String getStatusBarCutoutMode() {
+        return normalizeStatusBarCutoutMode(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MODE, true));
+    }
+
+    public void setStatusBarCutoutMode(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE,
+            normalizeStatusBarCutoutMode(value), false);
+    }
+
+    @NonNull
+    private static String normalizeStatusBarCutoutMode(@Nullable String value) {
+        if (TERMUX_APP.STATUS_BAR_CUTOUT_CUSTOM.equals(value)) return TERMUX_APP.STATUS_BAR_CUTOUT_CUSTOM;
+        if (TERMUX_APP.STATUS_BAR_CUTOUT_OFF.equals(value)) return TERMUX_APP.STATUS_BAR_CUTOUT_OFF;
+        return TERMUX_APP.STATUS_BAR_CUTOUT_AUTO;
+    }
+
+    /** A custom camera gap's centre in dp from the screen's centre, clamped to its range. */
+    public int getStatusBarCutoutCenter() {
+        return clampStatusBarCutoutCenter(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_CENTER));
+    }
+
+    public void setStatusBarCutoutCenter(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER,
+            clampStatusBarCutoutCenter(value), false);
+    }
+
+    private static int clampStatusBarCutoutCenter(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_CENTER,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_CENTER, value));
+    }
+
+    /** A custom camera gap's width in dp, clamped to its range. */
+    public int getStatusBarCutoutWidth() {
+        return clampStatusBarCutoutWidth(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_WIDTH));
+    }
+
+    public void setStatusBarCutoutWidth(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH,
+            clampStatusBarCutoutWidth(value), false);
+    }
+
+    private static int clampStatusBarCutoutWidth(int value) {
+        return Math.max(TERMUX_APP.MIN_STATUS_BAR_CUTOUT_WIDTH,
+            Math.min(TERMUX_APP.MAX_STATUS_BAR_CUTOUT_WIDTH, value));
     }
 
     /** The place the weather is fetched for, trimmed; empty when it follows the device. */
@@ -924,15 +1064,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setTerminalCursorTrailEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, value, false);
-    }
-
-    public boolean isTerminalPaddingFillEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_TERMINAL_PADDING_FILL, TERMUX_APP.DEFAULT_TERMINAL_PADDING_FILL);
-    }
-
-    public void setTerminalPaddingFillEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PADDING_FILL, value, false);
     }
 
     public String getTerminalCursorTrailStyle() {
@@ -1127,26 +1258,25 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
     }
 
-    /** The direction the launcher's own widgets are drawn in: "tonal" or "pane". */
+    /**
+     * The Numerals choice of the launcher's own widgets: "sans" or "mono". A value stored by the
+     * retired Tonal/Pane direction reads as the matching choice.
+     */
     public String getAppLauncherBuiltinWidgetStyle() {
-        return SharedPreferenceUtils.getString(mSharedPreferences,
+        return normaliseBuiltinWidgetNumerals(SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true);
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true));
+    }
+
+    /** "mono" and the retired "pane" are "mono"; everything else, the retired "tonal" included, is "sans". */
+    @NonNull
+    public static String normaliseBuiltinWidgetNumerals(@Nullable String stored) {
+        return "mono".equals(stored) || "pane".equals(stored) ? "mono" : "sans";
     }
 
     public void setAppLauncherBuiltinWidgetStyle(String value) {
         SharedPreferenceUtils.setString(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, value, false);
-    }
-
-    public boolean isX11DisplayEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, TERMUX_APP.DEFAULT_X11_DISPLAY_ENABLED);
-    }
-
-    public void setX11DisplayEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, value, false);
     }
 
     @NonNull
@@ -1245,6 +1375,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_DRAWER_APPS, value, false);
     }
 
+    public boolean isLauncherSoundEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_SOUND, TERMUX_APP.DEFAULT_LAUNCHER_SOUND);
+    }
+
+    public void setLauncherSoundEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_SOUND, value, false);
+    }
+
+    public boolean isLauncherMediaControlsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS, TERMUX_APP.DEFAULT_LAUNCHER_MEDIA_CONTROLS);
+    }
+
+    public void setLauncherMediaControlsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS, value, false);
+    }
+
     /** Trimmed; empty means no window manager. */
     @NonNull
     public String getX11WindowManager() {
@@ -1289,17 +1439,66 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
     }
 
-    /** The name of the wall place last rested on, or null when none was recorded. */
-    @Nullable
-    public String getWallLastPage() {
+    /**
+     * Start in as stored: {@code home} (the default), {@code workspace} or {@code display};
+     * anything else is Home. Display holds only while the display starts with the launcher, which
+     * the app's {@code StartInPolicy} resolves.
+     */
+    @NonNull
+    public String getLauncherStartIn() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_WALL_LAST_PAGE, null, false);
-        return value == null || value.trim().isEmpty() ? null : value.trim();
+            TERMUX_APP.KEY_LAUNCHER_START_IN, TERMUX_APP.DEFAULT_LAUNCHER_START_IN, true);
+        return normalizeLauncherStartIn(value);
     }
 
-    public void setWallLastPage(@Nullable String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALL_LAST_PAGE,
-            value == null ? "" : value, false);
+    public void setLauncherStartIn(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LAUNCHER_START_IN,
+            normalizeLauncherStartIn(value), false);
+    }
+
+    /** Use as, {@code home} or {@code terminal}; anything else (or nothing stored) is Home. */
+    @NonNull
+    public String getUseAs() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_USE_AS, TERMUX_APP.DEFAULT_USE_AS, true);
+        return TERMUX_APP.USE_AS_TERMINAL.equals(value) ? TERMUX_APP.USE_AS_TERMINAL
+            : TERMUX_APP.USE_AS_HOME;
+    }
+
+    public void setUseAs(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_USE_AS,
+            TERMUX_APP.USE_AS_TERMINAL.equals(value) ? TERMUX_APP.USE_AS_TERMINAL
+                : TERMUX_APP.USE_AS_HOME, false);
+    }
+
+    @NonNull
+    private static String normalizeLauncherStartIn(@Nullable String value) {
+        if (TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value))
+            return TERMUX_APP.LAUNCHER_START_IN_WORKSPACE;
+        if (TERMUX_APP.LAUNCHER_START_IN_DISPLAY.equals(value))
+            return TERMUX_APP.LAUNCHER_START_IN_DISPLAY;
+        return TERMUX_APP.LAUNCHER_START_IN_HOME;
+    }
+
+    /** The palette gesture on Home: {@code swipe_up} (the default) or {@code off}. */
+    @NonNull
+    public String getHomePaletteGesture() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_HOME_PALETTE_GESTURE, TERMUX_APP.DEFAULT_HOME_PALETTE_GESTURE, true);
+        return TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(value)
+            ? TERMUX_APP.HOME_PALETTE_GESTURE_OFF : TERMUX_APP.HOME_PALETTE_GESTURE_SWIPE_UP;
+    }
+
+    public void setHomePaletteGesture(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_HOME_PALETTE_GESTURE,
+            TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(value)
+                ? TERMUX_APP.HOME_PALETTE_GESTURE_OFF : TERMUX_APP.HOME_PALETTE_GESTURE_SWIPE_UP,
+            false);
+    }
+
+    /** Whether the keyboard swipe up on a Home page opens the palette. */
+    public boolean isHomePaletteGestureEnabled() {
+        return !TERMUX_APP.HOME_PALETTE_GESTURE_OFF.equals(getHomePaletteGesture());
     }
 
     /** Whether the user has ever set the display's text size; unset reads as the default 0. */
@@ -1320,40 +1519,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             value == null ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim(), false);
     }
 
-    /**
-     * The stored usage mode as written, or null when nothing was ever stored. Raw on purpose: the
-     * older two-way switch's "launcher" and any unknown value are mapped by
-     * {@code LauncherUseCaseMode}, which is the one reader that knows what they mean.
-     */
-    @Nullable
-    public String getAppLauncherUseCaseMode() {
-        String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE, null, true);
-        return value == null || value.trim().isEmpty() ? null : value.trim();
-    }
-
-    public void setAppLauncherUseCaseMode(@Nullable String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
-            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_MODE : value.trim(), false);
-    }
-
-    /** The terminal-alone mode, read straight off the store; the mapped answer is {@code LauncherUseCaseMode}'s. */
-    public boolean isTerminalOnlyUseCase() {
-        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(getAppLauncherUseCaseMode());
-    }
-
-    public String getAppLauncherUseCaseSnapshot() {
-        return SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT, true);
-    }
-
-    public void setAppLauncherUseCaseSnapshot(String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT,
-            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT : value, false);
-    }
 
     public boolean isAppLauncherNotificationDotsEnabled() {
         return isAppLauncherAppsRowEnabled() && SharedPreferenceUtils.getBoolean(
@@ -2284,6 +2449,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             clampInAppKeyboardKeyOpacity(value), false);
     }
 
+    public boolean isInAppKeyboardOpacityLinked() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_OPACITY_LINKED,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_OPACITY_LINKED);
+    }
+
+    public void setInAppKeyboardOpacityLinked(boolean linked) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_OPACITY_LINKED, linked, false);
+    }
+
     /** Negative values collapse to the -1 "theme-defined" sentinel. */
     public static int clampInAppKeyboardKeyOpacity(int value) {
         if (value < 0) return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY;
@@ -2291,8 +2467,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getInAppKeyboardBackgroundOpacity() {
+        return getInAppKeyboardBackgroundOpacity(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getInAppKeyboardBackgroundOpacity()} answers on one half of the wall (ADR 0013). */
+    public int getInAppKeyboardBackgroundOpacity(@Nullable WallHalf half) {
         return clampInAppKeyboardBackgroundOpacity(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY));
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY, half));
     }
 
     public void setInAppKeyboardBackgroundOpacity(int value) {
@@ -2310,8 +2491,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * follows Base until the editor's row is detached and holds its own number after that.
      */
     public int getInAppKeyboardBlurRadius() {
+        return getInAppKeyboardBlurRadius(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getInAppKeyboardBlurRadius()} answers on one half of the wall (ADR 0013). */
+    public int getInAppKeyboardBlurRadius(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR),
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR, half),
             TERMUX_APP.MIN_IN_APP_KEYBOARD_BLUR_RADIUS, TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS);
     }
 
@@ -2324,8 +2510,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Film-grain strength (percent) of the keyboard's glass: the KEYBOARD slot's GRAIN cell. */
     public int getInAppKeyboardGrain() {
+        return getInAppKeyboardGrain(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getInAppKeyboardGrain()} answers on one half of the wall (ADR 0013). */
+    public int getInAppKeyboardGrain(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN),
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN, half),
             TERMUX_APP.MIN_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN);
     }
 
@@ -2344,19 +2535,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * layer's own colour intensity.
      */
     public int getInAppKeyboardBackdropOpacity() {
-        int raw = SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+        return getInAppKeyboardBackdropOpacity(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getInAppKeyboardBackdropOpacity()} answers on one half (ADR 0013). */
+    public int getInAppKeyboardBackdropOpacity(@Nullable WallHalf half) {
+        int raw = readHalfInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, half,
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY);
         if (raw < 0) return TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
         return DataUtils.clamp(raw, TERMUX_APP.MIN_IN_APP_KEYBOARD_BACKDROP_OPACITY,
             TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY);
     }
 
+    /** Sets the keyboard's backdrop opacity on both halves. */
     public void setInAppKeyboardBackdropOpacity(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
-            DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BACKDROP_OPACITY,
-                TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY), false);
+        setInAppKeyboardBackdropOpacity(null, value);
+    }
+
+    /** Sets the keyboard's backdrop opacity on one half; a null half sets both. */
+    public void setInAppKeyboardBackdropOpacity(@Nullable WallHalf half, int value) {
+        int clamped = DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+        if (half != null)
+            SharedPreferenceUtils.setInt(mSharedPreferences,
+                surfaceHalfKey(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, half), clamped,
+                false);
+        else
+            writeSharedInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, clamped);
     }
 
     // The three raw accessors below read and write the stored key verbatim, ignoring the link,
@@ -2458,6 +2663,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private static String normalizeTopPaneClockStyle(String value) {
         if (TERMUX_APP.TOP_PANE_CLOCK_STYLE_LCD.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL.equals(value)
+            || TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_LED.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE.equals(value)
             || TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB.equals(value)) {
@@ -3042,11 +3248,47 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     private void writeSurfaceValue(SurfaceSlot slot, SurfaceProperty property, String overrideKey,
                                    int value) {
-        if (isRetiredSurfaceProperty(property)
-            || (hasSurfaceProperty(slot, property) && isSurfaceInheriting(slot, property)))
+        if (isRetiredSurfaceProperty(property)) {
+            setSurfaceBaseValue(property, value);
+            return;
+        }
+        boolean inheriting = hasSurfaceProperty(slot, property)
+            && isSurfaceInheriting(slot, property);
+        // No half named: both halves show the value. The Workspace's link decides where it lands,
+        // and a half that had a link of its own joins that one.
+        if (isPerHalf(slot, property) && hasHalfKey(surfaceInheritKey(slot, property)))
+            setSurfaceInheriting(slot, property, inheriting);
+        if (inheriting)
             setSurfaceBaseValue(property, value);
         else
-            SharedPreferenceUtils.setInt(mSharedPreferences, overrideKey, value, false);
+            writeSharedInt(overrideKey, value);
+    }
+
+    private boolean hasHalfKey(@NonNull String key) {
+        for (WallHalf half : WallHalf.values()) {
+            if (containsKey(surfaceHalfKey(key, half)))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Writes a surface's value on one half through that half's link: onto the half's Base while
+     * the surface follows it there, onto the surface's own key for that half once detached. A
+     * null half writes both halves, as the named setters do; so does a surface not held per half.
+     */
+    public void setSurfaceValue(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property,
+                                @Nullable WallHalf half, int value) {
+        if (half == null || !isPerHalf(slot, property)) {
+            String key = surfaceOverrideKey(slot, property);
+            if (key != null || isRetiredSurfaceProperty(property))
+                writeSurfaceValue(slot, property, key, value);
+            return;
+        }
+        if (isSurfaceInheriting(slot, property, half))
+            setSurfaceBaseValue(property, half, value);
+        else
+            writeSurfaceRaw(slot, property, half, value);
     }
 
     /**
@@ -3062,25 +3304,47 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setSurfaceInheriting(slot, property, getSurfaceBaseValue(property) == value);
     }
 
-    /** Writes the surface's own key regardless of the link, without changing it. Migration/undo. */
+    /**
+     * Writes the surface's own key regardless of the link, without changing it, on both halves.
+     * Migration/undo.
+     */
     public void setSurfaceRawValue(SurfaceSlot slot, SurfaceProperty property, int value) {
         writeSurfaceRaw(slot, property, value);
     }
 
-    /** Detaches this one property from Base and gives it {@code value}. The editor's drag path. */
+    /** Detaches this one property from Base on both halves and gives it {@code value}. */
     public void detachSurfaceValue(SurfaceSlot slot, SurfaceProperty property, int value) {
+        detachSurfaceValue(slot, property, null, value);
+    }
+
+    /**
+     * Detaches this one property from the half's Base on that half and gives it {@code value}: the
+     * editor's drag path. A null half, or a surface not held per half, detaches both.
+     */
+    public void detachSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
+                                   @Nullable WallHalf half, int value) {
         if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return;
-        setSurfaceInheriting(slot, property, false);
-        writeSurfaceRaw(slot, property, value);
+        setSurfaceInheriting(slot, property, half, false);
+        writeSurfaceRaw(slot, property, half, value);
     }
 
     private void writeSurfaceRaw(SurfaceSlot slot, SurfaceProperty property, int value) {
+        writeSurfaceRaw(slot, property, null, value);
+    }
+
+    private void writeSurfaceRaw(SurfaceSlot slot, SurfaceProperty property,
+                                 @Nullable WallHalf half, int value) {
         if (isRetiredSurfaceProperty(property))
             return;
         String key = surfaceOverrideKey(slot, property);
-        if (key != null)
-            SharedPreferenceUtils.setInt(mSharedPreferences, key, value, false);
+        if (key == null)
+            return;
+        if (half != null && isPerHalf(slot, property))
+            SharedPreferenceUtils.setInt(mSharedPreferences, surfaceHalfKey(key, half), value,
+                false);
+        else
+            writeSharedInt(key, value);
     }
 
     /**
@@ -3143,6 +3407,62 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
         public final String key;
         SurfaceSlot(String key) { this.key = key; }
+    }
+
+    /**
+     * A half of the wall, for look values (ADR 0013): Home and the Workspace may each hold their
+     * own Base and their own surface values. The keys that existed before the halves (the shared
+     * keys) mean "both halves"; a half's own key, the shared key plus {@code "_" + key}, wins for
+     * that half once written. Every install starts with no half keys, so the halves are equal
+     * until one is edited, with nothing to migrate. Reads that name no half answer the Workspace.
+     */
+    public enum WallHalf {
+        HOME("home"), WORKSPACE("workspace");
+
+        public final String key;
+        WallHalf(String key) { this.key = key; }
+
+        @NonNull
+        public WallHalf other() {
+            return this == HOME ? WORKSPACE : HOME;
+        }
+    }
+
+    /**
+     * Whether a property's value is held per half: the glass numbers, blur, opacity, grain and
+     * tint. Corners and margin are the chrome's shape, which stays one for both halves (ADR 0013
+     * §4, the layout's own reading of Corners and Margin).
+     */
+    public static boolean isPerHalfProperty(@NonNull SurfaceProperty property) {
+        return property == SurfaceProperty.BLUR || property == SurfaceProperty.OPACITY
+            || property == SurfaceProperty.GRAIN || property == SurfaceProperty.TINT;
+    }
+
+    /**
+     * Whether a surface's own value for a property is held per half. The canvas is the terminal's,
+     * which only the Workspace has, so it holds one value and reads the Workspace's Base.
+     */
+    public static boolean isPerHalf(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
+        return slot != SurfaceSlot.CANVAS && isPerHalfProperty(property)
+            && hasSurfaceProperty(slot, property);
+    }
+
+    /** A half's own key beside a shared one. Public because the preset format names it. */
+    @NonNull
+    public static String surfaceHalfKey(@NonNull String key, @NonNull WallHalf half) {
+        // Built once per key: the look getters run on the chrome's passes, which must not allocate.
+        return HALF_KEYS.computeIfAbsent(key, TermuxAppSharedPreferences::halfKeysOf)[half.ordinal()];
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<String, String[]> HALF_KEYS =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    @NonNull
+    private static String[] halfKeysOf(@NonNull String key) {
+        String[] keys = new String[WallHalf.values().length];
+        for (WallHalf half : WallHalf.values())
+            keys[half.ordinal()] = key + "_" + half.key;
+        return keys;
     }
 
     /** The shared properties. Not every slot has every one - see {@link #hasSurfaceProperty}. */
@@ -3208,70 +3528,242 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key;
     }
 
-    /** True while this surface still follows Base for this property. */
+    /** True while this surface still follows the Workspace's Base for this property. */
     public boolean isSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property) {
-        if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
-            return true;
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            surfaceInheritKey(slot, property), TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE);
+        return isSurfaceInheriting(slot, property, WallHalf.WORKSPACE);
     }
 
+    /** True while this surface still follows the half's Base for this property on that half. */
+    public boolean isSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property,
+                                       @Nullable WallHalf half) {
+        if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
+            return true;
+        String key = surfaceInheritKey(slot, property);
+        if (half != null && isPerHalf(slot, property) && containsKey(surfaceHalfKey(key, half)))
+            key = surfaceHalfKey(key, half);
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, key,
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE);
+    }
+
+    /** Links or unlinks the surface on both halves: the shared flag, with either half's dropped. */
     public void setSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property, boolean inherit) {
+        setSurfaceInheriting(slot, property, null, inherit);
+    }
+
+    /**
+     * Links or unlinks the surface on one half; a null half (or a surface whose value is not held
+     * per half) writes both, as {@link #setSurfaceInheriting(SurfaceSlot, SurfaceProperty, boolean)}.
+     */
+    public void setSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property,
+                                     @Nullable WallHalf half, boolean inherit) {
         if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return;
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            surfaceInheritKey(slot, property), inherit, false);
+        String key = surfaceInheritKey(slot, property);
+        if (half != null && isPerHalf(slot, property)) {
+            SharedPreferenceUtils.setBoolean(mSharedPreferences, surfaceHalfKey(key, half),
+                inherit, false);
+            return;
+        }
+        if (mSharedPreferences == null) return;
+        SharedPreferences.Editor editor = mSharedPreferences.edit().putBoolean(key, inherit);
+        removeHalfKeys(editor, key);
+        editor.apply();
     }
 
     /** How many properties this surface has detached from Base - the editor's tab badge. */
     public int surfaceOverrideCount(SurfaceSlot slot) {
+        return surfaceOverrideCount(slot, WallHalf.WORKSPACE);
+    }
+
+    /** How many properties this surface has detached from the half's Base on that half. */
+    public int surfaceOverrideCount(SurfaceSlot slot, @Nullable WallHalf half) {
         int count = 0;
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (hasSurfaceProperty(slot, property) && !isSurfaceInheriting(slot, property))
+            if (hasSurfaceProperty(slot, property) && !isSurfaceInheriting(slot, property, half))
                 count++;
         }
         return count;
     }
 
-    /** Puts every property of a surface back on Base. */
+    /** Puts every property of a surface back on Base, on both halves. */
     public void reattachSurface(SurfaceSlot slot) {
         for (SurfaceProperty property : SurfaceProperty.values())
             setSurfaceInheriting(slot, property, true);
     }
 
-    /** The shared value for a property, before any surface's clamp is applied to it. */
-    public int getSurfaceBaseValue(SurfaceProperty property) {
-        return SharedPreferenceUtils.getInt(mSharedPreferences, property.baseKey, property.baseDefault);
+    /**
+     * The editor's Reset on one half: every property of the surface back on that half's Look
+     * (its Base). The other half keeps what it has. A surface not held per half resets on both.
+     */
+    public void resetSurfaceToLook(@NonNull SurfaceSlot slot, @NonNull WallHalf half) {
+        for (SurfaceProperty property : SurfaceProperty.values())
+            setSurfaceInheriting(slot, property, half, true);
     }
 
+    /**
+     * The editor's Also-on for one card: the other half's surface made to look as it does on
+     * {@code from}. It follows the other half's Base where that gives the same number, and holds
+     * the number as its own otherwise, so what shows is copied rather than the link.
+     */
+    public void copySurfaceToOtherHalf(@NonNull SurfaceSlot slot, @NonNull WallHalf from) {
+        WallHalf to = from.other();
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (!isPerHalf(slot, property))
+                continue;
+            int shown = getSurfaceValue(slot, property, from);
+            boolean follows = isSurfaceInheriting(slot, property, from)
+                && getSurfaceBaseValue(property, to) == shown;
+            setSurfaceInheriting(slot, property, to, follows);
+            writeSurfaceRaw(slot, property, to, shown);
+        }
+        if (slot == SurfaceSlot.KEYBOARD)
+            copyKeyboardBackdropOpacity(from);
+    }
+
+    /** The keyboard's whole-stack fade, which sits outside the links, copied as stored. */
+    private void copyKeyboardBackdropOpacity(@NonNull WallHalf from) {
+        String key = TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY;
+        SharedPreferenceUtils.setInt(mSharedPreferences, surfaceHalfKey(key, from.other()),
+            readHalfInt(key, from, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY), false);
+    }
+
+    /**
+     * The editor's Also-on for the whole Look: the other half's Base, material point and every
+     * surface's link and own value set to {@code from}'s, so the two halves are equal again.
+     */
+    public void copyLookToOtherHalf(@NonNull WallHalf from) {
+        WallHalf to = from.other();
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (isPerHalfProperty(property))
+                setSurfaceBaseValue(property, to, getSurfaceBaseValue(property, from));
+        }
+        setSurfaceMaterial(to, getSurfaceMaterial(from));
+        setSurfaceMaterialIntensity(to, getSurfaceMaterialIntensity(from));
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!isPerHalf(slot, property))
+                    continue;
+                setSurfaceInheriting(slot, property, to,
+                    isSurfaceInheriting(slot, property, from));
+                writeSurfaceRaw(slot, property, to, getSurfaceOverrideValue(slot, property, from));
+            }
+        }
+        copyKeyboardBackdropOpacity(from);
+    }
+
+    /** The Workspace's Base value for a property, before any surface's clamp is applied to it. */
+    public int getSurfaceBaseValue(SurfaceProperty property) {
+        return getSurfaceBaseValue(property, WallHalf.WORKSPACE);
+    }
+
+    /** A half's Base value: its own once written, the shared one until then. */
+    public int getSurfaceBaseValue(SurfaceProperty property, @Nullable WallHalf half) {
+        return readHalfInt(property.baseKey, isPerHalfProperty(property) ? half : null,
+            property.baseDefault);
+    }
+
+    /** Sets Base on both halves: the shared key, with either half's own dropped. */
     public void setSurfaceBaseValue(SurfaceProperty property, int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, property.baseKey, value, false);
+        writeSharedInt(property.baseKey, value);
+    }
+
+    /** Sets one half's Base; a null half, or a property not held per half, sets both. */
+    public void setSurfaceBaseValue(SurfaceProperty property, @Nullable WallHalf half, int value) {
+        if (half != null && isPerHalfProperty(property))
+            SharedPreferenceUtils.setInt(mSharedPreferences, surfaceHalfKey(property.baseKey, half),
+                value, false);
+        else
+            writeSharedInt(property.baseKey, value);
     }
 
     /** Which material family the Base triple was last set from. Display state, not a render input. */
     @NonNull
     public String getSurfaceMaterial() {
-        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_MATERIAL,
+        return getSurfaceMaterial(WallHalf.WORKSPACE);
+    }
+
+    /** The material family a half's Base triple was last set from. */
+    @NonNull
+    public String getSurfaceMaterial(@Nullable WallHalf half) {
+        String key = TERMUX_APP.KEY_SURFACE_MATERIAL;
+        if (half != null && containsKey(surfaceHalfKey(key, half)))
+            key = surfaceHalfKey(key, half);
+        return SharedPreferenceUtils.getString(mSharedPreferences, key,
             TERMUX_APP.DEFAULT_SURFACE_MATERIAL, true);
     }
 
     public void setSurfaceMaterial(@Nullable String material) {
-        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_MATERIAL,
-            material == null ? TERMUX_APP.DEFAULT_SURFACE_MATERIAL : material, false);
+        setSurfaceMaterial(null, material);
+    }
+
+    /** Sets one half's material family; a null half sets both. */
+    public void setSurfaceMaterial(@Nullable WallHalf half, @Nullable String material) {
+        String value = material == null ? TERMUX_APP.DEFAULT_SURFACE_MATERIAL : material;
+        String key = TERMUX_APP.KEY_SURFACE_MATERIAL;
+        if (half != null) {
+            SharedPreferenceUtils.setString(mSharedPreferences, surfaceHalfKey(key, half), value,
+                false);
+            return;
+        }
+        if (mSharedPreferences == null) return;
+        SharedPreferences.Editor editor = mSharedPreferences.edit().putString(key, value);
+        removeHalfKeys(editor, key);
+        editor.apply();
     }
 
     /** Where on the family's curve the Base triple was last set. 0..100. */
     public int getSurfaceMaterialIntensity() {
-        int intensity = SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY,
+        return getSurfaceMaterialIntensity(WallHalf.WORKSPACE);
+    }
+
+    /** Where on the family's curve a half's Base triple was last set. 0..100. */
+    public int getSurfaceMaterialIntensity(@Nullable WallHalf half) {
+        int intensity = readHalfInt(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, half,
             TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY);
         return Math.max(0, Math.min(100, intensity));
     }
 
     public void setSurfaceMaterialIntensity(int intensity) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY,
-            Math.max(0, Math.min(100, intensity)), false);
+        setSurfaceMaterialIntensity(null, intensity);
+    }
+
+    /** Sets one half's point on the family's curve; a null half sets both. */
+    public void setSurfaceMaterialIntensity(@Nullable WallHalf half, int intensity) {
+        int value = Math.max(0, Math.min(100, intensity));
+        if (half != null)
+            SharedPreferenceUtils.setInt(mSharedPreferences,
+                surfaceHalfKey(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, half), value, false);
+        else
+            writeSharedInt(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, value);
+    }
+
+    // ---- the half keys' plumbing
+
+    private boolean containsKey(@NonNull String key) {
+        return mSharedPreferences != null && mSharedPreferences.contains(key);
+    }
+
+    /** {@code key}'s value for a half: the half's own once written, else the shared one. */
+    private int readHalfInt(@NonNull String key, @Nullable WallHalf half, int defaultValue) {
+        if (half != null && containsKey(surfaceHalfKey(key, half)))
+            key = surfaceHalfKey(key, half);
+        return SharedPreferenceUtils.getInt(mSharedPreferences, key, defaultValue);
+    }
+
+    /** Writes the shared key and drops both halves' own, in one editor: "both halves". */
+    private void writeSharedInt(@NonNull String key, int value) {
+        if (mSharedPreferences == null) return;
+        SharedPreferences.Editor editor = mSharedPreferences.edit().putInt(key, value);
+        removeHalfKeys(editor, key);
+        editor.apply();
+    }
+
+    private void removeHalfKeys(@NonNull SharedPreferences.Editor editor, @NonNull String key) {
+        for (WallHalf half : WallHalf.values()) {
+            String halfKey = surfaceHalfKey(key, half);
+            if (containsKey(halfKey))
+                editor.remove(halfKey);
+        }
     }
 
     /** The glass tint colour a preset chose; {@code scheme} unless it named another that we know. */
@@ -3371,6 +3863,37 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY), false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TEXT_SIZE_PERCENT}. Clamped. */
+    public int getTextSizePercent() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_TEXT_SIZE_PERCENT, TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT),
+            TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT);
+    }
+
+    public void setTextSizePercent(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TEXT_SIZE_PERCENT,
+            DataUtils.clamp(value, TERMUX_APP.MIN_TEXT_SIZE_PERCENT,
+                TERMUX_APP.MAX_TEXT_SIZE_PERCENT), false);
+    }
+
+    /** The shared Text size as a factor: 1 at the default. */
+    public float getTextSizeScale() {
+        return getTextSizePercent() / 100f;
+    }
+
+    /**
+     * The size a terminal view is drawn at, in px, for a terminal size of its own ({@link
+     * #getFontSize()}, the scratchpad's, or a pane's zoom): that size times the shared Text size,
+     * held inside this display's font size limits. The own size is what is stored and stepped, so
+     * zoom keeps working in its own units and the shared size moves every pane together.
+     */
+    public int textScaledFontSize(int ownSize) {
+        int percent = getTextSizePercent();
+        if (percent == TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT)
+            return ownSize;
+        return DataUtils.clamp(Math.round(ownSize * percent / 100f), MIN_FONTSIZE, MAX_FONTSIZE);
+    }
+
     /** A stored enum-like string if it is one of {@code known}, else the default. */
     @NonNull
     private String knownOrDefault(String key, String fallback, String... known) {
@@ -3399,9 +3922,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     private int resolveSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
                                     String overrideKey, int overrideDefault) {
-        if (isSurfaceInheriting(slot, property))
-            return getSurfaceBaseValue(property);
-        return SharedPreferenceUtils.getInt(mSharedPreferences, overrideKey, overrideDefault);
+        return resolveSurfaceValue(slot, property, overrideKey, overrideDefault,
+            WallHalf.WORKSPACE);
+    }
+
+    /** The number a surface uses on one half: that half's link, Base and own value. */
+    private int resolveSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
+                                    String overrideKey, int overrideDefault,
+                                    @Nullable WallHalf half) {
+        if (isSurfaceInheriting(slot, property, half))
+            return getSurfaceBaseValue(property, half);
+        return readHalfInt(overrideKey, isPerHalf(slot, property) ? half : null, overrideDefault);
+    }
+
+    /**
+     * The number a surface uses on a half, before its own clamp: what its named getter answers for
+     * that half. The crossing reads both halves' numbers with it. A slot without the property
+     * answers the shipped value.
+     */
+    public int getSurfaceValue(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property,
+                               @Nullable WallHalf half) {
+        String key = surfaceOverrideKey(slot, property);
+        if (key == null && !isRetiredSurfaceProperty(property))
+            return surfaceOverrideDefault(slot, property);
+        if (key == null)
+            return getSurfaceBaseValue(property, half);
+        return resolveSurfaceValue(slot, property, key, surfaceOverrideDefault(slot, property),
+            half);
     }
 
     /**
@@ -3422,10 +3969,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** The surface's own stored number, ignoring inheritance. For the editor's detached rows. */
     public int getSurfaceOverrideValue(SurfaceSlot slot, SurfaceProperty property) {
+        return getSurfaceOverrideValue(slot, property, WallHalf.WORKSPACE);
+    }
+
+    /** The surface's own stored number on a half, ignoring inheritance. */
+    public int getSurfaceOverrideValue(SurfaceSlot slot, SurfaceProperty property,
+                                       @Nullable WallHalf half) {
         String key = surfaceOverrideKey(slot, property);
         int defaultValue = surfaceOverrideDefault(slot, property);
         return key == null ? defaultValue
-            : SharedPreferenceUtils.getInt(mSharedPreferences, key, defaultValue);
+            : readHalfInt(key, isPerHalf(slot, property) ? half : null, defaultValue);
     }
 
     /** The shipped value behind {@link #surfaceOverrideKey}, cell for cell. */
@@ -3468,8 +4021,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getExtraKeysBlurRadius() {
+        return getExtraKeysBlurRadius(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getExtraKeysBlurRadius()} answers on one half of the wall (ADR 0013). */
+    public int getExtraKeysBlurRadius(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS), 0, 48);
+            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS, half), 0, 48);
     }
 
     public void setExtraKeysBlurRadius(int value) {
@@ -3478,8 +4036,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getDockGlassGrain() {
+        return getDockGlassGrain(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getDockGlassGrain()} answers on one half of the wall (ADR 0013). */
+    public int getDockGlassGrain(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
-            TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN), 0, 100);
+            TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN, half), 0, 100);
     }
 
     public void setDockGlassGrain(int value) {
@@ -3501,8 +4064,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getAppBarOpacity() {
+        return getAppBarOpacity(WallHalf.WORKSPACE);
+    }
+
+    /** What {@link #getAppBarOpacity()} answers on one half of the wall (ADR 0013). */
+    public int getAppBarOpacity(@Nullable WallHalf half) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY), 0, 100);
+            TERMUX_APP.KEY_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY, half), 0, 100);
     }
 
     public void setAppBarOpacity(int value) {
@@ -3585,6 +4153,46 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
 
+    /** Whether the launcher's wallpaper is its own picture, not the phone's; see {@code KEY_WALLPAPER_APP_ONLY}. */
+    public boolean isWallpaperAppOnly() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_APP_ONLY);
+    }
+
+    public void setWallpaperAppOnly(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY, value, false);
+    }
+
+    /** The app-only picture's Material seed; see {@code KEY_WALLPAPER_APP_ONLY_SEED}. */
+    public int getWallpaperAppOnlySeed() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED);
+    }
+
+    /** The picture the seed was taken from; see {@code KEY_WALLPAPER_APP_ONLY_SEED_STAMP}. */
+    public long getWallpaperAppOnlySeedStamp() {
+        return SharedPreferenceUtils.getLong(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED_STAMP,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED_STAMP);
+    }
+
+    /** Stores a seed with the stamp of the picture it was taken from, the two together. */
+    public void setWallpaperAppOnlySeed(int seed, long stamp) {
+        mSharedPreferences.edit()
+            .putInt(TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED, seed)
+            .putLong(TERMUX_APP.KEY_WALLPAPER_APP_ONLY_SEED_STAMP, stamp)
+            .apply();
+    }
+
+    /** The picker's remembered "Also set as phone wallpaper". */
+    public boolean isWallpaperAlsoSetPhone() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_ALSO_SET_PHONE,
+            TERMUX_APP.DEFAULT_VALUE_WALLPAPER_ALSO_SET_PHONE);
+    }
+
+    public void setWallpaperAlsoSetPhone(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_ALSO_SET_PHONE, value, false);
+    }
+
     public int getManagedWallpaperLockId() {
         return SharedPreferenceUtils.getInt(
             mSharedPreferences,
@@ -3636,6 +4244,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     
     public boolean isTerminalDynamicColorsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, TERMUX_APP.DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED);
+    }
+
+    public boolean isGlassEvenOutEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_GLASS_EVEN_OUT_ENABLED, TERMUX_APP.DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED);
+    }
+
+    public void setGlassEvenOutEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_GLASS_EVEN_OUT_ENABLED, value, false);
     }
 
     public void setTerminalDynamicColorsEnabled(boolean value) {
@@ -3737,6 +4353,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setFirstBootTourStepStage(int stage) {
         SharedPreferenceUtils.setInt(mSharedPreferences,
             TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE, stage, true);
+    }
+
+    /** Whether the Appearance editor's theme hint has been dismissed for good. */
+    public boolean isAppearanceThemeHintSeen() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, TERMUX_APP.DEFAULT_APPEARANCE_THEME_HINT_SEEN);
+    }
+
+    public void setAppearanceThemeHintSeen(boolean seen) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, seen, true);
     }
 
     /** Whether a card was skipped in the run the user is on. */

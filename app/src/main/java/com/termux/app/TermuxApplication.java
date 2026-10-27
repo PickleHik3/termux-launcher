@@ -102,6 +102,8 @@ public class TermuxApplication extends Application {
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);
+            // An install from before the wall rework takes Start in from its usage mode, once.
+            WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
         }
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
@@ -204,8 +206,10 @@ public class TermuxApplication extends Application {
         Configuration effectiveConfig = withPinnedNightMode(newConfig);
         ThemeTemplates.exportPaletteAndRunPassAsync(context, () -> {
             Context configuredContext = context.createConfigurationContext(effectiveConfig);
-            Context themedContext = new ContextThemeWrapper(configuredContext,
-                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            // In the app-only picture's colours while the launcher wears them (ADR 0011).
+            Context themedContext = com.termux.app.theme.AppOnlyWallpaperColors.wrap(
+                new ContextThemeWrapper(configuredContext,
+                    R.style.Theme_TermuxActivity_DayNight_NoActionBar));
             // No pane can be measured from here: the active palette stands on the ground the
             // activity last measured, so a flip does not undo a wallpaper's polarity.
             return MaterialTerminalColorScheme.createPaletteSetOnLastGround(themedContext, level);

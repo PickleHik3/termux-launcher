@@ -16,6 +16,7 @@ import android.view.Choreographer;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -114,11 +115,22 @@ public final class TerminalCommandPaletteController
         {LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, "A", "font"},
         {LauncherToolRegistry.TOOL_SESSION_NEW, "＋", "new"},
     };
-    private static final List<String> DEFAULT_KEYCAP_TOOLS;
-    static {
-        List<String> tools = new ArrayList<>(DEFAULT_KEYCAPS.length);
-        for (String[] fallback : DEFAULT_KEYCAPS) tools.add(fallback[0]);
-        DEFAULT_KEYCAP_TOOLS = java.util.Collections.unmodifiableList(tools);
+    /** The Home palette's fallback strip: the terminal defaults are all terminal-only there. */
+    private static final String[][] HOME_KEYCAPS = {
+        {CommandPaletteHomeSet.TOOL_OPEN_TERMINAL_HERE, "❯", "term"},
+        {CommandPaletteHomeSet.TOOL_GO_TO_WORKSPACE, "→", "work"},
+        {CommandPaletteHomeSet.TOOL_ADD_WIDGET, "＋", "widget"},
+        {LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER, "◩", "wall"},
+        {LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS, "⚙", "set"},
+    };
+    private static final List<String> DEFAULT_KEYCAP_TOOLS = toolsOf(DEFAULT_KEYCAPS);
+    private static final List<String> HOME_KEYCAP_TOOLS = toolsOf(HOME_KEYCAPS);
+
+    @NonNull
+    private static List<String> toolsOf(@NonNull String[][] keycaps) {
+        List<String> tools = new ArrayList<>(keycaps.length);
+        for (String[] fallback : keycaps) tools.add(fallback[0]);
+        return java.util.Collections.unmodifiableList(tools);
     }
     /** The glyph for the keyboard's own rows (its types and layouts), as the kbd default has. */
     private static final String KEYBOARD_GLYPH = "⌨";
@@ -141,6 +153,8 @@ public final class TerminalCommandPaletteController
      * resizing twice.
      */
     private final Spring mProgress = new Spring(0f, 900f, 50f);
+    /** The springs' share of their own time at the chosen animation speed; see {@link #kick}. */
+    private float mSpringTime = 1f;
     private final Spring mHeight = new Spring(0f, 820f, 55f);
 
     private final Rect mScratchRect = new Rect();
@@ -161,7 +175,20 @@ public final class TerminalCommandPaletteController
     private long mLastFrameTimeNanos;
     /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
     private boolean mInFrame;
+    /** Where the open glass ends in the Workspace; on Home, the lowest it may end. */
     private float mAnchorY;
+    /**
+     * On Home, the middle the glass grows about and the highest its top may rise, both in host
+     * coordinates ({@link CommandPaletteHomeOverlay#glassBottomPx}); NaN in the Workspace, whose
+     * glass ends at {@link #mAnchorY} and grows upward.
+     */
+    private float mHomeCenterY = Float.NaN;
+    private float mHomeHighestTop = Float.NaN;
+    /**
+     * The tallest the glass may grow: unbounded in the Workspace, and on Home the room above the
+     * dock ({@link CommandPaletteHomeOverlay#availableHeightPx}).
+     */
+    private float mMaxHeightPx = Float.MAX_VALUE;
     private float mCurrentRadius;
 
     private final List<CommandPaletteFilter.Entry> mEntries = new ArrayList<>();
@@ -253,6 +280,12 @@ public final class TerminalCommandPaletteController
     private boolean mListRevealed;
     @Nullable private CommandPaletteFilter.Entry mPendingEntry;
     private String mCrumb = "";
+    /** Where this show was summoned; decides the row set and what ⏎ with no match does. */
+    @NonNull private CommandPaletteContext mContext = CommandPaletteContext.TERMINAL;
+    /** Runs the Home actions that need the wall; does nothing until the wall installs one. */
+    @NonNull private CommandPaletteHomeHost mHomeHost = CommandPaletteHomeHost.NONE;
+    /** The palette gesture's pairing with the keyboard it raised on Home. */
+    private final CommandPaletteHomeOverlay mHomeOverlay = new CommandPaletteHomeOverlay();
 
     public TerminalCommandPaletteController(@NonNull TermuxActivity activity) {
         this(activity, ClipboardText.forContext(activity));
@@ -299,14 +332,108 @@ public final class TerminalCommandPaletteController
 
     /** Opens the palette, or collapses it when the same invocation arrives while it is up. */
     public void toggle() {
+        toggle(CommandPaletteContext.TERMINAL);
+    }
+
+    /** As {@link #toggle()}, opening with the row set for {@code where}. */
+    public void toggle(@NonNull CommandPaletteContext where) {
         if (mOpen) {
             collapse();
             return;
         }
-        show();
+        show(where);
+    }
+
+    /** Installs what runs the Home actions that need the wall; null puts back the no-op. */
+    public void setHomeHost(@Nullable CommandPaletteHomeHost host) {
+        mHomeHost = host == null ? CommandPaletteHomeHost.NONE : host;
+    }
+
+    /**
+     * A key typed on Home with the palette shut and the keyboard up, after the bound keys have had
+     * their turn: opens the Home palette with {@code text} as its query.
+     *
+     * @return whether the palette took the text; false leaves it to the caller
+     */
+    public boolean openHomeWithTypedText(@NonNull String text) {
+        if (!CommandPaletteHomeSet.opensOnTyped(mOpen, text)) return false;
+        show(CommandPaletteContext.HOME);
+        if (!mOpen) return false;
+        appendText(text);
+        return true;
+    }
+
+    /**
+     * The typed-key door on Home: {@link #openHomeWithTypedText} when the Home rules let a key
+     * open the palette (always on, nothing open, no Home float holding the typing). The caller
+     * offers the key to the bound keys first.
+     */
+    public boolean offerHomeTypedText(@Nullable String text, boolean floatHasFocus) {
+        if (!CommandPaletteHomeOverlay.typingOpens(mHomeHost.isOnHome(),
+            mHomeHost.isKeyboardAlwaysOn(), mOpen, floatHasFocus, text)) return false;
+        return openHomeWithTypedText(text);
+    }
+
+    /**
+     * The palette gesture on Home: the Home palette opens with the keyboard as one overlay, and
+     * the keyboard goes down again with the palette ({@link CommandPaletteHomeOverlay}). The
+     * caller has raised the keyboard; {@code keyboardWasUp} says whether it was up before.
+     */
+    public void showHomeOverlay(boolean keyboardWasUp) {
+        // Already up: the pairing it opened with stands.
+        if (mOpen) return;
+        mHomeOverlay.opened(keyboardWasUp);
+        show(CommandPaletteContext.HOME);
+        // A palette that could not open must not leave its keyboard behind.
+        if (!mOpen) endHomeOverlay();
+    }
+
+    /**
+     * The door for a field that stands for the palette's search on Home (the dock's Prompt line):
+     * the Home palette opens with the caret in its query line, {@code initialQuery} already typed
+     * when there is one, and with {@code withKeyboard} the in-app keyboard raised as one overlay
+     * with it, which goes down again with the palette ({@link #showHomeOverlay}). An open palette
+     * is left as it is. Main thread only.
+     */
+    public void openFromField(@Nullable String initialQuery, boolean withKeyboard) {
+        if (mOpen) return;
+        String query = initialQuery == null ? "" : initialQuery;
+        CommandPaletteHomeOverlay.FieldOpen how = CommandPaletteHomeOverlay.fieldOpen(withKeyboard,
+            mHomeHost.isKeyboardUp());
+        if (how == CommandPaletteHomeOverlay.FieldOpen.NOW || !mHomeHost.raiseKeyboard()) {
+            // Nothing raised here, so nothing for the palette's close to put down.
+            showHomeOverlay(true);
+            if (mOpen) appendText(query);
+            return;
+        }
+        // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
+        // space bar, so it opens once the keyboard stands where it will be.
+        mActivity.getWindow().getDecorView().post(() -> {
+            if (mOpen) return;
+            boolean onHome = mHomeHost.isOnHome();
+            if (CommandPaletteHomeOverlay.lowersRaisedKeyboard(onHome,
+                mHomeHost.isKeyboardAlwaysOn())) {
+                // The wall moved away before the palette could open: nothing to pair with.
+                mHomeHost.lowerKeyboard();
+                return;
+            }
+            if (!onHome) return;
+            showHomeOverlay(false);
+            if (mOpen) appendText(query);
+        });
+    }
+
+    /** The palette closed: the keyboard the Home overlay raised goes down with it. */
+    private void endHomeOverlay() {
+        if (mHomeOverlay.closed(mHomeHost.isOnHome(), mHomeHost.isKeyboardAlwaysOn()))
+            mHomeHost.lowerKeyboard();
     }
 
     public void show() {
+        show(CommandPaletteContext.TERMINAL);
+    }
+
+    public void show(@NonNull CommandPaletteContext where) {
         if (!bindViews()) return;
         // Two full-screen glass surfaces must never stack: the palette is transient and summonable
         // over anything, so the drawer is the one that yields. Immediate rather than animated —
@@ -315,9 +442,18 @@ public final class TerminalCommandPaletteController
         // Same rule for the sheet plane, which owns the same interceptor slot: the palette is the
         // one surface summonable over anything, so the modal sheets are the ones that yield.
         mActivity.getTerminalSheetController().dismissAll();
+        mContext = where;
         mEntries.clear();
-        mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
-        mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
+        if (where == CommandPaletteContext.HOME) {
+            mEntries.addAll(CommandPaletteHomeSet.orderedForHome(
+                TerminalCommandPalette.buildEntries(mActivity, where),
+                CommandPaletteHomeSet.jumpEntries(mActivity,
+                    mActivity.getSessionBrowserSessions(), mHomeHost),
+                TerminalCommandPalette.buildSessionEntries(mActivity)));
+        } else {
+            mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
+            mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
+        }
         mEntries.addAll(TerminalCommandPalette.buildKeyboardLayoutEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildKeyboardFormEntries(mActivity));
         if (mEntries.isEmpty()) {
@@ -369,6 +505,14 @@ public final class TerminalCommandPaletteController
                 if (mOpen) rebuildKeycaps(true);
                 if (mOpen && mMode == Mode.LIST) rebuildRows();
             });
+        // A Linux app installed from a pane leaves no broadcast and no resume behind; its desktop
+        // file is read now, off this thread, and the rows grow when the new list is in.
+        else mAppProvider.refreshIfLinuxAppsChanged(() -> {
+            if (!mOpen) return;
+            mAppUsage = mAppUsageStats.decayedScores(mAppProvider.getAllApps(),
+                System.currentTimeMillis());
+            if (mMode == Mode.LIST) rebuildRows();
+        });
 
         resolveAnchor();
         resolveSeed();
@@ -405,6 +549,7 @@ public final class TerminalCommandPaletteController
         if (mView != null) mView.setCaretBlinking(false);
         mProgress.target = 0f;
         kick();
+        endHomeOverlay();
     }
 
     /** Drops the overlay without animating, for pause, configuration change and destroy. */
@@ -418,6 +563,7 @@ public final class TerminalCommandPaletteController
         mProgress.reset(0f);
         if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
         if (mHost != null) mHost.setVisibility(View.INVISIBLE);
+        endHomeOverlay();
     }
 
     /** Re-resolves roles after a theme, wallpaper-color or configuration change. */
@@ -451,6 +597,7 @@ public final class TerminalCommandPaletteController
         });
         mView = new CommandPaletteView(mActivity);
         mView.setCallbacks(this);
+        mView.setPassThroughSource(this::passThroughRects);
         mHost.addView(mView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         // Stay above the backdrop pane in z. Without this the whole ledger — surface tint and
@@ -462,6 +609,12 @@ public final class TerminalCommandPaletteController
         // the square band applyFrame() already documents fighting.
         mView.setOutlineProvider(null);
         mView.setElevation(dp(1f));
+        // On Home the glass stands above the dock and the keyboard, so it follows them when the
+        // stack settles or changes height under an open palette (a keyboard laid out late, a
+        // rotation, the dock's rows coming or going).
+        View stack = mActivity.findViewById(R.id.accessory_stack_container);
+        if (stack != null) stack.addOnLayoutChangeListener(
+            (v, l, t, r, b, ol, ot, or, ob) -> onStackLayoutChanged(t != ot || b != ob));
         return true;
     }
 
@@ -471,7 +624,11 @@ public final class TerminalCommandPaletteController
         if (mFrameScheduled) return;
         mFrameScheduled = true;
         // A re-post from inside doFrame keeps the frame clock (see DockPlankController.kick).
-        if (!mInFrame) mLastFrameTimeNanos = 0L;
+        if (!mInFrame) {
+            mLastFrameTimeNanos = 0L;
+            // General › Animation speed, read once per run of the springs.
+            mSpringTime = com.termux.app.AnimationSpeed.springTime(mActivity);
+        }
         Choreographer.getInstance().postFrameCallback(this);
     }
 
@@ -491,7 +648,8 @@ public final class TerminalCommandPaletteController
             ? Spring.MIN_DT
             : (frameTimeNanos - mLastFrameTimeNanos) / 1_000_000_000f;
         mLastFrameTimeNanos = frameTimeNanos;
-        dt = Spring.clampDelta(dt);
+        // The springs run on a clock stretched or squeezed by the animation speed.
+        dt = Spring.clampDelta(dt) / mSpringTime;
         boolean reduced = isReducedMotion();
         boolean moving = mProgress.tick(reduced, dt);
         moving |= mHeight.tick(reduced, dt);
@@ -552,12 +710,17 @@ public final class TerminalCommandPaletteController
         float hostWidth = mHost.getWidth();
         float openLeft = dp(SIDE_INSET);
         float openRight = hostWidth - dp(SIDE_INSET);
-        float openTop = mAnchorY - mHeight.value;
+        // On Home the glass is centred and grows about its middle; in the Workspace it ends at the
+        // anchor and grows upward. Arithmetic on the animated height only: nothing is laid out.
+        float openBottom = Float.isNaN(mHomeCenterY) ? mAnchorY
+            : CommandPaletteHomeOverlay.glassBottomPx(mHeight.value, mHomeCenterY,
+                mHomeHighestTop, mAnchorY);
+        float openTop = openBottom - mHeight.value;
         mFrame.set(
             lerp(mSeed.left, openLeft, p),
             lerp(mSeed.top, openTop, p),
             lerp(mSeed.right, openRight, p),
-            lerp(mSeed.bottom, mAnchorY, p));
+            lerp(mSeed.bottom, openBottom, p));
         // Open radius matches the dock capsule, so the palette reads as the same glass kit.
         float openRadius = mActivity.resolveDockCapsuleCornerRadiusPx(
             Math.max(1, Math.round(mHeight.value)));
@@ -592,13 +755,31 @@ public final class TerminalCommandPaletteController
         mSeed.set(centerX - width / 2f, bottom - height, centerX + width / 2f, bottom);
     }
 
+    /** The bottom stack moved under an open Home palette: the glass settles above it again. */
+    private void onStackLayoutChanged(boolean moved) {
+        if (!moved || !mOpen || mView == null || mContext != CommandPaletteContext.HOME) return;
+        resolveAnchor();
+        mView.setModalBounds(mModalBounds);
+        mHeight.target = targetHeight();
+        applyFrame();
+        kick();
+    }
+
     /**
      * Bottom edge lands mid-terminal and is clamped so the keycap strip below it never covers
-     * the last prompt rows.
+     * the last prompt rows. On Home it stands in the screen's middle, clear of the dock and the
+     * keyboard, instead.
      */
     private void resolveAnchor() {
         float top = terminalTop();
         float bottom = terminalBottom();
+        if (mContext == CommandPaletteContext.HOME) {
+            resolveHomeAnchor(top, bottom);
+            return;
+        }
+        mMaxHeightPx = Float.MAX_VALUE;
+        mHomeCenterY = Float.NaN;
+        mHomeHighestTop = Float.NaN;
         float anchor = top + (bottom - top) * ANCHOR_FRACTION;
         float lowest = bottom - dp(STRIP_RESERVE);
         float highest = top + dp(MIN_HEIGHT);
@@ -607,6 +788,70 @@ public final class TerminalCommandPaletteController
         // Below that sits the in-app keyboard, whose keys are how the palette is typed into: if
         // the overlay ate those taps, every keystroke would register as a dismissing outside tap.
         mModalBounds.set(0f, top, mHost.getWidth(), bottom);
+    }
+
+    /**
+     * On Home the glass stands in the screen's middle and grows about it as results arrive. The
+     * page runs on under the dock and the keyboard, which overlay it (spec §5), so the glass and
+     * its keycap strip never end lower than the top of the bottom stack: with the keyboard up the
+     * room above it bounds the glass, which stands on that edge where the middle is too low.
+     * Taps on the dock and the keyboard go through to them.
+     */
+    private void resolveHomeAnchor(float top, float bottom) {
+        float stackHeight = CommandPaletteHomeOverlay.stackHeightPx(top, bottom, bottomStackTop());
+        float room = bottom - top;
+        float inset = CommandPaletteHomeOverlay.bottomInsetPx(room, stackHeight,
+            dp(STRIP_RESERVE));
+        mAnchorY = bottom - inset;
+        mHomeCenterY = mHost.getHeight() / 2f;
+        mHomeHighestTop = top + dp(SIDE_INSET);
+        mMaxHeightPx = CommandPaletteHomeOverlay.availableHeightPx(room, inset, dp(SIDE_INSET),
+            dp(MAX_HEIGHT));
+        mModalBounds.set(0f, top, mHost.getWidth(), bottom - stackHeight);
+    }
+
+    /**
+     * What takes its own touches even inside the modal bounds, in host coordinates: the in-app
+     * keyboard wherever it stands (docked, on a side edge), the floating keyboard's frame with its
+     * drag handle and resize grip, and the dock's rows. A floating keyboard lies over the page or
+     * the terminal, so without these a key tap read as a tap outside and closed the palette.
+     */
+    @NonNull
+    private float[] passThroughRects() {
+        List<View> views = new ArrayList<>(4);
+        views.add(mActivity.findViewById(R.id.inapp_keyboard_container));
+        views.add(mActivity.findViewById(R.id.accessory_stack_container));
+        View floatingHost = mActivity.findViewById(R.id.floating_keyboard_host);
+        if (floatingHost instanceof ViewGroup && floatingHost.isShown()) {
+            ViewGroup group = (ViewGroup) floatingHost;
+            for (int i = 0; i < group.getChildCount(); i++) views.add(group.getChildAt(i));
+        }
+        mHost.getLocationOnScreen(mLocation);
+        int hostX = mLocation[0];
+        int hostY = mLocation[1];
+        float[] out = new float[views.size() * 4];
+        int n = 0;
+        for (View view : views) {
+            if (view == null || !view.isShown() || view.getWidth() <= 0 || view.getHeight() <= 0)
+                continue;
+            view.getLocationOnScreen(mLocation);
+            out[n++] = mLocation[0] - hostX;
+            out[n++] = mLocation[1] - hostY;
+            out[n++] = mLocation[0] - hostX + view.getWidth();
+            out[n++] = mLocation[1] - hostY + view.getHeight();
+        }
+        return n == out.length ? out : java.util.Arrays.copyOf(out, n);
+    }
+
+    /** The top of the bottom stack (dock rows and keyboard) in host coordinates, NaN if none. */
+    private float bottomStackTop() {
+        View stack = mActivity.findViewById(R.id.accessory_stack_container);
+        if (stack == null || stack.getVisibility() != View.VISIBLE || stack.getHeight() <= 0)
+            return Float.NaN;
+        stack.getLocationOnScreen(mLocation);
+        int stackTop = mLocation[1];
+        mHost.getLocationOnScreen(mLocation);
+        return stackTop - mLocation[1];
     }
 
     private float terminalTop() {
@@ -626,7 +871,8 @@ public final class TerminalCommandPaletteController
 
     private float targetHeight() {
         float content = mView.measuredContentHeight();
-        return Math.max(mView.chromeHeight(), Math.min(dp(MAX_HEIGHT), content));
+        return Math.max(mView.chromeHeight(),
+            Math.min(Math.min(dp(MAX_HEIGHT), mMaxHeightPx), content));
     }
 
     private boolean isReducedMotion() {
@@ -744,12 +990,32 @@ public final class TerminalCommandPaletteController
      */
     @NonNull
     private List<CommandPaletteFilter.Entry> browseEntries(boolean actionsOnly) {
+        if (mContext == CommandPaletteContext.HOME) {
+            // Home reads Home actions, then Apps and Linux apps, then the jump rows and the rest.
+            List<CommandPaletteFilter.Entry> entries = new ArrayList<>(mEntries.size() + 16);
+            for (CommandPaletteFilter.Entry entry : mEntries)
+                if (CommandPaletteHomeSet.CATEGORY_HOME.equals(entry.category)) entries.add(entry);
+            if (!actionsOnly) {
+                for (TerminalCommandPalette.AppSection section : HOME_APP_SECTIONS)
+                    entries.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
+                        mAppUsageStats, "", mAppShortcuts, mRowIcons, null, section));
+            }
+            for (CommandPaletteFilter.Entry entry : mEntries)
+                if (!CommandPaletteHomeSet.CATEGORY_HOME.equals(entry.category)) entries.add(entry);
+            return entries;
+        }
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>(mEntries);
         if (!actionsOnly)
             entries.addAll(TerminalCommandPalette.buildAppEntries(mActivity, mAppProvider,
                 mAppUsageStats, "", mAppShortcuts, mRowIcons, null));
         return entries;
     }
+
+    /** Home's two app sections; the terminal palette keeps one Apps section holding both. */
+    private static final TerminalCommandPalette.AppSection[] HOME_APP_SECTIONS = {
+        TerminalCommandPalette.AppSection.ANDROID, TerminalCommandPalette.AppSection.LINUX};
+    private static final TerminalCommandPalette.AppSection[] TERMINAL_APP_SECTIONS = {
+        TerminalCommandPalette.AppSection.ALL};
 
     /**
      * One list for a search: the matching actions, apps and contacts gathered here, ordered by
@@ -762,11 +1028,16 @@ public final class TerminalCommandPaletteController
             CommandPaletteRanking.actionCandidates(mEntries, query.text);
         if (!query.actionsOnly) {
             Map<String, Integer> appScores = new HashMap<>();
-            for (CommandPaletteFilter.Entry app : TerminalCommandPalette.buildAppEntries(mActivity,
-                mAppProvider, mAppUsageStats, query.text, mAppShortcuts, mRowIcons, appScores)) {
-                Integer score = app.iconKey == null ? null : appScores.get(app.iconKey);
-                if (score != null && score > 0) candidates.add(new CommandPaletteRanking.Candidate(
-                    app, CommandPaletteRanking.Source.APP, score));
+            for (TerminalCommandPalette.AppSection section
+                : mContext == CommandPaletteContext.HOME ? HOME_APP_SECTIONS : TERMINAL_APP_SECTIONS) {
+                for (CommandPaletteFilter.Entry app : TerminalCommandPalette.buildAppEntries(
+                    mActivity, mAppProvider, mAppUsageStats, query.text, mAppShortcuts, mRowIcons,
+                    appScores, section)) {
+                    Integer score = app.iconKey == null ? null : appScores.get(app.iconKey);
+                    if (score != null && score > 0) candidates.add(
+                        new CommandPaletteRanking.Candidate(app, CommandPaletteRanking.Source.APP,
+                            score));
+                }
             }
             if (mContactsAccess) {
                 List<CommandPaletteContacts.Match> matches =
@@ -791,7 +1062,7 @@ public final class TerminalCommandPaletteController
             && !isContactsAllow(entry);
         String description = entry.enabled ? entry.subtitle : entry.disabledReason;
         // Every row a hold can bind says so, the way app rows already do in their own subtitle.
-        if (entry.enabled && !LauncherToolRegistry.CATEGORY_APPS.equals(entry.category)
+        if (entry.enabled && !entry.isAppRow()
             && TerminalCommandPalette.isBindable(entry)) {
             description = description == null || description.isEmpty()
                 ? mActivity.getString(R.string.palette_row_hold_to_bind)
@@ -885,7 +1156,8 @@ public final class TerminalCommandPaletteController
     private void rebuildKeycaps(boolean onlyIfChanged) {
         StripResolver resolver = new StripResolver();
         List<String> keys = CommandPaletteStrip.pickKeys(mRowUsage, resolver::canResolve,
-            DEFAULT_KEYCAP_TOOLS, CommandPaletteView.KEYCAP_COUNT);
+            mContext == CommandPaletteContext.HOME ? HOME_KEYCAP_TOOLS : DEFAULT_KEYCAP_TOOLS,
+            CommandPaletteView.KEYCAP_COUNT);
         if (mContactsLoaded) mStripContacts.clear();
         List<CommandPaletteView.Keycap> caps = new ArrayList<>(keys.size());
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>(keys.size());
@@ -1043,8 +1315,8 @@ public final class TerminalCommandPaletteController
 
     @NonNull
     private static String glyphFor(@NonNull String toolName) {
-        for (String[] fallback : DEFAULT_KEYCAPS)
-            if (fallback[0].equals(toolName)) return fallback[1];
+        String[] fallback = keycapFor(toolName);
+        if (fallback != null) return fallback[1];
         if (toolName.startsWith("keyboard.")) return KEYBOARD_GLYPH;
         return "▸";
     }
@@ -1052,9 +1324,18 @@ public final class TerminalCommandPaletteController
     /** A bare tool's cap label: a default's own, else the tool's verb. */
     @NonNull
     private static String bareLabel(@NonNull String toolName) {
+        String[] fallback = keycapFor(toolName);
+        return fallback != null ? fallback[2] : shortLabel(toolName);
+    }
+
+    /** The fallback chip, terminal or Home, that names this tool, or null. */
+    @Nullable
+    private static String[] keycapFor(@NonNull String toolName) {
         for (String[] fallback : DEFAULT_KEYCAPS)
-            if (fallback[0].equals(toolName)) return fallback[2];
-        return shortLabel(toolName);
+            if (fallback[0].equals(toolName)) return fallback;
+        for (String[] fallback : HOME_KEYCAPS)
+            if (fallback[0].equals(toolName)) return fallback;
+        return null;
     }
 
     /** Short cap label: the tool's own verb, e.g. {@code pane.split_vertical} → {@code split}. */
@@ -1447,13 +1728,16 @@ public final class TerminalCommandPaletteController
         }
         String tool;
         List<String> arguments;
-        if (LauncherToolRegistry.CATEGORY_APPS.equals(pending.category)) {
+        if (pending.isAppRow()) {
             String stableId = pending.arguments == null
                 ? "" : pending.arguments.optString("query", "");
             tool = LauncherToolRegistry.TOOL_APP_LAUNCH;
+            // Every Linux app shares one package, so its binding always names the app itself.
+            boolean linux = CommandPaletteHomeSet.CATEGORY_LINUX_APPS.equals(pending.category);
             arguments = stableId.isEmpty() ? java.util.Collections.<String>emptyList()
                 : java.util.Collections.singletonList(CommandPaletteAppShortcuts
-                    .bindingArgumentFor(stableId, defaultStableIdForPackage(stableId)));
+                    .bindingArgumentFor(stableId,
+                        linux ? null : defaultStableIdForPackage(stableId)));
         } else if (TerminalCommandPalette.CATEGORY_CONTACTS.equals(pending.category)) {
             tool = LauncherToolRegistry.TOOL_CONTACT_OPEN;
             arguments = TerminalCommandPalette.contactBindingArguments(pending.arguments);
@@ -1598,6 +1882,8 @@ public final class TerminalCommandPaletteController
         rememberPick();
         playTick();
         collapse();
+        // Home's own rows need the wall, which the dispatcher does not reach.
+        if (CommandPaletteHomeSet.runHostAction(entry, mHomeHost)) return;
         JSONObject result = TerminalActionDispatcher.getInstance().execute(entry.toolName,
             entry.arguments == null ? new JSONObject() : entry.arguments);
         if (!result.optBoolean("ok", false)) {
@@ -1605,7 +1891,12 @@ public final class TerminalCommandPaletteController
                 mActivity.getString(R.string.palette_action_failed, entry.title));
             Logger.logWarn(LOG_TAG, "Palette action " + entry.toolName + " failed: " + message);
             AppNotice.show(mActivity, message, false);
+            return;
         }
+        // A window's jump row on Home switches to that window, then goes to it.
+        if (mContext == CommandPaletteContext.HOME
+            && CommandPaletteHomeSet.CATEGORY_WINDOWS.equals(entry.category))
+            mHomeHost.goToWorkspace();
     }
 
     /**
@@ -1678,6 +1969,8 @@ public final class TerminalCommandPaletteController
         if (mMode == Mode.LIST && CommandPaletteRanking.Query.parse(mQuery).actionsOnly) return;
         String command = mQuery.trim();
         collapse();
+        // Home has no shell in front of the user to hand the query to.
+        if (mContext == CommandPaletteContext.HOME) return;
         if (command.isEmpty()) return;
         com.termux.terminal.TerminalSession session = mActivity.getCurrentSession();
         if (session == null) {

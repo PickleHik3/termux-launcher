@@ -36,6 +36,26 @@ public final class RetroUniforms {
     public float bend;
     /** How far the corners darken, 0 for none. */
     public float vignette;
+    /**
+     * The screen inside the card the effect is drawn on, {@code left, top, right, bottom}: the
+     * whole card on chrome, the rect inside a pane's bezel ({@link PaneBezel}). Between the
+     * screen and the card the view is drawn as it is.
+     */
+    public float screenLeft;
+    public float screenTop;
+    public float screenRight;
+    public float screenBottom;
+    /** The screen's corner radius, already capped at half its shorter side. */
+    public float screenRadius;
+    /**
+     * The rect the bend and the vignette are worked out over, {@code left, top, right, bottom}:
+     * the whole view on chrome, the pane's laid-out screen on a pane, so a travel that shortens
+     * the screen cuts the picture off rather than squeezing it.
+     */
+    public float bendLeft;
+    public float bendTop;
+    public float bendRight;
+    public float bendBottom;
 
     /** The screen's period in px. */
     public static float periodPx(float density) {
@@ -81,6 +101,39 @@ public final class RetroUniforms {
         this.radius = cappedRadius(radius, this.cardRight - cardLeft, this.cardBottom - cardTop);
         this.bend = bend;
         this.vignette = vignette;
+        this.screenLeft = this.cardLeft;
+        this.screenTop = this.cardTop;
+        this.screenRight = this.cardRight;
+        this.screenBottom = this.cardBottom;
+        this.screenRadius = this.radius;
+        this.bendLeft = 0f;
+        this.bendTop = 0f;
+        this.bendRight = width;
+        this.bendBottom = height;
+        return this;
+    }
+
+    /**
+     * Cuts the effect to a screen inside the card, after {@link #set}: the effect is drawn inside
+     * it and the view as it is between it and the card. The bend is worked out over the screen,
+     * down to {@code bendBottom} (its laid-out bottom, below the drawn one while a travel
+     * shortens it). Held inside the card.
+     *
+     * @return this, for chaining
+     */
+    @NonNull
+    public RetroUniforms screen(float left, float top, float right, float bottom, float radius,
+                                float bendBottom) {
+        this.screenLeft = Math.max(cardLeft, Math.min(left, cardRight));
+        this.screenTop = Math.max(cardTop, Math.min(top, cardBottom));
+        this.screenRight = Math.max(screenLeft, Math.min(right, cardRight));
+        this.screenBottom = Math.max(screenTop, Math.min(bottom, cardBottom));
+        this.screenRadius = cappedRadius(radius, screenRight - screenLeft,
+            screenBottom - screenTop);
+        this.bendLeft = screenLeft;
+        this.bendTop = screenTop;
+        this.bendRight = screenRight;
+        this.bendBottom = Math.max(screenBottom, bendBottom);
         return this;
     }
 
@@ -107,6 +160,15 @@ public final class RetroUniforms {
         radius = other.radius;
         bend = other.bend;
         vignette = other.vignette;
+        screenLeft = other.screenLeft;
+        screenTop = other.screenTop;
+        screenRight = other.screenRight;
+        screenBottom = other.screenBottom;
+        screenRadius = other.screenRadius;
+        bendLeft = other.bendLeft;
+        bendTop = other.bendTop;
+        bendRight = other.bendRight;
+        bendBottom = other.bendBottom;
     }
 
     @Override
@@ -121,7 +183,15 @@ public final class RetroUniforms {
             && Float.compare(cardRight, u.cardRight) == 0
             && Float.compare(cardBottom, u.cardBottom) == 0
             && Float.compare(radius, u.radius) == 0 && Float.compare(bend, u.bend) == 0
-            && Float.compare(vignette, u.vignette) == 0;
+            && Float.compare(vignette, u.vignette) == 0
+            && Float.compare(screenLeft, u.screenLeft) == 0
+            && Float.compare(screenTop, u.screenTop) == 0
+            && Float.compare(screenRight, u.screenRight) == 0
+            && Float.compare(screenBottom, u.screenBottom) == 0
+            && Float.compare(screenRadius, u.screenRadius) == 0
+            && Float.compare(bendLeft, u.bendLeft) == 0 && Float.compare(bendTop, u.bendTop) == 0
+            && Float.compare(bendRight, u.bendRight) == 0
+            && Float.compare(bendBottom, u.bendBottom) == 0;
     }
 
     @Override
@@ -137,6 +207,15 @@ public final class RetroUniforms {
         h = 31 * h + Float.floatToIntBits(cardBottom);
         h = 31 * h + Float.floatToIntBits(radius);
         h = 31 * h + Float.floatToIntBits(bend);
-        return 31 * h + Float.floatToIntBits(vignette);
+        h = 31 * h + Float.floatToIntBits(vignette);
+        h = 31 * h + Float.floatToIntBits(screenLeft);
+        h = 31 * h + Float.floatToIntBits(screenTop);
+        h = 31 * h + Float.floatToIntBits(screenRight);
+        h = 31 * h + Float.floatToIntBits(screenBottom);
+        h = 31 * h + Float.floatToIntBits(screenRadius);
+        h = 31 * h + Float.floatToIntBits(bendLeft);
+        h = 31 * h + Float.floatToIntBits(bendTop);
+        h = 31 * h + Float.floatToIntBits(bendRight);
+        return 31 * h + Float.floatToIntBits(bendBottom);
     }
 }

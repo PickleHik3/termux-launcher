@@ -47,6 +47,12 @@ public interface TourTargets {
     String DOCK = "dock";
     String AZ_ROW = "az_row";
     /**
+     * The free area of the Home page in front: a band across the middle of the page, clear of the
+     * dock rows below and the system bar above, where a plain swipe pages Home and a swipe up is
+     * the palette gesture. Nothing while the wall rests on the Workspace.
+     */
+    String HOME_PAGE = "home_page";
+    /**
      * The border of the page that is up, which is where a border drag is held. It is the page's
      * own frame line, so it is on every place and never needs the terminal underneath it.
      */

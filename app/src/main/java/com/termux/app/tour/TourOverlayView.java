@@ -243,9 +243,9 @@ public final class TourOverlayView extends FrameLayout {
         tips.setOrientation(LinearLayout.VERTICAL);
         tips.addView(tipRow(context, R.drawable.ic_symbol_help, R.string.tour_tip_help),
             matchWrap(0));
-        tips.addView(tipRow(context, R.drawable.ic_symbol_wallpaper, R.string.tour_tip_wallpaper),
+        tips.addView(tipRow(context, R.drawable.ic_symbol_terminal, R.string.tour_tip_float),
             matchWrap(dp(12)));
-        tips.addView(tipRow(context, R.drawable.ic_symbol_keyboard, R.string.tour_tip_shortcuts),
+        tips.addView(tipRow(context, R.drawable.ic_symbol_grid_view, R.string.tour_tip_layout),
             matchWrap(dp(12)));
         tips.addView(tipRow(context, R.drawable.ic_symbol_restart, R.string.tour_tip_replay),
             matchWrap(dp(12)));
@@ -530,12 +530,19 @@ public final class TourOverlayView extends FrameLayout {
         setShown(mBody, !completed);
         if (!completed && !away) setTextIfChanged(mTitle, step.titleResAt(mStage));
         if (!completed) setTextIfChanged(mBody, away
-            ? R.string.tour_card_return_to_terminal : step.bodyResAt(mStage));
+            ? awayBodyRes(step.sideAt(mStage)) : step.bodyResAt(mStage));
         // Practice has no run to count and no next lesson to skip to; ✕ is its way out.
         setShown(mProgress, !mPracticing);
         setShown(mSkip, !mPracticing);
         mClose.setContentDescription(getContext().getString(mPracticing
             ? R.string.tour_end_practice : R.string.tour_close_description));
+    }
+
+    /** The way to the half of the wall a stage is taught on, read from the other half. */
+    @StringRes
+    private static int awayBodyRes(@NonNull TourStep.Side side) {
+        return side == TourStep.Side.HOME ? R.string.tour_card_go_home
+            : R.string.tour_card_go_to_workspace;
     }
 
     private void setTextIfChanged(@NonNull TextView view, @StringRes int res) {

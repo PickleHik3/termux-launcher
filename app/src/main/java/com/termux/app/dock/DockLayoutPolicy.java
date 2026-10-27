@@ -1,12 +1,17 @@
 package com.termux.app.dock;
 
+import androidx.annotation.NonNull;
+
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.paging.PageTickStrip;
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
+
+import java.util.List;
 
 /**
  * Pure dock sizing. Everything the dock's geometry depends on arrives as a plain value in
@@ -132,6 +137,21 @@ public final class DockLayoutPolicy {
      */
     public static final float SHARED_ROW_AIR_DP = AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP;
 
+    /**
+     * The Search field (once the Prompt line's) as it stands under the apps row: the field view's height (its tap
+     * target, {@link PromptLineFieldView#HIT_HEIGHT_DP}) and the well drawn centred in it
+     * ({@link PromptLineFieldView#WELL_HEIGHT_DP}).
+     */
+    public static final float PROMPT_FIELD_HEIGHT_DP = PromptLineFieldView.HIT_HEIGHT_DP;
+    public static final float PROMPT_FIELD_WELL_DP = PromptLineFieldView.WELL_HEIGHT_DP;
+    /** The field's side inset inside the slab: the dock's content inset, the row's 14 dp. */
+    public static final float PROMPT_FIELD_SIDE_INSET_DP = 14f;
+
+    /** The Wall strip's first row as it stands over the apps row ({@link WallStripRowView#HEIGHT_DP}). */
+    public static final float WALL_STRIP_HEIGHT_DP = WallStripRowView.HEIGHT_DP;
+    /** The row's side inset inside the slab: the apps row's 14 dp, as the Search field. */
+    public static final float WALL_STRIP_SIDE_INSET_DP = PROMPT_FIELD_SIDE_INSET_DP;
+
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
     public static final class DockInputs {
         /** False before the preference store is attached; the rows collapse to zero then. */
@@ -147,7 +167,9 @@ public final class DockLayoutPolicy {
         public final boolean appsOnRail;
         /**
          * The row shares its container with nothing else — the only dock row on the bottom edge, or
-         * the only bar on its plank off the dock, which a rail always is. It swaps the dock's own
+         * the only bar on its plank off the dock, which a rail always is. The extra keys beside it
+         * do not count ({@link #appsRowAloneOnDock}), so the row is the same band on Home and in
+         * a window while the keys fold in and out. It swaps the dock's own
          * paddings for {@link #LONE_ROW_AIR_DP}, and lets the icon fill the preset's whole
          * baseline rather than a share of it ({@link #iconPxForScale}).
          */
@@ -166,6 +188,11 @@ public final class DockLayoutPolicy {
          * their own beside it, and its own air is unchanged.
          */
         public final boolean appsRowPageStripShown;
+        /**
+         * What the dock's style asks of its slab ({@link DockSurfaceSpec}): {@link
+         * DockSurfaceSpec#PLAIN}, the dock as it always was, unless the caller says otherwise.
+         */
+        public final DockSurfaceSpec surface;
         public final float density;
         /** The dock size preset, as stored (a raw scale, not a progress). */
         public final float barHeightScale;
@@ -193,8 +220,67 @@ public final class DockLayoutPolicy {
         public final boolean railOnRight;
         public final int displayCutoutInsetLeftPx;
         public final int displayCutoutInsetRightPx;
+        /**
+         * How much of the Search field the slab carries under the apps row, 0..1: 1 while the
+         * page's layout turns the field on, with whichever design (#96), 0 while it does not,
+         * and between while the toggle, the palette or a slide across the seam eases the slab's
+         * height. Read off its own value rather than the dress, so the slab can ease out after
+         * the toggle has already moved on.
+         */
+        public final float promptFieldReveal;
+        /**
+         * How much of the Wall strip's first row the slab carries over the apps row, 0..1: 1 while
+         * Home's dock wears {@link DockSurfaceSpec#WALL_STRIP}, 0 for every other dock, between
+         * while a style switch eases the slab's height. Read off its own value, as
+         * {@link #promptFieldReveal} is.
+         */
+        public final float wallStripReveal;
+        /**
+         * The Wall strip's first row's height in dp, as the page's layout keeps it (the Layout
+         * editor's Strip handle, {@code PlaceLayoutStore#wallStripHeightDp}); zero or less for
+         * the shipped {@link #WALL_STRIP_HEIGHT_DP}. Held to its range
+         * ({@link WallStripRowPolicy#clampHeightDp}).
+         */
+        public final int wallStripHeightDp;
+        /**
+         * Where this place's layout puts the pinned-apps row away ({@link #appsRowEnabledPref}
+         * false), how the half that does show it measures it: that half's Style, its dock size
+         * and whether the row stands alone there. The row stays in the dock's view while it is put
+         * away, and a slide brings it back with the icons it already has; handed no icon here it
+         * sized them from its own host, a fill ratio a few dp smaller, and they grew at the settle.
+         * {@link Float#NaN} for the scale while no half shows the row. Read for nothing else: the
+         * band of a row put away stays zero.
+         */
+        public final boolean hiddenRowCapsule;
+        public final float hiddenRowBarHeightScale;
+        public final boolean hiddenRowAlone;
+        /**
+         * The slot icon and usable width of that put-away row as the half that shows it lays it
+         * out at rest ({@link DockLayout#slotIconPx}, {@link DockLayout#appsRowUsableWidthPx}):
+         * its design's side inset and bead fit, its host's width. Negative while not measured.
+         */
+        public final int hiddenRowSlotIconPx;
+        public final int hiddenRowUsableWidthPx;
+        /**
+         * The width the pinned-apps row's host spans, px, before the row's side inset: the
+         * content's width between the display cutouts. Zero while not known, and the row's icon
+         * is then not held to a slot.
+         */
+        public final int rowWidthPx;
+        /** How many slots a page of the row lying down shares its width between. */
+        public final int slotCount;
 
         private DockInputs(Builder b) {
+            this.hiddenRowSlotIconPx = b.hiddenRowSlotIconPx;
+            this.hiddenRowUsableWidthPx = b.hiddenRowUsableWidthPx;
+            this.rowWidthPx = b.rowWidthPx;
+            this.slotCount = b.slotCount;
+            this.hiddenRowCapsule = b.hiddenRowCapsule;
+            this.hiddenRowBarHeightScale = b.hiddenRowBarHeightScale;
+            this.hiddenRowAlone = b.hiddenRowAlone;
+            this.promptFieldReveal = b.promptFieldReveal;
+            this.wallStripReveal = b.wallStripReveal;
+            this.wallStripHeightDp = b.wallStripHeightDp;
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
             this.appsRowOnEdge = b.appsRowOnEdge;
@@ -202,6 +288,7 @@ public final class DockLayoutPolicy {
             this.appsRowAlone = b.appsRowAlone;
             this.appsRowNextToCanvas = b.appsRowNextToCanvas;
             this.appsRowPageStripShown = b.appsRowPageStripShown;
+            this.surface = b.surface != null ? b.surface : DockSurfaceSpec.PLAIN;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
@@ -231,6 +318,7 @@ public final class DockLayoutPolicy {
             // Every row that lies down carries the ticks' band, whether or not it has a second
             // page to show — the band is its air, so a row that gained a page cannot grow by it.
             private boolean appsRowPageStripShown = true;
+            private DockSurfaceSpec surface = DockSurfaceSpec.PLAIN;
             private float density = 1f;
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
@@ -249,14 +337,49 @@ public final class DockLayoutPolicy {
             private boolean railOnRight;
             private int displayCutoutInsetLeftPx;
             private int displayCutoutInsetRightPx;
+            private float promptFieldReveal;
+            private float wallStripReveal;
+            private int wallStripHeightDp;
+            private boolean hiddenRowCapsule;
+            private float hiddenRowBarHeightScale = Float.NaN;
+            private boolean hiddenRowAlone;
+            private int hiddenRowSlotIconPx = -1;
+            private int hiddenRowUsableWidthPx = -1;
+            private int rowWidthPx;
+            private int slotCount = 1;
+
+            /**
+             * {@link DockInputs#hiddenRowSlotIconPx} and its width, from the half that shows the
+             * row, laid out at rest.
+             */
+            public Builder hiddenRowSlot(int slotIconPx, int usableWidthPx) {
+                this.hiddenRowSlotIconPx = slotIconPx;
+                this.hiddenRowUsableWidthPx = usableWidthPx;
+                return this;
+            }
+
+            public Builder rowWidthPx(int v) { this.rowWidthPx = v; return this; }
+            public Builder slotCount(int v) { this.slotCount = v; return this; }
+
+            /** {@link DockInputs#hiddenRowCapsule} and its pair, from the half that shows the row. */
+            public Builder hiddenRowAsShown(boolean capsule, float barHeightScale, boolean alone) {
+                this.hiddenRowCapsule = capsule;
+                this.hiddenRowBarHeightScale = barHeightScale;
+                this.hiddenRowAlone = alone;
+                return this;
+            }
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
+            public Builder promptFieldReveal(float v) { this.promptFieldReveal = v; return this; }
+            public Builder wallStripReveal(float v) { this.wallStripReveal = v; return this; }
+            public Builder wallStripHeightDp(int v) { this.wallStripHeightDp = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
             public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
             public Builder appsRowNextToCanvas(boolean v) { this.appsRowNextToCanvas = v; return this; }
             public Builder appsRowPageStripShown(boolean v) { this.appsRowPageStripShown = v; return this; }
+            public Builder surface(DockSurfaceSpec v) { this.surface = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
@@ -337,6 +460,16 @@ public final class DockLayoutPolicy {
         int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown,
             in.appsRowNextToCanvas, density);
         int tickSideAirPx = rowTickSideAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
+        // A style whose dashes float above the slab (the Glass tray) takes the strip out of the
+        // icons' air: the air on the ticks' side is the other side's, and the strip's band stands
+        // beyond it, outside the glass, so the icons sit in the middle of the slab with the ticks
+        // a small gap over its top edge. The band is still the row's, so the stack, the pager and
+        // the strip are sized exactly as before; only the glass starts lower (slabTopInsetPx).
+        boolean dashesAboveSlab = dashesAboveSlab(in);
+        if (dashesAboveSlab) tickSideAirPx = airPx + stripBandPx;
+        out.surface = in.surface;
+        out.slabTopInsetPx = dashesAboveSlab && in.preferencesAvailable && in.appsRowEnabledPref
+            ? stripBandPx : 0;
         out.appsRowStripBandPx = stripBandPx;
         out.appsTopPaddingPx = airPx;
         out.appsBottomPaddingPx = airPx;
@@ -365,8 +498,11 @@ public final class DockLayoutPolicy {
                 ? iconBaselinePx(capsule, in.barHeightScale, in.baseToolbarHeightPx, density,
                     in.additionalAppsBarHeightPx)
                 : 0;
-            out.appsRowIconPx =
-                rowIconPx(iconBaselinePx, out.iconScale, in.appsRowAlone, density);
+            // A row this layout puts away keeps the icon the half that shows it draws, so it comes
+            // back at its own size rather than growing into it at the settle. Its band stays zero.
+            out.appsRowIconPx = in.appsRowEnabledPref
+                ? rowIconPx(iconBaselinePx, out.iconScale, in.appsRowAlone, density)
+                : hiddenRowIconPx(in, density);
             // The band a lying-down apps row claims, whichever edge it lies on: the icon and the
             // air either side of it, and nothing else. The dock's own height is that band while
             // the row is the dock's; a row standing along the top is the same band in another
@@ -395,6 +531,53 @@ public final class DockLayoutPolicy {
         out.appsRowBandHintPx = Math.max(0, out.appsRowBandPx - airPx - tickSideAirPx);
         out.appsBarHeightHintPx = appsRowEnabled ? out.appsRowBandHintPx : 0;
 
+        // The Search field, under the apps row on the same slab, with any design (#96). Its well keeps the air
+        // over the icons from the slab's lower edge, so the slab's outer padding is equal top and
+        // bottom; the row's own air under the icons is the gap between the icons and the well.
+        // Only on the dock's own row: a row on another edge, or no row, carries no field.
+        float reveal = Float.isNaN(in.promptFieldReveal)
+            ? 0f : Math.max(0f, Math.min(1f, in.promptFieldReveal));
+        // Under Lens beads the row keeps its beads and the field stands in a glass capsule of its
+        // own under them (#84): as wide as the apps row, and the capsule's air over it, so the
+        // capsule stands the beads' own gap under them (LensBeadGeometry.CAPSULE_TOP_PAD_DP).
+        // The dock is that much taller than the slab's with the field, and nothing else moves.
+        if (appsRowEnabled && reveal > 0f && out.appsBarHeightPx > 0) {
+            boolean beads = in.surface.beads;
+            int fieldPx = promptFieldHeightPx(density);
+            int padPx = promptFieldBottomPadPx(airPx, density);
+            int topPadPx = beads ? LensBeadGeometry.capsuleTopPadPx(density) : 0;
+            int fullPx = topPadPx + fieldPx + padPx;
+            out.promptFieldFullBandPx = fullPx;
+            out.promptFieldBandPx = Math.round(fullPx * reveal);
+            out.promptFieldHeightPx = Math.min(out.promptFieldBandPx, Math.round(fieldPx * reveal));
+            out.promptFieldTopPadPx = Math.min(out.promptFieldBandPx - out.promptFieldHeightPx,
+                Math.round(topPadPx * reveal));
+            out.promptFieldBottomPadPx = out.promptFieldBandPx - out.promptFieldHeightPx
+                - out.promptFieldTopPadPx;
+            out.promptFieldWellGapPx = airPx;
+            out.promptFieldSideInsetPx = beads
+                ? appsRowSideInsetPx(capsule ? out.capsuleContentInsetPx : out.horizontalInsetPx,
+                    true, density)
+                : out.horizontalInsetPx + promptFieldSideInsetPx(density);
+        }
+
+        // The Wall strip's first row, over the apps row on the same slab. The slab's padding over
+        // it is the air under the icons, so the outer padding is equal top and bottom; the row's
+        // own air over the icons is the gap between the tiles and the icons. The page dashes keep
+        // standing above the slab (their band leads the host). Only on the dock's own row.
+        float wallReveal = Float.isNaN(in.wallStripReveal)
+            ? 0f : Math.max(0f, Math.min(1f, in.wallStripReveal));
+        if (appsRowEnabled && wallReveal > 0f && out.appsBarHeightPx > 0) {
+            int rowPx = wallStripHeightPx(density, in.wallStripHeightDp);
+            int fullPx = rowPx + airPx;
+            out.wallStripFullBandPx = fullPx;
+            out.wallStripBandPx = Math.round(fullPx * wallReveal);
+            out.wallStripHeightPx = Math.min(out.wallStripBandPx, Math.round(rowPx * wallReveal));
+            out.wallStripTopPadPx = out.wallStripBandPx - out.wallStripHeightPx;
+            out.wallStripSideInsetPx = out.horizontalInsetPx + wallStripSideInsetPx(density);
+            out.wallStripWellGapPx = airPx;
+        }
+
         // The apps rail.
         boolean railActive = in.appsOnRail && in.preferencesAvailable && in.appsRowEnabledPref;
         out.railActive = railActive;
@@ -419,6 +602,35 @@ public final class DockLayoutPolicy {
         out.railIconSizePx = railIconSizePx(density);
         out.railIconSpacingPx = railIconSpacingPx(density);
         out.railSlotLengthPx = railSlotLengthPx(density);
+        // The rail is a lone row standing up: its own air on all four sides.
+        out.railAirPx = loneAirPx;
+
+        // The width the row shares between its slots, and the icon one slot draws. On the dock the
+        // row stands in by its design's side inset (Lens beads narrow it); along the top by the
+        // plain one. A rail's slot is the rail's own icon. A row this layout puts away has the
+        // slot of the half that shows it, so it comes back at the size it settles at.
+        int contentInsetPx = capsule ? out.capsuleContentInsetPx : out.horizontalInsetPx;
+        out.appsRowEdgeInsetPx = appsRowSideInsetPx(contentInsetPx,
+            in.surface.beads && !in.appsRowOnEdge, density);
+        // Peek glass narrows the row to the card, so the end icons' lower halves and their
+        // reflections stand on it. The card is the same under either Style (DockPlacement), so
+        // Floating takes the card's inset too wherever the capsule's own would be narrower.
+        if (in.surface.peek && !in.appsRowOnEdge && in.rowWidthPx > 0) {
+            out.peekRowSideInsetPx = PeekGlassGeometry.rowSideInsetPx(in.rowWidthPx, density);
+            out.appsRowEdgeInsetPx = Math.max(out.appsRowEdgeInsetPx, out.peekRowSideInsetPx);
+        }
+        if (railActive) {
+            out.slotIconPx = out.railIconSizePx;
+        } else if (in.preferencesAvailable && !in.appsRowEnabledPref
+            && in.hiddenRowSlotIconPx >= 0) {
+            out.appsRowUsableWidthPx = Math.max(0, in.hiddenRowUsableWidthPx);
+            out.slotIconPx = in.hiddenRowSlotIconPx;
+        } else {
+            out.appsRowUsableWidthPx = in.rowWidthPx > 0
+                ? Math.max(0, in.rowWidthPx - 2 * out.appsRowEdgeInsetPx) : 0;
+            out.slotIconPx = slotIconPx(out.appsRowIconPx, out.appsRowUsableWidthPx,
+                in.slotCount, in.surface.beads, density);
+        }
 
         // The bar's own geometry owns this number in one place, for every edge and both styles;
         // the dock only asks what a compact row costs, because the lift it gives a bottom bar is
@@ -430,11 +642,101 @@ public final class DockLayoutPolicy {
     }
 
     /**
+     * Whether the pinned-apps row lying along the bottom stands alone on the dock's sheet, read
+     * off the resolved bottom stack ({@code EdgeStackPolicy.stack(layout, BOTTOM)}): no band
+     * beside it on the sheet but the extra keys.
+     *
+     * <p>The extra keys do not count. They are the Workspace's own and fold in and out with the
+     * swipe (ADR 0009), so counting them made the row a shared one on one half and a lone one on
+     * the other, and its icons shrank as the keys folded in. The row keeps the band it has
+     * without them — the same icon and the same air — and the dock grows by the keys' row
+     * instead.
+     */
+    public static boolean appsRowAloneOnDock(List<Element> bottomStack) {
+        boolean apps = false;
+        for (Element band : AccessoryStackLayoutPolicy.plankBands(bottomStack)) {
+            if (band == Element.APPS) apps = true;
+            else if (band != Element.EXTRA_KEYS) return false;
+        }
+        return apps;
+    }
+
+    /**
+     * Whether the page dashes stand above the slab rather than in the icons' top air: the style
+     * asks for it ({@link DockSurfaceSpec#dashesAboveSlab}) and the dashes stand over the icons
+     * anyway, which is the apps row lying on the dock as the band next to the canvas with its
+     * ticks shown ({@link PageTickStrip#ticksLeadRow}). Anywhere else the arrangement puts the
+     * ticks under the icons or beside another band, and the row keeps the plain layout.
+     */
+    public static boolean dashesAboveSlab(DockInputs in) {
+        return in.surface.dashesAboveSlab && in.appsRowPageStripShown && in.appsRowNextToCanvas
+            && !in.appsRowOnEdge;
+    }
+
+    /**
      * {@link #LONE_ROW_AIR_DP} in pixels: the air a pinned-apps row standing by itself keeps around
      * its icons and its ticks — above and below a row lying down, left and right of a rail.
      */
     public static int loneRowAirPx(float density) {
         return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
+    }
+
+    /** The Wall strip's first row view at its shipped height, px. */
+    public static int wallStripHeightPx(float density) {
+        return Math.round(Math.max(0f, density) * WALL_STRIP_HEIGHT_DP);
+    }
+
+    /**
+     * The row at {@code heightDp}, the layout's own height, px: the shipped one for zero or less,
+     * otherwise held to the row's range.
+     */
+    public static int wallStripHeightPx(float density, int heightDp) {
+        if (heightDp <= 0) return wallStripHeightPx(density);
+        return Math.round(Math.max(0f, density) * WallStripRowPolicy.clampHeightDp(heightDp));
+    }
+
+    /** {@link #WALL_STRIP_SIDE_INSET_DP} in px. */
+    public static int wallStripSideInsetPx(float density) {
+        return Math.round(Math.max(0f, density) * WALL_STRIP_SIDE_INSET_DP);
+    }
+
+    /** The Search field's view, px: its whole tap target. */
+    public static int promptFieldHeightPx(float density) {
+        return Math.round(Math.max(0f, density) * PROMPT_FIELD_HEIGHT_DP);
+    }
+
+    /** How far the field's well stands inside the field view, above and below it, px. */
+    public static int promptFieldWellInsetPx(float density) {
+        float d = Math.max(0f, density);
+        return Math.round(d * (PROMPT_FIELD_HEIGHT_DP - PROMPT_FIELD_WELL_DP) / 2f);
+    }
+
+    /**
+     * The slab's padding under the field view, px: what the air over the icons ({@code airPx})
+     * needs on top of the field's own inset around its well, so the well stands as far from the
+     * slab's lower edge as the icons do from its upper one.
+     */
+    public static int promptFieldBottomPadPx(int airPx, float density) {
+        return Math.max(0, airPx - promptFieldWellInsetPx(density));
+    }
+
+    /**
+     * The dock's apps row's side inset from the screen edge, on each side, for the content inset
+     * the row's style gives ({@code contentInsetPx}: the capsule's content inset, or the slab's
+     * margin docked). The row reads with more side padding than the A–Z row because its icons
+     * are space-between (half a slot of empty space at each edge), so the inset is trimmed ~18%
+     * to line the icons up with the letters' span; Lens beads narrow the slots a little more
+     * ({@link LensBeadGeometry#ROW_SIDE_INSET_DP}) so the end beads stand clear of the screen's
+     * edges.
+     */
+    public static int appsRowSideInsetPx(int contentInsetPx, boolean beads, float density) {
+        return Math.round(contentInsetPx * 0.82f)
+            + (beads ? LensBeadGeometry.rowSideInsetPx(density) : 0);
+    }
+
+    /** {@link #PROMPT_FIELD_SIDE_INSET_DP} in px. */
+    public static int promptFieldSideInsetPx(float density) {
+        return Math.round(Math.max(0f, density) * PROMPT_FIELD_SIDE_INSET_DP);
     }
 
     /**
@@ -512,6 +814,17 @@ public final class DockLayoutPolicy {
     }
 
     /**
+     * The icon of a pinned-apps row this place's layout puts away: exactly the one the half that
+     * shows it draws there at rest ({@link #iconPxForScale}, from {@link
+     * DockInputs#hiddenRowAsShown}), or none while no half shows the row.
+     */
+    private static int hiddenRowIconPx(DockInputs in, float density) {
+        if (Float.isNaN(in.hiddenRowBarHeightScale)) return 0;
+        return iconPxForScale(in.hiddenRowCapsule, in.hiddenRowAlone,
+            in.hiddenRowBarHeightScale, in.baseToolbarHeightPx, density);
+    }
+
+    /**
      * One pinned icon in the form that lies down: a fill ratio of the row's content box, floored
      * at a thumb-sized 20dp and never taller than the box it is centred in.
      *
@@ -542,6 +855,20 @@ public final class DockLayoutPolicy {
             return iconPx;
         int slotPx = rowWidthPx / Math.max(1, slotCount);
         return Math.max(1, Math.min(iconPx, slotPx - loneRowAirPx(density)));
+    }
+
+    /**
+     * The icon one slot of a row lying down draws: {@code iconPx} held to its slot
+     * ({@link #slotFitIconPx}) and, under Lens beads, to what a bead covers in it
+     * ({@link LensBeadGeometry#fitIconPx}). A row with no width yet is not held at all.
+     */
+    public static int slotIconPx(int iconPx, int usableWidthPx, int slotCount, boolean beads,
+                                 float density) {
+        int slots = Math.max(1, slotCount);
+        int fit = slotFitIconPx(iconPx, usableWidthPx, slots, density);
+        if (beads && usableWidthPx > 0)
+            fit = LensBeadGeometry.fitIconPx(fit, usableWidthPx / (float) slots, density);
+        return fit;
     }
 
     /**
@@ -589,6 +916,67 @@ public final class DockLayoutPolicy {
      */
     public static int maxRowBandPx(float density) {
         return 2 * railSlotLengthPx(density);
+    }
+
+    /**
+     * The length of a rail holding {@code pinCount} pins and, after them, the
+     * {@code mostUsedCount} apps of the most-used page: one slot each, end to end.
+     */
+    public static int railContentLengthPx(int pinCount, int mostUsedCount, int slotLengthPx) {
+        return (Math.max(0, pinCount) + Math.max(0, mostUsedCount)) * Math.max(0, slotLengthPx);
+    }
+
+    /**
+     * How a rail stands in the band its side stack leaves it (the stack's length less its own
+     * padding, which is where the side stack already ends above a bottom stack it overlays, and
+     * less the rail's own air). Every pin stands in one column, the most-used apps after them;
+     * the band shows as many whole slots as it holds and the rest are reached by scrolling.
+     *
+     * <p>A rail that scrolls stands only those whole slots long, so at rest no icon is cut at the
+     * end of it; the band's leftover, under one slot, stays empty past its end. A rail that fits
+     * keeps the whole band. Either way nothing it draws reaches past the band, which is what put
+     * an icon under the A&#8211;Z card when the column was paged by a length it had outgrown.
+     *
+     * @param bandLengthPx    the band along the side, the rail's own air already taken off
+     * @param contentLengthPx the column's whole length, {@link #railContentLengthPx}
+     * @param slotLengthPx    one slot's pitch, {@link #railSlotLengthPx}
+     */
+    @NonNull
+    public static RailFit railFit(int bandLengthPx, int contentLengthPx, int slotLengthPx) {
+        int band = Math.max(0, bandLengthPx);
+        int content = Math.max(0, contentLengthPx);
+        int slot = Math.max(0, slotLengthPx);
+        boolean scrolls = content > band;
+        int bandSlots = slot == 0 ? 0 : band / slot;
+        int contentSlots = slot == 0 ? 0 : (content + slot - 1) / slot;
+        int visible = Math.min(bandSlots, contentSlots);
+        // A band shorter than one slot still shows what it can of the first, and scrolls.
+        int viewport = scrolls && bandSlots > 0 ? bandSlots * slot : band;
+        return new RailFit(content, visible, viewport, scrolls);
+    }
+
+    /** {@link #railFit}'s answer. */
+    public static final class RailFit {
+        /** The column's whole length: one slot per pin and per most-used app. */
+        public final int contentLengthPx;
+        /** The whole slots on show at rest; never more than the column holds. */
+        public final int visibleSlots;
+        /** How long the rail's scroll stands: whole slots while it scrolls, else the band. */
+        public final int viewportLengthPx;
+        /** Whether the column is longer than the band, so the rest is reached by scrolling. */
+        public final boolean scrolls;
+
+        RailFit(int contentLengthPx, int visibleSlots, int viewportLengthPx, boolean scrolls) {
+            this.contentLengthPx = contentLengthPx;
+            this.visibleSlots = visibleSlots;
+            this.viewportLengthPx = viewportLengthPx;
+            this.scrolls = scrolls;
+        }
+
+        /** How far the column travels under the scroll; 0 when it fits. */
+        public int scrollRangePx() {
+            return Math.max(0, contentLengthPx - viewportLengthPx);
+        }
     }
 
     /**

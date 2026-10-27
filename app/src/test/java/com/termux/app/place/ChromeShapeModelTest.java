@@ -814,4 +814,36 @@ public class ChromeShapeModelTest {
             }
         }
     }
+
+    // ---------------------------------------------------------------- a lone band
+
+    /** The extra keys alone on the bottom edge, over or under the keyboard. */
+    private static PlaceLayout loneKeys(boolean underKeyboard, boolean keyboardShown) {
+        return layout(GONE, GONE, GONE, new Slot(false, Edge.BOTTOM, 0, underKeyboard),
+            KeyboardForm.DOCKED, keyboardShown);
+    }
+
+    @Test
+    public void floatingLoneExtraKeysAreAWholeCardWithTheKeyboardDown() {
+        for (boolean under : new boolean[] {false, true}) {
+            ChromeShape shape = shape(loneKeys(under, false), LayoutStyle.FLOATING);
+            Piece keys = piece(shape, PieceId.EXTRA_KEYS);
+            for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT}) {
+                assertEquals("under=" + under + " " + edge, EdgeKind.RIM, keys.kind(edge));
+                assertTrue("under=" + under + " " + edge, keys.drawsRim(edge));
+            }
+            assertCorners(keys, CORNERS, CORNERS, CORNERS, CORNERS);
+        }
+    }
+
+    @Test
+    public void floatingLoneExtraKeysUnderTheRaisedKeyboardAreTheirOwnCard() {
+        ChromeShape shape = shape(loneKeys(true, true), LayoutStyle.FLOATING);
+        Piece keys = piece(shape, PieceId.EXTRA_KEYS);
+        Piece keyboard = piece(shape, PieceId.KEYBOARD);
+        assertNotEquals(keyboard.groupId, keys.groupId);
+        assertTrue(keys.box.top >= keyboard.box.bottom);
+        for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT})
+            assertTrue(edge.toString(), keys.drawsRim(edge));
+    }
 }

@@ -171,10 +171,10 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
-        /** How the launcher's own widgets are drawn: {@code tonal} or {@code pane}. */
+        /** The numerals of the launcher's own widgets: {@code sans} or {@code mono}. */
         public static final String KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE =
             "app_launcher_builtin_widget_style";
-        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "tonal";
+        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "sans";
 
         /** The widget pane's grid: how many columns across and rows down a page has. */
         public static final String KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS = "app_launcher_widget_grid_columns";
@@ -194,14 +194,10 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_APP_LAUNCHER_WIDGET_GRID_ROWS = 12;
 
         /**
-         * Defines the key for the embedded Linux display: the wall's Display page, the
-         * {@code termux-x11} command the launcher writes into the prefix, and the display
-         * settings. Off until the user asks for it — a home screen that never wants a display
-         * should pay nothing for one.
+         * The retired Display switch: the display comes up on demand now (ADR 0008). Removed by
+         * {@code WallReworkMigration}; nothing reads it.
          */
         public static final String KEY_X11_DISPLAY_ENABLED = "x11_display_enabled";
-
-        public static final boolean DEFAULT_X11_DISPLAY_ENABLED = false;
 
         /** Command line the "Start display" button and the start-up opt-in run. */
         public static final String KEY_X11_DISPLAY_COMMAND = "x11_display_command";
@@ -254,6 +250,19 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_DRAWER_APPS = true;
 
+        /**
+         * The launcher's own PulseAudio server for every terminal session, Linux app and proot
+         * distro, started when something first may want sound.
+         */
+        public static final String KEY_LAUNCHER_SOUND = "launcher_sound";
+
+        public static final boolean DEFAULT_LAUNCHER_SOUND = true;
+
+        /** Mirror Linux media players into Android's media controls, and hold audio focus. */
+        public static final String KEY_LAUNCHER_MEDIA_CONTROLS = "launcher_media_controls";
+
+        public static final boolean DEFAULT_LAUNCHER_MEDIA_CONTROLS = true;
+
         /** The window manager the launcher starts with the server, so windows open full size. Empty for none. */
         public static final String KEY_X11_WINDOW_MANAGER = "x11_window_manager";
 
@@ -291,16 +300,51 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
 
-        /** The place the pane wall last rested on; the home screen comes back to it. */
+        /**
+         * The place the pane wall last rested on; read by nothing since Start in (ADR 0008), kept
+         * so {@code WallReworkMigration} can remove it.
+         */
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
 
+        /** The version {@code WallReworkMigration} last brought this install to; absent is 0. */
+        public static final String KEY_WALL_MIGRATION_VERSION = "wall_migration_version";
+
         /**
-         * Defines the key for the usage mode the user picked: the terminal alone, the terminal
-         * with the home screen, or both with the Linux display. Stored rather than derived from
-         * the surface switches: the surfaces stay individually settable after a mode is picked,
-         * and a derived mode would jump between presets the moment one is flipped. The value
-         * {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older two-way switch wrote;
-         * it is read once and mapped by {@code LauncherUseCaseMode}, never written again.
+         * Start in: the page a cold start shows, Home, the Workspace (ADR 0008) or the display
+         * window, which only holds while the display starts with the launcher.
+         */
+        public static final String KEY_LAUNCHER_START_IN = "app_launcher_start_in";
+        public static final String LAUNCHER_START_IN_HOME = "home";
+        public static final String LAUNCHER_START_IN_WORKSPACE = "workspace";
+        public static final String LAUNCHER_START_IN_DISPLAY = "display";
+        public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
+
+        /**
+         * Use as: the launcher is the phone's Home screen ({@code home}: Home pages, widgets and
+         * the Workspace) or the terminal only ({@code terminal}: no Home page, no Home settings,
+         * no Home in Start in). Asked on the welcome sheet's first page; an install that never
+         * answered is Home screen. Independent of whether the app is the system's home app.
+         */
+        public static final String KEY_USE_AS = "use_as";
+        public static final String USE_AS_HOME = "home";
+        public static final String USE_AS_TERMINAL = "terminal";
+        public static final String DEFAULT_USE_AS = USE_AS_HOME;
+
+        /**
+         * The palette gesture on Home: the keyboard swipe up from a Home page's bottom edge opens
+         * the command palette with the keyboard ({@code swipe_up}, the default), or nothing
+         * ({@code off}).
+         */
+        public static final String KEY_HOME_PALETTE_GESTURE = "app_launcher_home_palette_gesture";
+        public static final String HOME_PALETTE_GESTURE_SWIPE_UP = "swipe_up";
+        public static final String HOME_PALETTE_GESTURE_OFF = "off";
+        public static final String DEFAULT_HOME_PALETTE_GESTURE = HOME_PALETTE_GESTURE_SWIPE_UP;
+
+        /**
+         * The retired usage mode: the terminal alone, the terminal with the home screen, or both
+         * with the Linux display; {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older
+         * two-way switch wrote. Read once by {@code WallReworkMigration}, which maps it to Start in
+         * and removes it; nothing else reads or writes it (ADR 0008).
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_MODE = "app_launcher_use_case_mode";
 
@@ -308,18 +352,13 @@ public final class TermuxPreferenceConstants {
         public static final String APP_LAUNCHER_USE_CASE_MODE_TERMINAL = "terminal";
         public static final String APP_LAUNCHER_USE_CASE_MODE_HOME = "home";
         public static final String APP_LAUNCHER_USE_CASE_MODE_DISPLAY = "display";
-        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_MODE =
-            APP_LAUNCHER_USE_CASE_MODE_HOME;
 
         /**
-         * Defines the key holding the launcher surface states captured when the user switched to
-         * terminal-only mode, so switching back restores the layout they had. Encoded by
-         * {@code LauncherUseCaseMode}; an empty value means nothing was captured yet.
+         * The retired usage mode's snapshot of the home surfaces, taken on the way into the
+         * terminal alone. Removed by {@code WallReworkMigration}; nothing reads it.
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT =
             "app_launcher_use_case_snapshot";
-
-        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT = "";
 
         /**
          * Defines the key for showing active-notification dots on apps bar icons.
@@ -418,18 +457,27 @@ public final class TermuxPreferenceConstants {
         /** Set once the Style migration has renamed the style values and dropped the retired keys. */
         public static final String KEY_LAYOUT_STYLE_MIGRATED = "layout_style_migrated";
 
+        /**
+         * Home's own Style, Corners and Margin (ADR 0008): what the Home pages' chrome wears, apart
+         * from the Workspace's {@link #KEY_APP_LAUNCHER_DOCK_STYLE},
+         * {@link #KEY_SURFACE_BASE_CORNER_RADIUS} and {@link #KEY_SURFACE_BASE_SIDE_GAP}, in the same
+         * stored forms. While one is unset it reads the Workspace's value, so an upgrade changes
+         * nothing on screen; the first write to it pins it.
+         */
+        public static final String KEY_HOME_LAYOUT_STYLE = "home_layout_style";
+        public static final String KEY_HOME_SURFACE_CORNER_RADIUS = "home_surface_corner_radius";
+        public static final String KEY_HOME_SURFACE_SIDE_GAP = "home_surface_side_gap";
+
         /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
         public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =
             "app_launcher_dock_corner_radius";
         public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
         public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
 
-        /**
-         * Defines the key for enabling the full-screen app launcher drawer.
-         */
-        public static final String KEY_APP_LAUNCHER_DRAWER_ENABLED = "app_launcher_drawer_enabled";
+        /** Whether swiping up on a badged dock icon opens its quick reply. */
+        public static final String KEY_APP_LAUNCHER_QUICK_REPLY_SWIPE = "app_launcher_quick_reply_swipe";
 
-        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_ENABLED = true;
+        public static final boolean DEFAULT_APP_LAUNCHER_QUICK_REPLY_SWIPE = true;
 
         public static final String KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             "app_launcher_drawer_view_type";
@@ -550,20 +598,14 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_WALLPAPER_BACKDROP_DIM = 0;
 
         /**
-         * Extra magnification (percent) applied to the wallpaper copy the glass surfaces blur, so
-         * it lands where the system draws the wallpaper behind the app. 100 means no compensation.
-         *
-         * <p>It is a setting rather than a constant because the magnification a ROM applies at
-         * composite time turned out to depend on the wallpaper: a stored 1328x2654 wallpaper needed
-         * 103 on Nothing OS, a 1400x3100 one about 108. The shipped defaults are the measured
-         * per-manufacturer starting points, resolved by
-         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}.
+         * Magnification (percent) of the wallpaper copy the glass surfaces blur while the system
+         * draws the wallpaper, so it lands where the ROM composites it. Not a setting: the ROM's
+         * measured zoom, resolved by
+         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}. Nothing OS
+         * measured 103 for one wallpaper and about 108 for another; 103 is the closer common case.
          */
-        public static final String KEY_WALLPAPER_RENDER_ZOOM = "wallpaper_render_zoom";
         public static final int DEFAULT_WALLPAPER_RENDER_ZOOM = 100;
         public static final int DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS = 103;
-        public static final int MIN_WALLPAPER_RENDER_ZOOM = 90;
-        public static final int MAX_WALLPAPER_RENDER_ZOOM = 120;
 
         /**
          * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
@@ -618,6 +660,45 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
 
         /**
+         * Whether the status bar shows a small bell, with the count, while notifications are
+         * waiting: the same notifications the dock badges its icons with. Off by default.
+         */
+        public static final String KEY_STATUS_WIDGET_NOTIFICATIONS = "status_widget_notifications";
+        public static final boolean DEFAULT_STATUS_WIDGET_NOTIFICATIONS = false;
+
+        /**
+         * Whether the status bar's clock draws its seconds (the bar's own clock, the clock the Wall
+         * strip borrows from it, and the editor's preview of them). On by default: the bar has
+         * always drawn them.
+         */
+        public static final String KEY_STATUS_CLOCK_SECONDS = "status_clock_seconds";
+        public static final boolean DEFAULT_STATUS_CLOCK_SECONDS = true;
+
+        /**
+         * Whose box the status row leaves its camera gap for when it shares the camera's band
+         * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
+         * {@link #STATUS_BAR_CUTOUT_CUSTOM} the centre and width below, {@link #STATUS_BAR_CUTOUT_OFF}
+         * leaves none.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_MODE = "status_bar_cutout_mode";
+        public static final String STATUS_BAR_CUTOUT_AUTO = "auto";
+        public static final String STATUS_BAR_CUTOUT_CUSTOM = "custom";
+        public static final String STATUS_BAR_CUTOUT_OFF = "off";
+        public static final String DEFAULT_STATUS_BAR_CUTOUT_MODE = STATUS_BAR_CUTOUT_AUTO;
+
+        /** A custom camera gap's centre, in dp from the screen's horizontal centre (left negative). */
+        public static final String KEY_STATUS_BAR_CUTOUT_CENTER = "status_bar_cutout_center";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_CENTER = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_CENTER = -200;
+        public static final int MAX_STATUS_BAR_CUTOUT_CENTER = 200;
+
+        /** A custom camera gap's full width, in dp. */
+        public static final String KEY_STATUS_BAR_CUTOUT_WIDTH = "status_bar_cutout_width";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_WIDTH = 32;
+        public static final int MIN_STATUS_BAR_CUTOUT_WIDTH = 0;
+        public static final int MAX_STATUS_BAR_CUTOUT_WIDTH = 160;
+
+        /**
          * The label of a place picked in Settings ("Salmiya, Hawalli") that the weather is fetched
          * for instead of the device's location. Empty means the device's last known location, which
          * is what needs the location permission; a place picked here never does.
@@ -637,19 +718,11 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
 
-        /**
-         * Paint the empty band between a pane's text grid and its rounded border with the
-         * background colour of the nearest edge cell (Ghostty's {@code window-padding-color =
-         * extend}), so a full-screen app that paints its own background reaches the pane's border.
-         */
-        public static final String KEY_TERMINAL_PADDING_FILL = "terminal_padding_fill";
-        public static final boolean DEFAULT_TERMINAL_PADDING_FILL = true;
-
         /** Cursor trail style id (default, motion_blur, railgun, torpedo, pixiedust, comet). */
         public static final String KEY_TERMINAL_CURSOR_TRAIL_STYLE = "terminal_cursor_trail_style";
         public static final String DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE = "default";
 
-        /** Retro terminal effect id (none, crt, crt_green, crt_amber, tft). Global, API 33+. */
+        /** Retro terminal effect id (none, crt, crt_green, crt_amber, crt_material, tft). Global, API 33+. */
         public static final String KEY_TERMINAL_RETRO_EFFECT = "terminal_retro_effect";
         public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
 
@@ -1129,6 +1202,16 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_KEY_OPACITY = 100;
 
         /**
+         * Defines whether the Appearance editor moves the keyboard's key opacity and its
+         * background opacity together: a move of either slider moves the other by the same
+         * amount. Unlinking leaves both values where they are.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_OPACITY_LINKED =
+            "in_app_keyboard_opacity_linked";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_OPACITY_LINKED = false;
+
+        /**
          * Defines the opacity in percent of the keyboard's own background surface — the glass
          * tint, or the color-scheme background override when one is set. Independent of the key
          * caps ({@link #KEY_IN_APP_KEYBOARD_KEY_OPACITY}); 100 keeps the surface as the theme
@@ -1325,6 +1408,14 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
 
         /**
+         * Widgets on glass: whether the built-in widgets wear the Look's glass (Base's values).
+         * A widget's own Glass choice (on or off) still overrides it. On by default, for existing
+         * installs too: the key is deliberately not pinned in adoptShippedSurfaceDefaults.
+         */
+        public static final String KEY_WIDGETS_ON_GLASS = "widgets_on_glass";
+        public static final boolean DEFAULT_VALUE_WIDGETS_ON_GLASS = true;
+
+        /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
          * When off, nothing appears on its own: the {@code ?} cap lights up under the prefix and
          * pressing it opens the full table on demand.
@@ -1344,12 +1435,24 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_AGENT_PANES_ENABLED = "pane_agent_api";
         public static final boolean DEFAULT_AGENT_PANES_ENABLED = true;
 
+        /**
+         * Whether a sideways swipe on a terminal window's text pages the wall's row, as its
+         * border does (TerminalBodySwipe in the app).
+         */
+        public static final String KEY_TERMINAL_BODY_SWIPE = "terminal_body_swipe";
+        public static final boolean DEFAULT_TERMINAL_BODY_SWIPE = true;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 
         public static final String TOP_PANE_CLOCK_STYLE_FLIP = "flip";
         public static final String TOP_PANE_CLOCK_STYLE_LCD = "lcd";
         public static final String TOP_PANE_CLOCK_STYLE_MINIMAL = "minimal";
+        /**
+         * Minimal in a medium weight, for busy wallpapers (#111): set through Minimal's Weight row
+         * in the Look's clock picker, never a face row of its own.
+         */
+        public static final String TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM = "minimal_medium";
         public static final String TOP_PANE_CLOCK_STYLE_LED = "led";
         public static final String TOP_PANE_CLOCK_STYLE_TAPE = "tape";
         public static final String TOP_PANE_CLOCK_STYLE_SLAB = "slab";
@@ -1567,6 +1670,19 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_SURFACE_GLASS_VIBRANCY = 150;
 
         /**
+         * Text size: one multiplier, in percent, on the type the launcher draws itself. The
+         * terminal font, the keyboard's key legends and the chrome labels are each drawn at their
+         * own size times this, so each surface's own size (the terminal font and pane zoom, Home's
+         * label size) stays an offset from the shared one. Never move the default: 100 is what
+         * every install that has not touched the slider reads, so it keeps exactly the sizes it
+         * had; ship another size by writing it for fresh installs only, as the Clear look is.
+         */
+        public static final String KEY_TEXT_SIZE_PERCENT = "text_size_percent";
+        public static final int DEFAULT_TEXT_SIZE_PERCENT = 100;
+        public static final int MIN_TEXT_SIZE_PERCENT = 80;
+        public static final int MAX_TEXT_SIZE_PERCENT = 150;
+
+        /**
          * Where the Look editor's Glass slider was left, 0 to 100: Base's under this key, each
          * surface's under the key plus {@code _} and the surface's name. Blur and grain stay the
          * stored glass; this only says which of the positions that write the same pair the slider
@@ -1701,6 +1817,38 @@ public final class TermuxPreferenceConstants {
         public static final String VALUE_WALLPAPER_LOCK_SAME_AS_HOME = "same_as_home";
         public static final String VALUE_WALLPAPER_LOCK_PHOTO = "photo";
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
+
+        /**
+         * The launcher wears a picture of its own: the managed exact copy, set from the picker
+         * while the launcher was not the home app, which Android's home and lock screens never got.
+         * While it is set (and the copy is on disk) the launcher draws that copy itself and the
+         * glass treats it as the managed wallpaper, whatever Android shows.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY = "wallpaper_app_only";
+        public static final boolean DEFAULT_VALUE_WALLPAPER_APP_ONLY = false;
+
+        /**
+         * The Material seed colour taken from the app-only picture when it was set, so the theme
+         * can wear the picture's colours without decoding it at activity creation. 0 means none
+         * could be taken. Only meaningful while {@link #KEY_WALLPAPER_APP_ONLY_SEED_STAMP} matches
+         * the exact copy on disk.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY_SEED = "wallpaper_app_only_seed";
+        public static final int DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED = 0;
+
+        /**
+         * The exact copy the seed above was taken from, as its {@code lastModified()} and
+         * {@code length()} folded together; 0 when no seed was ever taken.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY_SEED_STAMP = "wallpaper_app_only_seed_stamp";
+        public static final long DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED_STAMP = 0L;
+
+        /**
+         * The picker's "Also set as phone wallpaper", remembered. Offered only while the launcher
+         * is not the home app; ticked, a pick goes to Android's wallpapers as well.
+         */
+        public static final String KEY_WALLPAPER_ALSO_SET_PHONE = "wallpaper_also_set_phone";
+        public static final boolean DEFAULT_VALUE_WALLPAPER_ALSO_SET_PHONE = false;
         
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.
@@ -1708,6 +1856,15 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_DYNAMIC_COLORS_ENABLED = "terminal_dynamic_colors_enabled";
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
+
+        /**
+         * Whether a glass terminal pane's wallpaper lightness is evened out (ADR 0014, wave 2).
+         * Off restores the mean-ground drawing for before/after shots; removed one release after
+         * wave 2 ships.
+         */
+        public static final String KEY_GLASS_EVEN_OUT_ENABLED = "glass_even_out_enabled";
+
+        public static final boolean DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED = true;
 
         /*
          * There is no key for the launcher chrome's colour source any more. It was a second name
@@ -1830,6 +1987,10 @@ public final class TermuxPreferenceConstants {
         /** How many of the current card's gestures have been observed. */
         public static final String KEY_FIRST_BOOT_TOUR_STEP_STAGE = "first_boot_tour_step_stage";
         public static final int DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE = 0;
+
+        /** Whether the Appearance editor's "theme, colours and glass" hint has been dismissed. */
+        public static final String KEY_APPEARANCE_THEME_HINT_SEEN = "first_run_appearance_theme_hint_seen";
+        public static final boolean DEFAULT_APPEARANCE_THEME_HINT_SEEN = false;
 
         /** Whether the user skipped past a card in the run they are on. */
         public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";

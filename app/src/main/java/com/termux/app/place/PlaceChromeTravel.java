@@ -33,10 +33,21 @@ public final class PlaceChromeTravel {
         public final boolean keyboardUp;
         /** Whether the place is in minimal mode, which puts the dock and the keyboard away. */
         public final boolean minimal;
+        /**
+         * Whether the page's layout has a status bar at all: a window's does, a Home page's never
+         * ({@link com.termux.app.chrome.Dress#wears}), so the bar's content fades out on the way
+         * to Home and arrives with the window on the way back.
+         */
+        public final boolean statusShown;
 
         public Rest(boolean keyboardUp, boolean minimal) {
+            this(keyboardUp, minimal, true);
+        }
+
+        public Rest(boolean keyboardUp, boolean minimal, boolean statusShown) {
             this.keyboardUp = keyboardUp;
             this.minimal = minimal;
+            this.statusShown = statusShown;
         }
 
         /** How much of the keyboard shows: all of it or none, at rest. */
@@ -49,30 +60,46 @@ public final class PlaceChromeTravel {
             return minimal ? 0f : 1f;
         }
 
-        /** How much of the status bar's content shows: none on a minimal place's strip. */
+        /**
+         * How much of the status bar's content shows: none on a minimal place's strip, and none
+         * on a page whose layout has no status bar.
+         */
         public float statusReveal() {
-            return minimal ? 0f : 1f;
+            return minimal || !statusShown ? 0f : 1f;
         }
 
         @Override public boolean equals(Object other) {
             if (this == other) return true;
             if (!(other instanceof Rest)) return false;
             Rest that = (Rest) other;
-            return keyboardUp == that.keyboardUp && minimal == that.minimal;
+            return keyboardUp == that.keyboardUp && minimal == that.minimal
+                && statusShown == that.statusShown;
         }
 
         @Override public int hashCode() {
-            return (keyboardUp ? 1 : 0) * 2 + (minimal ? 1 : 0);
+            return (keyboardUp ? 1 : 0) * 4 + (minimal ? 1 : 0) * 2 + (statusShown ? 1 : 0);
         }
 
         @NonNull @Override public String toString() {
-            return "Rest{keyboard=" + keyboardUp + ", minimal=" + minimal + "}";
+            return "Rest{keyboard=" + keyboardUp + ", minimal=" + minimal
+                + ", status=" + statusShown + "}";
         }
     }
 
     /** Answers what each place looks like at rest. */
     public interface States {
         @NonNull Rest restOf(@NonNull PaneWallPage place);
+    }
+
+    /**
+     * Answers whether the page the wall shows {@code steps} away from the current one (-1 on its
+     * left, +1 on its right) is another page of the current one's own — the Workspace's previous
+     * or next window — rather than the next place on the row. A drag toward a window moves the
+     * wall's offset exactly as a drag toward the next place does, so the offset alone cannot tell
+     * them apart.
+     */
+    public interface InnerPages {
+        boolean showsInnerPage(int steps);
     }
 
     /**
@@ -188,7 +215,41 @@ public final class PlaceChromeTravel {
     public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
                            float offsetPx, int widthPx, @NonNull States states,
                            @Nullable PaneWallPage leaving) {
+        return at(pages, current, offsetPx, widthPx, states, leaving, null);
+    }
+
+    /**
+     * The same, for a wall whose current page may hold pages of its own beside it
+     * ({@code inner}): a slide toward one of those — from one Workspace window to the next or
+     * the previous — stays on {@code current}'s place, so the frame is its rest. Without this the
+     * offset of a slide toward the previous window read as a slide toward the place on the left,
+     * Home, and the dock and the keyboard sank toward Home's state mid-swipe.
+     *
+     * @param inner null for a row of places only
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
+                           float offsetPx, int widthPx, @NonNull States states,
+                           @Nullable PaneWallPage leaving, @Nullable InnerPages inner) {
+        return at(pages, current, offsetPx, offsetPx, widthPx, states, leaving, inner);
+    }
+
+    /**
+     * The same, with the keyboard being put away read at {@code keyboardOffsetPx} rather than at
+     * {@code offsetPx}: a settle the chrome keeps the wall's clock through ({@link ChromeSettle})
+     * moves the two on their own ways, so each lands as the wall does. Everything else, and a
+     * keyboard on the chrome's way, reads {@code offsetPx}.
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
+                           float offsetPx, float keyboardOffsetPx, int widthPx,
+                           @NonNull States states, @Nullable PaneWallPage leaving,
+                           @Nullable InnerPages inner) {
         if (widthPx <= 0 || offsetPx == 0f || Float.isNaN(offsetPx)) {
+            return rest(current, states.restOf(current));
+        }
+        // A positive offset brings in what stands on the left (PaneWallLayout#offsetPx).
+        if (inner != null && inner.showsInnerPage(offsetPx > 0f ? -1 : 1)) {
             return rest(current, states.restOf(current));
         }
         // The screen shows position p, in places relative to current: a page r places away is at
@@ -221,7 +282,10 @@ public final class PlaceChromeTravel {
             if (left.keyboardReveal() > 0f && other.keyboardReveal() <= 0f) {
                 // The committed place's keyboard is being put away: it goes over the first half
                 // of the way out from that place, whichever side of the frame the place is.
-                float hidden = keyboardHideFraction(leaving == from ? fraction : 1f - fraction);
+                // Measured from the same near place as the frame, so both read one pair of places.
+                float way = Float.isNaN(keyboardOffsetPx) || keyboardOffsetPx == offsetPx
+                    ? fraction : clamp01(-keyboardOffsetPx / widthPx - near);
+                float hidden = keyboardHideFraction(leaving == from ? way : 1f - way);
                 keyboardT = leaving == from ? hidden : 1f - hidden;
             }
         }
@@ -254,8 +318,18 @@ public final class PlaceChromeTravel {
      */
     public static float stackTranslationPx(@NonNull Frame frame, int keyboardLaidOutPx,
                                            int dockLaidOutPx) {
-        float keyboard = Math.max(0, keyboardLaidOutPx) * (1f - clamp01(frame.keyboardReveal));
-        float dock = Math.max(0, dockLaidOutPx) * (1f - clamp01(frame.dockReveal));
+        return stackTranslationPx(frame.keyboardReveal, frame.dockReveal, keyboardLaidOutPx,
+            dockLaidOutPx);
+    }
+
+    /**
+     * The same, for reveals the caller has worked out: the dock's across the seam between the
+     * wall's halves is {@link SeamTravel#dockReveal}'s rather than the frame's.
+     */
+    public static float stackTranslationPx(float keyboardReveal, float dockReveal,
+                                           int keyboardLaidOutPx, int dockLaidOutPx) {
+        float keyboard = Math.max(0, keyboardLaidOutPx) * (1f - clamp01(keyboardReveal));
+        float dock = Math.max(0, dockLaidOutPx) * (1f - clamp01(dockReveal));
         return keyboard + dock;
     }
 

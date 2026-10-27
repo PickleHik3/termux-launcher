@@ -24,6 +24,7 @@ import com.termux.app.chrome.GlassMotionGate;
 import com.termux.app.chrome.GlassMotionLight;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.WallpaperParallax;
+import com.termux.app.chrome.scene.LiveSceneFrame;
 
 /**
  * One pane's glass. Draws the shared pre-blurred wallpaper frame through this pane's own rect, the
@@ -52,7 +53,20 @@ import com.termux.app.chrome.WallpaperParallax;
  * grain and the rim, in addition to the user's own terminal opacity — the order
  * {@code GlassSurfaceFactory} gives a chrome band's veil.
  */
-public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdge {
+public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdge, LiveSceneFrame.Surface {
+
+    private static final int NOT_LIVE = -1;
+    /** The live scene frame the paint was last pointed at, or {@link #NOT_LIVE}: the still frame is bound. */
+    private int mLiveGen = NOT_LIVE;
+
+    /** Frame-source counter for the idle audit: paneGlass.motion. */
+    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_MOTION = com.termux.terminal.FrameProbe.source("paneGlass.motion");
+
+    /** Frame-source counter for the idle audit: paneGlass.tilt. */
+    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_TILT = com.termux.terminal.FrameProbe.source("paneGlass.tilt");
+
+    /** Frame-source counter for the idle audit: paneGlass.crossfade. */
+    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_CROSSFADE = com.termux.terminal.FrameProbe.source("paneGlass.crossfade");
 
     private final Paint mFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint mTintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -265,8 +279,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mGrainStrength = grainStrength;
         mRadiusPx = radiusPx;
         mFrostFilter = frostFilter;
-        mFramePaint.setColorFilter(frostFilter);
-        mPreviousFramePaint.setColorFilter(frostFilter);
+        applyFrameFilter(0xFF);
         mFilterKeptBrightness = 0xFF;
         mAimStale = true;   // force the matrix to be rebuilt against the new frame
         invalidate();
@@ -310,17 +323,55 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      *
      * @return true when the veil changed
      */
+    /**
+     * The frame's filter: the pane's even-out matrix ahead of the frost, then lifted by what the
+     * page's sink will take away. Even-out acts on the blurred wallpaper, then frost, then tint,
+     * opacity and grain as before.
+     */
+    private void applyFrameFilter(int keptBrightness) {
+        ColorFilter filter = GlassFilters.undimmed(
+            GlassFilters.withEvenOut(mEvenOut, mFrostFilter), keptBrightness);
+        mFramePaint.setColorFilter(filter);
+        mPreviousFramePaint.setColorFilter(filter);
+    }
+
+    /** The even-out matrix last asked of the veil source, or null. */
+    @Nullable private android.graphics.ColorMatrix mEvenOut;
+
+    /** The source's generation as of the last refresh; see {@link PaneSurfaceStyle#paneGlassGeneration}. */
+    private int mVeilGeneration;
+
+    /** True when the source says its answers may have changed since this slab last asked. */
+    private boolean veilGenerationMoved() {
+        return mVeilSource.paneGlassGeneration() != mVeilGeneration;
+    }
+
     private boolean refreshVeil() {
+        boolean moved = refreshVeilNow();
+        // Read after asking: asking may itself measure the pane and move the generation.
+        if (mVeilSource != null) mVeilGeneration = mVeilSource.paneGlassGeneration();
+        return moved;
+    }
+
+    private boolean refreshVeilNow() {
         int veil = android.graphics.Color.TRANSPARENT;
+        android.graphics.ColorMatrix evenOut = null;
         if (mVeilSource != null && getWidth() > 0 && getHeight() > 0) {
             GlassAnchor.layoutOriginOnScreen(this, mVeilLocation, mVeilRootLocation);
             mVeilRect.set(mVeilLocation[0], mVeilLocation[1],
                 mVeilLocation[0] + getWidth(), mVeilLocation[1] + getHeight());
             veil = mVeilSource.paneGlassVeil(mVeilRect);
+            evenOut = mVeilSource.paneGlassEvenOut(mVeilRect);
         } else {
             mVeilRect.setEmpty();
         }
-        if (veil == mVeilColor) return false;
+        boolean evenOutMoved = !java.util.Arrays.equals(
+            evenOut == null ? null : evenOut.getArray(), mEvenOut == null ? null : mEvenOut.getArray());
+        if (evenOutMoved) {
+            mEvenOut = evenOut;
+            applyFrameFilter(mFilterKeptBrightness);
+        }
+        if (veil == mVeilColor) return evenOutMoved;
         mVeilColor = veil;
         return true;
     }
@@ -381,6 +432,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mClearFrame = live;
         mClearShader = live == null
             ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        mLiveGen = NOT_LIVE;
         syncClarity();
         invalidate();
     }
@@ -457,6 +509,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
 
     private void syncProgram() {
         mLastAimShader = null;
+        mLiveGen = NOT_LIVE;
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mFrameShader;
         if (look == null || shader == null || mCornerMaskRadiusPx > 0f || !GlassRefraction.available()) {
@@ -525,7 +578,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     private void followTilt() {
         mTiltStillDraws = 0;
-        if (mProgram != null && (mTilt[0] != 0f || mTilt[1] != 0f)) postInvalidateOnAnimation();
+        if (mProgram != null && (mTilt[0] != 0f || mTilt[1] != 0f)) {
+            PANEGLASS_TILT.tick();
+            postInvalidateOnAnimation();
+        }
     }
 
     @NonNull
@@ -649,6 +705,12 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         invalidateGlassPosition();
     }
 
+    /** A new live scene frame is out: draw it. */
+    @Override
+    public void invalidateLive() {
+        invalidate();
+    }
+
     /** The frame this pane is drawing, so the blur cache never recycles it under a draw. */
     @Nullable
     public Bitmap heldFrame() {
@@ -680,10 +742,30 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         }
         // A software canvas refuses a RuntimeShader (a RealtimeBlurView capturing the window is
         // one), so the refracted frame sits that pass out; it only feeds another view's blur.
+        LiveSceneFrame.Frame liveFrame = LiveSceneFrame.current();
+        // The live frame is a hardware bitmap, which a software canvas refuses outright.
+        if (liveFrame != null && !canvas.isHardwareAccelerated()) return;
+        // The scene went off: the still frame goes back on the paint.
+        if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && (mProgram == null || canvas.isHardwareAccelerated())) {
             BitmapShader aimShader = mFrameShader;
             Bitmap aimFrame = mFrame;
+            Rect aimRect = mFrameRect;
+            if (liveFrame != null) {
+                // The wallpaper scene's live frame instead of the still one: one shader shared by
+                // every surface, so its matrix is re-aimed on every draw. No crossfade, no parallax.
+                if (mLiveGen != liveFrame.generation) {
+                    mLiveGen = liveFrame.generation;
+                    if (mProgram != null) mProgram.setInput(liveFrame.shader);
+                    else mFramePaint.setShader(liveFrame.shader);
+                }
+                aimShader = liveFrame.shader;
+                aimFrame = liveFrame.bitmap;
+                aimRect = LiveSceneFrame.rect();
+                mAimStale = true;
+                LiveSceneFrame.noteDrawn(this);
+            }
             // Where this slab is on screen through its page's slide, sink and tilt: the frame is
             // aimed past all of it, so the wallpaper in the slab stays where the wallpaper behind
             // the wall is. The parallax carries the wallpaper to the left under it.
@@ -693,22 +775,26 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             int kept = mPlacement.keptBrightness;
             if (kept != mFilterKeptBrightness) {
                 mFilterKeptBrightness = kept;
-                ColorFilter filter = GlassFilters.undimmed(mFrostFilter, kept);
-                mFramePaint.setColorFilter(filter);
-                mPreviousFramePaint.setColorFilter(filter);
+                applyFrameFilter(kept);
             }
-            float parallax = mParallax == null ? 0f : mParallax.offsetPx();
+            float parallax = mParallax == null || liveFrame != null ? 0f : mParallax.offsetPx();
             GlassRefraction.Program program = mProgram;
             if (program != null) {
                 // Where the slab stands now against where it stood last draw: its bend follows on
                 // a spring and asks for the frames it needs to settle. At rest it asks for none
                 // and the program draws the resting look.
-                if (driveMotionLight(width, height)) postInvalidateOnAnimation();
+                if (driveMotionLight(width, height)) {
+                    PANEGLASS_MOTION.tick();
+                    postInvalidateOnAnimation();
+                }
                 program.setMotionLight(mMotionLight);
                 if (mPreviousProgram != null) mPreviousProgram.setMotionLight(mMotionLight);
                 // How far the slab is tipped, so the picture through it is displaced as through a
                 // tipped plate and its rim leans with the tip. Flat, (0, 0): the resting look.
-                if (readTilt()) postInvalidateOnAnimation();
+                if (readTilt()) {
+                    PANEGLASS_TILT.tick();
+                    postInvalidateOnAnimation();
+                }
                 program.setTilt(mTilt[0], mTilt[1]);
                 if (mPreviousProgram != null) mPreviousProgram.setTilt(mTilt[0], mTilt[1]);
             }
@@ -720,7 +806,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 mLastHeight = height;
                 mLastParallax = parallax;
                 mLastAimShader = aimShader;
-                mAim.set(mPlacement.toScreen, mFrameRect, aimFrame.getWidth(), aimFrame.getHeight(),
+                mAim.set(mPlacement.toScreen, aimRect, aimFrame.getWidth(), aimFrame.getHeight(),
                     parallax);
                 float[] aim = mAim.scaleOffset;
                 if (program != null) {
@@ -749,7 +835,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 }
             }
             float progress = mCrossfade.progress();
-            boolean fading = progress < 1f && mPreviousFrame != null && !mPreviousFrame.isRecycled()
+            boolean fading = liveFrame == null && progress < 1f && mPreviousFrame != null
+                && !mPreviousFrame.isRecycled()
                 && mPreviousFrameShader != null
                 && mPreviousFrame.getWidth() == mFrame.getWidth()
                 && mPreviousFrame.getHeight() == mFrame.getHeight();
@@ -761,6 +848,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 canvas.drawRect(0f, 0f, width, height, mPreviousFramePaint);
                 mFramePaint.setAlpha(Math.round(255f * progress));
                 canvas.drawRect(0f, 0f, width, height, mFramePaint);
+                PANEGLASS_CROSSFADE.tick();
                 postInvalidateOnAnimation();
             } else {
                 mPreviousFrame = null;
@@ -787,7 +875,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
             // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
             // that did not move costs one walk up the tree.
-            if (mVeilSource != null && veilRectMoved()) refreshVeil();
+            if (mVeilSource != null && (veilRectMoved() || veilGenerationMoved())) {
+                if (refreshVeil()) postInvalidateOnAnimation();
+            }
             if (android.graphics.Color.alpha(mVeilColor) > 0) {
                 mTintPaint.setColor(mVeilColor);
                 canvas.drawRect(0f, 0f, width, height, mTintPaint);

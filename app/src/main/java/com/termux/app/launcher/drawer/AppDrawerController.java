@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewTreeObserver;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -132,8 +133,22 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         default void setDecorNavStripAlpha(float alpha) {}
 
+        /**
+         * Home's grid, folders, widgets and page dots, faded by alpha alone while the plane covers
+         * them; 1 whenever the drawer is not engaged. See {@link AppDrawerHomeCoverPolicy}.
+         */
+        default void setHomeContentAlpha(float alpha) {}
+
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
+
+        /**
+         * The built-in keyboard came up under the engaged plane: lay the accessory stack out for it
+         * once, through the freeze. The stack is held at the height it had at the pull, and a
+         * keyboard raised inside it is measured against that height and cut off at the bottom.
+         * One pass, at the decision; everything after it stays frozen until the close.
+         */
+        void layOutAccessoryStackForRaisedKeyboard();
 
         /** Claims (or releases) the in-app keyboard's single interceptor slot for the search. */
         void setInterceptorActive(boolean active);
@@ -144,6 +159,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         void hideSystemKeyboard();
         /** The drawer is gone; an IME it dismissed on the way in comes back. */
         void restoreSystemKeyboard();
+
+        /**
+         * The list was scrolled with the system keyboard up for the search: it goes, and is not
+         * brought back on close (a pill tap asks for it again).
+         */
+        default void dismissSearchSystemKeyboard() {}
 
         /**
          * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
@@ -157,6 +178,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         /** The app-drawer settings page, where categorization is run. */
         void openAppDrawerSettings();
+
+        /**
+         * Home, for an app picked up in the drawer to be carried to (it closes the drawer and
+         * takes the drag over); null where there is no Home, and the drawer's own drag runs.
+         */
+        @Nullable default com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
+            return null;
+        }
     }
 
     /**
@@ -272,6 +301,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     // Captured once per gesture. Everything below is read-only until the next capture.
     @Nullable private Frame mDockRect;
+    /**
+     * Where the dock rests once the stack has been laid out for a keyboard the search raised. The
+     * close lands the plane here; taken on only at full open, where the plane's frame does not
+     * read the dock at all, so taking it on never moves the plane.
+     */
+    @Nullable private Frame mRaisedKeyboardDockRect;
     @Nullable private Frame mOpenRect;
     @Nullable private AppDrawerAccessoryChoreography.Band mExtraKeysBand;
     @Nullable private AppDrawerAccessoryChoreography.Band mKeyboardBand;
@@ -461,7 +496,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (!mDragging) return;
         mDragging = false;
         AppDrawerCommitPolicy.Decision decision = AppDrawerCommitPolicy.decide(mProgress.value,
-            velocityPxPerSec, mDirection);
+            velocityPxPerSec, mDirection, mDensity);
         boolean open;
         switch (decision) {
             case COMMIT_OPEN: open = true; break;
@@ -616,7 +651,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         // The launch itself is the dock's ladder, transitions and usage recording included; the
         // drawer is put away by the lifecycle path the launch triggers.
-        if (content != null) content.launchFirstResult();
+        if (content != null) content.launchHighlightedResult();
     }
 
     @Override
@@ -893,6 +928,83 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return pin < host.getHeight() ? Math.max(0f, pin) : 0f;
     }
 
+    // ------------------------------------------------------------------ keyboard away on scroll
+
+    /** How far down the list the current scroll has gone, for the keyboard; 0 at rest. */
+    private float mKeyboardScrollPx;
+    /** True while the scroll, not the spring, is holding the built-in keyboard part-way down. */
+    private boolean mKeyboardScrollHolding;
+    /** The system keyboard was sent away by the current scroll; once per scroll. */
+    private boolean mSystemImeScrolledAway;
+
+    /**
+     * One step of the finger's scroll down the list. Past the threshold the built-in keyboard is
+     * held down by the distance scrolled (the reveal written straight from the scroll, no spring,
+     * no layout) until it is gone; the system keyboard, which cannot be moved, goes at the
+     * threshold. The content's insets are left alone until the end, then laid out once.
+     */
+    private void onKeyboardScrollStep(int dy) {
+        AppDrawerContentView content = mContent;
+        if (!mOpen || content == null) return;
+        if (mImePinTopPx > 0f) {
+            mKeyboardScrollPx = AppDrawerKeyboardScrollHide.accumulate(mKeyboardScrollPx, dy);
+            if (mSystemImeScrolledAway || !AppDrawerKeyboardScrollHide.reachesThreshold(
+                    mKeyboardScrollPx, dp(AppDrawerKeyboardScrollHide.THRESHOLD_DP))) return;
+            mSystemImeScrolledAway = true;
+            content.dismissSearchKeyboardByScroll();
+            mHost.dismissSearchSystemKeyboard();
+            return;
+        }
+        AppDrawerAccessoryChoreography.Band keyboard = mKeyboardBand;
+        // Only a keyboard the reveal has up: one still rising, or one already going, is left be.
+        if (keyboard == null || !hasRevealableKeyboard()
+            || (!mKeyboardScrollHolding && mReveal.target < 1f)) return;
+        mKeyboardScrollPx = AppDrawerKeyboardScrollHide.accumulate(mKeyboardScrollPx, dy);
+        float hidden = AppDrawerKeyboardScrollHide.hiddenFraction(mKeyboardScrollPx,
+            dp(AppDrawerKeyboardScrollHide.THRESHOLD_DP), keyboard.heightPx);
+        if (hidden <= 0f) return;
+        mKeyboardScrollHolding = true;
+        float k = 1f - hidden;
+        mReveal.value = k;
+        mReveal.vel = 0f;
+        // Target held at the value: nothing chases it while the finger drives it.
+        mReveal.target = k;
+        if (hidden >= 1f) {
+            finishKeyboardScrollAway();
+            return;
+        }
+        applyFrame(mProgress.value);
+    }
+
+    /** The scroll came to rest: a keyboard held part-way finishes going, or springs back up. */
+    private void onKeyboardScrollIdle() {
+        mKeyboardScrollPx = 0f;
+        mSystemImeScrolledAway = false;
+        if (!mKeyboardScrollHolding) return;
+        mKeyboardScrollHolding = false;
+        if (AppDrawerKeyboardScrollHide.dismissesAtRest(1f - mReveal.value)) {
+            finishKeyboardScrollAway();
+        } else {
+            mReveal.target = 1f;
+            kick();
+        }
+    }
+
+    /**
+     * The keyboard is away: the content drops its reveal target, and the content is laid out
+     * once for the full height, its top where it was so the list does not jump.
+     */
+    private void finishKeyboardScrollAway() {
+        mKeyboardScrollHolding = false;
+        AppDrawerContentView content = mContent;
+        if (content != null) content.dismissSearchKeyboardByScroll();
+        retargetReveal();
+        mReveal.target = 0f;
+        applyContentInsets();
+        applyFrame(mProgress.value);
+        kick();
+    }
+
     /**
      * Retargets the search-keyboard reveal. Driven by the content — a first keystroke, a query
      * emptied, a pill tap — and by the system keyboard's inset; never polled.
@@ -995,6 +1107,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
         content.setSearchKeyboardRequestListener(this::onSearchKeyboardRequested);
+        content.setHomeAppDropTarget(mHost.homeAppDropTarget());
+        content.setKeyboardScrollListener(new AppDrawerContentView.KeyboardScrollListener() {
+            @Override public void onListScrolledDown(int dy) { onKeyboardScrollStep(dy); }
+            @Override public void onListScrollIdle() { onKeyboardScrollIdle(); }
+        });
         // A drawer that is not open is not a surface: interactivity is turned on by prepareOverlay
         // and off again on close, and never follows p.
         content.setInteractive(false);
@@ -1033,7 +1150,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The plane existing means a pull has already built everything this would have built.
         if (mWarmed || mPlane != null || mContent != null || mEngaged || mOpen) return false;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        if (preferences == null || !preferences.isAppLauncherDrawerEnabled()) return false;
+        if (preferences == null) return false;
         // The grid borrows its icons, tint and launch ladder from the dock; before that exists
         // there is nothing to warm.
         if (mHost.suggestionBar() == null) return false;
@@ -1101,6 +1218,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame dockRect = frameOf(dock);
         if (dockRect == null) return false;
         mDockRect = dockRect;
+        mRaisedKeyboardDockRect = null;
 
         // One dock-geometry snapshot for the whole capture: style, seed radius and (via
         // resolveOpenRect) the outer inset all come off the same value.
@@ -1271,10 +1389,21 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * has a real edge to hold the captured gap against.
      */
     private void captureBands(@NonNull Frame dockRect) {
+        captureBands(dockRect, false);
+    }
+
+    /**
+     * @param resting measure each band where its layout puts it, ignoring the translation the
+     *     choreography is holding it at: a re-capture with the plane open finds the bands pushed
+     *     away, and the band the recipe needs is the one they rest in.
+     */
+    private void captureBands(@NonNull Frame dockRect, boolean resting) {
         mExtraKeysView = mHost.findView(R.id.terminal_toolbar_view_pager);
         mKeyboardView = mHost.findView(R.id.inapp_keyboard_container);
-        Frame extraKeys = isBandVisible(mExtraKeysView) ? frameOf(mExtraKeysView) : null;
-        Frame keyboard = isBandVisible(mKeyboardView) ? frameOf(mKeyboardView) : null;
+        Frame extraKeys = isBandVisible(mExtraKeysView)
+            ? (resting ? restingFrameOf(mExtraKeysView) : frameOf(mExtraKeysView)) : null;
+        Frame keyboard = isBandVisible(mKeyboardView)
+            ? (resting ? restingFrameOf(mKeyboardView) : frameOf(mKeyboardView)) : null;
         mHasBands = extraKeys != null || keyboard != null;
         if (!mHasBands) {
             mExtraKeysBand = null;
@@ -1326,6 +1455,144 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return new Frame(left, top, left + view.getWidth(), top + view.getHeight());
     }
 
+    /** {@link #frameOf} less the view's own vertical translation. */
+    @Nullable
+    private Frame restingFrameOf(@Nullable View view) {
+        Frame frame = frameOf(view);
+        if (frame == null) return null;
+        float dy = view.getTranslationY();
+        return new Frame(frame.left, frame.top - dy, frame.right, frame.bottom - dy);
+    }
+
+    /**
+     * The built-in keyboard came up while the plane is open: the search raised it, on a place
+     * where it was down when the drawer was pulled. The bands were measured at the pull with no
+     * keyboard among them, so the reveal had nothing to bring up; they are measured again once
+     * the keyboard is on screen, and the reveal then brings it up through the plane exactly as it
+     * does a keyboard that was up before the drawer opened.
+     *
+     * <p>"On screen" means {@link View#VISIBLE} and laid out, not merely laid out: over glass the
+     * keyboard's open reveal ({@code KeyboardGeometryChoreographer}) lays the container out
+     * {@link View#INVISIBLE} and flips it to visible a frame or two later, once its backdrop is
+     * ready. That flip changes no bounds, so a layout listener never hears it, and a measure taken
+     * on the layout found no visible band: the reveal stayed at zero and the keyboard stayed
+     * under the plane. The wait is a pre-draw check instead, which the flip's redraw reaches.
+     */
+    public void onBuiltInKeyboardRaised() {
+        if (!mEngaged || mTextFieldSearch) return;
+        View keyboard = mHost.findView(R.id.inapp_keyboard_container);
+        if (keyboard == null) return;
+        // The stack was frozen at the pull with the keyboard down, and a keyboard raised inside it
+        // is measured against that height: whole rows cut off the bottom. It is laid out for the
+        // keyboard once here, and the bands are measured on the layout that pass books.
+        if (keyboard.getVisibility() != View.GONE) mHost.layOutAccessoryStackForRaisedKeyboard();
+        if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
+                isLayoutPending(keyboard))) {
+            stopAwaitingRaisedKeyboard();
+            recaptureBandsForRaisedKeyboard();
+            return;
+        }
+        if (mRaisedKeyboardWatch != null) return;
+        ViewTreeObserver.OnPreDrawListener watch = () -> {
+            if (!mEngaged) {
+                stopAwaitingRaisedKeyboard();
+            } else if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
+                    isLayoutPending(keyboard))) {
+                stopAwaitingRaisedKeyboard();
+                recaptureBandsForRaisedKeyboard();
+            }
+            // Never holds a frame back: the check only decides when to measure.
+            return true;
+        };
+        mRaisedKeyboardWatch = watch;
+        mRaisedKeyboardView = keyboard;
+        mRaisedKeyboardObserver = keyboard.getViewTreeObserver();
+        mRaisedKeyboardObserver.addOnPreDrawListener(watch);
+    }
+
+    /**
+     * Whether a keyboard the search raised can be measured into the bands: shown (not still
+     * hidden behind its open reveal), with a height, and with no layout pending.
+     */
+    @VisibleForTesting
+    static boolean isRaisedKeyboardMeasurable(int visibility, int heightPx,
+                                              boolean layoutRequested) {
+        return visibility == View.VISIBLE && heightPx > 0 && !layoutRequested;
+    }
+
+    /**
+     * A layout pending anywhere above the keyboard, not only on it: the stack's resize books its
+     * layout on the stack and its ancestors and leaves the keyboard's own flag clear while its
+     * bounds are still the cut-off ones.
+     */
+    private static boolean isLayoutPending(@NonNull View keyboard) {
+        return keyboard.isLayoutRequested() || keyboard.getRootView().isLayoutRequested();
+    }
+
+    /** The one pre-draw wait for {@link #onBuiltInKeyboardRaised}; gone on close. */
+    private void stopAwaitingRaisedKeyboard() {
+        ViewTreeObserver.OnPreDrawListener watch = mRaisedKeyboardWatch;
+        ViewTreeObserver observer = mRaisedKeyboardObserver;
+        View keyboard = mRaisedKeyboardView;
+        mRaisedKeyboardWatch = null;
+        mRaisedKeyboardObserver = null;
+        mRaisedKeyboardView = null;
+        if (watch == null) return;
+        if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(watch);
+        // An observer taken before the view was attached is merged into the window's on attach.
+        ViewTreeObserver current = keyboard == null ? null : keyboard.getViewTreeObserver();
+        if (current != null && current != observer && current.isAlive())
+            current.removeOnPreDrawListener(watch);
+    }
+
+    @Nullable private ViewTreeObserver.OnPreDrawListener mRaisedKeyboardWatch;
+    @Nullable private ViewTreeObserver mRaisedKeyboardObserver;
+    @Nullable private View mRaisedKeyboardView;
+
+    private void recaptureBandsForRaisedKeyboard() {
+        Frame dockRect = mDockRect;
+        FrameLayout host = mHostLayout;
+        if (!mEngaged || dockRect == null || host == null) return;
+        boolean hadBands = mHasBands;
+        float gap = mCapturedGapPx;
+        host.getLocationOnScreen(mHostLocation);
+        // The stack has been laid out for the keyboard, so the dock stands above it now: the gap
+        // is measured against where the dock rests, and the close lands the plane there.
+        Frame restingDock = restingDockRect();
+        captureBands(restingDock != null ? restingDock : dockRect, true);
+        // Without a dock to measure, a gap already known is kept rather than measured against the
+        // dock rect of the pull, which the stack's relayout has left stale.
+        if (restingDock == null && hadBands && mHasBands) mCapturedGapPx = gap;
+        if (restingDock != null) {
+            mRaisedKeyboardDockRect = restingDock;
+            adoptRaisedKeyboardDockRect(mProgress.value);
+        }
+        retargetReveal();
+        applyContentInsets();
+        applyFrame(mProgress.value);
+        kick();
+    }
+
+    /** The seed view where its layout puts it, less the lift; null when it is not showing. */
+    @Nullable
+    private Frame restingDockRect() {
+        View dock = mAccessorySurface;
+        if (dock == null || dock.getVisibility() != View.VISIBLE || dock.getWidth() <= 0
+            || dock.getHeight() <= 0) return null;
+        return restingFrameOf(dock);
+    }
+
+    /**
+     * Takes on the dock rect measured for a raised keyboard once the plane is fully open. Below
+     * that the plane's frame is still part dock, and swapping its seed would jump the plane.
+     */
+    private void adoptRaisedKeyboardDockRect(float progress) {
+        Frame raised = mRaisedKeyboardDockRect;
+        if (raised == null || progress < 1f) return;
+        mDockRect = raised;
+        mRaisedKeyboardDockRect = null;
+    }
+
     /** {@code -1} on the preference means "follow the rounded-surface token", as the dock's does. */
     private float resolveOpenRadiusPx() {
         TermuxAppSharedPreferences preferences = mHost.preferences();
@@ -1334,6 +1601,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (configured < 0)
             configured = TermuxAppSharedPreferences.resolveAutoCornerRadiusDp(null, true);
         return dp(configured);
+    }
+
+    /** The Dock rows, read once per open and handed to the grid. */
+    private void applyDrawerSettings() {
+        AppDrawerContentView content = mContent;
+        if (content == null) return;
+        content.setOpenOnlyMatch(DrawerSettings.openOnlyMatch(mHost.context()));
+        content.setAzSide(DrawerSettings.azSide(mHost.context()));
+        content.setRememberPosition(DrawerSettings.rememberPosition(mHost.context()));
+        // A drawer that opens onto the keyboard has no lower half to offer: the search is up.
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        boolean keyboardOnOpen = preferences != null
+            && preferences.isAppLauncherDrawerSearchOnOpenEnabled();
+        content.setLowerStart(DrawerSettings.lowerStart(mHost.context()) && !keyboardOnOpen);
     }
 
     /** Raises the overlay and picks its backdrop material for this open. */
@@ -1357,6 +1638,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             opacity, grain);
         glass.setVisibility(View.VISIBLE);
         host.setVisibility(View.VISIBLE);
+        applyDrawerSettings();
         applyBackdropMaterial();
         prepareContent(plane);
         addHostLayoutListener();
@@ -1547,6 +1829,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame openRect = mOpenRect;
         if (plane == null || mHostLayout == null || dockRect == null || openRect == null) return;
         float p = AppDrawerTransitionGeometry.clamp01(progress);
+        if (mRaisedKeyboardDockRect != null && p >= 1f) {
+            adoptRaisedKeyboardDockRect(p);
+            dockRect = mDockRect;
+        }
 
         float lift = -mLiftPx * AppDrawerTransitionGeometry.dockLiftFraction(p);
         Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p, lift);
@@ -1605,6 +1891,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // surface that has to be faded rather than covered. Linear in p, which is what the plane's
         // own bottom edge is: the two cross over exactly as the glass arrives underneath it.
         mHost.setDecorNavStripAlpha(1f - p);
+        mHost.setHomeContentAlpha(AppDrawerHomeCoverPolicy.homeAlpha(p));
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
         if (target != null) target.setDrawerTransitionProgress(p);
@@ -1745,6 +2032,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mSearch.reset();
             }
             mReveal.reset(0f);
+            mKeyboardScrollPx = 0f;
+            mKeyboardScrollHolding = false;
+            mSystemImeScrolledAway = false;
             endTextFieldSearchIfBegun();
             mImePinTopPx = 0f;
             mContentRect = null;
@@ -1753,6 +2043,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostClipped = false;
             }
             removeHostLayoutListener();
+            stopAwaitingRaisedKeyboard();
+            mRaisedKeyboardDockRect = null;
             applyAlpha(mAccessorySurface, 1f);
             applyGroupTranslationY(mDockLiftGroup, 0f);
             applyGroupAlpha(mDockRowFadeGroup, 1f);
@@ -1763,6 +2055,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             applyBand(mStatusBarView, 0f, 0f, 1f);
             applyAlpha(mStatusInsetStripView, 1f);
             mHost.setDecorNavStripAlpha(1f);
+            mHost.setHomeContentAlpha(1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
             if (mHostLayout != null) {

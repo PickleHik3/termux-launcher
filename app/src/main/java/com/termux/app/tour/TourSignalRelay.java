@@ -17,6 +17,9 @@ public final class TourSignalRelay implements TourSignals {
     private Listener mListener;
     private String mHomePlace;
     private String mPlace;
+    /** The side a place change happened on, while its signals are being heard. */
+    private TourStep.Side mSignalFromSide;
+    private boolean mSignalFromSideSet;
     private Boolean mStatusBarCollapsed;
     private Integer mWindowCount;
     private String mSelectedWindow;
@@ -40,12 +43,11 @@ public final class TourSignalRelay implements TourSignals {
     }
 
     /**
-     * The place the run is taught on. Everything else is "changed"; coming back to this one is
-     * "returned", which is what the second half of the first card waits for. Pinned by the
-     * launcher rather than read from wherever the wall happened to rest when the run was built:
-     * a replay from Settings, or a resume after a process death, can find the wall on the
-     * display, and a run that called that home asked for every terminal control from a place
-     * that has none of them.
+     * Home's place: the run starts there, and every other place is the Workspace. Leaving it is
+     * "changed" and the seam crossed forward; coming back to it is "returned" and the seam crossed
+     * back. Pinned by the launcher rather than read from wherever the wall happened to rest when
+     * the run was built: a replay from Settings, or a resume after a process death, can find the
+     * wall on a window, and a run that called that home would have the seam the wrong way round.
      */
     public void setHomePlace(String placeId) {
         mHomePlace = placeId;
@@ -54,22 +56,56 @@ public final class TourSignalRelay implements TourSignals {
     /**
      * The current place, when the wall has settled on it. Edge-triggered on the place itself: a
      * rotation re-settles the place the wall is already on, and that is not a swipe.
+     *
+     * <p>While the signals this raises are being heard, {@link #sideOfSignal()} answers the side
+     * the wall left: the seam was crossed from there, and a card taught there is the one waiting.
      */
     public void onPlaceSettled(String placeId) {
         if (placeId == null) return;
         if (mHomePlace == null) mHomePlace = placeId;
         String previous = mPlace;
+        TourStep.Side left = wallSide();
         mPlace = placeId;
         if (previous == null || previous.equals(placeId)) return;
-        emit(mHomePlace.equals(placeId) ? PLACE_RETURNED : PLACE_CHANGED);
+        boolean home = mHomePlace.equals(placeId);
+        boolean fromHome = mHomePlace.equals(previous);
+        mSignalFromSide = left;
+        mSignalFromSideSet = true;
+        try {
+            emit(home ? PLACE_RETURNED : PLACE_CHANGED);
+            if (home) emit(SEAM_TO_HOME);
+            else if (fromHome) emit(SEAM_TO_WORKSPACE);
+        } finally {
+            mSignalFromSide = null;
+            mSignalFromSideSet = false;
+        }
     }
 
     /**
-     * Whether the wall is resting on the place the run is taught on. True until the wall has
-     * ever said where it is: a launcher with no wall at all has only the terminal.
+     * Whether the wall is resting on the place the run starts on. True until the wall has ever
+     * said where it is.
      */
     public boolean isOnHomePlace() {
         return mPlace == null || mHomePlace == null || mHomePlace.equals(mPlace);
+    }
+
+    /**
+     * The half of the wall it rests on: Home on Home's place, the Workspace on any other (the
+     * display window is a window of the Workspace), and null until the wall has said.
+     */
+    @androidx.annotation.Nullable
+    public TourStep.Side wallSide() {
+        if (mPlace == null || mHomePlace == null) return null;
+        return mHomePlace.equals(mPlace) ? TourStep.Side.HOME : TourStep.Side.WORKSPACE;
+    }
+
+    /**
+     * The half of the wall the signal being heard happened on: where the wall rests, except for
+     * a place change, which happened on the side the wall has just left.
+     */
+    @androidx.annotation.Nullable
+    public TourStep.Side sideOfSignal() {
+        return mSignalFromSideSet ? mSignalFromSide : wallSide();
     }
 
     /** Whether the status bar is unfolded, as far as the run knows; compact until it has said. */
@@ -208,6 +244,15 @@ public final class TourSignalRelay implements TourSignals {
      * signals: the scrub is one of the ways to an app, and the lesson that asks the user to open
      * one does not care which way they found.
      */
+    /**
+     * The dock's A-Z letters laid a letter's apps out, once per touch on them that did not end in
+     * a launch (that one is {@link #onAppLaunchedFromScrub}). An action, like the launch, so
+     * there is no state to compare against.
+     */
+    public void onAzAppsShown() {
+        emit(AZ_APPS_SHOWN);
+    }
+
     public void onAppLaunchedFromScrub() {
         emit(APP_LAUNCHED_FROM_SCRUB);
         emit(APP_LAUNCHED);

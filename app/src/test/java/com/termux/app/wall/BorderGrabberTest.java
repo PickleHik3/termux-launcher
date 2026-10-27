@@ -113,4 +113,19 @@ public class BorderGrabberTest {
         assertEquals(flush.width() * PageSink.SCALE, sunk.width(), EPS);
         assertTrue(sunk.bottom <= 254f);
     }
+
+    @Test
+    public void homesGrabberIsBolderAndStillAnswersTheFinger() {
+        assertEquals(0.6f, BorderGrabber.homeAlpha(0f), EPS);
+        assertTrue("twice a window's at rest", BorderGrabber.homeAlpha(0f)
+            >= 2f * BorderGrabber.alpha(0f) - EPS);
+        assertEquals(BorderGrabber.PRESSED_ALPHA, BorderGrabber.homeAlpha(1f), EPS);
+        RectF pill = new RectF();
+        BorderGrabber.homeBounds(pill, 496f, 2119f, 584f, 2130f, 0f, 0f, DENSITY);
+        assertEquals(new RectF(496f, 2119f, 584f, 2130f), pill);
+        BorderGrabber.homeBounds(pill, 496f, 2119f, 584f, 2130f, 1f, -6f, DENSITY);
+        assertEquals("wider about its centre", 540f, pill.centerX(), EPS);
+        assertEquals(88f + BorderGrabber.PRESSED_EXTRA_WIDTH_DP * DENSITY, pill.width(), EPS);
+        assertEquals("drawn along the swipe", 2113f, pill.top, EPS);
+    }
 }

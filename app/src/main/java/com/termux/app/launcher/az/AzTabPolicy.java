@@ -63,6 +63,11 @@ public final class AzTabPolicy {
      */
     public static final float TOP_TAB_REACH_DP = 4f;
     public static final float TOP_TAB_MIN_THICKNESS_DP = 10f;
+    /**
+     * The air the half-pill keeps from where the pane's text begins on its side, when the pane's
+     * text box is known ({@link #placeOnScreen(Edge, boolean, Box, Box, float, float)}).
+     */
+    public static final float TEXT_AIR_DP = 2f;
 
     /**
      * The least opacity the tab and the letters' sheet are glazed at. Both stand over live
@@ -175,20 +180,46 @@ public final class AzTabPolicy {
     @NonNull
     public static Placement placeOnScreen(@NonNull Edge edge, boolean rtl, @NonNull Box canvas,
                                           float screenWidthPx, float density) {
+        return placeOnScreen(edge, rtl, canvas, EMPTY, screenWidthPx, density);
+    }
+
+    /**
+     * {@link #placeOnScreen(Edge, boolean, Box, float, float)} beside a pane that draws its text
+     * inside {@code text}, in the same pixels: the box the terminal's rows and columns fill, inside
+     * the pane's frame and its corners' clearance.
+     *
+     * <p>Along the side the tab then leads from the text box's ends, not the canvas's. The canvas
+     * is not where the pane stands: on the Workspace it reaches up under the bar while the wall
+     * moves and comes back down at rest, the pane keeping its place on screen by a top inset
+     * either way, so a tab led from the canvas's top rested higher or lower depending on which
+     * reach it was last laid out in. The text box does not move with the reach, so the tab rests
+     * in one place.
+     *
+     * <p>Across, the half-pill reaches in no further than {@link #TEXT_AIR_DP} short of where the
+     * text begins on its side — the pane's margin — so it covers no row's first or last characters
+     * whichever row it stands beside ({@link #marginThicknessPx}). An empty {@code text} keeps the
+     * canvas's placement.
+     */
+    @NonNull
+    public static Placement placeOnScreen(@NonNull Edge edge, boolean rtl, @NonNull Box canvas,
+                                          @NonNull Box text, float screenWidthPx,
+                                          float density) {
         Edge side = screenSide(edge, rtl);
         if (canvas.isEmpty() || screenWidthPx <= 0f) return new Placement(edge, EMPTY, EMPTY, side);
         float d = Math.max(0f, density);
-        float length = canvas.height();
+        Box along = text.isEmpty() ? canvas : text;
+        float length = along.height();
         float touchLength = Math.min(TOUCH_LENGTH_DP * d, length);
         float touchDepth = Math.min(TOUCH_THICKNESS_DP * d, screenWidthPx);
         float start = Math.max(0f, Math.min(leadInPx(d), length - touchLength));
         float visualLength = Math.min(TAB_LENGTH_DP * d, touchLength);
-        float visualDepth = Math.min(visualThicknessPx(edge, side, canvas, screenWidthPx, d),
-            touchDepth);
+        float visualDepth = Math.min(text.isEmpty()
+            ? visualThicknessPx(edge, side, canvas, screenWidthPx, d)
+            : marginThicknessPx(side, text, screenWidthPx, d), touchDepth);
 
-        // Along the side, from the index's leading end of the canvas.
+        // Along the side, from the index's leading end of the pane's text, or of the canvas.
         float touchTop = edge == Edge.BOTTOM
-            ? canvas.bottom - start - touchLength : canvas.top + start;
+            ? along.bottom - start - touchLength : along.top + start;
         float visualTop = touchTop + (touchLength - visualLength) / 2f;
 
         // Across, from the screen's side inwards.
@@ -219,6 +250,21 @@ public final class AzTabPolicy {
         float gap = side == Edge.LEFT ? canvas.left : screenWidthPx - canvas.right;
         float wanted = Math.max(0f, gap) + TOP_TAB_REACH_DP * d;
         return Math.min(full, Math.max(TOP_TAB_MIN_THICKNESS_DP * d, wanted));
+    }
+
+    /**
+     * How deep the half-pill stands in from the screen's {@code side} beside a pane whose text
+     * fills {@code text}: {@link #TEXT_AIR_DP} short of where the text begins on that side, never
+     * thinner than {@link #TOP_TAB_MIN_THICKNESS_DP} so it can still be seen and read, and never
+     * deeper than {@link #TAB_THICKNESS_DP}. Only a margin narrower than that floor lets it over
+     * the text, by the floor's sliver.
+     */
+    public static float marginThicknessPx(@NonNull Edge side, @NonNull Box text,
+                                          float screenWidthPx, float density) {
+        float d = Math.max(0f, density);
+        float gap = side == Edge.LEFT ? text.left : screenWidthPx - text.right;
+        float wanted = Math.max(0f, gap) - TEXT_AIR_DP * d;
+        return Math.min(TAB_THICKNESS_DP * d, Math.max(TOP_TAB_MIN_THICKNESS_DP * d, wanted));
     }
 
     /**

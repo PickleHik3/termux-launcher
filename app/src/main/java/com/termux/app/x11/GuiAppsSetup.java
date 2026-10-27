@@ -58,6 +58,26 @@ public final class GuiAppsSetup {
      */
     public static final String WINDOW_MANAGER_PACKAGE = "openbox";
 
+    /**
+     * fcitx5 and its toolkit modules: GTK 3, which every starter app uses, and Qt, so a Qt app
+     * installed later reports focus too rather than leaving taps in it to the cursor alone.
+     */
+    private static final String[] INPUT_METHOD_PACKAGES = {"fcitx5", "fcitx5-gtk3", "fcitx5-qt"};
+    /**
+     * The sound server the launcher runs for every terminal session, Linux app and distro
+     * ({@code LauncherSound}). It runs on the Termux side whichever route the apps came from.
+     */
+    private static final String AUDIO_PACKAGE = "pulseaudio";
+
+    /**
+     * {@code /etc/asound.conf} in a distro: ALSA's default device is PulseAudio, so an app that
+     * plays through ALSA alone reaches the launcher's server too (sound decision 6). Its first
+     * line marks it as the launcher's, which is what lets a later run rewrite it.
+     */
+    static final String ASOUND_CONF = "# written by termux-launcher: ALSA plays through the launcher sound server\n"
+        + "pcm.!default { type pulse }\n"
+        + "ctl.!default { type pulse }\n";
+
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
 
@@ -165,6 +185,8 @@ public final class GuiAppsSetup {
             "xfonts-base fonts-dejavu-core", "libgl1 libgl1-mesa-dri",
             // dbus-launch lives in dbus-x11 on Debian; the plain "dbus" package is only the daemon.
             "dbus-x11",
+            // ALSA's PulseAudio plugin; it brings libpulse with it.
+            "libasound2-plugins",
             // Debian ships Firefox as the ESR build; plain "firefox" is not a package there.
             "firefox-esr", "pcmanfm", "mousepad", "xterm"),
 
@@ -172,6 +194,7 @@ public final class GuiAppsSetup {
             "xfonts-base fonts-dejavu-core", "libgl1 libgl1-mesa-dri",
             // Same split as Debian: dbus-launch is in dbus-x11, not in dbus itself.
             "dbus-x11",
+            "libasound2-plugins",
             // Not "firefox": on Ubuntu that package is a stub that installs the snap, and snaps
             // cannot run inside a proot container at all. Falkon is a real deb and a real browser.
             "falkon", "pcmanfm", "mousepad", "xterm"),
@@ -180,6 +203,8 @@ public final class GuiAppsSetup {
             "xorg-fonts-misc ttf-dejavu", "mesa",
             // Arch does not split this: dbus-launch is in the dbus package itself.
             "dbus",
+            // Arch's plugin only suggests libpulse, so it is asked for by name.
+            "alsa-plugins libpulse",
             "firefox", "pcmanfm", "mousepad", "xterm");
 
         /** The name {@code proot-distro} installs and logs into this one by. */
@@ -194,6 +219,8 @@ public final class GuiAppsSetup {
         @NonNull public final String graphicsPackages;
         /** Carries {@code dbus-launch}, so a desktop that starts no session bus of its own gets one. */
         @NonNull public final String busPackage;
+        /** ALSA's PulseAudio plugin, so ALSA apps reach the launcher's sound server. */
+        @NonNull public final String alsaPackages;
 
         @NonNull private final String browser;
         @NonNull private final String fileManager;
@@ -202,7 +229,7 @@ public final class GuiAppsSetup {
 
         Distro(@NonNull String alias, @NonNull String key, @NonNull PackageManager packageManager,
                @NonNull String fontPackages, @NonNull String graphicsPackages,
-               @NonNull String busPackage,
+               @NonNull String busPackage, @NonNull String alsaPackages,
                @NonNull String browser, @NonNull String fileManager,
                @NonNull String textEditor, @NonNull String terminal) {
             this.alias = alias;
@@ -211,6 +238,7 @@ public final class GuiAppsSetup {
             this.fontPackages = fontPackages;
             this.graphicsPackages = graphicsPackages;
             this.busPackage = busPackage;
+            this.alsaPackages = alsaPackages;
             this.browser = browser;
             this.fileManager = fileManager;
             this.textEditor = textEditor;
@@ -357,6 +385,13 @@ public final class GuiAppsSetup {
         // mattered, so there it is asked for on its own after the rest, and a repository without
         // it stops nothing.
         if (!vaj) packages.add(WINDOW_MANAGER_PACKAGE);
+        // Exact text-field focus: fcitx5 and its GTK3 and Qt modules tell the display when a text
+        // field takes focus. GTK3 because the starter apps are GTK3. Termux's x11 repository
+        // only; VAJ's repository has not been checked for them.
+        if (!vaj) packages.addAll(Arrays.asList(INPUT_METHOD_PACKAGES));
+        // Sound: the launcher runs this server for everything (LauncherSound). Termux's repository
+        // only; VAJ's has not been checked.
+        if (!vaj) packages.add(AUDIO_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
             if (vaj && app == StarterApp.BROWSER) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
@@ -408,6 +443,10 @@ public final class GuiAppsSetup {
         out.append("command -v ").append(WINDOW_MANAGER_PACKAGE)
             .append(" >/dev/null 2>&1 || { pkg install -y x11-repo >/dev/null 2>&1 || true; "
                 + "pkg install -y ").append(WINDOW_MANAGER_PACKAGE).append("; }\n");
+        // The sound server runs on the Termux side too (LauncherSound); a repository without it
+        // costs the distro its sound and stops nothing.
+        out.append("command -v ").append(AUDIO_PACKAGE).append(" >/dev/null 2>&1 || pkg install -y ")
+            .append(AUDIO_PACKAGE).append(" || true\n");
         out.append("[ -d \"").append(CONTAINERS_PATH).append('/').append(distro.alias)
             .append("/rootfs\" ] || ").append(installStep(distro)).append('\n');
         // The name is asked for out here, not inside the container: the container is entered once,
@@ -451,10 +490,14 @@ public final class GuiAppsSetup {
         packages.addAll(Arrays.asList(distro.fontPackages.split(" ")));
         packages.addAll(Arrays.asList(distro.graphicsPackages.split(" ")));
         packages.add(distro.busPackage);
+        packages.addAll(Arrays.asList(distro.alsaPackages.split(" ")));
         for (StarterApp app : StarterApp.values()) {
             if (starters.contains(app)) packages.add(distro.packageFor(app));
         }
-        out.append(distro.packageManager.install(join(packages)));
+        out.append(distro.packageManager.install(join(packages))).append('\n');
+        // ALSA's default device goes to PulseAudio, unless somebody else's asound.conf is there.
+        out.append("if [ ! -e /etc/asound.conf ] || grep -q 'written by termux-launcher' /etc/asound.conf;"
+            + " then printf '%s' ").append(singleQuote(ASOUND_CONF)).append(" > /etc/asound.conf; fi");
         return out.toString();
     }
 

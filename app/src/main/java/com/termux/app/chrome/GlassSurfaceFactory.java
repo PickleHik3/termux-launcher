@@ -108,7 +108,7 @@ public final class GlassSurfaceFactory {
     /** The dock's tint strength, percent: what every dock-material surface wears. */
     private int dockTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
-        return preferences != null ? preferences.getDockTintStrength()
+        return preferences != null ? preferences.getDockTintStrength(mSurfaces.stackLookHalf())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
     }
 
@@ -165,7 +165,7 @@ public final class GlassSurfaceFactory {
                                 int tintStrengthPercent) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getDockGlassGrain()
+            ? preferences.getDockGlassGrain(mSurfaces.stackLookHalf())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, tintStrengthPercent);
     }
@@ -173,7 +173,7 @@ public final class GlassSurfaceFactory {
     /** The status bar's tint strength, percent. */
     public int statusTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
-        return preferences != null ? preferences.getStatusBarTintStrength()
+        return preferences != null ? preferences.getStatusBarTintStrength(mSurfaces.statusLookHalf())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
     }
 
@@ -233,7 +233,7 @@ public final class GlassSurfaceFactory {
                                      boolean glassDrawsEdge) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getStatusBarGrain()
+            ? preferences.getStatusBarGrain(mSurfaces.statusLookHalf())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         // Height-clamped like the outline clip (min(configured, height/2)): the compact pill's
         // baked stroke must curve exactly with the clip, or the corners double up.
@@ -313,7 +313,7 @@ public final class GlassSurfaceFactory {
                                               @Nullable GlassBackdropCache.Band veilOf) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getStatusBarGrain()
+            ? preferences.getStatusBarGrain(mSurfaces.statusLookHalf())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         return surface(barAlpha, sliceStart, sliceEnd, true, grain, 0f, ChromeEdgeRule.NONE, null,
             veilOf, statusTintStrength());

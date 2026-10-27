@@ -18,6 +18,7 @@ import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -27,11 +28,18 @@ import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
-/** The Display page's "Keyboard follows text fields" row: default on, live only in Touchscreen. */
+/** The Display page's "Keyboard follows text fields" row: default on, live in every touch mode. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class X11DisplayKeyboardFollowsTextTest {
+
+    @After
+    public void restoreFcitx5Check() {
+        com.termux.app.x11.GuiAppsSetupGuide.fcitx5Installed =
+            com.termux.app.x11.GuiAppsSetupGuide.FCITX5_ON_DISK;
+    }
+
 
     private static final String KEY = "x11_keyboard_follows_text";
 
@@ -67,25 +75,39 @@ public class X11DisplayKeyboardFollowsTextTest {
     }
 
     @Test
-    public void inTouchscreen_theRowIsLiveAndSaysWhatItDoes() {
-        setTouchMode("2");
+    public void beforeLinuxAppsAreSetUp_theRowIsGreyedAndKeepsItsValue() {
+        Application app = RuntimeEnvironment.getApplication();
         Preference row = launch().getPreferenceScreen().findPreference(KEY);
         assertNotNull(row);
-        assertTrue(row.isEnabled());
-        assertEquals(RuntimeEnvironment.getApplication()
-                .getString(R.string.settings_x11_keyboard_follows_text_summary),
+        assertFalse(row.isEnabled());
+        assertEquals(app.getString(R.string.settings_x11_keyboard_follows_text_needs_setup),
+            row.getSummary());
+        assertTrue(TermuxAppSharedPreferences.build(app, true).isX11KeyboardFollowsTextEnabled());
+    }
+
+    @Test
+    public void fcitx5OnDiskWithoutTheGuideRunStillGreysTheRow() {
+        Application app = RuntimeEnvironment.getApplication();
+        com.termux.app.x11.GuiAppsSetupGuide.fcitx5Installed = () -> true;
+        Preference row = launch().getPreferenceScreen().findPreference(KEY);
+        assertNotNull(row);
+        assertFalse(row.isEnabled());
+        assertEquals(app.getString(R.string.settings_x11_keyboard_follows_text_needs_setup),
             row.getSummary());
     }
 
     @Test
-    public void inTheOtherTouchModes_theRowIsDimmedAndSaysWhy() {
+    public void inEveryTouchMode_theRowIsLiveAndSaysWhatItDoes() {
         Application app = RuntimeEnvironment.getApplication();
-        for (String mode : new String[]{"1", "3"}) {
+        com.termux.app.x11.GuiAppsSetupGuide.fcitx5Installed = () -> true;
+        com.termux.app.x11.GuiAppsSetupGuide.preferences(app).edit()
+            .putBoolean(com.termux.app.x11.GuiAppsSetupGuide.KEY_COPIED, true).commit();
+        for (String mode : new String[]{"1", "2", "3"}) {
             setTouchMode(mode);
             Preference row = launch().getPreferenceScreen().findPreference(KEY);
             assertNotNull(row);
-            assertFalse("touch mode " + mode, row.isEnabled());
-            assertEquals(app.getString(R.string.settings_x11_keyboard_follows_text_unavailable),
+            assertTrue("touch mode " + mode, row.isEnabled());
+            assertEquals(app.getString(R.string.settings_x11_keyboard_follows_text_summary),
                 row.getSummary());
         }
     }

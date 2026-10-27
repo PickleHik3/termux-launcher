@@ -462,7 +462,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
                 keyboardContainer.getHeight(), choreographer().reservedHeightPx());
 
             settleLayout();
-            int rowsPx = ReflectionHelpers.getField(mActivity, "mAppliedDockContentHeightPx");
+            int rowsPx = appliedDockContentHeightPx();
             assertEquals(form + ": the stack is the rows plus the keyboard column",
                 rowsPx + keyboardColumn.getHeight(), accessoryContainer.getHeight());
             assertEquals(form + ": the extra keys row keeps its height",
@@ -499,8 +499,15 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         settleLayout();
         assertEquals(keyboardPx, choreographer.reservedHeightPx());
-        int rowsPx = ReflectionHelpers.getField(mActivity, "mAppliedDockContentHeightPx");
+        int rowsPx = appliedDockContentHeightPx();
         assertEquals(rowsPx + keyboardPx, accessoryContainer.getHeight());
+    }
+
+    /** The dock's rows and the bottom status band, as the last geometry pass's stack holds them. */
+    private int appliedDockContentHeightPx() {
+        com.termux.app.place.StackLayout.Result stack =
+            ReflectionHelpers.getField(mActivity, "mAppliedStack");
+        return stack.dockContentHeightPx;
     }
 
     @Test
@@ -530,9 +537,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void coldStartOnTheWidgetsPlaceLandsWithTheKeyboardDown() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setAppLauncherWidgetPaneEnabled(true);
-        preferences.setWallLastPage(PaneWallPage.WIDGETS.name());
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_HOME);
 
         PaneWallController wall = buildWall();
+        wall.landOnColdStart(preferences.getLauncherStartIn());
         assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
 
         // The keyboard is built after the wall, remembering itself up (no saved state).
@@ -551,9 +559,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void coldStartOnTheTerminalKeepsTheRestoredKeyboardState() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setAppLauncherWidgetPaneEnabled(true);
-        preferences.setWallLastPage(PaneWallPage.TERMINAL.name());
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_WORKSPACE);
 
         PaneWallController wall = buildWall();
+        wall.landOnColdStart(preferences.getLauncherStartIn());
         assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
 
         hostKeyboard(null);
