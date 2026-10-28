@@ -82,6 +82,12 @@ public final class WallReworkMigration {
             editor.putString(TERMUX_APP.KEY_LAUNCHER_START_IN,
                 startInFor(store.getString(TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE, null)));
         }
+        // Auto-start used to need the Display switch as well. With the switch gone the opt-in
+        // stands alone, so one left behind under a switch that was off must not wake up and
+        // start a server on every launch.
+        if (!store.getBoolean(TERMUX_APP.KEY_X11_DISPLAY_ENABLED, false)) {
+            editor.remove(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART);
+        }
         editor.remove(TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE);
         editor.remove(TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT);
         editor.remove(TERMUX_APP.KEY_X11_DISPLAY_ENABLED);

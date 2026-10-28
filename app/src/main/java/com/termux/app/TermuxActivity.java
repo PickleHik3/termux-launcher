@@ -32546,6 +32546,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mInAppKeyboard != null && mInAppKeyboard.isEnabled();
         }
 
+        @Override public boolean isHomeTerminalWidgetFocused() {
+            com.termux.app.terminal.TerminalPaneController.Window w = mPaneController == null
+                ? null : mPaneController.focusedHomeFloat();
+            return w != null && w.isHostedFloat();
+        }
+
         @Override public boolean cycleInAppKeyboardLayout(int delta) {
             return mInAppKeyboard != null && mInAppKeyboard.cycleTextLayout(delta);
         }
