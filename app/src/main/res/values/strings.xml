@@ -3450,4 +3450,5 @@
         <item quantity="one">%1$d couldn\'t be added.</item>
         <item quantity="other">%1$d couldn\'t be added.</item>
     </plurals>
+    <string name="wall_pages_adjacent_display">Two Display pages can\'t stand side by side</string>
 </resources>

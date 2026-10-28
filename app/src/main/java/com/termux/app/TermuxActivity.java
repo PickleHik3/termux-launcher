@@ -27932,7 +27932,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Runs an edit of the wall's pages through the store (saved, announced). */
     private void editWallPages(@NonNull com.termux.app.wall.WallPagesStore.Edit edit) {
-        wallPagesStore().edit(edit);
+        com.termux.app.wall.WallPages.Result result = wallPagesStore().edit(edit);
+        if (result.error == com.termux.app.wall.WallPages.Error.ADJACENT_DISPLAY) {
+            AppNotice.show(this, R.string.wall_pages_adjacent_display, false);
+        }
     }
 
     /** Whether the display starts with the launcher here: switched on, on a build that has one. */
@@ -30547,9 +30550,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isWidgetsPageShowing() || wallStripFed() && wallStripOn(mLastWallPage))
             syncWallStrip(chips, items);
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
+        // On a Display page the bar shows no terminal window chips (A3c2): the status widgets
+        // beside them stay; the chips come back with the wall's return to the Terminal page.
+        if (isDisplayWindowInFront()) {
+            items = java.util.Collections.emptyList();
+            selected = -1;
+        }
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.
-        bar.setMovableChipCount(chips.rowCount());
+        bar.setMovableChipCount(items.isEmpty() ? 0 : chips.rowCount());
         bar.setWindows(items, selected);
         if (mScene != null && selected >= 0 && selected < items.size())
             mScene.onFocusedWindow(items.get(selected).label);

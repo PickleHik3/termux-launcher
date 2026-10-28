@@ -528,4 +528,20 @@ public class WallPagesTest {
         assertEquals(2, WallParallax.rowIndex(mid, Stop.window(3, 1), 3));
         assertEquals(4, WallParallax.rowIndex(mid, Stop.of(2), 3));
     }
+
+    @Test
+    public void aMoveThatWouldStandTwoDisplayPagesSideBySideIsRefused() {
+        WallPages d = ok(three().add(PageKind.DISPLAY, WallPages.END, null));
+        List<WallPages.Page> v = d.pages();
+        // A second Display page with one page between it and the first, the last.
+        WallPages two = ok(d.add(PageKind.DISPLAY, v.get(v.size() - 3).id, null));
+        List<WallPages.Page> w = two.pages();
+        assertFalse(two.hasAdjacentDisplays());
+        int between = w.get(w.size() - 2).id;
+        Result moved = two.move(between, 0);
+        assertEquals(Error.ADJACENT_DISPLAY, moved.error);
+        assertSame(two, moved.pages);
+        // A move that keeps them apart is taken.
+        assertTrue(two.move(w.get(w.size() - 1).id, 0).ok());
+    }
 }
