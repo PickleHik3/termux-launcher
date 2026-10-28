@@ -27364,6 +27364,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void preview(@NonNull com.termux.app.wall.WallRow.Position position) {
                     showWallPositionAtOnce(position, false);
+                    if (position.kind == com.termux.app.wall.PaneWallPage.WIDGETS) {
+                        mSurfaceEditor.onOverviewCard(
+                            com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE);
+                    } else {
+                        mSurfaceEditor.onOverviewCard(com.termux.app.wall.DisplaySlot.isDisplay(
+                                position.index, displayRowSlot())
+                            ? com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY
+                            : com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL);
+                    }
                 }
                 @Override public void land(@NonNull com.termux.app.wall.WallRow.Position position) {
                     showWallPositionAtOnce(position, true);
