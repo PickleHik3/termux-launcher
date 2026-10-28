@@ -239,7 +239,7 @@ drawer and proot distros. It needs `pulseaudio`, which "Set up Linux apps" insta
 Audio** control it, both on by default.
 
 - **Sound.** The server starts with your first terminal or Linux app and keeps running when you
-  close them; it suspends its output when idle, so it costs next to nothing. It plays through
+  close them, and when you choose Exit in the notification; it suspends its output when idle, so it costs next to nothing. It plays through
   AAudio, or OpenSL ES on a phone where AAudio will not open. If it stops, it starts again at
   once; after three stops within a minute it stays off and the page says so, until your next
   terminal or Linux app.
