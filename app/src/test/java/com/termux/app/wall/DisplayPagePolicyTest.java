@@ -27,9 +27,12 @@ public class DisplayPagePolicyTest {
         return WallPagesMigration.seed("home", 0, "home", 2, true);
     }
 
-    /** [Home 1][Home 2][Terminal 3][Display 4][Display 5 = firefox]. */
+    /**
+     * [Home 1][Home 2][Display 5 = firefox][Terminal 3][Display 4]: two Display pages, never side
+     * by side (WallPages keeps them apart).
+     */
     private static WallPages twoDisplays() {
-        WallPages.Result r = oneDisplay().add(PageKind.DISPLAY, WallPages.END, "firefox");
+        WallPages.Result r = oneDisplay().add(PageKind.DISPLAY, 2, "firefox");
         assertTrue(r.ok());
         return r.pages;
     }
@@ -58,8 +61,8 @@ public class DisplayPagePolicyTest {
     public void displayPagesAreOneSlotEach() {
         List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
         assertEquals(4, slots.size());
-        assertEquals(4, slots.get(2).id());
-        assertEquals(5, slots.get(3).id());
+        assertEquals(5, slots.get(1).id());
+        assertEquals(4, slots.get(3).id());
     }
 
     @Test
@@ -75,19 +78,19 @@ public class DisplayPagePolicyTest {
     @Test
     public void boundDisplaySlotIsTheCurrentDisplayPage() {
         List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
-        assertEquals(2, PaneWallPolicy.boundDisplaySlot(slots, 2, 3));
-        assertEquals(3, PaneWallPolicy.boundDisplaySlot(slots, 3, 2));
+        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 1, 3));
+        assertEquals(3, PaneWallPolicy.boundDisplaySlot(slots, 3, 1));
     }
 
     @Test
     public void boundDisplaySlotFromTheTerminalIsTheOneNextDoor() {
         List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
-        assertEquals(2, PaneWallPolicy.boundDisplaySlot(slots, 1, -1));
-        // Bound to the far one, the view comes next door once the wall is beside it.
-        assertEquals(2, PaneWallPolicy.boundDisplaySlot(slots, 1, 3));
-        // From Home, no Display page next door: the bound one is kept.
-        assertEquals(3, PaneWallPolicy.boundDisplaySlot(slots, 0, 3));
-        assertEquals(2, PaneWallPolicy.boundDisplaySlot(slots, 0, -1));
+        // From the Terminal, a Display page on each side: the left one, unless the right is bound.
+        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 2, -1));
+        assertEquals(3, PaneWallPolicy.boundDisplaySlot(slots, 2, 3));
+        // From Home, the Display page next door takes the view, whichever was bound.
+        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 0, 3));
+        assertEquals(1, PaneWallPolicy.boundDisplaySlot(slots, 0, -1));
     }
 
     @Test
@@ -140,11 +143,13 @@ public class DisplayPagePolicyTest {
     }
 
     @Test
-    public void twoDisplayPagesSideBySideDoNotBothStand() {
+    public void twoDisplayPagesAreNeverSideBySide() {
+        // Added after a Display page's neighbour, the second keeps a page between them.
+        assertTrue(!twoDisplays().hasAdjacentDisplays());
         List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
-        // On Display 4: Display 5 next door is of the current kind, left out for now.
-        assertEquals(Arrays.asList(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY),
-            PaneWallPolicy.builtWindow(slots, 2, 0, 2));
+        // On the Terminal between them, only the bound Display page stands beside it.
+        assertEquals(Arrays.asList(PaneWallPage.DISPLAY, PaneWallPage.TERMINAL),
+            PaneWallPolicy.builtWindow(slots, 2, 0, 1));
     }
 
     @Test
