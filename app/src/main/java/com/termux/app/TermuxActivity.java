@@ -4716,7 +4716,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.WallPages pages = wallPages();
         boolean terminal = wallPage != com.termux.app.wall.PaneWallPage.WIDGETS;
         com.termux.app.wall.WallPages.Page page = null;
-        if (terminal) {
+        if (wallPage == com.termux.app.wall.PaneWallPage.DISPLAY && mBoundDisplayPage >= 0) {
+            // A Display page wears its own dim (W6).
+            page = pages.page(mBoundDisplayPage);
+            if (page == null) page = pages.terminal();
+        } else if (terminal) {
             page = pages.terminal();
         } else {
             // The Home frame wears the Home page it shows, not the home page (ADR 0015 §6).
