@@ -8,7 +8,6 @@ import static org.junit.Assert.assertTrue;
 import com.termux.app.chrome.WindowChips.Kind;
 import com.termux.app.chrome.WindowChips.Meaning;
 import com.termux.app.chrome.WindowChips.Surface;
-import com.termux.app.wall.DisplaySlot;
 
 import org.junit.Test;
 
@@ -89,7 +88,7 @@ public class WindowChipsTest {
 
     @Test
     public void noDisplay_isNoDisplayChip() {
-        WindowChips<String> chips = new WindowChips<>(false, true, AB, DisplaySlot.NONE, 0);
+        WindowChips<String> chips = new WindowChips<>(false, true, AB, -1, 0);
         assertEquals(2, chips.chips().size());
         assertEquals(2, chips.rowCount());
         assertEquals(-1, chips.displayChip());

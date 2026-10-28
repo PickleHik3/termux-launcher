@@ -16,21 +16,19 @@ import org.junit.Test;
  */
 public class PageOverviewPolicyTest {
 
-    // A strip of 3 Home pages, then 3 windows with the display at row place 1.
+    // A strip of 3 Home pages, then 3 terminal windows.
     private static final int HOME = 3;
     private static final int ROW = 3;
-    private static final int SLOT = 1;
 
     @Test
-    public void homePagesComeFirstThenTheWindowsWithTheDisplayWhereItsSlotSays() {
+    public void homePagesComeFirstThenTheTerminalWindows() {
         assertEquals(6, PageOverviewPolicy.cardCount(HOME, ROW));
-        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(0, HOME, SLOT));
-        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(2, HOME, SLOT));
-        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(3, HOME, SLOT));
-        assertEquals(Kind.DISPLAY, PageOverviewPolicy.kindAt(4, HOME, SLOT));
-        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(5, HOME, SLOT));
-        assertEquals("no display: every window is a terminal",
-            Kind.TERMINAL, PageOverviewPolicy.kindAt(4, HOME, DisplaySlot.NONE));
+        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(0, HOME));
+        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(2, HOME));
+        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(3, HOME));
+        assertEquals("the row holds terminal windows only (ADR 0015)",
+            Kind.TERMINAL, PageOverviewPolicy.kindAt(4, HOME));
+        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(5, HOME));
         assertEquals(1, PageOverviewPolicy.rowPlace(4, HOME));
         assertEquals(4, PageOverviewPolicy.positionOfRow(1, HOME));
     }

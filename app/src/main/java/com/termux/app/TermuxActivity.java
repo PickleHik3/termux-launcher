@@ -686,25 +686,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private long mRoutedLinuxAtMs;
     /** True while a landing runs its bound app: the runner's show-display step must not slide. */
     private boolean mLandingRunsApp;
-    /**
-     * Where the display window stands in its session's row and whether it is the window in front
-     * (ADR 0008, amended 2026-10-19). The display is a window of the Workspace, kept beside the
-     * session's terminal windows rather than among them: it has no panes.
-     */
-    @NonNull private final com.termux.app.wall.DisplaySlot<
-        com.termux.app.terminal.TerminalPaneController.Window> mDisplaySlot =
-            new com.termux.app.wall.DisplaySlot<>();
-    /** The session whose row holds the display window; null for the row of no session. */
-    @Nullable private WSession mDisplaySession;
-    /** Saved-instance-state keys for the display window's row place and front, across a recreate. */
-    private static final String ARG_DISPLAY_SLOT = "display_row_slot";
-    private static final String ARG_DISPLAY_FRONT = "display_front";
-    /**
-     * The row place and front a recreate saved for the display window, applied the first time it
-     * joins a session's row afterwards; {@code DisplaySlot.NONE} when there is nothing to apply.
-     */
-    private int mPendingDisplaySlot = com.termux.app.wall.DisplaySlot.NONE;
-    private boolean mPendingDisplayFront;
     /** The apps open on the display: the drawer's Displays group, and its chip's front icon. */
     @Nullable private com.termux.app.x11.X11WindowList mX11Windows;
     @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
@@ -1918,9 +1899,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
             mPendingWallState = savedInstanceState;
-            mPendingDisplaySlot = savedInstanceState.getInt(ARG_DISPLAY_SLOT,
-                com.termux.app.wall.DisplaySlot.NONE);
-            mPendingDisplayFront = savedInstanceState.getBoolean(ARG_DISPLAY_FRONT, false);
             mAppearanceHandover.take(savedInstanceState);
         } else {
             // No instance state while the process lives on: the layout the last activity left.
@@ -11257,13 +11235,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (paneLayout != null) savedInstanceState.putBundle(ARG_PANE_LAYOUT, paneLayout);
         if (mTermuxService != null) sProcessPaneLayout = paneLayout;
         if (mPaneWallController != null) mPaneWallController.onSaveInstanceState(savedInstanceState);
-        // The display window is not in the session's windows: where it stood in the current row,
-        // and whether it was in front, go with the recreate so it rejoins there.
-        int displaySlot = mDisplaySession != null && mDisplaySession == mCurrentWSession
-            ? displayRowSlot() : com.termux.app.wall.DisplaySlot.NONE;
-        savedInstanceState.putInt(ARG_DISPLAY_SLOT, displaySlot);
-        savedInstanceState.putBoolean(ARG_DISPLAY_FRONT,
-            displaySlot >= 0 && isDisplayWindowInFront());
         saveAppearanceRelaunch(savedInstanceState);
     }
 
@@ -18628,23 +18599,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (chipIndex > 0) items.add(Menu.NONE, 1, 1, R.string.tool_window_move_left);
             if (chipIndex < count - 1) items.add(Menu.NONE, 2, 2, R.string.tool_window_move_right);
             items.add(Menu.NONE, 3, 3, R.string.tool_window_close);
-            // On the display's chip, the other apps open on it, to switch between.
+            // The row's chips are terminal windows only (ADR 0015): no display apps to list.
             java.util.List<com.termux.app.x11.X11WindowList.Window> others = new java.util.ArrayList<>();
-            if (com.termux.app.wall.DisplaySlot.isDisplay(chipIndex, displayRowSlot())) {
-                int front = com.termux.app.x11.DisplayWindowName.frontIndex(
-                    mDisplayWindows.size(), mDisplayActiveWindow);
-                com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
-                String display = getString(R.string.launcher_entry_display);
-                for (int i = 0; i < mDisplayWindows.size(); i++) {
-                    if (i == front) continue;
-                    com.termux.app.x11.X11WindowList.Window window = mDisplayWindows.get(i);
-                    String name = com.termux.app.x11.DisplayWindowName.of(
-                        apps == null ? null : apps.nameFor(window.wmClass), window.label, display);
-                    items.add(Menu.NONE, 100 + others.size(), 100 + others.size(),
-                        getString(R.string.display_window_switch_to, name));
-                    others.add(window);
-                }
-            }
             menu.setOnMenuItemClickListener(item -> {
                 int other = item.getItemId() - 100;
                 if (other >= 0 && other < others.size()) {
@@ -22399,25 +22355,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Moves the Workspace's window at row place {@code from} to {@code to}: a chip dropped in the
-     * window bar, {@code window.move}, the palette's Move window left / right. The display window
-     * moves like the others ({@link com.termux.app.wall.DisplaySlot#move}). The window in front
-     * stays in front and its index follows it. Everything that reads the row — the window bar,
+     * window bar, {@code window.move}, the palette's Move window left / right. The row holds
+     * terminal windows only (ADR 0015). The window in front stays in front and its index follows
+     * it. Everything that reads the row — the window bar,
      * the drawer, the wall's inner index, the Ctrl+Alt window keys, Saved sessions — reads
      * {@link WSession#windows} and the display's place, so one rebuild brings them all along.
      * False when either place is outside the row.
      */
     boolean moveWindow(int from, int to) {
-        int slot = displayRowSlot();
-        com.termux.app.wall.DisplaySlot.Move move =
-            com.termux.app.wall.DisplaySlot.move(rowWindows().size(), slot, from, to);
-        if (!move.accepted) return false;
+        int count = rowWindows().size();
+        if (from < 0 || from >= count || to < 0 || to >= count) return false;
         if (from == to) return true;
-        if (move.windowFrom >= 0 && mCurrentWSession != null) {
+        if (mCurrentWSession != null) {
             mCurrentWSession.current = com.termux.app.terminal.WindowReorderPolicy.move(
-                mCurrentWSession.windows, move.windowFrom, move.windowTo,
-                mCurrentWSession.current);
+                mCurrentWSession.windows, from, to, mCurrentWSession.current);
         }
-        if (move.slot >= 0) mDisplaySlot.place(rowWindows(), move.slot);
         rebuildDrawerSessions();
         refreshTerminalWindowBar();
         return true;
@@ -22435,9 +22387,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean consumeWindow(boolean fromLeft) {
         if (mPaneController == null || mCurrentWSession == null) return false;
         // The display window has no panes to give or take: it neither consumes nor is consumed.
-        int slot = displayRowSlot();
-        if (isDisplayWindowInFront() || com.termux.app.wall.DisplaySlot.isDisplay(
-                rowCurrentIndex() + (fromLeft ? -1 : 1), slot)) return false;
+        if (isDisplayWindowInFront()) return false;
         WSession ws = mCurrentWSession;
         int current = ws.current;
         int source = com.termux.app.terminal.ColumnPolicy.consumeSource(current, ws.windows.size(),
@@ -25903,12 +25853,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
                     mStatusCardHost.dismiss();
-                    // A terminal window leaving for another is pictured; the display window, as
-                    // it comes or goes, is carried by the wall itself (setDisplayInFront).
-                    int slot = displayRowSlot();
-                    int from = rowCurrentIndex();
-                    if (com.termux.app.wall.DisplaySlot.isDisplay(from, slot)
-                        || com.termux.app.wall.DisplaySlot.isDisplay(from + steps, slot)) return;
+                    // A terminal window leaving for another is pictured.
                     captureTerminalDeparture();
                 }
                 @Override public void onInnerStep(@NonNull com.termux.app.wall.PaneWallPage page,
@@ -26710,15 +26655,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return false;
     }
 
-    /** The display window's place in the current row; {@code DisplaySlot.NONE} when not there. */
-    private int displayRowSlot() {
-        return isDisplayOnRow() ? mDisplaySlot.slot(rowWindows())
-            : com.termux.app.wall.DisplaySlot.NONE;
-    }
-
-    /** How many windows the current row has, the display window's included. */
+    /** How many windows the current row has: its terminal windows (ADR 0015). */
     private int rowWindowCount() {
-        return com.termux.app.wall.DisplaySlot.rowCount(rowWindows().size(), displayRowSlot());
+        return rowWindows().size();
     }
 
     /**
@@ -26732,9 +26671,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The row place of the window in front, the display window's included. */
     private int rowCurrentIndex() {
-        return com.termux.app.wall.DisplaySlot.rowCurrent(isDisplayWindowInFront(),
-            mCurrentWSession == null ? 0 : mCurrentWSession.current, rowWindows().size(),
-            displayRowSlot());
+        return Math.max(0, Math.min(mCurrentWSession == null ? 0 : mCurrentWSession.current, Math.max(0, rowWindows().size() - 1)));
     }
 
     /** Whether the wall is on a Display page (A3b); see {@link #isDisplayWindowInFront}. */
@@ -26823,17 +26760,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void showRowWindow(int row) {
         if (mPaneController == null) return;
-        int slot = displayRowSlot();
-        int count = com.termux.app.wall.DisplaySlot.rowCount(rowWindows().size(), slot);
+        int count = rowWindows().size();
         if (row < 0 || row >= count) return;
         int previous = rowCurrentIndex();
         if (row == previous) return;
         int direction = row > previous ? 1 : -1;
-        if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) {
-            setDisplayInFront(true, direction, 0f, previous);
-            return;
-        }
-        int window = com.termux.app.wall.DisplaySlot.windowAt(row, slot);
+        int window = row;
         if (isDisplayWindowInFront()) {
             // The display goes off as the window comes in: no picture of a terminal is leaving.
             if (mCurrentWSession != null && window != mCurrentWSession.current) {
@@ -26845,20 +26777,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         showWindowFromBar(window);
-    }
-
-    /**
-     * The terminal window in front closed from row place {@code removedRow}: when the window that
-     * takes its place in the row ({@link com.termux.app.wall.DisplaySlot#rowAfterRemoval}) is the
-     * display window, the display comes in front, at once. Answers whether it did.
-     */
-    private boolean landOnDisplayAfterClose(int removedRow) {
-        int slot = displayRowSlot();
-        if (slot < 0) return false;
-        int landing = com.termux.app.wall.DisplaySlot.rowAfterRemoval(removedRow, rowWindowCount());
-        if (!com.termux.app.wall.DisplaySlot.isDisplay(landing, slot)) return false;
-        setDisplayInFront(true, 0, 0f, removedRow);
-        return true;
     }
 
     /**
@@ -26877,12 +26795,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * closes, the display window's included ({@link #closeDisplayWindowFromRow}).
      */
     private void closeRowWindow(int row) {
-        int slot = displayRowSlot();
-        if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) {
-            closeDisplayWindowFromRow();
-            return;
-        }
-        int window = com.termux.app.wall.DisplaySlot.windowAt(row, slot);
+        int window = row;
         if (window < 0 || window >= rowWindows().size()) return;
         if (windowHasForegroundJob(window)) confirmCloseWindow(window);
         else closeWindow(window);
@@ -27180,8 +27093,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void tearDownEmbeddedDisplay() {
         if (mPaneWallController == null || mPaneWallController.displayWindow() == null) return;
         boolean wasInFront = isDisplayWindowInFront();
-        mDisplaySlot.leave();
-        mDisplaySession = null;
         mDisplayRequested = false;
         if (mDisplayStop != null) {
             mDisplayStop.abandon();
@@ -28127,41 +28038,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public int rowCount() {
                     return rowWindowCount();
                 }
-                @Override public int displaySlot() {
-                    return displayRowSlot();
-                }
                 @Override @NonNull public Object windowKey(int row) {
-                    int slot = displayRowSlot();
-                    if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) {
-                        return PAGE_OVERVIEW_DISPLAY_KEY;
-                    }
-                    int window = com.termux.app.wall.DisplaySlot.windowAt(row, slot);
+                    int window = row;
                     java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                         rowWindows();
                     return window >= 0 && window < windows.size() ? windows.get(window)
                         : PAGE_OVERVIEW_DISPLAY_KEY;
                 }
                 @Override public boolean windowBusy(int row) {
-                    int slot = displayRowSlot();
-                    if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) return false;
-                    return windowHasForegroundJob(com.termux.app.wall.DisplaySlot.windowAt(row, slot));
+                    return windowHasForegroundJob(row);
                 }
                 @Override public void moveWindow(int fromRow, int toRow) {
                     TermuxActivity.this.moveWindow(fromRow, toRow);
                 }
                 @Override public void removeWindow(int row) {
-                    int slot = displayRowSlot();
                     int terminals = rowWindows().size();
-                    if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) {
-                        // The undo window already stood in for the question: it stops now.
-                        if (!isDisplayUp()) return;
-                        if (!isEmbeddedDisplayRunning()) tearDownEmbeddedDisplay();
-                        else stopEmbeddedDisplay();
-                        startInAfterRemoval(com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY,
-                            terminals);
-                        return;
-                    }
-                    closeWindow(com.termux.app.wall.DisplaySlot.windowAt(row, slot));
+                    closeWindow(row);
                     startInAfterRemoval(com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL,
                         Math.max(0, terminals - 1));
                 }
@@ -28176,15 +28068,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void addDisplay(int row) {
                     openDisplayWindow(true);
-                    if (!isDisplayOnRow() || mCurrentWSession == null) return;
-                    mDisplaySlot.place(rowWindows(), row);
-                    refreshTerminalWindowBar();
                 }
                 @Override @Nullable public TerminalSession windowSession(int row) {
-                    int slot = displayRowSlot();
-                    if (mPaneController == null
-                        || com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) return null;
-                    int window = com.termux.app.wall.DisplaySlot.windowAt(row, slot);
+                    if (mPaneController == null) return null;
+                    int window = row;
                     java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                         rowWindows();
                     return window >= 0 && window < windows.size()
@@ -28251,21 +28138,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mWidgetPaneController != null) mWidgetPaneController.showHomePage(position.index);
             return;
         }
-        int slot = displayRowSlot();
         int row = position.index;
         if (row < 0 || row >= rowWindowCount()) return;
         int previous = rowCurrentIndex();
-        if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) {
-            if (landing) {
-                setDisplayInFront(true, 0, 0f, previous);
-                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, false);
-                refreshTerminalWindowBar();
-            } else if (isDisplayWindowShowing()) {
-                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, false);
-            }
-            return;
-        }
-        int window = com.termux.app.wall.DisplaySlot.windowAt(row, slot);
+        int window = row;
         if (mPaneController != null && mCurrentWSession != null && window >= 0
                 && window < mCurrentWSession.windows.size() && window != mCurrentWSession.current) {
             mCurrentWSession.current = window;
@@ -31572,26 +31448,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dropTerminalDepartureSnapshot();
             return;
         }
-        int slot = displayRowSlot();
         int from = rowCurrentIndex();
         int row = from + steps;
-        if (row < 0 || row >= com.termux.app.wall.DisplaySlot.rowCount(rowWindows().size(), slot)) {
+        if (row < 0 || row >= rowWindows().size()) {
             dropTerminalDepartureSnapshot();
             return;
         }
-        // Onto the display window, or off it: the wall carries the frame in or out beside the
-        // window it swaps with, from where the drag had brought it.
-        if (com.termux.app.wall.DisplaySlot.isDisplay(row, slot)) {
-            dropTerminalDepartureSnapshot();
-            setDisplayInFront(true, steps > 0 ? 1 : -1, fromPx, from);
-            return;
-        }
-        int target = com.termux.app.wall.DisplaySlot.windowAt(row, slot);
+        int target = row;
         if (mCurrentWSession == null || target < 0 || target >= mCurrentWSession.windows.size()) {
             dropTerminalDepartureSnapshot();
             return;
         }
-        if (com.termux.app.wall.DisplaySlot.isDisplay(from, slot)) {
+        if (isDisplayWindowInFront()) {
             dropTerminalDepartureSnapshot();
             if (target != mCurrentWSession.current) {
                 mCurrentWSession.current = target;
@@ -31652,12 +31520,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (mPaneController == null || index == rowCurrentIndex()) return;
-        int slot = displayRowSlot();
-        if (com.termux.app.wall.DisplaySlot.isDisplay(index, slot)) {
-            setDisplayInFront(true, 0, 0f, com.termux.app.wall.WallParallax.ADJACENT);
-            return;
-        }
-        int window = com.termux.app.wall.DisplaySlot.windowAt(index, slot);
+        int window = index;
         if (mCurrentWSession == null || window < 0 || window >= mCurrentWSession.windows.size()) {
             return;
         }
@@ -31717,7 +31580,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController == null || mCurrentWSession == null
             || index < 0 || index >= mCurrentWSession.windows.size()) return;
         if (isDisplayWindowInFront()) {
-            showRowWindow(com.termux.app.wall.DisplaySlot.rowOf(index, displayRowSlot()));
+            showRowWindow(index);
             return;
         }
         int previous = mCurrentWSession.current;
@@ -31731,7 +31594,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the arrival's offset (a whole jump) and the nudge's first tick wrote the departure back.
         // The wallpaper's pan counts row places, the display window's among them.
         animateTerminalWindowArrival(index >= previous ? 1 : -1,
-            com.termux.app.wall.DisplaySlot.rowOf(previous, displayRowSlot()));
+            previous);
         rebuildDrawerSessions();
     }
 
@@ -32404,8 +32267,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ws.name = TerminalNamePolicy.normalizeSession(shell.mSessionName);
             mWSessions.add(ws);
             mCurrentWSession = ws;
-            // A display window alone in the row joins this session behind the new window.
-            if (focus) mDisplaySlot.setFront(false);
             mPaneController.showWindow(w);
             rebuildDrawerSessions();
             if (mPaneWallController != null && focus) {
@@ -32507,8 +32368,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * display window keeps its place among the windows around it.
      */
     private int insertRowWindow(@NonNull com.termux.app.terminal.TerminalPaneController.Window w) {
-        return insertRowWindowAt(w, com.termux.app.wall.DisplaySlot.insertionRow(
-            rowCurrentIndex(), rowWindowCount()));
+        return insertRowWindowAt(w, com.termux.app.wall.WallRow.insertionIndex(rowCurrentIndex(), rowWindowCount()));
     }
 
     /**
@@ -32520,14 +32380,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                   int row) {
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
             mCurrentWSession.windows;
-        int slot = displayRowSlot();
-        row = Math.max(0, Math.min(row,
-            com.termux.app.wall.DisplaySlot.rowCount(windows.size(), slot)));
-        int at = com.termux.app.wall.DisplaySlot.windowIndexForInsert(row, slot);
+        int at = Math.max(0, Math.min(row, windows.size()));
         windows.add(at, w);
-        if (slot >= 0) {
-            mDisplaySlot.place(windows, com.termux.app.wall.DisplaySlot.slotAfterInsert(row, slot));
-        }
         return at;
     }
 
@@ -32607,7 +32461,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int oldIndex = mCurrentWSession.current;
         // Behind the display window in front, the current window is not the one on screen.
         boolean visible = index == oldIndex && !isDisplayWindowInFront();
-        int removedRow = com.termux.app.wall.DisplaySlot.rowOf(index, displayRowSlot());
         // Creation's pan in reverse: the dying window is carried off and a neighbour slides in —
         // from the left when the strip's tail was closed, from the right when a middle window's
         // right-hand neighbour moves up to fill its slot. Only the visible window is carried off;
@@ -32623,9 +32476,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else if (index == oldIndex) {
             mCurrentWSession.current = Math.min(oldIndex, mCurrentWSession.windows.size() - 1);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
-            if (visible && landOnDisplayAfterClose(removedRow)) {
-                dropTerminalDepartureSnapshot();
-            } else if (visible) {
+            if (visible) {
                 animateTerminalWindowLifecycleArrival(mCurrentWSession.current < oldIndex ? -1 : 1);
             } else {
                 refreshTerminalWindowBar();
@@ -32690,14 +32541,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The closed session is carried off along the session axis, the survivor slides in —
             // the same travel its creation played, reversed. Callers capture the departure.
             animateTerminalSessionLifecycleArrival(-1);
-        } else if (isDisplayOnRow()) {
-            // The display window is the row's last window now: it comes in front from the left,
-            // as the closed tail's neighbour would, while the closed window is carried off.
-            if (mPaneWallController != null) {
-                mPaneWallController.refreshPages();
-                dropTerminalDepartureSnapshot();
-                setDisplayInFront(true, -1, 0f, com.termux.app.wall.WallParallax.ADJACENT);
-            }
         } else {
             // The row's last window is gone: the last Home page slides in and the Workspace is
             // gone with it. No shell starts behind Home; the Terminal entry opens the next one.
@@ -32720,8 +32563,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int removed = ws.windows.indexOf(w);
         int oldIndex = ws.current;
         boolean onScreen = ws == mCurrentWSession && removed == oldIndex && !isDisplayWindowInFront();
-        int removedRow = ws == mCurrentWSession
-            ? com.termux.app.wall.DisplaySlot.rowOf(removed, displayRowSlot()) : removed;
         ws.windows.remove(w);
         int next = com.termux.app.terminal.WindowCloseFocus.afterRemoval(oldIndex, removed, ws.windows.size());
         if (next < 0) {
@@ -32737,7 +32578,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // No departure snapshot here — the window died with its last shell and its panes
                 // are already gone — but the neighbour still arrives with the travel language;
                 // behind the display window in front nothing on screen moved.
-                if (onScreen && !landOnDisplayAfterClose(removedRow))
+                if (onScreen)
                     animateTerminalWindowLifecycleArrival(next < oldIndex ? -1 : 1);
             }
         }
@@ -32811,7 +32652,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 rowShown ? rowWindows()
                     : java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>
                         emptyList(),
-                rowShown ? displayRowSlot() : com.termux.app.wall.DisplaySlot.NONE,
+                rowShown ? -1 : -1,
                 rowShown ? rowCurrentIndex() : 0);
         if (mPaneController == null) return chips;
         com.termux.app.terminal.TerminalPaneController.Window focused =
@@ -32891,13 +32732,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ws.name = TerminalNamePolicy.normalizeSession(shell == null ? null : shell.mSessionName);
             mWSessions.add(ws);
             mCurrentWSession = ws;
-            // A display window alone in the row joins this session; the docked window is in front.
-            mDisplaySlot.setFront(false);
-        } else if (isDisplayOnRow()) {
-            // Right after the window in front, the display window's included; the docked window
-            // is the one in front from now on.
-            mCurrentWSession.current = insertRowWindow(window);
-            mDisplaySlot.setFront(false);
         } else {
             mCurrentWSession.dockAfterCurrent(window);
         }
@@ -32920,25 +32754,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         WSession ws = wsessionOwning(window);
         if (ws == null || mPaneController.homeFloatLayer() == null) return false;
         int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
-        // The display window's place in this row, in row places, taken before the window leaves
-        // it: a refused move puts it back exactly, and an accepted one may hand it the front.
-        boolean displayHere = ws == mCurrentWSession && isDisplayOnRow();
-        int slotBefore = displayHere ? displayRowSlot() : com.termux.app.wall.DisplaySlot.NONE;
-        int removedRow = com.termux.app.wall.DisplaySlot.rowOf(ws.windows.indexOf(window),
-            slotBefore);
-        boolean wasInFront = ws.windows.indexOf(window) == ws.current;
         int next = ws.takeOutFor(window, () -> mPaneController.floatWindowOntoHome(window, page));
-        if (next == WSession.REFUSED) {
-            if (displayHere) mDisplaySlot.place(ws.windows, slotBefore);
-            return false;
-        }
-        // The window that takes its place in the row is the one in front when the Workspace is
-        // next shown: the display window, when that is its neighbour there.
-        if (displayHere && wasInFront && next >= 0 && com.termux.app.wall.DisplaySlot.isDisplay(
-                com.termux.app.wall.DisplaySlot.rowAfterRemoval(removedRow, rowWindowCount()),
-                displayRowSlot())) {
-            mDisplaySlot.setFront(true);
-        }
+        if (next == WSession.REFUSED) return false;
         if (next < 0) {
             mWSessions.remove(ws);
             if (ws == mCurrentWSession) {
@@ -32969,7 +32786,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The Home palette's actions that need the wall, and what it asks about Home floats. */
     private final class PaletteHomeHost implements com.termux.app.terminal.CommandPaletteHomeHost {
         @Override public int rowIndexOf(int window) {
-            return com.termux.app.wall.DisplaySlot.rowOf(window, displayRowSlot());
+            return window;
         }
 
         @Override public void openTerminalHere() { openHomeFloatHere(); }
@@ -33913,7 +33730,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int rowIndexOf(int window) {
-            return com.termux.app.wall.DisplaySlot.rowOf(window, displayRowSlot());
+            return window;
         }
 
         @Override public boolean isDisplayWindowInFront() {

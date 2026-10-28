@@ -5,7 +5,7 @@ import androidx.annotation.NonNull;
 /**
  * The page overview's rules (Launcher3's overview for this wall; ADR 0008 "one wall, two
  * halves"): one strip of cards, Home's pages first and then the current session's windows, the
- * display window among them where {@link DisplaySlot} stands it. Pure, so the halves, where a
+ * row holding terminal windows only since ADR 0015 A3b (Display pages are wall pages). Pure, so the halves, where a
  * dragged card may land, where an added card goes, which cards can be removed and how, and when
  * a display can be added read as arithmetic.
  *
@@ -50,11 +50,10 @@ public final class PageOverviewPolicy {
         return position >= 0 && position < homeCount;
     }
 
-    /** The kind of card at {@code position}; the display slot is a row place, NONE when absent. */
+    /** The kind of card at {@code position}: a Home page's, else a terminal window's. */
     @NonNull
-    public static Kind kindAt(int position, int homeCount, int displaySlot) {
-        if (isHome(position, homeCount)) return Kind.HOME_PAGE;
-        return DisplaySlot.isDisplay(position - homeCount, displaySlot) ? Kind.DISPLAY : Kind.TERMINAL;
+    public static Kind kindAt(int position, int homeCount) {
+        return isHome(position, homeCount) ? Kind.HOME_PAGE : Kind.TERMINAL;
     }
 
     /** The row place of the window card at {@code position}. */

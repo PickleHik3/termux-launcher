@@ -116,10 +116,8 @@ public final class PageOverviewView extends FrameLayout {
         /** The Terminal page becomes home ({@link WallPages#setHome}). */
         default void setTerminalHome() { chooseHome(PageOverviewPolicy.Kind.TERMINAL, 0); }
 
-        // The current session's row of windows, the display window among them.
+        // The current session's row of terminal windows (ADR 0015: no display window in it).
         int rowCount();
-        /** The display window's row place, {@link DisplaySlot#NONE} when it is not on the row. */
-        int displaySlot();
         /** Something that stays the same for the window at row place {@code row} while it lives. */
         @NonNull Object windowKey(int row);
         /** Whether the terminal window at {@code row} is running a process. */
@@ -532,11 +530,10 @@ public final class PageOverviewView extends FrameLayout {
         for (int page = 0; page < before; page++) addHomeCard(page);
         blockStart = cards.size();
         int rows = Math.max(0, host.rowCount());
-        int slot = host.displaySlot();
         if (displayGoing && !host.displayOpen()) displayGoing = false;
         int terminals = 0;
         for (int row = 0; row < rows; row++) {
-            boolean display = DisplaySlot.isDisplay(row, slot);
+            boolean display = false;
             if (!display) terminals++;
             Object key = host.windowKey(row);
             if (isPending(key) || (display && displayGoing)) continue;

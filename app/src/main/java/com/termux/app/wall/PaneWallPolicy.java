@@ -65,7 +65,7 @@ public final class PaneWallPolicy {
     /**
      * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
      * pages first, always there; then the Workspace's windows, only while the current session's
-     * row has one — a terminal window, or the display window ({@link DisplaySlot}). A Home page and
+     * row has one — a terminal window, or the display window (before ADR 0015 A3b). A Home page and
      * a window are each one entry here however many of them there are: the Home pages page inside
      * the widget grid and the windows inside the Workspace's view ({@link WallRow}), and the wall
      * only slides between the stretches.
