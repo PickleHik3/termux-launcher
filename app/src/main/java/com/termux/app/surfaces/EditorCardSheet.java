@@ -444,6 +444,8 @@ final class EditorCardSheet {
     void show(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> rows,
               @NonNull String resetLabel, boolean animate, int raiseTo) {
         boolean sameCard = mShown && card == mCard;
+        // A restatement with another row list (a chip offered or withdrawn) rebuilds in place.
+        boolean sameRows = sameCard && rows.equals(mBuilt);
         mCard = card;
         mReset.setContentDescription(resetLabel);
         androidx.appcompat.widget.TooltipCompat.setTooltipText(mReset, resetLabel);
@@ -456,9 +458,10 @@ final class EditorCardSheet {
                 mTitle.setLayoutParams(titleParams);
             }
         }
-        if (!sameCard) {
+        if (!sameRows) {
+            int scrollY = mScroll.getScrollY();
             build(card, rows);
-            mScroll.scrollTo(0, 0);
+            mScroll.scrollTo(0, sameCard ? scrollY : 0);
         }
         restateEye();
         EditorViews.setText(mTitle, mContext.getString(card.titleRes));
@@ -907,7 +910,11 @@ final class EditorCardSheet {
      * that follow one another share one strip, a column each, even across a tier's edge: the
      * strip stands in the tier of its first column.
      */
+    /** The rows the sheet was last built with, so a restatement can tell a changed list. */
+    @NonNull private List<EditorRows.Spec> mBuilt = java.util.Collections.emptyList();
+
     private void build(@NonNull EditorCard card, @NonNull List<EditorRows.Spec> specs) {
+        mBuilt = new java.util.ArrayList<>(specs);
         mRows.removeAllViews();
         mRowViews.clear();
         int tier = 0;

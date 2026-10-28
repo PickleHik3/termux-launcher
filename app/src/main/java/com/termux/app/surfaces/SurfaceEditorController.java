@@ -294,6 +294,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // ------------------------------------------------------------------------------ session state
 
     private boolean mOpen;
+
+    /** Whether the editor is open: its chrome then stands beside the page. */
+    public boolean isOpen() {
+        return mOpen;
+    }
     /** The state at open: what Undo and Discard return to, and what "unsaved" is measured against. */
     @Nullable private AppearanceSnapshot mEntry;
     @Nullable private String mEntrySignature;

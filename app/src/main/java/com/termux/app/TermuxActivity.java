@@ -27384,6 +27384,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The surface editor scales this container; the overview draws it alone.
                     return findViewById(R.id.terminal_root_container);
                 }
+                @Override public boolean editorOpen() {
+                    return mSurfaceEditor.isOpen();
+                }
                 @Override @Nullable public View backdrop() {
                     return findViewById(R.id.wallpaper_backdrop);
                 }

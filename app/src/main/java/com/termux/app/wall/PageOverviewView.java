@@ -140,6 +140,8 @@ public final class PageOverviewView extends FrameLayout {
          * stands as laid out. The live card then draws this view alone, at its natural size.
          */
         @Nullable default View posedFrame() { return null; }
+        /** Whether the surface editor is open: its chrome and sheet then stand beside the page. */
+        default boolean editorOpen() { return false; }
         /** The launcher's own wallpaper, drawn full-screen behind the cards when it is showing. */
         @Nullable View backdrop();
         /** The display's surface, for its card's picture; null while there is none. */
@@ -1257,6 +1259,9 @@ public final class PageOverviewView extends FrameLayout {
     private View posedFrame() {
         View frame = host.posedFrame();
         if (frame == null || frame.getWidth() <= 0) return null;
+        // With the editor open its label and sheet stand beside the page in the root, so the page
+        // is drawn alone even while the frame stands unposed.
+        if (host.editorOpen()) return frame;
         return OverviewGeometry.framePosed(frame.getScaleX(), frame.getScaleY(),
             frame.getTranslationX(), frame.getTranslationY()) ? frame : null;
     }
