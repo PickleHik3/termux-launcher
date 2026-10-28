@@ -27010,16 +27010,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             default:
                 break;
         }
-        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null ? null
-            : com.termux.app.x11.LinuxAppCatalog.find(
-                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots()),
-                page.binding);
-        android.graphics.drawable.Drawable icon = null;
-        if (app != null) {
-            java.io.File file = com.termux.app.x11.LinuxAppIcons.find(app);
-            icon = file == null ? null
-                : com.termux.app.x11.LinuxAppIcons.load(getResources(), file);
+        // The card's name and icon come from the cache (W2): read off the main thread once per
+        // binding, never on a drag's re-bind.
+        com.termux.app.x11.DisplayCardCache.Card<android.graphics.drawable.Drawable> card =
+            page.binding == null ? null : displayCards().card(page.binding);
+        if (page.binding != null && card == null && mDisplayCardsAsked.add(page.binding)) {
+            refreshDisplayCards();
         }
+        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = card == null ? null : card.app;
+        android.graphics.drawable.Drawable icon = card == null ? null : card.icon;
         if (icon == null) {
             icon = androidx.core.content.ContextCompat.getDrawable(this,
                 R.drawable.ic_symbol_desktop_windows);
@@ -27030,6 +27029,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         frame.showPageStill(null, icon, com.termux.app.wall.DisplayPagePolicy.cardName(page,
             app == null ? null : app.name));
+    }
+
+    @Nullable private com.termux.app.x11.DisplayCardCache<android.graphics.drawable.Drawable>
+        mDisplayCards;
+    /** Bindings whose card a refresh was asked for since the catalog last changed. */
+    private final java.util.Set<String> mDisplayCardsAsked = new java.util.HashSet<>();
+    private static final java.util.concurrent.ExecutorService DISPLAY_CARD_READER =
+        java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "display-cards");
+            thread.setDaemon(true);
+            return thread;
+        });
+
+    /** The Linux app catalog and the bound Display pages' cards, read off the main thread. */
+    @NonNull
+    private com.termux.app.x11.DisplayCardCache<android.graphics.drawable.Drawable> displayCards() {
+        if (mDisplayCards == null) {
+            final android.content.res.Resources resources = getResources();
+            mDisplayCards = new com.termux.app.x11.DisplayCardCache<>(
+                () -> com.termux.app.x11.LinuxAppCatalog.scan(
+                    com.termux.app.x11.LinuxAppCatalog.roots()),
+                app -> {
+                    java.io.File file = com.termux.app.x11.LinuxAppIcons.find(app);
+                    return file == null ? null
+                        : com.termux.app.x11.LinuxAppIcons.load(resources, file);
+                },
+                DISPLAY_CARD_READER, this::runOnUiThread);
+        }
+        return mDisplayCards;
+    }
+
+    /** Reads the catalog and every bound Display page's card again; the still follows. */
+    private void refreshDisplayCards() {
+        java.util.List<String> bindings = new java.util.ArrayList<>();
+        for (com.termux.app.wall.WallPages.Page p : wallPages().pages()) {
+            if (p.kind == com.termux.app.wall.WallPages.PageKind.DISPLAY && p.binding != null)
+                bindings.add(p.binding);
+        }
+        displayCards().refresh(bindings, () -> {
+            if (!isFinishing()) applyDisplayPageStill();
+        });
     }
 
     /** The display's frame on the wall while the wall has a Display page, the display up or not. */
@@ -27057,9 +27097,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String binding = page == null ? null : page.binding;
         com.termux.app.x11.LinuxAppCatalog.LinuxApp app = null;
         if (binding != null) {
-            app = com.termux.app.x11.LinuxAppCatalog.find(
-                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots()),
-                binding);
+            app = displayCards().find(binding);
+            // Not in the cached catalog (not read yet, or installed since): one scan, on a landing
+            // only, never per frame.
+            if (app == null) {
+                app = com.termux.app.x11.LinuxAppCatalog.find(
+                    com.termux.app.x11.LinuxAppCatalog.scan(
+                        com.termux.app.x11.LinuxAppCatalog.roots()), binding);
+            }
             if (app == null) {
                 Logger.logWarn(LOG_TAG, "Display page " + pageId + " is bound to " + binding
                     + ", which is gone; showing nothing new");
@@ -27665,6 +27710,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLinuxAppsSignature = signature;
         // Apps came or went, so a class that resolved to nothing may resolve now.
         if (mDisplayWindowIcons != null) mDisplayWindowIcons.clear();
+        // The Display pages' cards are read again with the catalog (W2).
+        mDisplayCardsAsked.clear();
+        if (mDisplayCards != null) refreshDisplayCards();
         // The same two steps, in the same order, as a package change takes through
         // refreshSuggestionBarFromPackageState: kick the provider's background rebuild first, then
         // tell the drawer. The provider parks warm-up callbacks while a rebuild is in flight, so
