@@ -137,6 +137,12 @@ public class ScreenMatchTest {
     public void aHomeOrientationNotUsedYetIsCopiedAsItWouldShow() {
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
         normal.setSlot(PlaceOrientation.LANDSCAPE, Element.APPS, Slot.on(Edge.RIGHT, 0));
+        // A page layout is whole from the moment it is turned on (ADR 0015 §3): turned on again
+        // here, after the Workspace's landscape is set, so Home's landscape is that seed.
+        store.setPageLayout(com.termux.app.place.KindFixtures.HOME_ID,
+            com.termux.app.wall.WallPages.PageKind.HOME, false);
+        store.setPageLayout(com.termux.app.place.KindFixtures.HOME_ID,
+            com.termux.app.wall.WallPages.PageKind.HOME, true);
         assertNotNull(ScreenMatch.match(launcher, store, WallHalf.WORKSPACE));
         assertEquals("Home's landscape, never used, is copied as its seed (the Workspace's own), "
                 + "not as an empty layout", Edge.RIGHT,
@@ -148,6 +154,12 @@ public class ScreenMatchTest {
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
         PlaceLayoutStore home = store.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         normal.setSlot(PlaceOrientation.LANDSCAPE, Element.APPS, Slot.on(Edge.RIGHT, 0));
+        // A page layout is whole from the moment it is turned on (ADR 0015 §3): turned on again
+        // here, after the Workspace's landscape is set, so Home's landscape is that seed.
+        store.setPageLayout(com.termux.app.place.KindFixtures.HOME_ID,
+            com.termux.app.wall.WallPages.PageKind.HOME, false);
+        store.setPageLayout(com.termux.app.place.KindFixtures.HOME_ID,
+            com.termux.app.wall.WallPages.PageKind.HOME, true);
         ScreenMatch.Undo undo = ScreenMatch.match(launcher, store, WallHalf.HOME);
         assertNotNull(undo);
         undo.restore(launcher);

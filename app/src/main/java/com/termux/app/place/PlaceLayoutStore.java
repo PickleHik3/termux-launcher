@@ -554,6 +554,17 @@ public final class PlaceLayoutStore {
         /** The ids of every Home page, in order; empty while the wall has none yet. */
         @NonNull
         java.util.List<Integer> homePageIds();
+
+        /** The name page {@code pageId} goes by on the wall ("Home 2", "Terminal"), or null. */
+        @Nullable
+        default String pageName(int pageId) { return null; }
+    }
+
+    /** {@link ShownPages#pageName}, or null where the launcher has not said. */
+    @Nullable
+    public String pageName(int pageId) {
+        ShownPages pages = mShownPages.get();
+        return pages == null || pageId < 0 ? null : pages.pageName(pageId);
     }
 
     /** Tells this store (and every view of it) which pages are on screen. */
@@ -609,8 +620,35 @@ public final class PlaceLayoutStore {
      */
     public void setPageLayout(int pageId, @NonNull PageKind kind, boolean on) {
         if (mStore == null || pageId < 0 || hasPageLayout(pageId) == on) return;
-        if (on) copyIntoLayout(LayoutVariant.NORMAL, LayoutVariant.page(pageId, kind));
+        if (on) {
+            LayoutVariant layout = LayoutVariant.page(pageId, kind);
+            copyIntoLayout(LayoutVariant.NORMAL, layout);
+            showWhatTheKindShows(layout);
+        }
         writeBoolean(pageLayoutKey(pageId), on);
+    }
+
+    /**
+     * {@code layout}'s slots shown or put away as its kind shows them, in every orientation: a
+     * page layout's visibility starts as what the page showed, so nothing moves when it opts in.
+     */
+    private void showWhatTheKindShows(@NonNull LayoutVariant layout) {
+        // Every orientation, an empty one included (seeded now, not on first use): the page's
+        // visibility is what the kind showed at this moment, and later kind edits never reach it.
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            showWhatTheKindShows(layout, orientation);
+    }
+
+
+
+    private void showWhatTheKindShows(@NonNull LayoutVariant layout,
+                                      @NonNull PlaceOrientation orientation) {
+        PlaceLayoutStore view = forVariant(layout);
+        for (Element element : Element.values()) {
+            boolean hide = !kindShows(layout.kind(), orientation, element);
+            Slot stored = view.storedSlot(orientation, element);
+            if (stored.hidden != hide) view.setSlot(orientation, element, stored.withHidden(hide));
+        }
     }
 
     /** Deletes page {@code pageId}'s layout and its flag: the page, of {@code kind}, is gone for good. */
@@ -652,7 +690,9 @@ public final class PlaceLayoutStore {
         SharedPreferences.Editor flags = mStore.edit();
         for (Integer id : homePageIds) {
             if (id == null || id < 0 || mStore.getBoolean(pageLayoutKey(id), false)) continue;
-            copyIntoLayout(LayoutVariant.HOME, LayoutVariant.page(id, PageKind.HOME));
+            LayoutVariant layout = LayoutVariant.page(id, PageKind.HOME);
+            copyIntoLayout(LayoutVariant.HOME, layout);
+            showWhatTheKindShows(layout);
             flags.putBoolean(pageLayoutKey(id), true);
         }
         flags.remove(adoptHomeLayoutKey()).apply();
@@ -692,8 +732,9 @@ public final class PlaceLayoutStore {
         }
         for (String key : LAYOUT_WIDE_KEYS)
             copy(editor, all, layoutWideKey(from, key), layoutWideKey(to, key));
-        // Which elements show comes along: the source layout's visibility becomes its kind's.
-        if (to != LayoutVariant.MINIMAL) {
+        // Which elements show comes along: the source layout's visibility becomes its kind's,
+        // or the target's own where it holds its own (a page layout).
+        if (!to.holdsOwnVisibility()) {
             PlaceLayoutStore source = forVariant(from);
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 for (Element element : Element.values()) {
@@ -704,6 +745,19 @@ public final class PlaceLayoutStore {
             }
         }
         editor.apply();
+        if (to.isPage()) {
+            PlaceLayoutStore source = forVariant(from);
+            PlaceLayoutStore target = forVariant(to);
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                for (Element element : Element.values()) {
+                    if (!from.offers(element) || !to.offers(element)) continue;
+                    boolean hide = source.slot(orientation, element).hidden;
+                    Slot stored = target.storedSlot(orientation, element);
+                    if (stored.hidden != hide)
+                        target.setSlot(orientation, element, stored.withHidden(hide));
+                }
+            }
+        }
         // The target is whole now: it must not be seeded over on its next read.
         for (PlaceOrientation orientation : PlaceOrientation.values())
             mSeeded.add(seededKey(to, orientation));
@@ -734,7 +788,7 @@ public final class PlaceLayoutStore {
         }
         for (String key : LAYOUT_WIDE_KEYS)
             keys.add(layoutWideKey(to, key));
-        if (to != LayoutVariant.MINIMAL) {
+        if (!to.holdsOwnVisibility()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 for (Element element : Element.values())
                     keys.add(kindKey(kindOfVariant(to), orientation, element));
@@ -960,9 +1014,10 @@ public final class PlaceLayoutStore {
         for (Element element : Element.values()) {
             Slot slot = slot(orientation, element);
             // An element the page's kind does not show is not shown, whatever is stored.
-            // Minimal mode's layout holds its own visibility; the others follow their kind.
+            // Minimal mode's layout and a page's own hold their own visibility; the others
+            // follow their kind.
             boolean shown = mMigrating.get() ? variant.offers(element)
-                : variant == LayoutVariant.MINIMAL
+                : variant.holdsOwnVisibility()
                     || kindShows(kindOfVariant(variant), orientation, element);
             slots.put(element, shown || slot.hidden ? slot : slot.withHidden(true));
         }
@@ -1196,7 +1251,7 @@ public final class PlaceLayoutStore {
         Slot stored = storedSlot(orientation, element);
         // On the normal and Home layouts whether an element shows is its kind's, one value for
         // both orientations (the page model, #171); the stored "hidden" is only legacy.
-        if (mMigrating.get() || activeVariant() == LayoutVariant.MINIMAL) return stored;
+        if (mMigrating.get() || activeVariant().holdsOwnVisibility()) return stored;
         boolean shown = kindShows(kindOfVariant(activeVariant()), orientation, element);
         return stored.hidden == !shown ? stored : stored.withHidden(!shown);
     }
@@ -1341,7 +1396,8 @@ public final class PlaceLayoutStore {
     /** The kind this view dresses shows or hides {@code element}, as its writers say. */
     private void syncKind(@NonNull PlaceOrientation orientation, @NonNull Element element,
                           boolean shown) {
-        if (mMigrating.get() || activeVariant() == LayoutVariant.MINIMAL
+        // A page's own layout keeps its visibility in its slots: its edits never reach the kind.
+        if (mMigrating.get() || activeVariant().holdsOwnVisibility()
             || !activeVariant().offers(element)) return;
         setKindShows(kindOfVariant(activeVariant()), orientation, element, shown);
     }
@@ -1812,6 +1868,11 @@ public final class PlaceLayoutStore {
         }
         editor.apply();
         PlaceLayoutStore seededStore = forVariant(variant);
+        if (variant.isPage()) {
+            // A page layout starts showing what the page showed: its kind's visibility.
+            showWhatTheKindShows(variant, orientation);
+            return;
+        }
         // The Home layout's resolve already puts away what it does not offer.
         PlaceLayout seeded = variant == LayoutVariant.MINIMAL
             ? MinimalMode.apply(seededStore.resolve(orientation))

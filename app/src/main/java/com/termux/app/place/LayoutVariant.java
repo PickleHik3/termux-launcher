@@ -84,6 +84,14 @@ public final class LayoutVariant {
         return mPageId;
     }
 
+    /**
+     * Whether this layout keeps which elements show in its own slots rather than reading its
+     * kind's: the minimal layout, and every page layout (ADR 0015 §3).
+     */
+    public boolean holdsOwnVisibility() {
+        return this == MINIMAL || isPage();
+    }
+
     /** Whether this layout dresses Home pages: the old Home layout, or a Home page's own. */
     public boolean isHomeKind() {
         return mKind == PageKind.HOME;
