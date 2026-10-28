@@ -365,6 +365,19 @@ public final class Crossing {
         return end == null ? null : end.arrangement;
     }
 
+    /**
+     * The committed page a reader asking by {@code kind} alone is answered with while a crossing
+     * runs whose committed end is of that kind: a Home pager that commits to another Home page
+     * mid-settle moves the store's Home page in front, while the chrome still stands in the one
+     * the crossing began on (C6). Null while none runs, or the committed end is of another kind.
+     */
+    @Nullable
+    public PageRef heldCommittedPage(@NonNull PaneWallPage kind) {
+        SeamCrossing.Endpoint here = mHere;
+        if (mCommitted == null || here == null || here.page.kind != kind) return null;
+        return here.page;
+    }
+
     /** {@code page}'s dock at rest as the crossing worked it out; null while none runs. */
     @Nullable
     public DockLayout heldRest(@NonNull PageRef page) {

@@ -735,7 +735,11 @@ public class CrossingTest {
             crossing.heldArrangement(PageRef.TERMINAL));
         assertNull(crossing.heldRest(PageRef.TERMINAL));
         assertNull(crossing.heldArrangement(PageRef.of(PaneWallPage.DISPLAY, 7)));
+        assertEquals("a Home reader by kind is the committed page, whatever the pager committed to",
+            HOME_2, crossing.heldCommittedPage(PaneWallPage.WIDGETS));
+        assertNull("no Workspace end is held", crossing.heldCommittedPage(PaneWallPage.TERMINAL));
         crossing.land(HOME_3, REVISION);
+        assertNull("landed, the store answers", crossing.heldCommittedPage(PaneWallPage.WIDGETS));
         assertEquals(1, moves.morphEnds);
         assertSame(rest3, moves.landed);
         crossing.end();

@@ -15637,7 +15637,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** What {@code page} wears now. */
     @NonNull
     private com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page) {
-        return mDresses.dressOf(page);
+        // While a Home crossing holds, Home asked by kind is the page it began on, not the one
+        // the pager committed to mid-settle (C6).
+        com.termux.app.wall.PageRef held = mCrossing.heldCommittedPage(page);
+        return held != null ? mDresses.dressOf(held) : mDresses.dressOf(page);
+    }
+
+    /**
+     * The layout {@code page} wears as the chrome stands in it: while a crossing holds a committed
+     * end of that kind, that end's page's, so a Home pager committing to another Home page
+     * mid-settle moves no layout before the landing (C6); otherwise the store's page in front.
+     */
+    @NonNull
+    private com.termux.app.place.LayoutVariant heldLayoutOf(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        com.termux.app.wall.PageRef held = mCrossing.heldCommittedPage(page);
+        return held != null ? mDresses.layoutOf(held) : mDresses.layoutOf(page);
     }
 
     /**
@@ -15709,6 +15724,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.wall.PageRef endpointPageOf(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        // While a Home crossing holds, the end it began on (C6).
+        com.termux.app.wall.PageRef held = mCrossing.heldCommittedPage(page);
+        return held != null ? held : shownEndpointPageOf(page);
+    }
+
+    /** {@code page} as the store shows it, a crossing's hold or not: where a crossing lands. */
+    @NonNull
+    private com.termux.app.wall.PageRef shownEndpointPageOf(
             @NonNull com.termux.app.wall.PaneWallPage page) {
         PlaceLayoutStore store = placeLayoutStore();
         return com.termux.app.wall.PageRef.of(page, store == null ? -1 : store.shownPageId(page));
@@ -15797,7 +15821,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.place.LayoutVariant chromeVariant() {
-        return mDresses.layoutOf(mLastWallPage);
+        return heldLayoutOf(mLastWallPage);
     }
 
     /**
@@ -15857,7 +15881,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.place.LayoutVariant stackVariant() {
-        return mDresses.layoutOf(stackDressPage());
+        return heldLayoutOf(stackDressPage());
     }
 
     /**
@@ -25205,7 +25229,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // dock's morph, the row laying out the landed rest its last frame already drew. From
             // here the chrome reads the store's arrangements again.
             com.termux.app.place.Crossing.Landing crossingLanding =
-                mCrossing.land(landed != null ? landed : endpointPageOf(page),
+                mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
             // A keyboard a pictured dip put away comes back where the wall came back.
