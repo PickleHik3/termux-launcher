@@ -607,16 +607,16 @@ public final class PlaceLayoutStore {
      * the user edits it. Turned off, the page wears the shared layout again; its copy stays,
      * unread, until {@link #dropPageLayout}.
      */
-    public void setPageLayout(int pageId, boolean on) {
+    public void setPageLayout(int pageId, @NonNull PageKind kind, boolean on) {
         if (mStore == null || pageId < 0 || hasPageLayout(pageId) == on) return;
-        if (on) copyIntoLayout(LayoutVariant.NORMAL, LayoutVariant.page(pageId, PageKind.TERMINAL));
+        if (on) copyIntoLayout(LayoutVariant.NORMAL, LayoutVariant.page(pageId, kind));
         writeBoolean(pageLayoutKey(pageId), on);
     }
 
-    /** Deletes page {@code pageId}'s layout and its flag: the page is gone for good. */
-    public void dropPageLayout(int pageId) {
+    /** Deletes page {@code pageId}'s layout and its flag: the page, of {@code kind}, is gone for good. */
+    public void dropPageLayout(int pageId, @NonNull PageKind kind) {
         if (mStore == null || pageId < 0) return;
-        LayoutVariant layout = LayoutVariant.page(pageId, PageKind.TERMINAL);
+        LayoutVariant layout = LayoutVariant.page(pageId, kind);
         String scope = LAYOUT_PREFIX + layout.keyScope();
         SharedPreferences.Editor editor = mStore.edit();
         for (String key : mStore.getAll().keySet()) {
@@ -2123,7 +2123,8 @@ public final class PlaceLayoutStore {
      */
     private void migrateToPageLayouts() {
         if (!mStore.getBoolean(homeLayoutKey(), false)) return;
-        boolean differs = homeLayoutDiffersFromShared();
+        // A Home layout that holds nothing yet is the shared one; asking it would seed it.
+        boolean differs = homeHoldsArrangement() && homeLayoutDiffersFromShared();
         SharedPreferences.Editor editor = mStore.edit().putBoolean(homeLayoutKey(), false);
         if (differs) editor.putBoolean(adoptHomeLayoutKey(), true);
         editor.apply();

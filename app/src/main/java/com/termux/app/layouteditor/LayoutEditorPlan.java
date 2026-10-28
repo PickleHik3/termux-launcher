@@ -107,6 +107,7 @@ public final class LayoutEditorPlan {
     /** The page the editor opened on (-1: none known) and whether it held a page layout then:
      *  the flag Discard puts back too. */
     private final int mEntryPageId;
+    @NonNull private final com.termux.app.wall.WallPages.PageKind mEntryPageKind;
     private final boolean mEntryPageLayout;
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
@@ -138,6 +139,7 @@ public final class LayoutEditorPlan {
         LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
         enterVariant(workspace);
         mEntryPageId = places.shownPageId(place);
+        mEntryPageKind = DressResolver.kindOf(place);
         mEntryPageLayout = places.hasPageLayout(mEntryPageId);
     }
 
@@ -616,7 +618,7 @@ public final class LayoutEditorPlan {
     public void revert() {
         boolean switchMoved = mRoot.hasPageLayout(mEntryPageId) != mEntryPageLayout;
         if (switchMoved)
-            mRoot.setPageLayout(mEntryPageId, mEntryPageLayout);
+            mRoot.setPageLayout(mEntryPageId, mEntryPageKind, mEntryPageLayout);
         for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
             String atOpen = mEntrySignatures.get(entry.getKey());
             if (atOpen == null || !atOpen.equals(

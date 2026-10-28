@@ -27460,7 +27460,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The removal is final: the page's own look goes with it, and what stood on it.
                 if (mPageLookPruner != null) mPageLookPruner.dropPage(page.id);
                 PlaceLayoutStore places = placeLayoutStore();
-                if (places != null) places.dropPageLayout(page.id);
+                if (places != null) places.dropPageLayout(page.id, page.kind);
                 if (mPaneController != null && page.kind == com.termux.app.wall.WallPages.PageKind.HOME) {
                     mPaneController.homePageRemoved(page.id);
                 }

@@ -96,7 +96,7 @@ public class PlaceLayoutPageLayoutTest {
         store.setStatusBarEdge(PORTRAIT, Edge.BOTTOM);
         store.setDockStyle(DockStyle.LENS_BEADS);
 
-        store.setPageLayout(2, true);
+        store.setPageLayout(2, PageKind.HOME, true);
 
         assertTrue(store.hasPageLayout(2));
         assertSame(home(2), store.variantFor(PaneWallPage.WIDGETS));
@@ -109,8 +109,8 @@ public class PlaceLayoutPageLayoutTest {
     public void anEditOnOnePagesLayoutLeavesTheOthersAndTheSharedOneAlone() {
         PlaceLayoutStore store = store();
         store.setStatusBarEdge(PORTRAIT, Edge.TOP);
-        store.setPageLayout(2, true);
-        store.setPageLayout(3, true);
+        store.setPageLayout(2, PageKind.HOME, true);
+        store.setPageLayout(3, PageKind.HOME, true);
 
         store.forVariant(home(2)).setStatusBarEdge(PORTRAIT, Edge.BOTTOM);
         store.forVariant(home(2)).setDockStyle(DockStyle.LENS_BEADS);
@@ -125,7 +125,7 @@ public class PlaceLayoutPageLayoutTest {
     @Test
     public void theSizesStayLinkedToTheSharedLayout() {
         PlaceLayoutStore store = store();
-        store.setPageLayout(2, true);
+        store.setPageLayout(2, PageKind.HOME, true);
         store.forVariant(home(2)).setDockHeightScale(PORTRAIT, 1.25f);
         assertEquals(1.25f, store.dockHeightScale(PORTRAIT), 0f);
         store.setDockHeightScale(PORTRAIT, 0.75f);
@@ -137,12 +137,12 @@ public class PlaceLayoutPageLayoutTest {
     @Test
     public void droppedAPageLayoutsKeysAndFlagAreGone() {
         PlaceLayoutStore store = store();
-        store.setPageLayout(2, true);
+        store.setPageLayout(2, PageKind.HOME, true);
         store.forVariant(home(2)).setStatusBarEdge(PORTRAIT, Edge.BOTTOM);
         store.forVariant(home(2)).setDockStyle(DockStyle.LENS_BEADS);
-        store.setPageLayout(3, true);
+        store.setPageLayout(3, PageKind.HOME, true);
 
-        store.dropPageLayout(2);
+        store.dropPageLayout(2, PageKind.HOME);
 
         assertFalse(store.hasPageLayout(2));
         for (String key : prefs.getAll().keySet())
