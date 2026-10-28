@@ -23685,7 +23685,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // page shows the display window while that is the row's window in front.
         if (mPaneWallController != null) {
             mPaneWallController.refreshPages();
-            syncDisplayFront();
         }
         // So does the wallpaper's pan: a window opened or closed, or another session's windows,
         // re-spread the picture over the row (a snap; an arrival that follows pans from there).
@@ -25876,6 +25875,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                     int index) {
                     showWallInnerPage(page, index);
                 }
+                // The display view stands on one Display page at a time (ADR 0015, A3b).
+                @Override public void bindDisplayPage(int pageId) {
+                    onDisplayPageBound(pageId);
+                }
+                @Override public void onDisplayPageLanded(int pageId) {
+                    onDisplayPageLandedAt(pageId);
+                }
                 // Edit pages' default page, held to the pages there are now.
                 @Override public int homePressPage() {
                     return Math.max(0, Math.min(TermuxActivity.this.wallPages().homeIndex(),
@@ -26692,25 +26698,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether the display window stands in the current session's row. A display that is up with
-     * no row to stand in — it just came up, or the session that held it closed — joins the
-     * current one at its end, as a new window joins.
+     * Whether the display stands in the current session's row: never since ADR 0015 A3b. The
+     * row holds terminal windows only; the display stands on the wall's Display pages.
      */
     private boolean isDisplayOnRow() {
-        if (!isDisplayUp()) return false;
-        boolean sessionGone = mDisplaySession != null && !mWSessions.contains(mDisplaySession);
-        boolean rowOfNoSession = mDisplaySession == null && mCurrentWSession != null;
-        if (!mDisplaySlot.isOnRow() || sessionGone || rowOfNoSession) {
-            mDisplaySession = mCurrentWSession;
-            mDisplaySlot.joinAtEnd(rowWindows());
-            // Back after a recreate: where it stood, once the row it stood in is back too.
-            if (mPendingDisplaySlot >= 0 && mCurrentWSession != null) {
-                mDisplaySlot.place(rowWindows(), mPendingDisplaySlot);
-                mDisplaySlot.setFront(mPendingDisplayFront);
-                mPendingDisplaySlot = com.termux.app.wall.DisplaySlot.NONE;
-            }
-        }
-        return mDisplaySession == mCurrentWSession;
+        return false;
     }
 
     /** The display window's place in the current row; {@code DisplaySlot.NONE} when not there. */
@@ -26724,9 +26716,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.wall.DisplaySlot.rowCount(rowWindows().size(), displayRowSlot());
     }
 
-    /** Whether the display window is the current row's window in front (alone, it always is). */
+    /**
+     * Whether the wall is on a Display page (ADR 0015, A3b): what the keyboard's form, the keys
+     * and help read as "the display is in front". Mid-slide, the page the wall committed to.
+     */
     private boolean isDisplayWindowInFront() {
-        return isDisplayOnRow() && (mDisplaySlot.isFront() || rowWindows().isEmpty());
+        return mPaneWallController != null
+            && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.DISPLAY;
     }
 
     /** The row place of the window in front, the display window's included. */
@@ -26736,45 +26732,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             displayRowSlot());
     }
 
-    /** Whether the wall rests on the Workspace with the display window in front of it. */
+    /** Whether the wall is on a Display page (A3b); see {@link #isDisplayWindowInFront}. */
     private boolean isDisplayWindowShowing() {
-        return mPaneWallController != null
-            && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.TERMINAL
-            && isDisplayWindowInFront();
+        return isDisplayWindowInFront();
     }
 
-    /** The row {@link #placesOf} last answered for with the display in front, and its answer. */
-    @Nullable private java.util.List<com.termux.app.wall.PaneWallPage> mPlacesFor;
-    @Nullable private java.util.List<com.termux.app.wall.PaneWallPage> mPlaces;
-
     /**
-     * The wall's pages as the places they show now ({@link #placeOf}). Read on every frame the
-     * chrome travels, so worked out once per row rather than per frame.
+     * The wall's pages as the places they show: the pages themselves since A3b, a Display page
+     * being a page of the wall's own.
      */
     @NonNull
     private java.util.List<com.termux.app.wall.PaneWallPage> placesOf(
             @NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages) {
-        if (!pages.contains(com.termux.app.wall.PaneWallPage.TERMINAL)
-                || !isDisplayWindowInFront()) return pages;
-        if (pages == mPlacesFor && mPlaces != null) return mPlaces;
-        java.util.List<com.termux.app.wall.PaneWallPage> places = new java.util.ArrayList<>(pages);
-        places.set(places.indexOf(com.termux.app.wall.PaneWallPage.TERMINAL),
-            com.termux.app.wall.PaneWallPage.DISPLAY);
-        mPlacesFor = pages;
-        mPlaces = places;
-        return places;
+        return pages;
     }
 
-    /**
-     * The place the chrome is dressed for when the wall shows {@code page}: the page itself, or
-     * the display's place while the Workspace shows the display window ({@link
-     * com.termux.app.wall.PaneWallPage#DISPLAY}).
-     */
+    /** The place the chrome is dressed for when the wall shows {@code page}: the page itself. */
     @NonNull
     private com.termux.app.wall.PaneWallPage placeOf(
             @NonNull com.termux.app.wall.PaneWallPage page) {
-        return page == com.termux.app.wall.PaneWallPage.TERMINAL && isDisplayWindowInFront()
-            ? com.termux.app.wall.PaneWallPage.DISPLAY : page;
+        return page;
     }
 
     /**
@@ -26787,38 +26764,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * @param fromRow the row place the arrival left, for the wallpaper's pan
      */
     private void setDisplayInFront(boolean front, int direction, float fromPx, int fromRow) {
-        if (mPaneWallController == null) return;
-        boolean before = mPaneWallController.isDisplayInFront();
-        mDisplaySlot.setFront(front && isDisplayOnRow());
-        boolean after = isDisplayWindowInFront();
-        if (before == after) return;
-        boolean travels = direction != 0 && isVisible() && !isReducedMotionEnabled()
-            && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.TERMINAL;
-        if (!travels) {
-            mPaneWallController.setDisplayInFront(after);
-            onDisplayFrontChanged();
-            return;
-        }
-        int width = mPaneWallController.wall().getWidth();
-        float start = fromPx != 0f ? fromPx : (direction > 0 ? 1f : -1f) * width;
-        long duration =
-            com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS;
-        if (width > 0) duration = Math.max(160L,
-            Math.round(duration * Math.min(1f, Math.abs(start) / width)));
-        duration = windowSwitchMs(duration);
-        // The display going off keeps its picture while it slides: its X view lets go of the
-        // surface once the travel is over, not as it starts.
-        mDeferDisplayDetach = !after;
-        try {
-            mPaneWallController.swapDisplayInFront(after, start, fromRow, duration,
-                com.termux.app.terminal.Motion.settle(),
-                // Posted: where no travel could start the end runs at once, before the place
-                // change below has said what is owed.
-                () -> mPaneWallController.wall().post(this::detachOwedDisplayView));
-            onDisplayFrontChanged();
-        } finally {
-            mDeferDisplayDetach = false;
-        }
+        if (mPaneWallController == null || front == isDisplayWindowInFront()) return;
+        // A Display page is a page of the wall (A3b): in front is the wall going there, and
+        // back is the wall going to the Terminal page.
+        boolean animate = direction != 0 && isVisible() && !isReducedMotionEnabled();
+        if (front) mPaneWallController.goToDisplayPage(-1, animate);
+        else mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, animate);
     }
 
     /** {@link #syncDisplayAttachment} is to leave the X view attached until the travel ends. */
@@ -26858,17 +26809,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dropUnstartedDisplayWhenSettled(windowSwitchMs(
                 com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS));
         }
-    }
-
-    /**
-     * The row was rebuilt (a window came or went, the session changed): the wall's Workspace
-     * page shows what the row now has in front, without travel.
-     */
-    private void syncDisplayFront() {
-        if (mPaneWallController == null) return;
-        if (mPaneWallController.isDisplayInFront() == isDisplayWindowInFront()) return;
-        mPaneWallController.setDisplayInFront(isDisplayWindowInFront());
-        onDisplayFrontChanged();
     }
 
     /**
@@ -26922,14 +26862,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * window gets a fresh shell, whose window then takes the front. Nothing otherwise.
      */
     private void bringTerminalWindowInFront() {
-        if (!isDisplayWindowInFront()) return;
-        if (mCurrentWSession == null || mCurrentWSession.windows.isEmpty()) {
-            if (getTermuxTerminalSessionClient() != null)
-                getTermuxTerminalSessionClient().addNewSession(false, null);
-            return;
-        }
-        showRowWindow(com.termux.app.wall.DisplaySlot.rowOf(mCurrentWSession.current,
-            displayRowSlot()));
+        if (!isDisplayWindowInFront() || mPaneWallController == null) return;
+        // The Terminal page beside it, its first shell started when it has none.
+        mPaneWallController.goToWorkspace(isVisible() && !isReducedMotionEnabled());
     }
 
     /**
@@ -26970,22 +26905,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void bringDisplayWindowInFront(boolean animateWall) {
         if (mPaneWallController == null || !isDisplayUp()) return;
-        if (mDisplaySession != mCurrentWSession || !mDisplaySlot.isOnRow()) {
-            // Another session's row held it: it moves to this one, at its end.
-            mDisplaySession = mCurrentWSession;
-            mDisplaySlot.joinAtEnd(rowWindows());
-        }
-        boolean onWorkspace =
-            mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.TERMINAL;
-        int previous = rowCurrentIndex();
         mPaneWallController.refreshPages();
-        // On the Workspace already, the display arrives as a window switch does; from Home the wall
-        // slides to the Workspace with the display already in front.
-        setDisplayInFront(true, onWorkspace && animateWall
-            ? (displayRowSlot() >= previous ? 1 : -1) : 0, 0f, previous);
-        mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, animateWall);
+        // The wall goes to the bound Display page (A3b); a wall with none has nowhere to show it.
+        if (!mPaneWallController.goToDisplayPage(-1, animateWall)) {
+            Logger.logWarn(LOG_TAG, "No Display page on the wall to show the display on");
+        }
         onWallPlacesChanged();
         refreshTerminalWindowBar();
+    }
+
+    /** The Display page the display view stands on (A3b); -1 while the wall has none. */
+    private int mBoundDisplayPage = -1;
+
+    /**
+     * The wall bound the display view to Display page {@code pageId}: the page gets the frame,
+     * built as soon as the wall has a Display page so the slide onto it shows the page's card,
+     * not an empty page. Building the frame alone starts nothing.
+     */
+    private void onDisplayPageBound(int pageId) {
+        mBoundDisplayPage = pageId;
+        if (pageId >= 0 && mPaneWallController != null) {
+            mPaneWallController.wall().post(this::ensureDisplayPageFrame);
+        }
+    }
+
+    /** The display's frame on the wall while the wall has a Display page, the display up or not. */
+    private void ensureDisplayPageFrame() {
+        if (mPaneWallController == null || !isX11DisplayEnabled() || mBoundDisplayPage < 0) return;
+        if (mPaneWallController.displayWindow() == null) buildDisplayFrame();
+    }
+
+    /**
+     * The wall came to rest on Display page {@code pageId}: the display starts there when it is
+     * neither running nor on its way ({@link com.termux.app.wall.DisplayPagePolicy#startsOnLanding}).
+     * Raising or maximising the page's bound app is wave c's (A3c).
+     */
+    private void onDisplayPageLandedAt(int pageId) {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+        if (!com.termux.app.wall.DisplayPagePolicy.startsOnLanding(
+                com.termux.app.wall.WallPages.PageKind.DISPLAY, isEmbeddedDisplayRunning(),
+                mDisplayRequested)) {
+            return;
+        }
+        attachEmbeddedDisplay();
+        if (mPaneWallController.displayWindow() == null) return;
+        mDisplayRequested = true;
+        if (com.termux.app.x11.X11CliInstaller.hasKeyboardData()) startEmbeddedDisplay();
+        syncDisplayOnRow();
     }
 
     /**
@@ -26996,10 +26962,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Whether it is on the row is {@link #isDisplayUp}'s to say.
      */
     private void buildDisplayWindow() {
-        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+        if (buildDisplayFrame()) createX11DisplayController();
+    }
+
+    /**
+     * The display's frame alone, as the Display page's view: its X view and its host, without the
+     * server connection ({@link #buildDisplayWindow} adds that). Answers whether there is one.
+     */
+    private boolean buildDisplayFrame() {
+        if (mPaneWallController == null || !isX11DisplayEnabled()) return false;
         com.termux.app.x11.X11PaneFrame page =
             mPaneWallController.attachDisplayWindow(getLayoutInflater());
-        if (page == null) return;
+        if (page == null) return false;
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
@@ -27033,7 +27007,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         page.applyEnabled(true);
         // The phone defaults (text size, touch mode) go in the first time a display is used.
         com.termux.app.x11.X11Defaults.applyOnce(this);
-        createX11DisplayController();
+        return true;
     }
 
     /**
@@ -27067,7 +27041,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncDisplayOnRow() {
         if (mPaneWallController == null) return;
         mPaneWallController.refreshPages();
-        syncDisplayFront();
         boolean up = isDisplayUp();
         if (up != mDisplayUpOnRow) {
             mDisplayUpOnRow = up;
@@ -27114,7 +27087,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void claimKeptDisplay() {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
-        if (mPaneWallController.displayWindow() != null) return;
+        // A Display page's frame alone has no server connection yet: the announcement is its.
+        if (mPaneWallController.displayWindow() != null && mX11Display != null) return;
         if (!com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) return;
         attachEmbeddedDisplay();
     }
@@ -27149,18 +27123,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void tearDownEmbeddedDisplay() {
         if (mPaneWallController == null || mPaneWallController.displayWindow() == null) return;
-        int slot = displayRowSlot();
         boolean wasInFront = isDisplayWindowInFront();
         mDisplaySlot.leave();
         mDisplaySession = null;
-        if (wasInFront && mCurrentWSession != null && mPaneController != null) {
-            int next = com.termux.app.wall.DisplaySlot.windowAfterDisplayLeaves(slot,
-                mCurrentWSession.windows.size());
-            if (next >= 0 && next != mCurrentWSession.current) {
-                mCurrentWSession.current = next;
-                mPaneController.showWindow(mCurrentWSession.currentWindow());
-            }
-        }
         mDisplayRequested = false;
         if (mDisplayStop != null) {
             mDisplayStop.abandon();
@@ -27192,6 +27157,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Taking the page away hands the wall to a window with no settle after it, and may move
         // the panes under the hand-back above: the keys are checked once more where they ended.
         if (!(getCurrentFocus() instanceof TerminalView)) returnKeysToTerminal();
+        // The Display pages stay on the wall: a fresh frame stands on the bound one, its card.
+        mPaneWallController.wall().post(this::ensureDisplayPageFrame);
     }
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
@@ -31774,7 +31741,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Behind the display window in front, a terminal window's arrival is not on screen: the
         // Workspace's page is the display's frame, which this travel must not move.
         if (surfaceHost == null || paneHost == null || isReducedMotionEnabled()
-                || (mPaneWallController != null && mPaneWallController.isDisplayInFront())) {
+                || isDisplayWindowInFront()) {
             dropTerminalDepartureSnapshot();
             return;
         }
@@ -32650,7 +32617,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPaneWallController.refreshPages();
                 dropTerminalDepartureSnapshot();
                 setDisplayInFront(true, -1, 0f, com.termux.app.wall.WallParallax.ADJACENT);
-                syncDisplayFront();
             }
         } else {
             // The row's last window is gone: the last Home page slides in and the Workspace is
