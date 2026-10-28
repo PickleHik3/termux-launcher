@@ -254,7 +254,10 @@ public final class GlassStack {
         }
         if (backdrop != null) {
             // The content-aware light scatter every glass surface's frame wears.
-            backdrop.setColorFilter(GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));
+            // Even-out first where the band has one (ADR 0014, wave 2c): the keyboard's frame is
+            // evened on its own rect, then frosted as before. Null for every other stack.
+            backdrop.setColorFilter(GlassFilters.withEvenOut(glass.bandEvenOut(spec.band),
+                GlassFilters.frost(Math.round(spec.tintAlpha * 100f))));
             // The gathered light is drawn under the tint, so it is raised by what the tint covers
             // and every surface shows a like outline.
             backdrop.setRefraction(spec.look.withCover(spec.tintColor != null

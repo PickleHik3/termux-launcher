@@ -148,6 +148,22 @@ public final class EvenOut {
     }
 
     /**
+     * The ground limit of a chrome band that keeps its own Opacity (ADR 0014, wave 2c): not the
+     * terminal palette's pairs but the one target the band's own content is held to (its body
+     * text, {@code target} already at the Contrast level), for the most extreme ink the band can
+     * wear on that side, white for pale ink and black for dark. The band's ink is re-toned or
+     * chosen per tone by {@link ChromeInk}, so that extreme is what the solve can reach.
+     */
+    @NonNull
+    public static Ceiling ceilingForTarget(double target, @NonNull ChromeInk.Polarity polarity) {
+        boolean pale = polarity == ChromeInk.Polarity.PALE_INK;
+        double inkTone = pale ? 100d : 0d;
+        double ground = toneAtRatio(inkTone, target, pale);
+        return new Ceiling(ground, Collections.singletonList(
+            new PairLimit("band text", inkTone, target, ground, true)));
+    }
+
+    /**
      * The tone whose WCAG ratio against {@code tone} is exactly {@code ratio}, on the darker side
      * when {@code darker} and the lighter side otherwise. A ratio that cannot be met inside the
      * tone range pins to its end, 0 or 100.

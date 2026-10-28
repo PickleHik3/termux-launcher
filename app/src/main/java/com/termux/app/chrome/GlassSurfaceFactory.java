@@ -398,6 +398,16 @@ public final class GlassSurfaceFactory {
     }
 
     /**
+     * The even-out matrix {@code band}'s frame is drawn through ahead of its frost
+     * ({@link ChromeInk#bandEvenOutMatrix}, measured on the rect the band's content last asked
+     * about), or null: no band, no even-out for it, or the identity.
+     */
+    @Nullable
+    android.graphics.ColorMatrix bandEvenOut(@Nullable GlassBackdropCache.Band band) {
+        return band != null && mInk != null ? mInk.bandEvenOutMatrix(band, null) : null;
+    }
+
+    /**
      * Tells the ink the blur {@code band}'s glass is drawn at ({@link ChromeInk#noteBandBlur}), so
      * its rows are measured on the frame it really shows. Nothing for no band or no ink.
      */
