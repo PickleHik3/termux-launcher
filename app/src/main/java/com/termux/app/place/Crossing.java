@@ -256,8 +256,10 @@ public final class Crossing {
                                       boolean fieldUnderPalette) {
         SeamCrossing.Answers answers = mSeam.frame(frame, wallFrame, dressable, bandEaseRuns,
             fieldUnderPalette);
-        if (mCommitted != null && mMorph.active()) {
-            mMorph.at(mSeam.pictured() ? 1f : SeamTravel.otherHalfProgress(frame, mCommitted));
+        SeamCrossing.Endpoint here = mHere;
+        if (mCommitted != null && here != null && mMorph.active()) {
+            // Read by end, so a frame of Home's pager morphs between two Home pages' rests.
+            mMorph.at(mSeam.pictured() ? 1f : SeamTravel.otherEndProgress(frame, here.page));
             mDock.dress(mMorph);
         }
         return answers;
@@ -296,12 +298,14 @@ public final class Crossing {
     }
 
     /**
-     * The status bar for this frame: drawn where the Workspace's page stands whenever the seam
-     * says it rides ({@link SeamCrossing#rideBar}), else at its rest. Whether it rides.
+     * The status bar for this frame: drawn where the page that carries it stands whenever the
+     * seam says it rides ({@link SeamCrossing#rideBar}), the Workspace's across the seam and the
+     * Home page that wears it between two Home pages ({@link SeamCrossing#barScreenXPx}), else at
+     * its rest. Whether it rides.
      */
     public boolean rideBar(@NonNull Frame frame, boolean hostCanRide, int wallWidthPx) {
         boolean rides = mSeam.rideBar(frame, hostCanRide);
-        mBar.rideX(rides ? SeamTravel.workspaceScreenXPx(frame, wallWidthPx) : 0f);
+        mBar.rideX(rides ? mSeam.barScreenXPx(frame, wallWidthPx) : 0f);
         return rides;
     }
 
@@ -372,13 +376,17 @@ public final class Crossing {
      * The end {@code page} names while a crossing runs: the end that is that page or whose
      * arrangement is resolved for it, else the end of its kind (Home's end for any Home page, the
      * window's for any window, as the one end of each kind a crossing between Home and a window
-     * holds). Null while none runs.
+     * holds). Between two pages of one kind (two Home pages), a page of that kind with no id said
+     * names the committed end: the reader asking by kind alone is asking what the chrome stands
+     * in. Null while none runs.
      */
     @Nullable
     private SeamCrossing.Endpoint heldEnd(@NonNull PageRef page) {
         SeamCrossing.Endpoint here = mHere;
         SeamCrossing.Endpoint there = mThere;
         if (here == null || there == null) return null;
+        if (page.id < 0 && here.page.kind == there.page.kind && page.kind == here.page.kind)
+            return here;
         if (standsFor(here, page)) return here;
         if (standsFor(there, page)) return there;
         return here.page.isHome() == page.isHome() ? here : there;

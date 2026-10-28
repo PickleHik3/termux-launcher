@@ -1249,4 +1249,119 @@ public class SeamCrossingTest {
         assertEquals(WallHalf.HOME, atRest);
         assertTrue(travelled != atRest);
     }
+
+    // ---- Between two Home pages (#173 slice E) ----
+
+    private static final PageRef HOME_2 = PageRef.of(PaneWallPage.WIDGETS, 2);
+    private static final PageRef HOME_3 = PageRef.of(PaneWallPage.WIDGETS, 3);
+
+    /** A Home page's end, on the one dress both pages wear. */
+    private static SeamCrossing.Endpoint homePage(@NonNull Stored stored, @NonNull PageRef page,
+                                                  @NonNull PlaceLayout layout) {
+        Dress dress = new DressResolver(stored).dressOf(PaneWallPage.WIDGETS);
+        return SeamCrossing.Endpoint.of(page, dress, layout, stackOf(dress), false);
+    }
+
+    /** Home's pager {@code fraction} of the way from page {@code from} to page {@code toward}. */
+    private static Frame pagerAt(int from, int toward, float fraction) {
+        return PlaceChromeTravel.homePages(new Rest(false, false, true), from, toward,
+            -fraction * WIDTH, WIDTH);
+    }
+
+    @Test
+    public void twoHomePagesCrossOnlyWhereTheirLayoutsDifferInWhatCanMorph() {
+        Stored stored = new Stored();
+        SeamCrossing.Endpoint bare = homePage(stored, HOME_2, homeWithoutBar());
+        assertTrue("a bar one page wears", SeamCrossing.crosses(bare,
+            homePage(stored, HOME_3, home())));
+        assertFalse("dressed alike: a plain flip", SeamCrossing.crosses(bare,
+            homePage(stored, HOME_3, homeWithoutBar())));
+        PlaceLayout noIndex = homeWithoutBar().withSlot(Element.AZ,
+            Slot.on(Edge.BOTTOM, Element.AZ).withHidden(true));
+        assertTrue("other dock rows", SeamCrossing.crosses(bare,
+            homePage(stored, HOME_3, noIndex)));
+        // Another Dock design changes at the landing, as it did before: no morph begins.
+        Stored beads = new Stored();
+        beads.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+        assertFalse(SeamCrossing.crosses(bare, homePage(beads, HOME_3, home())));
+        // Home and the Workspace always cross.
+        assertTrue(SeamCrossing.crosses(bare, half(new DressResolver(stored),
+            PaneWallPage.TERMINAL, window(), false)));
+    }
+
+    /**
+     * From page 2, which puts the bar away, to page 3, which wears it along the top: the bar is
+     * laid out over page 2 from the first frame and rides in with page 3, dressed for Home
+     * throughout; nothing of the dock moves and the stack keeps its dress.
+     */
+    @Test
+    public void towardAHomePageThatWearsTheBarItRidesInWithThatPage() {
+        Stored stored = new Stored();
+        SeamCrossing crossing = new SeamCrossing();
+        crossing.begin(homePage(stored, HOME_2, homeWithoutBar()),
+            homePage(stored, HOME_3, home()), SeamCrossing.Stage.of(false, () -> false, true));
+        assertTrue(crossing.oneKind());
+        assertEquals(HOME_3, crossing.otherEnd());
+        assertFalse(crossing.barTakesWorkspaceDressFirst());
+        for (float fraction = SLOW; fraction < 1f; fraction += SLOW) {
+            Frame frame = pagerAt(2, 3, fraction);
+            SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
+            if (answers.relayout()) crossing.standLayout();
+            assertTrue(crossing.rideBar(frame, true));
+            assertFalse(answers.barRedressed());
+            assertEquals((1f - fraction) * WIDTH, crossing.barScreenXPx(frame, WIDTH), 0.01f);
+            assertTrue(Float.isNaN(answers.statusFade()));
+            assertEquals(1f, answers.dockReveal(), EPSILON);
+            assertNull(crossing.stackDressPage());
+            assertFalse("the bar wears Home's dress", crossing.barDressedAcross());
+            if (SeamTravel.otherEndProgress(frame, HOME_2) > 0f) {
+                assertNotNull(crossing.layout());
+                assertFalse(crossing.layout().slot(Element.STATUS).hidden);
+            }
+        }
+        SeamCrossing.Landing landing = crossing.land();
+        assertTrue(landing.laidOut());
+        assertFalse(landing.barTravelled());
+        crossing.end();
+        assertNull(crossing.otherEnd());
+    }
+
+    /** Under a page transition that turns the pages the bar fades instead, either way. */
+    @Test
+    public void betweenTurningHomePagesTheBarFadesInPlace() {
+        Stored stored = new Stored();
+        SeamCrossing.Stage turning = SeamCrossing.Stage.of(false, () -> false, true, false);
+        SeamCrossing toward = new SeamCrossing();
+        toward.begin(homePage(stored, HOME_2, homeWithoutBar()),
+            homePage(stored, HOME_3, home()), turning);
+        SeamCrossing away = new SeamCrossing();
+        away.begin(homePage(stored, HOME_3, home()),
+            homePage(stored, HOME_2, homeWithoutBar()), turning);
+        for (float fraction = SLOW; fraction < 1f; fraction += SLOW) {
+            Frame in = pagerAt(2, 3, fraction);
+            float progress = SeamTravel.otherEndProgress(in, HOME_2);
+            SeamCrossing.Answers answers = toward.frame(in, true, false, false);
+            if (answers.relayout()) toward.standLayout();
+            assertFalse(toward.rideBar(in, true));
+            assertEquals(progress, answers.statusFade(), EPSILON);
+            if (progress > 0f) assertFalse(toward.layout().slot(Element.STATUS).hidden);
+
+            Frame out = pagerAt(3, 2, fraction);
+            SeamCrossing.Answers leaving = away.frame(out, true, false, false);
+            if (leaving.relayout()) away.standLayout();
+            assertFalse(away.rideBar(out, true));
+            assertEquals(1f - SeamTravel.otherEndProgress(out, HOME_3), leaving.statusFade(),
+                EPSILON);
+            assertNull("the leaving page's bar stays laid out", away.layout());
+        }
+    }
+
+    /** Across the seam the bar's dress reads as it did: the Workspace's while the wall slides. */
+    @Test
+    public void acrossTheSeamTheBarIsDressedAcrossWhileTheWallSlides() {
+        Drive drive = oneLayout(PaneWallPage.WIDGETS).slow(0f, 0.6f);
+        assertTrue(drive.crossing.sliding());
+        assertEquals(drive.crossing.sliding(), drive.crossing.barDressedAcross());
+        assertFalse(drive.crossing.oneKind());
+    }
 }

@@ -15706,6 +15706,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mHomeArrangement = null;
             mArrangedHomePageId = homePage;
         }
+        // Another Home page than the one in front, a crossing's other end between two Home pages
+        // (#173 slice E), is resolved for its own id and not kept: it is read as a crossing
+        // begins, and the crossing holds it from there.
+        if (home && page.id >= 0 && page.id != homePage)
+            return ResolvedArrangement.resolve(store, orientation, page);
         ResolvedArrangement held = home ? mHomeArrangement : mWorkspaceArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home
@@ -17704,10 +17709,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.dock.DockGeometry.Half dockHalf(
             @NonNull com.termux.app.wall.PaneWallPage page, @NonNull PlaceOrientation orientation,
             @NonNull PlaceLayout fallbackLayout) {
+        return dockHalf(arrangedPageOf(page), orientation, fallbackLayout);
+    }
+
+    /**
+     * The same for {@code page} named by its id: a Home page with an id is the other Home end of
+     * a crossing between two Home pages (#173 slice E, {@code DockGeometry.Snapshot#otherHome}),
+     * kept apart from the Home half the chrome stands in, so neither memo is built again per
+     * frame.
+     */
+    @NonNull
+    private com.termux.app.dock.DockGeometry.Half dockHalf(
+            @NonNull com.termux.app.wall.PageRef page, @NonNull PlaceOrientation orientation,
+            @NonNull PlaceLayout fallbackLayout) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null)
             return com.termux.app.dock.DockGeometry.Half.builder(fallbackLayout).build();
-        boolean home = page == com.termux.app.wall.PaneWallPage.WIDGETS;
+        boolean home = page.isHome();
+        boolean otherHome = home && page.id >= 0;
         // Its layout, Style, Dock design and Search field: the half's resolved arrangement.
         ResolvedArrangement arrangement = arrangementOf(page);
         com.termux.app.place.LayoutVariant variant = arrangement.variant();
@@ -17717,7 +17736,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int stripDp = sizes.wallStripHeightDp(orientation);
         // The same facts as last time: the same half, so a pass per frame of a crossing builds
         // no halves (docs/agents/performance.md rule 3) and the memo matches it by identity.
-        com.termux.app.dock.DockGeometry.Half last = home ? mDockHomeHalf : mDockWorkspaceHalf;
+        com.termux.app.dock.DockGeometry.Half last = otherHome ? mDockOtherHomeHalf
+            : home ? mDockHomeHalf : mDockWorkspaceHalf;
         if (last != null && last.arrangement == arrangement
             && Float.compare(last.dockHeightScale, scale) == 0
             && last.marginDp == shape.marginDp && last.cornersDp == shape.cornersDp
@@ -17729,13 +17749,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 .cornersDp(shape.cornersDp)
                 .wallStripHeightDp(stripDp)
                 .build();
-        if (home) mDockHomeHalf = half;
+        if (otherHome) mDockOtherHomeHalf = half;
+        else if (home) mDockHomeHalf = half;
         else mDockWorkspaceHalf = half;
         return half;
     }
 
     /** Each half as {@link #dockHalf} last built it, handed back while its facts stand. */
     @Nullable private com.termux.app.dock.DockGeometry.Half mDockHomeHalf;
+    /** The other Home end's half of a crossing between two Home pages, as last built. */
+    @Nullable private com.termux.app.dock.DockGeometry.Half mDockOtherHomeHalf;
     @Nullable private com.termux.app.dock.DockGeometry.Half mDockWorkspaceHalf;
 
     /**

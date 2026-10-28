@@ -8,6 +8,7 @@ import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.WallShape;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.WallPages.PageKind;
 
@@ -175,8 +176,21 @@ public final class DressResolver {
      */
     @NonNull
     public Dress dressOf(@NonNull PaneWallPage page) {
-        LayoutVariant layout = layoutOf(page);
-        PageKind kind = kindOf(page);
+        return dressOf(layoutOf(page), kindOf(page));
+    }
+
+    /**
+     * What {@code page} wears, named by its id (#173 slice E): the same as {@link
+     * #dressOf(PaneWallPage)} for a page with no id said or for the page in front, and the page's
+     * own for another page of its kind, a Home page beside the one in front included.
+     */
+    @NonNull
+    public Dress dressOf(@NonNull PageRef page) {
+        return dressOf(layoutOf(page), kindOf(page.kind));
+    }
+
+    @NonNull
+    private Dress dressOf(@NonNull LayoutVariant layout, @NonNull PageKind kind) {
         Set<Element> leftOut = EnumSet.noneOf(Element.class);
         for (Element element : Element.values()) {
             if (!mSource.layoutShows(layout, kind, element)) leftOut.add(element);
@@ -195,9 +209,24 @@ public final class DressResolver {
      */
     @NonNull
     public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
+        return layoutOf(page, mSource.pageIdOf(page));
+    }
+
+    /**
+     * The layout {@code page} wears, read for its own id rather than for the page of its kind in
+     * front (#173 slice E): a crossing between two Home pages resolves the page it slides toward
+     * while the other is still in front. A page with no id said reads as {@link
+     * #layoutOf(PaneWallPage)}.
+     */
+    @NonNull
+    public LayoutVariant layoutOf(@NonNull PageRef page) {
+        return page.id < 0 ? layoutOf(page.kind) : layoutOf(page.kind, page.id);
+    }
+
+    @NonNull
+    private LayoutVariant layoutOf(@NonNull PaneWallPage page, int id) {
         boolean home = page == PaneWallPage.WIDGETS;
         if (!home && mSource.minimal()) return LayoutVariant.MINIMAL;
-        int id = mSource.pageIdOf(page);
         if (id >= 0 && mSource.pageLayout(id))
             return LayoutVariant.page(id, home ? PageKind.HOME : PageKind.TERMINAL);
         return LayoutVariant.NORMAL;
