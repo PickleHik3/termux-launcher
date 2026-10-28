@@ -531,4 +531,16 @@ public class GlassControlsMigrationTest {
         assertFalse(saved.has(SurfacePresets.RETIRED_SHADE_KEY));
         assertEquals(30, saved.getInt(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
     }
+
+    /** L5: the Terminal page's own tint the half upgrade wrote survives this migration. */
+    @Test
+    public void theTerminalPagesOwnValuesSurviveTheMigration() {
+        String tint = TermuxAppSharedPreferences.surfaceOverrideKey(SurfaceSlot.DOCK,
+            SurfaceProperty.TINT);
+        String own = com.termux.shared.termux.settings.preferences.PageLookKeys.pageKey(tint,
+            com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID);
+        store.edit().putInt(own, 23).commit();
+        GlassControlsMigration.run(preferences);
+        assertEquals(23, store.getInt(own, -1));
+    }
 }
