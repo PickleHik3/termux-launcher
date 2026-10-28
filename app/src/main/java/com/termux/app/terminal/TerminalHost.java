@@ -127,6 +127,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Whether the launcher's embedded keyboard — not the system IME — is the input method. */
     boolean isInAppKeyboardEnabled();
 
+    /** Whether a Terminal widget on Home holds the focus (a tap on its terminal put it there). */
+    default boolean isHomeTerminalWidgetFocused() { return false; }
+
     /**
      * Steps the in-app keyboard's layout ring, answering whether it actually moved. A ring of
      * one says so on screen rather than moving.

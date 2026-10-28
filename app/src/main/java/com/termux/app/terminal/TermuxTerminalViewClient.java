@@ -357,6 +357,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     private void showInAppKeyboardForTap() {
+        // A Home terminal widget tapped is the typing target: a stale external-field flag would
+        // keep the keyboard's container hidden on Home (#178).
+        if (com.termux.app.place.PlaceKeyboard.tapReclaimsFromExternalInput(
+                mInAppKeyboardController.isExternalTextInputActive(),
+                mHost.isHomeTerminalWidgetFocused())) {
+            mInAppKeyboardController.endExternalTextInput();
+        }
         mInAppKeyboardController.show(ShowReason.TERMINAL_TAP);
         suppressSystemImeForInAppKeyboard();
     }

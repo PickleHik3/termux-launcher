@@ -140,6 +140,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     @Override
     public void onCreate() {
+        LifecycleTrail.service("create", null);
         Logger.logVerbose(LOG_TAG, "onCreate");
         // Get Termux app SharedProperties without loading from disk since TermuxApplication handles
         // load and TermuxActivity handles reloads
@@ -154,6 +155,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     private void autostartEmbeddedDisplay() {
         String[] argv = com.termux.app.x11.X11Autostart.commandToRun(this);
         if (argv == null) return;
+        LifecycleTrail.service("display-autostart", argv[0]);
         createTermuxTask(argv[0], java.util.Arrays.copyOfRange(argv, 1, argv.length), null,
             TermuxConstants.TERMUX_HOME_DIR_PATH);
     }
@@ -203,7 +205,10 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     @Override
     public void onDestroy() {
+        LifecycleTrail.service("destroy", "wantsToStop=" + mWantsToStop);
         Logger.logVerbose(LOG_TAG, "onDestroy");
+        // The bus socket lives in the tmp that is emptied next; the server's own does not.
+        com.termux.app.sound.LauncherSound.get(this).onServiceStopping();
         TermuxShellUtils.clearTermuxTMPDIR(true);
         actionReleaseWakeLock(false);
         if (!mWantsToStop)
@@ -262,6 +267,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * Process action to stop service.
      */
     private void actionStopService() {
+        LifecycleTrail.service("stop-action", "Exit");
         mWantsToStop = true;
         // Exit is itself the arrangement (wall rework slice 9): the next cold start shows exactly
         // what Exit leaves, an empty Workspace. Written before the shells die; the activity's
@@ -353,6 +359,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * this killed the app process itself, and it did so on each and every session exit, which read
      * as a crash. Processes of another uid raise an {@code ErrnoException} rather than dying, so each
      * kill is guarded separately instead of aborting the whole sweep on the first foreign pid.
+     *
+     * The launcher's sound processes, and the helper's own children, are spared: the sound server
+     * outlives every shell, and Sound off is what stops it (decision 1 of the sound spec).
      */
     private void reapOrphanedProcesses() {
         String[] procEntries = new File("/proc").list();
@@ -362,6 +371,33 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         }
         int ownPid = android.os.Process.myPid();
         int reaped = 0;
+        Map<Integer, List<String>> argvByPid = new java.util.HashMap<>();
+        Map<Integer, Integer> parentByPid = new java.util.HashMap<>();
+        for (String procEntry : procEntries) {
+            int candidate;
+            try {
+                candidate = Integer.parseInt(procEntry);
+            } catch (NumberFormatException e) {
+                continue;
+            }
+            byte[] raw = readProc(candidate, "cmdline", 8192);
+            if (raw != null)
+                argvByPid.put(candidate, com.termux.app.sound.LauncherSound.parseCmdline(raw, raw.length));
+            byte[] stat = readProc(candidate, "stat", 1024);
+            if (stat != null) {
+                // "pid (comm) S ppid ...": comm may hold spaces and parentheses, so cut after the last one.
+                String text = new String(stat, java.nio.charset.StandardCharsets.UTF_8);
+                int close = text.lastIndexOf(')');
+                String[] fields = close < 0 ? new String[0] : text.substring(close + 1).trim().split(" ");
+                if (fields.length > 1) {
+                    try {
+                        parentByPid.put(candidate, Integer.parseInt(fields[1]));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        java.util.Set<Integer> spared = com.termux.app.sound.LauncherSound.spares(argvByPid, parentByPid);
         for (String procEntry : procEntries) {
             int pid;
             try {
@@ -370,7 +406,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
                 // Not a pid directory.
                 continue;
             }
-            if (pid == ownPid || isProcessOfThisApp(pid))
+            if (pid == ownPid || spared.contains(pid) || isProcessOfThisApp(pid))
                 continue;
             try {
                 Os.kill(pid, OsConstants.SIGTERM);
@@ -380,6 +416,20 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             }
         }
         Logger.logDebug(LOG_TAG, "Sent SIGTERM to " + reaped + " orphaned processes");
+    }
+
+    /** The first {@code limit} bytes of {@code /proc/<pid>/<name>}, or null when unreadable. */
+    private static byte[] readProc(int pid, String name, int limit) {
+        try (FileInputStream in = new FileInputStream("/proc/" + pid + "/" + name)) {
+            byte[] buffer = new byte[limit];
+            int length = 0;
+            int read;
+            while (length < limit && (read = in.read(buffer, length, limit - length)) > 0)
+                length += read;
+            return java.util.Arrays.copyOf(buffer, length);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -1012,6 +1062,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             // Not while the launcher shows Home over an empty Workspace: the activity binds without
             // BIND_AUTO_CREATE, so a stopped service disconnects it (onServiceDisconnected) and it
             // finishes, dropping the user to another launcher (WallRow.lastShellClosedShowsHome).
+            LifecycleTrail.service("stop", "nothing left to run and the activity does not keep it");
             requestStopService();
         } else {
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
