@@ -35,14 +35,22 @@ final class LifecycleTrail {
         line("service", event, detail);
     }
 
-    /** The method name {@code framesUp} frames above the caller of this method; "?" when out of range. */
+    /**
+     * The method name {@code framesUp} frames above this method's own frame: 1 is the method that
+     * called {@code caller}, 2 is that method's caller. The frame is found by name, since how many
+     * VM frames sit above it differs between ART and a desktop JVM. "?" when out of range.
+     */
     @NonNull
     static String caller(int framesUp) {
         try {
             StackTraceElement[] st = Thread.currentThread().getStackTrace();
-            // 0 getStackTrace, 1 caller (this method), 2 its caller, ...
-            int i = 1 + framesUp;
-            return i >= 0 && i < st.length ? st[i].getMethodName() : "?";
+            String self = LifecycleTrail.class.getName();
+            for (int i = 0; i < st.length; i++) {
+                if (!self.equals(st[i].getClassName()) || !"caller".equals(st[i].getMethodName())) continue;
+                int target = i + framesUp;
+                return target < st.length ? st[target].getMethodName() : "?";
+            }
+            return "?";
         } catch (RuntimeException e) {
             return "?";
         }
