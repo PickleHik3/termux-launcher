@@ -88,12 +88,15 @@ final class SupervisedProcess {
 
     /**
      * Kill the running process and start it again, uncounted: the launcher judged it broken, so
-     * the exit is not a crash of its own. Nothing happens when nothing runs.
+     * the exit is not a crash of its own. {@code kill} sends the SIGKILL, by pid, since Android's
+     * {@link Process#destroyForcibly} has been seen to send SIGTERM, which a stuck server never
+     * acts on; {@link Process#destroy} follows as the fallback. Nothing happens when nothing runs.
      */
-    synchronized void restart() {
+    synchronized void restart(@NonNull Runnable kill) {
         if (process == null) return;
         restartRequested = true;
-        process.destroyForcibly();
+        kill.run();
+        process.destroy();
     }
 
     /** Stop it now. The exit that follows is not a crash and starts nothing. */

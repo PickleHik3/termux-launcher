@@ -263,13 +263,22 @@ public final class LauncherSound {
                 String broken = brokenReason();
                 if (broken != null) {
                     Logger.logWarn(LOG_TAG, "pulseaudio is broken (" + broken + "); starting it again");
-                    server.restart();
+                    server.restart(LauncherSound::killOwnServers);
                 }
             }
             ensureBus();
             ensureMedia();
         } catch (IOException | RuntimeException e) {
             Logger.logErrorExtended(LOG_TAG, "Sound did not start: " + e.getMessage());
+        }
+    }
+
+    /** SIGKILL every server of the launcher's own, found by its command line in {@code /proc}. */
+    private static void killOwnServers() {
+        for (Map.Entry<Integer, List<String>> process : ownProcesses().entrySet()) {
+            if (StepAside.classify(process.getValue(), SoundPaths.STARTUP_FILE) == StepAside.Server.OURS) {
+                android.os.Process.sendSignal(process.getKey(), SIGKILL);
+            }
         }
     }
 

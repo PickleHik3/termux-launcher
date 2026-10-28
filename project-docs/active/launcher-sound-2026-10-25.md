@@ -54,14 +54,6 @@ launcher-owned server for everything, and adds Android media integration on top.
    writes nothing, and the Linux apps page says it is using the user's own setup.
 8. **Replace a stock server.** A server some client autospawned, with no user configuration, is
    not a user's setup: it is stopped and the launcher's started in its place.
-14. **The server survives a service stop.** Its runtime directory (pid file, socket) is
-   `$PREFIX/var/run/termux-launcher/sound`, not the tmp, because the service empties `$TMPDIR` on
-   every stop (Exit in the notification, the last shell). The service's orphan reaper spares the
-   launcher's sound processes (server, bus, helper and the helper's children), and `onDestroy`
-   takes the bus, helper and media bridge down; the next need starts them again (the bus socket
-   stays in `$TMPDIR/.X11-unix`, recreated at every bus start). At a need the server is judged
-   broken, and killed and restarted uncounted, when `pactl info` times out or fails to run, or when
-   it is older than 10 s and its socket is missing or `pactl` says "Connection refused/failure".
 
 ### Media
 
@@ -94,6 +86,15 @@ launcher-owned server for everything, and adds Android media integration on top.
       launcher's drop-ins, stop handing addresses to new sessions.
     - **Media controls** — notification and audio focus; greyed out while Sound is off.
     The page also shows the step-aside state ("using your own setup") and the restart-cap notice.
+
+14. **The server survives a service stop.** Its runtime directory (pid file, socket) is
+   `$PREFIX/var/run/termux-launcher/sound`, not the tmp, because the service empties `$TMPDIR` on
+   every stop (Exit in the notification, the last shell). The service's orphan reaper spares the
+   launcher's sound processes (server, bus, helper and the helper's children), and `onDestroy`
+   takes the bus, helper and media bridge down; the next need starts them again (the bus socket
+   stays in `$TMPDIR/.X11-unix`, recreated at every bus start). At a need the server is judged
+   broken, and killed and restarted uncounted, when `pactl info` times out or fails to run, or when
+   it is older than 10 s and its socket is missing or `pactl` says "Connection refused/failure".
 
 ## Out of scope
 
