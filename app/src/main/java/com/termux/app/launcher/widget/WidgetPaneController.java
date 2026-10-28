@@ -495,6 +495,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      */
     public void setHomeRun(int first, int last) {
         pane.setRun(first, last);
+        // Re-bound to another run, the frame turns to that run's arrival page, the end nearest the
+        // page it showed: it never shows one run's page while bound to another (W5).
+        int lo = Math.max(0, first);
+        int hi = last < 0 ? Integer.MAX_VALUE : Math.max(lo, last);
+        if (currentPage < lo) setCurrentPage(lo);
+        else if (currentPage > hi) setCurrentPage(hi);
     }
 
     /**
