@@ -857,6 +857,51 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         restateCard();
     }
 
+    private boolean mFoldedByOverview;
+
+    /**
+     * The page overview centred a card over the open editor: the editor shows that page. Home and
+     * terminal cards rebind the half (label, preview and the screen's card); a display card keeps
+     * the card and folds the sheet to its header. Nothing is written: looking is not an edit.
+     */
+    public void onOverviewCard(@NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind) {
+        EditorCardSheet sheet = mSheet;
+        if (!mOpen || sheet == null)
+            return;
+        OverviewFollow follow = OverviewFollow.of(kind);
+        if (follow == OverviewFollow.FOLD) {
+            if (sheet.isShown() && sheet.detent() != EditorCardSheet.DETENT_PEEK) {
+                mFoldedByOverview = true;
+                collapseCard(false);
+            }
+            return;
+        }
+        WallHalf half = follow == OverviewFollow.HOME ? WallHalf.HOME : WallHalf.WORKSPACE;
+        if (half == WallHalf.HOME && !useAs().showsHomePage())
+            return;
+        boolean unfold = mFoldedByOverview;
+        mFoldedByOverview = false;
+        if (half != mHalf) {
+            mHalf = half;
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null)
+                layout.showHome(half == WallHalf.HOME, false);
+            if (mBar != null)
+                mBar.setHalf(half);
+        }
+        if (mCard == null || mCard == EditorCard.HOME || mCard == EditorCard.WORKSPACE
+                || !mCard.standsOn(half)) {
+            int detent = sheet.isShown() && !unfold ? sheet.detent() : EditorCardSheet.DETENT_HALF;
+            openCard(follow.card, false, detent);
+            if (sheet.isShown() && sheet.detent() != detent)
+                sheet.setDetent(detent, false);
+        } else
+            restateCard();
+        if (unfold && sheet.detent() == EditorCardSheet.DETENT_PEEK)
+            sheet.setDetent(EditorCardSheet.DETENT_HALF, false);
+        positionTargets();
+    }
+
     @NonNull
     private String resetLabel(@NonNull EditorCard card) {
         switch (card) {
