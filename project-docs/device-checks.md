@@ -21,6 +21,15 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-29 · commits 6a688dc92, 247e13ab0, 69eef88db, 1504e53d4 and the two fixes after them
+  (Edit pages overview round, `project-docs/active/edit-pages-overview-2026-10-27.md`) · on pong:
+  Home actions › Appearance › sheet More › Edit pages opens the overview at once (no splash, no
+  Settings); the chip is gone from More while the overview is up; the Home card fills its frame
+  with no page label or sheet inside it; swipe to the terminal card and the sheet says Workspace;
+  a tap on a side card centres it, a tap on the centred card zooms in; Back asks no Discard;
+  "+ Add terminal" is not clipped; Launcher settings opens with no black splash · passes when
+  each holds as on the emulator (`app/evidence/edit-pages-2026-10-27/` has the before frames) ·
+  pong, the debug arm64 build installed 2026-10-29 01:45.
 - 2026-10-25 · commit "fix(statusbar): the status row flows around the camera and clears the
   screen's corners" (#163) · with the status bar along the top and Full screen on, screenshots in
   portrait show a gap at the camera with the chips left of it and the readings right of it, and
