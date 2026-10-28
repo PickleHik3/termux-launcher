@@ -123,6 +123,19 @@ final class EditorCardSheet {
 
         /** Reads a {@link #rowView} again from the values, as {@link #restate()} does any row. */
         default void restateRowView(@NonNull Row row, @NonNull View view) {}
+
+        /**
+         * The scope chip's two words for the card up, "Global" then the page's name (ADR 0015
+         * §6); null where the card carries no chip (its surface shows on one page only).
+         */
+        @Nullable
+        default CharSequence[] scopeLabels() { return null; }
+
+        /** Whether the chip stands on the page side: the card's rows read and write the page. */
+        default boolean scopeOnPage() { return false; }
+
+        /** A touch on the chip picked a side. */
+        default void setScopeOnPage(boolean onPage) {}
     }
 
     /** What the header and the sheet itself report. */
@@ -180,6 +193,10 @@ final class EditorCardSheet {
     /** The glyph the eye shows now: open or struck through. */
     private int mEyeIcon = R.drawable.ic_ms_visibility;
     @NonNull private final ScrollView mScroll;
+    /** The scope chip under the header ({@link Model#scopeLabels}), and the words it was built with. */
+    @NonNull private final FrameLayout mScopeSlot;
+    @Nullable private com.termux.app.surfaces.rows.SegmentRow mScopeChip;
+    @Nullable private CharSequence[] mScopeLabels;
     @NonNull private final LinearLayout mRows;
     @NonNull private final Map<Row, RowViews> mRowViews = new EnumMap<>(Row.class);
     @Nullable private EditorCard mCard;
@@ -288,6 +305,11 @@ final class EditorCardSheet {
         mEye.setVisibility(View.GONE);
         headerRow.addView(mEye, headerButtonParams(1));
         bindHeaderDrag();
+
+        mScopeSlot = new FrameLayout(context);
+        mScopeSlot.setVisibility(View.GONE);
+        mColumn.addView(mScopeSlot, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         mScroll = new SheetScrollView(context);
         mScroll.setClipToPadding(false);
@@ -461,6 +483,7 @@ final class EditorCardSheet {
             mScroll.scrollTo(0, 0);
         }
         restateEye();
+        restateScope();
         EditorViews.setText(mTitle, mContext.getString(card.titleRes));
         mHeaderIcon.setImageResource(card.iconRes);
         mSheet.setContentDescription(mContext.getString(card.titleRes));
@@ -1507,6 +1530,42 @@ final class EditorCardSheet {
         for (RowViews views : mRowViews.values())
             restate(views);
         restateEye();
+        restateScope();
+    }
+
+    /**
+     * The scope chip read again: built anew only when its words change (another page), else only
+     * its side set. A card segment row, as the Elements card's "Applies to" chip is.
+     */
+    private void restateScope() {
+        CharSequence[] labels = mModel.scopeLabels();
+        if (labels == null || labels.length != 2) {
+            if (mScopeChip != null) {
+                mScopeSlot.removeAllViews();
+                mScopeChip = null;
+                mScopeLabels = null;
+            }
+            EditorViews.setVisible(mScopeSlot, false);
+            return;
+        }
+        if (mScopeChip == null || !java.util.Arrays.equals(labels, mScopeLabels)) {
+            mScopeSlot.removeAllViews();
+            mScopeChip = com.termux.app.surfaces.rows.SegmentRow.build(mContext,
+                R.drawable.ic_ms_layers, mContext.getString(R.string.editor_scope_for),
+                java.util.Arrays.asList(
+                    com.termux.app.surfaces.rows.SegmentRow.Segment.word(labels[0]),
+                    com.termux.app.surfaces.rows.SegmentRow.Segment.word(labels[1])),
+                mModel.scopeOnPage() ? 1 : 0,
+                mContext.getResources().getDisplayMetrics().widthPixels,
+                index -> {
+                    mModel.setScopeOnPage(index == 1);
+                    restate();
+                });
+            mScopeLabels = labels.clone();
+            mScopeSlot.addView(mScopeChip.root);
+        }
+        mScopeChip.select(mModel.scopeOnPage() ? 1 : 0);
+        EditorViews.setVisible(mScopeSlot, true);
     }
 
     /**
