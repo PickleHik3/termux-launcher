@@ -647,4 +647,106 @@ public class CrossingTest {
         crossing.coverAt(0f);
         assertEquals(0, moves.coverPx);
     }
+
+    // ---- Between two Home pages (#173 slice E) ----
+
+    private static final PageRef HOME_2 = PageRef.of(PaneWallPage.WIDGETS, 2);
+    private static final PageRef HOME_3 = PageRef.of(PaneWallPage.WIDGETS, 3);
+    /** Home page 3's own layout: Home's, with the index shown beside the pinned apps. */
+    private static final PlaceLayout HOME_WITH_INDEX = new PlaceLayout(Edge.TOP,
+        RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.HIDDEN,
+        PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    private static final ResolvedArrangement HOME_2_ARRANGED = ResolvedArrangement.of(HOME,
+        LayoutStyle.DOCKED, DockStyle.GLASS_TRAY, false, false, PlaceOrientation.PORTRAIT,
+        LayoutVariant.NORMAL, HOME_2);
+    private static final ResolvedArrangement HOME_3_ARRANGED = ResolvedArrangement.of(
+        HOME_WITH_INDEX, LayoutStyle.DOCKED, DockStyle.GLASS_TRAY, false, false,
+        PlaceOrientation.PORTRAIT, LayoutVariant.page(3,
+            com.termux.app.wall.WallPages.PageKind.HOME), HOME_3);
+
+    /** One snapshot holding both Home pages' halves, the other in {@code otherHome}. */
+    private static DockGeometry.Snapshot twoHomes() {
+        return DockGeometry.Snapshot.builder(DockGeometry.Half.builder(HOME_2_ARRANGED).build(),
+                DockGeometry.Half.builder(WORKSPACE_ARRANGED).build())
+            .otherHome(DockGeometry.Half.builder(HOME_3_ARRANGED).build())
+            .density(DENSITY)
+            .widthPx(Math.round(411 * DENSITY))
+            .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(DENSITY))
+            .pinnedSlotCount(7)
+            .build();
+    }
+
+    @Test
+    public void aSnapshotAnswersEachOfTwoHomePagesWithItsOwnHalf() {
+        DockGeometry.Snapshot rests = twoHomes();
+        assertSame(HOME_2_ARRANGED, rests.half(HOME_2).arrangement);
+        assertSame(HOME_3_ARRANGED, rests.half(HOME_3).arrangement);
+        assertSame("a Home page with no id said reads the one in front", HOME_2_ARRANGED,
+            rests.half(PageRef.HOME).arrangement);
+        assertSame(WORKSPACE_ARRANGED, rests.half(PageRef.TERMINAL).arrangement);
+        // Without a second half, every Home page reads the one Home half, as before.
+        assertSame(HOME_ARRANGED, snapshot().half(HOME_3).arrangement);
+        assertNotEquals(dressOf(DockGeometry.compute(rests.restOf(HOME_2)))[4],
+            dressOf(DockGeometry.compute(rests.restOf(HOME_3)))[4]);
+    }
+
+    /**
+     * A slide on Home's pager between page 2 and page 3, whose own layout adds the index: the
+     * crossing holds both pages' arrangements and rests, the row morphs from page 2's rest to
+     * page 3's on the pager's way, a reader asking for Home by kind reads the committed page, and
+     * the landing lays out page 3's rest.
+     */
+    @Test
+    public void aSlideBetweenTwoHomePagesMorphsTheRowFromOnePagesRestToTheOthers() {
+        DockGeometry.Snapshot rests = twoHomes();
+        DockLayout rest2 = DockGeometry.compute(rests.restOf(HOME_2));
+        DockLayout rest3 = DockGeometry.compute(rests.restOf(HOME_3));
+        Dress dress = new DressResolver(new Stored()).dressOf(PaneWallPage.WIDGETS);
+        SeamDress.StackDress stack = SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0);
+        SeamCrossing.Endpoint here = SeamCrossing.Endpoint.of(HOME_2, dress, null,
+            HOME_2_ARRANGED, HOME, stack, false, -1);
+        SeamCrossing.Endpoint there = SeamCrossing.Endpoint.of(HOME_3, dress, null,
+            HOME_3_ARRANGED, HOME_WITH_INDEX, stack, false, -1);
+        assertTrue(SeamCrossing.crosses(here, there));
+        Moves moves = new Moves();
+        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Rest home = new Rest(false, false, true);
+        crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true), rest2,
+            rest3, REVISION);
+        assertEquals(1, moves.morphBegins);
+        assertSame(rest2, moves.leaving);
+        assertSame(rest3, moves.arriving);
+        for (float fraction = STEP; fraction < 1f; fraction += STEP) {
+            Frame frame = PlaceChromeTravel.homePages(home, 2, 3, -fraction * WIDTH, WIDTH);
+            SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
+            if (answers.relayout()) crossing.seam().standLayout();
+            assertEquals("the row on the pager's way at " + fraction,
+                SeamTravel.otherEndProgress(frame, HOME_2), moves.dressed.fraction(), 1e-4f);
+        }
+        assertTrue("the morph reaches the arriving page",
+            moves.dressed.fraction() > 0.99f);
+        assertSame(HOME_2_ARRANGED, crossing.heldArrangement(HOME_2));
+        assertSame(HOME_3_ARRANGED, crossing.heldArrangement(HOME_3));
+        assertSame("Home asked by kind alone is the committed page", HOME_2_ARRANGED,
+            crossing.heldArrangement(PageRef.HOME));
+        assertSame(rest3, crossing.heldRest(HOME_3));
+        assertSame(rest2, crossing.heldRest(PageRef.HOME));
+        crossing.land(HOME_3, REVISION);
+        assertEquals(1, moves.morphEnds);
+        assertSame(rest3, moves.landed);
+        crossing.end();
+        assertTrue(crossing.idle());
+    }
+
+    @Test
+    public void twoHomePagesThatDressAlikeAreNoCrossing() {
+        Dress dress = new DressResolver(new Stored()).dressOf(PaneWallPage.WIDGETS);
+        SeamDress.StackDress stack = SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0);
+        SeamCrossing.Endpoint here = SeamCrossing.Endpoint.of(HOME_2, dress, null,
+            HOME_2_ARRANGED, HOME, stack, false, -1);
+        SeamCrossing.Endpoint alike = SeamCrossing.Endpoint.of(HOME_3, dress, null,
+            HOME_2_ARRANGED, HOME, stack, false, -1);
+        assertFalse(SeamCrossing.crosses(here, alike));
+        assertFalse("one page with itself", SeamCrossing.crosses(here, here));
+    }
 }

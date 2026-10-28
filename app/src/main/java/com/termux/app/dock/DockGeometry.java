@@ -183,6 +183,12 @@ public final class DockGeometry {
         @NonNull public final Half home;
         @NonNull public final Half workspace;
         /**
+         * A second Home page's half, for a crossing between two Home pages (#173 slice E): it
+         * answers for the page its arrangement is resolved for ({@link #half}), {@link #home} for
+         * every other Home page. Null while the snapshot holds one Home half.
+         */
+        @Nullable public final Half otherHome;
+        /**
          * The page whose rows the frame shows, and whose dress they wear: Home's half answers for
          * a Home page, the Workspace's for every window ({@link #half}).
          */
@@ -212,8 +218,10 @@ public final class DockGeometry {
             preferencesAvailable = b.preferencesAvailable;
             home = b.home;
             workspace = b.workspace;
+            otherHome = b.otherHome;
             rows = b.rows;
-            arrangement = b.arrangement != null ? b.arrangement : half(b.rows, b.home, b.workspace).layout;
+            arrangement = b.arrangement != null ? b.arrangement
+                : half(b.rows, b.home, b.otherHome, b.workspace).layout;
             density = b.density;
             widthPx = b.widthPx;
             cutoutLeftPx = b.cutoutLeftPx;
@@ -232,18 +240,23 @@ public final class DockGeometry {
         }
 
         /**
-         * The half {@code page} stands in: Home's for a Home page, the Workspace's for a window.
-         * The snapshot holds one half per kind until a crossing runs between two pages of one.
+         * The half {@code page} stands in: Home's for a Home page, the Workspace's for a window;
+         * the second Home half ({@link #otherHome}) for the Home page it is resolved for, while a
+         * crossing between two Home pages holds one.
          */
         @NonNull
         public Half half(@NonNull PageRef page) {
-            return half(page, home, workspace);
+            return half(page, home, otherHome, workspace);
         }
 
         @NonNull
         private static Half half(@NonNull PageRef page, @NonNull Half home,
-                                 @NonNull Half workspace) {
-            return page.isHome() ? home : workspace;
+                                 @Nullable Half otherHome, @NonNull Half workspace) {
+            if (!page.isHome()) return workspace;
+            if (otherHome != null && page.id >= 0
+                && otherHome.arrangement.page().equals(page)
+                && !home.arrangement.page().equals(page)) return otherHome;
+            return home;
         }
 
         /** The half whose rows the frame shows. */
@@ -268,7 +281,8 @@ public final class DockGeometry {
 
         @NonNull
         public Builder toBuilder() {
-            return new Builder(home, workspace).preferencesAvailable(preferencesAvailable)
+            return new Builder(home, workspace).otherHome(otherHome)
+                .preferencesAvailable(preferencesAvailable)
                 .rows(rows).arrangement(arrangement)
                 .density(density).widthPx(widthPx).cutouts(cutoutLeftPx, cutoutRightPx)
                 .baseToolbarHeightPx(baseToolbarHeightPx).landscape(landscape)
@@ -295,18 +309,20 @@ public final class DockGeometry {
                 && squeezePx == that.squeezePx
                 && arrangement.equals(that.arrangement)
                 && home.equals(that.home)
+                && Objects.equals(otherHome, that.otherHome)
                 && workspace.equals(that.workspace);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(preferencesAvailable, home, workspace, rows, arrangement, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
+            return Objects.hash(preferencesAvailable, home, otherHome, workspace, rows, arrangement, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
                 landscape, pinnedSlotCount, fieldReveal, stripReveal, squeezePx);
         }
 
         public static final class Builder {
             @NonNull private final Half home;
             @NonNull private final Half workspace;
+            @Nullable private Half otherHome;
             private boolean preferencesAvailable = true;
             @NonNull private PageRef rows = PageRef.TERMINAL;
             @Nullable private PlaceLayout arrangement;
@@ -326,6 +342,8 @@ public final class DockGeometry {
                 this.workspace = workspace;
             }
 
+            /** A second Home page's half ({@link Snapshot#otherHome}); null for none. */
+            public Builder otherHome(@Nullable Half v) { otherHome = v; return this; }
             public Builder preferencesAvailable(boolean v) { preferencesAvailable = v; return this; }
             public Builder rows(@NonNull PageRef v) { rows = v; return this; }
             public Builder arrangement(@Nullable PlaceLayout v) { arrangement = v; return this; }
