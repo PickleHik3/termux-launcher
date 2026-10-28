@@ -23262,9 +23262,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockEvenOutRect.set(mDockEvenOutLocation[0], mDockEvenOutLocation[1],
             mDockEvenOutLocation[0] + surfaceHost.getWidth(),
             mDockEvenOutLocation[1] + surfaceHost.getHeight());
-        return com.termux.app.chrome.GlassFilters.withEvenOut(mChrome.ink().bandEvenOutMatrix(
-            com.termux.app.chrome.GlassBackdropCache.Band.DOCK, mDockEvenOutRect), frost);
+        android.graphics.ColorFilter composed = com.termux.app.chrome.GlassFilters.withEvenOut(
+            mChrome.ink().bandEvenOutMatrix(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
+                mDockEvenOutRect), frost);
+        // EvenOut2c diagnostic (temporary): logged when the answer moves, not per pass.
+        if (composed != mDiagDockFilter || !mDockEvenOutRect.equals(mDiagDockRect)) {
+            mDiagDockFilter = composed;
+            mDiagDockRect.set(mDockEvenOutRect);
+            android.util.Log.d("EvenOut2c", "t=" + android.os.SystemClock.uptimeMillis()
+                + " dockFrostFilter " + (composed == frost ? "bare-frost" : "composed")
+                + " policy=" + (mBandEvenOutKept[EVEN_OUT_DOCK] != null)
+                + " host=" + mDockEvenOutRect.toShortString()
+                + " caller=" + com.termux.app.chrome.ChromeInk.diagCallersPublic());
+        }
+        return composed;
     }
+
+    @Nullable private android.graphics.ColorFilter mDiagDockFilter;
+    @NonNull private final Rect mDiagDockRect = new Rect();
 
     /**
      * {@link #dockFrostFilter} for the decor nav strip, measured on the strip itself; with
