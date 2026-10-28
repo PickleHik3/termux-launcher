@@ -38,7 +38,6 @@ public class UseAsTest {
         assertTrue(home.showsHomeSettings());
         assertTrue(home.offersHomeStartIn());
         for (EditorCard card : EditorCard.values()) assertTrue(card.name(), home.reaches(card));
-        for (EditorRows.Row row : EditorRows.Row.values()) assertTrue(row.name(), home.shows(row));
         assertSame(EditorCard.HOME, home.doorCard(EditorCard.HOME));
         assertSame(PaneWallPage.WIDGETS, home.editorPlace(PaneWallPage.WIDGETS));
         assertSame(PaneWallPage.WIDGETS, home.homePage());
@@ -85,8 +84,6 @@ public class UseAsTest {
         for (EditorCard card : EditorCard.values()) {
             if (card != EditorCard.HOME) assertTrue(card.name(), terminal.reaches(card));
         }
-        assertTrue(terminal.shows(EditorRows.Row.LOOK));
-        assertTrue(terminal.shows(EditorRows.Row.LINK_GLOBAL));
     }
 
     @Test public void terminalOnlyHomeDoorsOpenTheEditorAtRest() {
@@ -106,9 +103,6 @@ public class UseAsTest {
         List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.WORKSPACE,
             new EditorRows.Offers(true, true, false));
         assertEquals(home.size(), terminal.size());
-        for (EditorRows.Spec spec : terminal) {
-            assertTrue(spec.row.name(), UseAs.TERMINAL.shows(spec.row));
-        }
     }
 
     @Test public void choosingTerminalOnlyOnHomeMovesTheWall() {
