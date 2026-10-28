@@ -377,6 +377,11 @@ final class EditorBar {
         mHint.animate().cancel();
         mHint.setAlpha(1f);
         mHint.setVisibility(shown && mHintWanted ? View.VISIBLE : View.GONE);
+        // Under the page overview the change is kept for when it closes.
+        if (mBarBeforeOverview >= 0) {
+            mBarBeforeOverview = shown ? View.VISIBLE : View.INVISIBLE;
+            return;
+        }
         mBar.animate().cancel();
         float to = shown ? 1f : 0f;
         if (shown && mBar.getVisibility() != View.VISIBLE) {
@@ -393,10 +398,45 @@ final class EditorBar {
         }).start();
     }
 
+    /** The half row's visibility to restore when the page overview closes, -1 while not under it. */
+    private int mHalfRowBeforeOverview = -1;
+    /** The bar's visibility to restore when the page overview closes, -1 while not under it. */
+    private int mBarBeforeOverview = -1;
+
+    /**
+     * The page overview covers the page, and the label and the bar stand in the activity's content
+     * beside it, so under the overview they hide and come back as they were when it closes.
+     */
+    void setUnderOverview(boolean under) {
+        if (under) {
+            if (mHalfRowBeforeOverview < 0) {
+                mHalfRowBeforeOverview = mHalfRow.getVisibility();
+                mHalfRow.setVisibility(View.INVISIBLE);
+            }
+            if (mBarBeforeOverview < 0) {
+                mBarBeforeOverview = mBar.getVisibility();
+                mBar.animate().cancel();
+                mBar.setVisibility(View.INVISIBLE);
+            }
+            return;
+        }
+        if (mHalfRowBeforeOverview >= 0) {
+            mHalfRow.setVisibility(mHalfRowBeforeOverview);
+            mHalfRowBeforeOverview = -1;
+        }
+        if (mBarBeforeOverview >= 0) {
+            mBar.setVisibility(mBarBeforeOverview);
+            mBarBeforeOverview = -1;
+        }
+    }
+
     void setShown(boolean shown) {
         int visibility = shown ? View.VISIBLE : View.GONE;
-        if (mHalfRow.getVisibility() != visibility) mHalfRow.setVisibility(visibility);
-        if (!shown && mBar.getVisibility() != View.GONE) mBar.setVisibility(View.GONE);
+        // Under the overview the change is kept for when it closes.
+        if (mHalfRowBeforeOverview >= 0) mHalfRowBeforeOverview = visibility;
+        else if (mHalfRow.getVisibility() != visibility) mHalfRow.setVisibility(visibility);
+        if (!shown && mBarBeforeOverview >= 0) mBarBeforeOverview = View.GONE;
+        else if (!shown && mBar.getVisibility() != View.GONE) mBar.setVisibility(View.GONE);
         if (!shown && mHint.getVisibility() != View.GONE) mHint.setVisibility(View.GONE);
         if (!shown) hideNote();
     }

@@ -859,6 +859,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The page overview opened or closed: the card's Edit pages chip shows or hides with it. */
     public void onPageOverviewChanged() {
+        if (mBar != null)
+            mBar.setUnderOverview(mHost.isPageOverviewOpen());
         restateCard();
     }
 
