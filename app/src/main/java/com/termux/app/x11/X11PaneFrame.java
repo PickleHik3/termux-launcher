@@ -1394,8 +1394,21 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             float density = context.getResources().getDisplayMetrics().scaledDensity;
             mText.setTextSize(16f * density);
             mText.setTextAlign(android.graphics.Paint.Align.CENTER);
-            mText.setColor(0xFFE8EAED);
-            mGround = 0xFF15171A;
+            // The theme's tokens, as the frame's empty state wears them.
+            mText.setColor(themeColor(context,
+                com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFE8EAED));
+            mGround = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase,
+                0xFF15171A);
+        }
+
+        private static int themeColor(@NonNull Context context, int attr, int fallback) {
+            android.util.TypedValue value = new android.util.TypedValue();
+            if (!context.getTheme().resolveAttribute(attr, value, true)) return fallback;
+            if (value.resourceId != 0) {
+                return androidx.core.content.ContextCompat.getColor(context, value.resourceId);
+            }
+            return value.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT
+                && value.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT ? value.data : fallback;
         }
 
         void set(@Nullable android.graphics.Bitmap picture,
