@@ -167,4 +167,48 @@ public class PageOverviewPolicyTest {
         assertFalse("spreading", PageOverviewPolicy.isPinchIn(400f, 500f, 60f));
         assertFalse("no start", PageOverviewPolicy.isPinchIn(0f, 0f, 60f));
     }
+
+    private static java.util.List<Kind> strip(String shape) {
+        java.util.List<Kind> out = new java.util.ArrayList<>();
+        for (char c : shape.toCharArray()) out.add(c == 'H' ? Kind.HOME_PAGE : Kind.TERMINAL);
+        return out;
+    }
+
+    @Test
+    public void freeOrderEqualsTheOldArithmeticWhenHomeIsFirst() {
+        java.util.List<Kind> s = strip("HHHTTT");
+        assertArrayEquals(new int[] {3, 5}, PageOverviewPolicy.blockBounds(s));
+        assertEquals(PageOverviewPolicy.addPageIndex(1, HOME), PageOverviewPolicy.addPageIndex(1, s));
+        assertEquals(PageOverviewPolicy.addPageIndex(4, HOME),
+            PageOverviewPolicy.addPageIndex(4, s));
+        assertEquals(WallRow.homePage(2), PageOverviewPolicy.wallPosition(2, s));
+        assertEquals(WallRow.window(1), PageOverviewPolicy.wallPosition(4, s));
+        assertEquals(1, PageOverviewPolicy.dropTarget(0, 1, s));
+        assertEquals(PageOverviewPolicy.NONE, PageOverviewPolicy.dropTarget(3, 0, s));
+        assertEquals(5, PageOverviewPolicy.dropTarget(3, 5, s));
+    }
+
+    @Test
+    public void aHomeCardCrossesTheBlockAndSnapsOutOfIt() {
+        java.util.List<Kind> s = strip("HTTTH");
+        assertEquals(4, PageOverviewPolicy.dropTarget(0, 4, s));
+        assertEquals(0, PageOverviewPolicy.dropTarget(4, 0, s));
+        // Home 1 dropped over the middle window: block shifts to 0..2, so before or after it.
+        assertEquals(2 + 1, PageOverviewPolicy.dropTarget(0, 3, s));
+        assertEquals(1, PageOverviewPolicy.dropTarget(4, 1, s));
+        assertEquals(PageOverviewPolicy.NONE, PageOverviewPolicy.dropTarget(1, 0, s));
+    }
+
+    @Test
+    public void theBlockMovesAsOneAndAddGoesAfterIt() {
+        java.util.List<Kind> s = strip("HTTHH");
+        assertEquals(PageOverviewPolicy.NONE, PageOverviewPolicy.blockDropTarget(2, s));
+        assertEquals(0, PageOverviewPolicy.blockDropTarget(0, s));
+        assertEquals(3, PageOverviewPolicy.blockDropTarget(4, s));
+        assertEquals(1, PageOverviewPolicy.pageIndexAt(2, s));
+        assertEquals(2, PageOverviewPolicy.pageIndexAt(3, s));
+        assertEquals(1, PageOverviewPolicy.addPageIndex(0, s));
+        assertEquals(5, PageOverviewPolicy.addPageIndex(1, s));
+        assertEquals(WallRow.homePage(1), PageOverviewPolicy.wallPosition(3, s));
+    }
 }

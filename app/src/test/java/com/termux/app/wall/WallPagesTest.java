@@ -454,4 +454,36 @@ public class WallPagesTest {
         assertSame(p, p.withHomeMapping(new int[] {0, 1}));
         assertEquals(java.util.Arrays.asList(1, 3), ids(three().withHomeMapping(new int[] {-1, -1})));
     }
+
+    @Test
+    public void slotsGroupHomeRunsAndKeepTheTerminalAlone() {
+        WallPages p = three();
+        assertEquals(2, p.slots().size());
+        assertEquals(java.util.Arrays.asList(1, 2), p.slots().get(0).pageIds);
+        assertEquals(PageKind.TERMINAL, p.slots().get(1).kind);
+        // [Home 1][Terminal][Home 2]: the terminal moves to index 1.
+        WallPages mid = ok(p.move(3, 1));
+        assertEquals(3, mid.slots().size());
+        assertEquals(java.util.Arrays.asList(1), mid.slots().get(0).pageIds);
+        assertEquals(java.util.Arrays.asList(2), mid.slots().get(2).pageIds);
+        assertEquals(2, mid.slotIndexOf(2));
+        assertEquals(1, mid.slotIndexOf(3));
+        assertEquals(-1, mid.slotIndexOf(99));
+        // [Terminal][Home 1][Home 2]
+        assertEquals(2, ok(p.move(3, 0)).slots().size());
+    }
+
+    @Test
+    public void parallaxRowReadsTheStopsInAnyOrder() {
+        WallPages p = three();
+        for (int w = 0; w < 3; w++) {
+            assertEquals(WallParallax.rowIndex(PaneWallPage.TERMINAL, w, 2, 3),
+                WallParallax.rowIndex(p, Stop.window(3, w), 3));
+        }
+        assertEquals(WallParallax.rowCount(2, 3), WallParallax.rowCount(p, 3));
+        assertEquals(1, WallParallax.rowIndex(p, Stop.of(2), 3));
+        WallPages mid = ok(p.move(3, 1));
+        assertEquals(2, WallParallax.rowIndex(mid, Stop.window(3, 1), 3));
+        assertEquals(4, WallParallax.rowIndex(mid, Stop.of(2), 3));
+    }
 }
