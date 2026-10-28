@@ -269,7 +269,16 @@ public final class EditorRows {
             this(glassEdge, terminalEffect, true);
         }
 
+        /** Whether the page overview is up: Home's Edit pages chip is not offered under it. */
+        public final boolean overviewUp;
+
         public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown) {
+            this(glassEdge, terminalEffect, homeShown, false);
+        }
+
+        public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown,
+                      boolean overviewUp) {
+            this.overviewUp = overviewUp;
             this.glassEdge = glassEdge;
             this.terminalEffect = terminalEffect;
             this.homeShown = homeShown;

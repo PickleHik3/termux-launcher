@@ -24,14 +24,16 @@ public final class HomeCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return new EditorRows.CardRows()
+        EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.SECTION_GRID, Row.HOME_COLUMNS, Row.HOME_ROWS, Row.SECTION_LOOK,
                 Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY, Row.TINT)
             .tier(2, Row.SECTION_LABELS_FOLDERS, Row.LABEL_SIZE, Row.HOME_ICON_SIZE, Row.FOLDERS,
                 Row.NUMERALS, Row.SECTION_OPTIONS, Row.GLASS_WIDGETS, Row.TWO_LINE,
                 Row.LABEL_SHADOW, Row.PAGE_DOTS, Row.PAGE_TRANSITION, Row.WALLPAPER_SCROLL)
             .tier(3, Row.MATCH_WORKSPACE, Row.ELEMENTS, Row.SECTION_MORE, Row.LINK_GLOBAL,
-                Row.LINK_GESTURES, Row.LINK_PAGES)
-            .build();
+                Row.LINK_GESTURES);
+        // Edit pages is not offered while the overview it opens is already up.
+        if (!offers.overviewUp) rows.tier(3, Row.LINK_PAGES);
+        return rows.build();
     }
 }
