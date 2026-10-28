@@ -161,7 +161,24 @@ public class TextSelectionCursorController implements CursorController {
                 if (nextIndex < 0 || nextIndex >= text.length || text[nextIndex] == ' ') break;
                 mSelX2++;
             }
+            mSelX2 = trimTrailingPunctuation(line, mSelX1, mSelX2);
         }
+    }
+
+    /**
+     * The column where a word selected by whitespace ends once the sentence punctuation after it
+     * is left out: a long press on {@code /tmp/handoff.md.} wants the path, not the full stop.
+     * Only {@code . , ; : ! ?} count, since a closing quote or bracket belongs with its opener
+     * at the word's start, and a word that is punctuation alone keeps its first cell.
+     */
+    static int trimTrailingPunctuation(TerminalRow line, int selX1, int selX2) {
+        char[] text = line.mText;
+        while (selX2 > selX1) {
+            int index = line.findStartOfColumn(selX2);
+            if (index < 0 || index >= text.length || ".,;:!?".indexOf(text[index]) < 0) break;
+            selX2--;
+        }
+        return selX2;
     }
 
     /**
