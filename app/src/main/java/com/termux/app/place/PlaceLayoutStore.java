@@ -579,6 +579,12 @@ public final class PlaceLayoutStore {
         return pages == null || pageId < 0 ? null : pages.pageName(pageId);
     }
 
+    /** Which pages stand on screen, as the launcher last said; null before it has. */
+    @Nullable
+    public ShownPages shownPages() {
+        return mShownPages.get();
+    }
+
     /** Tells this store (and every view of it) which pages are on screen. */
     public void setShownPages(@Nullable ShownPages pages) {
         mShownPages.set(pages);

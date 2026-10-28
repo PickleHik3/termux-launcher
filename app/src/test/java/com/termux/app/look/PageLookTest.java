@@ -319,4 +319,45 @@ public class PageLookTest {
         assertNotSame(before, look.of(HOME_B));
         assertEquals(TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN, look.of(HOME_B).dockGlassGrain());
     }
+
+    // ---- the editor's scope (B2)
+
+    @Test
+    public void pageScopeWriteAndResetNotifyOnlyThatPage() {
+        look.of(HOME);
+        look.of(HOME_B);
+        events.clear();
+        assertTrue(look.write(PageLook.Scope.page(3), dockGrain(), 12));
+        assertEquals(ids(3), events.get(events.size() - 1));
+        assertEquals(12, look.of(HOME_B).dockGlassGrain());
+        events.clear();
+        look.reset(PageLook.Scope.page(3), dockGrain());
+        assertEquals(ids(3), events.get(events.size() - 1));
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN, look.of(HOME_B).dockGlassGrain());
+    }
+
+    @Test
+    public void globalWriteNotifiesEveryCachedPage() {
+        look.of(HOME);
+        look.of(TERMINAL);
+        events.clear();
+        assertTrue(look.write(PageLook.Scope.GLOBAL, TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 33));
+        assertEquals(ids(1, 2), events.get(events.size() - 1));
+        assertEquals(33, look.of(TERMINAL).dockGlassGrain());
+    }
+
+    @Test
+    public void hasAndReadAnswerTheLevelOfTheScope() {
+        PageLook.Scope page = PageLook.Scope.page(3);
+        assertFalse(look.has(page, dockGrain()));
+        assertEquals(-1, look.read(page, dockGrain(), -1));
+        look.write(page, dockGrain(), 21);
+        assertTrue(look.has(page, dockGrain()));
+        assertFalse(look.has(PageLook.Scope.page(1), dockGrain()));
+        assertFalse(look.has(PageLook.Scope.GLOBAL, dockGrain()));
+        assertEquals(21, look.read(page, dockGrain(), -1));
+        // A wall-wide-only key never holds a page's value.
+        assertFalse(look.write(page, TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 5));
+        assertFalse(look.has(page, TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+    }
 }

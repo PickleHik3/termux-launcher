@@ -1025,6 +1025,35 @@ public final class SurfacePresets {
     }
 
     /**
+     * A Look put on one page (the editor's scope chip on the page side, ADR 0015 §6): each surface
+     * cell a page may hold (the blur, opacity, grain and tint of the dock, status bar and keyboard)
+     * gets the Look's number as that page's {@code @id} override. Base, the links, the material,
+     * and every value held once for the wall stay as they are, so a Look on one page never
+     * reaches the others. Old half keys read Home's values ({@link #halfOf}).
+     */
+    public static void applyLookAtPage(@NonNull TermuxAppSharedPreferences prefs,
+                                       @NonNull Preset preset, int pageId) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null || pageId < 0)
+            return;
+        Preset look = halfOf(preset, WallHalf.HOME);
+        SharedPreferences.Editor editor = store.edit();
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (isLayoutOwned(property)
+                        || !TermuxAppSharedPreferences.isPerHalf(slot, property))
+                    continue;
+                String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+                if (key == null || !com.termux.app.look.PageLook.isDetachable(key))
+                    continue;
+                editor.putInt(com.termux.shared.termux.settings.preferences.PageLookKeys
+                    .pageKey(key, pageId), lookCellValue(prefs, look, slot, property));
+            }
+        }
+        editor.apply();
+    }
+
+    /**
      * A look at one half's scope. Home is the wall: {@link #applyHalf}. The Workspace is the
      * Terminal page, which a Look reaches only through its own surface values: each per-half
      * cell's resolved number lands as the page's override, and Base, the inherit links, the

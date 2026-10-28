@@ -207,6 +207,24 @@ public final class PageLook {
     }
 
     /**
+     * Whether the level of the scope holds its own value of a Look number: the page's override
+     * under a page, the plain key under Global. The editor's dot.
+     */
+    public boolean has(@NonNull Scope scope, @NonNull String key) {
+        if (!LookKeys.KNOWN.contains(key)) return false;
+        if (scope.isGlobal()) return store.has(key);
+        return LookKeys.OVERRIDABLE.contains(key)
+            && store.has(LookKeys.pageKey(key, scope.pageId()));
+    }
+
+    /** The number the level of the scope holds for {@code key}, or {@code fallback} where it holds none. */
+    public int read(@NonNull Scope scope, @NonNull String key, int fallback) {
+        if (!has(scope, key)) return fallback;
+        return store.getInt(scope.isGlobal() ? key : LookKeys.pageKey(key, scope.pageId()),
+            fallback);
+    }
+
+    /**
      * Copies every look override of page {@code fromPageId} to page {@code toPageId} (the
      * {@code key@id} entries; the target's own are overwritten, other keys are left). Pure on the
      * store, no listeners: for a page made at upgrade time. Returns how many keys it wrote.
