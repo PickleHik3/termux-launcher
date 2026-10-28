@@ -1894,6 +1894,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        LifecycleTrail.activity("create", "saved=" + (savedInstanceState != null)
+            + " intent=" + (getIntent() == null ? null : getIntent().getAction())
+            + " home=" + (getIntent() != null && getIntent().hasCategory(Intent.CATEGORY_HOME)));
         Logger.logDebug(LOG_TAG, "onCreate");
         com.termux.terminal.LatencyProbe.setDebugBuild(com.termux.BuildConfig.DEBUG);
         mIsOnResumeAfterOnCreate = true;
@@ -2238,6 +2241,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        LifecycleTrail.activity("new-intent", String.valueOf(intent == null ? null : intent.getAction()));
         setIntent(intent);
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
@@ -4797,7 +4801,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
             readSystemWallpaperHint(wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM));
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
-                if ((which & WallpaperManager.FLAG_SYSTEM) != 0) readSystemWallpaperHint(colors);
+                if ((which & WallpaperManager.FLAG_SYSTEM) != 0) {
+                    LifecycleTrail.activity("wallpaper-colours", "system wallpaper colours changed");
+                    readSystemWallpaperHint(colors);
+                }
                 // The new id first, so nothing that runs from here on cuts a frame for the old one.
                 com.termux.app.chrome.WallpaperSourceFacts facts = refreshWallpaperSourceFacts();
                 // A wallpaper set outside the launcher is still a wallpaper change: tagged so the
@@ -10957,6 +10964,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     public void onDestroy() {
+        LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         if (sLiveActivity != null && sLiveActivity.get() == this) sLiveActivity = null;
@@ -11156,6 +11164,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         Logger.logVerbose(LOG_TAG, "onConfigurationChanged");
+        String configText = String.valueOf(newConfig);
+        LifecycleTrail.activity("config-changed", configText.length() > 160 ? configText.substring(0, 160) : configText);
         super.onConfigurationChanged(newConfig);
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
@@ -11555,6 +11565,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onServiceDisconnected(ComponentName name) {
         Logger.logDebug(LOG_TAG, "onServiceDisconnected");
+        LifecycleTrail.activity("service-disconnected", "finishing the activity");
         // Respect being stopped from the {@link TermuxService} notification action.
         finishActivityIfNotFinishing();
     }
@@ -20337,6 +20348,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void finishActivityIfNotFinishing() {
+        LifecycleTrail.activity("finish", "from " + LifecycleTrail.caller(2));
         // prevent duplicate calls to finish() if called from multiple places
         if (!TermuxActivity.this.isFinishing()) {
             if (!shouldShowInRecents())
@@ -34234,6 +34246,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // It will destroy the activity, including all stored variables and views, and onCreate()
         // will be called again. Extra keys input text, terminal sessions and transcripts will be preserved.
         if (recreateActivity) {
+            LifecycleTrail.activity("recreate", "styling reload from " + LifecycleTrail.caller(2));
             Logger.logDebug(LOG_TAG, "Recreating activity");
             TermuxActivity.this.recreate();
         }

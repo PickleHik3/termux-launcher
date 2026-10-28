@@ -140,6 +140,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     @Override
     public void onCreate() {
+        LifecycleTrail.service("create", null);
         Logger.logVerbose(LOG_TAG, "onCreate");
         // Get Termux app SharedProperties without loading from disk since TermuxApplication handles
         // load and TermuxActivity handles reloads
@@ -154,6 +155,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     private void autostartEmbeddedDisplay() {
         String[] argv = com.termux.app.x11.X11Autostart.commandToRun(this);
         if (argv == null) return;
+        LifecycleTrail.service("display-autostart", argv[0]);
         createTermuxTask(argv[0], java.util.Arrays.copyOfRange(argv, 1, argv.length), null,
             TermuxConstants.TERMUX_HOME_DIR_PATH);
     }
@@ -203,6 +205,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     @Override
     public void onDestroy() {
+        LifecycleTrail.service("destroy", "wantsToStop=" + mWantsToStop);
         Logger.logVerbose(LOG_TAG, "onDestroy");
         // The bus socket lives in the tmp that is emptied next; the server's own does not.
         com.termux.app.sound.LauncherSound.get(this).onServiceStopping();
@@ -264,6 +267,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * Process action to stop service.
      */
     private void actionStopService() {
+        LifecycleTrail.service("stop-action", "Exit");
         mWantsToStop = true;
         // Exit is itself the arrangement (wall rework slice 9): the next cold start shows exactly
         // what Exit leaves, an empty Workspace. Written before the shells die; the activity's
@@ -1058,6 +1062,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             // Not while the launcher shows Home over an empty Workspace: the activity binds without
             // BIND_AUTO_CREATE, so a stopped service disconnects it (onServiceDisconnected) and it
             // finishes, dropping the user to another launcher (WallRow.lastShellClosedShowsHome).
+            LifecycleTrail.service("stop", "nothing left to run and the activity does not keep it");
             requestStopService();
         } else {
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
