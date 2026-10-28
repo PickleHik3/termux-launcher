@@ -245,6 +245,9 @@ public final class GlassStack {
             && spec.tintColor == null;
         if (bare) backdrop = null;
         glass.noteBandBlur(spec.band, backdrop != null ? spec.blurRadiusDp : 0);
+        // The frame, when there is one, is drawn over the page's dim: the band's content stands
+        // on no dim then, and its ink and even-out are measured so.
+        glass.noteBandFrame(spec.band, backdrop != null);
         if (bare) {
             Drawable rimOnly = spec.rim ? glass.rimDrawable(spec.cornerRadiusPx)
                 : new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);

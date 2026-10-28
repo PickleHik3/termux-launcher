@@ -7850,6 +7850,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
+        // No frame: the dock's content stands on the page's dim again.
+        mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, false);
         mGlassParamsValid = false; // no live backdrop shader -> key lens falls back to the bubble border
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         setDockProgramEdge(false);
@@ -9843,6 +9845,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // this frame keeps the tint layer without stale wallpaper brightness.
                 backdrop.setImageDrawable(null);
                 backdrop.setVisibility(View.GONE);
+                mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
+                    false);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
                 setDockProgramEdge(false);
             }
@@ -23252,6 +23256,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
             mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100);
         if (mChrome == null) return frost;
+        // Asked only where the dock's frame is up: it covers the page's dim, so the dock's ink and
+        // even-out are measured with none under them (cleared in clearAccessoryRenderEffectBackdrop).
+        mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, true);
         if (surfaceHost == null) {
             return com.termux.app.chrome.GlassFilters.withEvenOut(mChrome.ink().lastBandEvenOutMatrix(
                 com.termux.app.chrome.GlassBackdropCache.Band.DOCK), frost);

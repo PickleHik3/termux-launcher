@@ -312,6 +312,46 @@ public final class ChromeInk {
          * its rows are read off the frame the status bar or the dock is drawn at.
          */
         int blurRadiusDp = -1;
+        /**
+         * The band's frame (its own opaque cut of the blurred wallpaper) is up ({@link
+         * #noteBandFrame}): it is drawn over the page's dim, so its content stands on no dim.
+         */
+        boolean framed;
+    }
+
+    /**
+     * The dim a band's content really stands on: none where the band draws its own frame, which
+     * covers the page's dim (measured 2026-10-28: under the dock and the keyboard the 45% page dim
+     * is not on screen); the page's ground dim where the band has no frame and the wallpaper
+     * shows through it dimmed.
+     */
+    @ColorInt
+    static int groundDim(boolean framed, @ColorInt int pageDim) {
+        return framed ? Color.TRANSPARENT : pageDim;
+    }
+
+    /** {@link #groundDim} for {@code band} under {@code rootRect}. */
+    @ColorInt
+    private int bandDim(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
+        return glassFor(band).framed ? Color.TRANSPARENT : dimUnder(rootRect);
+    }
+
+    /**
+     * Tells the ink whether {@code band}'s own frame is up (the keyboard's stack, the dock's
+     * backdrop). A frame covers the page's dim, so the band's ink, vote and even-out are then
+     * measured with no dim under them. Says whether that moved; a move asks for a redraw.
+     */
+    public boolean noteBandFrame(@NonNull GlassBackdropCache.Band band, boolean framed) {
+        BandGlass glass = glassFor(band);
+        if (glass.framed == framed) return false;
+        glass.framed = framed;
+        if (mOnVeilChanged != null) mOnVeilChanged.run();
+        return true;
+    }
+
+    /** Whether {@code band}'s own frame is up ({@link #noteBandFrame}). */
+    public boolean bandFramed(@NonNull GlassBackdropCache.Band band) {
+        return glassFor(band).framed;
     }
 
     /** The base colour {@code glass}'s tint is drawn in: the tinted one it told, or the mode's. */
@@ -1149,12 +1189,13 @@ public final class ChromeInk {
             memo = new BandEvenOut();
             mBandEvenOut.put(band, memo);
         }
-        return measureEvenOut(memo, policy, root, glassFor(band));
+        return measureEvenOut(memo, policy, root, glassFor(band), glassFor(band).framed);
     }
 
     /**
      * {@link #bandEvenOutMatrix} for the decor nav strip at {@code screenRect}: the frost of the
-     * surface right above it, so measured on the dock's glass.
+     * surface right above it, so measured on the dock's glass; its frame is up whenever this
+     * is asked (the strip's frost site), so it stands on no page dim.
      */
     @Nullable
     public android.graphics.ColorMatrix stripEvenOutMatrix(@NonNull Rect screenRect) {
@@ -1163,7 +1204,7 @@ public final class ChromeInk {
         readMode();
         toRootSpace(screenRect, mTmpEvenOutRect);
         return measureEvenOut(mStripEvenOut, policy, mTmpEvenOutRect,
-            glassFor(GlassBackdropCache.Band.DOCK));
+            glassFor(GlassBackdropCache.Band.DOCK), true);
     }
 
     /**
@@ -1188,8 +1229,8 @@ public final class ChromeInk {
     private android.graphics.ColorMatrix measureEvenOut(@NonNull BandEvenOut memo,
                                                         @NonNull EvenOutPolicy policy,
                                                         @NonNull Rect rootRect,
-                                                        @NonNull BandGlass glass) {
-        int dim = dimUnder(rootRect);
+                                                        @NonNull BandGlass glass, boolean framed) {
+        int dim = groundDim(framed, dimUnder(rootRect));
         int tint = OnGlass.withAlpha(baseOf(glass), ChromePolicy.dockGlassBaseAlpha(glass.opacity));
         if (memo.measured && memo.generation == mCache.generation() && memo.rect.equals(rootRect)
                 && memo.dim == dim && memo.tint == tint && samePolicy(memo.policy, policy)) {
@@ -1486,7 +1527,7 @@ public final class ChromeInk {
         // Through the band's even-out where it has one: the ink is solved on the ground drawn.
         int rawWallpaper = mCache.wallpaperUnder(band, screenRect);
         int wallpaper = evened(band, rawWallpaper);
-        int under = OnGlass.backdrop(wallpaper, dimUnder(screenRect), Color.TRANSPARENT);
+        int under = OnGlass.backdrop(wallpaper, bandDim(band, screenRect), Color.TRANSPARENT);
         // The band's flat glass: wallpaper, the launcher's dim, the base layer in its tinted
         // colour. No light model, so the polarity vote is the same number whichever ink is
         // asking.
@@ -1551,7 +1592,7 @@ public final class ChromeInk {
         // evened ground, as the pane's palette is.
         bandEvenOutMatrix(band, null);
         int wallpaper = evened(band, mCache.wallpaperUnder(band, contract.rect));
-        int under = OnGlass.backdrop(wallpaper, dimUnder(contract.rect), Color.TRANSPARENT);
+        int under = OnGlass.backdrop(wallpaper, bandDim(band, contract.rect), Color.TRANSPARENT);
         vote(band, OnGlass.composite(OnGlass.withAlpha(baseColor, baseAlpha), under));
         int top = DockGlassRendering.topSheenAlpha(glass.opacity);
         int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
@@ -1659,7 +1700,8 @@ public final class ChromeInk {
         int worst = 0;
         double worstRatio = Double.MAX_VALUE;
         for (int i = 0; i < rows.length; i++) {
-            int rowUnder = OnGlass.backdrop(rows[i], mDimColor, Color.TRANSPARENT);
+            int rowUnder = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+                Color.TRANSPARENT);
             float stop = DockGlassRendering.worstLightModelStop(ink, rowUnder, baseColor,
                 baseAlpha, mAccentColor, top, mid, foot, rowPosition(glass, i),
                 rowPosition(glass, i + 1));
@@ -2040,7 +2082,8 @@ public final class ChromeInk {
         int[] rows = evenedRows(band, rowWallpapers(band, contract.rect));
         int[] faces = new int[rows.length];
         for (int i = 0; i < rows.length; i++) {
-            int under = OnGlass.backdrop(rows[i], mDimColor, Color.TRANSPARENT);
+            int under = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+                Color.TRANSPARENT);
             float centre = (rowPosition(glass, i) + rowPosition(glass, i + 1)) / 2f;
             int surface = DockGlassRendering.glassSurfaceAt(centre, under, baseColor, baseAlpha,
                 mAccentColor, top, mid, foot);
@@ -2110,7 +2153,7 @@ public final class ChromeInk {
         BandGlass glass = glassFor(band);
         int raw = mCache.wallpaperUnder(band, rootRect);
         int face = WallpaperInk.faceOf(evened(band, raw),
-            dimUnder(rootRect), baseOf(glass),
+            bandDim(band, rootRect), baseOf(glass),
             glass.opacity);
         if (band == GlassBackdropCache.Band.DOCK && face != mDiagDockFace) {
             mDiagDockFace = face;
