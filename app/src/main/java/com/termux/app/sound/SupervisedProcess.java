@@ -56,6 +56,10 @@ final class SupervisedProcess {
     private boolean wanted;
     /** Bumped on every start, so a waiter left from an earlier run acts on nothing. */
     private int generation;
+    /** When the running process was started, on the elapsed-realtime clock. */
+    private long startedAt;
+    /** Set by {@link #restart}: the next exit is one the launcher asked for. */
+    private boolean restartRequested;
 
     SupervisedProcess(@NonNull String name, @NonNull Owner owner) {
         this.name = name;
@@ -71,8 +75,25 @@ final class SupervisedProcess {
     synchronized void start() {
         if (wanted && process != null) return;
         wanted = true;
+        restartRequested = false;
         cap.reset();
         spawn();
+    }
+
+    /** How long the running process has been up; 0 when none runs. */
+    synchronized long uptimeMs() {
+        if (process == null) return 0;
+        return Math.max(1, android.os.SystemClock.elapsedRealtime() - startedAt);
+    }
+
+    /**
+     * Kill the running process and start it again, uncounted: the launcher judged it broken, so
+     * the exit is not a crash of its own. Nothing happens when nothing runs.
+     */
+    synchronized void restart() {
+        if (process == null) return;
+        restartRequested = true;
+        process.destroyForcibly();
     }
 
     /** Stop it now. The exit that follows is not a crash and starts nothing. */
@@ -96,6 +117,7 @@ final class SupervisedProcess {
             try {
                 Process started = builder.start();
                 process = started;
+                startedAt = android.os.SystemClock.elapsedRealtime();
                 int run = ++generation;
                 Thread waiter = new Thread(() -> watch(started, run), "launcher-sound-" + name);
                 waiter.setDaemon(true);
@@ -144,7 +166,13 @@ final class SupervisedProcess {
             process = null;
             Logger.logInfo(LOG_TAG, name + " exited with " + exitCode
                 + (output.isEmpty() ? "" : ": " + output.get(output.size() - 1)));
-            AfterExit next = owner.afterExit(this, exitCode, output);
+            AfterExit next;
+            if (restartRequested) {
+                restartRequested = false;
+                next = AfterExit.RESTART_UNCOUNTED;
+            } else {
+                next = owner.afterExit(this, exitCode, output);
+            }
             if (next == AfterExit.STOP) {
                 wanted = false;
                 return;
