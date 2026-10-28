@@ -135,6 +135,11 @@ public final class PageOverviewView extends FrameLayout {
         void land(@NonNull WallRow.Position position);
         /** The launcher's root view, drawn into the live card. */
         @NonNull View liveRoot();
+        /**
+         * The page frame while the surface editor has posed it (scaled, moved), null when it
+         * stands as laid out. The live card then draws this view alone, at its natural size.
+         */
+        @Nullable default View posedFrame() { return null; }
         /** The launcher's own wallpaper, drawn full-screen behind the cards when it is showing. */
         @Nullable View backdrop();
         /** The display's surface, for its card's picture; null while there is none. */
@@ -185,6 +190,8 @@ public final class PageOverviewView extends FrameLayout {
         static final int FULL = 0;
         static final int TEXT = 1;
         static final int SURFACE = 2;
+        /** The page alone, without the card's buttons, drawn in software. */
+        static final int PAGE = 3;
 
         @NonNull final Bitmap bitmap;
         final int type;
@@ -381,6 +388,9 @@ public final class PageOverviewView extends FrameLayout {
         savedRootAlpha = root.getAlpha();
         // Hidden, not gone: it keeps drawing its children, which the live card shows.
         root.setAlpha(0f);
+        // Neighbours have their text from the first frame; the live page its picture.
+        refreshNearbyText();
+        captureLive(true);
         animateZoom(1f, null);
     }
 
@@ -828,14 +838,14 @@ public final class PageOverviewView extends FrameLayout {
             Object key = card.key;
             int row = card.index;
             int made = generation;
-            postOnAnimation(() -> renderText(key, row, made));
+            postOnAnimation(() -> renderText(key, row, made, false));
         }
     }
 
-    private void renderText(@NonNull Object key, int row, int made) {
+    private void renderText(@NonNull Object key, int row, int made, boolean live) {
         if (!isOpen() || made != generation) return;
         int index = indexOfKey(key);
-        if (index < 0 || cards.get(index).index != row || key == liveKey) return;
+        if (index < 0 || cards.get(index).index != row || (key == liveKey && !live)) return;
         TerminalSession session = host.windowSession(row);
         TerminalEmulator emulator = session == null ? null : session.getEmulator();
         if (emulator == null || cardWidth <= 0f) return;
@@ -870,23 +880,61 @@ public final class PageOverviewView extends FrameLayout {
     private void captureLiveCard() {
         if (!isOpen() || liveKey == null || zoom < 1f || dragCard != null || scrolling
             || snackbar != null || scrollAnimator != null) return;
+        captureLive(false);
+    }
+
+    /**
+     * The live card's picture now, which a swipe or the opening wants before the card leaves the
+     * wall. {@code early} lets it run while zooming or scrolling: only a software draw of the
+     * page does, a window copy needs the card at rest.
+     */
+    private void captureLive(boolean early) {
+        if (!isOpen() || liveKey == null || dragCard != null || cardWidth <= 0f) return;
         Card card = focusedCard();
         if (card == null || card.key != liveKey) return;
+        Object key = card.key;
+        int buttons = buttonsOf(card);
+        boolean covered = host.posedFrame() != null;
+        OverviewGeometry.Capture how = OverviewGeometry.captureFor(covered,
+            card.kind == PageOverviewPolicy.Kind.TERMINAL);
+        if (how == OverviewGeometry.Capture.TEXT) {
+            // Under the editor's sheet a terminal is drawn from its text, never from pixels.
+            int row = card.index;
+            int made = generation;
+            postOnAnimation(() -> renderText(key, row, made, true));
+            return;
+        }
+        if (how == OverviewGeometry.Capture.SUBTREE_DRAW) {
+            View frame = posedFrame();
+            if (frame == null) return;
+            try {
+                Bitmap bitmap = Bitmap.createBitmap(Math.max(1, Math.round(cardWidth * SNAPSHOT_SCALE)),
+                    Math.max(1, Math.round(cardHeight * SNAPSHOT_SCALE)), Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                canvas.scale(bitmap.getWidth() / rootWidth, bitmap.getHeight() / rootHeight);
+                drawPageNatural(canvas, frame);
+                // No buttons are in it, and the card draws its own over it.
+                putSnapshot(key, new Snapshot(bitmap, Snapshot.PAGE, buttons, generation));
+            } catch (RuntimeException | OutOfMemoryError e) {
+                // No picture: the card shows its label until it is live again.
+            }
+            return;
+        }
+        if (early || zoom < 1f || scrolling || snackbar != null || scrollAnimator != null) return;
         Window window = windowOf(getContext());
-        if (window == null || cardWidth <= 0f) return;
+        if (window == null) return;
         cardRect(cards.indexOf(card), rect);
         int[] at = new int[2];
         getLocationInWindow(at);
         Rect source = new Rect(Math.round(rect.left) + at[0], Math.round(rect.top) + at[1],
             Math.round(rect.right) + at[0], Math.round(rect.bottom) + at[1]);
         if (source.width() <= 0 || source.height() <= 0) return;
-        Object key = card.key;
-        int buttons = buttonsOf(card);
         try {
             Bitmap bitmap = Bitmap.createBitmap(Math.round(cardWidth * SNAPSHOT_SCALE),
                 Math.round(cardHeight * SNAPSHOT_SCALE), Bitmap.Config.ARGB_8888);
             PixelCopy.request(window, source, bitmap, result -> {
-                if (result != PixelCopy.SUCCESS || !isOpen()) return;
+                // A copy made while a sheet came up over the page is thrown away.
+                if (result != PixelCopy.SUCCESS || !isOpen() || host.posedFrame() != null) return;
                 putSnapshot(key, new Snapshot(bitmap, Snapshot.FULL, buttons, generation));
             }, handler);
         } catch (RuntimeException | OutOfMemoryError e) {
@@ -983,6 +1031,7 @@ public final class PageOverviewView extends FrameLayout {
         Insets insets = insets();
         pills.setPadding(Math.max(dp(16), insets.left), dp(8), Math.max(dp(16), insets.right),
             Math.max(dp(16), insets.bottom + dp(12)));
+        fitPills(width);
         gap = dp(16);
         seamGap = dp(28);
         corner = dp(24);
@@ -997,6 +1046,31 @@ public final class PageOverviewView extends FrameLayout {
         cardTop = topSpace + (available - cardHeight) / 2f;
         dotsY = cardTop + cardHeight + buttonRadius + dp(20);
         labelPaint.setTextSize(dp(16));
+    }
+
+    /** Each chip's text at the largest size that fits its share of the row, ellipsized if none does. */
+    private void fitPills(float width) {
+        TextView[] all = {addPage, addTerminal, addDisplay};
+        int shown = 0;
+        for (TextView pill : all) if (pill.getVisibility() != GONE) shown++;
+        if (shown == 0) return;
+        float share = (width - pills.getPaddingLeft() - pills.getPaddingRight()) / shown
+            - dp(8) - dp(24);
+        float maxPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 14,
+            getResources().getDisplayMetrics());
+        float minPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 9,
+            getResources().getDisplayMetrics());
+        for (TextView pill : all) {
+            android.text.TextPaint paint = new android.text.TextPaint(pill.getPaint());
+            CharSequence text = pill.getText();
+            float size = OverviewGeometry.fitTextSize(maxPx, minPx, share, px -> {
+                paint.setTextSize(px);
+                return paint.measureText(text, 0, text.length());
+            });
+            if (Math.abs(pill.getTextSize() - size) > 0.25f) {
+                pill.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
+            }
+        }
     }
 
     private static final class Insets {
@@ -1141,12 +1215,18 @@ public final class PageOverviewView extends FrameLayout {
             int save = canvas.save();
             canvas.translate(at.left, at.top);
             canvas.scale(at.width() / rootWidth, at.height() / rootHeight);
-            root.draw(canvas);
+            View frame = posedFrame();
+            if (frame != null) drawPageNatural(canvas, frame);
+            else root.draw(canvas);
             canvas.restoreToCount(save);
             return;
         }
         Snapshot shot = snapshots.get(card.key);
         if (shot != null && shot.type == Snapshot.FULL && shot.buttons == buttonsOf(card)) {
+            canvas.drawBitmap(shot.bitmap, null, at, bitmapPaint);
+            return;
+        }
+        if (shot != null && shot.type == Snapshot.PAGE) {
             canvas.drawBitmap(shot.bitmap, null, at, bitmapPaint);
             return;
         }
@@ -1170,6 +1250,45 @@ public final class PageOverviewView extends FrameLayout {
             canvas.drawRect(at, fillPaint);
         }
         canvas.drawText(labelOf(card), at.centerX(), at.centerY(), labelPaint);
+    }
+
+    /** The page frame when the surface editor has posed it, else null. */
+    @Nullable
+    private View posedFrame() {
+        View frame = host.posedFrame();
+        if (frame == null || frame.getWidth() <= 0) return null;
+        return OverviewGeometry.framePosed(frame.getScaleX(), frame.getScaleY(),
+            frame.getTranslationX(), frame.getTranslationY()) ? frame : null;
+    }
+
+    /**
+     * The wallpaper and then {@code frame} alone, in the root's coordinates at the frame's laid-out
+     * size: a view's own draw leaves its scale and translation to the parent, so the editor's pose
+     * is not in it, and only this subtree is drawn, so the editor's sheet and the overview are not.
+     */
+    private void drawPageNatural(@NonNull Canvas canvas, @NonNull View frame) {
+        View backdrop = host.backdrop();
+        if (backdrop != null && backdrop.getVisibility() == VISIBLE) {
+            int[] there = new int[2];
+            int[] rootAt = new int[2];
+            backdrop.getLocationInWindow(there);
+            root.getLocationInWindow(rootAt);
+            int save = canvas.save();
+            canvas.translate(there[0] - rootAt[0], there[1] - rootAt[1]);
+            backdrop.draw(canvas);
+            canvas.restoreToCount(save);
+        }
+        float left = frame.getLeft();
+        float top = frame.getTop();
+        for (android.view.ViewParent p = frame.getParent(); p instanceof View && p != root; p = p.getParent()) {
+            left += ((View) p).getLeft() - ((View) p).getScrollX();
+            top += ((View) p).getTop() - ((View) p).getScrollY();
+        }
+        int save = canvas.save();
+        canvas.translate(left, top);
+        canvas.clipRect(0, 0, frame.getWidth(), frame.getHeight());
+        frame.draw(canvas);
+        canvas.restoreToCount(save);
     }
 
     /** The launcher's own wallpaper inside a card that has no picture of its own. */
@@ -1344,7 +1463,11 @@ public final class PageOverviewView extends FrameLayout {
                     removeCallbacks(longPress);
                     scrolling = Math.abs(x - downX) > touchSlop;
                     downPart = null;
-                    if (scrolling) handler.removeCallbacks(capture);
+                    if (scrolling) {
+                        handler.removeCallbacks(capture);
+                        // The page leaves the wall's view as the swipe goes on: keep its picture.
+                        captureLive(true);
+                    }
                 }
                 if (scrolling) {
                     float stride = cardWidth + gap;
@@ -1380,7 +1503,16 @@ public final class PageOverviewView extends FrameLayout {
                     switch (downPart) {
                         case DELETE: onDelete(card); break;
                         case HOME: onMakeHome(card); break;
-                        default: closeInto(cards.indexOf(card), false); break;
+                        default: {
+                            int index = cards.indexOf(card);
+                            // Only the centred card zooms in; another one is brought to the centre.
+                            if (OverviewGeometry.tapZooms(index, focus)) closeInto(index, false);
+                            else if (index >= 0) {
+                                captureLive(true);
+                                scrollTo(index, this::onSettled);
+                            }
+                            break;
+                        }
                     }
                 }
                 downCard = null;
@@ -1531,7 +1663,8 @@ public final class PageOverviewView extends FrameLayout {
         pill.setMaxLines(1);
         pill.setTextColor(0xFFE6E1E5);
         pill.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        pill.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, TypedValue.COMPLEX_UNIT_SP);
+        // The size is fitted in onLayout (fitPills); a text that still does not fit is ellipsized.
+        pill.setEllipsize(android.text.TextUtils.TruncateAt.END);
         GradientDrawable background = new GradientDrawable();
         background.setColor(0xE61D1B20);
         background.setCornerRadius(dp(24));

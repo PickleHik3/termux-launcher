@@ -27363,6 +27363,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override @NonNull public View liveRoot() {
                     return root;
                 }
+                @Override @Nullable public View posedFrame() {
+                    // The surface editor scales this container; the overview draws it alone.
+                    return findViewById(R.id.terminal_root_container);
+                }
                 @Override @Nullable public View backdrop() {
                     return findViewById(R.id.wallpaper_backdrop);
                 }
