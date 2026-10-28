@@ -204,4 +204,14 @@ public class SeamDressTest {
         assertNotEquals(base, StackDress.of(docked, 1f, 0.9f, 0));
         assertNotEquals(base, StackDress.of(docked, 1f, 1f, 6));
     }
+
+    /** L1: each surface reads the page it stands on, not the wall or the Terminal's for all. */
+    @Test
+    public void theLookIsReadUnderThePageTheSurfaceStandsOn() {
+        int wall = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.PAGE_WALL;
+        assertEquals(7, SeamDress.lookPageId(PaneWallPage.WIDGETS, 7, -1, 2));
+        assertEquals(wall, SeamDress.lookPageId(PaneWallPage.WIDGETS, -1, -1, 2));
+        assertEquals(5, SeamDress.lookPageId(PaneWallPage.TERMINAL, 7, 5, 2));
+        assertEquals(2, SeamDress.lookPageId(PaneWallPage.TERMINAL, 7, -1, 2));
+    }
 }

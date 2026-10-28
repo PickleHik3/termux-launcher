@@ -506,21 +506,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return look != null && look.has(scope, key);
     }
 
+    /**
+     * The keys a page's Reset drops for a card on {@code slot}: every detachable value of that
+     * surface, the keyboard's backdrop with the keyboard's; a card on no one surface (null) drops
+     * every value the page may hold, the material and its intensity included.
+     */
+    @NonNull
+    static java.util.Set<String> pageResetKeys(@Nullable SurfaceSlot slot) {
+        java.util.Set<String> keys = new java.util.LinkedHashSet<>();
+        if (slot == null) {
+            keys.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.DETACHABLE);
+            return keys;
+        }
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            String key = detachableKey(slot, property);
+            if (key != null) keys.add(key);
+        }
+        if (slot == SurfaceSlot.KEYBOARD)
+            keys.add(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+        return keys;
+    }
+
     /** Reset under a page: every value the page holds of the card's surface goes back to Base. */
     private void resetOnPage(@NonNull EditorCard card) {
         com.termux.app.look.PageLook.Scope scope = scopeFor(card);
         com.termux.app.look.PageLook look = pageLook();
         if (look == null || scope.isGlobal())
             return;
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            if (card.slot != null && slot != card.slot)
-                continue;
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                String key = detachableKey(slot, property);
-                if (key != null)
-                    look.reset(scope, key);
-            }
-        }
+        for (String key : pageResetKeys(card.slot))
+            look.reset(scope, key);
         mHeldCustomPages.remove(scope.pageId());
         mPageCustoms.remove(scope.pageId());
     }

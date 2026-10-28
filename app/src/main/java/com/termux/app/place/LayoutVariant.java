@@ -31,6 +31,12 @@ public final class LayoutVariant {
     private static final LayoutVariant[] FIXED = {NORMAL, MINIMAL, HOME};
 
     private static final ConcurrentHashMap<String, LayoutVariant> PAGES = new ConcurrentHashMap<>();
+    /**
+     * The page layouts of ids below 64 by kind, filled from {@link #PAGES} (which decides the one
+     * instance): a racing read that misses here falls back to the map.
+     */
+    private static final LayoutVariant[] SMALL_HOME = new LayoutVariant[64];
+    private static final LayoutVariant[] SMALL_TERMINAL = new LayoutVariant[64];
 
     @NonNull private final String mName;
     @NonNull private final String mKeyScope;
@@ -65,13 +71,24 @@ public final class LayoutVariant {
     @NonNull
     public static LayoutVariant page(int pageId, @NonNull PageKind kind) {
         PageKind dressed = kind == PageKind.HOME ? PageKind.HOME : PageKind.TERMINAL;
+        // Read on travel frames: a small id is found in an array, allocating nothing.
+        LayoutVariant[] small = dressed == PageKind.HOME ? SMALL_HOME : SMALL_TERMINAL;
+        if (pageId >= 0 && pageId < small.length) {
+            LayoutVariant held = small[pageId];
+            if (held != null) return held;
+        }
         String key = dressed.name() + pageId;
         LayoutVariant variant = PAGES.get(key);
-        if (variant != null) return variant;
+        if (variant != null) {
+            if (pageId >= 0 && pageId < small.length) small[pageId] = variant;
+            return variant;
+        }
         LayoutVariant made = new LayoutVariant("PAGE_" + pageId, "page" + pageId + ".", pageId,
             dressed);
         LayoutVariant raced = PAGES.putIfAbsent(key, made);
-        return raced != null ? raced : made;
+        LayoutVariant interned = raced != null ? raced : made;
+        if (pageId >= 0 && pageId < small.length) small[pageId] = interned;
+        return interned;
     }
 
     /** Whether this is a page's own layout ({@link #page}). */
