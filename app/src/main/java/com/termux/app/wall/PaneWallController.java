@@ -758,8 +758,21 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             goToWorkspace(animate);
             return;
         }
+        if (homeIsTerminalPage()) {
+            // Edit pages set the Terminal page as home: the press lands on its window in front,
+            // or starts its first shell, as Home's swipe into the Workspace does.
+            goToWorkspace(animate);
+            return;
+        }
         showHomePage(Math.max(0, mHost.homePressPage()));
         goTo(PaneWallPage.WIDGETS, animate);
+    }
+
+    /** Whether the wall's pages name the Terminal page as home ({@link WallPages#setHome}). */
+    private boolean homeIsTerminalPage() {
+        WallPages pages = mHost.wallPages();
+        WallPages.Page home = pages == null ? null : pages.home();
+        return home != null && home.kind == WallPages.PageKind.TERMINAL;
     }
 
     /**

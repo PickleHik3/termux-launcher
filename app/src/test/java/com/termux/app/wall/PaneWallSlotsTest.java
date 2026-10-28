@@ -40,8 +40,18 @@ public class PaneWallSlotsTest {
         int boundFirst = 0;
         int boundLast = -1;
         int bindCalls;
+        boolean canStart;
+        int shellsStarted;
 
         @Override public boolean reducedMotion() { return true; }
+        @Override public boolean canStartWorkspace() { return canStart; }
+        @Override public boolean startWorkspaceShell() {
+            shellsStarted++;
+            hasWindow = true;
+            windows = 1;
+            current = 0;
+            return true;
+        }
         @Override public boolean hasWindow() { return hasWindow; }
         @Override public WallPages wallPages() { return pages; }
         @Override public void bindHomeRun(int first, int last) {
@@ -220,6 +230,42 @@ public class PaneWallSlotsTest {
         controller.onSaveInstanceState(saved);
         assertEquals(WallRow.HALF_HOME, saved.getString(PaneWallController.ARG_HALF));
         assertEquals(1, saved.getInt(PaneWallController.ARG_INDEX));
+    }
+
+    // ---- the Terminal page as home -------------------------------------------------------
+
+    @Test public void theHomePressLandsOnTheTerminalPageWhenItIsHome() {
+        host.pages = mid().setHome(3).pages;
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        controller.goHome(false);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(0, host.shellsStarted);
+    }
+
+    @Test public void theHomePressStartsAShellWhenTheTerminalHomeHasNone() {
+        host.pages = mid().setHome(3).pages;
+        host.hasWindow = false;
+        host.canStart = true;
+        controller.refreshPages();
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        controller.goHome(false);
+        assertEquals(1, host.shellsStarted);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+    }
+
+    @Test public void aHomePageAsHomeKeepsTheHomePress() {
+        host.pages = mid().setHome(2).pages;
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        controller.goHome(false);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(0, host.homePage);
+    }
+
+    @Test public void aColdStartLandsOnTheTerminalPageWhenItIsHome() {
+        host.pages = mid().setHome(3).pages;
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        controller.landOnColdStart(host.pages.startIn());
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
     }
 
     private static void idle() {
