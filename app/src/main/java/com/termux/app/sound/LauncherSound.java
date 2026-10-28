@@ -259,9 +259,12 @@ public final class LauncherSound {
                 if (!server.isWanted()) return;
                 status = Status.RUNNING;
                 refreshDistros();
-            } else if (isHung()) {
-                Logger.logWarn(LOG_TAG, "pulseaudio stopped answering; starting it again");
-                killHungServer();
+            } else {
+                String broken = brokenReason();
+                if (broken != null) {
+                    Logger.logWarn(LOG_TAG, "pulseaudio is broken (" + broken + "); starting it again");
+                    server.restart(LauncherSound::killOwnServers);
+                }
             }
             ensureBus();
             ensureMedia();
@@ -270,37 +273,29 @@ public final class LauncherSound {
         }
     }
 
-    /**
-     * Whether the running server has stopped answering. Its output thread has been seen stuck
-     * for good while the process lived on, which no exit would ever report; a need is the moment
-     * to look, not a timer. Only a timeout counts: a server still starting refuses at once.
-     */
-    private boolean isHung() {
-        if (!canExecute(SoundPaths.PACTL)) return false;
-        String answer = runCommand(SoundFiles.argv(SoundPaths.PACTL, "info"));
-        return answer == null || answer.contains("Timeout");
+    /** SIGKILL every server of the launcher's own, found by its command line in {@code /proc}. */
+    private static void killOwnServers() {
+        for (Map.Entry<Integer, List<String>> process : ownProcesses().entrySet()) {
+            if (StepAside.classify(process.getValue(), SoundPaths.STARTUP_FILE) == StepAside.Server.OURS) {
+                android.os.Process.sendSignal(process.getKey(), SIGKILL);
+            }
+        }
     }
 
     /**
-     * SIGKILL, by the pid the server wrote, once its command line shows it is the launcher's: a
-     * stuck server never acts on the SIGTERM {@link Process#destroy} sends. Its exit then reaches
-     * the supervisor, which restarts it like any other.
+     * Why the running server counts as broken, or null when it does not. A need is the moment to
+     * look, not a timer: a hung server never reports an exit, and one whose socket was deleted
+     * or that refuses connections lives on unseen. With no {@code pactl} only the socket speaks.
      */
-    private static void killHungServer() {
-        byte[] raw = readBytes(new File(SoundPaths.PID_FILE), 32);
-        if (raw == null) return;
-        int pid;
-        try {
-            pid = Integer.parseInt(new String(raw, StandardCharsets.UTF_8).trim());
-        } catch (NumberFormatException e) {
-            return;
-        }
-        byte[] cmdline = readBytes(new File("/proc/" + pid + "/cmdline"), 8192);
-        if (cmdline == null || StepAside.classify(StepAside.parseCmdline(cmdline, cmdline.length),
-                SoundPaths.STARTUP_FILE) != StepAside.Server.OURS) {
-            return;
-        }
-        android.os.Process.sendSignal(pid, SIGKILL);
+    @Nullable
+    private String brokenReason() {
+        boolean socket = new File(SoundPaths.SOCKET).exists();
+        long uptime = server.uptimeMs();
+        String answer = canExecute(SoundPaths.PACTL)
+            ? runCommand(SoundFiles.argv(SoundPaths.PACTL, "info")) : "";
+        if (ServerHealth.judge(socket, uptime, answer) == ServerHealth.Verdict.OK) return null;
+        return "socket " + (socket ? "present" : "missing") + ", up " + uptime + " ms, answer "
+            + (answer == null ? "none" : answer.trim().split("\\R", 2)[0]);
     }
 
     /**
@@ -318,14 +313,12 @@ public final class LauncherSound {
         boolean userServer = false;
         for (Map.Entry<Integer, List<String>> process : ownProcesses().entrySet()) {
             List<String> argv = process.getValue();
-            if (argv.contains(SoundPaths.HELPER)
-                    || argv.contains("--config-file=" + SoundPaths.BUS_CONFIG)) {
+            if (OwnProcesses.isLauncherSoundProcess(argv)) {
                 orphans.add(process.getKey());
                 continue;
             }
             StepAside.Server kind = StepAside.classify(argv, SoundPaths.STARTUP_FILE);
-            if (kind == StepAside.Server.OURS) orphans.add(process.getKey());
-            else if (kind == StepAside.Server.STOCK) stock.add(process.getKey());
+            if (kind == StepAside.Server.STOCK) stock.add(process.getKey());
             else if (kind == StepAside.Server.USER) userServer = true;
         }
         if (!userFiles.isEmpty() || userServer) {
@@ -398,21 +391,29 @@ public final class LauncherSound {
         synchronized (files) {
             writeText(new File(SoundPaths.BUS_CONFIG), SoundFiles.busConfig(SoundPaths.BUS_SOCKET),
                 false, false);
-            File sockets = new File(SoundPaths.X11_SOCKETS);
-            if (!sockets.isDirectory()) {
-                if (!sockets.mkdirs()) throw new IOException("Failed to create " + sockets);
-                // What an X server makes it, so a display started later finds it as it expects.
-                try {
-                    android.system.Os.chmod(sockets.getPath(), 01777);
-                } catch (Exception ignored) {
-                }
-            }
-            File socket = new File(SoundPaths.BUS_SOCKET);
-            if (socket.exists() && !socket.delete()) {
-                Logger.logWarn(LOG_TAG, "A stale bus socket could not be removed");
-            }
         }
         bus.start();
+    }
+
+    /**
+     * The bus socket's directory, as an X server makes it, so a display started later finds it
+     * as it expects, and no stale socket in it. Done at every start of the bus, a restart
+     * included: the service empties {@code $TMPDIR} on a stop, directory and all.
+     */
+    private static boolean prepareBusSocket() {
+        File sockets = new File(SoundPaths.X11_SOCKETS);
+        if (!sockets.isDirectory()) {
+            if (!sockets.mkdirs()) return false;
+            try {
+                android.system.Os.chmod(sockets.getPath(), 01777);
+            } catch (Exception ignored) {
+            }
+        }
+        File socket = new File(SoundPaths.BUS_SOCKET);
+        if (socket.exists() && !socket.delete()) {
+            Logger.logWarn(LOG_TAG, "A stale bus socket could not be removed");
+        }
+        return true;
     }
 
     private void ensureMedia() throws IOException {
@@ -435,6 +436,39 @@ public final class LauncherSound {
         }
         mediaRunning = true;
         helper.start();
+    }
+
+    /**
+     * The service is going down and is about to empty {@code $TMPDIR}: the bus, the helper and
+     * the media bridge go down with it and come back at the next need, while the server (its
+     * runtime directory is outside the tmp) keeps playing. Posted, never waited for.
+     */
+    public void onServiceStopping() {
+        worker.execute(this::stopPieces);
+    }
+
+    /** A command line from {@code /proc/PID/cmdline}, for the service's reaper. */
+    @NonNull
+    public static List<String> parseCmdline(@NonNull byte[] raw, int length) {
+        return StepAside.parseCmdline(raw, length);
+    }
+
+    /**
+     * What the service's orphan reaper must leave alone: the launcher's sound processes and
+     * their direct children (the helper's {@code dbus-monitor} and {@code pactl}).
+     */
+    @NonNull
+    public static java.util.Set<Integer> spares(@NonNull Map<Integer, List<String>> argvByPid,
+                                                @NonNull Map<Integer, Integer> parentByPid) {
+        java.util.Set<Integer> spared = new java.util.HashSet<>();
+        for (Map.Entry<Integer, List<String>> process : argvByPid.entrySet()) {
+            if (OwnProcesses.isLauncherSoundProcess(process.getValue())) spared.add(process.getKey());
+        }
+        java.util.Set<Integer> roots = new java.util.HashSet<>(spared);
+        for (Map.Entry<Integer, Integer> parent : parentByPid.entrySet()) {
+            if (roots.contains(parent.getValue())) spared.add(parent.getKey());
+        }
+        return spared;
     }
 
     /** Everything down, the launcher's drop-ins taken back out (Sound off, decision 13). */
@@ -486,6 +520,10 @@ public final class LauncherSound {
                 env = SoundFiles.processEnvironment(termux, preload, true);
             } else if (process == bus) {
                 if (!canExecute(SoundPaths.DBUS_DAEMON)) return null;
+                if (!prepareBusSocket()) {
+                    Logger.logWarn(LOG_TAG, "Failed to create " + SoundPaths.X11_SOCKETS);
+                    return null;
+                }
                 argv = SoundFiles.busArgv(SoundPaths.DBUS_DAEMON, SoundPaths.BUS_CONFIG);
                 env = SoundFiles.processEnvironment(termux, preload, false);
             } else {

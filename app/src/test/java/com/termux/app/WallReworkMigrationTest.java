@@ -90,6 +90,30 @@ public class WallReworkMigrationTest {
         assertFalse(store.contains(TERMUX_APP.KEY_WALL_LAST_PAGE));
     }
 
+    @Test public void autostartUnderADisplaySwitchThatWasOffStaysOff() {
+        store.edit()
+            .putBoolean(TERMUX_APP.KEY_X11_DISPLAY_ENABLED, false)
+            .putBoolean(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, true)
+            .commit();
+        WallReworkMigration.migrateIfNeeded(store);
+        assertFalse(store.getBoolean(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, false));
+    }
+
+    @Test public void autostartWithNoDisplaySwitchStoredStaysOff() {
+        store.edit().putBoolean(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, true).commit();
+        WallReworkMigration.migrateIfNeeded(store);
+        assertFalse(store.getBoolean(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, false));
+    }
+
+    @Test public void autostartUnderADisplaySwitchThatWasOnStands() {
+        store.edit()
+            .putBoolean(TERMUX_APP.KEY_X11_DISPLAY_ENABLED, true)
+            .putBoolean(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, true)
+            .commit();
+        WallReworkMigration.migrateIfNeeded(store);
+        assertTrue(store.getBoolean(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, false));
+    }
+
     @Test public void leftoverPlaceKeysGoOnceThePlaceStoreHasFoldedThem() {
         store.edit()
             .putInt(WallReworkMigration.KEY_PLACE_MIGRATED, 8)

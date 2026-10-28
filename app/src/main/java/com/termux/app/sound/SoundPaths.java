@@ -26,9 +26,10 @@ final class SoundPaths {
     /**
      * The server's runtime directory: its pid file and its socket. Its own, so a server some
      * client autospawned in the stock place ({@code ~/.config/pulse/*-runtime}) never holds the
-     * pid file or the socket ours needs. In the prefix's tmp, which the system empties at boot.
+     * pid file or the socket ours needs. Not in the prefix's tmp: the service empties that on every
+     * stop (Exit, the last shell), which would leave a live server with no socket.
      */
-    static final String RUNTIME_DIR = TMP + "/termux-launcher-pulse";
+    static final String RUNTIME_DIR = PREFIX + "/var/run/termux-launcher/sound";
     /** The server's socket for everything in the prefix. */
     static final String SOCKET = RUNTIME_DIR + "/native";
     /** The running server's pid, written by the server itself ({@code --use-pid-file=yes}). */
