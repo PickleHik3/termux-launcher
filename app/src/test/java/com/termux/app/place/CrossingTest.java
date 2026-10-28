@@ -731,6 +731,10 @@ public class CrossingTest {
             crossing.heldArrangement(PageRef.HOME));
         assertSame(rest3, crossing.heldRest(HOME_3));
         assertSame(rest2, crossing.heldRest(PageRef.HOME));
+        assertNull("a kind neither end has is the store's to answer",
+            crossing.heldArrangement(PageRef.TERMINAL));
+        assertNull(crossing.heldRest(PageRef.TERMINAL));
+        assertNull(crossing.heldArrangement(PageRef.of(PaneWallPage.DISPLAY, 7)));
         crossing.land(HOME_3, REVISION);
         assertEquals(1, moves.morphEnds);
         assertSame(rest3, moves.landed);
