@@ -474,6 +474,16 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return pane.contentShiftFraction();
     }
 
+    /** Whether the Home page in front is settling, sliding in or back; see WidgetPaneView. */
+    public boolean isHomePageSettling() {
+        return pane.isContentSettling();
+    }
+
+    /** Runs {@code action} once that settle lands or is cut short, or now if none is under way. */
+    public void runWhenHomePageSettles(@NonNull Runnable action) {
+        pane.runWhenContentSettles(action);
+    }
+
     /** Turn Home to page {@code page} (clamped), without the swipe's slide. */
     public void showHomePage(int page) {
         setCurrentPage(page);

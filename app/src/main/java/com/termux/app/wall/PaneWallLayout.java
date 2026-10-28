@@ -774,7 +774,18 @@ public final class PaneWallLayout extends ViewGroup {
     public void nudgePage(@NonNull PaneWallPage page, float fromPx, long durationMs,
                           @Nullable android.view.animation.Interpolator interpolator,
                           @Nullable Runnable onEnd) {
-        startNudge(page, fromPx, durationMs, interpolator, onEnd, null);
+        nudgePage(page, fromPx, durationMs, interpolator, onEnd, null);
+    }
+
+    /**
+     * {@link #nudgePage}, its clock held behind {@code clock} (#173): the page is posed at
+     * {@code fromPx} now and moves from the frame after the gate opens, so the frame the arriving
+     * page first draws in does not eat the nudge. A null gate starts the clock at once.
+     */
+    public void nudgePage(@NonNull PaneWallPage page, float fromPx, long durationMs,
+                          @Nullable android.view.animation.Interpolator interpolator,
+                          @Nullable Runnable onEnd, @Nullable FirstDrawGate clock) {
+        startNudge(page, fromPx, durationMs, interpolator, onEnd, null, clock);
     }
 
     /**
@@ -784,6 +795,13 @@ public final class PaneWallLayout extends ViewGroup {
     private boolean startNudge(@NonNull PaneWallPage page, float fromPx, long durationMs,
                                @Nullable android.view.animation.Interpolator interpolator,
                                @Nullable Runnable onEnd, @Nullable View leaving) {
+        return startNudge(page, fromPx, durationMs, interpolator, onEnd, leaving, null);
+    }
+
+    private boolean startNudge(@NonNull PaneWallPage page, float fromPx, long durationMs,
+                               @Nullable android.view.animation.Interpolator interpolator,
+                               @Nullable Runnable onEnd, @Nullable View leaving,
+                               @Nullable FirstDrawGate clock) {
         stopNudge();
         // Only the page the wall rests on is nudged: a page the wall has put away would otherwise
         // slide across the place the user is looking at.
@@ -814,7 +832,15 @@ public final class PaneWallLayout extends ViewGroup {
             }
         });
         mNudge = nudge;
-        nudge.start();
+        if (clock == null) {
+            nudge.start();
+        } else {
+            // Posed at fromPx above until the gate opens; a nudge stopped before then is not
+            // started by it.
+            clock.then(() -> {
+                if (mNudge == nudge && !nudge.isStarted()) nudge.start();
+            });
+        }
         return true;
     }
 
@@ -824,8 +850,12 @@ public final class PaneWallLayout extends ViewGroup {
         mNudgePage = null;
         mNudgePx = 0f;
         mNudgeLeaving = null;
+        if (nudge == null) return;
+        // A nudge still held behind its gate has not started, and cancelling an animator that
+        // never started tells nobody: started here, so its end listener runs on the cancel.
+        if (!nudge.isStarted()) nudge.start();
         // Cancelling runs the end listener, which repositions the page and runs onEnd.
-        if (nudge != null) nudge.cancel();
+        nudge.cancel();
     }
 
     /** Off while another surface owns the gesture (the surface editor, for one). */
