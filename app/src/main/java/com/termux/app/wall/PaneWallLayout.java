@@ -576,15 +576,37 @@ public final class PaneWallLayout extends ViewGroup {
      * A page that goes away while it is showing hands the wall back to the terminal.
      */
     public void setPages(@NonNull List<PaneWallPage> pages) {
+        setPages(pages, null, 0);
+    }
+
+    /**
+     * The same, for a re-built window the wall is about to land in: when the current page leaves,
+     * the wall is handed to {@code landing} (if the new pages hold it) instead of the neighbour
+     * on the left, standing {@code side} widths off its rest (+1: arriving from the right), so
+     * the {@link #goTo goTo(landing)} that must follow slides it in and tells the listener once.
+     * No other page is announced on the way (W3: a Home press to a far Display page never hands
+     * the wall to the Terminal page).
+     */
+    public void setPages(@NonNull List<PaneWallPage> pages, @Nullable PaneWallPage landing,
+                         int side) {
         List<PaneWallPage> resolved = new ArrayList<>(pages);
         if (resolved.isEmpty()) resolved.add(PaneWallPolicy.homePage());
         if (resolved.equals(mPages)) return;
         List<PaneWallPage> before = mPages;
         mPages = Collections.unmodifiableList(resolved);
         if (!mPages.contains(mCurrent)) {
-            // A page taken away while it showed hands the wall to its neighbour on the left.
-            mCurrent = PaneWallPolicy.pageAfterRemoval(before, mPages, mCurrent);
-            notifyPageChanged();
+            if (landing != null && mPages.contains(landing)) {
+                stopSlide();
+                mCurrent = landing;
+                mOffsetPx = Integer.signum(side) * (float) getWidth();
+                mCrossSlide = mOffsetPx != 0f;
+                // At rest already, a following goTo would not announce it: announce it here.
+                if (mOffsetPx == 0f) notifyPageChanged();
+            } else {
+                // A page taken away while it showed hands the wall to its neighbour on the left.
+                mCurrent = PaneWallPolicy.pageAfterRemoval(before, mPages, mCurrent);
+                notifyPageChanged();
+            }
         }
         applyPagePositions();
         publishBackExclusion();

@@ -417,8 +417,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mDisplayPageId = slots.get(slot).id();
         mLandingSlot = mWall.currentPage() == PaneWallPage.DISPLAY
             && mBoundDisplayPageId == mDisplayPageId ? -1 : slot;
+        int from = currentSlot(slots);
         try {
-            rebuild();
+            // The landing window may leave the current page out: the wall is handed straight to
+            // the Display page, never to the Terminal page on the way (which would start an empty
+            // Workspace's first shell).
+            mWall.setPages(builtWindow(mHost.hasWindow() || mSeamIntoEmpty),
+                PaneWallPage.DISPLAY, Integer.signum(slot - from));
         } finally {
             mLandingSlot = -1;
         }
