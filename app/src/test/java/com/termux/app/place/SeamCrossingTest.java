@@ -93,11 +93,15 @@ public class SeamCrossingTest {
 
     // ---- Dresses, as the resolver answers them ----
 
+    /** The Home page in front's own layout: what the old Home layout switch stood for. */
+    private static final LayoutVariant HOME_PAGE =
+        LayoutVariant.page(2, com.termux.app.wall.WallPages.PageKind.HOME);
+
     private static final class Stored implements DressResolver.Source {
         boolean minimal;
         boolean homeLayout;
-        final EnumMap<LayoutVariant, DockStyle> designs = new EnumMap<>(LayoutVariant.class);
-        final EnumMap<LayoutVariant, Boolean> searchFields = new EnumMap<>(LayoutVariant.class);
+        final java.util.Map<LayoutVariant, DockStyle> designs = new java.util.HashMap<>();
+        final java.util.Map<LayoutVariant, Boolean> searchFields = new java.util.HashMap<>();
 
         Stored() {
             for (LayoutVariant variant : LayoutVariant.values()) {
@@ -107,12 +111,16 @@ public class SeamCrossingTest {
         }
 
         @Override public boolean minimal() { return minimal; }
-        @Override public boolean homeLayout() { return homeLayout; }
+        // homeLayout: the Home page in front (id 2) holds a page layout of its own.
+        @Override public int pageIdOf(@NonNull PaneWallPage page) {
+            return page == PaneWallPage.WIDGETS ? 2 : 1;
+        }
+        @Override public boolean pageLayout(int pageId) { return pageId == 2 && homeLayout; }
         @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant variant) {
-            return designs.get(variant);
+            return designs.getOrDefault(variant, DockStyle.GLASS_TRAY);
         }
         @Override public boolean searchField(@NonNull LayoutVariant variant) {
-            return searchFields.get(variant);
+            return searchFields.getOrDefault(variant, false);
         }
         @Override public boolean drawerTile(@NonNull LayoutVariant variant) { return false; }
         @Override public boolean shows(@NonNull com.termux.app.wall.WallPages.PageKind kind,
@@ -708,7 +716,7 @@ public class SeamCrossingTest {
         // on the shared layout, the Wall strip's row follows Home's share, and nothing dips.
         for (PaneWallPage from : BOTH) {
             Stored stored = homeLayoutOn();
-            stored.designs.put(LayoutVariant.HOME, DockStyle.WALL_STRIP);
+            stored.designs.put(HOME_PAGE, DockStyle.WALL_STRIP);
             Drive drive = homeOwn(stored, from, home(), false).slow(0f, 1f);
             assertOnlyTheExtraKeysFold(drive, false);
             float previous = Float.NaN;
@@ -740,8 +748,8 @@ public class SeamCrossingTest {
     public void homesOwnDesignWithoutTheAppsRowSwapsTheRowsAndEasesTheStrip() {
         for (PaneWallPage from : BOTH) {
             Stored stored = homeLayoutOn();
-            stored.designs.put(LayoutVariant.HOME, DockStyle.WALL_STRIP);
-            stored.searchFields.put(LayoutVariant.HOME, true);
+            stored.designs.put(HOME_PAGE, DockStyle.WALL_STRIP);
+            stored.searchFields.put(HOME_PAGE, true);
             Drive drive = homeOwn(stored, from, homeWithoutApps(), false).slow(0f, 1f);
             assertRowsSwapOnlyWhileHidden(drive);
             assertEquals(1, drive.count(s -> s.relayout));
@@ -753,7 +761,7 @@ public class SeamCrossingTest {
     @Test
     public void homesOwnLensBeadsMeltIntoTheSlabAsHomeLeavesAndBackOut() {
         Stored stored = homeLayoutOn();
-        stored.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
+        stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
         Drive drive = drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
             window(), false, true).slow(0f, 1f);
         assertOnlyTheExtraKeysFold(drive, false);
@@ -778,8 +786,8 @@ public class SeamCrossingTest {
         // #84: Lens beads with the Search field keep their beads (the field in a capsule of its
         // own under them), so a slide in from the window's slab melts them in as Home comes.
         Stored stored = homeLayoutOn();
-        stored.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
-        stored.searchFields.put(LayoutVariant.HOME, true);
+        stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
+        stored.searchFields.put(HOME_PAGE, true);
         // Home's row alone on its dock (the index put away), where it wears beads.
         Drive drive = drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
             homeWithoutAz(), false, false).slow(0f, 1f);
@@ -1018,7 +1026,7 @@ public class SeamCrossingTest {
         for (boolean pictured : new boolean[] {true, false}) {
             Stored stored = new Stored();
             stored.minimal = true;
-            stored.designs.put(LayoutVariant.HOME, DockStyle.WALL_STRIP);
+            stored.designs.put(HOME_PAGE, DockStyle.WALL_STRIP);
             stored.designs.put(LayoutVariant.NORMAL, DockStyle.WALL_STRIP);
             Drive drive = drive(stored, PaneWallPage.TERMINAL, minimalWindow(), true,
                 PaneWallPage.WIDGETS, home(), false, false);
@@ -1124,7 +1132,7 @@ public class SeamCrossingTest {
         // the Workspace's bead fit for the whole slide (118 px) and grew at the settle (143 px).
         for (PaneWallPage from : BOTH) {
             Stored stored = homeLayoutOn();
-            stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
+            stored.designs.put(HOME_PAGE, DockStyle.GLASS_TRAY);
             stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
             boolean fromHome = from == PaneWallPage.WIDGETS;
             Drive drive = fromHome

@@ -90,7 +90,18 @@ public final class ScreenMatch {
      */
     @NonNull
     public static LayoutVariant layoutOf(@NonNull WallHalf half, boolean minimal) {
-        return half == WallHalf.HOME ? LayoutVariant.HOME : LayoutVariant.of(minimal);
+        // Since page layouts (ADR 0015 §3) no page wears the old Home layout: Home's half is the
+        // normal layout unless the Home page in front holds its own ({@link #layoutOf(WallHalf,
+        // PlaceLayoutStore)}).
+        return half == WallHalf.HOME ? LayoutVariant.NORMAL : LayoutVariant.of(minimal);
+    }
+
+    /** The layout a screen stands in, as the store dresses it: the Home page in front's on Home. */
+    @NonNull
+    public static LayoutVariant layoutOf(@NonNull WallHalf half, @NonNull PlaceLayoutStore places) {
+        return half == WallHalf.HOME
+            ? places.variantFor(com.termux.app.wall.PaneWallPage.WIDGETS)
+            : LayoutVariant.of(places.isMinimal());
     }
 
     /**
@@ -104,8 +115,8 @@ public final class ScreenMatch {
         if (store == null)
             return null;
         boolean minimal = places.isMinimal();
-        LayoutVariant from = layoutOf(target.other(), minimal);
-        LayoutVariant to = layoutOf(target, minimal);
+        LayoutVariant from = layoutOf(target.other(), places);
+        LayoutVariant to = layoutOf(target, places);
         // Both layouts seeded before the snapshot: an orientation not used yet would otherwise be
         // taken as empty, and Undo would leave it empty rather than on its seed.
         places.seed(from);

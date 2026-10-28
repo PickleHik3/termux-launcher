@@ -56,11 +56,11 @@ public class LayoutEditorHomeFilterTest {
         places.setAppsRow(LANDSCAPE, RowPlacement.BOTTOM);
         // The filter moves between two layouts only while Home holds one of its own; on the
         // shared layout see LayoutEditorSharedLayoutTest.
-        places.setHomeLayout(true);
+        com.termux.app.place.KindFixtures.onHomePage(places).setPageLayout(com.termux.app.place.KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
     }
 
     private PlaceLayoutStore home() {
-        return places.forVariant(LayoutVariant.HOME);
+        return places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
     }
 
     private PlaceLayoutStore workspace() {
@@ -75,7 +75,7 @@ public class LayoutEditorHomeFilterTest {
     @Test
     public void openedOnHomeTheDoorsEntryEditsTheHomeLayout() {
         LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
-        assertEquals(LayoutVariant.HOME, plan.variant());
+        assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE, plan.variant());
         assertTrue(plan.showsHome());
         assertEquals(LayoutVariant.NORMAL, open(PaneWallPage.TERMINAL).variant());
         assertFalse(open(PaneWallPage.TERMINAL).showsHome());
@@ -87,7 +87,7 @@ public class LayoutEditorHomeFilterTest {
         assertEquals(PaneWallPage.WIDGETS, plan.showHome(true));
         assertTrue(plan.showsHome());
         assertEquals(PaneWallPage.WIDGETS, plan.place());
-        assertEquals(LayoutVariant.HOME, plan.variant());
+        assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE, plan.variant());
 
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.APPS_ROW, Edge.TOP));
         assertEquals(Edge.TOP, home().slot(PORTRAIT, Element.APPS).edge);

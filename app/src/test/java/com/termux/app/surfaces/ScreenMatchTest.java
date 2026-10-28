@@ -55,10 +55,11 @@ public class ScreenMatchTest {
         prefs.edit().clear().commit();
         launcher = new TermuxAppSharedPreferences(app, prefs, null);
         store = com.termux.app.place.KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
-        assertTrue("every install holds a Home layout", store.hasHomeLayout());
+        // The Home page holds a page layout of its own, where the Home layout stood before v16.
+        com.termux.app.place.KindFixtures.withHomePageLayout(store);
 
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
-        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        PlaceLayoutStore home = store.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         normal.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.LEFT, 0));
         normal.setSlot(PORTRAIT, Element.EXTRA_KEYS, Slot.on(Edge.TOP, 0));
         normal.setSlot(PORTRAIT, Element.STATUS, Slot.hiddenFrom(Edge.TOP, 0));
@@ -78,7 +79,7 @@ public class ScreenMatchTest {
     @Test
     public void matchWorkspaceStylingGivesHomeTheWorkspacesLayoutAndGlass() {
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
-        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        PlaceLayoutStore home = store.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         assertNotNull(ScreenMatch.match(launcher, store, WallHalf.HOME));
 
         assertEquals(normal.slot(PORTRAIT, Element.APPS), home.slot(PORTRAIT, Element.APPS));
@@ -99,7 +100,7 @@ public class ScreenMatchTest {
     @Test
     public void matchHomeStylingGivesTheWorkspaceHomesLayoutButKeepsItsExtraKeys() {
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
-        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        PlaceLayoutStore home = store.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         Slot extraKeys = normal.slot(PORTRAIT, Element.EXTRA_KEYS);
         assertNotNull(ScreenMatch.match(launcher, store, WallHalf.WORKSPACE));
 
@@ -117,7 +118,7 @@ public class ScreenMatchTest {
     public void undoPutsEveryKeyBackAsItStood() {
         // A layout's seed is written the first time it is used; a Match uses both layouts, and
         // Undo puts them back on that seed, so the comparison starts from it.
-        store.seed(LayoutVariant.HOME);
+        store.seed(com.termux.app.place.KindFixtures.HOME_PAGE);
         store.seed(LayoutVariant.NORMAL);
         for (WallHalf target : WallHalf.values()) {
             Map<String, ?> before = new HashMap<>(prefs.getAll());
@@ -145,7 +146,7 @@ public class ScreenMatchTest {
     @Test
     public void undoOverAnOrientationNotUsedYetPutsItBackOnItsSeed() {
         PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
-        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        PlaceLayoutStore home = store.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
         normal.setSlot(PlaceOrientation.LANDSCAPE, Element.APPS, Slot.on(Edge.RIGHT, 0));
         ScreenMatch.Undo undo = ScreenMatch.match(launcher, store, WallHalf.HOME);
         assertNotNull(undo);
@@ -158,14 +159,14 @@ public class ScreenMatchTest {
     public void inMinimalModeTheWorkspacesMinimalLayoutIsTheOneMatched() {
         store.setMinimal(true);
         assertEquals(LayoutVariant.MINIMAL, ScreenMatch.layoutOf(WallHalf.WORKSPACE, true));
-        assertEquals(LayoutVariant.HOME, ScreenMatch.layoutOf(WallHalf.HOME, true));
+        assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE, ScreenMatch.layoutOf(WallHalf.HOME, store));
         ScreenMatch.Undo undo = ScreenMatch.match(launcher, store, WallHalf.WORKSPACE);
         assertNotNull(undo);
         for (String key : undo.keys()) {
             if (key.startsWith("layout."))
                 assertTrue(key, key.startsWith("layout.minimal."));
         }
-        assertEquals(store.forVariant(LayoutVariant.HOME).slot(PORTRAIT, Element.APPS),
+        assertEquals(store.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).slot(PORTRAIT, Element.APPS),
             store.forVariant(LayoutVariant.MINIMAL).slot(PORTRAIT, Element.APPS));
         assertEquals("the normal layout is left alone", Slot.on(Edge.LEFT, 0).edge,
             store.forVariant(LayoutVariant.NORMAL).slot(PORTRAIT, Element.APPS).edge);

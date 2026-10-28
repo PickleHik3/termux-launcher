@@ -34,13 +34,19 @@ public class DressResolverTest {
 
     private static final WallShape WORKSPACE = WallShape.of(LayoutStyle.DOCKED, 12, 8);
 
+    /** The Home page in front and the Terminal page, as the Source names them. */
+    private static final int HOME_ID = 2;
+    private static final int TERMINAL_ID = 1;
+    /** The Home page in front's own layout: what the old Home layout switch stood for. */
+    private static final LayoutVariant HOME_PAGE = LayoutVariant.page(HOME_ID, PageKind.HOME);
+
     /** What the store holds, as a test sets it. */
     private static final class Stored implements DressResolver.Source {
         boolean minimal;
         boolean homeLayout;
-        final EnumMap<LayoutVariant, DockStyle> designs = new EnumMap<>(LayoutVariant.class);
-        final EnumMap<LayoutVariant, Boolean> searchFields = new EnumMap<>(LayoutVariant.class);
-        final EnumMap<LayoutVariant, Boolean> drawerTiles = new EnumMap<>(LayoutVariant.class);
+        final java.util.Map<LayoutVariant, DockStyle> designs = new java.util.HashMap<>();
+        final java.util.Map<LayoutVariant, Boolean> searchFields = new java.util.HashMap<>();
+        final java.util.Map<LayoutVariant, Boolean> drawerTiles = new java.util.HashMap<>();
         WallShape workspace = WORKSPACE;
         /** Kind visibility as a test sets it; what is absent is Home without the extra keys. */
         final java.util.Map<String, Boolean> kindShown = new java.util.HashMap<>();
@@ -54,15 +60,27 @@ public class DressResolverTest {
         }
 
         @Override public boolean minimal() { return minimal; }
-        @Override public boolean homeLayout() { return homeLayout; }
+        /** Whether the Terminal page holds a page layout of its own. */
+        boolean terminalLayout;
+        int homeInFront = HOME_ID;
+        final java.util.Set<Integer> otherPageLayouts = new java.util.HashSet<>();
+
+        @Override public int pageIdOf(@NonNull PaneWallPage page) {
+            return page == PaneWallPage.WIDGETS ? homeInFront : TERMINAL_ID;
+        }
+        @Override public boolean pageLayout(int pageId) {
+            if (pageId == HOME_ID) return homeLayout;
+            if (pageId == TERMINAL_ID) return terminalLayout;
+            return otherPageLayouts.contains(pageId);
+        }
         @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
-            return designs.get(layout);
+            return designs.getOrDefault(layout, DockStyle.GLASS_TRAY);
         }
         @Override public boolean searchField(@NonNull LayoutVariant layout) {
-            return searchFields.get(layout);
+            return searchFields.getOrDefault(layout, false);
         }
         @Override public boolean drawerTile(@NonNull LayoutVariant layout) {
-            return drawerTiles.get(layout);
+            return drawerTiles.getOrDefault(layout, false);
         }
         @NonNull @Override public WallShape shape() {
             return workspace;
@@ -109,12 +127,12 @@ public class DressResolverTest {
     @Test
     public void homeWearsTheStatusBarOnItsOwnLayoutToo() {
         stored.homeLayout = true;
-        assertEquals(LayoutVariant.HOME, home().layout());
+        assertEquals(HOME_PAGE, home().layout());
         assertTrue(home().wears(Element.STATUS));
         assertFalse(home().wears(Element.EXTRA_KEYS));
-        assertTrue(DressResolver.wornOn(LayoutVariant.HOME, Element.STATUS));
-        assertTrue(LayoutVariant.HOME.offers(Element.STATUS));
-        assertFalse(LayoutVariant.HOME.offers(Element.EXTRA_KEYS));
+        assertTrue(DressResolver.wornOn(HOME_PAGE, Element.STATUS));
+        assertTrue(HOME_PAGE.offers(Element.STATUS));
+        assertFalse(HOME_PAGE.offers(Element.EXTRA_KEYS));
     }
 
     /**
@@ -147,7 +165,7 @@ public class DressResolverTest {
     public void homeOnTheSharedLayoutDrawsThatLayoutsDockDesign() {
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
         stored.designs.put(LayoutVariant.MINIMAL, DockStyle.WALL_STRIP);
-        stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
+        stored.designs.put(HOME_PAGE, DockStyle.GLASS_TRAY);
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
         stored.minimal = true;
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
@@ -181,7 +199,7 @@ public class DressResolverTest {
     public void homeAndAWindowOnOneLayoutDrawOneDesign() {
         for (DockStyle style : DockStyle.values()) {
             stored.designs.put(LayoutVariant.NORMAL, style);
-            stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
+            stored.designs.put(HOME_PAGE, DockStyle.GLASS_TRAY);
             assertEquals(style.name(), dresses.dockDesignOf(PaneWallPage.WIDGETS),
                 dresses.dockDesignOf(PaneWallPage.TERMINAL));
             assertSame(style.name(),
@@ -207,7 +225,7 @@ public class DressResolverTest {
     @Test
     public void homeLayoutOnHomeWearsItsOwnLayoutInTheWallsShape() {
         stored.homeLayout = true;
-        assertEquals(LayoutVariant.HOME, home().layout());
+        assertEquals(HOME_PAGE, home().layout());
         assertEquals(WORKSPACE, home().shape());
         assertEquals(WORKSPACE, terminal().shape());
         assertEquals(LayoutVariant.NORMAL, terminal().layout());
@@ -217,21 +235,21 @@ public class DressResolverTest {
     public void aHomeLayoutAndMinimalModeDoNotMeet() {
         stored.homeLayout = true;
         stored.minimal = true;
-        assertEquals(LayoutVariant.HOME, home().layout());
+        assertEquals(HOME_PAGE, home().layout());
     }
 
     @Test
     public void aHomeLayoutStaysAsSetInMinimalMode() {
         stored.homeLayout = true;
         stored.minimal = true;
-        assertEquals(LayoutVariant.HOME, home().layout());
+        assertEquals(HOME_PAGE, home().layout());
         assertEquals(LayoutVariant.MINIMAL, terminal().layout());
     }
 
     @Test
     public void aHomeLayoutDrawsItsOwnDockDesign() {
         stored.homeLayout = true;
-        stored.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
+        stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.WALL_STRIP);
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
         assertEquals("a window keeps the Workspace's", DockStyle.WALL_STRIP,
@@ -278,6 +296,7 @@ public class DressResolverTest {
             stored.homeLayout = homeLayout;
             for (DockStyle style : DockStyle.values()) {
                 for (LayoutVariant layout : LayoutVariant.values()) stored.designs.put(layout, style);
+                stored.designs.put(HOME_PAGE, style);
                 assertEquals(DockStyle.effectiveStyle(style), home().dockDesign());
             }
         }
@@ -328,7 +347,7 @@ public class DressResolverTest {
         stored.searchFields.put(LayoutVariant.NORMAL, true);
         assertNotEquals(without, terminal());
         stored.homeLayout = true;
-        stored.designs.put(LayoutVariant.HOME, DockStyle.GLASS_TRAY);
+        stored.designs.put(HOME_PAGE, DockStyle.GLASS_TRAY);
         assertNotEquals("a field on one half only sets them apart",
             dresses.dressOf(PaneWallPage.WIDGETS).searchField(), terminal().searchField());
     }
@@ -395,7 +414,7 @@ public class DressResolverTest {
         assertFalse("a Home layout holds its own", home().drawerTile());
         assertFalse(dresses.drawerTileOf(PaneWallPage.WIDGETS));
         assertTrue(terminal().drawerTile());
-        stored.drawerTiles.put(LayoutVariant.HOME, true);
+        stored.drawerTiles.put(HOME_PAGE, true);
         assertTrue(dresses.drawerTileOf(PaneWallPage.WIDGETS));
     }
 
@@ -445,7 +464,7 @@ public class DressResolverTest {
     @Test
     public void theDockDesignAloneMatchesTheWholeDress() {
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
-        stored.designs.put(LayoutVariant.HOME, DockStyle.WALL_STRIP);
+        stored.designs.put(HOME_PAGE, DockStyle.WALL_STRIP);
         for (boolean homeLayout : new boolean[] {false, true}) {
             stored.homeLayout = homeLayout;
             for (PaneWallPage page : PaneWallPage.values())
@@ -462,7 +481,7 @@ public class DressResolverTest {
                 dresses.wears(PaneWallPage.WIDGETS, element));
             assertTrue(dresses.wears(PaneWallPage.TERMINAL, element));
             assertEquals(element.name(), home().wears(element),
-                DressResolver.wornOn(LayoutVariant.HOME, element));
+                DressResolver.wornOn(HOME_PAGE, element));
             assertTrue(DressResolver.wornOn(LayoutVariant.NORMAL, element));
             assertTrue(DressResolver.wornOn(LayoutVariant.MINIMAL, element));
             for (LayoutVariant layout : LayoutVariant.values())
@@ -521,5 +540,51 @@ public class DressResolverTest {
         assertTrue(empty.dressOf(PaneWallPage.TERMINAL).wears(Element.EXTRA_KEYS));
         assertFalse(empty.dressOf(PaneWallPage.TERMINAL).wears(Element.APPS));
         assertTrue(empty.dressOf(PaneWallPage.TERMINAL).wears(Element.STATUS));
+    }
+
+    // ------------------------------------------------------------------ page layouts (ADR 0015 §3)
+
+    @Test
+    public void aHomePageWithoutAPageLayoutWearsTheNormalLayout() {
+        assertSame(LayoutVariant.NORMAL, dresses.layoutOf(PaneWallPage.WIDGETS));
+        stored.homeLayout = true;
+        stored.homeInFront = 3;
+        assertSame("page 2's layout is not page 3's", LayoutVariant.NORMAL,
+            dresses.layoutOf(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void aHomePageWithAPageLayoutWearsItsOwnWhateverMinimalModeSays() {
+        stored.otherPageLayouts.add(3);
+        stored.homeInFront = 3;
+        LayoutVariant own = dresses.layoutOf(PaneWallPage.WIDGETS);
+        assertSame(LayoutVariant.page(3, PageKind.HOME), own);
+        assertTrue(own.isPage());
+        assertTrue(own.isHomeKind());
+        assertFalse(own.offers(Element.EXTRA_KEYS));
+        stored.minimal = true;
+        assertSame(own, dresses.layoutOf(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void theTerminalPageWearsItsPageLayoutUnlessMinimal() {
+        assertSame(LayoutVariant.NORMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
+        stored.terminalLayout = true;
+        LayoutVariant own = dresses.layoutOf(PaneWallPage.TERMINAL);
+        assertSame(LayoutVariant.page(TERMINAL_ID, PageKind.TERMINAL), own);
+        assertFalse(own.isHomeKind());
+        assertTrue(own.offers(Element.EXTRA_KEYS));
+        stored.minimal = true;
+        assertSame(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
+    }
+
+    @Test
+    public void aPageLayoutsDesignIsWhatThePageDraws() {
+        stored.terminalLayout = true;
+        stored.designs.put(LayoutVariant.page(TERMINAL_ID, PageKind.TERMINAL), DockStyle.LENS_BEADS);
+        assertEquals(DockStyle.effectiveStyle(DockStyle.LENS_BEADS),
+            dresses.dockDesignOf(PaneWallPage.TERMINAL));
+        assertEquals(DockStyle.effectiveStyle(DockStyle.GLASS_TRAY),
+            dresses.dockDesignOf(PaneWallPage.WIDGETS));
     }
 }

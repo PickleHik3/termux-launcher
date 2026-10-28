@@ -15468,6 +15468,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mPlaceLayoutStore = new PlaceLayoutStore(base);
+        bindShownPages(mPlaceLayoutStore);
         // The sizes are the layout's the stack is dressed for: the Home layout's on a Home page,
         // and mid-slide across the seam the half's whose rows the stack stands (SeamDress).
         base.setPlaceSizes(new PlaceSizePreferences(
@@ -15562,6 +15563,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayoutStore placeLayoutStore() {
         if (mPlaceLayoutStore == null && mPreferences != null) {
             mPlaceLayoutStore = new PlaceLayoutStore(mPreferences);
+            bindShownPages(mPlaceLayoutStore);
         }
         return mPlaceLayoutStore;
     }
@@ -15688,8 +15690,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the switch once per revision.
      */
     private boolean homeHoldsOwnLayout() {
-        return mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS)
-            == com.termux.app.place.LayoutVariant.HOME;
+        // The Home page in front holds a page layout of its own (ADR 0015 §3).
+        return mDresses.layoutOf(com.termux.app.wall.PaneWallPage.WIDGETS).isPage();
+    }
+
+    /**
+     * Tells the store which pages are on screen, so a page's own layout is the one it wears: the
+     * Home page in front (the pane's index into the wall's Home pages) and the Terminal page.
+     */
+    private void bindShownPages(@NonNull PlaceLayoutStore store) {
+        store.setShownPages(new PlaceLayoutStore.ShownPages() {
+            @Override public int homePageInFront() {
+                java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
+                if (ids.isEmpty()) return -1;
+                int index = mWidgetPaneController != null ? mWidgetPaneController.homePageIndex() : 0;
+                return ids.get(Math.max(0, Math.min(index, ids.size() - 1)));
+            }
+
+            @Override public int terminalPage() {
+                com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
+                return terminal != null ? terminal.id : -1;
+            }
+
+            @NonNull @Override public java.util.List<Integer> homePageIds() {
+                return wallPages().homePageIdsForRepository();
+            }
+        });
     }
 
     /**
@@ -27433,6 +27459,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
                 // The removal is final: the page's own look goes with it, and what stood on it.
                 if (mPageLookPruner != null) mPageLookPruner.dropPage(page.id);
+                PlaceLayoutStore places = placeLayoutStore();
+                if (places != null) places.dropPageLayout(page.id, page.kind);
                 if (mPaneController != null && page.kind == com.termux.app.wall.WallPages.PageKind.HOME) {
                     mPaneController.homePageRemoved(page.id);
                 }
@@ -29036,6 +29064,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The badge, the chips and the summary read the page: a new page or a new
                     // widget changes all three.
                     if (!isWidgetsPageShowing()) return;
+                    // The Home page in front may wear a page layout of its own (ADR 0015 §3):
+                    // landing on another one re-arranges the chrome. The morph is slice E.
+                    syncChromeArrangement();
                     syncPlaceBar();
                     com.termux.app.terminal.TerminalWindowBar chips =
                         findViewById(R.id.terminal_window_bar);
