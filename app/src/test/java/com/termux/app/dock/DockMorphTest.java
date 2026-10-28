@@ -1,7 +1,7 @@
 package com.termux.app.dock;
 
 import com.termux.app.dock.DockGeometry.Half;
-import com.termux.app.dock.DockGeometry.Side;
+import com.termux.app.wall.PageRef;
 import com.termux.app.dock.DockGeometry.Snapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -50,7 +50,7 @@ public class DockMorphTest {
             .build();
     }
 
-    private static DockLayout rest(Snapshot snapshot, Side side) {
+    private static DockLayout rest(Snapshot snapshot, PageRef side) {
         return DockGeometry.compute(snapshot.restOf(side));
     }
 
@@ -76,8 +76,8 @@ public class DockMorphTest {
         for (float density : DENSITIES)
             for (boolean floating : STYLES) {
                 Snapshot s = device(density, floating);
-                DockLayout home = rest(s, Side.HOME);
-                DockLayout workspace = rest(s, Side.WORKSPACE);
+                DockLayout home = rest(s, PageRef.HOME);
+                DockLayout workspace = rest(s, PageRef.TERMINAL);
                 String at = at(density, floating);
                 assertTrue(at + ": Home carries the Search field", home.promptFieldBandPx > 0);
                 assertEquals(at + ": the Workspace has none", 0, workspace.promptFieldBandPx);
@@ -92,8 +92,8 @@ public class DockMorphTest {
             for (boolean floating : STYLES)
                 for (boolean fromHome : new boolean[] {true, false}) {
                     Snapshot s = device(density, floating);
-                    DockLayout leaving = rest(s, fromHome ? Side.HOME : Side.WORKSPACE);
-                    DockLayout arriving = rest(s, fromHome ? Side.WORKSPACE : Side.HOME);
+                    DockLayout leaving = rest(s, fromHome ? PageRef.HOME : PageRef.TERMINAL);
+                    DockLayout arriving = rest(s, fromHome ? PageRef.TERMINAL : PageRef.HOME);
                     DockMorph morph = new DockMorph();
                     morph.between(leaving, fromHome, arriving, !fromHome);
                     String at = at(density, floating) + (fromHome ? " from Home" : " to Home");
@@ -132,7 +132,7 @@ public class DockMorphTest {
             for (boolean floating : STYLES) {
                 Snapshot s = device(density, floating);
                 DockMorph morph = new DockMorph();
-                morph.between(rest(s, Side.HOME), true, rest(s, Side.WORKSPACE), false);
+                morph.between(rest(s, PageRef.HOME), true, rest(s, PageRef.TERMINAL), false);
                 for (float t = 0f; t <= 1f + 1e-6f; t += STEP) {
                     morph.at(t);
                     int bands = morph.appsBarHeightPx() + morph.promptFieldBandPx()
@@ -156,8 +156,8 @@ public class DockMorphTest {
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
             .pinnedSlotCount(7)
             .build();
-        DockLayout row = rest(s, Side.HOME);
-        DockLayout rail = rest(s, Side.WORKSPACE);
+        DockLayout row = rest(s, PageRef.HOME);
+        DockLayout rail = rest(s, PageRef.TERMINAL);
         assertFalse(row.railActive);
         assertTrue(rail.railActive);
         DockMorph morph = new DockMorph();
@@ -194,8 +194,8 @@ public class DockMorphTest {
         for (float density : DENSITIES)
             for (boolean floating : STYLES) {
                 Snapshot s = device(density, floating);
-                DockLayout leaving = rest(s, Side.WORKSPACE);
-                DockLayout arriving = rest(s, Side.HOME);
+                DockLayout leaving = rest(s, PageRef.TERMINAL);
+                DockLayout arriving = rest(s, PageRef.HOME);
                 DockMorph morph = new DockMorph();
                 morph.between(leaving, false, arriving, true);
                 int[] from = numbers(leaving);
@@ -222,7 +222,7 @@ public class DockMorphTest {
     public void aReversalRunsTheSameNumbersBack() {
         Snapshot s = device(2.625f, true);
         DockMorph morph = new DockMorph();
-        morph.between(rest(s, Side.HOME), true, rest(s, Side.WORKSPACE), false);
+        morph.between(rest(s, PageRef.HOME), true, rest(s, PageRef.TERMINAL), false);
         int frames = Math.round(1f / STEP);
         int[][] out = new int[frames + 1][];
         for (int i = 0; i <= frames; i++) {
@@ -238,8 +238,8 @@ public class DockMorphTest {
     @Test
     public void aBandOnOneSideOnlyGrowsFromNothingAndFades() {
         Snapshot s = device(3f, false);
-        DockLayout workspace = rest(s, Side.WORKSPACE);
-        DockLayout home = rest(s, Side.HOME);
+        DockLayout workspace = rest(s, PageRef.TERMINAL);
+        DockLayout home = rest(s, PageRef.HOME);
         DockMorph morph = new DockMorph();
         morph.between(workspace, false, home, false);
         assertEquals(0, morph.promptFieldBandPx());
@@ -258,7 +258,7 @@ public class DockMorphTest {
     public void clearedItHoldsNothing() {
         Snapshot s = device(2.625f, false);
         DockMorph morph = new DockMorph();
-        morph.between(rest(s, Side.HOME), true, rest(s, Side.WORKSPACE), false);
+        morph.between(rest(s, PageRef.HOME), true, rest(s, PageRef.TERMINAL), false);
         morph.at(0.4f);
         morph.clear();
         assertFalse(morph.active());

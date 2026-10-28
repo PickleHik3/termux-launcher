@@ -5,14 +5,15 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockStyle;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import java.util.Objects;
 
 /**
- * A half's resolved arrangement (#141): where every Element stands on one half of the wall, in one
- * orientation, and its shape. Resolved once per (half, orientation) from the stored layout, the
+ * A page's resolved arrangement (#141): where every Element stands on one page of the wall, in one
+ * orientation, and its shape. Resolved once per (page, orientation) from the stored layout, the
  * Style and the Dock design ({@link #resolve}), then only read: every chrome predicate is answered
  * here, from the same value, so no caller can see two arrangements within one crossing.
  *
@@ -29,7 +30,8 @@ public final class ResolvedArrangement {
     private final boolean mDrawerTile;
     @NonNull private final PlaceOrientation mOrientation;
     @NonNull private final LayoutVariant mVariant;
-    private final boolean mHome;
+    /** The page it is resolved for: Home's page in front, or the Terminal's for every window. */
+    @NonNull private final PageRef mPage;
 
     private final boolean mAppsShown;
     @NonNull private final Edge mAppsEdge;
@@ -49,7 +51,7 @@ public final class ResolvedArrangement {
     private ResolvedArrangement(@NonNull PlaceLayout layout, @NonNull LayoutStyle style,
                                 @NonNull DockStyle design, boolean searchField,
                                 boolean drawerTile, @NonNull PlaceOrientation orientation,
-                                @NonNull LayoutVariant variant, boolean home) {
+                                @NonNull LayoutVariant variant, @NonNull PageRef page) {
         mLayout = layout;
         mStyle = style;
         mDesign = design;
@@ -57,7 +59,7 @@ public final class ResolvedArrangement {
         mDrawerTile = drawerTile;
         mOrientation = orientation;
         mVariant = variant;
-        mHome = home;
+        mPage = page;
         mAppsShown = PlaceChromePolicy.appsShown(layout);
         mAppsEdge = PlaceChromePolicy.appsEdge(layout);
         mAppsRowShown = PlaceChromePolicy.appsRowShown(layout);
@@ -77,21 +79,23 @@ public final class ResolvedArrangement {
     // ---- Resolving ----
 
     /**
-     * {@code home}'s half as the store holds it now: the layout its dress wears ({@link
+     * {@code page} as the store holds it now: the layout its dress wears ({@link
      * PlaceLayoutStore#variantFor}) in its Style ({@link PlaceLayoutStore#halfShape}, linked
-     * across the wall, #84). The one place the activity's arrangement reads the store.
+     * across the wall, #84). The one place the activity's arrangement reads the store. The store
+     * names the page it dresses by its kind and the page it shows of that kind, so {@code page}'s
+     * id is held here, not read.
      */
     @NonNull
     public static ResolvedArrangement resolve(@NonNull PlaceLayoutStore store,
                                               @NonNull PlaceOrientation orientation,
-                                              boolean home) {
-        LayoutVariant variant = store.variantFor(pageOf(home));
+                                              @NonNull PageRef page) {
+        LayoutVariant variant = store.variantFor(page.kind);
         LayoutStyle style = store.shape().style;
-        return resolve(store, orientation, variant, home, style);
+        return resolve(store, orientation, variant, page, style);
     }
 
     /**
-     * {@code home}'s half on {@code variant} in {@code style}: the layout the half wears ({@link
+     * {@code page} on {@code variant} in {@code style}: the layout the page wears ({@link
      * PlaceLayoutStore#resolve(PlaceOrientation, LayoutVariant, PaneWallPage)}, so a Home page
      * leaves out what Home never wears), and the Dock design, Search field and Drawer tile that
      * layout holds.
@@ -99,12 +103,13 @@ public final class ResolvedArrangement {
     @NonNull
     public static ResolvedArrangement resolve(@NonNull PlaceLayoutStore store,
                                               @NonNull PlaceOrientation orientation,
-                                              @NonNull LayoutVariant variant, boolean home,
+                                              @NonNull LayoutVariant variant,
+                                              @NonNull PageRef page,
                                               @NonNull LayoutStyle style) {
         PlaceLayoutStore view = store.forVariant(variant);
-        PlaceLayout layout = store.resolve(orientation, variant, pageOf(home));
+        PlaceLayout layout = store.resolve(orientation, variant, page.kind);
         return new ResolvedArrangement(layout, style, DockStyle.effectiveStyle(view.dockStyle()),
-            view.searchField(), view.drawerTile(), orientation, variant, home);
+            view.searchField(), view.drawerTile(), orientation, variant, page);
     }
 
     /** An arrangement made of its parts, for a reader with no store (before one, and tests). */
@@ -113,13 +118,14 @@ public final class ResolvedArrangement {
                                          @NonNull DockStyle design, boolean searchField,
                                          boolean drawerTile,
                                          @NonNull PlaceOrientation orientation,
-                                         @NonNull LayoutVariant variant, boolean home) {
+                                         @NonNull LayoutVariant variant,
+                                         @NonNull PageRef page) {
         return new ResolvedArrangement(layout, style, design, searchField, drawerTile,
-            orientation, variant, home);
+            orientation, variant, page);
     }
 
     /**
-     * This half's dress standing {@code layout}: mid-slide across the seam the chrome stands the
+     * This page's dress standing {@code layout}: mid-slide across the seam the chrome stands the
      * layout the crossing composes from both halves' arrangements ({@link SeamCrossing#layout}),
      * in the committed half's Style and design. Reads no store.
      */
@@ -127,13 +133,7 @@ public final class ResolvedArrangement {
     public ResolvedArrangement standing(@NonNull PlaceLayout layout) {
         if (layout == mLayout) return this;
         return new ResolvedArrangement(layout, mStyle, mDesign, mSearchField, mDrawerTile,
-            mOrientation, mVariant, mHome);
-    }
-
-    /** The page a half's arrangement is resolved for: Home's own page, or any window. */
-    @NonNull
-    private static PaneWallPage pageOf(boolean home) {
-        return home ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL;
+            mOrientation, mVariant, mPage);
     }
 
     // ---- What it was resolved from ----
@@ -177,9 +177,15 @@ public final class ResolvedArrangement {
         return mVariant;
     }
 
-    /** Whether this is Home's half; the Workspace's otherwise. */
+    /** The page it is resolved for. */
+    @NonNull
+    public PageRef page() {
+        return mPage;
+    }
+
+    /** Whether it is resolved for a Home page; for the Terminal's otherwise. */
     public boolean home() {
-        return mHome;
+        return mPage.isHome();
     }
 
     // ---- Where every Element stands (PlaceChromePolicy, asked once) ----
@@ -262,19 +268,19 @@ public final class ResolvedArrangement {
         return mStyle == that.mStyle && mDesign == that.mDesign
             && mSearchField == that.mSearchField && mDrawerTile == that.mDrawerTile
             && mOrientation == that.mOrientation && mVariant == that.mVariant
-            && mHome == that.mHome && mLayout.equals(that.mLayout);
+            && mPage.equals(that.mPage) && mLayout.equals(that.mLayout);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(mLayout, mStyle, mDesign, mSearchField, mDrawerTile, mOrientation,
-            mVariant, mHome);
+            mVariant, mPage);
     }
 
     @NonNull
     @Override
     public String toString() {
-        return (mHome ? "Home" : "Workspace") + " " + mOrientation + " " + mVariant + " "
+        return mPage + " " + mOrientation + " " + mVariant + " "
             + mStyle + " " + mDesign;
     }
 }
