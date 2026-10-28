@@ -894,7 +894,7 @@ public final class PageOverviewView extends FrameLayout {
         if (card == null || card.key != liveKey) return;
         Object key = card.key;
         int buttons = buttonsOf(card);
-        boolean covered = host.posedFrame() != null;
+        boolean covered = posedFrame() != null;
         OverviewGeometry.Capture how = OverviewGeometry.captureFor(covered,
             card.kind == PageOverviewPolicy.Kind.TERMINAL);
         if (how == OverviewGeometry.Capture.TEXT) {
@@ -934,7 +934,7 @@ public final class PageOverviewView extends FrameLayout {
                 Math.round(cardHeight * SNAPSHOT_SCALE), Bitmap.Config.ARGB_8888);
             PixelCopy.request(window, source, bitmap, result -> {
                 // A copy made while a sheet came up over the page is thrown away.
-                if (result != PixelCopy.SUCCESS || !isOpen() || host.posedFrame() != null) return;
+                if (result != PixelCopy.SUCCESS || !isOpen() || posedFrame() != null) return;
                 putSnapshot(key, new Snapshot(bitmap, Snapshot.FULL, buttons, generation));
             }, handler);
         } catch (RuntimeException | OutOfMemoryError e) {
@@ -1268,26 +1268,23 @@ public final class PageOverviewView extends FrameLayout {
      */
     private void drawPageNatural(@NonNull Canvas canvas, @NonNull View frame) {
         View backdrop = host.backdrop();
-        if (backdrop != null && backdrop.getVisibility() == VISIBLE) {
-            int[] there = new int[2];
-            int[] rootAt = new int[2];
-            backdrop.getLocationInWindow(there);
-            root.getLocationInWindow(rootAt);
-            int save = canvas.save();
-            canvas.translate(there[0] - rootAt[0], there[1] - rootAt[1]);
-            backdrop.draw(canvas);
-            canvas.restoreToCount(save);
-        }
-        float left = frame.getLeft();
-        float top = frame.getTop();
-        for (android.view.ViewParent p = frame.getParent(); p instanceof View && p != root; p = p.getParent()) {
+        // The backdrop is posed with the page, so it too is drawn at its laid-out place.
+        if (backdrop != null && backdrop.getVisibility() == VISIBLE) drawNatural(canvas, backdrop);
+        drawNatural(canvas, frame);
+    }
+
+    /** {@code view} at its laid-out position in the root, its own scale and translation left out. */
+    private void drawNatural(@NonNull Canvas canvas, @NonNull View view) {
+        float left = view.getLeft();
+        float top = view.getTop();
+        for (android.view.ViewParent p = view.getParent(); p instanceof View && p != root; p = p.getParent()) {
             left += ((View) p).getLeft() - ((View) p).getScrollX();
             top += ((View) p).getTop() - ((View) p).getScrollY();
         }
         int save = canvas.save();
         canvas.translate(left, top);
-        canvas.clipRect(0, 0, frame.getWidth(), frame.getHeight());
-        frame.draw(canvas);
+        canvas.clipRect(0, 0, view.getWidth(), view.getHeight());
+        view.draw(canvas);
         canvas.restoreToCount(save);
     }
 
