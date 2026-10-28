@@ -130,13 +130,25 @@ public final class PaneWallPolicy {
 
     /**
      * The slots the wall pages over: {@link #rowSlots} without Display slots, since the display
-     * stays one of the Workspace's windows in this slice.
+     * stays one of the Workspace's windows until the wall is wired for Display pages
+     * ({@link #wallSlots(WallPages, boolean, boolean)}).
      */
     @NonNull
     public static List<WallPages.Slot> wallSlots(@NonNull WallPages pages, boolean hasWindow) {
+        return wallSlots(pages, hasWindow, false);
+    }
+
+    /**
+     * The slots the wall pages over (ADR 0015, A3b). With {@code displayPages} each Display page
+     * is a slot of its own, where the wall rests as on any other page; without, the Display
+     * slots are left out and the display stays one of the Workspace's windows.
+     */
+    @NonNull
+    public static List<WallPages.Slot> wallSlots(@NonNull WallPages pages, boolean hasWindow,
+                                                 boolean displayPages) {
         List<WallPages.Slot> out = new ArrayList<>();
         for (WallPages.Slot slot : rowSlots(pages, hasWindow)) {
-            if (slot.kind != WallPages.PageKind.DISPLAY) out.add(slot);
+            if (displayPages || slot.kind != WallPages.PageKind.DISPLAY) out.add(slot);
         }
         return Collections.unmodifiableList(out);
     }
@@ -176,14 +188,33 @@ public final class PaneWallPolicy {
      */
     public static int boundHomeSlot(@NonNull List<WallPages.Slot> slots, int current,
                                     int homeSlot) {
-        if (isHome(slots, current)) return current;
-        boolean left = isHome(slots, current - 1);
-        boolean right = isHome(slots, current + 1);
-        if ((left && homeSlot == current - 1) || (right && homeSlot == current + 1)) return homeSlot;
+        return boundSlotOf(slots, WallPages.PageKind.HOME, current, homeSlot);
+    }
+
+    /**
+     * The Display slot the one display view is bound to (ADR 0015, A3b), by
+     * {@link #boundHomeSlot}'s rule: the slot the wall is on when it is a Display page; else the
+     * bound slot {@code displaySlot} when it lies next door; else the Display page on the left,
+     * else the one on the right; else {@code displaySlot} as it was, or the first Display slot
+     * when that is not one; -1 while there is no Display slot at all. A drag heading for the
+     * other neighbour re-binds it, as the Home frame is re-bound.
+     */
+    public static int boundDisplaySlot(@NonNull List<WallPages.Slot> slots, int current,
+                                       int displaySlot) {
+        return boundSlotOf(slots, WallPages.PageKind.DISPLAY, current, displaySlot);
+    }
+
+    private static int boundSlotOf(@NonNull List<WallPages.Slot> slots,
+                                   @NonNull WallPages.PageKind kind, int current, int bound) {
+        if (isKind(slots, current, kind)) return current;
+        boolean left = isKind(slots, current - 1, kind);
+        boolean right = isKind(slots, current + 1, kind);
+        if ((left && bound == current - 1) || (right && bound == current + 1)) return bound;
         if (left) return current - 1;
         if (right) return current + 1;
-        if (isHome(slots, homeSlot)) return homeSlot;
-        return firstSlotOf(slots, PaneWallPage.WIDGETS);
+        if (isKind(slots, bound, kind)) return bound;
+        for (int i = 0; i < slots.size(); i++) if (slots.get(i).kind == kind) return i;
+        return -1;
     }
 
     /**
@@ -196,6 +227,19 @@ public final class PaneWallPolicy {
     @NonNull
     public static List<PaneWallPage> builtWindow(@NonNull List<WallPages.Slot> slots, int current,
                                                  int homeSlot) {
+        return builtWindow(slots, current, homeSlot, boundDisplaySlot(slots, current, -1));
+    }
+
+    /**
+     * {@link #builtWindow(List, int, int)} with Display slots on the wall (A3b): likewise only
+     * the bound Display slot ({@code displaySlot}) stands for {@link PaneWallPage#DISPLAY}, the
+     * one display view being one page's at a time. Two Display pages side by side are two slots
+     * of one kind, so the second is left out beside the first, as a second Home run is: the
+     * wall does not yet slide from one Display page to the next.
+     */
+    @NonNull
+    public static List<PaneWallPage> builtWindow(@NonNull List<WallPages.Slot> slots, int current,
+                                                 int homeSlot, int displaySlot) {
         List<PaneWallPage> out = new ArrayList<>(3);
         if (current < 0 || current >= slots.size()) return out;
         PaneWallPage here = kindOf(slots.get(current));
@@ -205,6 +249,7 @@ public final class PaneWallPolicy {
             if (i != current) {
                 if (kind == here || out.contains(kind)) continue;
                 if (kind == PaneWallPage.WIDGETS && i != homeSlot) continue;
+                if (kind == PaneWallPage.DISPLAY && i != displaySlot) continue;
             }
             out.add(kind);
         }
@@ -238,8 +283,9 @@ public final class PaneWallPolicy {
         return last;
     }
 
-    private static boolean isHome(@NonNull List<WallPages.Slot> slots, int i) {
-        return i >= 0 && i < slots.size() && slots.get(i).kind == WallPages.PageKind.HOME;
+    private static boolean isKind(@NonNull List<WallPages.Slot> slots, int i,
+                                  @NonNull WallPages.PageKind kind) {
+        return i >= 0 && i < slots.size() && slots.get(i).kind == kind;
     }
 
     /**
