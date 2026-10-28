@@ -198,12 +198,12 @@ public final class PaneGlass {
      */
     public static void dressTab(@Nullable PaneSurfaceStyle style,
                                 @Nullable com.termux.app.wall.PaneControlsView tab,
-                                @NonNull com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf half) {
+                                int pageId) {
         if (tab == null) return;
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
                 tab.getContext(), false);
-        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain(half));
+        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain(pageId));
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;

@@ -55,14 +55,14 @@ public final class ChromeRenderer {
          * extra keys and the keyboard) wears now (ADR 0013): the half whose rows it stands.
          */
         @NonNull
-        default TermuxAppSharedPreferences.WallHalf stackLookHalf() {
-            return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        default int stackLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
         }
 
         /** The half of the wall whose look values the status bar wears now (ADR 0013). */
         @NonNull
-        default TermuxAppSharedPreferences.WallHalf statusLookHalf() {
-            return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        default int statusLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
         }
 
         /** The frames' Vibrancy: the stored glass Vibrancy, today's frame without preferences. */

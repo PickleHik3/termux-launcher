@@ -93,7 +93,7 @@ public final class HalfLookUpgrade {
     static {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!TermuxAppSharedPreferences.isPerHalf(slot, property)) continue;
+                if (!TermuxAppSharedPreferences.isPerPage(slot, property)) continue;
                 ENTRIES.add(new Entry(LookKeys.surfaceKey(slot, property), Write.Type.INT,
                     LookKeys.surfaceDefault(slot, property), true));
                 ENTRIES.add(new Entry(LookKeys.inheritKey(slot, property), Write.Type.BOOL,
@@ -101,7 +101,7 @@ public final class HalfLookUpgrade {
             }
         }
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (TermuxAppSharedPreferences.isPerHalfProperty(property))
+            if (TermuxAppSharedPreferences.isPerPageProperty(property))
                 ENTRIES.add(new Entry(property.baseKey, Write.Type.INT, property.baseDefault, false));
         }
         ENTRIES.add(new Entry(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, Write.Type.INT,

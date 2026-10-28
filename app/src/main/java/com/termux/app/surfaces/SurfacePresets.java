@@ -8,10 +8,11 @@ import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
+import com.termux.app.place.SeamDress;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.Arrays;
@@ -498,8 +499,8 @@ public final class SurfacePresets {
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs) {
-        Map<String, Object> look = captureLook(prefs, WallHalf.WORKSPACE);
-        Map<String, Object> home = captureLook(prefs, WallHalf.HOME);
+        Map<String, Object> look = captureLook(prefs, PaneWallPage.TERMINAL);
+        Map<String, Object> home = captureLook(prefs, PaneWallPage.WIDGETS);
         if (!halfCells(home).equals(halfCells(look))) {
             look.put(KEY_HOME_LOOK, Boolean.TRUE);
             for (Map.Entry<String, Object> entry : halfCells(home).entrySet())
@@ -514,15 +515,15 @@ public final class SurfacePresets {
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs,
-                                                  @NonNull WallHalf half) {
+                                                  @NonNull PaneWallPage half) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
-        look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, prefs.getSurfaceMaterial(half));
-        look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, prefs.getSurfaceMaterialIntensity(half));
+        look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, prefs.getSurfaceMaterial(pageOf(half)));
+        look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, prefs.getSurfaceMaterialIntensity(pageOf(half)));
         // After the material point, never before it: a hand-tuned triple no longer sits on any
         // point of any family's curve, and these three are the numbers that must win on apply.
         for (SurfaceProperty property : SurfaceProperty.values()) {
             if (!isLayoutOwned(property))
-                look.put(property.baseKey, prefs.getSurfaceBaseValue(property, half));
+                look.put(property.baseKey, prefs.getSurfaceBaseValue(property, pageOf(half)));
         }
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, prefs.getSurfaceGlassTint());
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, prefs.getSurfaceGlassRim());
@@ -539,10 +540,10 @@ public final class SurfacePresets {
         putCustomOnly(prefs, look);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property)
-                || prefs.isSurfaceInheriting(row.slot, row.property, half))
+                || prefs.isSurfaceInheriting(row.slot, row.property, pageOf(half)))
                 continue;
             look.put(TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property),
-                prefs.getSurfaceOverrideValue(row.slot, row.property, half));
+                prefs.getSurfaceOverrideValue(row.slot, row.property, pageOf(half)));
         }
         return look;
     }
@@ -568,6 +569,15 @@ public final class SurfacePresets {
     }
 
     /**
+     * The page id a screen kind's look values are read and written under: the wall for Home's, the
+     * Terminal page for any other, and "no page" (all) for none.
+     */
+    static int pageOf(@Nullable PaneWallPage screen) {
+        return screen == null ? TermuxAppSharedPreferences.PAGE_ALL
+            : SeamDress.lookPageId(screen, TermuxAppSharedPreferences.terminalPageId());
+    }
+
+    /**
      * Whether a plain look key is one a half holds its own value for: the material point, a
      * per-half Base number, or a per-half surface cell.
      */
@@ -577,9 +587,9 @@ public final class SurfacePresets {
             return true;
         SurfaceProperty base = SurfaceProperty.forBaseKey(key);
         if (base != null)
-            return TermuxAppSharedPreferences.isPerHalfProperty(base);
+            return TermuxAppSharedPreferences.isPerPageProperty(base);
         SurfaceEditorRows.Row cell = overrideCellForKey(key);
-        return cell != null && TermuxAppSharedPreferences.isPerHalf(cell.slot, cell.property);
+        return cell != null && TermuxAppSharedPreferences.isPerPage(cell.slot, cell.property);
     }
 
     /** The per-half cells of a one-half look, in order. */
@@ -614,8 +624,8 @@ public final class SurfacePresets {
      * cells in place of the Workspace's.
      */
     @NonNull
-    static Preset halfOf(@NonNull Preset preset, @NonNull WallHalf half) {
-        boolean home = half == WallHalf.HOME && hasHomeLook(preset);
+    static Preset halfOf(@NonNull Preset preset, @NonNull PaneWallPage half) {
+        boolean home = half == PaneWallPage.WIDGETS && hasHomeLook(preset);
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : preset.values.entrySet()) {
             String key = entry.getKey();
@@ -918,7 +928,7 @@ public final class SurfacePresets {
      * (the glass ink, rim, motion, hue, vibrancy and edge) are one for the wall, as a Look's are.
      */
     public static void applyCustom(@NonNull TermuxAppSharedPreferences prefs,
-                                   @NonNull Preset custom, @NonNull WallHalf half) {
+                                   @NonNull Preset custom, @NonNull PaneWallPage half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
@@ -931,7 +941,7 @@ public final class SurfacePresets {
 
     /** One half's live look as a Custom, under the plain keys ({@link #captureLook}). */
     @NonNull
-    static Preset customOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull WallHalf half) {
+    static Preset customOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull PaneWallPage half) {
         return new Preset(CUSTOM_ID, R.string.termux_surface_preset_custom,
             captureLook(prefs, half));
     }
@@ -974,7 +984,7 @@ public final class SurfacePresets {
     static void applyEach(@NonNull TermuxAppSharedPreferences prefs, @NonNull Preset preset) {
         // The Workspace's look lands on both halves; Home's own, where the look names it, then
         // lands on Home's per-half cells alone.
-        applyHalf(prefs, halfOf(preset, WallHalf.WORKSPACE), null, false);
+        applyHalf(prefs, halfOf(preset, PaneWallPage.TERMINAL), null, false);
         if (!hasHomeLook(preset))
             return;
         // The halves are pages now (ADR 0015 6): Home's values are the wall's, and what the
@@ -987,19 +997,19 @@ public final class SurfacePresets {
         for (SurfaceSlot slot : slots)
             for (SurfaceProperty property : properties)
                 workspace[slot.ordinal()][property.ordinal()] =
-                    prefs.getSurfaceValue(slot, property, WallHalf.WORKSPACE);
-        String workspaceMaterial = prefs.getSurfaceMaterial(WallHalf.WORKSPACE);
-        int workspaceIntensity = prefs.getSurfaceMaterialIntensity(WallHalf.WORKSPACE);
-        applyHalf(prefs, halfOf(preset, WallHalf.HOME), WallHalf.HOME, true);
-        if (!workspaceMaterial.equals(prefs.getSurfaceMaterial(WallHalf.WORKSPACE)))
-            prefs.setSurfaceMaterial(WallHalf.WORKSPACE, workspaceMaterial);
-        if (workspaceIntensity != prefs.getSurfaceMaterialIntensity(WallHalf.WORKSPACE))
-            prefs.setSurfaceMaterialIntensity(WallHalf.WORKSPACE, workspaceIntensity);
+                    prefs.getSurfaceValue(slot, property, pageOf(PaneWallPage.TERMINAL));
+        String workspaceMaterial = prefs.getSurfaceMaterial(pageOf(PaneWallPage.TERMINAL));
+        int workspaceIntensity = prefs.getSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL));
+        applyHalf(prefs, halfOf(preset, PaneWallPage.WIDGETS), PaneWallPage.WIDGETS, true);
+        if (!workspaceMaterial.equals(prefs.getSurfaceMaterial(pageOf(PaneWallPage.TERMINAL))))
+            prefs.setSurfaceMaterial(pageOf(PaneWallPage.TERMINAL), workspaceMaterial);
+        if (workspaceIntensity != prefs.getSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL)))
+            prefs.setSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL), workspaceIntensity);
         for (SurfaceSlot slot : slots) {
             for (SurfaceProperty property : properties) {
-                if (!TermuxAppSharedPreferences.isPerHalf(slot, property)) continue;
+                if (!TermuxAppSharedPreferences.isPerPage(slot, property)) continue;
                 int want = workspace[slot.ordinal()][property.ordinal()];
-                if (prefs.getSurfaceValue(slot, property, WallHalf.WORKSPACE) != want)
+                if (prefs.getSurfaceValue(slot, property, pageOf(PaneWallPage.TERMINAL)) != want)
                     prefs.setSurfaceWorkspaceOverride(slot, property, want);
             }
         }
@@ -1013,7 +1023,7 @@ public final class SurfacePresets {
      * the whole wall and are written for both, as is the reset of the per-surface extras.
      */
     public static void applyLook(@NonNull TermuxAppSharedPreferences prefs,
-                                 @NonNull Preset preset, @NonNull WallHalf half) {
+                                 @NonNull Preset preset, @NonNull PaneWallPage half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
@@ -1036,12 +1046,12 @@ public final class SurfacePresets {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null || pageId < 0)
             return;
-        Preset look = halfOf(preset, WallHalf.HOME);
+        Preset look = halfOf(preset, PaneWallPage.WIDGETS);
         SharedPreferences.Editor editor = store.edit();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (isLayoutOwned(property)
-                        || !TermuxAppSharedPreferences.isPerHalf(slot, property))
+                        || !TermuxAppSharedPreferences.isPerPage(slot, property))
                     continue;
                 String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
                 if (key == null || !com.termux.app.look.PageLook.isDetachable(key))
@@ -1056,7 +1066,7 @@ public final class SurfacePresets {
     /** The keys a page may hold its own value of, as surface cells: what a page-scoped Look writes. */
     private static boolean isPageCell(@NonNull SurfaceSlot slot,
                                       @NonNull SurfaceProperty property) {
-        if (isLayoutOwned(property) || !TermuxAppSharedPreferences.isPerHalf(slot, property))
+        if (isLayoutOwned(property) || !TermuxAppSharedPreferences.isPerPage(slot, property))
             return false;
         String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
         return key != null && com.termux.app.look.PageLook.isDetachable(key);
@@ -1071,7 +1081,7 @@ public final class SurfacePresets {
             : com.termux.shared.termux.settings.preferences.PageLookKeys.pageKey(key, pageId);
         if (own != null && store.contains(own))
             return store.getInt(own, 0);
-        return prefs.getSurfaceValue(slot, property, WallHalf.HOME);
+        return prefs.getSurfaceValue(slot, property, pageOf(PaneWallPage.WIDGETS));
     }
 
     /**
@@ -1105,7 +1115,7 @@ public final class SurfacePresets {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null || pageId < 0)
             return false;
-        Preset look = halfOf(preset, WallHalf.HOME);
+        Preset look = halfOf(preset, PaneWallPage.WIDGETS);
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (!isPageCell(slot, property))
@@ -1147,15 +1157,15 @@ public final class SurfacePresets {
      * as ever.
      */
     private static void applyAtHalf(@NonNull TermuxAppSharedPreferences prefs,
-                                    @NonNull Preset look, @NonNull WallHalf half) {
-        if (half != WallHalf.WORKSPACE || !TermuxAppSharedPreferences.hasTerminalPage()) {
+                                    @NonNull Preset look, @NonNull PaneWallPage half) {
+        if (half != PaneWallPage.TERMINAL || !TermuxAppSharedPreferences.hasTerminalPage()) {
             applyHalf(prefs, look, half, false);
             return;
         }
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (isLayoutOwned(property)
-                        || !TermuxAppSharedPreferences.isPerHalf(slot, property))
+                        || !TermuxAppSharedPreferences.isPerPage(slot, property))
                     continue;
                 prefs.setSurfaceWorkspaceOverride(slot, property,
                     lookCellValue(prefs, look, slot, property));
@@ -1183,12 +1193,12 @@ public final class SurfacePresets {
         Object own = key == null ? null : look.values.get(key);
         if (own != null) return intOf(own);
         Object base = look.values.get(property.baseKey);
-        return base != null ? intOf(base) : prefs.getSurfaceBaseValue(property, WallHalf.HOME);
+        return base != null ? intOf(base) : prefs.getSurfaceBaseValue(property, pageOf(PaneWallPage.WIDGETS));
     }
 
     /** Whether the Workspace's worn values are read as the Terminal page's own; see {@link #wornOn}. */
-    private static boolean pageScoped(@NonNull WallHalf half) {
-        return half == WallHalf.WORKSPACE && TermuxAppSharedPreferences.hasTerminalPage();
+    private static boolean pageScoped(@NonNull PaneWallPage half) {
+        return half == PaneWallPage.TERMINAL && TermuxAppSharedPreferences.hasTerminalPage();
     }
 
     /**
@@ -1198,13 +1208,13 @@ public final class SurfacePresets {
      * to a Workspace or both-halves write.
      */
     private static void applyHalf(@NonNull TermuxAppSharedPreferences prefs,
-                                  @NonNull Preset preset, @Nullable WallHalf half,
+                                  @NonNull Preset preset, @Nullable PaneWallPage half,
                                   boolean cellsOnly) {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (isLayoutOwned(property) || !touchesCell(slot, property, half, cellsOnly))
                     continue;
-                prefs.setSurfaceInheriting(slot, property, half, true);
+                prefs.setSurfaceInheriting(slot, property, pageOf(half), true);
             }
         }
         for (Map.Entry<String, Object> entry : preset.values.entrySet()) {
@@ -1218,10 +1228,10 @@ public final class SurfacePresets {
     /** Whether a write for {@code half} touches a surface cell; see {@link #applyHalf}. */
     private static boolean touchesCell(@NonNull SurfaceSlot slot,
                                        @NonNull SurfaceProperty property,
-                                       @Nullable WallHalf half, boolean cellsOnly) {
-        if (TermuxAppSharedPreferences.isPerHalf(slot, property))
+                                       @Nullable PaneWallPage half, boolean cellsOnly) {
+        if (TermuxAppSharedPreferences.isPerPage(slot, property))
             return true;
-        return !cellsOnly && half != WallHalf.HOME;
+        return !cellsOnly && half != PaneWallPage.WIDGETS;
     }
 
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
@@ -1230,7 +1240,7 @@ public final class SurfacePresets {
     }
 
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
-                                 @NonNull Object value, @Nullable WallHalf half) {
+                                 @NonNull Object value, @Nullable PaneWallPage half) {
         switch (key) {
             // Style is never part of a Look: a stored look from before this rule may still carry
             // the key, and it is ignored on apply and in matches().
@@ -1255,10 +1265,10 @@ public final class SurfacePresets {
                 prefs.setFancierGlassClarityPercent(intOf(value));
                 return;
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
-                prefs.setSurfaceMaterial(half, (String) value);
+                prefs.setSurfaceMaterial(pageOf(half), (String) value);
                 return;
             case TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY:
-                prefs.setSurfaceMaterialIntensity(half, intOf(value));
+                prefs.setSurfaceMaterialIntensity(pageOf(half), intOf(value));
                 return;
             case TERMUX_APP.KEY_SURFACE_GLASS_TINT:
                 prefs.setSurfaceGlassTint((String) value);
@@ -1293,14 +1303,14 @@ public final class SurfacePresets {
         }
         SurfaceProperty baseProperty = SurfaceProperty.forBaseKey(key);
         if (baseProperty != null) {
-            prefs.setSurfaceBaseValue(baseProperty, half, intOf(value));
+            prefs.setSurfaceBaseValue(baseProperty, pageOf(half), intOf(value));
             return;
         }
         SurfaceEditorRows.Row cell = overrideCellForKey(key);
         if (cell != null) {
-            if (half != WallHalf.HOME || TermuxAppSharedPreferences.isPerHalf(cell.slot,
+            if (half != PaneWallPage.WIDGETS || TermuxAppSharedPreferences.isPerPage(cell.slot,
                     cell.property))
-                prefs.detachSurfaceValue(cell.slot, cell.property, half, intOf(value));
+                prefs.detachSurfaceValue(cell.slot, cell.property, pageOf(half), intOf(value));
             return;
         }
         // A saved Custom's Glass slider positions; never part of a match ({@link #currentOne}).
@@ -1323,7 +1333,7 @@ public final class SurfacePresets {
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull Preset preset) {
-        return matches(prefs, preset, WallHalf.WORKSPACE);
+        return matches(prefs, preset, PaneWallPage.TERMINAL);
     }
 
     /**
@@ -1332,20 +1342,20 @@ public final class SurfacePresets {
      * shows on that half. Values not held per half are compared as they are for both.
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
-                                  @NonNull Preset preset, @NonNull WallHalf half) {
+                                  @NonNull Preset preset, @NonNull PaneWallPage half) {
         Preset look = halfOf(preset, half);
         boolean scoped = pageScoped(half);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property))
                 continue;
-            if (scoped && TermuxAppSharedPreferences.isPerHalf(row.slot, row.property)) {
-                if (prefs.getSurfaceValue(row.slot, row.property, half)
+            if (scoped && TermuxAppSharedPreferences.isPerPage(row.slot, row.property)) {
+                if (prefs.getSurfaceValue(row.slot, row.property, pageOf(half))
                         != lookCellValue(prefs, look, row.slot, row.property))
                     return false;
                 continue;
             }
             String key = TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property);
-            if (prefs.isSurfaceInheriting(row.slot, row.property, half)
+            if (prefs.isSurfaceInheriting(row.slot, row.property, pageOf(half))
                     == look.values.containsKey(key))
                 return false;
         }
@@ -1362,7 +1372,7 @@ public final class SurfacePresets {
 
     /**
      * Whether one screen wears this preset in what it holds itself: {@link #matches(
-     * TermuxAppSharedPreferences, Preset, WallHalf)} asked of that half's own values only — its
+     * TermuxAppSharedPreferences, Preset, PaneWallPage)} asked of that half's own values only — its
      * per-half cells and numbers, and on the Workspace the terminal's cells, which are the
      * Workspace's alone. The values held once for the wall (the glass ink, rim, motion, hue,
      * vibrancy and edge) are left out: a Look picked on the other screen writes them for both,
@@ -1370,20 +1380,20 @@ public final class SurfacePresets {
      * own Look and glass; the two meet only through the Match rows).
      */
     public static boolean wornOn(@NonNull TermuxAppSharedPreferences prefs,
-                                 @NonNull Preset preset, @NonNull WallHalf half) {
+                                 @NonNull Preset preset, @NonNull PaneWallPage half) {
         Preset look = halfOf(preset, half);
         boolean scoped = pageScoped(half);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property) || !touchesCell(row.slot, row.property, half, false))
                 continue;
-            if (scoped && TermuxAppSharedPreferences.isPerHalf(row.slot, row.property)) {
-                if (prefs.getSurfaceValue(row.slot, row.property, half)
+            if (scoped && TermuxAppSharedPreferences.isPerPage(row.slot, row.property)) {
+                if (prefs.getSurfaceValue(row.slot, row.property, pageOf(half))
                         != lookCellValue(prefs, look, row.slot, row.property))
                     return false;
                 continue;
             }
             String key = TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property);
-            if (prefs.isSurfaceInheriting(row.slot, row.property, half)
+            if (prefs.isSurfaceInheriting(row.slot, row.property, pageOf(half))
                     == look.values.containsKey(key))
                 return false;
         }
@@ -1400,7 +1410,7 @@ public final class SurfacePresets {
     }
 
     /** Whether a plain preset key is one {@code half} holds itself; see {@link #wornOn}. */
-    private static boolean isOwnKey(@NonNull String key, @NonNull WallHalf half) {
+    private static boolean isOwnKey(@NonNull String key, @NonNull PaneWallPage half) {
         if (isHalfKey(key))
             return true;
         SurfaceEditorRows.Row cell = overrideCellForKey(key);
@@ -1410,7 +1420,7 @@ public final class SurfacePresets {
     /** The live value behind a preset key, or null for a key this build does not know. */
     @Nullable
     private static Object currentOne(@NonNull TermuxAppSharedPreferences prefs,
-                                     @NonNull String key, @NonNull WallHalf half) {
+                                     @NonNull String key, @NonNull PaneWallPage half) {
         switch (key) {
             case TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE:
                 return null;
@@ -1427,9 +1437,9 @@ public final class SurfacePresets {
             case TERMUX_APP.KEY_FANCIER_GLASS_CLARITY:
                 return prefs.getFancierGlassClarityPercent();
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
-                return prefs.getSurfaceMaterial(half);
+                return prefs.getSurfaceMaterial(pageOf(half));
             case TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY:
-                return prefs.getSurfaceMaterialIntensity(half);
+                return prefs.getSurfaceMaterialIntensity(pageOf(half));
             case TERMUX_APP.KEY_SURFACE_GLASS_TINT:
                 return prefs.getSurfaceGlassTint();
             case TERMUX_APP.KEY_SURFACE_GLASS_RIM:
@@ -1453,10 +1463,10 @@ public final class SurfacePresets {
         }
         SurfaceProperty baseProperty = SurfaceProperty.forBaseKey(key);
         if (baseProperty != null)
-            return prefs.getSurfaceBaseValue(baseProperty, half);
+            return prefs.getSurfaceBaseValue(baseProperty, pageOf(half));
         SurfaceEditorRows.Row cell = overrideCellForKey(key);
         if (cell != null)
-            return prefs.getSurfaceOverrideValue(cell.slot, cell.property, half);
+            return prefs.getSurfaceOverrideValue(cell.slot, cell.property, pageOf(half));
         return null;
     }
 

@@ -1682,12 +1682,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mPreferences;
         }
 
-        @NonNull @Override public TermuxAppSharedPreferences.WallHalf stackLookHalf() {
-            return TermuxActivity.this.stackLookHalf();
+        @Override public int stackLookPage() {
+            return TermuxActivity.this.stackLookPage();
         }
 
-        @NonNull @Override public TermuxAppSharedPreferences.WallHalf statusLookHalf() {
-            return TermuxActivity.this.statusLookHalf();
+        @Override public int statusLookPage() {
+            return TermuxActivity.this.statusLookPage();
         }
 
         @Override public int orientation() {
@@ -3921,8 +3921,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The test is for the glass this method built, not for any background: the body-surface
         // reset that runs just before leaves a transparent colour drawable and hides the view, and
         // taking that for the glass left the gutter bare from the second pass on.
-        List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(restingHalf()),
-            mPreferences.getDockGlassGrain(restingHalf()), mFancierGlassLook, mPreferences.getDockTintStrength(restingHalf()));
+        List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(restingPage()),
+            mPreferences.getDockGlassGrain(restingPage()), mFancierGlassLook, mPreferences.getDockTintStrength(restingPage()));
         if (mFrameGutterShown && mFrameGutterDrawable != null
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
@@ -3936,9 +3936,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
                 com.termux.app.chrome.GlassAnchor.layout(body, () -> 0f));
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
-            blurRadiusDp, mPreferences.getAppBarOpacity(restingHalf()) / 100f,
-            mPreferences.getDockGlassGrain(restingHalf()), 0f, mFancierGlassLook).withRim(false)
-            .withTintStrength(mPreferences.getDockTintStrength(restingHalf()))
+            blurRadiusDp, mPreferences.getAppBarOpacity(restingPage()) / 100f,
+            mPreferences.getDockGlassGrain(restingPage()), 0f, mFancierGlassLook).withRim(false)
+            .withTintStrength(mPreferences.getDockTintStrength(restingPage()))
             // Every edge of this sheet is the screen's own. The gathered light, which every side
             // takes a share of, would run a glow round the screen, so all four are seams.
             .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL);
@@ -5096,7 +5096,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** What the dock material's tint covers of the frost under it, 0..1. */
     private float dockGlassCover() {
         if (mPreferences == null) return 0f;
-        return mPreferences.getAppBarOpacity(stackLookHalf()) / 100f;
+        return mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
     }
 
     // Last dock-glass params, so the lens can rebuild the backdrop effect without recapturing.
@@ -6663,10 +6663,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
                 state.blurRadiusDp, state.barAlpha, mPreferences != null
-                    ? mPreferences.getDockGlassGrain(stackLookHalf())
+                    ? mPreferences.getDockGlassGrain(stackLookPage())
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
                 radiusPx, mFancierGlassLook)
-            .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength(stackLookHalf())
+            .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength(stackLookPage())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
             // A card under Floating, with its whole rim. Docked it joins the frame below the
             // keyboard: its top is a join and the rest is the screen's edge, so it draws none.
@@ -6765,32 +6765,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * shape, which Home wears only with a Home layout of its own, look values are always held per
      * half; until a half is edited both answer the same numbers.
      */
-    @NonNull
-    private TermuxAppSharedPreferences.WallHalf lookHalf(@NonNull com.termux.app.place.SeamDress.Surface surface) {
+    private int lookPageId(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         // Between two Home pages the bar is Home's on both ends (SeamCrossing#barDressedAcross).
-        return com.termux.app.place.SeamDress.lookHalf(surface, mLastWallPage, stackDressPage(),
-            mCrossing.seam().barDressedAcross());
+        return com.termux.app.place.SeamDress.lookPageId(
+            com.termux.app.place.SeamDress.lookPage(surface, mLastWallPage, stackDressPage(),
+                mCrossing.seam().barDressedAcross()), terminalLookPageId());
+    }
+
+    /**
+     * The id the Terminal page's look values are read under (ADR 0015 section 6): the Terminal
+     * page of the wall, or the wall itself while it has none.
+     */
+    private int terminalLookPageId() {
+        com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
+        return terminal == null ? TermuxAppSharedPreferences.PAGE_WALL : terminal.id;
     }
 
     /** The half whose look the stack (dock, extra keys, keyboard) wears now. */
-    @NonNull
-    private TermuxAppSharedPreferences.WallHalf stackLookHalf() {
-        return lookHalf(com.termux.app.place.SeamDress.Surface.STACK);
+    private int stackLookPage() {
+        return lookPageId(com.termux.app.place.SeamDress.Surface.STACK);
     }
 
     /**
      * The half the wall rests on, or the one a crossing is arriving at: what a layer that opens
      * over whatever is in front (drawer, sheets, the suggestion bar) wears.
      */
-    @NonNull
-    private TermuxAppSharedPreferences.WallHalf restingHalf() {
-        return stackLookHalf();
+    private int restingPage() {
+        return stackLookPage();
     }
 
     /** The half whose look the status bar wears now. */
-    @NonNull
-    private TermuxAppSharedPreferences.WallHalf statusLookHalf() {
-        return lookHalf(com.termux.app.place.SeamDress.Surface.STATUS);
+    private int statusLookPage() {
+        return lookPageId(com.termux.app.place.SeamDress.Surface.STATUS);
     }
 
     /** The page whose half the stack wears: the committed one, except across the seam. */
@@ -6869,9 +6875,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) return false;
         return !dressOf(com.termux.app.wall.PaneWallPage.WIDGETS).shape().equals(
                 dressOf(com.termux.app.wall.PaneWallPage.TERMINAL).shape())
-            || !com.termux.app.place.HalfLook.read(mPreferences, TermuxAppSharedPreferences.WallHalf.HOME)
+            || !com.termux.app.place.HalfLook.read(mPreferences, TermuxAppSharedPreferences.PAGE_WALL)
                 .statusEquals(com.termux.app.place.HalfLook.read(mPreferences,
-                    TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+                    terminalLookPageId()));
     }
 
     /**
@@ -6880,11 +6886,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean looksDifferAcross(@NonNull com.termux.app.wall.PaneWallPage from,
                                       @NonNull com.termux.app.wall.PaneWallPage to) {
-        if (com.termux.app.place.SeamDress.halfOf(from)
-                == com.termux.app.place.SeamDress.halfOf(to))
+        if (com.termux.app.place.SeamDress.screenOf(from)
+                == com.termux.app.place.SeamDress.screenOf(to))
             return false;
-        return !com.termux.app.place.HalfLook.read(mPreferences, TermuxAppSharedPreferences.WallHalf.HOME)
-            .equals(com.termux.app.place.HalfLook.read(mPreferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        return !com.termux.app.place.HalfLook.read(mPreferences, TermuxAppSharedPreferences.PAGE_WALL)
+            .equals(com.termux.app.place.HalfLook.read(mPreferences, terminalLookPageId()));
     }
 
     /** Corners, the one Floating radius, in px: the half's corner radius, or the auto token. */
@@ -7652,7 +7658,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean extraKeysRowEnabled = arranged.extraKeysRowShown();
         boolean dockShown = arranged.dockShown();
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        float barAlpha = mPreferences.getAppBarOpacity(stackLookHalf()) / 100f;
+        float barAlpha = mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
         return new ChromeSpec(
             dockShown,
             keyboardShown,
@@ -7705,13 +7711,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null || !wallpaperPicture().blurs()) {
             return 0;
         }
-        return Math.max(0, mPreferences.getExtraKeysBlurRadius(stackLookHalf()));
+        return Math.max(0, mPreferences.getExtraKeysBlurRadius(stackLookPage()));
     }
 
     /** @see #getEffectiveExtraKeysBlurRadius() */
     private int getEffectiveStatusBarBlurRadius() {
         if (mPreferences == null || !wallpaperPicture().blurs()) return 0;
-        return Math.max(0, mPreferences.getStatusBarBlurRadius(statusLookHalf()));
+        return Math.max(0, mPreferences.getStatusBarBlurRadius(statusLookPage()));
     }
 
     /**
@@ -7722,7 +7728,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getEffectiveInAppKeyboardBlurRadius() {
         if (mPreferences == null || !wallpaperPicture().blurs()) return 0;
-        return Math.max(0, mPreferences.getInAppKeyboardBlurRadius(stackLookHalf()));
+        return Math.max(0, mPreferences.getInAppKeyboardBlurRadius(stackLookPage()));
     }
 
     /**
@@ -8365,7 +8371,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int getInAppKeyboardBackgroundOpacityPercent() {
         return mPreferences != null
-            ? mPreferences.getInAppKeyboardBackgroundOpacity(stackLookHalf())
+            ? mPreferences.getInAppKeyboardBackgroundOpacity(stackLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
     }
 
@@ -8375,13 +8381,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getInAppKeyboardTintStrengthPercent() {
         return mPreferences != null
-            ? mPreferences.getInAppKeyboardTintStrength(stackLookHalf())
+            ? mPreferences.getInAppKeyboardTintStrength(stackLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
     }
 
     private int getInAppKeyboardGrainPercent() {
         return mPreferences != null
-            ? mPreferences.getInAppKeyboardGrain(stackLookHalf())
+            ? mPreferences.getInAppKeyboardGrain(stackLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
     }
 
@@ -8394,7 +8400,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getInAppKeyboardBackdropOpacityPercent() {
         return mPreferences != null
-            ? com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookHalf())
+            ? com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
     }
 
@@ -8417,7 +8423,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return ChromePolicy.hasInAppKeyboardBackgroundOverride(isInAppKeyboardOpacityLinked(),
             resolveInAppKeyboardSchemeBackgroundColor(),
             getInAppKeyboardBackgroundOpacityPercent(),
-            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf())
+            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookPage())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
     }
 
@@ -8861,12 +8867,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int modelRim = capsule ? com.termux.app.chrome.ChromeEdgeRule.ALL
             : chromeRimEdges(KEYBOARD_PIECES);
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.keyboard(
-                mPreferences, stackLookHalf(), state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
+                mPreferences, stackLookPage(), state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
             .withBlur(blurRadiusDp)
             // A card is a card: its fill and rim are never faded out by the stack alpha a
             // detached Keyboard Opacity may hold. That alpha belongs to a slice of the frame.
             .withStackAlpha(capsule && !floating ? 100
-                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookHalf()))
+                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
             .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
             .withSlice(defaultDockGlassFootFraction(), false)
             .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
@@ -10566,7 +10572,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyStatusInsetStripOverDockSheet(statusGlass, statusBlur, statusSurface);
             return;
         }
-        float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity(statusLookHalf()) / 100f : 1f;
+        float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity(statusLookPage()) / 100f : 1f;
         int blurRadiusDp = getEffectiveStatusBarBlurRadius();
         boolean statusBlurEnabled = ChromePolicy.dockBlurEnabled(blurRadiusDp);
         int glassInset = resolveStatusBarHorizontalInsetPx();
@@ -10621,7 +10627,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyStatusInsetStripOverDockSheet(@NonNull View statusGlass,
                                                     @Nullable View statusBlur,
                                                     @Nullable View statusSurface) {
-        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookHalf()) / 100f;
+        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         int glassInset = appliedDockLayout().horizontalInsetPx;
         ViewGroup.LayoutParams glassParams = statusGlass.getLayoutParams();
@@ -11817,7 +11823,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             appsBarHost.addView(mSuggestionBarView, params);
         }
 
-        mSuggestionBarView.setLookHalfSupplier(this::restingHalf);
+        mSuggestionBarView.setLookPageSupplier(this::restingPage);
         mSuggestionBarView.setAppDataProvider(mLauncherAppDataProvider);
         mSuggestionBarView.setConfigRepository(mLauncherConfigRepository);
         mSuggestionBarView.setAppCatalogChangedListener(() -> {
@@ -12368,7 +12374,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void refreshAzTabGlass() {
         AzPullTabLayer layer = mAzTabLayer;
         if (layer == null || layer.getVisibility() != View.VISIBLE) return;
-        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookHalf()) / 100f;
+        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
         opacity = Math.max(opacity, AzTabPolicy.MIN_GLASS_OPACITY);
         boolean glass = ChromePolicy.dockBlurEnabled(getEffectiveExtraKeysBlurRadius());
         int base = resolveAccessoryGlassBaseColor();
@@ -12552,7 +12558,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull List<com.termux.app.place.ChromeShape.PieceId> pieces,
         @NonNull PlaceLayout layout
     ) {
-        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookHalf()) / 100f;
+        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         // Floating's card radius is Corners, clamped to half of the sheet being glazed. Under
         // Docked the sheet carries no radius of its own: its glass view clips to its slice of
@@ -12868,7 +12874,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         // The row's sizes are the dock's to hand over (applyDockLayout), not the styling's.
-        mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity(stackLookHalf()));
+        mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity(stackLookPage()));
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
         mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
         mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
@@ -14796,7 +14802,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isInAppKeyboardOpacityLinked() {
         return mPreferences != null && mPreferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, stackLookHalf());
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, stackLookPage());
     }
 
     // ------------------------------------------------------------------ keybind hint popup
@@ -15353,7 +15359,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The glass keyboard is transparent; give the controls the same tint so
             // they stay readable over the terminal instead of inheriting a transparent background.
             controls.setBackground(mChrome.glass().dockSurface(
-                mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) / 100f : 1f));
+                mPreferences != null ? mPreferences.getAppBarOpacity(stackLookPage()) / 100f : 1f));
         } else {
             controls.setBackgroundColor(resolveInAppKeyboardBackgroundColor());
         }
@@ -19411,9 +19417,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private Drawable buildTerminalSheetSurface() {
-        float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingHalf()) / 100f : 0.5f;
+        float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) / 100f : 0.5f;
         int grain = mPreferences != null
-            ? mPreferences.getDockGlassGrain(restingHalf())
+            ? mPreferences.getDockGlassGrain(restingPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         // Floored well above the dock's opacity: a sheet has body text over a live blur, and at the
         // dock's own tint the terminal behind it reads straight through the words.
@@ -19482,8 +19488,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.onChromeChanged();
         }
 
-        @NonNull @Override public TermuxAppSharedPreferences.WallHalf restingHalf() {
-            return TermuxActivity.this.restingHalf();
+        @Override public int restingPage() {
+            return TermuxActivity.this.restingPage();
         }
 
         @Nullable @Override public <T extends View> T findView(int viewId) {
@@ -20253,7 +20259,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull
         @Override
         public Drawable barBackground() {
-            float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(TermuxAppSharedPreferences.WallHalf.WORKSPACE) / 100f : 0.5f;
+            float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(terminalLookPageId()) / 100f : 0.5f;
             // The keybind hint slab's surface, but a good deal thinner. That slab is read instead of
             // what is behind it; this strip is read alongside the transcript it is searching, and the
             // row of matches directly above it has to stay legible through the glass.
@@ -20384,9 +20390,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull
         @Override
         public Drawable chipBackground() {
-            float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingHalf()) / 100f : 0.5f;
+            float barAlpha = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) / 100f : 0.5f;
             int grain = mPreferences != null
-                ? mPreferences.getDockGlassGrain(restingHalf())
+                ? mPreferences.getDockGlassGrain(restingPage())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
             // Half the chip's 40dp height: a full pill, with the same containing rim the other
             // floating glass surfaces carry.
@@ -21817,7 +21823,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (extraKeysView != null) {
             extraKeysView.setKeyPressFeedbackColor(resolveDockAccentColor());
             // Soft feathered wash when the dock blur is doing the work; a more present fill otherwise.
-            boolean blurActive = mPreferences != null && mPreferences.getExtraKeysBlurRadius(stackLookHalf()) > 0;
+            boolean blurActive = mPreferences != null && mPreferences.getExtraKeysBlurRadius(stackLookPage()) > 0;
             extraKeysView.setKeyPressFeedbackBlurAvailable(blurActive);
             // Floating capsule dock -> vertical liquid popup pill; edge-to-edge dock -> rounded-rect.
             extraKeysView.setPopupCapsuleStyle(arrangement().floating());
@@ -23252,7 +23258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void updateBandEvenOutPolicies() {
         if (mChrome == null) return;
         com.termux.app.chrome.ChromeInk.EvenOutPolicy stage = mEvenOutPolicy;
-        TermuxAppSharedPreferences.WallHalf half = stackLookHalf();
+        int half = stackLookPage();
         mChrome.ink().setBandEvenOutPolicy(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
             bandEvenOut(EVEN_OUT_KEYBOARD, com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
                 TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD, mPreferences != null
@@ -23271,7 +23277,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Nullable com.termux.app.chrome.GlassBackdropCache.Band band,
             @Nullable TermuxAppSharedPreferences.SurfaceSlot slot, int opacityPercent,
             @Nullable com.termux.app.chrome.ChromeInk.EvenOutPolicy stage,
-            @Nullable TermuxAppSharedPreferences.WallHalf half) {
+            int half) {
         boolean inherits = slot == null || mPreferences == null || mPreferences.isSurfaceInheriting(
             slot, TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
         if (mBandEvenOutOpacity[index] >= 0 && mBandEvenOutStage[index] == stage
@@ -23301,7 +23307,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private android.graphics.ColorFilter dockFrostFilter(@Nullable View surfaceHost) {
         android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
-            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100);
+            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookPage()) : 100);
         if (mChrome == null) return frost;
         // Asked only where the dock's frame is up: it covers the page's dim, so the dock's ink and
         // even-out are measured with none under them (cleared in clearAccessoryRenderEffectBackdrop).
@@ -23327,7 +23333,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private android.graphics.ColorFilter navStripFrostFilter(boolean measure) {
         android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
-            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100);
+            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookPage()) : 100);
         if (mChrome == null) return frost;
         if (!measure) {
             return com.termux.app.chrome.GlassFilters.withEvenOut(
@@ -24328,7 +24334,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.place.SeamDress.StackDress.of(shape,
             sizes.dockHeightScale(orientation), sizes.keyboardHeightScale(orientation),
             sizes.keyboardChinDp(orientation), com.termux.app.place.HalfLook.read(mPreferences,
-                com.termux.app.place.SeamDress.halfOf(page)));
+                com.termux.app.place.SeamDress.lookPageId(page, terminalLookPageId())));
     }
 
     /**
@@ -25123,7 +25129,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.wall.PaneWallPage left = mLastWallPage;
             // The half whose look the status bar wore through the slide: the Workspace's while
             // the wall slid across the seam (SeamDress), its own half's otherwise.
-            TermuxAppSharedPreferences.WallHalf statusHalfTravelled = statusLookHalf();
+            int statusHalfTravelled = statusLookPage();
             mChromeTravelMoved = false;
             // The material blend, if one ran, has landed on the arriving place's material; the
             // pass below paints that material plainly, and the blend's layers go with it.
@@ -25190,7 +25196,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // bar back out of the Workspace's look it slid in. Its glass and the strip behind the
             // system status bar are glazed again here, together, in Home's, or the strip alone
             // takes Home's at the next insets pass and parts from the pane below it.
-            if (page == left && statusLookHalf() != statusHalfTravelled
+            if (page == left && statusLookPage() != statusHalfTravelled
                 && statusDressDiffersAcrossHalves())
                 refreshTerminalWindowBar();
             // A slide that came back past the swap without a frame there to undo it (the drawer
@@ -30486,7 +30492,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // glass is inset below it (dockGlassTopInsetPx) — which is where it has always stood.
         boolean onPlank = (joinsDock && mStatusBarOnDockPlank) || frameStandsDown();
         float opacity = mPreferences == null ? 1f
-            : (joinsDock ? mPreferences.getAppBarOpacity(stackLookHalf()) : mPreferences.getStatusBarOpacity(statusLookHalf()))
+            : (joinsDock ? mPreferences.getAppBarOpacity(stackLookPage()) : mPreferences.getStatusBarOpacity(statusLookPage()))
                 / 100f;
         int blurRadiusDp = joinsDock
             ? getEffectiveExtraKeysBlurRadius() : getEffectiveStatusBarBlurRadius();
@@ -31998,7 +32004,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.Paint paint =
             new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
         paint.setShader(shader);
-        paint.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity(restingHalf()) : 100));
+        paint.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) : 100));
         paint.setAntiAlias(true);
         return (canvas, slabs) -> canvas.drawPath(slabs, paint);
     }

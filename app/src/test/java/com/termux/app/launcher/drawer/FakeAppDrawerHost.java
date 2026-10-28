@@ -42,7 +42,7 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return viewRoot == null ? null : (T) viewRoot.findViewById(viewId);
     }
 
-    @NonNull @Override public TermuxAppSharedPreferences.WallHalf restingHalf() {
+    @NonNull @Override public TermuxAppSharedPreferences.WallHalf restingPage() {
         return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
     }
 

@@ -341,14 +341,14 @@ public final class WallpaperFrostPainter {
     private float statusCover() {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             mSurfaces.preferences();
-        return preferences != null ? preferences.getStatusBarOpacity(mSurfaces.statusLookHalf()) / 100f : 0f;
+        return preferences != null ? preferences.getStatusBarOpacity(mSurfaces.statusLookPage()) / 100f : 0f;
     }
 
     /** What the dock's material (the planes and sheets wear it) covers of its frost. */
     private float dockCover() {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             mSurfaces.preferences();
-        return preferences != null ? preferences.getAppBarOpacity(mSurfaces.stackLookHalf()) / 100f : 0f;
+        return preferences != null ? preferences.getAppBarOpacity(mSurfaces.stackLookPage()) / 100f : 0f;
     }
 
     /**

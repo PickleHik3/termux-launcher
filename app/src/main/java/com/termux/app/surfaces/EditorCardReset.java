@@ -7,7 +7,6 @@ import com.termux.app.dock.PeekGlassPreferences;
 import com.termux.app.surfaces.cards.DockCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
@@ -25,25 +24,25 @@ final class EditorCardReset {
 
     /** The glass rows' stored values back as they ship, then the card's other store keys. */
     static void resetStore(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card,
-                           @NonNull WallHalf half) {
+                           int pageId) {
         switch (card) {
             case HOME:
-                screenGlass(prefs, WallHalf.HOME);
+                screenGlass(prefs, TermuxAppSharedPreferences.PAGE_WALL);
                 break;
             case WORKSPACE:
-                screenGlass(prefs, WallHalf.WORKSPACE);
+                screenGlass(prefs, TermuxAppSharedPreferences.terminalPageId());
                 break;
             case APPEARANCE:
                 for (TermuxAppSharedPreferences.SurfaceSlot slot
                         : TermuxAppSharedPreferences.SurfaceSlot.values()) {
-                    prefs.resetSurfaceToLook(slot, half);
+                    prefs.resetSurfaceToLook(slot, pageId);
                     prefs.setSurfaceGlassPosition(slot, -1);
                 }
                 prefs.setSurfaceGlassPosition(null, -1);
                 break;
             default:
                 if (card.slot != null) {
-                    prefs.resetSurfaceToLook(card.slot, half);
+                    prefs.resetSurfaceToLook(card.slot, pageId);
                     prefs.setSurfaceGlassPosition(card.slot, -1);
                 }
                 break;
@@ -102,12 +101,12 @@ final class EditorCardReset {
 
     /** A screen's own half of Base back to the values it ships with. */
     private static void screenGlass(@NonNull TermuxAppSharedPreferences prefs,
-                                    @NonNull WallHalf half) {
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR);
-        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
+                                    int pageId) {
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, pageId, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR);
+        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, pageId,
             TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN);
-        prefs.setSurfaceBaseValue(SurfaceProperty.OPACITY, half,
+        prefs.setSurfaceBaseValue(SurfaceProperty.OPACITY, pageId,
             TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY);
-        prefs.setSurfaceBaseValue(SurfaceProperty.TINT, half, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
+        prefs.setSurfaceBaseValue(SurfaceProperty.TINT, pageId, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
     }
 }

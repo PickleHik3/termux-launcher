@@ -165,24 +165,24 @@ public final class GlassStack {
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
-        return keyboard(preferences, TermuxAppSharedPreferences.WallHalf.WORKSPACE, dockAlpha,
+        return keyboard(preferences, TermuxAppSharedPreferences.terminalPageId(), dockAlpha,
             cornerRadiusPx, fancierLook);
     }
 
     /** The keyboard's glass on one half of the wall, which may hold its own values (ADR 0013). */
     @NonNull
     public static Spec keyboard(@NonNull TermuxAppSharedPreferences preferences,
-                                @NonNull TermuxAppSharedPreferences.WallHalf half, float dockAlpha,
+                                int pageId, float dockAlpha,
                                 float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, pageId);
         float tint = linked ? dockAlpha
-            : preferences.getInAppKeyboardBackgroundOpacity(half) / 100f;
-        return Spec.of(preferences.getInAppKeyboardBlurRadius(half), tint,
-            preferences.getInAppKeyboardGrain(half), cornerRadiusPx, fancierLook)
-            .withTintStrength(preferences.getInAppKeyboardTintStrength(half))
-            .withStackAlpha(keyboardStackAlphaPercent(preferences, half));
+            : preferences.getInAppKeyboardBackgroundOpacity(pageId) / 100f;
+        return Spec.of(preferences.getInAppKeyboardBlurRadius(pageId), tint,
+            preferences.getInAppKeyboardGrain(pageId), cornerRadiusPx, fancierLook)
+            .withTintStrength(preferences.getInAppKeyboardTintStrength(pageId))
+            .withStackAlpha(keyboardStackAlphaPercent(preferences, pageId));
     }
 
     /**
@@ -194,16 +194,16 @@ public final class GlassStack {
      */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences) {
         return keyboardStackAlphaPercent(preferences,
-            TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+            TermuxAppSharedPreferences.terminalPageId());
     }
 
     /** {@link #keyboardStackAlphaPercent(TermuxAppSharedPreferences)} on one half of the wall. */
     public static int keyboardStackAlphaPercent(@NonNull TermuxAppSharedPreferences preferences,
-                                                @NonNull TermuxAppSharedPreferences.WallHalf half) {
+                                                int pageId) {
         boolean linked = preferences.isSurfaceInheriting(
             TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
-        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(half);
+            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, pageId);
+        return linked ? 100 : preferences.getInAppKeyboardBackdropOpacity(pageId);
     }
 
     /**

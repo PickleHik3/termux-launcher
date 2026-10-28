@@ -120,14 +120,14 @@ public class AppearanceSnapshotHalfTest {
         java.util.List<String> keys = AppearanceSnapshot.halfAbleKeys();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!TermuxAppSharedPreferences.isPerHalf(slot, property))
+                if (!TermuxAppSharedPreferences.isPerPage(slot, property))
                     continue;
                 assertTrue(slot + " " + property, keys.contains(
                     TermuxAppSharedPreferences.surfaceOverrideKey(slot, property)));
             }
         }
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (TermuxAppSharedPreferences.isPerHalfProperty(property))
+            if (TermuxAppSharedPreferences.isPerPageProperty(property))
                 assertTrue(property.name(), keys.contains(property.baseKey));
         }
     }
