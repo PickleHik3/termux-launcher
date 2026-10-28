@@ -1252,24 +1252,8 @@ public final class ChromeInk {
             boolean pale = polarity == Polarity.PALE_INK;
             EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
                 pale ? policy.pale : policy.dark, polarity, policy.level, chain);
-            EvenOut.Mapping drawn = mapping.toward(policy.strengthPercent / 100d);
-            matrix = EvenOutMatrix.of(drawn);
+            matrix = EvenOutMatrix.of(mapping.toward(policy.strengthPercent / 100d));
             memo.polarity = polarity;
-            // EvenOut2c diagnostic (temporary).
-            android.util.Log.d(DIAG, String.format(java.util.Locale.US,
-                "t=%d measure %s rect=%s p2=%.1f mean=%.1f p98=%.1f paleCeil=%.1f darkCeil=%.1f"
-                    + " strength=%d dim=%08x tint=%08x shortPale=%.2f shortDark=%.2f pol=%s"
-                    + " src=[%.1f,%.1f] dst=[%.1f,%.1f] cLo=%.1f cHi=%.1f identity=%b matrix=%s"
-                    + " caller=%s",
-                android.os.SystemClock.uptimeMillis(), diagName(memo), rootRect.toShortString(),
-                lightness.p2, lightness.mean, lightness.p98, policy.pale.tone, policy.dark.tone,
-                policy.strengthPercent, dim, tint, shortPale, shortDark, polarity, drawn.srcLo,
-                drawn.srcHi, drawn.dstLo, drawn.dstHi, chain.composited(drawn.dstLo),
-                chain.composited(drawn.dstHi), drawn.isIdentity(), matrix == null ? "null" : "set",
-                diagCallers()));
-        } else {
-            android.util.Log.d(DIAG, "t=" + android.os.SystemClock.uptimeMillis() + " measure "
-                + diagName(memo) + " rect=" + rootRect.toShortString() + " lightness=null");
         }
         boolean moved = !java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
             memo.matrix == null ? null : memo.matrix.getArray());
@@ -1299,40 +1283,6 @@ public final class ChromeInk {
         Polarity flipped = paleCurrent ? Polarity.DARK_INK : Polarity.PALE_INK;
         if (other <= 0d || other < own) return flipped;
         return current;
-    }
-
-    // ---- EvenOut2c diagnostic (temporary; reverted before merge)
-    static final String DIAG = "EvenOut2c";
-    private int mDiagDockFlat;
-    @Nullable private Polarity mDiagDockPolarity;
-    private int mDiagDockFace;
-
-    @NonNull
-    private String diagName(@NonNull BandEvenOut memo) {
-        if (memo == mStripEvenOut) return "strip";
-        for (Map.Entry<GlassBackdropCache.Band, BandEvenOut> e : mBandEvenOut.entrySet())
-            if (e.getValue() == memo) return e.getKey().name();
-        return "?";
-    }
-
-    @NonNull
-    static String diagCallers() {
-        StackTraceElement[] trace = new Throwable().getStackTrace();
-        StringBuilder out = new StringBuilder();
-        for (int i = 2; i < Math.min(trace.length, 8); i++) {
-            if (out.length() > 0) out.append(" < ");
-            out.append(trace[i].getMethodName()).append(':').append(trace[i].getLineNumber());
-        }
-        return out.toString();
-    }
-
-    @NonNull
-    public static String diagCallersPublic() {
-        return diagCallers();
-    }
-
-    static double diagTone(@ColorInt int color) {
-        return com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(color);
     }
 
     /** A band's matrix moved: its frame is re-dressed and its ink re-solved on the next pass. */
@@ -1525,8 +1475,7 @@ public final class ChromeInk {
         // part of the tint that gets composited over this, so counting it here too would apply it
         // twice and pick the worst row off a band a shade lighter than the one being drawn.
         // Through the band's even-out where it has one: the ink is solved on the ground drawn.
-        int rawWallpaper = mCache.wallpaperUnder(band, screenRect);
-        int wallpaper = evened(band, rawWallpaper);
+        int wallpaper = evened(band, mCache.wallpaperUnder(band, screenRect));
         int under = OnGlass.backdrop(wallpaper, bandDim(band, screenRect), Color.TRANSPARENT);
         // The band's flat glass: wallpaper, the launcher's dim, the base layer in its tinted
         // colour. No light model, so the polarity vote is the same number whichever ink is
@@ -1534,18 +1483,6 @@ public final class ChromeInk {
         int flat = OnGlass.composite(OnGlass.withAlpha(baseColor, baseAlpha), under);
         vote(band, flat);
         int ink = polarity() == Polarity.DARK_INK ? contract.darkInk : contract.paleInk;
-        if (band == GlassBackdropCache.Band.DOCK
-                && (flat != mDiagDockFlat || polarity() != mDiagDockPolarity)) {
-            mDiagDockFlat = flat;
-            mDiagDockPolarity = polarity();
-            android.util.Log.d(DIAG, String.format(java.util.Locale.US,
-                "t=%d dockVote rect=%s raw=%.1f evened=%.1f changed=%b flat=%.1f meanVote=%.1f"
-                    + " votes=%d pol=%s ink=%08x caller=%s",
-                android.os.SystemClock.uptimeMillis(), screenRect.toShortString(),
-                diagTone(rawWallpaper), diagTone(wallpaper), rawWallpaper != wallpaper,
-                diagTone(flat), diagTone(meanVote()), mVotes.size(), polarity(), ink,
-                diagCallers()));
-        }
 
         int top = DockGlassRendering.topSheenAlpha(glass.opacity);
         int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
@@ -2151,19 +2088,9 @@ public final class ChromeInk {
     @ColorInt
     private int flatFace(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
         BandGlass glass = glassFor(band);
-        int raw = mCache.wallpaperUnder(band, rootRect);
-        int face = WallpaperInk.faceOf(evened(band, raw),
+        return WallpaperInk.faceOf(evened(band, mCache.wallpaperUnder(band, rootRect)),
             bandDim(band, rootRect), baseOf(glass),
             glass.opacity);
-        if (band == GlassBackdropCache.Band.DOCK && face != mDiagDockFace) {
-            mDiagDockFace = face;
-            android.util.Log.d(DIAG, String.format(java.util.Locale.US,
-                "t=%d dockFace rect=%s raw=%.1f evened=%.1f changed=%b face=%.1f pol=%s caller=%s",
-                android.os.SystemClock.uptimeMillis(), rootRect.toShortString(), diagTone(raw),
-                diagTone(evened(band, raw)), evened(band, raw) != raw, diagTone(face), polarity(),
-                diagCallers()));
-        }
-        return face;
     }
 
     /**
