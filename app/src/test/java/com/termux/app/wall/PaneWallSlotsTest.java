@@ -268,6 +268,72 @@ public class PaneWallSlotsTest {
         assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
     }
 
+    // ---- the empty Workspace outside the default order -------------------------------------
+
+    @Test public void anEmptyWorkspaceKeepsItsSlotBetweenTwoRuns() {
+        host.hasWindow = false;
+        host.canStart = true;
+        controller.refreshPages();
+        controller.goHome(false);
+        assertEquals("Home 1, then the empty Workspace's stop", HOME_LEFT, controller.pages());
+        assertTrue(controller.homeSeam().canLeaveForward());
+
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        assertEquals("landing on the stop starts the first shell", 1, host.shellsStarted);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+
+        swipe(-600f);
+        assertEquals("Home 2 is reached through it", PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(1, host.homePage);
+        assertEquals(HOME_RIGHT, controller.pages());
+    }
+
+    @Test public void theSecondRunReachesAnEmptyWorkspaceBackward() {
+        host.hasWindow = false;
+        host.canStart = true;
+        controller.refreshPages();
+        controller.goHome(false);
+        Bundle state = new Bundle();
+        state.putString(PaneWallController.ARG_HALF, WallRow.HALF_HOME);
+        state.putInt(PaneWallController.ARG_INDEX, 1);
+        controller.restoreInstanceState(state);
+        assertEquals(HOME_RIGHT, controller.pages());
+        com.termux.app.launcher.widget.WidgetPaneView.Seam seam = controller.homeSeam();
+        assertTrue(seam.canLeaveBackward());
+        seam.begin();
+        seam.drag(600f);
+        seam.end(3000f);
+        idle();
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(1, host.shellsStarted);
+    }
+
+    @Test public void theLastWindowClosingHandsTheWallToHome() {
+        host.canStart = true;
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        host.hasWindow = false;
+        host.windows = 0;
+        controller.refreshPages();
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals("Home 1's page beside the Terminal page", 0, host.homePage);
+        assertEquals(0, host.shellsStarted);
+    }
+
+    @Test public void theDefaultOrderKeepsAnEmptyWorkspaceOffTheRow() {
+        host.pages = WallPagesMigration.seed("home", 0, "home", 2);
+        host.hasWindow = false;
+        host.canStart = true;
+        controller.refreshPages();
+        assertEquals(java.util.Collections.singletonList(PaneWallPage.WIDGETS), controller.pages());
+    }
+
+    @Test public void withNoShellToStartTheRunsStillMeet() {
+        host.hasWindow = false;
+        host.canStart = false;
+        controller.refreshPages();
+        assertEquals(java.util.Collections.singletonList(PaneWallPage.WIDGETS), controller.pages());
+    }
+
     private static void idle() {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
             .idleFor(java.time.Duration.ofMillis(3000L));

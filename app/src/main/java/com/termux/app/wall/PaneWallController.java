@@ -220,6 +220,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private boolean mDefaultOrder = true;
     /** A page id of the Home run the frame is bound to; -1 for the first run. */
     private int mHomeRunId = -1;
+    /**
+     * The Terminal page stands in the built window with no window, as a stop whose landing
+     * starts the first shell (non-default orders only).
+     */
+    private boolean mEmptyTerminalStop;
+    /** The row had a window at the last {@link #refreshPages}. */
+    private boolean mHadWindow;
     /** The run last handed to the host ({@link Host#bindHomeRun}). */
     private int mBoundFirst = 0;
     private int mBoundLast = -1;
@@ -261,6 +268,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.setReducedMotion(mHost.reducedMotion());
         PaneWallPage before = mWall.currentPage();
         boolean hasWindow = mHost.hasWindow();
+        boolean lostWindow = mHadWindow && !hasWindow;
+        mHadWindow = hasWindow;
         if (hasWindow) { mSeamIntoEmpty = false; mSeamShellStarted = false; }
         // Which side of the Terminal page the Home frame stood on, for the hand-over below.
         java.util.List<PaneWallPage> was = mWall.pages();
@@ -280,6 +289,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             }
             mHost.showInnerPage(after, page);
         }
+        // The last window closed under the wall while the empty Workspace keeps its stop: the
+        // wall hands to the Home run beside it, as it does when the Workspace leaves the row.
+        if (lostWindow && mEmptyTerminalStop && !mSeamIntoEmpty && !mWorkspacePending
+            && mWall.currentPage() == PaneWallPage.TERMINAL) {
+            goToLastHomePage(false);
+        }
         if (mWorkspacePending && mWall.pages().contains(PaneWallPage.TERMINAL)) {
             mWorkspacePending = false;
             mWall.goTo(PaneWallPage.TERMINAL, false);
@@ -294,13 +309,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @NonNull
     private java.util.List<PaneWallPage> builtWindow(boolean onRow) {
         WallPages pages = mHost.useAs() == UseAs.HOME ? mHost.wallPages() : null;
+        // Outside the default order an empty Workspace keeps its slot, as a stop whose landing
+        // starts the first shell: two Home runs never merge over it, and the far run stays
+        // reachable through it. The default order keeps the Workspace off the row, as always.
+        boolean emptyStop = pages != null && !onRow && mHost.canStartWorkspace()
+            && !PaneWallPolicy.isDefaultOrder(PaneWallPolicy.wallSlots(pages, true));
+        mEmptyTerminalStop = emptyStop;
         java.util.List<WallPages.Slot> slots = pages == null ? null
-            : PaneWallPolicy.wallSlots(pages, onRow);
+            : PaneWallPolicy.wallSlots(pages, onRow || emptyStop);
         if (slots == null || PaneWallPolicy.firstSlotOf(slots, PaneWallPage.WIDGETS) < 0
             || (onRow && PaneWallPolicy.firstSlotOf(slots, PaneWallPage.TERMINAL) < 0)) {
             mSlots = null;
             mSlotPages = null;
             mDefaultOrder = true;
+            mEmptyTerminalStop = false;
             bindRun(0, -1);
             return mHost.useAs().rowPages(onRow);
         }
@@ -878,13 +900,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallPageChanged(@NonNull PaneWallPage page) {
         mHost.onWallPageChanged(page);
-        if (mSeamShellStarted || !WallRow.seamStartsShell(mSeamIntoEmpty, page)) return;
+        boolean intoEmpty = mSeamIntoEmpty || (mEmptyTerminalStop && !mHost.hasWindow());
+        if (mSeamShellStarted || !WallRow.seamStartsShell(intoEmpty, page)) return;
         mSeamShellStarted = true;
         // The release committed to the empty Workspace: its first shell starts now, while the
         // wall slides there. Its window takes the page the swipe brought in.
         if (!mHost.startWorkspaceShell()) {
             mSeamIntoEmpty = false;
+            boolean stop = mEmptyTerminalStop;
             refreshPages();
+            // The empty stop stays on the row: with no shell to land on, the wall goes back.
+            if (stop && mWall.currentPage() == PaneWallPage.TERMINAL
+                && mWall.pages().contains(PaneWallPage.WIDGETS)) {
+                mWall.goTo(PaneWallPage.WIDGETS, true);
+            }
             return;
         }
         refreshPages();
