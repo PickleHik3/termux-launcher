@@ -121,6 +121,17 @@ public class DressResolverTest {
         assertEquals(WORKSPACE, home().shape());
     }
 
+    /** A Display page is of the Display kind, so the Display kind's visibility is read (C2). */
+    @Test
+    public void aDisplayPageIsOfTheDisplayKind() {
+        assertEquals(com.termux.app.wall.WallPages.PageKind.DISPLAY,
+            DressResolver.kindOf(PaneWallPage.DISPLAY));
+        assertEquals(com.termux.app.wall.WallPages.PageKind.TERMINAL,
+            DressResolver.kindOf(PaneWallPage.TERMINAL));
+        assertEquals(com.termux.app.wall.WallPages.PageKind.HOME,
+            DressResolver.kindOf(PaneWallPage.WIDGETS));
+    }
+
     /** The bar on Home (#90): Home wears the status bar, and still not the extra keys. */
     @Test
     public void homeWearsTheStatusBarStillNotTheExtraKeys() {

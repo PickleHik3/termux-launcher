@@ -15834,6 +15834,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mShownTerminalPageId;
             }
 
+            @Override public int displayPage() {
+                return mPaneWallController != null ? mPaneWallController.boundDisplayPage() : -1;
+            }
+
             @NonNull @Override public java.util.List<Integer> homePageIds() {
                 refreshShownPageIds();
                 return mShownHomePageIds;
