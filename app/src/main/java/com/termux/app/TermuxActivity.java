@@ -32922,7 +32922,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 rowShown ? rowWindows()
                     : java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>
                         emptyList(),
-                rowShown ? -1 : -1,
                 rowShown ? rowCurrentIndex() : 0);
         if (mPaneController == null) return chips;
         com.termux.app.terminal.TerminalPaneController.Window focused =

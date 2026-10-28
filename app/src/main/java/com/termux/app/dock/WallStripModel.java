@@ -185,8 +185,8 @@ public final class WallStripModel {
                 minimised[chip.index] = chip.minimised;
             }
         }
-        return build(items, chips.selected(surface), chips.rowCount(), chips.displayChip(),
-            minimised, newWindowSpoken);
+        return build(items, chips.selected(surface), chips.rowCount(), -1, minimised,
+            newWindowSpoken);
     }
 
     /** Asking for the user, the way the window chip column reads it: a bell, or a blocked agent. */
