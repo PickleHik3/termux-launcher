@@ -88,6 +88,11 @@ public final class WidgetPaneView extends FrameLayout {
     public interface Seam {
         /** Whether a forward swipe on the last Home page leaves Home: the row has a page after it. */
         boolean canLeaveForward();
+        /**
+         * Whether a backward swipe on the first page of the bound run leaves Home: the row has a
+         * page before the run (ADR 0015: a Home run after the Terminal page).
+         */
+        default boolean canLeaveBackward() { return false; }
         /** The swipe is the wall's from here. */
         void begin();
         /** The finger has travelled {@code dxPx} on screen since it went down, positive right. */
@@ -191,6 +196,9 @@ public final class WidgetPaneView extends FrameLayout {
     @Nullable private WidgetGridView neighbour;
     /** The page the neighbour grid is bound to; -1 for none. */
     private int neighbourPage = -1;
+    /** The bound run of Home pages ({@link #setRun}); runLast -1 for every page. */
+    private int runFirst = 0;
+    private int runLast = -1;
     @Nullable private LauncherWidgetRepository repository;
     @NonNull private final HomePageTransition.Transform neighbourTransform =
         new HomePageTransition.Transform();
@@ -367,6 +375,31 @@ public final class WidgetPaneView extends FrameLayout {
     /** The wall's seam: a forward swipe on the last Home page carries on into the row. */
     public void setSeam(@Nullable Seam value) {
         seam = value;
+    }
+
+    /**
+     * The run of Home pages this view pages inside (ADR 0015, A2a): global Home-page indexes
+     * {@code first} to {@code last}, both included. The swipe stops, or hands to the wall, at the
+     * run's ends rather than the repository's. {@code last} below 0 is every page, as before.
+     */
+    public void setRun(int first, int last) {
+        runFirst = Math.max(0, first);
+        runLast = last;
+    }
+
+    /** The first page of the bound run, held to the pages there are. */
+    private int runFirstPage() {
+        return Math.max(0, Math.min(pageCount - 1, runFirst));
+    }
+
+    /** The last page of the bound run, held to the pages there are. */
+    private int runLastPage() {
+        int last = runLast < 0 ? pageCount - 1 : Math.min(pageCount - 1, runLast);
+        return Math.max(runFirstPage(), last);
+    }
+
+    private int runPageCount() {
+        return runLastPage() - runFirstPage() + 1;
     }
 
     public void setListener(@NonNull Listener value,
@@ -738,7 +771,8 @@ public final class WidgetPaneView extends FrameLayout {
                     && !insideNestedScrollingChild(this, event)
                     && (!onFloat || pinnedLayerYieldsSideways(event));
                 // One page still tracks when the seam is open: its forward swipe is the wall's.
-                pagingTracking = (pageCount > 1 || seamOpen()) && free;
+                pagingTracking = (runPageCount() > 1 || seamOpen() || seamOpenBackward())
+                    && free;
                 // A swipe on a widget is the widget's, whichever way it goes, and a vertical one
                 // on a float is its terminal's scroll.
                 verticalCandidate = free && !onFloat && !onWidget(event);
@@ -820,15 +854,16 @@ public final class WidgetPaneView extends FrameLayout {
                 } else if (axis == HomeSwipePolicy.Axis.HORIZONTAL) {
                     verticalCandidate = false;
                     if (!pagingTracking) break;
-                    if (com.termux.app.wall.WallRow.swipeLeavesHome(currentPage, pageCount,
-                            dx < 0 ? 1 : -1, seamOpen())) {
-                        // Forward off the last Home page: the swipe goes on into the row.
+                    int way = dx < 0 ? 1 : -1;
+                    if (com.termux.app.wall.WallRow.swipeLeavesRun(currentPage - runFirstPage(),
+                            runPageCount(), way, way > 0 ? seamOpen() : seamOpenBackward())) {
+                        // Off the run's edge page: the swipe goes on into the row.
                         pagingDragging = true;
                         seamDragging = true;
                         beginSeamDrag(event);
                         return true;
                     }
-                    if (pageCount <= 1) {
+                    if (runPageCount() <= 1) {
                         // Nothing to page and no seam this way: the swipe is not Home's.
                         pagingTracking = false;
                         break;
@@ -1017,6 +1052,10 @@ public final class WidgetPaneView extends FrameLayout {
         return seam != null && seam.canLeaveForward();
     }
 
+    private boolean seamOpenBackward() {
+        return seam != null && seam.canLeaveBackward();
+    }
+
     private void beginSeamDrag(@NonNull MotionEvent event) {
         if (seamVelocity == null) seamVelocity = VelocityTracker.obtain();
         seamVelocity.clear();
@@ -1066,8 +1105,8 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private float resistedDrag(float dx) {
-        boolean pastStart = dx > 0 && currentPage == 0;
-        boolean pastEnd = dx < 0 && currentPage == pageCount - 1;
+        boolean pastStart = dx > 0 && currentPage <= runFirstPage();
+        boolean pastEnd = dx < 0 && currentPage >= runLastPage();
         return pastStart || pastEnd ? dx * PAGE_EDGE_RESISTANCE : dx;
     }
 
@@ -1082,7 +1121,7 @@ public final class WidgetPaneView extends FrameLayout {
         // The one page rule; a drag to the left (negative) brings the next page in.
         int direction = -com.termux.app.wall.PagePolicy.turn(dx, velocityX,
             Math.max(1, getWidth()), getResources().getDisplayMetrics().density);
-        int target = Math.max(0, Math.min(pageCount - 1, currentPage + direction));
+        int target = Math.max(runFirstPage(), Math.min(runLastPage(), currentPage + direction));
         // The content moved with the finger, at its speed, except into an end, where it only
         // ever took the resistance's share of the travel and so of the speed too.
         float contentVelocity = resistedDrag(dx) != dx ? velocityX * PAGE_EDGE_RESISTANCE
@@ -1145,8 +1184,8 @@ public final class WidgetPaneView extends FrameLayout {
         int width = getWidth();
         float position = width <= 0 ? 0f : contentShiftPx / width;
         // A turn is a page with another page that way; a pull against either end only slides.
-        boolean turning = position < 0f ? currentPage < pageCount - 1
-            : position > 0f && currentPage > 0;
+        boolean turning = position < 0f ? currentPage < runLastPage()
+            : position > 0f && currentPage > runFirstPage();
         // A widget carried across pages in edit mode turns them with the plain slide: its drop
         // is aimed at the grid, which must not be scaled or turned under it.
         HomePageTransition effect = widgetEditActive() ? HomePageTransition.SLIDE : transition;

@@ -233,6 +233,14 @@ public final class PaneWallLayout extends ViewGroup {
          * (the first window when leaving Home) while it is still off screen.
          */
         default void onWallDragBegin(@NonNull PaneWallPage page) { }
+        /**
+         * A drag on {@code page} now heads {@code steps} away (-1 bringing in the page on the
+         * left, +1 the one on the right): on its first move, and again on each reversal. Asked
+         * before the frame's offset is worked out, so the listener may re-build the page list
+         * ({@link #setPages}) to put the page that way in place (ADR 0015: one Home frame,
+         * re-bound to the Home run the drag heads for).
+         */
+        default void onWallDragHeading(@NonNull PaneWallPage page, int steps) { }
     }
 
     private final Map<PaneWallPage, View> mPageViews = new EnumMap<>(PaneWallPage.class);
@@ -913,6 +921,7 @@ public final class PaneWallLayout extends ViewGroup {
             settleKeyboardRevealNow();
             settleStatusFoldNow();
             mDragging = true;
+            mDragHeading = 0;
             stopSlide();
             stopNudge();
             if (mListener != null) mListener.onWallDragBegin(mCurrent);
@@ -925,12 +934,21 @@ public final class PaneWallLayout extends ViewGroup {
         }
     }
 
+    /** Which way the drag under way last headed: -1, +1, or 0 before it has moved. */
+    private int mDragHeading;
+
     /** Move the wall for a finger that has travelled {@code dxPx} since it went down. */
     public void dragTo(float dxPx) {
         if (!mDragging) return;
         Trace.beginSection("Wall.dragTo");
         try {
             int width = getWidth();
+            // A finger moving right brings in the page on the left.
+            int heading = dxPx > 0f ? -1 : dxPx < 0f ? 1 : 0;
+            if (heading != 0 && heading != mDragHeading) {
+                mDragHeading = heading;
+                if (mListener != null) mListener.onWallDragHeading(mCurrent, heading);
+            }
             mOffsetPx = PaneWallPolicy.offsetForDrag(dxPx, width, canStep(-1), canStep(1));
             applyPagePositions();
         } finally {
