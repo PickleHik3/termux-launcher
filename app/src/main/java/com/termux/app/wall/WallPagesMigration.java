@@ -33,6 +33,9 @@ public final class WallPagesMigration {
     /** Bumped when another set of old keys has to be folded in. */
     @VisibleForTesting static final int VERSION = 1;
     @VisibleForTesting static final String KEY_VERSION = "wall_pages_migration_version";
+    /** A copy of a stored value this build could not read, kept by the upgrade (W7). */
+    @VisibleForTesting static final String KEY_UNREADABLE_BACKUP = "wall_pages_unreadable_backup";
+    private static final String LOG_TAG = "WallPagesMigration";
     /** {@code HomeSettings.KEY_DEFAULT_PAGE}. */
     @VisibleForTesting static final String KEY_DEFAULT_PAGE = "app_launcher_home_default_page";
 
@@ -45,8 +48,9 @@ public final class WallPagesMigration {
 
     /**
      * Seeds {@code store} from {@code prefs} when this install has not been through it, or when
-     * the store holds no pages (unreadable or newer data: an empty wall never reaches the
-     * activity). Otherwise a no-op.
+     * the store holds no pages. A stored value this build cannot read (bad JSON, a newer
+     * version) is not seeded over: it is copied under {@link #KEY_UNREADABLE_BACKUP}, logged, and
+     * left as it was, so the build that wrote it finds its pages again. Otherwise a no-op.
      *
      * @param homeCount the widget repository's Home page count, read only when seeding
      * @return whether it seeded
@@ -57,6 +61,14 @@ public final class WallPagesMigration {
         if (prefs == null) return false;
         boolean gated = prefs.getInt(KEY_VERSION, 0) >= VERSION;
         boolean empty = store.current().allPages().isEmpty();
+        String unreadable = empty ? store.unreadable() : null;
+        if (unreadable != null) {
+            prefs.edit().putString(KEY_UNREADABLE_BACKUP, unreadable).apply();
+            com.termux.shared.logger.Logger.logWarn(LOG_TAG, "The wall's stored pages cannot be"
+                + " read by this build (" + unreadable.length() + " chars); not seeding over"
+                + " them, a copy is kept under " + KEY_UNREADABLE_BACKUP);
+            return false;
+        }
         if (gated && !empty) {
             // Two Display pages stored side by side by an older build are parted (W4).
             WallPages parted = store.current().separateDisplays();

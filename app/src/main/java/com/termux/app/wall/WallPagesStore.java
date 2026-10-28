@@ -119,6 +119,17 @@ public final class WallPagesStore {
         for (Listener l : listeners) l.onChanged(loaded);
     }
 
+    /**
+     * The stored string when one is there but cannot be read (bad JSON, or a version this build
+     * does not know, as after a downgrade); null when nothing is stored or it reads. Such a value
+     * is not "no pages": the upgrade must not seed over it (W7).
+     */
+    @Nullable
+    public String unreadable() {
+        String raw = storage.read();
+        return raw != null && !raw.isEmpty() && fromJson(raw) == null ? raw : null;
+    }
+
     /** Whether a value was stored when this store was built (the upgrade seeds when not). */
     public boolean wasSeeded() { return seeded; }
 
