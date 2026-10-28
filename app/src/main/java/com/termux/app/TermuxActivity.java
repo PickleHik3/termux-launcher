@@ -24256,6 +24256,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * applied. Nothing while none runs.
      */
     private void landHomePagesCrossing() {
+        mHomeCrossLandingQueued = false;
         if (!homePagesCrossing()) return;
         int committedId = mHomeCrossHereId;
         int landedId = homePageInFront();
