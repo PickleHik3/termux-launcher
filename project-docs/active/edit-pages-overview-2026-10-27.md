@@ -97,3 +97,14 @@ Also seen on pong at 420 dpi: the "+ Add terminal" chip clips to "+ Add termina"
   a terminal card gets the Workspace surface's sheet, a display card folds the sheet to its handle.
   The rebinding goes through the `onSettled` → `host.preview()` seam in `SurfaceEditorController`
   and `TermuxActivity`'s preview implementation (around `:27275`).
+
+## Status (2026-10-29)
+
+All three waves are merged on `v2-redesign`, with three follow-up fixes found on the emulator:
+the card draws the page subtree whenever the editor is open (not only while posed), the editor
+sheet rebuilds a changed row list for the same card, and the editor's label and bar hide under
+the overview. Emulator (emu2, x86_64 debug): chip opens the overview directly with no Settings,
+chip hidden under the overview, Home card fills its frame on the editor route, neighbour draws at
+card scale, sheet turns to Workspace on the terminal card and back to Home, a side tap centres,
+Back asks no Discard, "+ Add terminal" fits at 1080/420, Settings shares the launcher's task
+(no system splash). Pong: see the device-checks entry until the build has been seen there.
