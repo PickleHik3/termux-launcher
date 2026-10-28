@@ -203,7 +203,7 @@ public final class WallPages {
 
     public int nextId() { return nextId; }
 
-    /** Transitional: home is the display window, which is not a page. */
+    /** Legacy: home is the display window, which is not a page. Read from old JSON, never produced. */
     public boolean homeIsDisplayWindow() { return homeIsDisplayWindow; }
 
     /** The Home page that was home last (0 when none was). */
@@ -375,7 +375,7 @@ public final class WallPages {
         List<Page> list = new ArrayList<>(all);
         list.add(at, page);
         boolean first = pages().isEmpty() && !homeIsDisplayWindow;
-        WallPages next = new WallPages(list, pending, detached, first ? page.id : homeId,
+        WallPages next = copy(list, pending, detached, first ? page.id : homeId,
             nextId + 1, homeIsDisplayWindow);
         return new Result(next, ChangeType.ADDED, page, null, -1, next.visibleIndex(page.id));
     }
@@ -469,11 +469,95 @@ public final class WallPages {
         return new Result(next, ChangeType.HOME_SET, page, null, -1, next.visibleIndex(id));
     }
 
-    /** Transitional: makes the display window home. The pages and the home id stay. */
+    /**
+     * Legacy state only (tests, old JSON): makes the display window home. Nothing produces this
+     * any more; {@link #homeOnDisplayPage} replaced it.
+     */
     @NonNull
     public Result setHomeDisplayWindow() {
         WallPages next = withHome(all, detached, homeId, true, rememberedHome(), false);
         return new Result(next, ChangeType.HOME_SET, null, null, -1, -1);
+    }
+
+    /**
+     * Makes a Display page home: the one home already is (no change), else the first unbound one
+     * on the wall, else a new unbound one right after the Terminal page (the end when there is
+     * none). Also converts the legacy display-window target, clearing its flag. The result's
+     * change is ADDED when the page is new, HOME_SET when it existed, NONE when nothing moved.
+     */
+    @NonNull
+    public Result homeOnDisplayPage() {
+        Page home = home();
+        if (home != null && home.kind == PageKind.DISPLAY) {
+            return new Result(this, ChangeType.NONE, home, null, -1, -1);
+        }
+        Page unbound = firstUnboundDisplay();
+        if (unbound != null) {
+            Result set = setHome(unbound.id);
+            return new Result(set.pages, ChangeType.HOME_SET, unbound, null, -1, set.toIndex);
+        }
+        Page t = terminal();
+        Result added = add(PageKind.DISPLAY, t == null ? END : t.id, null);
+        Result set = added.pages.setHome(added.page.id);
+        return new Result(set.pages, ChangeType.ADDED, added.page, null, -1, added.toIndex);
+    }
+
+    /** Where a Linux app opens: an existing page, or a place to add one. */
+    public static final class Route {
+        /** The page to open on, or 0 when one has to be added. */
+        public final int pageId;
+        /** When {@link #pageId} is 0: the page to add a new unbound Display page after. */
+        public final int addAfterId;
+
+        Route(int pageId, int addAfterId) {
+            this.pageId = pageId;
+            this.addAfterId = addAfterId;
+        }
+
+        public boolean needsNewPage() { return pageId == 0; }
+
+        /** Adds the new unbound Display page {@link #addAfterId} names; null when none is needed. */
+        @Nullable
+        public Result addTo(@NonNull WallPages pages) {
+            return needsNewPage() ? pages.add(PageKind.DISPLAY, addAfterId, null) : null;
+        }
+
+        @Override public boolean equals(Object o) {
+            return o instanceof Route && ((Route) o).pageId == pageId
+                && ((Route) o).addAfterId == addAfterId;
+        }
+
+        @Override public int hashCode() { return 31 * pageId + addAfterId; }
+
+        @Override public String toString() {
+            return needsNewPage() ? "add after " + addAfterId : "page " + pageId;
+        }
+    }
+
+    /**
+     * The page a Linux app opens on: the Display page bound to {@code app} (the id as
+     * {@link Page#binding} stores it), else the first unbound Display page, else a new unbound
+     * Display page after {@code currentPageId} (the end when that page is not on the wall).
+     * Pages pending removal do not count. A null or empty {@code app} skips the bound match.
+     */
+    @NonNull
+    public Route routeLinuxApp(@Nullable String app, int currentPageId) {
+        if (app != null && !app.isEmpty()) {
+            for (Page p : pages()) {
+                if (p.kind == PageKind.DISPLAY && app.equals(p.binding)) return new Route(p.id, 0);
+            }
+        }
+        Page unbound = firstUnboundDisplay();
+        if (unbound != null) return new Route(unbound.id, 0);
+        return new Route(0, page(currentPageId) != null ? currentPageId : END);
+    }
+
+    @Nullable
+    private Page firstUnboundDisplay() {
+        for (Page p : pages()) {
+            if (p.kind == PageKind.DISPLAY && p.binding == null) return p;
+        }
+        return null;
     }
 
     /** Names a page; null or blank goes back to its default name. */
@@ -501,6 +585,7 @@ public final class WallPages {
     public String startIn() {
         if (homeIsDisplayWindow) return WallRow.START_IN_DISPLAY;
         Page home = home();
+        if (home != null && home.kind == PageKind.DISPLAY) return WallRow.START_IN_DISPLAY;
         return home != null && home.kind == PageKind.TERMINAL
             ? WallRow.START_IN_WORKSPACE : WallRow.START_IN_HOME;
     }
@@ -528,7 +613,7 @@ public final class WallPages {
     @NonNull
     public Result chooseStartIn(@Nullable String startIn) {
         String value = StartInPolicy.read(startIn);
-        if (WallRow.START_IN_DISPLAY.equals(value)) return setHomeDisplayWindow();
+        if (WallRow.START_IN_DISPLAY.equals(value)) return homeOnDisplayPage();
         if (WallRow.START_IN_WORKSPACE.equals(value)) {
             Page t = terminal();
             return t == null ? refuse(Error.UNKNOWN_PAGE) : setHome(t.id);

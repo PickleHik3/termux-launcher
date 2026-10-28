@@ -292,6 +292,38 @@ public class WallPagesTest {
     }
 
     @Test
+    public void routeLinuxAppPrefersTheBoundPageThenTheFirstUnboundThenAddsAfterCurrent() {
+        // three(): Home 1, Home 2, Terminal 3; no Display page yet.
+        WallPages p = three();
+        assertEquals("add after 2", p.routeLinuxApp("gimp", 2).toString());
+        assertEquals(2, p.routeLinuxApp("gimp", 2).addAfterId);
+        assertEquals(WallPages.END, p.routeLinuxApp("gimp", 99).addAfterId);
+        Result added = p.routeLinuxApp("gimp", 3).addTo(p);
+        assertEquals(PageKind.DISPLAY, added.page.kind);
+        assertNull(added.page.binding);
+        assertEquals(3, ids(added.pages).get(2).intValue());
+        assertEquals(4, ids(added.pages).get(3).intValue());
+
+        WallPages withUnbound = added.pages;
+        WallPages.Route unbound = withUnbound.routeLinuxApp("gimp", 1);
+        assertEquals(4, unbound.pageId);
+        assertFalse(unbound.needsNewPage());
+        assertNull(unbound.addTo(withUnbound));
+
+        WallPages two = ok(withUnbound.add(PageKind.DISPLAY, 4, "gimp"));
+        assertEquals(5, two.routeLinuxApp("gimp", 1).pageId);
+        assertEquals(4, two.routeLinuxApp("blender", 1).pageId);
+        assertEquals(4, two.routeLinuxApp(null, 1).pageId);
+
+        // Every Display page bound: a new one, after the current page.
+        WallPages bound = ok(two.bind(4, "krita"));
+        assertEquals("add after 5", bound.routeLinuxApp("blender", 5).toString());
+        // A pending page does not count.
+        WallPages gone = ok(two.remove(5));
+        assertEquals(4, gone.routeLinuxApp("gimp", 1).pageId);
+    }
+
+    @Test
     public void startInIsDerivedFromWhereHomeIs() {
         assertEquals("home", three().startIn());
         assertEquals("workspace", ok(three().setHome(3)).startIn());
@@ -306,8 +338,18 @@ public class WallPagesTest {
         assertEquals(WallPages.ChangeType.NONE, p.chooseStartIn("home").change);
         assertEquals(3, ok(p.chooseStartIn("workspace")).home().id);
         assertEquals(2, ok(ok(p.chooseStartIn("workspace")).chooseStartIn("home")).home().id);
-        assertTrue(ok(p.chooseStartIn("display")).homeIsDisplayWindow());
-        assertEquals(2, ok(ok(p.chooseStartIn("display")).chooseStartIn("home")).home().id);
+        WallPages d = ok(p.chooseStartIn("display"));
+        assertFalse(d.homeIsDisplayWindow());
+        assertEquals(PageKind.DISPLAY, d.home().kind);
+        assertEquals("display", d.startIn());
+        assertEquals(2, ok(d.chooseStartIn("home")).home().id);
+        assertEquals(WallPages.ChangeType.NONE, d.chooseStartIn("display").change);
+
+        // The display page home is the first unbound one, not a second.
+        WallPages two = ok(ok(three().add(PageKind.DISPLAY, WallPages.END, null))
+            .setHome(2));
+        assertEquals(4, ok(two.chooseStartIn("display")).home().id);
+        assertEquals(4, ok(two.chooseStartIn("display")).pages().size());
         assertEquals(Error.BAD_INDEX, three().chooseHomePage(2).error);
         assertEquals(2, ok(three().chooseHomePage(1)).home().id);
     }

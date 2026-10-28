@@ -122,6 +122,11 @@ public class TermuxApplication extends Application {
             com.termux.app.look.HalfLookUpgrade.run(
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
                 terminalId, -1);
+            // The Display page the wall upgrade created starts with the Terminal page's look.
+            com.termux.app.wall.WallPagesMigration.copyLookToUpgradedDisplay(
+                surfacePreferences.getSharedPreferences(),
+                new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
+                terminalId);
             surfacePreferences.migrateSurfaceInheritance();
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
