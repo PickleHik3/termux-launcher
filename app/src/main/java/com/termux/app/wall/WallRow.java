@@ -117,25 +117,6 @@ public final class WallRow {
         return sideOfArrival > 0 ? Math.max(0, runLength - 1) : 0;
     }
 
-    /** Where a global Home-page index (as {@code wall_index} saves it) lives: slot and run page. */
-    @NonNull
-    public static int[] homeSlotOf(@NonNull WallPages pages, int globalHomeIndex) {
-        java.util.List<WallPages.Slot> slots = pages.slots();
-        int seen = 0;
-        int lastSlot = 0;
-        int lastLen = 1;
-        for (int i = 0; i < slots.size(); i++) {
-            WallPages.Slot slot = slots.get(i);
-            if (slot.kind != WallPages.PageKind.HOME) continue;
-            int len = slot.pageIds.size();
-            if (globalHomeIndex < seen + len) return new int[] {i, Math.max(0, globalHomeIndex - seen)};
-            seen += len;
-            lastSlot = i;
-            lastLen = len;
-        }
-        return new int[] {lastSlot, lastLen - 1};
-    }
-
     /** The global Home-page index of run page {@code pageInRun} of slot {@code slotIndex}. */
     public static int globalHomeIndex(@NonNull WallPages pages, int slotIndex, int pageInRun) {
         java.util.List<WallPages.Slot> slots = pages.slots();

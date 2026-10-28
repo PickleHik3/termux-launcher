@@ -22904,7 +22904,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Floats only, and nothing left in the row: the Workspace is empty, as after its last
             // window closed. The wall stays on Home; off Home, the last Home page slides in.
             mCurrentWSession = null;
-            if (mPaneWallController != null && !isDisplayOnRow()
+            if (mPaneWallController != null
                 && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.TERMINAL)
                 mPaneWallController.goToLastHomePage(isVisible());
         }
@@ -26720,14 +26720,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private java.util.List<com.termux.app.terminal.TerminalPaneController.Window> rowWindows() {
         return mCurrentWSession == null ? java.util.Collections.emptyList()
             : mCurrentWSession.windows;
-    }
-
-    /**
-     * Whether the display stands in the current session's row: never since ADR 0015 A3b. The
-     * row holds terminal windows only; the display stands on the wall's Display pages.
-     */
-    private boolean isDisplayOnRow() {
-        return false;
     }
 
     /** How many windows the current row has: its terminal windows (ADR 0015). */
@@ -32856,8 +32848,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             windowChips() {
-        boolean rowShown = mPaneController != null
-            && (mCurrentWSession != null || isDisplayOnRow());
+        boolean rowShown = mPaneController != null && mCurrentWSession != null;
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             chips = new com.termux.app.chrome.WindowChips<>(isWidgetsPageShowing(), rowShown,
                 rowShown ? rowWindows()

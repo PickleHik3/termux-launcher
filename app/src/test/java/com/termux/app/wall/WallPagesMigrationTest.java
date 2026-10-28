@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -225,8 +226,8 @@ public class WallPagesMigrationTest {
     public void anEmptyStoreIsSeededAgainEvenWhenTheVersionIsRecorded() {
         prefs.edit().putString("app_launcher_start_in", "workspace").putInt(
             "wall_pages_migration_version", 1).commit();
+        // Nothing stored (an unreadable value is kept instead: see the W7 test below).
         WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
-        storage.write("{not json");
         WallPagesStore store = new WallPagesStore(storage);
         assertTrue(store.current().allPages().isEmpty());
         assertTrue(WallPagesMigration.migrateIfNeeded(prefs, 2, store));
@@ -249,5 +250,30 @@ public class WallPagesMigrationTest {
     public void aMissingPreferencesStoreRunsNothing() {
         assertFalse(WallPagesMigration.migrateIfNeeded(null, 2,
             new WallPagesStore(new WallPagesStore.MemoryStorage())));
+    }
+
+    @Test
+    public void unreadableStoredPagesAreKeptAndNotSeededOver() {
+        // A newer build's value (version 2) and a broken one (W7): neither is "no pages".
+        String[] raws = {"{\"version\":2,\"pages\":[],\"home\":1,\"next\":2}", "{not json"};
+        for (String raw : raws) {
+            prefs.edit().clear().commit();
+            WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
+            storage.write(raw);
+            WallPagesStore store = new WallPagesStore(storage);
+            assertEquals(raw, store.unreadable());
+            assertFalse(WallPagesMigration.migrateIfNeeded(prefs, 3, store));
+            assertEquals("the stored value is left as it was", raw, storage.read());
+            assertTrue(store.current().allPages().isEmpty());
+            assertEquals("and a copy is kept", raw,
+                prefs.getString(WallPagesMigration.KEY_UNREADABLE_BACKUP, null));
+        }
+        // Nothing stored: seeded as before, and nothing is unreadable.
+        prefs.edit().clear().commit();
+        WallPagesStore fresh = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        assertNull(fresh.unreadable());
+        assertTrue(WallPagesMigration.migrateIfNeeded(prefs, 3, fresh));
+        assertFalse(fresh.current().allPages().isEmpty());
+        assertNull(fresh.unreadable());
     }
 }

@@ -252,7 +252,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * to bring a Display page that is not next door into the window ({@link #goToDisplayPage}).
      */
     private int mLandingSlot = -1;
-    static final String SLOTS_TAG = "WallSlots";
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
         mWall = wall;
@@ -417,8 +416,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mDisplayPageId = slots.get(slot).id();
         mLandingSlot = mWall.currentPage() == PaneWallPage.DISPLAY
             && mBoundDisplayPageId == mDisplayPageId ? -1 : slot;
+        int from = currentSlot(slots);
         try {
-            rebuild();
+            // The landing window may leave the current page out: the wall is handed straight to
+            // the Display page, never to the Terminal page on the way (which would start an empty
+            // Workspace's first shell).
+            mWall.setPages(builtWindow(mHost.hasWindow() || mSeamIntoEmpty),
+                PaneWallPage.DISPLAY, Integer.signum(slot - from));
         } finally {
             mLandingSlot = -1;
         }
@@ -1114,12 +1118,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int was = boundSlot();
         if (was != target) {
             mHomeRunId = slots.get(target).id();
-            if (com.termux.BuildConfig.DEBUG) {
-                android.util.Log.d(SLOTS_TAG, "uptime=" + android.os.SystemClock.uptimeMillis()
-                    + " rebind slot " + was + "->" + target + " steps=" + steps
-                    + " homePage=" + mHost.innerIndex(PaneWallPage.WIDGETS) + " "
-                    + describeState(), new Throwable("WallSlots caller"));
-            }
             rebuild();
         }
         // Arriving from the Terminal page on the run's right is its last page; on its left, its first.

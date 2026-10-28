@@ -178,16 +178,8 @@ public class WallRowTest {
     }
 
     @Test
-    public void aSavedHomeIndexLandsOnTheSecondRun() {
+    public void theSecondRunsFirstPageIsGlobalHomeIndexOne() {
         WallPages p = mid();
-        assertEquals(0, WallRow.homeSlotOf(p, 0)[0]);
-        assertEquals(2, WallRow.homeSlotOf(p, 1)[0]);
-        assertEquals(0, WallRow.homeSlotOf(p, 1)[1]);
-        assertEquals(2, WallRow.homeSlotOf(p, 9)[0]);
         assertEquals(1, WallRow.globalHomeIndex(p, 2, 0));
-        // Default order: one run, the index is the page in it.
-        WallPages d = WallPagesMigration.seed("home", 0, "home", 2);
-        assertEquals(1, WallRow.homeSlotOf(d, 1)[1]);
-        assertEquals(0, WallRow.homeSlotOf(d, 1)[0]);
     }
 }

@@ -16,7 +16,8 @@ import java.util.Objects;
  * <p>Rules held here: at most one Terminal page (a page pending removal still counts, so an undo
  * can never make a second); removing the home page makes the first page home; the last Home page
  * is not removed while it is home and alone; a Terminal page with windows is removed only once
- * the caller has confirmed closing them. A page marked for removal is <em>pending</em>: it
+ * the caller has confirmed closing them; no two Display pages stand side by side (an add or a
+ * removal re-places one, a move is refused). A page marked for removal is <em>pending</em>: it
  * leaves {@link #pages()} and {@link #stops} at once but stays until {@link #commitRemoval}
  * (or {@link #undo}).
  *
@@ -364,7 +365,9 @@ public final class WallPages {
 
     /**
      * Adds a page of {@code kind} after the page {@code afterId} ({@link #END}: last).
-     * {@code binding} is for a Display page only. The first page added becomes home.
+     * {@code binding} is for a Display page only. The first page added becomes home. A Display
+     * page that would stand beside another Display page goes after the next non-Display page
+     * instead (before the nearest one when none follows), so {@link Route#addTo} never joins two.
      */
     @NonNull
     public Result add(@NonNull PageKind kind, int afterId, @Nullable String binding) {
@@ -379,6 +382,7 @@ public final class WallPages {
         Page page = new Page(nextId, kind, null, binding);
         List<Page> list = new ArrayList<>(all);
         list.add(at, page);
+        if (kind == PageKind.DISPLAY) relocateDisplay(list, pending, page);
         boolean first = pages().isEmpty() && !homeIsDisplayWindow;
         WallPages next = copy(list, pending, detached, first ? page.id : homeId,
             nextId + 1, homeIsDisplayWindow);
@@ -400,7 +404,9 @@ public final class WallPages {
         rest.remove(page);
         int at = toIndex >= rest.size() ? list.size() : list.indexOf(rest.get(toIndex));
         list.add(at, page);
-        WallPages next = copy(list, pending, detached, homeId, nextId, homeIsDisplayWindow);
+        // Not through copy(): a move is refused rather than re-placed (A3c2).
+        WallPages next = new WallPages(list, pending, detached, homeId, nextId,
+            homeIsDisplayWindow, lastHomePageId, homeParked);
         if (next.hasAdjacentDisplays() && !hasAdjacentDisplays()) {
             return refuse(Error.ADJACENT_DISPLAY);
         }
@@ -417,6 +423,70 @@ public final class WallPages {
             }
         }
         return false;
+    }
+
+    /**
+     * The same pages with no two Display pages side by side (W4): wherever two stand together,
+     * the later one goes after the next non-Display page (before the nearest gap when none
+     * follows). This value itself when nothing stands together. Every edit but a move (which is
+     * refused instead) already returns a separated value; this repairs one stored by an older
+     * build.
+     */
+    @NonNull
+    public WallPages separateDisplays() {
+        if (!hasAdjacentDisplays()) return this;
+        return new WallPages(separated(all, pending), pending, detached, homeId, nextId,
+            homeIsDisplayWindow, lastHomePageId, homeParked);
+    }
+
+    /** {@code all} with each Display page that follows a Display page re-placed; see above. */
+    @NonNull
+    static List<Page> separated(@NonNull List<Page> all, @NonNull List<Integer> pending) {
+        List<Page> list = new ArrayList<>(all);
+        for (int guard = 0; guard < all.size(); guard++) {
+            List<Page> visible = visible(list, pending);
+            Page later = null;
+            for (int i = 1; i < visible.size() && later == null; i++) {
+                if (visible.get(i).kind == PageKind.DISPLAY
+                        && visible.get(i - 1).kind == PageKind.DISPLAY) {
+                    later = visible.get(i);
+                }
+            }
+            if (later == null || !relocateDisplay(list, pending, later)) break;
+        }
+        return list;
+    }
+
+    /**
+     * Moves Display page {@code page} within {@code list} to the first gap at or after where it
+     * stands that has no Display page on either side, else the nearest such gap before it.
+     * False (and {@code list} untouched) when there is none.
+     */
+    private static boolean relocateDisplay(List<Page> list, List<Integer> pending, Page page) {
+        List<Page> visible = visible(list, pending);
+        int from = visible.indexOf(page);
+        if (from < 0) return false;
+        List<Page> rest = new ArrayList<>(visible);
+        rest.remove(page);
+        int gap = -1;
+        for (int g = from; g <= rest.size() && gap < 0; g++) if (gapFits(rest, g)) gap = g;
+        for (int g = from - 1; g >= 0 && gap < 0; g--) if (gapFits(rest, g)) gap = g;
+        if (gap < 0) return false;
+        if (gap == from) return true;
+        list.remove(page);
+        list.add(gap >= rest.size() ? list.size() : list.indexOf(rest.get(gap)), page);
+        return true;
+    }
+
+    private static boolean gapFits(List<Page> rest, int g) {
+        return (g == 0 || rest.get(g - 1).kind != PageKind.DISPLAY)
+            && (g == rest.size() || rest.get(g).kind != PageKind.DISPLAY);
+    }
+
+    private static List<Page> visible(List<Page> list, List<Integer> pending) {
+        List<Page> out = new ArrayList<>(list.size());
+        for (Page p : list) if (!pending.contains(p.id)) out.add(p);
+        return out;
     }
 
     /** Removes a page that has no windows to close; see {@link #remove(int, int, boolean)}. */
@@ -838,8 +908,8 @@ public final class WallPages {
         for (Page d : dropped) if (d.id == homeId && !homeIsDisplayWindow) {
             home = firstVisible(list, marked);
         }
-        return new WallPages(list, marked, kept, home, nextId, homeIsDisplayWindow,
-            lastHomePageId, homeParked);
+        return new WallPages(separated(list, marked), marked, kept, home, nextId,
+            homeIsDisplayWindow, lastHomePageId, homeParked);
     }
 
     private static int firstVisible(List<Page> list, List<Integer> marked) {
@@ -862,13 +932,14 @@ public final class WallPages {
 
     private WallPages copy(List<Page> all, List<Integer> pending, List<Page> detached,
                            int homeId, int nextId, boolean display) {
-        return new WallPages(all, pending, detached, homeId, nextId, display, lastHomePageId,
-            homeParked);
+        return new WallPages(separated(all, pending), pending, detached, homeId, nextId, display,
+            lastHomePageId, homeParked);
     }
 
     private WallPages withHome(List<Page> all, List<Page> detached, int homeId, boolean display,
                                int last, boolean parked) {
-        return new WallPages(all, pending, detached, homeId, nextId, display, last, parked);
+        return new WallPages(separated(all, pending), pending, detached, homeId, nextId, display,
+            last, parked);
     }
 
     private boolean hasTerminal() {

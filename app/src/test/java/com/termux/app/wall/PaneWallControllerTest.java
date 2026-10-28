@@ -53,11 +53,13 @@ public class PaneWallControllerTest {
         WallPages pages;
         int boundDisplay = -2;
         int landedDisplay = -1;
+        final java.util.List<PaneWallPage> changes = new java.util.ArrayList<>();
 
         @Override public boolean reducedMotion() { return reduced; }
         @Override public WallPages wallPages() { return pages; }
         @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
         @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
+        @Override public void onWallPageChanged(PaneWallPage page) { changes.add(page); }
         @Override public UseAs useAs() { return useAs; }
         @Override public boolean canStartWorkspace() { return canStart; }
         @Override public boolean startWorkspaceShell() {
@@ -696,6 +698,34 @@ public class PaneWallControllerTest {
         controller.goHome(false);
         assertEquals(PaneWallPage.DISPLAY, controller.currentPage());
         assertEquals(4, controller.boundDisplayPage());
+    }
+
+    @Test public void theHomePressToAFarDisplayHomeNeitherPassesTheTerminalNorStartsAShell() {
+        // [HomeA][D1][HomeB][T empty][D2 home], pressed from HomeA (W3).
+        host.pages = new WallPages(Arrays.asList(
+            new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(2, WallPages.PageKind.DISPLAY, null, null),
+            new WallPages.Page(3, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(4, WallPages.PageKind.TERMINAL, null, null),
+            new WallPages.Page(5, WallPages.PageKind.DISPLAY, null, null)),
+            Collections.<Integer>emptyList(), Collections.<WallPages.Page>emptyList(), 1, 6, false);
+        host.homePages = 2;
+        host.hasWindow = false;
+        host.canStart = true;
+        View frame = new FrameLayout(activity);
+        wall.addView(frame);
+        wall.setPageView(PaneWallPage.DISPLAY, frame);
+        controller.refreshPages();
+        controller.goHome(false);
+        assertEquals(1, controller.currentPageId());
+        host.pages = host.pages.setHome(5).pages;
+        host.changes.clear();
+        controller.goHome(false);
+        assertEquals(PaneWallPage.DISPLAY, controller.currentPage());
+        assertEquals(5, controller.boundDisplayPage());
+        assertEquals("no Workspace shell starts on the way", 0, host.shellsStarted);
+        assertFalse("the wall is never handed to the Terminal page",
+            host.changes.contains(PaneWallPage.TERMINAL));
     }
 
     @Test public void terminalOnlyKeepsTheDisplayPagesBesideTheWorkspace() {
