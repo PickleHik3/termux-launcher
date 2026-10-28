@@ -4,8 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.place.SeamTravel.DockPlan;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.wall.PaneWallPage;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.Objects;
 
@@ -146,22 +146,32 @@ public final class SeamDress {
     }
 
     /**
-     * The half of the wall whose look values {@code surface} wears on this frame (ADR 0013): the
-     * half whose dress it wears ({@link #wearsHome}). The stack's look so changes with its rows,
-     * where none of it shows; the status bar wears the Workspace's through a slide and its own
-     * half's at rest; the frame its committed half's.
+     * The page whose look values {@code surface} wears on this frame (ADR 0015): the page whose
+     * dress it wears ({@link #wearsHome}), {@link PaneWallPage#WIDGETS} for Home's and
+     * {@link PaneWallPage#TERMINAL} for the Terminal's. The stack's look so changes with its
+     * rows, where none of it shows; the status bar wears the Terminal's through a slide and its
+     * own page's at rest; the frame its committed page's.
      */
     @NonNull
-    public static WallHalf lookHalf(@NonNull Surface surface, @NonNull PaneWallPage committed,
-                                    @NonNull PaneWallPage stackPage, boolean seamTravel) {
-        return wearsHome(surface, committed, stackPage, seamTravel) ? WallHalf.HOME
-            : WallHalf.WORKSPACE;
+    public static PaneWallPage lookPage(@NonNull Surface surface, @NonNull PaneWallPage committed,
+                                        @NonNull PaneWallPage stackPage, boolean seamTravel) {
+        return wearsHome(surface, committed, stackPage, seamTravel) ? PaneWallPage.WIDGETS
+            : PaneWallPage.TERMINAL;
     }
 
-    /** The half of the wall a page stands on, for its look values. */
+    /** The kind of screen a page is, for its look values: Home's or the Terminal's. */
     @NonNull
-    public static WallHalf halfOf(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? WallHalf.HOME : WallHalf.WORKSPACE;
+    public static PaneWallPage screenOf(@NonNull PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL;
+    }
+
+    /**
+     * The id a page's look values are read under: the wall (Base) for Home's pages, which hold no
+     * look of their own, and the Terminal page's id for any other page.
+     */
+    public static int lookPageId(@NonNull PaneWallPage page, int terminalPageId) {
+        return page == PaneWallPage.WIDGETS ? TermuxAppSharedPreferences.PAGE_WALL
+            : terminalPageId;
     }
 
     /**

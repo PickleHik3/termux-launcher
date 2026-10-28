@@ -82,7 +82,7 @@ public class GlassControlsMigrationTest {
 
     /** The base colour the dock's tint is drawn in now, its accent resolved. */
     private int dockColourNow() {
-        return GlassLook.of(preferences).withAmountPercent(preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE))
+        return GlassLook.of(preferences).withAmountPercent(preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()))
             .withAccentColors(CONTAINER, ACCENT).tintBase(BASE);
     }
 
@@ -142,8 +142,8 @@ public class GlassControlsMigrationTest {
         GlassControlsMigration.run(preferences);
 
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
-        assertEquals("scaled onto the stretched Tint", 21, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
-        assertEquals(11, preferences.getStatusBarTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals("scaled onto the stretched Tint", 21, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(11, preferences.getStatusBarTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
         assertEquals("the same colour", before, dockColourNow());
     }
@@ -158,8 +158,8 @@ public class GlassControlsMigrationTest {
         GlassControlsMigration.run(preferences);
 
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
-        assertEquals(0, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
-        assertEquals(0, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(0, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(0, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals("Obsidian's ink, untouched", 0xFF161822, dockColourNow());
     }
 
@@ -172,7 +172,7 @@ public class GlassControlsMigrationTest {
 
         GlassControlsMigration.run(preferences);
 
-        assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getTerminalTintStrength());
     }
 
@@ -187,8 +187,8 @@ public class GlassControlsMigrationTest {
         assertEquals(13, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         int[] dock = GlassControls.snapped(20, 10);
-        assertEquals(dock[0], preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
-        assertEquals(dock[1], preferences.getDockGlassGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(dock[0], preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(dock[1], preferences.getDockGlassGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.GRAIN));
         assertTrue("an untouched surface still follows Base",
             preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
@@ -279,7 +279,7 @@ public class GlassControlsMigrationTest {
         GlassControlsMigration.run(preferences);
 
         assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
-        assertEquals("a detached cell", 14, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals("a detached cell", 14, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT));
         assertEquals("the same colour", before, dockColourNow());
         preferences.setSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT, true);
@@ -427,7 +427,7 @@ public class GlassControlsMigrationTest {
 
         GlassControlsMigration.run(preferences);
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
-        assertEquals("the colour is kept", 25, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals("the colour is kept", 25, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     /** The blur wallpaper mode puts back when it is turned on again lands on the curve too. */

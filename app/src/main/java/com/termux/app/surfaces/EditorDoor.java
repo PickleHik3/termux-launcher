@@ -6,7 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.wall.PaneWallPage;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.Locale;
 
@@ -163,8 +162,7 @@ public enum EditorDoor {
                                         @Nullable PaneWallPage onScreen) {
         if (place != null || card == null)
             return place;
-        if (onScreen != null && card.standsOn(
-                onScreen == PaneWallPage.WIDGETS ? WallHalf.HOME : WallHalf.WORKSPACE))
+        if (onScreen != null && card.standsOn(onScreen))
             return null;
         if (card == EditorCard.HOME) return PaneWallPage.WIDGETS;
         if (card == EditorCard.TERMINAL || card == EditorCard.WORKSPACE) return PaneWallPage.TERMINAL;

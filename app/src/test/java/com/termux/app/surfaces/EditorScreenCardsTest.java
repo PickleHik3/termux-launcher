@@ -1,5 +1,7 @@
 package com.termux.app.surfaces;
 
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -8,7 +10,6 @@ import static org.junit.Assert.assertTrue;
 import com.termux.app.surfaces.EditorRows.Kind;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.EditorRows.Spec;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Test;
 
@@ -43,24 +44,24 @@ public class EditorScreenCardsTest {
 
     @Test
     public void theWorkspaceCardsLookAndGlassAreTheWorkspaceHalfsWhateverTheFrameShows() {
-        for (WallHalf frame : WallHalf.values()) {
+        for (PaneWallPage frame : PaneWallPage.values()) {
             for (Row row : new Row[] {Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT})
-                assertEquals(row + " with the frame on " + frame, WallHalf.WORKSPACE,
-                    EditorRows.halfFor(EditorCard.WORKSPACE, row, frame));
-            assertNull(EditorRows.halfFor(EditorCard.WORKSPACE, Row.LINK_GLOBAL, frame));
+                assertEquals(row + " with the frame on " + frame, TermuxAppSharedPreferences.PAGE_WALL,
+                    EditorRows.pageFor(EditorCard.WORKSPACE, row));
+            assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.WORKSPACE, Row.LINK_GLOBAL));
         }
     }
 
     @Test
     public void theWorkspaceCardStandsOnTheWorkspaceAndIsNamedByItsKey() {
-        assertTrue(EditorCard.WORKSPACE.standsOn(WallHalf.WORKSPACE));
-        assertFalse(EditorCard.WORKSPACE.standsOn(WallHalf.HOME));
+        assertTrue(EditorCard.WORKSPACE.standsOn(PaneWallPage.TERMINAL));
+        assertFalse(EditorCard.WORKSPACE.standsOn(PaneWallPage.WIDGETS));
         assertFalse("the screens meet through Match, not the menu's Copy",
             EditorCard.WORKSPACE.perHalf());
         assertNull(EditorCard.WORKSPACE.slot);
         assertEquals(EditorCard.WORKSPACE, EditorCard.forKey("workspace"));
-        assertEquals(EditorCard.HOME, EditorCard.forScreen(WallHalf.HOME));
-        assertEquals(EditorCard.WORKSPACE, EditorCard.forScreen(WallHalf.WORKSPACE));
+        assertEquals(EditorCard.HOME, EditorCard.forScreen(PaneWallPage.WIDGETS));
+        assertEquals(EditorCard.WORKSPACE, EditorCard.forScreen(PaneWallPage.TERMINAL));
         assertFalse("its glass is the Base itself",
             EditorRows.marksOwnValue(EditorCard.WORKSPACE, Row.FROST));
     }

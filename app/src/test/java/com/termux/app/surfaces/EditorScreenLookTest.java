@@ -18,7 +18,6 @@ import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -72,7 +71,7 @@ public class EditorScreenLookTest {
         tapLook(editor, SOLID);
 
         assertTrue("the wall wears Solid", SurfacePresets.wornOn(preferences, preset("solid"),
-            WallHalf.HOME));
+            PaneWallPage.WIDGETS));
         assertFalse(SurfacePresets.holdsPageLook(preferences, TERMINAL_PAGE));
         assertFalse(SurfacePresets.holdsPageLook(preferences, HOME_PAGE));
         assertEquals(SOLID, model(editor).value(Row.LOOK));
@@ -93,7 +92,7 @@ public class EditorScreenLookTest {
         assertFalse("the other page holds nothing",
             SurfacePresets.holdsPageLook(preferences, HOME_PAGE));
         assertTrue("the wall still wears Frost",
-            SurfacePresets.wornOn(preferences, preset("frost"), WallHalf.HOME));
+            SurfacePresets.wornOn(preferences, preset("frost"), PaneWallPage.WIDGETS));
 
         model(editor).setScopeOnPage(false);
         assertEquals("Global reads the wall's stop", FROST, model(editor).value(Row.LOOK));
@@ -122,7 +121,7 @@ public class EditorScreenLookTest {
         assertEquals("the saved Custom's numbers land on the page", 92,
             pageValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TERMINAL_PAGE));
         assertTrue("the wall is untouched",
-            SurfacePresets.wornOn(preferences, preset("frost"), WallHalf.HOME));
+            SurfacePresets.wornOn(preferences, preset("frost"), PaneWallPage.WIDGETS));
         assertFalse(SurfacePresets.holdsPageLook(preferences, HOME_PAGE));
     }
 
@@ -138,15 +137,15 @@ public class EditorScreenLookTest {
 
         assertFalse(SurfacePresets.holdsPageLook(preferences, TERMINAL_PAGE));
         assertEquals("the page follows Base again", FROST, model(editor).value(Row.LOOK));
-        assertTrue(SurfacePresets.wornOn(preferences, preset("frost"), WallHalf.HOME));
+        assertTrue(SurfacePresets.wornOn(preferences, preset("frost"), PaneWallPage.WIDGETS));
     }
 
     @Test
     public void eachScreenCardsLookRowIsItsOwnHalfWhateverTheFrameShows() {
-        for (WallHalf frame : WallHalf.values()) {
-            assertEquals(WallHalf.HOME, EditorRows.halfFor(EditorCard.HOME, Row.LOOK, frame));
-            assertEquals(WallHalf.WORKSPACE,
-                EditorRows.halfFor(EditorCard.WORKSPACE, Row.LOOK, frame));
+        for (PaneWallPage frame : PaneWallPage.values()) {
+            assertEquals(TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(EditorCard.HOME, Row.LOOK));
+            assertEquals(TermuxAppSharedPreferences.PAGE_WALL,
+                EditorRows.pageFor(EditorCard.WORKSPACE, Row.LOOK));
         }
     }
 

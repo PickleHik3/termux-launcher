@@ -10,7 +10,6 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -49,17 +48,17 @@ public class HalfLookTest {
 
     @Test
     public void untouchedHalves_lookAlike() {
-        assertEquals(HalfLook.read(preferences, WallHalf.HOME),
-            HalfLook.read(preferences, WallHalf.WORKSPACE));
+        assertEquals(HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL),
+            HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
     public void stackLook_isPartOfTheStacksDress() {
         // Base is wall-wide: the halves differ by the Terminal page's own dock value.
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            WallHalf.WORKSPACE, 5);
-        HalfLook home = HalfLook.read(preferences, WallHalf.HOME);
-        HalfLook workspace = HalfLook.read(preferences, WallHalf.WORKSPACE);
+            TermuxAppSharedPreferences.terminalPageId(), 5);
+        HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
+        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
 
         assertFalse(home.stackEquals(workspace));
         assertNotEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home),
@@ -69,9 +68,9 @@ public class HalfLookTest {
     @Test
     public void statusLookAlone_leavesTheStacksDressAlike() {
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
-            WallHalf.WORKSPACE, 90);
-        HalfLook home = HalfLook.read(preferences, WallHalf.HOME);
-        HalfLook workspace = HalfLook.read(preferences, WallHalf.WORKSPACE);
+            TermuxAppSharedPreferences.terminalPageId(), 90);
+        HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
+        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
 
         assertTrue(home.stackEquals(workspace));
         assertFalse(home.statusEquals(workspace));
@@ -84,9 +83,9 @@ public class HalfLookTest {
 
     @Test
     public void keyboardsOwnFade_isPartOfTheStack() {
-        preferences.setInAppKeyboardBackdropOpacity(WallHalf.WORKSPACE, 40);
-        assertFalse(HalfLook.read(preferences, WallHalf.HOME)
-            .stackEquals(HalfLook.read(preferences, WallHalf.WORKSPACE)));
+        preferences.setInAppKeyboardBackdropOpacity(TermuxAppSharedPreferences.terminalPageId(), 40);
+        assertFalse(HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL)
+            .stackEquals(HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId())));
     }
 
     @Test
@@ -95,24 +94,24 @@ public class HalfLookTest {
         PaneWallPage window = PaneWallPage.TERMINAL;
         // At rest, every surface wears its committed half's look.
         for (SeamDress.Surface surface : SeamDress.Surface.values()) {
-            assertEquals(WallHalf.HOME, SeamDress.lookHalf(surface, home, home, false));
-            assertEquals(WallHalf.WORKSPACE, SeamDress.lookHalf(surface, window, window, false));
+            assertEquals(PaneWallPage.WIDGETS, SeamDress.lookPage(surface, home, home, false));
+            assertEquals(PaneWallPage.TERMINAL, SeamDress.lookPage(surface, window, window, false));
         }
         // Mid-slide from Home: the stack wears the half whose rows it stands, the status bar the
         // Workspace's, the frame the committed half's.
-        assertEquals(WallHalf.WORKSPACE,
-            SeamDress.lookHalf(SeamDress.Surface.STACK, home, window, true));
-        assertEquals(WallHalf.HOME,
-            SeamDress.lookHalf(SeamDress.Surface.STACK, home, home, true));
-        assertEquals(WallHalf.WORKSPACE,
-            SeamDress.lookHalf(SeamDress.Surface.STATUS, home, home, true));
-        assertEquals(WallHalf.HOME,
-            SeamDress.lookHalf(SeamDress.Surface.FRAME, home, window, true));
+        assertEquals(PaneWallPage.TERMINAL,
+            SeamDress.lookPage(SeamDress.Surface.STACK, home, window, true));
+        assertEquals(PaneWallPage.WIDGETS,
+            SeamDress.lookPage(SeamDress.Surface.STACK, home, home, true));
+        assertEquals(PaneWallPage.TERMINAL,
+            SeamDress.lookPage(SeamDress.Surface.STATUS, home, home, true));
+        assertEquals(PaneWallPage.WIDGETS,
+            SeamDress.lookPage(SeamDress.Surface.FRAME, home, window, true));
     }
 
     @Test
     public void halfOf_namesThePagesHalf() {
-        assertEquals(WallHalf.HOME, SeamDress.halfOf(PaneWallPage.WIDGETS));
-        assertEquals(WallHalf.WORKSPACE, SeamDress.halfOf(PaneWallPage.TERMINAL));
+        assertEquals(PaneWallPage.WIDGETS, SeamDress.screenOf(PaneWallPage.WIDGETS));
+        assertEquals(PaneWallPage.TERMINAL, SeamDress.screenOf(PaneWallPage.TERMINAL));
     }
 }

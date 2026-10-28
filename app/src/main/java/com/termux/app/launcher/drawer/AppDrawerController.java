@@ -104,7 +104,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         @Nullable TermuxAppSharedPreferences preferences();
 
         /** The half of the wall the drawer opens over: Home's or the Workspace's look. */
-        @NonNull TermuxAppSharedPreferences.WallHalf restingHalf();
+        int restingPage();
 
         /** The one dock-geometry snapshot the seed rect, radius and inset all come off. */
         @NonNull DockLayout dockLayout();
@@ -1630,10 +1630,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // Capped below the user's dock opacity so the drawer glass always stays see-through:
         // the terminal keeps running visibly behind the open drawer.
         float opacity = Math.min(0.45f,
-            preferences == null ? 0.5f : preferences.getAppBarOpacity(mHost.restingHalf()) / 100f);
+            preferences == null ? 0.5f : preferences.getAppBarOpacity(mHost.restingPage()) / 100f);
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
-            : preferences.getDockGlassGrain(mHost.restingHalf());
+            : preferences.getDockGlassGrain(mHost.restingPage());
         plane.applyGlassMaterial(
             InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(mHost.context()),
             MaterialColors.getColor(mHost.context(), androidx.appcompat.R.attr.colorPrimary,

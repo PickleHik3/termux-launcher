@@ -1,5 +1,6 @@
 package com.termux.app.surfaces;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -23,7 +24,6 @@ import com.termux.app.place.Slot;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -153,7 +153,7 @@ public class SurfaceEditorRelaunchTest {
 
     private static int stop(SurfaceEditorController editor) {
         return ReflectionHelpers.callInstanceMethod(editor, "matchingStop",
-            ReflectionHelpers.ClassParameter.from(WallHalf.class, WallHalf.WORKSPACE));
+            ReflectionHelpers.ClassParameter.from(PaneWallPage.class, PaneWallPage.TERMINAL));
     }
 
     /** An activity with the views the editor looks for, and an editor over it. */

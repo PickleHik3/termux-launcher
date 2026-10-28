@@ -18,7 +18,6 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Test;
 
@@ -1185,9 +1184,9 @@ public class SeamCrossingTest {
     // ---- The status bar's look half through the settle ----
 
     /** The half whose look the status bar's glass, and the strip behind the system bar, read. */
-    private static WallHalf statusHalf(@NonNull Drive drive, @NonNull PaneWallPage committed) {
+    private static PaneWallPage statusHalf(@NonNull Drive drive, @NonNull PaneWallPage committed) {
         PaneWallPage stackPage = drive.crossing.stackDressPage();
-        return SeamDress.lookHalf(SeamDress.Surface.STATUS, committed,
+        return SeamDress.lookPage(SeamDress.Surface.STATUS, committed,
             stackPage != null ? stackPage : committed, drive.crossing.sliding());
     }
 
@@ -1202,16 +1201,16 @@ public class SeamCrossingTest {
     public void statusBarWearsTheLandedHalfLookThroughThePageCommit() {
         Drive drive = oneLayout(PaneWallPage.TERMINAL).slow(0f, 1f);
         assertTrue(drive.crossing.sliding());
-        assertEquals(WallHalf.WORKSPACE, statusHalf(drive, PaneWallPage.TERMINAL));
+        assertEquals(PaneWallPage.TERMINAL, statusHalf(drive, PaneWallPage.TERMINAL));
         drive.crossing.land();
         // The stack still reads the crossing through the commit...
         assertNotNull(drive.crossing.other());
         // ...but the wall is at rest: the commit, now on Home, dresses the bar in Home's look.
         assertFalse(drive.crossing.sliding());
-        WallHalf atCommit = statusHalf(drive, PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.HOME, atCommit);
+        PaneWallPage atCommit = statusHalf(drive, PaneWallPage.WIDGETS);
+        assertEquals(PaneWallPage.WIDGETS, atCommit);
         // The reading the commit used to take, which answered the Workspace on Home.
-        assertEquals(WallHalf.WORKSPACE, SeamDress.lookHalf(SeamDress.Surface.STATUS,
+        assertEquals(PaneWallPage.TERMINAL, SeamDress.lookPage(SeamDress.Surface.STATUS,
             PaneWallPage.WIDGETS, PaneWallPage.WIDGETS, drive.crossing.other() != null));
         drive.crossing.end();
         assertEquals("every pass after the settle reads what the commit built", atCommit,
@@ -1222,15 +1221,15 @@ public class SeamCrossingTest {
     @Test
     public void statusBarLookHalfFollowsARoundTripAcrossTheSeam() {
         Drive out = oneLayout(PaneWallPage.WIDGETS).slow(0f, 1f);
-        assertEquals(WallHalf.WORKSPACE, statusHalf(out, PaneWallPage.WIDGETS));
+        assertEquals(PaneWallPage.TERMINAL, statusHalf(out, PaneWallPage.WIDGETS));
         out.crossing.land();
-        assertEquals(WallHalf.WORKSPACE, statusHalf(out, PaneWallPage.TERMINAL));
+        assertEquals(PaneWallPage.TERMINAL, statusHalf(out, PaneWallPage.TERMINAL));
         out.crossing.end();
         Drive back = oneLayout(PaneWallPage.TERMINAL).slow(0f, 1f);
         back.crossing.land();
-        assertEquals(WallHalf.HOME, statusHalf(back, PaneWallPage.WIDGETS));
+        assertEquals(PaneWallPage.WIDGETS, statusHalf(back, PaneWallPage.WIDGETS));
         back.crossing.end();
-        assertEquals(WallHalf.HOME, statusHalf(back, PaneWallPage.WIDGETS));
+        assertEquals(PaneWallPage.WIDGETS, statusHalf(back, PaneWallPage.WIDGETS));
     }
 
     /**
@@ -1241,12 +1240,12 @@ public class SeamCrossingTest {
     public void statusBarLookHalfReturnsToHomeWhenASlideSpringsBack() {
         Drive drive = oneLayout(PaneWallPage.WIDGETS).slow(0f, 0.5f).slow(0.5f, 0f);
         assertNotNull(drive.crossing.other());
-        WallHalf travelled = statusHalf(drive, PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.WORKSPACE, travelled);
+        PaneWallPage travelled = statusHalf(drive, PaneWallPage.WIDGETS);
+        assertEquals(PaneWallPage.TERMINAL, travelled);
         drive.crossing.land();
         drive.crossing.end();
-        WallHalf atRest = statusHalf(drive, PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.HOME, atRest);
+        PaneWallPage atRest = statusHalf(drive, PaneWallPage.WIDGETS);
+        assertEquals(PaneWallPage.WIDGETS, atRest);
         assertTrue(travelled != atRest);
     }
 

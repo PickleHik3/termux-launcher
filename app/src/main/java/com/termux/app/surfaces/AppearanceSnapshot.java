@@ -99,8 +99,8 @@ final class AppearanceSnapshot {
             mRaws[i] = isKeyboardBlur(rows.get(i)) ? prefs.getInAppKeyboardBlurRadiusRaw()
                 : prefs.getSurfaceOverrideValue(rows.get(i).slot, rows.get(i).property);
         }
-        mMaterial = prefs.getSurfaceMaterial(TermuxAppSharedPreferences.WallHalf.WORKSPACE);
-        mIntensity = prefs.getSurfaceMaterialIntensity(TermuxAppSharedPreferences.WallHalf.WORKSPACE);
+        mMaterial = prefs.getSurfaceMaterial(TermuxAppSharedPreferences.terminalPageId());
+        mIntensity = prefs.getSurfaceMaterialIntensity(TermuxAppSharedPreferences.terminalPageId());
         mDockStyle = prefs.getAppLauncherDockStyle();
         mBorder = prefs.isTerminalBorderEnabled();
         mTerminalRadius = prefs.getTerminalCornerRadius();
@@ -270,12 +270,12 @@ final class AppearanceSnapshot {
     static List<String> halfAbleKeys() {
         List<String> keys = new java.util.ArrayList<>();
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (TermuxAppSharedPreferences.isPerHalfProperty(property))
+            if (TermuxAppSharedPreferences.isPerPageProperty(property))
                 keys.add(property.baseKey);
         }
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!TermuxAppSharedPreferences.isPerHalf(slot, property))
+                if (!TermuxAppSharedPreferences.isPerPage(slot, property))
                     continue;
                 String own = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
                 if (own != null) keys.add(own);
@@ -298,9 +298,9 @@ final class AppearanceSnapshot {
             return out;
         java.util.Map<String, ?> all = store.getAll();
         for (String key : halfAbleKeys()) {
-            for (TermuxAppSharedPreferences.WallHalf half
-                    : TermuxAppSharedPreferences.WallHalf.values()) {
-                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+            {
+                int pageId = TermuxAppSharedPreferences.terminalPageId();
+                String halfKey = TermuxAppSharedPreferences.surfacePageKey(key, pageId);
                 // Only the Terminal page's own values are half keys now; the wall's are shared.
                 if (halfKey.equals(key))
                     continue;
@@ -318,16 +318,16 @@ final class AppearanceSnapshot {
      * to put Home's glass back on the Look it wore when the editor opened.
      */
     void restoreHalfBase(@NonNull TermuxAppSharedPreferences prefs,
-                         @NonNull TermuxAppSharedPreferences.WallHalf half,
+                         int pageId,
                          @NonNull SurfaceProperty... properties) {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null)
             return;
         SharedPreferences.Editor editor = store.edit();
         for (SurfaceProperty property : properties) {
-            if (!TermuxAppSharedPreferences.isPerHalfProperty(property))
+            if (!TermuxAppSharedPreferences.isPerPageProperty(property))
                 continue;
-            String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(property.baseKey, half);
+            String halfKey = TermuxAppSharedPreferences.surfacePageKey(property.baseKey, pageId);
             if (halfKey.equals(property.baseKey))
                 continue; // Base is the wall's: the shared restore puts it back
             Object value = mHalfKeys.get(halfKey);
@@ -345,9 +345,9 @@ final class AppearanceSnapshot {
             return;
         SharedPreferences.Editor editor = store.edit();
         for (String key : halfAbleKeys()) {
-            for (TermuxAppSharedPreferences.WallHalf half
-                    : TermuxAppSharedPreferences.WallHalf.values()) {
-                String halfKey = TermuxAppSharedPreferences.surfaceHalfKey(key, half);
+            {
+                int pageId = TermuxAppSharedPreferences.terminalPageId();
+                String halfKey = TermuxAppSharedPreferences.surfacePageKey(key, pageId);
                 if (halfKey.equals(key))
                     continue;
                 Object value = halfKeys.get(halfKey);

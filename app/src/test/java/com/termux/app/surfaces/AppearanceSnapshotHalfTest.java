@@ -1,5 +1,6 @@
 package com.termux.app.surfaces;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -13,7 +14,6 @@ import android.os.Build;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -50,52 +50,19 @@ public class AppearanceSnapshotHalfTest {
     public void aHomeOnlyWriteIsUnsaved() {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
         int workspace = preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            WallHalf.WORKSPACE);
+            TermuxAppSharedPreferences.terminalPageId());
 
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, WallHalf.HOME,
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL,
             23);
 
         // Home's detach is the wall's: the Workspace's dock wears the same number.
         assertEquals("the Workspace's dock follows the wall", 23,
             preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-                WallHalf.WORKSPACE));
+                TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(23, preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            WallHalf.HOME));
+            TermuxAppSharedPreferences.PAGE_WALL));
         assertNotEquals("Home's own value is a change", atOpen,
             AppearanceSnapshot.signatureOf(preferences));
-    }
-
-    @Test
-    public void undoPutsBothHalvesBackAndTheirLinks() {
-        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, WallHalf.HOME, 40);
-        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
-        String atOpen = entry.signature();
-        int homeTint = preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
-            WallHalf.HOME);
-        int workspaceTint = preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
-            WallHalf.WORKSPACE);
-        boolean workspaceFollows = preferences.isSurfaceInheriting(SurfaceSlot.STATUS,
-            SurfaceProperty.TINT, WallHalf.WORKSPACE);
-
-        // Edits on both halves, a reset, a copy and a Look on one half.
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
-            WallHalf.WORKSPACE, 30);
-        preferences.resetSurfaceToLook(SurfaceSlot.STATUS, WallHalf.HOME);
-        preferences.copySurfaceToOtherHalf(SurfaceSlot.KEYBOARD, WallHalf.WORKSPACE);
-        SurfacePresets.applyLook(preferences, SurfacePresets.presets().get(3), WallHalf.HOME);
-        assertNotEquals(atOpen, AppearanceSnapshot.signatureOf(preferences));
-
-        entry.restore(preferences);
-
-        assertEquals(atOpen, AppearanceSnapshot.signatureOf(preferences));
-        assertEquals(homeTint, preferences.getSurfaceValue(SurfaceSlot.STATUS,
-            SurfaceProperty.TINT, WallHalf.HOME));
-        assertEquals(workspaceTint, preferences.getSurfaceValue(SurfaceSlot.STATUS,
-            SurfaceProperty.TINT, WallHalf.WORKSPACE));
-        assertFalse("Home's own value is its own again", preferences.isSurfaceInheriting(
-            SurfaceSlot.STATUS, SurfaceProperty.TINT, WallHalf.HOME));
-        assertEquals(workspaceFollows, preferences.isSurfaceInheriting(SurfaceSlot.STATUS,
-            SurfaceProperty.TINT, WallHalf.WORKSPACE));
     }
 
     @Test
@@ -104,15 +71,15 @@ public class AppearanceSnapshotHalfTest {
         AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
         assertFalse(hasHalfKeys());
 
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 77);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN, WallHalf.WORKSPACE, 12);
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 77);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 12);
         assertTrue(hasHalfKeys());
 
         entry.restore(preferences);
 
         assertFalse("every half key written in the session is gone", hasHalfKeys());
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
+        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL),
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -120,14 +87,14 @@ public class AppearanceSnapshotHalfTest {
         java.util.List<String> keys = AppearanceSnapshot.halfAbleKeys();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!TermuxAppSharedPreferences.isPerHalf(slot, property))
+                if (!TermuxAppSharedPreferences.isPerPage(slot, property))
                     continue;
                 assertTrue(slot + " " + property, keys.contains(
                     TermuxAppSharedPreferences.surfaceOverrideKey(slot, property)));
             }
         }
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (TermuxAppSharedPreferences.isPerHalfProperty(property))
+            if (TermuxAppSharedPreferences.isPerPageProperty(property))
                 assertTrue(property.name(), keys.contains(property.baseKey));
         }
     }

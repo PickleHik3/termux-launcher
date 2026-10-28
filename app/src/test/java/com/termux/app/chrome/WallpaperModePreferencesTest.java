@@ -49,8 +49,8 @@ public class WallpaperModePreferencesTest {
 
         assertFalse(preferences.isUseSystemWallpaperEnabled());
         assertEquals(100, preferences.getTerminalBackgroundOpacity());
-        assertEquals(100, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
-        assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(100, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(37, preferences.getWallpaperEnabledTerminalBackgroundOpacity());
         assertEquals(63, preferences.getWallpaperEnabledAppBarOpacity());
         assertEquals(19, preferences.getWallpaperEnabledExtraKeysBlurRadius());
@@ -59,8 +59,8 @@ public class WallpaperModePreferencesTest {
 
         assertTrue(preferences.isUseSystemWallpaperEnabled());
         assertEquals(37, preferences.getTerminalBackgroundOpacity());
-        assertEquals(63, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
-        assertEquals(19, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(63, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(19, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -82,8 +82,8 @@ public class WallpaperModePreferencesTest {
         assertTrue(preferences.isUseSystemWallpaperEnabled());
         assertEquals(25, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR));
         assertEquals(60, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY));
-        assertEquals(25, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
-        assertEquals(60, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(25, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(60, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(60, preferences.getTerminalBackgroundOpacity());
     }
 
