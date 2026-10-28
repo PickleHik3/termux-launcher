@@ -57,7 +57,13 @@ public final class WallPagesMigration {
         if (prefs == null) return false;
         boolean gated = prefs.getInt(KEY_VERSION, 0) >= VERSION;
         boolean empty = store.current().allPages().isEmpty();
-        if (gated && !empty) return convertDisplayWindowHome(prefs, store);
+        if (gated && !empty) {
+            // Two Display pages stored side by side by an older build are parted (W4).
+            WallPages parted = store.current().separateDisplays();
+            boolean repaired = parted != store.current();
+            if (repaired) store.replace(parted);
+            return convertDisplayWindowHome(prefs, store) || repaired;
+        }
         if (empty) {
             WallPages seeded = seed(prefs.getString(TERMUX_APP.KEY_LAUNCHER_START_IN, null),
                 prefs.getInt(KEY_DEFAULT_PAGE, 0), prefs.getString(TERMUX_APP.KEY_USE_AS, null),
