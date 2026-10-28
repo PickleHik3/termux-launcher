@@ -50,8 +50,14 @@ public class PaneWallControllerTest {
         boolean canStart;
         int shellsStarted;
         UseAs useAs = UseAs.HOME;
+        WallPages pages;
+        int boundDisplay = -2;
+        int landedDisplay = -1;
 
         @Override public boolean reducedMotion() { return reduced; }
+        @Override public WallPages wallPages() { return pages; }
+        @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
+        @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
         @Override public UseAs useAs() { return useAs; }
         @Override public boolean canStartWorkspace() { return canStart; }
         @Override public boolean startWorkspaceShell() {
@@ -653,6 +659,50 @@ public class PaneWallControllerTest {
         host.windows = 0;
         controller.refreshPages();
         assertEquals(4, controller.rowCount());
+    }
+
+    // ---- Display pages as wall slots (ADR 0015, A3b) --------------------------------------------
+
+    /** [Home 1][Home 2][Terminal 3][Display 4], with the display's frame as the Display page. */
+    private void displayPages() {
+        host.pages = WallPagesMigration.seed("home", 0, "home", 2, true);
+        host.homePages = 2;
+        View frame = new FrameLayout(activity);
+        wall.addView(frame);
+        wall.setPageView(PaneWallPage.DISPLAY, frame);
+        controller.refreshPages();
+    }
+
+    @Test public void aDisplayPageIsAPageOfTheWallBesideTheTerminal() {
+        displayPages();
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
+            PaneWallPage.DISPLAY), wall.pages());
+        assertEquals("the display view is bound to the Display page", 4, host.boundDisplay);
+        assertEquals("the Terminal page is the pane host alone", 3, host.innerCount(
+            PaneWallPage.TERMINAL));
+        assertTrue(controller.goTo(PaneWallPage.DISPLAY, false));
+        assertEquals(PaneWallPage.DISPLAY, controller.currentPage());
+        assertEquals("landing tells the host which page", 4, host.landedDisplay);
+        assertFalse("the Terminal page is not showing", controller.isTerminalShowing());
+    }
+
+    @Test public void theHomePressLandsOnADisplayHome() {
+        displayPages();
+        WallPages.Result home = host.pages.setHome(4);
+        assertTrue(home.ok());
+        host.pages = home.pages;
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        controller.goHome(false);
+        assertEquals(PaneWallPage.DISPLAY, controller.currentPage());
+        assertEquals(4, controller.boundDisplayPage());
+    }
+
+    @Test public void terminalOnlyKeepsTheDisplayPagesBesideTheWorkspace() {
+        displayPages();
+        host.useAs = UseAs.TERMINAL;
+        controller.refreshPages();
+        assertEquals(Arrays.asList(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY), wall.pages());
     }
 
     @Test public void homesOwnSwipeMovesTheRowBetweenHomePages() {

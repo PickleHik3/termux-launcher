@@ -535,12 +535,6 @@ public final class PaneWallLayout extends ViewGroup {
      */
     public void setPageView(@NonNull PaneWallPage page, @Nullable View view) {
         if (page == PaneWallPage.TERMINAL) mTerminalHost = view;
-        View previous = mPageViews.get(page);
-        if (previous != null && previous != view) {
-            // A Display page's frame going lets go of its still and any nudge carrying it.
-            if (previous == mNudgeLeaving) stopNudge();
-            if (previous instanceof SurfacePage) ((SurfacePage) previous).dropStill();
-        }
         registerPageView(page, view);
     }
 

@@ -780,9 +780,10 @@ public class PaneWallLayoutTest {
         wall.setGesturesEnabled(true);
         assertEquals(expected, wall.getSystemGestureExclusionRects());
 
-        // The stretches follow the page that is up. With the terminal's own frame air on, the
-        // other places stand that much nearer the wall, so Display's zone is MARGIN - AIR wide;
-        // and a page change re-lays nothing, so the change itself has to republish.
+        // The stretches follow the page that is up. A Display page owns its picture to its rim
+        // since A3b (BorderReach.ownsContent), so its borders keep to the air beside it and its
+        // stretch is narrower than the terminal's; and a page change re-lays nothing, so the
+        // change itself has to republish.
         final int air = 4;
         wall.setTerminalFrameAirPx(air);
         relayout();
@@ -790,9 +791,8 @@ public class PaneWallLayoutTest {
         wall.goTo(PaneWallPage.DISPLAY, false);
         relayout();
         List<android.graphics.Rect> onDisplay = Arrays.asList(
-            new android.graphics.Rect(0, centre - 72, MARGIN - air + SIDE_REACH, centre + 72),
-            new android.graphics.Rect(WIDTH - MARGIN + air - SIDE_REACH, centre - 72, WIDTH,
-                centre + 72));
+            new android.graphics.Rect(0, centre - 72, MARGIN - air, centre + 72),
+            new android.graphics.Rect(WIDTH - MARGIN + air, centre - 72, WIDTH, centre + 72));
         assertEquals(onDisplay, wall.getSystemGestureExclusionRects());
         // Back to the terminal: no layout runs, and the stretches still come back to its zone.
         wall.goTo(PaneWallPage.TERMINAL, false);
