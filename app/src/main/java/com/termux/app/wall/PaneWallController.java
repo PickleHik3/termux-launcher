@@ -294,8 +294,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (hasWindow) { mSeamIntoEmpty = false; mSeamShellStarted = false; }
         // Which side of the Terminal page the Home frame stood on, for the hand-over below.
         java.util.List<PaneWallPage> was = mWall.pages();
+        // Measured from the page that may go (the Terminal page is not always on the row: W8).
         int homeSide = Integer.signum(was.indexOf(PaneWallPage.WIDGETS)
-            - was.indexOf(PaneWallPage.TERMINAL));
+            - was.indexOf(before));
         mWall.setPages(builtWindow(hasWindow || mSeamIntoEmpty));
         PaneWallPage after = mWall.currentPage();
         // Home taken off the row by Use as hands the wall to the Workspace as it stands, the
