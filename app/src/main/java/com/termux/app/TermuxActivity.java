@@ -28580,8 +28580,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // one, else a new unbound page after the current one. The runner's show-display step
             // shows that page; the landing there leaves the app to the runner.
             com.termux.app.wall.WallPages.Route route =
-                wallPages().routeLinuxApp(app.id, mPaneWallController == null ? -1
-                    : mPaneWallController.currentPageId());
+                wallPages().routeLinuxApp(app.id, linuxRouteFromPageId());
             int routedPage = route.pageId;
             if (route.needsNewPage()) {
                 com.termux.app.wall.WallPages.Result added =
@@ -28639,6 +28638,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #LINUX_APP_RESOLUTION_REUSE_MS}, and used once.
      */
     @Nullable private com.termux.app.launcher.model.LauncherAppEntry mResolvedLinuxEntry;
+    /**
+     * The page a Linux app's new Display page goes after: on Home the Home page in front (the
+     * wall's current slot is the first page of the Home run), else the page the wall is on.
+     */
+    private int linuxRouteFromPageId() {
+        if (mPaneWallController == null) return -1;
+        if (mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.WIDGETS) {
+            int home = homePageInFront();
+            if (home >= 0) return home;
+        }
+        return mPaneWallController.currentPageId();
+    }
+
     @Nullable private com.termux.app.x11.LinuxAppCatalog.LinuxApp mResolvedLinuxApp;
     @Nullable private Thread mResolvedLinuxThread;
     private long mResolvedLinuxAtMs;
