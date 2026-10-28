@@ -736,7 +736,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * and content pre-rolled for the slide, the grid's paused resize) and the travel cover, and
      * composes the seam's answerer (SeamCrossing). {@link #mCrossingViews} is what it moves.
      * While it runs, every chrome reader of an arrangement reads the ones it holds
-     * ({@link #arrangementOf(boolean)}).
+     * ({@link #arrangementOf(com.termux.app.wall.PageRef)}).
      */
     private final CrossingViews mCrossingViews = new CrossingViews();
     private final com.termux.app.place.Crossing mCrossing = new com.termux.app.place.Crossing(
@@ -6827,7 +6827,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The Floating Style for one surface's dress: the arrangement of the half it wears. */
     private boolean isRoundedStyle(@NonNull com.termux.app.place.SeamDress.Surface surface) {
-        return arrangementOf(chromeWearsHomeShape(surface)).floating();
+        return arrangementOf(chromeWearsHomeShape(surface) ? com.termux.app.wall.PageRef.HOME
+            : com.termux.app.wall.PageRef.TERMINAL).floating();
     }
 
     /** Corners in dp as stored for the chrome on screen (-1 is the auto token). */
@@ -7013,7 +7014,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? (keyboardHost.getHeight() > 0 ? keyboardHost.getHeight()
                 : mKeyboardGeometry.desiredHeightPx()) : 0f;
         return com.termux.app.chrome.LiveChromeShape.of(layout,
-            arrangementOf(chromeWearsHomeShape(surface)).layoutStyle(), width, height,
+            arrangementOf(chromeWearsHomeShape(surface) ? com.termux.app.wall.PageRef.HOME
+                : com.termux.app.wall.PageRef.TERMINAL).layoutStyle(), width, height,
             com.termux.app.place.ChromeShapeModel.Thickness.of(status, status, apps, apps, az, az,
                 keys, keys, keyboard),
             layoutCornersPx(surface), layoutMarginPx(surface), screenRadiusPx(),
@@ -15569,7 +15571,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ResolvedArrangement.of(NO_PREFERENCES_PLACE_LAYOUT,
             TermuxAppSharedPreferences.LayoutStyle.DOCKED, com.termux.app.dock.DockStyle.GLASS_TRAY,
             false, false, PlaceOrientation.PORTRAIT, com.termux.app.place.LayoutVariant.NORMAL,
-            false);
+            com.termux.app.wall.PageRef.TERMINAL);
 
     @Nullable
     private PlaceLayoutStore placeLayoutStore() {
@@ -15626,15 +15628,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * {@code home}'s half's resolved arrangement, for every chrome reader: while a crossing runs,
-     * the one it took as it began (Crossing#heldArrangement), so no reader sees a layout change
-     * mid-slide and a store that moves under the slide is applied at the landing; otherwise the
-     * store's ({@link #storeArrangementOf}).
+     * {@code page}'s resolved arrangement, for every chrome reader: while a crossing runs, the one
+     * it took as it began (Crossing#heldArrangement), so no reader sees a layout change mid-slide
+     * and a store that moves under the slide is applied at the landing; otherwise the store's
+     * ({@link #storeArrangementOf}). A Home page reads Home's, every window the Terminal page's.
      */
     @NonNull
-    private ResolvedArrangement arrangementOf(boolean home) {
-        ResolvedArrangement held = mCrossing.heldArrangement(home);
-        return held != null ? held : storeArrangementOf(home);
+    private ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PageRef page) {
+        ResolvedArrangement held = mCrossing.heldArrangement(page);
+        return held != null ? held : storeArrangementOf(page);
+    }
+
+    /**
+     * The page {@code page}'s arrangement is read for, with no id said: Home's for a Home page,
+     * the Terminal page's for every window. Builds nothing, so a frame's readers may ask it.
+     */
+    @NonNull
+    private static com.termux.app.wall.PageRef arrangedPageOf(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        return page == com.termux.app.wall.PaneWallPage.WIDGETS
+            ? com.termux.app.wall.PageRef.HOME : com.termux.app.wall.PageRef.TERMINAL;
+    }
+
+    /**
+     * {@code page} as a crossing's end names it: its kind and the id of the page of that kind the
+     * store shows ({@link PlaceLayoutStore#shownPageId}), -1 before there is a store.
+     */
+    @NonNull
+    private com.termux.app.wall.PageRef endpointPageOf(
+            @NonNull com.termux.app.wall.PaneWallPage page) {
+        PlaceLayoutStore store = placeLayoutStore();
+        return com.termux.app.wall.PageRef.of(page, store == null ? -1 : store.shownPageId(page));
+    }
+
+    /** {@code page}'s own Look as it is now, for a crossing's end; null with no page to read. */
+    @Nullable
+    private com.termux.app.look.PageLook.Snapshot pageLookOf(
+            @NonNull com.termux.app.wall.PageRef page) {
+        com.termux.app.look.PageLook look = groundLook();
+        com.termux.app.wall.WallPages pages = wallPages();
+        if (look == null || pages == null || page.id < 0) return null;
+        com.termux.app.wall.WallPages.Page wallPage = pages.page(page.id);
+        return wallPage == null ? null : look.of(wallPage);
     }
 
     /** The store revision the arrangements are resolved at; 0 before there is a store. */
@@ -15644,14 +15679,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * {@code home}'s half's resolved arrangement in the orientation on screen, resolved from the
+     * {@code page}'s resolved arrangement in the orientation on screen, resolved from the
      * store ({@link ResolvedArrangement#resolve}) only when the store's revision or the
      * orientation moved: the Style, the Dock design and the layout are all stored preferences, so
      * a change to any of them moves the revision. Before there is a store, nothing is arranged.
      * Read by a crossing's begin, and by {@link #arrangementOf} while none runs.
      */
     @NonNull
-    private ResolvedArrangement storeArrangementOf(boolean home) {
+    private ResolvedArrangement storeArrangementOf(@NonNull com.termux.app.wall.PageRef page) {
+        boolean home = page.isHome();
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_ARRANGEMENT;
         PlaceOrientation orientation = currentPlaceOrientation();
@@ -15672,7 +15708,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         ResolvedArrangement held = home ? mHomeArrangement : mWorkspaceArrangement;
         if (held == null) {
-            held = ResolvedArrangement.resolve(store, orientation, home);
+            held = ResolvedArrangement.resolve(store, orientation, home
+                ? com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, homePage)
+                : com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.TERMINAL,
+                    store.shownPageId(com.termux.app.wall.PaneWallPage.TERMINAL)));
             // A first read can seed a layout, which moves the revision: the other half is read
             // again on its next ask.
             if (store.revision() != revision) {
@@ -15780,16 +15819,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (store != null) store.setStatusCompact(currentPlaceOrientation(), compact);
     }
 
-    /** The resolved arrangement of the half {@code page} belongs to. */
+    /** The resolved arrangement {@code page} wears ({@link #arrangedPageOf}). */
     @NonNull
     private ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PaneWallPage page) {
-        return arrangementOf(page == com.termux.app.wall.PaneWallPage.WIDGETS);
+        return arrangementOf(arrangedPageOf(page));
     }
 
-    /** The arrangement of the half the chrome is committed to, whatever a slide is standing. */
+    /** The arrangement of the page the chrome is committed to, whatever a slide is standing. */
     @NonNull
     private ResolvedArrangement committedArrangement() {
-        return arrangementOf(mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS);
+        return arrangementOf(mLastWallPage);
     }
 
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
@@ -16058,7 +16097,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the shape model, which is fed this very answer through {@link #chromeThicknessPx}.
      */
     private int dockedFrameSharedBandPx() {
-        if (mPreferences == null || arrangementOf(chromeWearsHomeShape()).floating()) return 0;
+        if (mPreferences == null || arrangementOf(chromeWearsHomeShape()
+            ? com.termux.app.wall.PageRef.HOME
+            : com.termux.app.wall.PageRef.TERMINAL).floating()) return 0;
         PlaceLayout layout = arrangement().layout();
         int railBand = 0;
         if (isDockRailShown() && layout.slot(Element.APPS).edge.isOnSide()) {
@@ -16671,7 +16712,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayout workspacePlaceLayout() {
         if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS
             && placeLayoutStore() == null) return null;
-        return arrangementOf(false).layout();
+        return arrangementOf(com.termux.app.wall.PageRef.TERMINAL).layout();
     }
 
     /**
@@ -16682,7 +16723,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayout homePlaceLayout() {
         if (mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS
             && placeLayoutStore() == null) return null;
-        return arrangementOf(true).layout();
+        return arrangementOf(com.termux.app.wall.PageRef.HOME).layout();
     }
 
     /**
@@ -17637,7 +17678,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 dockHalf(com.termux.app.wall.PaneWallPage.WIDGETS, orientation, arrangement),
                 dockHalf(com.termux.app.wall.PaneWallPage.TERMINAL, orientation, arrangement))
             .preferencesAvailable(mPreferences != null)
-            .rows(com.termux.app.dock.DockGeometry.Side.of(rowsPage))
+            .rows(arrangedPageOf(rowsPage))
             .arrangement(arrangement)
             .density(metrics.density)
             .widthPx(dockRowsWidthPx(metrics))
@@ -17668,7 +17709,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return com.termux.app.dock.DockGeometry.Half.builder(fallbackLayout).build();
         boolean home = page == com.termux.app.wall.PaneWallPage.WIDGETS;
         // Its layout, Style, Dock design and Search field: the half's resolved arrangement.
-        ResolvedArrangement arrangement = arrangementOf(home);
+        ResolvedArrangement arrangement = arrangementOf(page);
         com.termux.app.place.LayoutVariant variant = arrangement.variant();
         PlaceLayoutStore sizes = store.forVariant(variant);
         com.termux.app.place.WallShape shape = store.shape();
@@ -23921,60 +23962,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (other == null || other == mCrossing.seam().other()) return;
         PlaceOrientation orientation = currentPlaceOrientation();
         PlaceLayout committed = committedArrangement().layout();
-        PlaceLayout otherLayout =
-            arrangementOf(other == com.termux.app.wall.PaneWallPage.WIDGETS).layout();
+        ResolvedArrangement otherArrangement = arrangementOf(other);
+        PlaceLayout otherLayout = otherArrangement.layout();
         com.termux.app.chrome.Dress committedDress = dressOf(mLastWallPage);
         com.termux.app.chrome.Dress otherDress = dressOf(other);
         boolean begins = !mCrossing.crossing();
-        // Both halves' docks at rest, worked out once as the crossing begins and held for its
-        // life (ADR 0012): a half's rest is its own (Stack layout), its rows in its dress, its
-        // Search field and Wall strip wholly in or out, nothing squeezed, whichever half is
+        // The crossing's two ends: the committed page and the one this frame reaches.
+        com.termux.app.wall.PageRef herePage = endpointPageOf(mLastWallPage);
+        com.termux.app.wall.PageRef therePage = endpointPageOf(other);
+        // Both ends' docks at rest, worked out once as the crossing begins and held for its
+        // life (ADR 0012): an end's rest is its own (Stack layout), its rows in its dress, its
+        // Search field and Wall strip wholly in or out, nothing squeezed, whichever end is
         // committed, so one snapshot answers both. A frame that reaches another page of the same
-        // half reads the halves' dresses again and the rests the crossing holds.
-        com.termux.app.dock.DockLayout homeRest;
-        com.termux.app.dock.DockLayout workspaceRest;
+        // half reads the ends' dresses again and the rests the crossing holds.
+        com.termux.app.dock.DockLayout hereRest;
+        com.termux.app.dock.DockLayout thereRest;
         com.termux.app.dock.DockGeometry.Snapshot rests = null;
         if (begins) {
             rests = dockSnapshot(committed, mLastWallPage);
-            homeRest = com.termux.app.dock.DockGeometry.compute(
-                rests.restOf(com.termux.app.dock.DockGeometry.Side.HOME));
-            workspaceRest = com.termux.app.dock.DockGeometry.compute(
-                rests.restOf(com.termux.app.dock.DockGeometry.Side.WORKSPACE));
+            hereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(herePage));
+            thereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(therePage));
         } else {
-            homeRest = mCrossing.heldRest(true);
-            workspaceRest = mCrossing.heldRest(false);
-            if (homeRest == null || workspaceRest == null) return;
+            hereRest = mCrossing.heldRest(herePage);
+            thereRest = mCrossing.heldRest(therePage);
+            if (hereRest == null || thereRest == null) return;
         }
-        boolean otherHome = other == com.termux.app.wall.PaneWallPage.WIDGETS;
+        boolean otherHome = therePage.isHome();
         // A keyboard in the stack, not one floating in a frame of its own: the committed half's
         // as it is up now, the other's as it wants one on arrival.
         // And each half's dock rows at rest, less the extra keys, so a fold travels from one
         // half's rest to the other's (SeamCrossing.foldRestGrowthPx); unknown before the
         // preferences are read.
         int committedRowsPx = mPreferences == null ? -1
-            : com.termux.app.dock.DockMorph.rowsPx(otherHome ? workspaceRest : homeRest);
+            : com.termux.app.dock.DockMorph.rowsPx(hereRest);
         int otherRowsPx = mPreferences == null ? -1
-            : com.termux.app.dock.DockMorph.rowsPx(otherHome ? homeRest : workspaceRest);
-        com.termux.app.place.SeamCrossing.Half here = com.termux.app.place.SeamCrossing.Half.of(
-            mLastWallPage, committedDress, committed, stackDressOf(committedDress, mLastWallPage, orientation),
-            committedKeyboardVisible() && !isKeyboardFloating(), committedRowsPx);
-        com.termux.app.place.SeamCrossing.Half there = com.termux.app.place.SeamCrossing.Half.of(
-            other, otherDress, otherLayout, stackDressOf(otherDress, other, orientation),
-            mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
-            otherRowsPx);
-        // Both halves' arrangements, held for the crossing's life with the revision they were
-        // resolved at: from here every chrome reader reads them (arrangementOf).
-        ResolvedArrangement home = arrangementOf(true);
-        ResolvedArrangement workspace = arrangementOf(false);
+            : com.termux.app.dock.DockMorph.rowsPx(thereRest);
+        // Each end carries its page's arrangement, held for the crossing's life with the revision
+        // it was resolved at: from here every chrome reader reads them (arrangementOf).
+        com.termux.app.place.SeamCrossing.Endpoint here =
+            com.termux.app.place.SeamCrossing.Endpoint.of(herePage, committedDress,
+                pageLookOf(herePage), committedArrangement(), committed,
+                stackDressOf(committedDress, mLastWallPage, orientation),
+                committedKeyboardVisible() && !isKeyboardFloating(), committedRowsPx);
+        com.termux.app.place.SeamCrossing.Endpoint there =
+            com.termux.app.place.SeamCrossing.Endpoint.of(therePage, otherDress,
+                pageLookOf(therePage), otherArrangement, otherLayout,
+                stackDressOf(otherDress, other, orientation),
+                mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
+                otherRowsPx);
         mCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
                 isSplitPanesEnabled()),
-            home, workspace, homeRest, home.drawerTile(), workspaceRest, workspace.drawerTile(),
-            arrangementRevision());
+            hereRest, thereRest, arrangementRevision());
         if (!begins) return;
         // Toward Home, the grid is given the room Home's dock leaves it at rest now, so it is laid
         // out at its final size for the slide rather than re-measured at the landing.
-        if (otherHome && rests != null) applyArrivingHomeGridReserve(rests, homeRest, home);
+        if (otherHome && rests != null)
+            applyArrivingHomeGridReserve(rests, therePage, thereRest, otherArrangement);
         // From Home, the bar takes off Home's dress for the Workspace's while it is still hidden,
         // before any pass lays it out over Home.
         if (mCrossing.seam().barTakesWorkspaceDressFirst()) {
@@ -23991,12 +24035,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyArrivingHomeGridReserve(
             @NonNull com.termux.app.dock.DockGeometry.Snapshot rests,
+            @NonNull com.termux.app.wall.PageRef homePage,
             @NonNull com.termux.app.dock.DockLayout homeRest, @NonNull ResolvedArrangement home) {
         View widgetPane = findViewById(R.id.widget_pane);
         if (!(widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
         com.termux.app.place.StackLayout.RestInput in =
-            new com.termux.app.place.StackLayout.RestInput(rests,
-                com.termux.app.dock.DockGeometry.Side.HOME);
+            new com.termux.app.place.StackLayout.RestInput(rests, homePage);
         in.toolbarShown = home.dockShown();
         in.extraKeysRowEnabled = home.extraKeysRowShown();
         in.toolbarHeightPx = appliedToolbarHeightPx();
@@ -24275,7 +24319,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
                                         boolean toolbarShown, boolean keyboardShown) {
         ChromeSpec spec = buildChromeSpec();
-        com.termux.app.dock.DockGeometry.Side side = com.termux.app.dock.DockGeometry.Side.of(place);
+        com.termux.app.wall.PageRef side = arrangedPageOf(place);
         com.termux.app.dock.DockGeometry.Snapshot snapshot =
             dockSnapshot(arrangement().layout(), stackDressPage());
         com.termux.app.place.StackLayout.RestInput in =
@@ -24822,7 +24866,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // dock's morph, the row laying out the landed rest its last frame already drew. From
             // here the chrome reads the store's arrangements again.
             com.termux.app.place.Crossing.Landing crossingLanding =
-                mCrossing.land(page, arrangementRevision());
+                mCrossing.land(endpointPageOf(page), arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);

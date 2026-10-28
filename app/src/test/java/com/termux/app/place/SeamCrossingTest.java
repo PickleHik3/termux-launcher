@@ -15,6 +15,7 @@ import com.termux.app.dock.DockStyle;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
@@ -140,10 +141,10 @@ public class SeamCrossingTest {
         return SeamDress.StackDress.of(dress.shape(), dock, 1f, 0);
     }
 
-    private static SeamCrossing.Half half(@NonNull DressResolver dresses, @NonNull PaneWallPage page,
+    private static SeamCrossing.Endpoint half(@NonNull DressResolver dresses, @NonNull PaneWallPage page,
                                           @NonNull PlaceLayout layout, boolean keyboardUp) {
         Dress dress = dresses.dressOf(page);
-        return SeamCrossing.Half.of(page, dress, layout, stackOf(dress), keyboardUp);
+        return SeamCrossing.Endpoint.of(PageRef.of(page), dress, layout, stackOf(dress), keyboardUp);
     }
 
     // ---- The drive: the activity's frame protocol ----
@@ -164,7 +165,7 @@ public class SeamCrossingTest {
     private static final class Drive {
         final SeamCrossing crossing = new SeamCrossing();
         final PaneWallPage committed;
-        final SeamCrossing.Half here, there;
+        final SeamCrossing.Endpoint here, there;
         final SeamCrossing.Stage stage;
         final PlaceChromeTravel.States states;
         final List<Step> steps = new ArrayList<>();
@@ -174,12 +175,12 @@ public class SeamCrossingTest {
         boolean picture;
         boolean askedForPicture;
 
-        Drive(@NonNull SeamCrossing.Half here, @NonNull SeamCrossing.Half there,
+        Drive(@NonNull SeamCrossing.Endpoint here, @NonNull SeamCrossing.Endpoint there,
               @NonNull SeamCrossing.Stage stage) {
             this.here = here;
             this.there = there;
             this.stage = stage;
-            this.committed = here.page;
+            this.committed = here.page.kind;
             boolean hereKeyboard = here.keyboardUp, thereKeyboard = there.keyboardUp;
             this.states = place -> new Rest(place == committed ? hereKeyboard : thereKeyboard,
                 false, true);
@@ -395,9 +396,9 @@ public class SeamCrossingTest {
         DressResolver dresses = new DressResolver(stored);
         Dress windowDress = dresses.dressOf(PaneWallPage.TERMINAL);
         Dress homeDress = dresses.dressOf(PaneWallPage.WIDGETS);
-        SeamCrossing.Half window = SeamCrossing.Half.of(PaneWallPage.TERMINAL, windowDress,
+        SeamCrossing.Endpoint window = SeamCrossing.Endpoint.of(PageRef.TERMINAL, windowDress,
             window(), stackOf(windowDress), windowKeyboard, WINDOW_ROWS);
-        SeamCrossing.Half home = SeamCrossing.Half.of(PaneWallPage.WIDGETS, homeDress, home(),
+        SeamCrossing.Endpoint home = SeamCrossing.Endpoint.of(PageRef.HOME, homeDress, home(),
             stackOf(homeDress), false, HOME_ROWS);
         SeamCrossing.Stage stage = SeamCrossing.Stage.of(false, () -> false, true);
         return from == PaneWallPage.TERMINAL ? new Drive(window, home, stage)
@@ -603,7 +604,7 @@ public class SeamCrossingTest {
     }
 
     /** The share of a band only {@code design} carries that {@code half}'s dock rests with. */
-    private static float restShare(@NonNull SeamCrossing.Half half, @NonNull DockStyle design) {
+    private static float restShare(@NonNull SeamCrossing.Endpoint half, @NonNull DockStyle design) {
         return half.dress.dockDesign() == design ? 1f : 0f;
     }
 
@@ -654,7 +655,7 @@ public class SeamCrossingTest {
             assertRowsSwapOnlyWhileHidden(drive);
             assertEquals("one swap, at the midpoint", 1, drive.count(s -> s.relayout));
             assertLandsOnTheOtherHalfsRest(drive);
-            assertSame(drive.there.page, drive.last().stackDressPage);
+            assertSame(drive.there.page.kind, drive.last().stackDressPage);
             SeamCrossing.Landing landing = drive.crossing.land();
             assertTrue(landing.laidOut());
             drive.crossing.end();

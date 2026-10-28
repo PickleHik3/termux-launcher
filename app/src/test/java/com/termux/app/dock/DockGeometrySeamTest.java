@@ -1,7 +1,7 @@
 package com.termux.app.dock;
 
 import com.termux.app.dock.DockGeometry.Half;
-import com.termux.app.dock.DockGeometry.Side;
+import com.termux.app.wall.PageRef;
 import com.termux.app.dock.DockGeometry.Snapshot;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
@@ -70,7 +70,7 @@ public class DockGeometrySeamTest {
             .pinnedSlotCount(slots);
     }
 
-    private static DockLayout rest(Snapshot.Builder device, Side side) {
+    private static DockLayout rest(Snapshot.Builder device, PageRef side) {
         return DockGeometry.compute(device.build().restOf(side));
     }
 
@@ -104,8 +104,8 @@ public class DockGeometrySeamTest {
                             Half home = Half.builder(HOME_ON_ONE_LAYOUT).floating(capsule)
                                 .dockHeightScale(scale).design(design).build();
                             Snapshot.Builder device = device(home, workspace, density, slots);
-                            DockLayout window = rest(device, Side.WORKSPACE);
-                            DockLayout onHome = rest(device, Side.HOME);
+                            DockLayout window = rest(device, PageRef.TERMINAL);
+                            DockLayout onHome = rest(device, PageRef.HOME);
                             assertTrue(at, window.appsRowUsableWidthPx > 0);
                             assertSameRow(at, window, onHome);
                         }
@@ -132,13 +132,13 @@ public class DockGeometrySeamTest {
                                 workspaceBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
                                 true);
                             Snapshot.Builder device = device(home, workspace, density, slots);
-                            DockLayout homeRest = rest(device, Side.HOME);
-                            DockLayout workspaceRest = rest(device, Side.WORKSPACE);
+                            DockLayout homeRest = rest(device, PageRef.HOME);
+                            DockLayout workspaceRest = rest(device, PageRef.TERMINAL);
 
                             // From a window toward Home: Home's rows, the field easing in.
                             PlaceLayout towardHome = SeamTravel.withDockOf(WINDOW_APPS, HOME);
                             for (float p : new float[] {0.25f, 0.5f, 0.75f, 1f}) {
-                                DockLayout frame = DockGeometry.compute(device.rows(Side.HOME)
+                                DockLayout frame = DockGeometry.compute(device.rows(PageRef.HOME)
                                     .arrangement(towardHome).fieldReveal(p).build());
                                 assertShowsItsOwnHalf(at + " toward Home at " + p, homeRest,
                                     frame);
@@ -149,7 +149,7 @@ public class DockGeometrySeamTest {
                             PlaceLayout towardWindow = SeamTravel.withDockOf(HOME, WINDOW_APPS);
                             for (float p : new float[] {0.25f, 0.5f, 0.75f, 1f}) {
                                 DockLayout frame = DockGeometry.compute(device
-                                    .rows(Side.WORKSPACE).arrangement(towardWindow)
+                                    .rows(PageRef.TERMINAL).arrangement(towardWindow)
                                     .fieldReveal(1f - p).build());
                                 assertShowsItsOwnHalf(at + " toward a window at " + p,
                                     workspaceRest, frame);
@@ -191,14 +191,14 @@ public class DockGeometrySeamTest {
                                 workspaceBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
                                 false);
                             Snapshot.Builder device = device(home, workspace, density, slots);
-                            DockLayout homeRest = rest(device, Side.HOME);
-                            DockLayout window = rest(device, Side.WORKSPACE);
+                            DockLayout homeRest = rest(device, PageRef.HOME);
+                            DockLayout window = rest(device, PageRef.TERMINAL);
                             assertSameRow(at + " in the window", homeRest, window);
                             // Its band stays the window's: none.
                             assertEquals(at, 0, window.appsRowBandPx);
                             assertEquals(at, 0, window.appsBarHeightPx);
                             // And the slide that brings it in hands it the same.
-                            DockLayout sliding = DockGeometry.compute(device.rows(Side.HOME)
+                            DockLayout sliding = DockGeometry.compute(device.rows(PageRef.HOME)
                                 .arrangement(SeamTravel.withDockOf(WINDOW_KEYS, HOME)).build());
                             assertSameRow(at + " sliding in", homeRest, sliding);
                         }
@@ -222,15 +222,15 @@ public class DockGeometrySeamTest {
                                 workspaceBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
                                 true);
                             Snapshot.Builder device = device(home, workspace, density, slots);
-                            DockLayout workspaceRest = rest(device, Side.WORKSPACE);
-                            DockLayout onHome = rest(device, Side.HOME);
+                            DockLayout workspaceRest = rest(device, PageRef.TERMINAL);
+                            DockLayout onHome = rest(device, PageRef.HOME);
                             assertSameRow(at + " on Home", workspaceRest, onHome);
                             // Its band stays Home's: none.
                             assertEquals(at, 0, onHome.appsRowBandPx);
                             assertEquals(at, 0, onHome.appsBarHeightPx);
                             // And the slide from Home that brings it in hands it the same.
                             DockLayout sliding = DockGeometry.compute(device
-                                .rows(Side.WORKSPACE)
+                                .rows(PageRef.TERMINAL)
                                 .arrangement(SeamTravel.withDockOf(HOME_BARE, WINDOW_APPS))
                                 .build());
                             assertSameRow(at + " sliding in", workspaceRest, sliding);
@@ -249,7 +249,7 @@ public class DockGeometrySeamTest {
                         Half workspace = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
                             false);
                         Half home = half(HOME, capsule, scale, DockStyle.GLASS_TRAY, true);
-                        for (Side side : Side.values()) {
+                        for (PageRef side : new PageRef[] {PageRef.HOME, PageRef.TERMINAL}) {
                             Snapshot rest = device(home, workspace, density, slots).build()
                                 .restOf(side);
                             DockLayout loose = DockGeometry.compute(rest);
@@ -289,9 +289,9 @@ public class DockGeometrySeamTest {
                                 designs[1], true);
                             Snapshot.Builder device = device(home, workspace, density, slots);
                             assertEachFrameHoldsItsHalf(at + " toward Home", device,
-                                Side.WORKSPACE);
+                                PageRef.TERMINAL);
                             assertEachFrameHoldsItsHalf(at + " toward a window", device,
-                                Side.HOME);
+                                PageRef.HOME);
                         }
     }
 
@@ -303,9 +303,9 @@ public class DockGeometrySeamTest {
      * as far apart, as that half's row at rest, and draws the same icon.
      */
     private static void assertEachFrameHoldsItsHalf(String at, Snapshot.Builder device,
-                                                    Side from) {
+                                                    PageRef from) {
         Snapshot base = device.build();
-        Side to = from == Side.HOME ? Side.WORKSPACE : Side.HOME;
+        PageRef to = from == PageRef.HOME ? PageRef.TERMINAL : PageRef.HOME;
         Half departing = base.half(from);
         Half arriving = base.half(to);
         PlaceLayout seam = SeamTravel.withDockOf(departing.layout, arriving.layout);
@@ -315,7 +315,7 @@ public class DockGeometrySeamTest {
         float stripTo = arriving.design == DockStyle.WALL_STRIP ? 1f : 0f;
         for (int step = 0; step <= 10; step++) {
             float p = step / 10f;
-            Side shown = p >= 0.5f ? to : from;
+            PageRef shown = p >= 0.5f ? to : from;
             Snapshot frameSnapshot = base.toBuilder()
                 .rows(shown)
                 .arrangement(shown == to ? seam : departing.layout)
@@ -355,13 +355,13 @@ public class DockGeometrySeamTest {
                         Half home = Half.builder(HOME_ON_ONE_LAYOUT).floating(capsule)
                             .dockHeightScale(scale).design(DockStyle.LENS_BEADS).build();
                         Snapshot base = device(home, workspace, density, slots).build();
-                        int width = DockGeometry.compute(base.restOf(Side.WORKSPACE))
+                        int width = DockGeometry.compute(base.restOf(PageRef.TERMINAL))
                             .appsRowUsableWidthPx;
                         PlaceLayout seam = SeamTravel.withDockOf(WINDOW_APPS, HOME_ON_ONE_LAYOUT);
                         for (int step = 0; step <= 10; step++) {
                             boolean homeRows = step >= 5;
                             DockLayout frame = DockGeometry.compute(base.toBuilder()
-                                .rows(homeRows ? Side.HOME : Side.WORKSPACE)
+                                .rows(homeRows ? PageRef.HOME : PageRef.TERMINAL)
                                 .arrangement(homeRows ? seam : WINDOW_APPS).build());
                             assertEquals(at + " at " + step, width, frame.appsRowUsableWidthPx);
                         }
