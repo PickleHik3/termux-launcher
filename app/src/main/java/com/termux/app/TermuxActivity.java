@@ -15715,6 +15715,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull @Override public java.util.List<Integer> homePageIds() {
                 return wallPages().homePageIdsForRepository();
             }
+
+            @Nullable @Override public String pageName(int pageId) {
+                com.termux.app.wall.WallPages pages = wallPages();
+                com.termux.app.wall.WallPages.Page page = pages.page(pageId);
+                return page == null ? null : pages.displayName(page, null);
+            }
         });
     }
 

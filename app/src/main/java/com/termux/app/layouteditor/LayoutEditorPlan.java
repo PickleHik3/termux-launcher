@@ -104,11 +104,13 @@ public final class LayoutEditorPlan {
         new java.util.LinkedHashMap<>();
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
-    /** The page the editor opened on (-1: none known) and whether it held a page layout then:
-     *  the flag Discard puts back too. */
-    private final int mEntryPageId;
-    @NonNull private final com.termux.app.wall.WallPages.PageKind mEntryPageKind;
-    private final boolean mEntryPageLayout;
+    /**
+     * Every page the session has dressed, by id, and whether it held a page layout when the
+     * session first reached it: the flags Discard puts back too (ADR 0015 §3).
+     */
+    @NonNull private final Map<Integer, Boolean> mEntryPageLayouts = new java.util.LinkedHashMap<>();
+    @NonNull private final Map<Integer, com.termux.app.wall.WallPages.PageKind> mEntryPageKinds =
+        new java.util.LinkedHashMap<>();
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
                              @NonNull PlaceOrientation deviceOrientation,
@@ -138,9 +140,71 @@ public final class LayoutEditorPlan {
         // remembered so Discard puts it back (ADR 0015 §3).
         LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
         enterVariant(workspace);
-        mEntryPageId = places.shownPageId(place);
-        mEntryPageKind = DressResolver.kindOf(place);
-        mEntryPageLayout = places.hasPageLayout(mEntryPageId);
+        rememberPage(places.shownPageId(place), DressResolver.kindOf(place));
+    }
+
+    /** Keeps {@code pageId}'s page-layout flag as the session first found it. */
+    private void rememberPage(int pageId, @NonNull com.termux.app.wall.WallPages.PageKind kind) {
+        if (pageId < 0 || mEntryPageLayouts.containsKey(pageId))
+            return;
+        mEntryPageLayouts.put(pageId, mRoot.hasPageLayout(pageId));
+        mEntryPageKinds.put(pageId, kind);
+    }
+
+    // ------------------------------------------------------------------ the page-layout chip
+
+    /** The page being dressed, by id; -1 where the launcher has not named it. */
+    public int pageId() {
+        return mRoot.shownPageId(mDressedPage);
+    }
+
+    /** The kind of the page being dressed. */
+    @NonNull
+    public com.termux.app.wall.WallPages.PageKind pageKind() {
+        return DressResolver.kindOf(mDressedPage);
+    }
+
+    /**
+     * Whether the "<kind> | <page>" chip is offered: the page is known and the session is not on
+     * the minimal layout, which is one switch for every window.
+     */
+    public boolean offersPageLayout() {
+        return pageId() >= 0 && mVariant != LayoutVariant.MINIMAL;
+    }
+
+    /** The chip's page side: whether the page being dressed wears a layout of its own. */
+    public boolean pageLayoutSide() {
+        int id = pageId();
+        return id >= 0 && mRoot.hasPageLayout(id);
+    }
+
+    /**
+     * The chip: the page side gives the page a layout of its own, seeded from what it showed,
+     * and the session edits it from then on; the kind side puts the page back on its kind's.
+     * Either way the flag and the page layout are in the session, so Discard puts them back.
+     */
+    public void setPageLayoutSide(boolean pageSide) {
+        int id = pageId();
+        if (id < 0 || mVariant == LayoutVariant.MINIMAL || pageLayoutSide() == pageSide)
+            return;
+        com.termux.app.wall.WallPages.PageKind kind = pageKind();
+        rememberPage(id, kind);
+        // The page layout as it stood is kept before the seed writes over it.
+        if (pageSide)
+            enterVariant(LayoutVariant.page(id, kind));
+        mRoot.setPageLayout(id, kind, pageSide);
+        mVariant = dress().layout();
+        mPlaces = mRoot.forVariant(mVariant);
+        enterVariant(mVariant);
+    }
+
+    /** Whether any page's layout flag differs from what the session found. */
+    private boolean pageFlagsMoved() {
+        for (Map.Entry<Integer, Boolean> entry : mEntryPageLayouts.entrySet()) {
+            if (mRoot.hasPageLayout(entry.getKey()) != entry.getValue())
+                return true;
+        }
+        return false;
     }
 
     private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
@@ -515,6 +579,7 @@ public final class LayoutEditorPlan {
         PaneWallPage place = home ? PaneWallPage.WIDGETS : mWindowPlace;
         mPlace = place;
         mDressedPage = place;
+        rememberPage(pageId(), pageKind());
         mVariant = dress().layout();
         mPlaces = mRoot.forVariant(mVariant);
         enterVariant(mVariant);
@@ -601,7 +666,7 @@ public final class LayoutEditorPlan {
      * — the unsaved-changes question.
      */
     public boolean isDirty() {
-        if (mRoot.hasPageLayout(mEntryPageId) != mEntryPageLayout)
+        if (pageFlagsMoved())
             return true;
         for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
             if (!entry.getValue().equals(
@@ -616,9 +681,12 @@ public final class LayoutEditorPlan {
      * nothing moved is left unwritten.
      */
     public void revert() {
-        boolean switchMoved = mRoot.hasPageLayout(mEntryPageId) != mEntryPageLayout;
-        if (switchMoved)
-            mRoot.setPageLayout(mEntryPageId, mEntryPageKind, mEntryPageLayout);
+        boolean switchMoved = pageFlagsMoved();
+        for (Map.Entry<Integer, Boolean> entry : mEntryPageLayouts.entrySet()) {
+            int id = entry.getKey();
+            if (mRoot.hasPageLayout(id) != entry.getValue())
+                mRoot.setPageLayout(id, mEntryPageKinds.get(id), entry.getValue());
+        }
         for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
             String atOpen = mEntrySignatures.get(entry.getKey());
             if (atOpen == null || !atOpen.equals(

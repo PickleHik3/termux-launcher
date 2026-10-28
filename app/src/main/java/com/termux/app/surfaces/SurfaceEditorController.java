@@ -1304,6 +1304,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private final class ElementsHost implements com.termux.app.surfaces.cards.ElementsList.Host {
         @NonNull private final DockHost mDock = new DockHost();
 
+        @Nullable @Override public CharSequence[] chipLabels() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null || !layout.offersPageLayout())
+                return null;
+            com.termux.app.wall.WallPages.PageKind kind = layout.pageLayoutKind();
+            String kindLabel = mHost.context().getString(
+                kind == com.termux.app.wall.WallPages.PageKind.HOME
+                    ? R.string.editor_elements_kind_home : R.string.editor_elements_kind_terminal);
+            String page = layout.pageLayoutPageName();
+            return page == null ? null : new CharSequence[] {kindLabel, page};
+        }
+
+        @Override public boolean pageSide() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.pageLayoutSide();
+        }
+
+        @Override public void setPageSide(boolean pageSide) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            layout.setPageLayoutSide(pageSide);
+            if (mElements != null)
+                mElements.restate();
+            positionTargets();
+        }
+
         @Override public boolean offers(
                 @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
             LayoutEditorController layout = mHost.layoutEditor();
