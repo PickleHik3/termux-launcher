@@ -7850,6 +7850,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
+        // No frame: the dock's content stands on the page's dim again.
+        mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, false);
         mGlassParamsValid = false; // no live backdrop shader -> key lens falls back to the bubble border
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         setDockProgramEdge(false);
@@ -8940,6 +8942,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // dark legend left from a brighter face cannot buy a milky veil that keeps it dark.
         int pale = android.graphics.Color.WHITE;
         int dark = android.graphics.Color.BLACK;
+        // The keyboard band's even-out (ADR 0014) is current before its legends are judged on it.
+        updateEvenOutPolicy();
         mChrome.ink().onFixedInkEitherTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
             host, dark, pale, inks[1],
             com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory.secondaryOf(dark),
@@ -9158,9 +9162,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, targetRect) &&
             backdrop.getDrawable() != null) {
-            if (mGlassDragPreview)
-                backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(
-                    mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100));
+            // Frost and even-out as now; mid-drag the matrix last measured. The same instance
+            // when nothing moved, which re-dresses nothing.
+            backdrop.setColorFilter(navStripFrostFilter(!mGlassDragPreview));
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
@@ -9228,8 +9232,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         // Same content-aware light scatter the dock and keyboard backdrops apply, so the
-        // under-pill strip reads as the same glass material rather than a plain blur.
-        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100));
+        // under-pill strip reads as the same glass material rather than a plain blur; evened out
+        // first on its own rect, as the dock is (ADR 0014).
+        backdrop.setColorFilter(navStripFrostFilter(true));
         backdrop.setVisibility(View.VISIBLE);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, stripRadiusDp,
             usingManagedWallpaperSource, targetRect);
@@ -9818,10 +9823,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.ACCESSORY) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.ACCESSORY, backdropTargetRect) &&
             installed != null) {
-            // The frost filter follows Opacity live; outside a drag it is what the install set.
-            if (mGlassDragPreview)
-                backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(
-                    mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100));
+            // The frost filter follows Opacity live, and the even-out the wallpaper under the dock
+            // now asks for (mid-drag the one last measured, re-measured on the release's pass);
+            // the same filter instance when neither moved, which re-dresses nothing.
+            backdrop.setColorFilter(dockFrostFilter(mGlassDragPreview ? null : surfaceHost));
             backdrop.setVisibility(View.VISIBLE);
             if (beadsMoved) rebuildBackdropGlassEffectForLens();
             syncDockShelf(state);
@@ -9840,6 +9845,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // this frame keeps the tint layer without stale wallpaper brightness.
                 backdrop.setImageDrawable(null);
                 backdrop.setVisibility(View.GONE);
+                mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
+                    false);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
                 setDockProgramEdge(false);
             }
@@ -9888,8 +9895,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mGlassParamsValid = (glass != null);
             backdrop.setRenderEffect(glass);
         }
-        // Content-aware light scatter — the frost that makes the blur read as glass, not plastic.
-        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100));
+        // Content-aware light scatter — the frost that makes the blur read as glass, not plastic —
+        // with the dock band's even-out ahead of it (ADR 0014).
+        backdrop.setColorFilter(dockFrostFilter(surfaceHost));
         backdrop.setVisibility(View.VISIBLE);
         // Below Android 13 there is no effect to install, and the dock keeps its rim.
         setDockProgramEdge(mGlassParamsValid);
@@ -23134,11 +23142,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void updateEvenOutPolicy() {
         if (mChrome == null) return;
         int strength = evenOutStrengthNow();
-        boolean enabled = mPreferences != null && mPreferences.isGlassEvenOutEnabled() && strength > 0;
+        boolean switchOn = mPreferences != null && mPreferences.isGlassEvenOutEnabled();
+        boolean enabled = switchOn && strength > 0;
         com.termux.app.terminal.MaterialTerminalColorScheme.setGlassFloors(enabled);
-        if (!enabled) {
+        if (!switchOn) {
             mEvenOutPolicy = null;
             mChrome.ink().setEvenOutPolicy(null);
+            updateBandEvenOutPolicies();
             return;
         }
         com.termux.shared.termux.settings.preferences.TerminalContrastLevel level =
@@ -23165,7 +23175,137 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mEvenOutCeilings[1], current, strength);
             mEvenOutPolicy = kept;
         }
-        mChrome.ink().setEvenOutPolicy(kept);
+        // The stage is kept at a terminal Opacity of 0 too (strength 0): the panes draw none, and
+        // a band with an Opacity of its own still evens out at its own strength.
+        mChrome.ink().setEvenOutPolicy(enabled ? kept : null);
+        updateBandEvenOutPolicies();
+    }
+
+    /** Index of each chrome band's slot in the per-band memo below. */
+    private static final int EVEN_OUT_KEYBOARD = 0;
+    private static final int EVEN_OUT_DOCK = 1;
+    private static final int EVEN_OUT_STRIP = 2;
+    /** What each band's even-out was last built from, so an unchanged pass builds nothing. */
+    @NonNull private final com.termux.app.chrome.ChromeInk.EvenOutPolicy[] mBandEvenOutStage =
+        new com.termux.app.chrome.ChromeInk.EvenOutPolicy[3];
+    @NonNull private final com.termux.app.chrome.ChromeInk.EvenOutPolicy[] mBandEvenOutKept =
+        new com.termux.app.chrome.ChromeInk.EvenOutPolicy[3];
+    @NonNull private final boolean[] mBandEvenOutInherits = new boolean[3];
+    @NonNull private final int[] mBandEvenOutOpacity = {-1, -1, -1};
+
+    /**
+     * Tells the chrome bands their even-out (ADR 0014, wave 2c; ChromeInk.bandEvenOutPolicy): by
+     * default the terminal's stage, the same policy the panes draw with; a band whose Opacity no
+     * longer follows Base evens out to its own text target at its own Opacity's strength. The
+     * keyboard and the dock have a frost to compose into; the nav strip always takes the default.
+     * The status strip's glass is the top pane's (WallpaperFrostPainter), which this stage does
+     * not reach, so it gets none and its ink stays on today's ground. Run with the terminal's
+     * stage ({@link #updateEvenOutPolicy}); a few cached preference reads when nothing moved.
+     */
+    private void updateBandEvenOutPolicies() {
+        if (mChrome == null) return;
+        com.termux.app.chrome.ChromeInk.EvenOutPolicy stage = mEvenOutPolicy;
+        TermuxAppSharedPreferences.WallHalf half = stackLookHalf();
+        mChrome.ink().setBandEvenOutPolicy(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+            bandEvenOut(EVEN_OUT_KEYBOARD, com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+                TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD, mPreferences != null
+                    ? mPreferences.getInAppKeyboardBackdropOpacity(half) : 100, stage, half));
+        mChrome.ink().setBandEvenOutPolicy(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
+            bandEvenOut(EVEN_OUT_DOCK, com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
+                TermuxAppSharedPreferences.SurfaceSlot.DOCK, mPreferences != null
+                    ? mPreferences.getAppBarOpacity(half) : 100, stage, half));
+        mChrome.ink().setStripEvenOutPolicy(
+            bandEvenOut(EVEN_OUT_STRIP, null, null, 100, stage, half));
+    }
+
+    /** {@link com.termux.app.chrome.ChromeInk#bandEvenOutPolicy}, rebuilt only when an input moved. */
+    @Nullable
+    private com.termux.app.chrome.ChromeInk.EvenOutPolicy bandEvenOut(int index,
+            @Nullable com.termux.app.chrome.GlassBackdropCache.Band band,
+            @Nullable TermuxAppSharedPreferences.SurfaceSlot slot, int opacityPercent,
+            @Nullable com.termux.app.chrome.ChromeInk.EvenOutPolicy stage,
+            @Nullable TermuxAppSharedPreferences.WallHalf half) {
+        boolean inherits = slot == null || mPreferences == null || mPreferences.isSurfaceInheriting(
+            slot, TermuxAppSharedPreferences.SurfaceProperty.OPACITY, half);
+        if (mBandEvenOutOpacity[index] >= 0 && mBandEvenOutStage[index] == stage
+                && mBandEvenOutInherits[index] == inherits
+                && (inherits || mBandEvenOutOpacity[index] == opacityPercent)) {
+            return mBandEvenOutKept[index];
+        }
+        com.termux.app.chrome.ChromeInk.EvenOutPolicy policy =
+            com.termux.app.chrome.ChromeInk.bandEvenOutPolicy(band, inherits, opacityPercent, stage);
+        mBandEvenOutStage[index] = stage;
+        mBandEvenOutInherits[index] = inherits;
+        mBandEvenOutOpacity[index] = opacityPercent;
+        mBandEvenOutKept[index] = policy;
+        return policy;
+    }
+
+    /** Scratch for the dock's even-out rect; main thread only, as every dress pass is. */
+    @NonNull private final Rect mDockEvenOutRect = new Rect();
+    @NonNull private final int[] mDockEvenOutLocation = new int[2];
+
+    /**
+     * The dock backdrop's frost with the dock band's even-out composed ahead of it, measured on
+     * the dock's own surface ({@code surfaceHost}) as laid out on screen. The frost alone while
+     * the band has none, or the switch is off. A null host (a Glass drag's tick) measures nothing
+     * and keeps the matrix last measured, so a drag samples no wallpaper per tick.
+     */
+    @Nullable
+    private android.graphics.ColorFilter dockFrostFilter(@Nullable View surfaceHost) {
+        android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
+            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100);
+        if (mChrome == null) return frost;
+        // Asked only where the dock's frame is up: it covers the page's dim, so the dock's ink and
+        // even-out are measured with none under them (cleared in clearAccessoryRenderEffectBackdrop).
+        mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, true);
+        if (surfaceHost == null) {
+            return com.termux.app.chrome.GlassFilters.withEvenOut(mChrome.ink().lastBandEvenOutMatrix(
+                com.termux.app.chrome.GlassBackdropCache.Band.DOCK), frost);
+        }
+        if (surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0) return frost;
+        updateEvenOutPolicy();
+        surfaceHost.getLocationOnScreen(mDockEvenOutLocation);
+        mDockEvenOutRect.set(mDockEvenOutLocation[0], mDockEvenOutLocation[1],
+            mDockEvenOutLocation[0] + surfaceHost.getWidth(),
+            mDockEvenOutLocation[1] + surfaceHost.getHeight());
+        android.graphics.ColorFilter composed = com.termux.app.chrome.GlassFilters.withEvenOut(
+            mChrome.ink().bandEvenOutMatrix(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
+                mDockEvenOutRect), frost);
+        // EvenOut2c diagnostic (temporary): logged when the answer moves, not per pass.
+        if (composed != mDiagDockFilter || !mDockEvenOutRect.equals(mDiagDockRect)) {
+            mDiagDockFilter = composed;
+            mDiagDockRect.set(mDockEvenOutRect);
+            android.util.Log.d("EvenOut2c", "t=" + android.os.SystemClock.uptimeMillis()
+                + " dockFrostFilter " + (composed == frost ? "bare-frost" : "composed")
+                + " policy=" + (mBandEvenOutKept[EVEN_OUT_DOCK] != null)
+                + " host=" + mDockEvenOutRect.toShortString()
+                + " caller=" + com.termux.app.chrome.ChromeInk.diagCallersPublic());
+        }
+        return composed;
+    }
+
+    @Nullable private android.graphics.ColorFilter mDiagDockFilter;
+    @NonNull private final Rect mDiagDockRect = new Rect();
+
+    /**
+     * {@link #dockFrostFilter} for the decor nav strip, measured on the strip itself; with
+     * {@code measure} false (a drag's tick) the matrix last measured.
+     */
+    @Nullable
+    private android.graphics.ColorFilter navStripFrostFilter(boolean measure) {
+        android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
+            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookHalf()) : 100);
+        if (mChrome == null) return frost;
+        if (!measure) {
+            return com.termux.app.chrome.GlassFilters.withEvenOut(
+                mChrome.ink().lastStripEvenOutMatrix(), frost);
+        }
+        updateEvenOutPolicy();
+        Rect strip = buildDecorNavBarBackdropTargetRect(0);
+        if (strip == null) return frost;
+        return com.termux.app.chrome.GlassFilters.withEvenOut(
+            mChrome.ink().stripEvenOutMatrix(strip), frost);
     }
 
     /**

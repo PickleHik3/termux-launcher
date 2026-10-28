@@ -398,11 +398,29 @@ public final class GlassSurfaceFactory {
     }
 
     /**
+     * The even-out matrix {@code band}'s frame is drawn through ahead of its frost
+     * ({@link ChromeInk#bandEvenOutMatrix}, measured on the rect the band's content last asked
+     * about), or null: no band, no even-out for it, or the identity.
+     */
+    @Nullable
+    android.graphics.ColorMatrix bandEvenOut(@Nullable GlassBackdropCache.Band band) {
+        return band != null && mInk != null ? mInk.bandEvenOutMatrix(band, null) : null;
+    }
+
+    /**
      * Tells the ink the blur {@code band}'s glass is drawn at ({@link ChromeInk#noteBandBlur}), so
      * its rows are measured on the frame it really shows. Nothing for no band or no ink.
      */
     void noteBandBlur(@Nullable GlassBackdropCache.Band band, int blurRadiusDp) {
         if (band != null && mInk != null) mInk.noteBandBlur(band, blurRadiusDp);
+    }
+
+    /**
+     * Tells the ink whether {@code band}'s own frame is up ({@link ChromeInk#noteBandFrame}): a
+     * frame covers the page's dim. Nothing for no band or no ink.
+     */
+    void noteBandFrame(@Nullable GlassBackdropCache.Band band, boolean framed) {
+        if (band != null && mInk != null) mInk.noteBandFrame(band, framed);
     }
 
     /**
@@ -425,6 +443,8 @@ public final class GlassSurfaceFactory {
         mInk.noteBandGlass(band, clamped, withFoot, sliceStart, sliceEnd, base);
         // The glass under it is the dock's, blurred at the dock's radius.
         mInk.noteBandBlur(band, mSurfaces.effectiveDockBlurRadiusDp());
+        // And it stands on the dock's frame where that is up, which covers the page's dim.
+        mInk.noteBandFrame(band, mInk.bandFramed(GlassBackdropCache.Band.DOCK));
         int veil = mInk.bandVeil(band);
         if (Color.alpha(veil) <= 0) return null;
         GradientDrawable layer = new GradientDrawable();
