@@ -277,6 +277,24 @@ public class PlaceLayoutPageLayoutTest {
      * while page 2, on the shared layout, is in front, so a crossing between the two holds each
      * end's own arrangement. With no id said, or for the page in front, it reads as before.
      */
+    /**
+     * A Display page's own layout is of the Display kind: it seeds from what Display pages show,
+     * not the Terminal's, and links its sizes as a Terminal page's does.
+     */
+    @Test
+    public void aDisplayPagesLayoutSeedsFromTheDisplayKind() {
+        PlaceLayoutStore store = store();
+        store.setKindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS, true);
+        store.setKindShows(PageKind.DISPLAY, PORTRAIT, Element.APPS, false);
+        store.setPageLayout(5, PageKind.DISPLAY, true);
+        LayoutVariant display = LayoutVariant.page(5, PageKind.DISPLAY);
+        assertEquals(PageKind.DISPLAY, display.kind());
+        assertTrue(display.linksSizes());
+        assertTrue(display.holdsOwnVisibility());
+        assertTrue("seeded from the Display kind",
+            store.forVariant(display).slot(PORTRAIT, Element.APPS).hidden);
+    }
+
     @Test
     public void aPageNamedByItsIdResolvesItsOwnLayoutWhileAnotherIsInFront() {
         PlaceLayoutStore store = store();

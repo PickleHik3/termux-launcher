@@ -37,6 +37,7 @@ public final class LayoutVariant {
      */
     private static final LayoutVariant[] SMALL_HOME = new LayoutVariant[64];
     private static final LayoutVariant[] SMALL_TERMINAL = new LayoutVariant[64];
+    private static final LayoutVariant[] SMALL_DISPLAY = new LayoutVariant[64];
 
     @NonNull private final String mName;
     @NonNull private final String mKeyScope;
@@ -66,13 +67,16 @@ public final class LayoutVariant {
 
     /**
      * The page layout of page {@code pageId}, a page of {@code kind}: one instance per id and
-     * kind, so {@code ==} holds. A Display page dresses as a Terminal page does.
+     * kind, so {@code ==} holds. A Display page's layout is tagged with its own kind, so its
+     * visibility seeds from the Display kind's; otherwise it is a Terminal page's in all but name
+     * (its sizes link, it holds its own visibility, it offers what a window's offers).
      */
     @NonNull
     public static LayoutVariant page(int pageId, @NonNull PageKind kind) {
-        PageKind dressed = kind == PageKind.HOME ? PageKind.HOME : PageKind.TERMINAL;
+        PageKind dressed = kind;
         // Read on travel frames: a small id is found in an array, allocating nothing.
-        LayoutVariant[] small = dressed == PageKind.HOME ? SMALL_HOME : SMALL_TERMINAL;
+        LayoutVariant[] small = dressed == PageKind.HOME ? SMALL_HOME
+            : dressed == PageKind.DISPLAY ? SMALL_DISPLAY : SMALL_TERMINAL;
         if (pageId >= 0 && pageId < small.length) {
             LayoutVariant held = small[pageId];
             if (held != null) return held;
@@ -114,10 +118,13 @@ public final class LayoutVariant {
         return mKind == PageKind.HOME;
     }
 
-    /** The kind of page this layout dresses: Home's, else the Terminal's. */
+    /**
+     * The kind of page this layout dresses: Home's, a Display page's own layout's Display kind,
+     * else the Terminal's (the shared layouts included).
+     */
     @NonNull
     public PageKind kind() {
-        return mKind == PageKind.HOME ? PageKind.HOME : PageKind.TERMINAL;
+        return mKind == null ? PageKind.TERMINAL : mKind;
     }
 
     /**

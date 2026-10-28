@@ -596,6 +596,21 @@ public class DressResolverTest {
         assertSame(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
     }
 
+    /** A Display page's own layout is tagged with the Display kind, dressed as a window's. */
+    @Test
+    public void aDisplayPagesOwnLayoutIsOfTheDisplayKind() {
+        stored.terminalLayout = true;
+        LayoutVariant own = dresses.layoutOf(PaneWallPage.DISPLAY);
+        assertSame(LayoutVariant.page(TERMINAL_ID, PageKind.DISPLAY), own);
+        assertEquals(PageKind.DISPLAY, own.kind());
+        assertTrue(own.isPage());
+        assertTrue(own.holdsOwnVisibility());
+        assertFalse(own.isHomeKind());
+        assertTrue(own.offers(Element.EXTRA_KEYS));
+        stored.minimal = true;
+        assertSame(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.DISPLAY));
+    }
+
     @Test
     public void aPageLayoutsDesignIsWhatThePageDraws() {
         stored.terminalLayout = true;

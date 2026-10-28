@@ -232,7 +232,7 @@ public final class DressResolver {
         boolean home = page == PaneWallPage.WIDGETS;
         if (!home && mSource.minimal()) return LayoutVariant.MINIMAL;
         if (id >= 0 && mSource.pageLayout(id))
-            return LayoutVariant.page(id, home ? PageKind.HOME : PageKind.TERMINAL);
+            return LayoutVariant.page(id, kindOf(page));
         return LayoutVariant.NORMAL;
     }
 
