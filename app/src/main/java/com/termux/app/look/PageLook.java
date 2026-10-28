@@ -206,6 +206,28 @@ public final class PageLook {
         store.remove(scope.isGlobal() ? key : LookKeys.pageKey(key, scope.pageId()));
     }
 
+    /**
+     * Copies every look override of page {@code fromPageId} to page {@code toPageId} (the
+     * {@code key@id} entries; the target's own are overwritten, other keys are left). Pure on the
+     * store, no listeners: for a page made at upgrade time. Returns how many keys it wrote.
+     */
+    public static int copyOverrides(@NonNull LookStore store, int fromPageId, int toPageId) {
+        if (fromPageId < 0 || toPageId < 0 || fromPageId == toPageId) return 0;
+        int copied = 0;
+        for (String plain : LookKeys.OVERRIDABLE) {
+            String from = LookKeys.pageKey(plain, fromPageId);
+            if (!store.has(from)) continue;
+            String to = LookKeys.pageKey(plain, toPageId);
+            if (TERMUX_APP.KEY_SURFACE_MATERIAL.equals(plain)) {
+                store.putString(to, store.getString(from, ""));
+            } else {
+                store.putInt(to, store.getInt(from, 0));
+            }
+            copied++;
+        }
+        return copied;
+    }
+
     /** Whether a page may hold its own value of this key. */
     public static boolean isDetachable(@NonNull String key) {
         return LookKeys.OVERRIDABLE.contains(key);

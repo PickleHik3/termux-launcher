@@ -57,12 +57,23 @@ public class WallPagesMigrationTest {
     }
 
     @Test
-    public void homeUsersStartingInTheDisplayGetTheTransitionalTarget() {
+    public void homeUsersStartingInTheDisplayGetADisplayPageAsHome() {
         WallPages p = WallPagesMigration.seed("display", 1, "home", 2);
-        assertTrue(p.homeIsDisplayWindow());
-        assertEquals(null, p.home());
-        assertEquals("HHT", kinds(p));
-        assertEquals(2, p.homeId());
+        assertFalse(p.homeIsDisplayWindow());
+        assertEquals("HHTD", kinds(p));
+        assertEquals(PageKind.DISPLAY, p.home().kind);
+        assertEquals(4, p.homeId());
+        assertEquals(null, p.home().binding);
+        assertEquals(5, p.nextId());
+    }
+
+    @Test
+    public void aDisplayInTheRowAddsAnUnboundDisplayPageAfterTerminalButHomeStays() {
+        WallPages p = WallPagesMigration.seed("home", 1, "home", 2, true);
+        assertEquals("HHTD", kinds(p));
+        assertEquals(2, p.home().id);
+        assertEquals(5, p.nextId());
+        assertEquals("HHT", kinds(WallPagesMigration.seed("home", 1, "home", 2, false)));
     }
 
     @Test
@@ -77,12 +88,67 @@ public class WallPagesMigrationTest {
     }
 
     @Test
-    public void terminalOnlyUsersStartingInTheDisplayKeepIt() {
+    public void terminalOnlyUsersStartingInTheDisplayGetTheDisplayPage() {
         WallPages p = WallPagesMigration.seed("display", 0, "terminal", 2);
-        assertTrue(p.homeIsDisplayWindow());
-        assertEquals("T", kinds(p));
+        assertFalse(p.homeIsDisplayWindow());
+        assertEquals("TD", kinds(p));
+        assertEquals(PageKind.DISPLAY, p.home().kind);
         assertEquals(2, p.detached().size());
-        assertFalse(WallPagesMigration.seed("workspace", 0, "terminal", 2).homeIsDisplayWindow());
+        assertEquals(5, p.nextId());
+        assertEquals("T", kinds(WallPagesMigration.seed("workspace", 0, "terminal", 2)));
+    }
+
+    @Test
+    public void anAlreadySeededWallWithTheDisplayWindowHomeIsConvertedOnce() {
+        WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        WallPages old = WallPagesMigration.seed("home", 1, "home", 2);
+        store.replace(old.setHomeDisplayWindow().pages);
+        prefs.edit().putInt(WallPagesMigration.KEY_VERSION, WallPagesMigration.VERSION).commit();
+        assertTrue(WallPagesMigration.migrateIfNeeded(prefs, 2, store));
+        WallPages p = store.current();
+        assertFalse(p.homeIsDisplayWindow());
+        assertEquals("HHTD", kinds(p));
+        assertEquals(PageKind.DISPLAY, p.home().kind);
+        assertEquals(4, p.homeId());
+        assertEquals(2, p.lastHomePageId());
+        assertEquals(4, prefs.getInt(WallPagesMigration.KEY_DISPLAY_LOOK_PENDING, 0));
+        WallPages again = store.current();
+        assertFalse(WallPagesMigration.migrateIfNeeded(prefs, 2, store));
+        assertEquals(again, store.current());
+    }
+
+    @Test
+    public void aSeededWallWithoutTheFlagIsLeftAlone() {
+        WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        store.replace(WallPagesMigration.seed("home", 0, "home", 2));
+        prefs.edit().putInt(WallPagesMigration.KEY_VERSION, WallPagesMigration.VERSION).commit();
+        assertFalse(WallPagesMigration.migrateIfNeeded(prefs, 2, store));
+        assertEquals("HHT", kinds(store.current()));
+    }
+
+    @Test
+    public void aFreshSeedHonoursTheAutostartKeyAndRemembersTheDisplayPage() {
+        WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        prefs.edit().putBoolean("x11_display_autostart", true).commit();
+        assertTrue(WallPagesMigration.migrateIfNeeded(prefs, 2, store));
+        assertEquals("HHTD", kinds(store.current()));
+        assertEquals(PageKind.HOME, store.current().home().kind);
+        assertEquals(4, prefs.getInt(WallPagesMigration.KEY_DISPLAY_LOOK_PENDING, 0));
+    }
+
+    @Test
+    public void theUpgradedDisplayPageGetsTheTerminalLookOnce() {
+        com.termux.app.look.MemoryLookStore look = new com.termux.app.look.MemoryLookStore();
+        String key = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
+        look.putInt(key + "@3", 42);
+        assertFalse(WallPagesMigration.copyLookToUpgradedDisplay(prefs, look, 3));
+        prefs.edit().putInt(WallPagesMigration.KEY_DISPLAY_LOOK_PENDING, 4).commit();
+        assertTrue(WallPagesMigration.copyLookToUpgradedDisplay(prefs, look, 3));
+        assertEquals(42, look.getInt(key + "@4", -1));
+        look.putInt(key + "@4", 7);
+        assertFalse(WallPagesMigration.copyLookToUpgradedDisplay(prefs, look, 3));
+        assertEquals(7, look.getInt(key + "@4", -1));
     }
 
     @Test
@@ -94,14 +160,13 @@ public class WallPagesMigrationTest {
                         WallPages p = WallPagesMigration.seed(startIn, def, useAs, count);
                         String tag = startIn + "/" + useAs + "/" + count + "/" + def;
                         boolean terminalOnly = !UseAs.read(useAs).showsHomePage() || count == 0;
-                        assertEquals(tag, terminalOnly ? "T" : repeat('H', count) + "T", kinds(p));
+                        boolean display = "display".equals(StartInPolicy.read(startIn));
+                        String tail = display ? "TD" : "T";
+                        assertEquals(tag, terminalOnly ? tail : repeat('H', count) + tail, kinds(p));
+                        assertFalse(tag, p.homeIsDisplayWindow());
                         assertEquals(tag, terminalOnly ? count : 0, p.detached().size());
-                        if (p.homeIsDisplayWindow()) {
-                            assertEquals(tag, "display", StartInPolicy.read(startIn));
-                        } else {
-                            assertFalse(tag, "display".equals(StartInPolicy.read(startIn)));
-                            assertTrue(tag, p.home() != null);
-                        }
+                        assertTrue(tag, p.home() != null);
+                        assertEquals(tag, display, p.home().kind == PageKind.DISPLAY);
                         if (!terminalOnly && "home".equals(StartInPolicy.read(startIn))) {
                             int want = Math.max(0, Math.min(def, count - 1)) + 1;
                             assertEquals(tag, want, p.home().id);
