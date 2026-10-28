@@ -26966,12 +26966,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         boolean running = isEmbeddedDisplayRunning();
+        boolean routed = com.termux.app.wall.DisplayPagePolicy.isRoutedLanding(pageId,
+            mRoutedLinuxPage, mRoutedLinuxAtMs, android.os.SystemClock.uptimeMillis());
+        // The drawer's route is answered by one landing; the next landing is the user's own.
+        if (routed) mRoutedLinuxPage = -1;
         com.termux.app.wall.DisplayPagePolicy.Landing landing =
             com.termux.app.wall.DisplayPagePolicy.landing(binding, app != null, running,
                 mDisplayRequested, app != null && !app.session && running
                     && linuxWindowIdFor(app) >= 0,
-                com.termux.app.wall.DisplayPagePolicy.isRoutedLanding(pageId, mRoutedLinuxPage,
-                    mRoutedLinuxAtMs, android.os.SystemClock.uptimeMillis()));
+                routed);
         switch (landing) {
             case NOTHING:
                 return;
