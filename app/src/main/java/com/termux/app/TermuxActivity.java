@@ -4734,8 +4734,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (terminal) {
             page = pages.terminal();
         } else {
-            java.util.List<com.termux.app.wall.WallPages.Page> homes = pages.homePages();
-            if (!homes.isEmpty()) page = homes.get(Math.min(homes.size() - 1, pages.homeIndex()));
+            // The Home frame wears the Home page it shows, not the home page (ADR 0015 §6).
+            page = pages.page(homePageInFront());
         }
         return com.termux.app.terminal.TerminalSurfacePolicy.pageGround(terminal, mGroundGlassPane,
             mGroundCanvasTint, pageDimColor(page));
@@ -15707,13 +15707,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Tells the store which pages are on screen, so a page's own layout is the one it wears: the
      * Home page in front (the pane's index into the wall's Home pages) and the Terminal page.
      */
+    /** The id of the Home page the widget grid shows; -1 when there is none. */
+    private int homePageInFront() {
+        java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
+        if (ids.isEmpty()) return -1;
+        int index = mWidgetPaneController != null ? mWidgetPaneController.homePageIndex() : 0;
+        return ids.get(Math.max(0, Math.min(index, ids.size() - 1)));
+    }
+
     private void bindShownPages(@NonNull PlaceLayoutStore store) {
         store.setShownPages(new PlaceLayoutStore.ShownPages() {
             @Override public int homePageInFront() {
-                java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
-                if (ids.isEmpty()) return -1;
-                int index = mWidgetPaneController != null ? mWidgetPaneController.homePageIndex() : 0;
-                return ids.get(Math.max(0, Math.min(index, ids.size() - 1)));
+                return TermuxActivity.this.homePageInFront();
             }
 
             @Override public int terminalPage() {
@@ -22617,8 +22622,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public com.termux.app.terminal.TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace, boolean runCommands)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
         requireArrangementRestorable();
-        return restoreArrangement(new com.termux.app.terminal.TerminalWorkspaceStore().load(name),
-            replace, runCommands);
+        return restoreArrangement(new com.termux.app.terminal.TerminalWorkspaceStore()
+            .load(name, homePagesForWorkspace()), replace, runCommands);
     }
 
     private void requireArrangementRestorable()
@@ -29076,6 +29081,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onWidgetPageRendered() {
                     // A Terminal widget gone from Home takes its shell with it, however it went.
                     mTerminalWidgets.reconcile();
+                    // Another Home page in front may wear another ground, on screen or beside it.
+                    refreshGroundStrip();
                     // The badge, the chips and the summary read the page: a new page or a new
                     // widget changes all three.
                     if (!isWidgetsPageShowing()) return;
