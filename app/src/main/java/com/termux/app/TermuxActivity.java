@@ -14399,6 +14399,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentWallPlace();
         }
 
+        @Nullable @Override public java.util.List<com.termux.app.wall.WallPages.Page> wallPages() {
+            // The pages the scope chip counts, Display pages included (ADR 0015 §6).
+            return TermuxActivity.this.wallPages().pages();
+        }
+
+        @Override public int pageIdOnScreen() {
+            // The page in front: the Home page shown, the bound Display page, or the Terminal's.
+            com.termux.app.wall.PaneWallPage place = currentWallPlace();
+            if (place == com.termux.app.wall.PaneWallPage.WIDGETS)
+                return homePageInFront();
+            if (place == com.termux.app.wall.PaneWallPage.DISPLAY && mBoundDisplayPage >= 0)
+                return mBoundDisplayPage;
+            com.termux.app.wall.WallPages.Page terminal = TermuxActivity.this.wallPages().terminal();
+            return terminal == null ? -1 : terminal.id;
+        }
+
         @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
             return mInAppKeyboard;
         }

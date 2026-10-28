@@ -111,12 +111,11 @@ public enum UseAs {
     }
 
     /**
-     * Whether a card shows {@code row}: both Match rows copy from or to Home, so they go under
-     * Terminal only. The Workspace card itself stays.
+     * Whether a card shows {@code row}: every row, under every mode. The Match rows that went under
+     * Terminal only retired with the halves (ADR 0015 §6).
      */
     public boolean shows(@NonNull EditorRows.Row row) {
-        return this == HOME
-            || (row != EditorRows.Row.MATCH_HOME && row != EditorRows.Row.MATCH_WORKSPACE);
+        return true;
     }
 
     /** The card a door opens under this mode: the editor at rest (null) for a card it took away. */

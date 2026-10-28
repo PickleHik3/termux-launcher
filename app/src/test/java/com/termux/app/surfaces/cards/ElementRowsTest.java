@@ -113,12 +113,10 @@ public class ElementRowsTest {
     }
 
     @Test
-    public void theListStandsAfterTheMatchRowAndBeforeTheMoreChips() {
+    public void theListStandsBeforeTheMoreChips() {
         List<Row> home = rowsOf(EditorCard.HOME);
-        assertEquals(home.indexOf(Row.MATCH_WORKSPACE) + 1, home.indexOf(Row.ELEMENTS));
         assertEquals(home.indexOf(Row.ELEMENTS) + 1, home.indexOf(Row.SECTION_MORE));
         List<Row> workspace = rowsOf(EditorCard.WORKSPACE);
-        assertEquals(workspace.indexOf(Row.MATCH_HOME) + 1, workspace.indexOf(Row.ELEMENTS));
         assertEquals(workspace.indexOf(Row.ELEMENTS) + 1, workspace.indexOf(Row.SECTION_MORE));
     }
 

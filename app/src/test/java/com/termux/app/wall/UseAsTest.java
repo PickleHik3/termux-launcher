@@ -78,15 +78,13 @@ public class UseAsTest {
             Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_WORKSPACE)));
     }
 
-    @Test public void terminalOnlyHasNoHomeCardAndNoMatchRows() {
+    @Test public void terminalOnlyHasNoHomeCard() {
         UseAs terminal = UseAs.TERMINAL;
         assertFalse(terminal.reaches(EditorCard.HOME));
         assertTrue("the editor at rest is always reachable", terminal.reaches(null));
         for (EditorCard card : EditorCard.values()) {
             if (card != EditorCard.HOME) assertTrue(card.name(), terminal.reaches(card));
         }
-        assertFalse(terminal.shows(EditorRows.Row.MATCH_HOME));
-        assertFalse(terminal.shows(EditorRows.Row.MATCH_WORKSPACE));
         assertTrue(terminal.shows(EditorRows.Row.LOOK));
         assertTrue(terminal.shows(EditorRows.Row.LINK_GLOBAL));
     }
@@ -101,15 +99,13 @@ public class UseAsTest {
         assertEquals("settings-home hidden by terminal -> REST", terminal.doorLine("settings-home"));
     }
 
-    @Test public void theWorkspaceCardLosesOnlyItsMatchRowUnderTerminalOnly() {
+    @Test public void theWorkspaceCardIsTheSameUnderTerminalOnly() {
+        // The Match row it lost under Terminal only retired with the halves (ADR 0015 §6).
         List<EditorRows.Spec> home = EditorRows.rows(EditorCard.WORKSPACE,
             new EditorRows.Offers(true, true, true));
         List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.WORKSPACE,
             new EditorRows.Offers(true, true, false));
-        assertEquals(home.size() - 1, terminal.size());
-        boolean homeMatches = false;
-        for (EditorRows.Spec spec : home) homeMatches |= spec.row == EditorRows.Row.MATCH_HOME;
-        assertTrue(homeMatches);
+        assertEquals(home.size(), terminal.size());
         for (EditorRows.Spec spec : terminal) {
             assertTrue(spec.row.name(), UseAs.TERMINAL.shows(spec.row));
         }

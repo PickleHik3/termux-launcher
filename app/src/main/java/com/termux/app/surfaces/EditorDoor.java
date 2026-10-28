@@ -182,23 +182,6 @@ public enum EditorDoor {
         return null;
     }
 
-    /**
-     * The card that replaces {@code open} when the preview settles on {@code half}: a screen's card
-     * (Home's or the Workspace's) gives way to the card of the screen now shown; an element card,
-     * or no card, stays as it is (null). Null too when the screen has no card to give (no Home
-     * page under Terminal only, {@code showsHomePage} false) or the card already fits.
-     */
-    @Nullable
-    public static EditorCard cardAfterSwipe(@Nullable EditorCard open, @NonNull WallHalf half,
-                                            boolean showsHomePage) {
-        if (open != EditorCard.HOME && open != EditorCard.WORKSPACE)
-            return null;
-        if (half == WallHalf.HOME && !showsHomePage)
-            return null;
-        EditorCard next = EditorCard.forScreen(half);
-        return next == open ? null : next;
-    }
-
     /** {@link #cardFor}, with the door's line logged. */
     @Nullable
     public EditorCard route(@Nullable PaneWallPage onScreen, @Nullable EditorCard named) {

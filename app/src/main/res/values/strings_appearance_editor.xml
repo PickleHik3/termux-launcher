@@ -29,7 +29,7 @@
     <!-- Under the frame: which half of the wall the frame shows, and what a card changes. -->
     <string name="appearance_half_home">Home</string>
     <string name="appearance_half_workspace">Workspace</string>
-    <string name="appearance_half_description">Editing %1$s. Swipe across the preview to switch.</string>
+    <string name="appearance_half_description">Editing %1$s.</string>
     <!-- A surface in the preview, as accessibility names it. -->
     <string name="appearance_target_description">%1$s. Tap to change it, hold to move it.</string>
 
@@ -89,11 +89,7 @@
     <string name="appearance_row_page_dots">Page dots</string>
     <string name="appearance_row_wallpaper_scroll">Wallpaper scroll</string>
     <!-- The Match rows: copy the other screen's layout and glass onto this one. -->
-    <string name="appearance_row_match_workspace">Match Workspace styling</string>
-    <string name="appearance_row_match_home">Match Home styling</string>
     <!-- The Match row's button: Copy, then Undo while the copy can be taken back. -->
-    <string name="appearance_match_copy">Copy</string>
-    <string name="appearance_match_undo">Undo</string>
     <!-- The link from a screen's card to the card both screens share. -->
     <string name="appearance_row_global">Global</string>
     <string name="appearance_row_gestures">Gestures</string>

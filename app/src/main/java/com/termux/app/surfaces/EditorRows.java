@@ -110,11 +110,6 @@ public final class EditorRows {
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
-        /** Home's card: Home takes the Workspace's layout and glass ({@link ScreenMatch}). */
-        MATCH_WORKSPACE(Kind.ACTION, R.string.appearance_row_match_workspace,
-            R.drawable.ic_ms_swap_horiz),
-        /** The Workspace's card: the Workspace takes Home's layout and glass. */
-        MATCH_HOME(Kind.ACTION, R.string.appearance_row_match_home, R.drawable.ic_ms_swap_horiz),
         /** A screen's card to the card both screens share (the palette's). */
         LINK_GLOBAL(Kind.LINK, R.string.appearance_row_global, R.drawable.ic_symbol_palette),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),

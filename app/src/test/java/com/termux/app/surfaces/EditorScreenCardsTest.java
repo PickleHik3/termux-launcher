@@ -25,32 +25,19 @@ public class EditorScreenCardsTest {
     private static final EditorRows.Offers ALL = new EditorRows.Offers(true, true);
 
     @Test
-    public void theWorkspaceCardHoldsItsLookItsGlassItsMatchAndGlobal() {
+    public void theWorkspaceCardHoldsItsLookItsGlassAndGlobal() {
         assertEquals(Arrays.asList(Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST,
             Row.OPACITY, Row.TINT), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
-        assertEquals(Arrays.asList(Row.MATCH_HOME, Row.ELEMENTS, Row.SECTION_MORE,
+        assertEquals(Arrays.asList(Row.ELEMENTS, Row.SECTION_MORE,
             Row.LINK_GLOBAL), EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
     }
 
     @Test
-    public void theHomeCardHasAMatchRowAndNoOwnLayoutSwitch() {
-        List<Row> rows = rowsOf(EditorCard.HOME);
-        assertTrue(rows.contains(Row.MATCH_WORKSPACE));
-        assertFalse(rows.contains(Row.MATCH_HOME));
-        for (Row row : Row.values())
+    public void theMatchRowsAndTheOwnLayoutSwitchAreGone() {
+        // ADR 0015 §6: copy-to-the-other-half retired with the halves.
+        for (Row row : Row.values()) {
             assertFalse("the Own layout switch is gone", row.name().equals("OWN_LAYOUT"));
-    }
-
-    @Test
-    public void theMatchRowsAreActionsOnTheirScreensCardsAlone() {
-        assertEquals(Kind.ACTION, Row.MATCH_HOME.kind);
-        assertEquals(Kind.ACTION, Row.MATCH_WORKSPACE.kind);
-        for (EditorCard card : EditorCard.values()) {
-            List<Row> rows = rowsOf(card);
-            assertEquals(card + " and Match Home styling", card == EditorCard.WORKSPACE,
-                rows.contains(Row.MATCH_HOME));
-            assertEquals(card + " and Match Workspace styling", card == EditorCard.HOME,
-                rows.contains(Row.MATCH_WORKSPACE));
+            assertFalse(row + ": the Match rows are gone", row.name().startsWith("MATCH_"));
         }
     }
 
@@ -60,9 +47,7 @@ public class EditorScreenCardsTest {
             for (Row row : new Row[] {Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT})
                 assertEquals(row + " with the frame on " + frame, WallHalf.WORKSPACE,
                     EditorRows.halfFor(EditorCard.WORKSPACE, row, frame));
-            assertNull(EditorRows.halfFor(EditorCard.WORKSPACE, Row.MATCH_HOME, frame));
             assertNull(EditorRows.halfFor(EditorCard.WORKSPACE, Row.LINK_GLOBAL, frame));
-            assertNull(EditorRows.halfFor(EditorCard.HOME, Row.MATCH_WORKSPACE, frame));
         }
     }
 

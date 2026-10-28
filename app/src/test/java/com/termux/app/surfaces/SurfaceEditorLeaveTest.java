@@ -70,7 +70,7 @@ public class SurfaceEditorLeaveTest {
     @Test
     public void backTakesTheCardToPeekThenAWorkspaceChangeAsks() {
         SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, null);
-        assertEquals(WallHalf.WORKSPACE, editor.half());
+        assertEquals(WallHalf.WORKSPACE, editor.screen());
         model(editor).onValue(Row.OPACITY, 21, false);
         model(editor).onReleased(Row.OPACITY);
 
@@ -98,7 +98,7 @@ public class SurfaceEditorLeaveTest {
         model(editor).onReleased(Row.TINT);
         editor.present(EditorCard.DOCK, PaneWallPage.WIDGETS, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(WallHalf.HOME, editor.half());
+        assertEquals(WallHalf.HOME, editor.screen());
         model(editor).onValue(Row.OPACITY, 73, false);
         model(editor).onReleased(Row.OPACITY);
         assertNotEquals(atOpen, AppearanceSnapshot.signatureOf(preferences));

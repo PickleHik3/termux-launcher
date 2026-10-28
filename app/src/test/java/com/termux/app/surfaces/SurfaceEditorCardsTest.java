@@ -51,7 +51,7 @@ public class SurfaceEditorCardsTest {
     @Test
     public void aDockSliderOnHomeWritesHomeAlone() {
         SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.HOME, editor.half());
+        assertEquals(WallHalf.HOME, editor.screen());
         int workspace = opacity(WallHalf.WORKSPACE);
 
         model(editor).onValue(Row.OPACITY, 23, false);
@@ -158,9 +158,9 @@ public class SurfaceEditorCardsTest {
     }
 
     @Test
-    public void allSurfacesStandsAtTheCustomStopAndWritesTheHalfsSharedGlass() {
+    public void allSurfacesStandsAtTheCustomStopAndWritesBase() {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
-        assertEquals(WallHalf.WORKSPACE, editor.half());
+        assertEquals(WallHalf.WORKSPACE, editor.screen());
         EditorCardSheet.Model model = model(editor);
         assertFalse("a Look stop shows no strip", model.shown(Row.FROST));
 
@@ -171,23 +171,20 @@ public class SurfaceEditorCardsTest {
         assertTrue(model.shown(Row.FROST));
         assertTrue(model.shown(Row.TEXT_SIZE));
 
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            WallHalf.WORKSPACE, 9);
-        int home = preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME);
+        // Global writes Base, which every page wears (ADR 0015 §6): no half of its own.
         model.onValue(Row.OPACITY, 33, false);
         model.onReleased(Row.OPACITY);
-        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY,
-            WallHalf.WORKSPACE));
-        assertEquals("every surface on the half wears it", 33, opacity(WallHalf.WORKSPACE));
-        assertEquals("Base is wall-wide, so Home wears it too", 33,
+        assertEquals("Global writes Base", 33,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+        assertEquals("the dock wears it on every page", 33, opacity(WallHalf.HOME));
+        assertEquals(33, opacity(WallHalf.WORKSPACE));
 
         model.onValue(Row.FROST, 75, false);
         model.onReleased(Row.FROST);
         assertEquals(GlassControls.blurForGlass(75),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
         assertEquals(GlassControls.grainForGlass(75),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME));
         assertEquals(75, model.value(Row.FROST));
 
         model.onValue(Row.LOOK, 1, false);
@@ -196,20 +193,14 @@ public class SurfaceEditorCardsTest {
     }
 
     @Test
-    public void openingSlidingAndAThemeChangeNeverWriteHome() {
+    public void openingAndAThemeChangeNeverWriteHome() {
         // Home on its own look (Tint), the Workspace on Mist: unequal halves.
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(2),
             WallHalf.HOME);
         java.util.Map<String, Object> home = homeKeys();
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.HOME, editor.half());
+        assertEquals(WallHalf.HOME, editor.screen());
 
-        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
-            ReflectionHelpers.ClassParameter.from(WallHalf.class, WallHalf.WORKSPACE),
-            ReflectionHelpers.ClassParameter.from(boolean.class, false));
-        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
-            ReflectionHelpers.ClassParameter.from(WallHalf.class, WallHalf.HOME),
-            ReflectionHelpers.ClassParameter.from(boolean.class, false));
         model(editor).onValue(Row.THEME, 2, false);
         model(editor).onReleased(Row.THEME);
         editor.done();
@@ -219,21 +210,22 @@ public class SurfaceEditorCardsTest {
     }
 
     @Test
-    public void customOnTheWorkspaceNeverWritesHome() {
+    public void customUnderGlobalBringsTheSavedCustomToTheWall() {
         java.util.List<SurfacePresets.Preset> looks = SurfacePresets.presets(preferences);
-        // A saved Custom that names Home's own look on Solid's numbers, as pong's did.
+        // A saved Custom on Solid's numbers; the wall on another Look. Global is the wall, so
+        // Custom there brings the saved numbers back on it (the page side is EditorScreenLookTest).
         SurfacePresets.applyLook(preferences, looks.get(3), WallHalf.HOME);
+        int saved = opacity(WallHalf.HOME);
         SurfacePresets.saveCustom(preferences);
         SurfacePresets.applyLook(preferences, looks.get(2), WallHalf.HOME);
-        java.util.Map<String, Object> home = homeKeys();
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
-        assertEquals(WallHalf.WORKSPACE, editor.half());
+        assertEquals(WallHalf.WORKSPACE, editor.screen());
 
         model(editor).onValue(Row.LOOK, AppearanceLooks.CUSTOM_STOP, false);
         model(editor).onReleased(Row.LOOK);
 
-        assertEquals("the Workspace's Custom leaves Home as it stood", home, homeKeys());
         assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+        assertEquals("the saved Custom's dock is the wall's", saved, opacity(WallHalf.HOME));
     }
 
     @Test

@@ -1053,6 +1053,92 @@ public final class SurfacePresets {
         editor.apply();
     }
 
+    /** The keys a page may hold its own value of, as surface cells: what a page-scoped Look writes. */
+    private static boolean isPageCell(@NonNull SurfaceSlot slot,
+                                      @NonNull SurfaceProperty property) {
+        if (isLayoutOwned(property) || !TermuxAppSharedPreferences.isPerHalf(slot, property))
+            return false;
+        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+        return key != null && com.termux.app.look.PageLook.isDetachable(key);
+    }
+
+    /** A page's value of a surface cell: its own {@code @id} override, else the wall's. */
+    private static int pageCellValue(@NonNull TermuxAppSharedPreferences prefs,
+                                     @NonNull SharedPreferences store, int pageId,
+                                     @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
+        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+        String own = key == null ? null
+            : com.termux.shared.termux.settings.preferences.PageLookKeys.pageKey(key, pageId);
+        if (own != null && store.contains(own))
+            return store.getInt(own, 0);
+        return prefs.getSurfaceValue(slot, property, WallHalf.HOME);
+    }
+
+    /**
+     * Whether page {@code pageId} holds a value of its own for any surface cell a Look writes: a
+     * page that holds none follows Base, and wears the wall's stop.
+     */
+    public static boolean holdsPageLook(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null || pageId < 0)
+            return false;
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!isPageCell(slot, property))
+                    continue;
+                String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+                if (store.contains(com.termux.shared.termux.settings.preferences.PageLookKeys
+                        .pageKey(key, pageId)))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether page {@code pageId} wears {@code preset} in the cells a page may hold: each cell, the
+     * page's own value or else the wall's, is the number the Look gives it ({@link
+     * #applyLookAtPage} writes exactly these). The values held once for the wall never decide it.
+     */
+    public static boolean wornAtPage(@NonNull TermuxAppSharedPreferences prefs,
+                                     @NonNull Preset preset, int pageId) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null || pageId < 0)
+            return false;
+        Preset look = halfOf(preset, WallHalf.HOME);
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!isPageCell(slot, property))
+                    continue;
+                if (pageCellValue(prefs, store, pageId, slot, property)
+                        != lookCellValue(prefs, look, slot, property))
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Page {@code pageId}'s look as a Custom: every cell a page may hold, as the page shows it,
+     * under the plain keys. {@link #applyLookAtPage} puts it back on that page (or another).
+     */
+    @NonNull
+    public static Preset customAtPage(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
+        Map<String, Object> values = new java.util.LinkedHashMap<>();
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store != null && pageId >= 0) {
+            for (SurfaceSlot slot : SurfaceSlot.values()) {
+                for (SurfaceProperty property : SurfaceProperty.values()) {
+                    if (!isPageCell(slot, property))
+                        continue;
+                    values.put(TermuxAppSharedPreferences.surfaceOverrideKey(slot, property),
+                        pageCellValue(prefs, store, pageId, slot, property));
+                }
+            }
+        }
+        return new Preset(CUSTOM_ID, R.string.termux_surface_preset_custom, values);
+    }
+
     /**
      * A look at one half's scope. Home is the wall: {@link #applyHalf}. The Workspace is the
      * Terminal page, which a Look reaches only through its own surface values: each per-half

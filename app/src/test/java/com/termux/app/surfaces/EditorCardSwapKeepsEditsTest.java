@@ -191,12 +191,15 @@ public class EditorCardSwapKeepsEditsTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
-    /** The preview swiped to {@code half}: the page swipe's own path. */
+    /**
+     * The editor shown {@code half}'s page by a door: the page swipe retired with the halves
+     * (ADR 0015 §6), and a door naming the other page is the one path left.
+     */
     private static void swipe(SurfaceEditorController editor, WallHalf half) {
-        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
-            ClassParameter.from(WallHalf.class, half),
-            ClassParameter.from(boolean.class, true),
-            ClassParameter.from(boolean.class, true));
+        ReflectionHelpers.callInstanceMethod(editor, "showPage",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PaneWallPage.class,
+                half == WallHalf.HOME ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL),
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 

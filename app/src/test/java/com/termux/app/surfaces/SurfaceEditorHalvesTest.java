@@ -62,11 +62,11 @@ public class SurfaceEditorHalvesTest {
     @Test
     public void slidingTheHalvesMovesTheLiveWallBothWays() {
         SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.HOME, editor.half());
+        assertEquals(WallHalf.HOME, editor.screen());
         wallMoves.clear();
 
         switchHalf(editor, WallHalf.WORKSPACE);
-        assertEquals(WallHalf.WORKSPACE, editor.half());
+        assertEquals(WallHalf.WORKSPACE, editor.screen());
         assertEquals("the wall slides to the Workspace", PaneWallPage.TERMINAL, last());
 
         switchHalf(editor, WallHalf.HOME);
@@ -178,9 +178,12 @@ public class SurfaceEditorHalvesTest {
         return wallMoves.isEmpty() ? null : wallMoves.get(wallMoves.size() - 1);
     }
 
+    /** A door to {@code half}'s page while the editor is up (the swipe retired, ADR 0015 §6). */
     private static void switchHalf(SurfaceEditorController editor, WallHalf half) {
-        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
-            ClassParameter.from(WallHalf.class, half), ClassParameter.from(boolean.class, true));
+        ReflectionHelpers.callInstanceMethod(editor, "showPage",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PaneWallPage.class,
+                half == WallHalf.HOME ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL),
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
