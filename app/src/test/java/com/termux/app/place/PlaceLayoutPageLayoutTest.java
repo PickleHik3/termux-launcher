@@ -217,4 +217,58 @@ public class PlaceLayoutPageLayoutTest {
         assertEquals(Edge.TOP, store.forVariant(home(2)).statusBarEdge(PORTRAIT));
         assertFalse(store.hasPageLayout(3));
     }
+
+    // ------------------------------------------------------------------ a page's own visibility
+
+    @Test
+    public void hidingOnOnePagesLayoutLeavesTheKindAndOtherPagesAlone() {
+        PlaceLayoutStore store = store();
+        store.setShownPages(pages(2, 1, Arrays.asList(2, 3)));
+        store.setPageLayout(2, PageKind.HOME, true);
+        store.setPageLayout(3, PageKind.HOME, true);
+        PlaceLayoutStore own = store.forVariant(home(2));
+        assertFalse(own.resolve(PORTRAIT).slot(Element.STATUS).hidden);
+
+        own.setSlot(PORTRAIT, Element.STATUS, own.slot(PORTRAIT, Element.STATUS).withHidden(true));
+
+        assertTrue(own.resolve(PORTRAIT).slot(Element.STATUS).hidden);
+        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.STATUS).hidden);
+        assertTrue("the Home kind still shows it",
+            store.kindShows(PageKind.HOME, PORTRAIT, Element.STATUS));
+        assertFalse("page 3 still shows it",
+            store.forVariant(home(3)).resolve(PORTRAIT).slot(Element.STATUS).hidden);
+    }
+
+    @Test
+    public void aSeededPageLayoutShowsExactlyWhatTheKindShowed() {
+        PlaceLayoutStore store = store();
+        store.setKindShows(PageKind.HOME, PORTRAIT, Element.AZ, false);
+        store.setKindShows(PageKind.HOME, PlaceOrientation.LANDSCAPE, Element.STATUS, false);
+        // A hidden flag the shared layout still holds from before the kinds is not what shows.
+        store.setPageLayout(2, PageKind.HOME, true);
+
+        PlaceLayoutStore own = store.forVariant(home(2));
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (Element element : Element.values()) {
+                assertEquals(orientation + " " + element,
+                    store.kindShows(PageKind.HOME, orientation, element),
+                    !own.resolve(orientation).slot(element).hidden);
+            }
+        }
+    }
+
+    @Test
+    public void kindEditsDoNotReachAPageThatHoldsItsOwnLayout() {
+        PlaceLayoutStore store = store();
+        store.setShownPages(pages(2, 1, Arrays.asList(2, 3)));
+        store.setPageLayout(2, PageKind.HOME, true);
+
+        store.setKindShows(PageKind.HOME, PORTRAIT, Element.APPS, false);
+
+        assertFalse("page 2 keeps its own",
+            store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS).hidden);
+        store.setShownPages(pages(3, 1, Arrays.asList(2, 3)));
+        assertTrue("page 3 wears the kind's",
+            store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS).hidden);
+    }
 }

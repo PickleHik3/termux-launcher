@@ -804,6 +804,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private PlaceLayoutStore mArrangedStore;
     @Nullable private PlaceOrientation mArrangedOrientation;
     private int mArrangedRevision = Integer.MIN_VALUE;
+    /** The Home page in front when Home's arrangement was resolved; -1 for none known. */
+    private int mArrangedHomePageId = -1;
     /** The arrangement the chrome was last laid out for, so an unchanged one costs nothing. */
     @Nullable private PlaceLayout mAppliedPlaceLayout;
     /** The edge the bar is standing on right now; every piece of its geometry reads this. */
@@ -15651,6 +15653,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mArrangedStore = store;
             mArrangedOrientation = orientation;
         }
+        // Each Home page may wear a layout of its own (ADR 0015 §3): a swipe to another Home page
+        // moves no revision, so Home's arrangement is kept per Home page in front.
+        int homePage = store.shownPageId(com.termux.app.wall.PaneWallPage.WIDGETS);
+        if (homePage != mArrangedHomePageId) {
+            mHomeArrangement = null;
+            mArrangedHomePageId = homePage;
+        }
         ResolvedArrangement held = home ? mHomeArrangement : mWorkspaceArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home);
@@ -15714,6 +15723,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @NonNull @Override public java.util.List<Integer> homePageIds() {
                 return wallPages().homePageIdsForRepository();
+            }
+
+            @Nullable @Override public String pageName(int pageId) {
+                com.termux.app.wall.WallPages pages = wallPages();
+                com.termux.app.wall.WallPages.Page page = pages.page(pageId);
+                return page == null ? null : pages.displayName(page, null);
             }
         });
     }

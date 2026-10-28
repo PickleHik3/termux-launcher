@@ -74,6 +74,15 @@ public final class DressResolver {
 
         /** Whether a kind of page shows one element: the page model's per-kind visibility. */
         boolean shows(@NonNull PageKind kind, @NonNull Element element);
+
+        /**
+         * Whether a page on {@code layout}, of {@code kind}, shows one element: a page layout's own
+         * visibility, in either orientation, else the kind's ({@link #shows}).
+         */
+        default boolean layoutShows(@NonNull LayoutVariant layout, @NonNull PageKind kind,
+                                    @NonNull Element element) {
+            return shows(kind, element);
+        }
     }
 
     /**
@@ -149,6 +158,13 @@ public final class DressResolver {
                 return store != null ? store.kindShowsAny(kind, element)
                     : PlaceLayoutStore.kindShowsByDefault(kind, element);
             }
+
+            @Override public boolean layoutShows(@NonNull LayoutVariant layout,
+                                                 @NonNull PageKind kind, @NonNull Element element) {
+                PlaceLayoutStore store = places.get();
+                if (store == null || !layout.isPage()) return shows(kind, element);
+                return store.forVariant(layout).showsAny(element);
+            }
         });
     }
 
@@ -163,7 +179,7 @@ public final class DressResolver {
         PageKind kind = kindOf(page);
         Set<Element> leftOut = EnumSet.noneOf(Element.class);
         for (Element element : Element.values()) {
-            if (!mSource.shows(kind, element)) leftOut.add(element);
+            if (!mSource.layoutShows(layout, kind, element)) leftOut.add(element);
         }
         return new Dress(layout, leftOut,
             DockStyle.effectiveStyle(mSource.dockDesign(layout)), mSource.searchField(layout),
@@ -214,11 +230,11 @@ public final class DressResolver {
     }
 
     /**
-     * Whether {@code page} wears {@code element} ({@link Dress#wears}): its kind shows it, as the
+     * Whether {@code page} wears {@code element} ({@link Dress#wears}): its page layout or its kind shows it, as the
      * store has it now, for a reader that has the page but not the dress.
      */
     public boolean wears(@NonNull PaneWallPage page, @NonNull Element element) {
-        return mSource.shows(kindOf(page), element);
+        return mSource.layoutShows(layoutOf(page), kindOf(page), element);
     }
 
     /**
