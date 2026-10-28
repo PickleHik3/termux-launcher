@@ -90,6 +90,13 @@ public class DressResolverTest {
             if (set != null) return set;
             return kind != PageKind.HOME || element != Element.EXTRA_KEYS;
         }
+        /** A page layout's own visibility as a test sets it; absent follows the kind. */
+        final java.util.Map<String, Boolean> layoutShown = new java.util.HashMap<>();
+        @Override public boolean layoutShows(@NonNull LayoutVariant layout, @NonNull PageKind kind,
+                                             @NonNull Element element) {
+            Boolean set = layout.isPage() ? layoutShown.get(layout + "." + element) : null;
+            return set != null ? set : shows(kind, element);
+        }
     }
 
     private final Stored stored = new Stored();
@@ -586,5 +593,17 @@ public class DressResolverTest {
             dresses.dockDesignOf(PaneWallPage.TERMINAL));
         assertEquals(DockStyle.effectiveStyle(DockStyle.GLASS_TRAY),
             dresses.dockDesignOf(PaneWallPage.WIDGETS));
+    }
+
+    @Test
+    public void aHomePageOnItsOwnLayoutWearsWhatThatLayoutShowsNotTheKind() {
+        stored.kindShown.put(PageKind.HOME + "." + Element.STATUS, false);
+        assertFalse(home().wears(Element.STATUS));
+        stored.homeLayout = true;
+        stored.layoutShown.put(HOME_PAGE + "." + Element.STATUS, true);
+        stored.layoutShown.put(HOME_PAGE + "." + Element.APPS, false);
+        assertTrue(home().wears(Element.STATUS));
+        assertFalse(home().wears(Element.APPS));
+        assertTrue(dresses.wears(PaneWallPage.WIDGETS, Element.STATUS));
     }
 }

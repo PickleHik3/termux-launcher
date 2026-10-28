@@ -639,8 +639,6 @@ public final class PlaceLayoutStore {
             showWhatTheKindShows(layout, orientation);
     }
 
-
-
     private void showWhatTheKindShows(@NonNull LayoutVariant layout,
                                       @NonNull PlaceOrientation orientation) {
         PlaceLayoutStore view = forVariant(layout);
@@ -1254,6 +1252,14 @@ public final class PlaceLayoutStore {
         if (mMigrating.get() || activeVariant().holdsOwnVisibility()) return stored;
         boolean shown = kindShows(kindOfVariant(activeVariant()), orientation, element);
         return stored.hidden == !shown ? stored : stored.withHidden(!shown);
+    }
+
+    /** Whether this view's layout shows {@code element} in either orientation ({@link #slot}). */
+    public boolean showsAny(@NonNull Element element) {
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            if (!slot(orientation, element).hidden) return true;
+        }
+        return false;
     }
 
     /** {@link #slot} as the arrangement keys hold it, before the kind's visibility. */
