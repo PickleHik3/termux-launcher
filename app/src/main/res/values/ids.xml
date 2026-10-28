@@ -44,4 +44,7 @@
     <item name="appearance_surface_host" type="id" />
     <!-- An app icon view's pending background render: which request it is waiting on, and its fade. -->
     <item name="launcher_icon_request" type="id" />
+    <!-- Edit pages' accessibility actions on the Terminal grip: move the Terminal page one page. -->
+    <item name="page_overview_action_move_terminal_left" type="id" />
+    <item name="page_overview_action_move_terminal_right" type="id" />
 </resources>

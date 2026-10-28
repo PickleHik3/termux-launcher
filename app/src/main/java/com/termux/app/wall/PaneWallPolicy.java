@@ -81,6 +81,168 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * The wall's slots in page-list order ({@link WallPages#slots}), without the Terminal slot
+     * while the row has no window. For [Home...][Terminal] this is {@link #rowPages} one-to-one,
+     * a Home run being the one WIDGETS entry.
+     */
+    @NonNull
+    public static List<WallPages.Slot> rowSlots(@NonNull WallPages pages, boolean hasWindow) {
+        List<WallPages.Slot> out = new ArrayList<>();
+        for (WallPages.Slot slot : pages.slots()) {
+            if (slot.kind == WallPages.PageKind.TERMINAL && !hasWindow) continue;
+            out.add(slot);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The kind of page a slot is shown by. */
+    @NonNull
+    public static PaneWallPage kindOf(@NonNull WallPages.Slot slot) {
+        switch (slot.kind) {
+            case HOME: return PaneWallPage.WIDGETS;
+            case DISPLAY: return PaneWallPage.DISPLAY;
+            default: return PaneWallPage.TERMINAL;
+        }
+    }
+
+    /** The kinds of {@code slots}, in order: what the kind-keyed wall list becomes. */
+    @NonNull
+    public static List<PaneWallPage> kindsOf(@NonNull List<WallPages.Slot> slots) {
+        List<PaneWallPage> out = new ArrayList<>(slots.size());
+        for (WallPages.Slot slot : slots) out.add(kindOf(slot));
+        return out;
+    }
+
+    /**
+     * Where a slot sits relative to the current one, in whole pages (negative on the left): a
+     * plain line over the slots, whatever kinds they are.
+     */
+    public static int relativeSlot(int current, int slot) {
+        return slot - current;
+    }
+
+    /** The slot {@code steps} away from {@code current}, held at the row's ends. */
+    public static int neighbourSlot(int slotCount, int current, int steps) {
+        return Math.max(0, Math.min(Math.max(0, slotCount - 1), current + steps));
+    }
+
+    // ---- The built window (ADR 0015, A2a) ---------------------------------------------------
+
+    /**
+     * The slots the wall pages over: {@link #rowSlots} without Display slots, since the display
+     * stays one of the Workspace's windows in this slice.
+     */
+    @NonNull
+    public static List<WallPages.Slot> wallSlots(@NonNull WallPages pages, boolean hasWindow) {
+        List<WallPages.Slot> out = new ArrayList<>();
+        for (WallPages.Slot slot : rowSlots(pages, hasWindow)) {
+            if (slot.kind != WallPages.PageKind.DISPLAY) out.add(slot);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The index among {@code slots} of the slot holding {@code pageId}; -1 if none. */
+    public static int slotHolding(@NonNull List<WallPages.Slot> slots, int pageId) {
+        for (int i = 0; i < slots.size(); i++) if (slots.get(i).pageIds.contains(pageId)) return i;
+        return -1;
+    }
+
+    /** The index of the first slot of {@code kind}; -1 if none. */
+    public static int firstSlotOf(@NonNull List<WallPages.Slot> slots, @NonNull PaneWallPage kind) {
+        for (int i = 0; i < slots.size(); i++) if (kindOf(slots.get(i)) == kind) return i;
+        return -1;
+    }
+
+    /**
+     * Whether the slots are the order every wall had before A2a: one Home run, first, then
+     * anything else. The wall then pages exactly as it always did.
+     */
+    public static boolean isDefaultOrder(@NonNull List<WallPages.Slot> slots) {
+        int homes = 0;
+        for (int i = 0; i < slots.size(); i++) {
+            if (slots.get(i).kind != WallPages.PageKind.HOME) continue;
+            if (i != 0) return false;
+            homes++;
+        }
+        return homes <= 1;
+    }
+
+    /**
+     * The Home slot the one Home frame is bound to, with the wall on slot {@code current}: that
+     * slot when it is a Home run; else the bound slot {@code homeSlot} when it lies next door;
+     * else the Home run on the left, else the one on the right; else {@code homeSlot} as it was
+     * (no Home next door, the frame waits off the window), or the first Home slot when that is
+     * not one.
+     */
+    public static int boundHomeSlot(@NonNull List<WallPages.Slot> slots, int current,
+                                    int homeSlot) {
+        if (isHome(slots, current)) return current;
+        boolean left = isHome(slots, current - 1);
+        boolean right = isHome(slots, current + 1);
+        if ((left && homeSlot == current - 1) || (right && homeSlot == current + 1)) return homeSlot;
+        if (left) return current - 1;
+        if (right) return current + 1;
+        if (isHome(slots, homeSlot)) return homeSlot;
+        return firstSlotOf(slots, PaneWallPage.WIDGETS);
+    }
+
+    /**
+     * The built window: the kind-keyed page list the wall lays out, a distinct-kind list. The
+     * current slot and its neighbours, except that only the bound Home slot ({@code homeSlot})
+     * stands for Home, so with a Home run on both sides of the Terminal page the frame sits on
+     * one side. A neighbour of the current slot's own kind (two Home runs met over a slot taken
+     * off the row) is left out. For [Home...][Terminal] this is {@link #rowPages}.
+     */
+    @NonNull
+    public static List<PaneWallPage> builtWindow(@NonNull List<WallPages.Slot> slots, int current,
+                                                 int homeSlot) {
+        List<PaneWallPage> out = new ArrayList<>(3);
+        if (current < 0 || current >= slots.size()) return out;
+        PaneWallPage here = kindOf(slots.get(current));
+        for (int i = current - 1; i <= current + 1; i++) {
+            if (i < 0 || i >= slots.size()) continue;
+            PaneWallPage kind = kindOf(slots.get(i));
+            if (i != current) {
+                if (kind == here || out.contains(kind)) continue;
+                if (kind == PaneWallPage.WIDGETS && i != homeSlot) continue;
+            }
+            out.add(kind);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The global Home-page index of the first page of Home slot {@code homeSlot}. */
+    public static int runStart(@NonNull List<WallPages.Slot> slots, int homeSlot) {
+        int seen = 0;
+        for (int i = 0; i < slots.size() && i < homeSlot; i++) {
+            if (slots.get(i).kind == WallPages.PageKind.HOME) seen += slots.get(i).pageIds.size();
+        }
+        return seen;
+    }
+
+    /** The number of pages of slot {@code slot}; 0 when there is none. */
+    public static int runLength(@NonNull List<WallPages.Slot> slots, int slot) {
+        return slot < 0 || slot >= slots.size() ? 0 : slots.get(slot).pageIds.size();
+    }
+
+    /** The Home slot holding global Home page {@code globalHomeIndex}, held to the last one. */
+    public static int homeSlotAt(@NonNull List<WallPages.Slot> slots, int globalHomeIndex) {
+        int seen = 0;
+        int last = -1;
+        for (int i = 0; i < slots.size(); i++) {
+            if (slots.get(i).kind != WallPages.PageKind.HOME) continue;
+            seen += slots.get(i).pageIds.size();
+            last = i;
+            if (globalHomeIndex < seen) return i;
+        }
+        return last;
+    }
+
+    private static boolean isHome(@NonNull List<WallPages.Slot> slots, int i) {
+        return i >= 0 && i < slots.size() && slots.get(i).kind == WallPages.PageKind.HOME;
+    }
+
+    /**
      * Where the wall goes when the page it rests on leaves the row: the nearest page to its left
      * that is still there: the last window closing lands on Home. A page the old row did not have
      * hands over to Home.

@@ -480,6 +480,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
+     * The run of Home pages the one Home frame pages inside (ADR 0015, A2a), global indexes,
+     * both included; {@code last} below 0 for every page.
+     */
+    public void setHomeRun(int first, int last) {
+        pane.setRun(first, last);
+    }
+
+    /**
      * How a Home page moves while a swipe turns it, and Animation speed's multiplier on its
      * settle; the activity pushes both in as it comes to the front.
      */

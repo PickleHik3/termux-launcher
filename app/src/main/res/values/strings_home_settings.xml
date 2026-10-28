@@ -89,6 +89,11 @@
     <string name="page_overview_start_in_terminal">Start in Terminal</string>
     <string name="page_overview_start_on_display">Start on Display</string>
     <string name="page_overview_terminal">Terminal %1$d</string>
+    <!-- The header grip over the Terminal page's window cards in Edit pages: a long press drags the block. -->
+    <string name="page_overview_terminal_grip">Terminal ⋮⋮</string>
+    <string name="page_overview_terminal_grip_description">Move Terminal page</string>
+    <string name="page_overview_move_terminal_left">Move Terminal page left</string>
+    <string name="page_overview_move_terminal_right">Move Terminal page right</string>
     <string name="page_overview_display">Display</string>
     <string name="page_overview_open">Open %1$s</string>
     <string name="page_overview_close_terminal">Close terminal %1$d</string>
