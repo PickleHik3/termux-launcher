@@ -14,34 +14,12 @@ Latest stable: v1.2.1.
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
 
 ### Terminal
-- dialog and whiptail screens, such as termux-change-repo, are readable: the red and blue text on their white panels now stands out in every Look and at every Contrast level.
-- Grey and normal text stays readable on a glass terminal over a bright wallpaper: the glass evens out the wallpaper under the text. It is on by default; Settings › Debugging › Even out glass turns it off so you can compare.
-- Switching terminal windows with Fancier Glass on no longer flashes the bare wallpaper behind the window that is leaving.
-- The terminal's Opacity stays yours: at 0% the glass is exactly as clear as you set it, with no evening-out, and below the default it evens out less.
-- A terminal window whose shell Android kills (its child-process limit, often hit with a Linux desktop on the display) stays open with "Process completed (signal 9)" instead of vanishing; Enter closes it, and a notice says how to lift the limit.
-
-### Home
-- Bare widgets draw nothing behind themselves: the soft dim behind a Bare clock is gone, and only its ink changes tone to stay readable.
-- Swiping between Home pages moves both pages together under your finger, in the transition you picked, instead of the next page appearing only after you let go.
-- The Home card has a Transition row of five glyph tiles (Slide, Depth, Fade, Carousel and Stack), and Settings › General › Page transition now opens it.
-
-### Appearance editor
-- Scrolling a card's content moves the card sheet like a standard bottom sheet: up grows it to half and full height, down at the top of the content shrinks it a stop. Sliders and strips still drag sideways.
-- A swipe on a glass slider in the Appearance sheet moves it straight away, without tapping it first.
-- Change wallpaper opens its picker above the card sheet, so Choose photo can be tapped again.
-
-### Launcher
-- Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.
+- Sound keeps playing after you choose Exit in the notification or close your last shell: the launcher's sound server stays up, and one that stopped answering or lost its socket is replaced the next time a terminal or Linux app opens, instead of leaving you without audio until a reboot.
+- A long press on a word no longer takes the full stop, comma or other punctuation after it: pressing on a path at the end of a sentence selects just the path.
+- Tapping a terminal widget on Home brings up the keyboard (#178).
 
 ### Linux apps
-- A display you start from a shell with termux-x11 gets a window manager, so apps open with window frames instead of unmanaged at their own size.
-- The display starts on its own again after it was killed, instead of staying down until you cleared it by hand.
-- On the apt edition, installing termux-x11-nightly no longer replaces the launcher's termux-x11 command.
-- Linux apps play sound in a distro you installed while the launcher was running, without an "Access denied" from the sound server.
-- Tapping an app that is already open, in the drawer or Home, raises its window instead of starting a second copy, and the Display chip's menu lists the other open windows under Switch to.
-- The Linux display now works on 32-bit phones and with the 32-bit APK; before, it could not start there at all.
-- When the display can't start, its window now says why, with a link to Startup and support, instead of showing Start display again as if nothing happened.
-- Settings › Linux apps says Linux apps are set up only once the setup command has finished; after copying it, the row tells you to run it.
+- Upgrading from 1.3.0-pre.3 with the Display switch off no longer starts a display server, and its window manager, every time the launcher starts. If you upgraded already and did not want a display, turn off Settings › Linux apps › Start the display with the launcher.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
@@ -49,6 +27,31 @@ and end the line with its status in an HTML comment: ready, stays: P2, P6 (the c
 or drop: reason (docs/agents/releasing.md, "Promoting from pre to a stable"). -->
 These may change or be dropped before they reach a stable release.
 
+- **Terminal** (v2.0.0-pre.1):
+  - dialog and whiptail screens, such as termux-change-repo, are readable: the red and blue text on their white panels now stands out in every Look and at every Contrast level. <!-- stays: P1, P2 -->
+  - Grey and normal text stays readable on a glass terminal over a bright wallpaper: the glass evens out the wallpaper under the text. It is on by default; Settings › Debugging › Even out glass turns it off so you can compare. <!-- stays: P1, P2 -->
+  - Switching terminal windows with Fancier Glass on no longer flashes the bare wallpaper behind the window that is leaving. <!-- stays: P1, P2 -->
+  - The terminal's Opacity stays yours: at 0% the glass is exactly as clear as you set it, with no evening-out, and below the default it evens out less. <!-- stays: P1, P2 -->
+  - A terminal window whose shell Android kills (its child-process limit, often hit with a Linux desktop on the display) stays open with "Process completed (signal 9)" instead of vanishing; Enter closes it, and a notice says how to lift the limit. <!-- stays: P1, P2 -->
+- **Home** (v2.0.0-pre.1):
+  - Bare widgets draw nothing behind themselves: the soft dim behind a Bare clock is gone, and only its ink changes tone to stay readable. <!-- stays: P1, P2 -->
+  - Swiping between Home pages moves both pages together under your finger, in the transition you picked, instead of the next page appearing only after you let go. <!-- stays: P1, P2 -->
+  - The Home card has a Transition row of five glyph tiles (Slide, Depth, Fade, Carousel and Stack), and Settings › General › Page transition now opens it. <!-- stays: P1, P2 -->
+- **Appearance editor** (v2.0.0-pre.1):
+  - Scrolling a card's content moves the card sheet like a standard bottom sheet: up grows it to half and full height, down at the top of the content shrinks it a stop. Sliders and strips still drag sideways. <!-- stays: P1, P2 -->
+  - A swipe on a glass slider in the Appearance sheet moves it straight away, without tapping it first. <!-- stays: P1, P2 -->
+  - Change wallpaper opens its picker above the card sheet, so Choose photo can be tapped again. <!-- stays: P1, P2 -->
+- **Launcher** (v2.0.0-pre.1):
+  - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place. <!-- stays: P1, P2 -->
+- **Linux apps** (v2.0.0-pre.1):
+  - A display you start from a shell with termux-x11 gets a window manager, so apps open with window frames instead of unmanaged at their own size. <!-- stays: P1, P2 -->
+  - The display starts on its own again after it was killed, instead of staying down until you cleared it by hand. <!-- stays: P1, P2 -->
+  - On the apt edition, installing termux-x11-nightly no longer replaces the launcher's termux-x11 command. <!-- stays: P1, P2 -->
+  - Linux apps play sound in a distro you installed while the launcher was running, without an "Access denied" from the sound server. <!-- stays: P1, P2 -->
+  - Tapping an app that is already open, in the drawer or Home, raises its window instead of starting a second copy, and the Display chip's menu lists the other open windows under Switch to. <!-- stays: P1, P2 -->
+  - The Linux display now works on 32-bit phones and with the 32-bit APK; before, it could not start there at all. <!-- stays: P1, P2 -->
+  - When the display can't start, its window now says why, with a link to Startup and support, instead of showing Start display again as if nothing happened. <!-- stays: P1, P2 -->
+  - Settings › Linux apps says Linux apps are set up only once the setup command has finished; after copying it, the row tells you to run it. <!-- stays: P1, P2 -->
 - Settings › About & help has an Ask on Discord row, Documentation opens the website guide, and the help panel's support link goes to Discord (#58). <!-- ready -->
 - Settings › Backup & restore saves your launcher settings and config files to one file, and your downloaded AI models to a folder, and restores both on this phone or a new one (#40). <!-- stays: P1, P2 -->
 - Pressing a pinned app on a glass dock, or a glass card in a sheet, lights the glass under your finger for a moment (#75). <!-- stays: P1, P2 -->
