@@ -6767,9 +6767,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int lookPageId(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         // Between two Home pages the bar is Home's on both ends (SeamCrossing#barDressedAcross).
-        return com.termux.app.place.SeamDress.lookPageId(
-            com.termux.app.place.SeamDress.lookPage(surface, mLastWallPage, stackDressPage(),
-                mCrossing.seam().barDressedAcross()), terminalLookPageId());
+        // Each surface reads the page it stands on (ADR 0015 §6): the Home page in front, the
+        // bound Display page, or the Terminal's; mid-crossing the end the surface wears.
+        com.termux.app.wall.PaneWallPage stackPage = stackDressPage();
+        com.termux.app.wall.PaneWallPage kind = com.termux.app.place.SeamDress.lookPage(surface,
+            mLastWallPage, stackPage, mCrossing.seam().barDressedAcross());
+        com.termux.app.wall.PaneWallPage window =
+            surface == com.termux.app.place.SeamDress.Surface.STACK ? stackPage : mLastWallPage;
+        int displayId = window == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage : -1;
+        return com.termux.app.place.SeamDress.lookPageId(kind,
+            kind == com.termux.app.wall.PaneWallPage.WIDGETS ? homePageInFront() : -1, displayId,
+            terminalLookPageId());
+    }
+
+    /** The id {@code page}'s look values are read under, for a crossing's end. */
+    private int lookIdOf(@NonNull com.termux.app.wall.PageRef page) {
+        if (page.isHome())
+            return com.termux.app.place.SeamDress.lookPageId(
+                com.termux.app.wall.PaneWallPage.WIDGETS, page.id >= 0 ? page.id : homePageInFront(),
+                -1, terminalLookPageId());
+        return com.termux.app.place.SeamDress.lookPageId(page.kind, -1,
+            page.kind == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage : -1,
+            terminalLookPageId());
     }
 
     /**
@@ -6777,8 +6796,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * page of the wall, or the wall itself while it has none.
      */
     private int terminalLookPageId() {
-        com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
-        return terminal == null ? TermuxAppSharedPreferences.PAGE_WALL : terminal.id;
+        refreshShownPageIds();
+        return mShownTerminalPageId < 0 ? TermuxAppSharedPreferences.PAGE_WALL : mShownTerminalPageId;
+    }
+
+    /** The wall value {@link #mShownHomePageIds} and {@link #mShownTerminalPageId} were read from. */
+    @Nullable private com.termux.app.wall.WallPages mShownPagesValue;
+    /** The wall's Home page ids, read once per wall value: read on every dress and look pass. */
+    @NonNull private java.util.List<Integer> mShownHomePageIds = java.util.Collections.emptyList();
+    /** The Terminal page's id, read once per wall value; -1 for none. */
+    private int mShownTerminalPageId = -1;
+
+    /**
+     * Reads the Home and Terminal page ids again only when the store holds another wall value
+     * (it replaces the value on every change), so the hot paths allocate nothing.
+     */
+    private void refreshShownPageIds() {
+        com.termux.app.wall.WallPages pages = wallPages();
+        if (pages == mShownPagesValue) return;
+        mShownPagesValue = pages;
+        mShownHomePageIds = java.util.Collections.unmodifiableList(
+            new java.util.ArrayList<>(pages.homePageIdsForRepository()));
+        com.termux.app.wall.WallPages.Page terminal = pages.terminal();
+        mShownTerminalPageId = terminal == null ? -1 : terminal.id;
     }
 
     /** The half whose look the stack (dock, extra keys, keyboard) wears now. */
@@ -11299,6 +11339,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         Logger.logVerbose(LOG_TAG, "onConfigurationChanged");
+        mEvenOutSeedsKey = null;
         super.onConfigurationChanged(newConfig);
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
@@ -15771,7 +15812,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     /** The id of the Home page the widget grid shows; -1 when there is none. */
     private int homePageInFront() {
-        java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
+        refreshShownPageIds();
+        java.util.List<Integer> ids = mShownHomePageIds;
         if (ids.isEmpty()) return -1;
         int index = mWidgetPaneController != null ? mWidgetPaneController.homePageIndex() : 0;
         return ids.get(Math.max(0, Math.min(index, ids.size() - 1)));
@@ -15784,12 +15826,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int terminalPage() {
-                com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
-                return terminal != null ? terminal.id : -1;
+                refreshShownPageIds();
+                return mShownTerminalPageId;
             }
 
             @NonNull @Override public java.util.List<Integer> homePageIds() {
-                return wallPages().homePageIdsForRepository();
+                refreshShownPageIds();
+                return mShownHomePageIds;
             }
 
             @Nullable @Override public String pageName(int pageId) {
@@ -23171,6 +23214,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private com.termux.shared.termux.settings.preferences.TerminalContrastLevel mEvenOutLevel;
     @Nullable private int[] mEvenOutSeeds;
+    /** The theme's seeds key, dropped on a configuration change (night mode, dynamic colour). */
+    @Nullable private int[] mEvenOutSeedsKey;
     private boolean mEvenOutSwitchSeen;
     @Nullable private com.termux.shared.termux.settings.preferences.TerminalContrastLevel mEvenOutLevelSeen;
     @Nullable private com.termux.app.chrome.EvenOut.Ceiling[] mEvenOutCeilings;
@@ -23206,7 +23251,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.shared.termux.settings.preferences.TerminalContrastLevel level =
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mPreferences);
-        int[] seeds = com.termux.app.terminal.MaterialTerminalColorScheme.seedsKey(this);
+        // The theme's seeds, read once per theme: asked on every dock and nav-strip frost request.
+        if (mEvenOutSeedsKey == null)
+            mEvenOutSeedsKey = com.termux.app.terminal.MaterialTerminalColorScheme.seedsKey(this);
+        int[] seeds = mEvenOutSeedsKey;
         if (mEvenOutCeilings == null || mEvenOutLevel != level
                 || !java.util.Arrays.equals(mEvenOutSeeds, seeds)) {
             mEvenOutCeilings = com.termux.app.terminal.MaterialTerminalColorScheme
@@ -24114,12 +24162,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, hereId);
         com.termux.app.wall.PageRef therePage =
             com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, thereId);
+        // The cheap refusals first (SeamCrossing#crosses): two Home pages on one layout arrange
+        // alike, and two that dress the dock or the search field apart flip; neither crosses.
+        if (mDresses.layoutOf(herePage) == mDresses.layoutOf(therePage)) return false;
+        com.termux.app.chrome.Dress hereDress = dressOf(herePage);
+        com.termux.app.chrome.Dress thereDress = dressOf(therePage);
+        if (hereDress.dockDesign() != thereDress.dockDesign()
+            || hereDress.searchField() != thereDress.searchField()) return false;
         ResolvedArrangement hereArrangement = arrangementOf(herePage);
         ResolvedArrangement thereArrangement = arrangementOf(therePage);
         PlaceLayout hereLayout = hereArrangement.layout();
         PlaceLayout thereLayout = thereArrangement.layout();
-        com.termux.app.chrome.Dress hereDress = dressOf(herePage);
-        com.termux.app.chrome.Dress thereDress = dressOf(therePage);
         // One keyboard across Home's pages: up on both or on neither, as it is now.
         boolean keyboardUp = committedKeyboardVisible() && !isKeyboardFloating();
         // Both ends' docks at rest from one snapshot, the arriving page's as its second Home half.
@@ -24134,12 +24187,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.SeamCrossing.Endpoint here =
             com.termux.app.place.SeamCrossing.Endpoint.of(herePage, hereDress,
                 pageLookOf(herePage), hereArrangement, hereLayout,
-                stackDressOf(hereDress, com.termux.app.wall.PaneWallPage.WIDGETS, orientation),
+                stackDressOf(hereDress, herePage, orientation),
                 keyboardUp, com.termux.app.dock.DockMorph.rowsPx(hereRest));
         com.termux.app.place.SeamCrossing.Endpoint there =
             com.termux.app.place.SeamCrossing.Endpoint.of(therePage, thereDress,
                 pageLookOf(therePage), thereArrangement, thereLayout,
-                stackDressOf(thereDress, com.termux.app.wall.PaneWallPage.WIDGETS, orientation),
+                stackDressOf(thereDress, therePage, orientation),
                 keyboardUp, com.termux.app.dock.DockMorph.rowsPx(thereRest));
         // Two Home pages that dress alike are a plain flip.
         if (!com.termux.app.place.SeamCrossing.crosses(here, there)) return false;
@@ -24268,12 +24321,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.SeamCrossing.Endpoint here =
             com.termux.app.place.SeamCrossing.Endpoint.of(herePage, committedDress,
                 pageLookOf(herePage), committedArrangement(), committed,
-                stackDressOf(committedDress, mLastWallPage, orientation),
+                stackDressOf(committedDress, herePage, orientation),
                 committedKeyboardVisible() && !isKeyboardFloating(), committedRowsPx);
         com.termux.app.place.SeamCrossing.Endpoint there =
             com.termux.app.place.SeamCrossing.Endpoint.of(therePage, otherDress,
                 pageLookOf(therePage), otherArrangement, otherLayout,
-                stackDressOf(otherDress, other, orientation),
+                stackDressOf(otherDress, therePage, orientation),
                 mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
                 otherRowsPx);
         mCrossing.begin(here, there,
@@ -24325,7 +24378,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.place.SeamDress.StackDress stackDressOf(
             @NonNull com.termux.app.chrome.Dress dress,
-            @NonNull com.termux.app.wall.PaneWallPage page, @NonNull PlaceOrientation orientation) {
+            @NonNull com.termux.app.wall.PageRef page, @NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
         com.termux.app.place.WallShape shape = dress.shape();
         if (store == null)
@@ -24334,7 +24387,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.place.SeamDress.StackDress.of(shape,
             sizes.dockHeightScale(orientation), sizes.keyboardHeightScale(orientation),
             sizes.keyboardChinDp(orientation), com.termux.app.place.HalfLook.read(mPreferences,
-                com.termux.app.place.SeamDress.lookPageId(page, terminalLookPageId())));
+                lookIdOf(page)));
     }
 
     /**

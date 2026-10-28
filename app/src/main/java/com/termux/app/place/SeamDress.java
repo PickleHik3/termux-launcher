@@ -175,6 +175,21 @@ public final class SeamDress {
     }
 
     /**
+     * The id a surface's look values are read under (ADR 0015 §6): the page it stands on. Home's
+     * pages read the Home page's own ({@code homePageId}, the wall while none is known); a window
+     * reads the bound Display page's ({@code displayPageId}, when the surface stands on Display)
+     * or else the Terminal page's. A page holding no overrides reads Base through its id.
+     *
+     * @param page the kind of page the surface wears ({@link #lookPage})
+     */
+    public static int lookPageId(@NonNull PaneWallPage page, int homePageId, int displayPageId,
+                                 int terminalPageId) {
+        if (page == PaneWallPage.WIDGETS)
+            return homePageId >= 0 ? homePageId : TermuxAppSharedPreferences.PAGE_WALL;
+        return displayPageId >= 0 ? displayPageId : terminalPageId;
+    }
+
+    /**
      * How the stack crosses the seam, given how its rows would ({@code rowsPlan},
      * {@link SeamTravel#dockPlan}). While the halves dress it alike that is the answer. While they
      * differ, the stack's dress may only change on a frame where none of the stack shows:
