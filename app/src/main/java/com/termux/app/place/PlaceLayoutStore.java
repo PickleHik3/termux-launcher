@@ -17,6 +17,7 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -462,6 +463,17 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public LayoutVariant variantFor(@NonNull PaneWallPage page) {
+        if (mDresses == null) mDresses = DressResolver.of(this);
+        return mDresses.layoutOf(page);
+    }
+
+    /**
+     * The variant {@code page} is arranged by, read for its own id (#173 slice E): another Home
+     * page's own layout while a different one is in front, so a crossing between the two resolves
+     * each end for its page. A page with no id said reads as {@link #variantFor(PaneWallPage)}.
+     */
+    @NonNull
+    public LayoutVariant variantFor(@NonNull PageRef page) {
         if (mDresses == null) mDresses = DressResolver.of(this);
         return mDresses.layoutOf(page);
     }

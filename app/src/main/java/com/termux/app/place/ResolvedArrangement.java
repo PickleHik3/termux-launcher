@@ -81,15 +81,16 @@ public final class ResolvedArrangement {
     /**
      * {@code page} as the store holds it now: the layout its dress wears ({@link
      * PlaceLayoutStore#variantFor}) in its Style ({@link PlaceLayoutStore#halfShape}, linked
-     * across the wall, #84). The one place the activity's arrangement reads the store. The store
-     * names the page it dresses by its kind and the page it shows of that kind, so {@code page}'s
-     * id is held here, not read.
+     * across the wall, #84). The one place the activity's arrangement reads the store. The page
+     * is resolved for its own id ({@link PlaceLayoutStore#variantFor(PageRef)}): another Home
+     * page than the one in front wears its own layout here (#173 slice E); with no id said, the
+     * page of its kind the store shows.
      */
     @NonNull
     public static ResolvedArrangement resolve(@NonNull PlaceLayoutStore store,
                                               @NonNull PlaceOrientation orientation,
                                               @NonNull PageRef page) {
-        LayoutVariant variant = store.variantFor(page.kind);
+        LayoutVariant variant = store.variantFor(page);
         LayoutStyle style = store.shape().style;
         return resolve(store, orientation, variant, page, style);
     }

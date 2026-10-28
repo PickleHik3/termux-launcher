@@ -271,4 +271,33 @@ public class PlaceLayoutPageLayoutTest {
         assertTrue("page 3 wears the kind's",
             store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS).hidden);
     }
+
+    /**
+     * A page named by its id resolves for that page (#173 slice E): Home page 3's own layout
+     * while page 2, on the shared layout, is in front, so a crossing between the two holds each
+     * end's own arrangement. With no id said, or for the page in front, it reads as before.
+     */
+    @Test
+    public void aPageNamedByItsIdResolvesItsOwnLayoutWhileAnotherIsInFront() {
+        PlaceLayoutStore store = store();
+        store.setShownPages(pages(2, 1, Arrays.asList(2, 3)));
+        store.setStatusBarEdge(PORTRAIT, Edge.TOP);
+        store.setPageLayout(3, PageKind.HOME, true);
+        store.forVariant(home(3)).setStatusBarEdge(PORTRAIT, Edge.BOTTOM);
+
+        com.termux.app.wall.PageRef page2 = com.termux.app.wall.PageRef.of(PaneWallPage.WIDGETS, 2);
+        com.termux.app.wall.PageRef page3 = com.termux.app.wall.PageRef.of(PaneWallPage.WIDGETS, 3);
+        assertSame(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+        assertSame(LayoutVariant.NORMAL, store.variantFor(page2));
+        assertSame(home(3), store.variantFor(page3));
+        assertSame(LayoutVariant.NORMAL, store.variantFor(com.termux.app.wall.PageRef.HOME));
+
+        ResolvedArrangement three = ResolvedArrangement.resolve(store, PORTRAIT, page3);
+        assertSame(home(3), three.variant());
+        assertEquals(page3, three.page());
+        assertEquals(Edge.BOTTOM, three.layout().slot(Element.STATUS).edge);
+        ResolvedArrangement two = ResolvedArrangement.resolve(store, PORTRAIT, page2);
+        assertSame(LayoutVariant.NORMAL, two.variant());
+        assertEquals(Edge.TOP, two.layout().slot(Element.STATUS).edge);
+    }
 }
