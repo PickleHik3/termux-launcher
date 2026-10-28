@@ -83,6 +83,51 @@ public class AppearanceSnapshotHalfTest {
     }
 
     @Test
+    public void aHomeOrDisplayPageOverrideWrittenInTheSessionGoesOnRestore() {
+        int home = 7;
+        int display = 9;
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 31);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String dockKey = TermuxAppSharedPreferences.surfaceOverrideKey(SurfaceSlot.DOCK,
+            SurfaceProperty.OPACITY);
+        String homeKey = TermuxAppSharedPreferences.surfacePageKey(dockKey, home);
+        String displayKey = TermuxAppSharedPreferences.surfacePageKey(dockKey, display);
+        assertNotEquals("the dock's opacity is a page key", dockKey, homeKey);
+
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, home, 15);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 60);
+        assertNotEquals("a Home page's own value is a change", entry.signature(),
+            AppearanceSnapshot.signatureOf(preferences));
+
+        entry.restore(preferences);
+
+        assertFalse("Home's override written in the session is gone", store.contains(homeKey));
+        assertEquals("the Display page's override is put back", 31, store.getInt(displayKey, -1));
+        assertEquals(entry.signature(), AppearanceSnapshot.signatureOf(preferences));
+    }
+
+    @Test
+    public void theTerminalsMaterialIsNotWrittenOntoTheWall() {
+        int terminal = TermuxAppSharedPreferences.terminalPageId();
+        String wallMaterial = preferences.getSurfaceMaterial(TermuxAppSharedPreferences.PAGE_WALL);
+        String own = wallMaterial.equals("frost") ? "clear" : "frost";
+        preferences.setSurfaceMaterial(terminal, own);
+        preferences.setSurfaceMaterialIntensity(terminal, 13);
+        int wallIntensity = preferences.getSurfaceMaterialIntensity(
+            TermuxAppSharedPreferences.PAGE_WALL);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+
+        entry.restore(preferences);
+
+        assertEquals(wallMaterial, preferences.getSurfaceMaterial(
+            TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals(wallIntensity, preferences.getSurfaceMaterialIntensity(
+            TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals(own, preferences.getSurfaceMaterial(terminal));
+        assertEquals(13, preferences.getSurfaceMaterialIntensity(terminal));
+    }
+
+    @Test
     public void theHalvesKeysAreEveryPerHalfCell() {
         java.util.List<String> keys = AppearanceSnapshot.halfAbleKeys();
         for (SurfaceSlot slot : SurfaceSlot.values()) {

@@ -99,8 +99,10 @@ final class AppearanceSnapshot {
             mRaws[i] = isKeyboardBlur(rows.get(i)) ? prefs.getInAppKeyboardBlurRadiusRaw()
                 : prefs.getSurfaceOverrideValue(rows.get(i).slot, rows.get(i).property);
         }
-        mMaterial = prefs.getSurfaceMaterial(TermuxAppSharedPreferences.terminalPageId());
-        mIntensity = prefs.getSurfaceMaterialIntensity(TermuxAppSharedPreferences.terminalPageId());
+        // Read at the scope restore writes them: the wall-wide value. Each page's own material
+        // and intensity are page keys, captured and put back with the others (L2).
+        mMaterial = prefs.getSurfaceMaterial(TermuxAppSharedPreferences.PAGE_WALL);
+        mIntensity = prefs.getSurfaceMaterialIntensity(TermuxAppSharedPreferences.PAGE_WALL);
         mDockStyle = prefs.getAppLauncherDockStyle();
         mBorder = prefs.isTerminalBorderEnabled();
         mTerminalRadius = prefs.getTerminalCornerRadius();
@@ -288,7 +290,7 @@ final class AppearanceSnapshot {
         return keys;
     }
 
-    /** Each half's own key that the store holds, by name, with its value. */
+    /** Every page's own key that the store holds (any page, not only the Terminal's), by name. */
     @NonNull
     private static java.util.TreeMap<String, Object> halfKeys(
             @NonNull TermuxAppSharedPreferences prefs) {
@@ -296,20 +298,33 @@ final class AppearanceSnapshot {
         SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
         if (store == null)
             return out;
-        java.util.Map<String, ?> all = store.getAll();
-        for (String key : halfAbleKeys()) {
-            {
-                int pageId = TermuxAppSharedPreferences.terminalPageId();
-                String halfKey = TermuxAppSharedPreferences.surfacePageKey(key, pageId);
-                // Only the Terminal page's own values are half keys now; the wall's are shared.
-                if (halfKey.equals(key))
-                    continue;
-                Object value = all.get(halfKey);
-                if (value != null)
-                    out.put(halfKey, value);
-            }
+        java.util.Set<String> able = pageAbleKeys();
+        for (java.util.Map.Entry<String, ?> entry : store.getAll().entrySet()) {
+            if (entry.getValue() != null && isPageKey(entry.getKey(), able))
+                out.put(entry.getKey(), entry.getValue());
         }
         return out;
+    }
+
+    /** The keys a page may hold its own copy of: the half-able ones and every detachable Look key. */
+    @NonNull
+    private static java.util.Set<String> pageAbleKeys() {
+        java.util.Set<String> able = new java.util.HashSet<>(halfAbleKeys());
+        able.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.DETACHABLE);
+        return able;
+    }
+
+    /** Whether {@code key} is one page's override ({@code <able key>@<page id>}). */
+    static boolean isPageKey(@NonNull String key, @NonNull java.util.Set<String> able) {
+        String separator = com.termux.shared.termux.settings.preferences.PageLookKeys.PAGE_SEPARATOR;
+        int at = key.lastIndexOf(separator);
+        if (at <= 0 || at + separator.length() >= key.length())
+            return false;
+        for (int i = at + separator.length(); i < key.length(); i++) {
+            if (!Character.isDigit(key.charAt(i)))
+                return false;
+        }
+        return able.contains(key.substring(0, at));
     }
 
     /**
@@ -337,27 +352,29 @@ final class AppearanceSnapshot {
         editor.apply();
     }
 
-    /** Puts every half's own key back as it was, and drops the ones that were absent. */
+    /**
+     * Puts every page's own key back as it was, and drops the ones that were absent: an override
+     * written in the session on any page (Home, Display, Terminal) is gone after the restore.
+     */
     private static void restoreHalfKeys(@NonNull TermuxAppSharedPreferences prefs,
                                         @NonNull java.util.Map<String, Object> halfKeys) {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null)
             return;
+        java.util.Set<String> able = pageAbleKeys();
         SharedPreferences.Editor editor = store.edit();
-        for (String key : halfAbleKeys()) {
-            {
-                int pageId = TermuxAppSharedPreferences.terminalPageId();
-                String halfKey = TermuxAppSharedPreferences.surfacePageKey(key, pageId);
-                if (halfKey.equals(key))
-                    continue;
-                Object value = halfKeys.get(halfKey);
-                if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
-                else if (value instanceof Boolean) editor.putBoolean(halfKey, (Boolean) value);
-                else if (value instanceof String) editor.putString(halfKey, (String) value);
-                else if (value instanceof Float) editor.putFloat(halfKey, (Float) value);
-                else if (value instanceof Long) editor.putLong(halfKey, (Long) value);
-                else if (store.contains(halfKey)) editor.remove(halfKey);
-            }
+        for (String key : store.getAll().keySet()) {
+            if (isPageKey(key, able) && !halfKeys.containsKey(key))
+                editor.remove(key);
+        }
+        for (java.util.Map.Entry<String, Object> entry : halfKeys.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (value instanceof Integer) editor.putInt(key, (Integer) value);
+            else if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
+            else if (value instanceof String) editor.putString(key, (String) value);
+            else if (value instanceof Float) editor.putFloat(key, (Float) value);
+            else if (value instanceof Long) editor.putLong(key, (Long) value);
         }
         editor.apply();
     }
