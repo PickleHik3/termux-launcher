@@ -1151,7 +1151,10 @@ public final class WidgetPaneView extends FrameLayout {
         if (instantMotion()) { setContentTranslationX(0f); return; }
         float start = direction > 0 ? getWidth() + dragX : dragX - getWidth();
         setContentTranslationX(start);
-        animateContentTranslationX(velocityPxPerSec);
+        // The page just rendered lays out and draws on the next frame, which can take as long as
+        // the whole settle (#173): posed at the start for that frame, the spring's clock starts
+        // on the frame after, still carrying the release's speed.
+        animateContentTranslationX(velocityPxPerSec, true);
     }
 
     private void settleContentBack() {
@@ -1169,9 +1172,51 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     private void setContentTranslationX(float value) {
-        if (contentSettle != null) contentSettle.cancel();
+        cancelContentSettle();
         moveContent(value);
     }
+
+    /**
+     * Stops the settle under way, if one is. A settle still held behind its gate has not started,
+     * and cancelling it tells no listener, so the settle is let go of here rather than in its end
+     * listener.
+     */
+    private void cancelContentSettle() {
+        ValueAnimator settle = contentSettle;
+        contentSettle = null;
+        if (settle != null) settle.cancel();
+        runAfterSettle();
+    }
+
+    /**
+     * Whether the page's content is settling, a page sliding in or back: from the moment the
+     * settle is posed, held clock included, until it lands or is cut short.
+     */
+    public boolean isContentSettling() {
+        return contentSettle != null;
+    }
+
+    /**
+     * Runs {@code action} once the settle under way lands or is cut short, or now if none is:
+     * work too heavy for a settle's frames waits for it (#173).
+     */
+    public void runWhenContentSettles(@NonNull Runnable action) {
+        if (contentSettle == null) {
+            action.run();
+            return;
+        }
+        afterSettle.add(action);
+    }
+
+    private void runAfterSettle() {
+        if (contentSettle != null || afterSettle.isEmpty()) return;
+        java.util.List<Runnable> waiting = new java.util.ArrayList<>(afterSettle);
+        afterSettle.clear();
+        for (Runnable action : waiting) action.run();
+    }
+
+    /** What waits for the settle under way; see {@link #runWhenContentSettles}. */
+    private final java.util.List<Runnable> afterSettle = new java.util.ArrayList<>(1);
 
     private void moveContent(float value) {
         contentShiftPx = value;
@@ -1317,7 +1362,19 @@ public final class WidgetPaneView extends FrameLayout {
 
     /** Settles the content from where it stands to rest, starting at {@code velocityPxPerSec}. */
     private void animateContentTranslationX(float velocityPxPerSec) {
-        if (contentSettle != null) contentSettle.cancel();
+        animateContentTranslationX(velocityPxPerSec, false);
+    }
+
+    /**
+     * @param afterNextDraw whether the spring's clock waits for the window's next draw, the
+     *                      arriving page's first ({@link com.termux.app.wall.FirstDrawGate}); the
+     *                      content stands where it is until then
+     */
+    private void animateContentTranslationX(float velocityPxPerSec, boolean afterNextDraw) {
+        // Replaced, not cut short: what waits for the settle waits for this one too.
+        ValueAnimator previous = contentSettle;
+        contentSettle = null;
+        if (previous != null) previous.cancel();
         final SettleSpring spring = settleSpring(contentShiftPx, velocityPxPerSec,
             AnimationSpeed.springTime(getContext()));
         final long duration = spring.durationMs(SettleSpring.PAGE_REST_PX);
@@ -1332,11 +1389,20 @@ public final class WidgetPaneView extends FrameLayout {
         });
         settle.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
-                if (contentSettle == animation) contentSettle = null;
+                if (contentSettle != animation) return;
+                contentSettle = null;
+                runAfterSettle();
             }
         });
         contentSettle = settle;
-        settle.start();
+        if (!afterNextDraw) {
+            settle.start();
+            return;
+        }
+        com.termux.app.wall.FirstDrawGate.afterNextDraw(this).then(() -> {
+            // Not once another motion has taken the content over.
+            if (contentSettle == settle && !settle.isStarted()) settle.start();
+        });
     }
 
     private static boolean insideNestedScrollingChild(@NonNull ViewGroup parent,
@@ -1361,7 +1427,14 @@ public final class WidgetPaneView extends FrameLayout {
 
     @Override protected void onDetachedFromWindow() {
         getViewTreeObserver().removeOnPreDrawListener(hintCoverCheck);
-        if (contentSettle != null) { contentSettle.end(); contentSettle = null; }
+        if (contentSettle != null) {
+            ValueAnimator settle = contentSettle;
+            // A settle still held behind its gate is started so that end() lands it.
+            if (!settle.isStarted()) settle.start();
+            settle.end();
+            contentSettle = null;
+        }
+        runAfterSettle();
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
         if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }
         super.onDetachedFromWindow();

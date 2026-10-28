@@ -778,6 +778,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * only this.
      */
     @Nullable private Boolean mAppliedChromeHome;
+    /** A Home page's re-arrangement is waiting for Home's page settle to land (#173). */
+    private boolean mChromeArrangementAfterSettle;
     /** The variant the arrangement pass last laid out, so a keyboard element is compared within one. */
     @Nullable private com.termux.app.place.LayoutVariant mAppliedPlaceVariant;
     /** Whether that pass laid it out for a Home page, whose keyboard element is always on. */
@@ -29213,7 +29215,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (!isWidgetsPageShowing()) return;
                     // The Home page in front may wear a page layout of its own (ADR 0015 §3):
                     // landing on another one re-arranges the chrome. The morph is slice E.
-                    syncChromeArrangement();
+                    // Re-arranging costs a frame of 70-160 ms, which would eat a page settle
+                    // under way (#173): it waits for the settle to land, once however many
+                    // renders ask in the meantime.
+                    if (mWidgetPaneController != null
+                            && mWidgetPaneController.isHomePageSettling()) {
+                        if (!mChromeArrangementAfterSettle) {
+                            mChromeArrangementAfterSettle = true;
+                            mWidgetPaneController.runWhenHomePageSettles(() -> {
+                                mChromeArrangementAfterSettle = false;
+                                syncChromeArrangement();
+                            });
+                        }
+                    } else {
+                        syncChromeArrangement();
+                    }
                     syncPlaceBar();
                     com.termux.app.terminal.TerminalWindowBar chips =
                         findViewById(R.id.terminal_window_bar);
@@ -31195,7 +31211,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long duration = com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS;
         if (width > 0) duration = Math.max(160L, Math.round(duration * Math.min(1f, remaining / width)));
         duration = windowSwitchMs(duration);
-        animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining);
+        // The window just shown lays out and draws for the first time on the next frame, which
+        // can take as long as the whole step (#173): the step waits for that draw to start.
+        animateTerminalArrival(steps > 0 ? 1 : -1, true, duration, remaining,
+            com.termux.app.wall.WallParallax.ADJACENT, true);
     }
 
     /**
@@ -31385,6 +31404,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
                                         float travelPx, int fromWindow) {
+        animateTerminalArrival(direction, horizontal, durationMs, travelPx, fromWindow, false);
+    }
+
+    /**
+     * @param afterArrivalDraws whether the arrival's clock waits for the arriving window's first
+     *                          draw (#173): both sheets are posed at their start now and start
+     *                          together on the frame after that draw, so the frame the new window
+     *                          lays out in does not eat the travel. A travel of no duration
+     *                          (Animation speed Off) never waits.
+     */
+    private void animateTerminalArrival(int direction, boolean horizontal, long durationMs,
+                                        float travelPx, int fromWindow,
+                                        boolean afterArrivalDraws) {
         ViewGroup surfaceHost = findViewById(R.id.terminal_surface_host);
         View paneHost = findViewById(R.id.terminal_pane_host);
         // Behind the display window in front, a terminal window's arrival is not on screen: the
@@ -31420,7 +31452,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // draws, children included.
         surfaceHost.setClipBounds(new android.graphics.Rect(
             0, 0, surfaceHost.getWidth(), surfaceHost.getHeight()));
-        animateTerminalDeparture(surfaceHost, offset, horizontal, settle, durationMs);
+        // One gate for both sheets: they are one sheet, so their clocks start on the same frame.
+        com.termux.app.wall.FirstDrawGate clock = afterArrivalDraws && durationMs > 0L
+            ? com.termux.app.wall.FirstDrawGate.afterNextDraw(paneHost)
+            : com.termux.app.wall.FirstDrawGate.opened();
+        animateTerminalDeparture(surfaceHost, offset, horizontal, settle, durationMs, clock);
         Runnable unclip = () -> surfaceHost.setClipBounds(null);
         paneHost.animate().cancel();
         paneHost.setTranslationY(0f);
@@ -31429,19 +31465,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // a sideways arrival is drawn by the wall; nothing else writes that position.
             if (mPaneWallController != null) {
                 mPaneWallController.nudgeTerminalPage(offset, fromWindow, durationMs, settle,
-                    unclip);
+                    unclip, clock);
             } else {
                 unclip.run();
             }
             return;
         }
         paneHost.setTranslationY(offset);
-        paneHost.animate()
+        // Built when the gate opens, not before: a property animator starts itself on the next
+        // frame once a property is set.
+        clock.then(() -> paneHost.animate()
             .translationY(0f)
             .setDuration(durationMs)
             .setInterpolator(settle)
             .withEndAction(unclip)
-            .start();
+            .start());
     }
 
     /** Snapshot of the outgoing terminal surface, captured just before a window/session swap. */
@@ -31570,7 +31608,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void animateTerminalDeparture(ViewGroup surfaceHost, float offset, boolean horizontal,
                                           android.view.animation.Interpolator settle,
-                                          long durationMs) {
+                                          long durationMs,
+                                          @NonNull com.termux.app.wall.FirstDrawGate clock) {
         android.graphics.Bitmap departure = mTerminalDepartureSnapshot;
         boolean translucent = mTerminalDepartureTranslucent;
         mTerminalDepartureSnapshot = null;
@@ -31588,12 +31627,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (horizontal && wall != null
                 && effect != com.termux.app.launcher.home.HomePageTransition.SLIDE) {
             turnTerminalDeparture(surfaceHost, wall, ghost, departure, effect, offset, settle,
-                durationMs);
+                durationMs, clock);
             return;
         }
         surfaceHost.addView(ghost, new android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        ghost.animate()
+        // Stands at its start until the clock's gate opens. Built then, not before: a property
+        // animator starts itself on the next frame once a property is set.
+        clock.then(() -> ghost.animate()
             .translationX(horizontal ? -offset : 0f)
             .translationY(horizontal ? 0f : -offset)
             .setDuration(durationMs)
@@ -31603,7 +31644,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ghost.setImageDrawable(null);
                 departure.recycle();
             })
-            .start();
+            .start());
     }
 
     /**
@@ -31623,7 +31664,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                        @NonNull com.termux.app.launcher.home.HomePageTransition effect,
                                        float offset,
                                        @NonNull android.view.animation.Interpolator settle,
-                                       long durationMs) {
+                                       long durationMs,
+                                       @NonNull com.termux.app.wall.FirstDrawGate clock) {
         View page = findViewById(R.id.terminal_pane_host);
         int direction = offset < 0f ? -1 : 1;
         int width = wall.getWidth();
@@ -31668,9 +31710,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 departure.recycle();
             }
         });
-        // Posed for the frame it is added in, not one frame later.
+        // Posed for the frame it is added in, not one frame later, and held there until the
+        // clock's gate opens: the wall's nudge starts from the same gate, on the same frame.
         travel.setCurrentFraction(0f);
-        travel.start();
+        clock.then(travel::start);
     }
 
     // Creation used to settle in place (fade + a whisper of scale); it now rides the same wall

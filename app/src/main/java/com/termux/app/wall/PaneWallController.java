@@ -618,8 +618,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public void nudgeTerminalPage(float fromPx, int fromWindow, long durationMs,
                                   @Nullable android.view.animation.Interpolator interpolator,
                                   @Nullable Runnable onEnd) {
+        nudgeTerminalPage(fromPx, fromWindow, durationMs, interpolator, onEnd, null);
+    }
+
+    /** {@link #nudgeTerminalPage}, its clock held behind {@code clock}; see PaneWallLayout#nudgePage. */
+    public void nudgeTerminalPage(float fromPx, int fromWindow, long durationMs,
+                                  @Nullable android.view.animation.Interpolator interpolator,
+                                  @Nullable Runnable onEnd, @Nullable FirstDrawGate clock) {
         mNudgeFromWindow = fromWindow;
-        mWall.nudgePage(PaneWallPage.TERMINAL, fromPx, durationMs, interpolator, onEnd);
+        mWall.nudgePage(PaneWallPage.TERMINAL, fromPx, durationMs, interpolator, onEnd, clock);
     }
 
     /** The window the terminal page's current nudge left; see {@link #nudgeTerminalPage}. */

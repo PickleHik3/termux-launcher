@@ -513,6 +513,50 @@ public class PaneWallLayoutTest {
         assertEquals(1, ended[0]);
     }
 
+    /** A gate that only opens when the test says: on a view in a window, never drawn here. */
+    private static FirstDrawGate heldGate() {
+        Activity other = Robolectric.buildActivity(Activity.class).setup().get();
+        View content = new View(other);
+        other.setContentView(content);
+        FirstDrawGate gate = FirstDrawGate.afterNextDraw(content);
+        assertFalse(gate.isOpen());
+        return gate;
+    }
+
+    @Test
+    public void aHeldNudgeStandsAtItsStartUntilTheArrivingPageHasDrawn() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final int[] ended = {0};
+        wall.setReducedMotion(false);
+        FirstDrawGate gate = heldGate();
+        wall.nudgePage(PaneWallPage.TERMINAL, 300f, 380L, null, () -> ended[0]++, gate);
+        assertEquals(300f, terminal.getTranslationX(), EPS);
+        assertEquals(0, ended[0]);
+        // The clock starts when the gate opens, and runs its whole course from there.
+        gate.open();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(1000L));
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+    }
+
+    @Test
+    public void aHeldNudgeCutShortEndsOnceAndItsGateDoesNotStartIt() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final int[] ended = {0};
+        wall.setReducedMotion(false);
+        FirstDrawGate gate = heldGate();
+        wall.nudgePage(PaneWallPage.TERMINAL, 300f, 380L, null, () -> ended[0]++, gate);
+        wall.beginDrag();
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+        gate.open();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(1000L));
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+    }
+
     @Test
     public void aNudgeOnAPageTheWallHasPutAwayLeavesItAway() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
