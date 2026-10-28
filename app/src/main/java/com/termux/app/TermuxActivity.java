@@ -26846,16 +26846,131 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * not an empty page. Building the frame alone starts nothing.
      */
     private void onDisplayPageBound(int pageId) {
+        int left = mBoundDisplayPage;
         mBoundDisplayPage = pageId;
+        if (left != pageId) {
+            // The frame leaves page `left`: what it shows now is that page's last picture. The
+            // page it comes to shows its own picture, or its card, until the landing makes it live.
+            keepDisplayPagePicture(left);
+            mDisplayPageStillPending = pageId >= 0;
+            applyDisplayPageStill();
+        }
         if (pageId >= 0 && mPaneWallController != null) {
             mPaneWallController.wall().post(this::ensureDisplayPageFrame);
         }
     }
 
+    /**
+     * Each Display page's last picture, by page id (A3c2, stories 28/29), taken as the display
+     * frame leaves the page; the bitmaps are this activity's to recycle.
+     */
+    @NonNull private final com.termux.app.wall.DisplayPagePolicy.Pictures<android.graphics.Bitmap>
+        mDisplayPictures = new com.termux.app.wall.DisplayPagePolicy.Pictures<>();
+    /** The frame came to its bound page and has not landed there yet: the page's still shows. */
+    private boolean mDisplayPageStillPending;
+    /** Hides the bound page's still once its app was raised or run there. */
+    private final Runnable mDisplayPageLive = () -> {
+        mDisplayPageStillPending = false;
+        applyDisplayPageStill();
+    };
+    /** How long a landed page keeps its still while its app comes forward, in ms. */
+    private static final long DISPLAY_PAGE_LIVE_DELAY_MS = 300L;
+
+    /** Keep what the running display shows as Display page {@code pageId}'s picture. */
+    private void keepDisplayPagePicture(int pageId) {
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+            ? null : mPaneWallController.displayWindow();
+        if (pageId < 0 || frame == null || !isEmbeddedDisplayRunning()) return;
+        frame.copyPagePicture(picture -> {
+            if (picture == null) return;
+            com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
+            if (isFinishing() || page == null
+                    || page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) {
+                picture.recycle();
+                return;
+            }
+            recycleDisplayPicture(mDisplayPictures.put(pageId, picture));
+            // A picture that lands after the frame came back to its page is that page's newest.
+            if (pageId == mBoundDisplayPage) applyDisplayPageStill();
+        });
+    }
+
+    private void recycleDisplayPicture(@Nullable android.graphics.Bitmap picture) {
+        if (picture == null) return;
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+            ? null : mPaneWallController.displayWindow();
+        if (frame != null) frame.forgetPagePicture(picture);
+        if (!picture.isRecycled()) picture.recycle();
+    }
+
+    /** Only the Display pages still on the wall keep their pictures. */
+    private void retainDisplayPictures(@NonNull com.termux.app.wall.WallPages pages) {
+        java.util.List<Integer> ids = new java.util.ArrayList<>();
+        for (com.termux.app.wall.WallPages.Page page : pages.allPages()) {
+            if (page.kind == com.termux.app.wall.WallPages.PageKind.DISPLAY) ids.add(page.id);
+        }
+        for (android.graphics.Bitmap dropped : mDisplayPictures.retain(ids)) {
+            recycleDisplayPicture(dropped);
+        }
+    }
+
+    /**
+     * What the display frame shows on its bound page ({@link
+     * com.termux.app.wall.DisplayPagePolicy#shows}): live, the page's picture, or its card. A
+     * page the frame just came to counts as not live until its landing. With the display down
+     * and its keyboard data missing, the empty state's install prompt shows instead of a card.
+     */
+    private void applyDisplayPageStill() {
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+            ? null : mPaneWallController.displayWindow();
+        if (frame == null) return;
+        int pageId = mBoundDisplayPage;
+        boolean running = isEmbeddedDisplayRunning();
+        com.termux.app.wall.WallPages.Page page = pageId < 0 ? null : wallPages().page(pageId);
+        if (page == null || (!running && !com.termux.app.x11.X11CliInstaller.hasKeyboardData())) {
+            frame.hidePageStill();
+            return;
+        }
+        switch (com.termux.app.wall.DisplayPagePolicy.shows(pageId,
+                mDisplayPageStillPending ? -1 : pageId, running, mDisplayPictures.has(pageId))) {
+            case LIVE:
+                frame.hidePageStill();
+                return;
+            case PICTURE:
+                frame.showPageStill(mDisplayPictures.get(pageId), null, "");
+                return;
+            case CARD:
+            default:
+                break;
+        }
+        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null ? null
+            : com.termux.app.x11.LinuxAppCatalog.find(
+                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots()),
+                page.binding);
+        android.graphics.drawable.Drawable icon = null;
+        if (app != null) {
+            java.io.File file = com.termux.app.x11.LinuxAppIcons.find(app);
+            icon = file == null ? null
+                : com.termux.app.x11.LinuxAppIcons.load(getResources(), file);
+        }
+        if (icon == null) {
+            icon = androidx.core.content.ContextCompat.getDrawable(this,
+                R.drawable.ic_symbol_desktop_windows);
+            if (icon != null) {
+                icon = icon.mutate();
+                icon.setTint(0xFFE8EAED);
+            }
+        }
+        frame.showPageStill(null, icon, com.termux.app.wall.DisplayPagePolicy.cardName(page,
+            app == null ? null : app.name));
+    }
+
     /** The display's frame on the wall while the wall has a Display page, the display up or not. */
     private void ensureDisplayPageFrame() {
         if (mPaneWallController == null || !isX11DisplayEnabled() || mBoundDisplayPage < 0) return;
-        if (mPaneWallController.displayWindow() == null) buildDisplayFrame();
+        if (mPaneWallController.displayWindow() == null && buildDisplayFrame()) {
+            applyDisplayPageStill();
+        }
     }
 
     /**
@@ -26866,6 +26981,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onDisplayPageLandedAt(int pageId) {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
+        // The page goes live once its app had a moment to come forward (A3c2).
+        if (pageId == mBoundDisplayPage) {
+            mPaneWallController.wall().removeCallbacks(mDisplayPageLive);
+            mPaneWallController.wall().postDelayed(mDisplayPageLive, DISPLAY_PAGE_LIVE_DELAY_MS);
+        }
         com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
         String binding = page == null ? null : page.binding;
         com.termux.app.x11.LinuxAppCatalog.LinuxApp app = null;
@@ -27882,6 +28002,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPaneController != null) mPaneController.onHomePagesChanged();
                 // The wall lays out in the pages' order: a moved page moves on the wall.
                 if (mPaneWallController != null) mPaneWallController.refreshPages();
+                // A removed Display page's picture goes with it (A3c2).
+                retainDisplayPictures(pages);
+                applyDisplayPageStill();
             }
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
                 // The removal is final: the page's own look goes with it, and what stood on it.
@@ -27932,6 +28055,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWallPagesStore.removeListener(mWallPagesListener);
         }
         mWallPagesListener = null;
+        for (android.graphics.Bitmap picture : mDisplayPictures.clear()) {
+            recycleDisplayPicture(picture);
+        }
         if (mPageLookPruner != null) mPageLookPruner.close();
         mPageLookPruner = null;
         if (mGroundLook != null) mGroundLook.close();
@@ -28611,6 +28737,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
             ? null : mPaneWallController.displayWindow();
         if (frame != null) frame.applyRunning(running);
+        applyDisplayPageStill();
         syncPlaceBar();
         syncDisplayTouchpad();
         syncDisplayEnvironment();
