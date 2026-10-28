@@ -81,6 +81,52 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * The wall's slots in page-list order ({@link WallPages#slots}), without the Terminal slot
+     * while the row has no window. For [Home...][Terminal] this is {@link #rowPages} one-to-one,
+     * a Home run being the one WIDGETS entry.
+     */
+    @NonNull
+    public static List<WallPages.Slot> rowSlots(@NonNull WallPages pages, boolean hasWindow) {
+        List<WallPages.Slot> out = new ArrayList<>();
+        for (WallPages.Slot slot : pages.slots()) {
+            if (slot.kind == WallPages.PageKind.TERMINAL && !hasWindow) continue;
+            out.add(slot);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The kind of page a slot is shown by. */
+    @NonNull
+    public static PaneWallPage kindOf(@NonNull WallPages.Slot slot) {
+        switch (slot.kind) {
+            case HOME: return PaneWallPage.WIDGETS;
+            case DISPLAY: return PaneWallPage.DISPLAY;
+            default: return PaneWallPage.TERMINAL;
+        }
+    }
+
+    /** The kinds of {@code slots}, in order: what the kind-keyed wall list becomes. */
+    @NonNull
+    public static List<PaneWallPage> kindsOf(@NonNull List<WallPages.Slot> slots) {
+        List<PaneWallPage> out = new ArrayList<>(slots.size());
+        for (WallPages.Slot slot : slots) out.add(kindOf(slot));
+        return out;
+    }
+
+    /**
+     * Where a slot sits relative to the current one, in whole pages (negative on the left): a
+     * plain line over the slots, whatever kinds they are.
+     */
+    public static int relativeSlot(int current, int slot) {
+        return slot - current;
+    }
+
+    /** The slot {@code steps} away from {@code current}, held at the row's ends. */
+    public static int neighbourSlot(int slotCount, int current, int steps) {
+        return Math.max(0, Math.min(Math.max(0, slotCount - 1), current + steps));
+    }
+
+    /**
      * Where the wall goes when the page it rests on leaves the row: the nearest page to its left
      * that is still there: the last window closing lands on Home. A page the old row did not have
      * hands over to Home.

@@ -97,6 +97,55 @@ public final class WallRow {
         return direction > 0 && rowContinues && homePage >= Math.max(1, homeCount) - 1;
     }
 
+    // ---- Slots (ADR 0015, A2a): Home runs anywhere on the row -------------------------------
+
+    /**
+     * {@link #swipeLeavesHome} for any order: a swipe in {@code direction} leaves the Home run at
+     * the run's edge on that side, when a slot lies on that side ({@code slotOnSide}). Inside the
+     * run the swipe stays with Home, which pages. For the default order (no slot before the first
+     * Home page) this is {@code swipeLeavesHome}.
+     */
+    public static boolean swipeLeavesRun(int pageInRun, int runLength, int direction,
+                                         boolean slotOnSide) {
+        if (!slotOnSide || direction == 0) return false;
+        int last = Math.max(1, runLength) - 1;
+        return direction > 0 ? pageInRun >= last : pageInRun <= 0;
+    }
+
+    /** The run page the wall shows when it arrives from a slot on {@code side} of it. */
+    public static int arrivalPage(int runLength, int sideOfArrival) {
+        return sideOfArrival > 0 ? Math.max(0, runLength - 1) : 0;
+    }
+
+    /** Where a global Home-page index (as {@code wall_index} saves it) lives: slot and run page. */
+    @NonNull
+    public static int[] homeSlotOf(@NonNull WallPages pages, int globalHomeIndex) {
+        java.util.List<WallPages.Slot> slots = pages.slots();
+        int seen = 0;
+        int lastSlot = 0;
+        int lastLen = 1;
+        for (int i = 0; i < slots.size(); i++) {
+            WallPages.Slot slot = slots.get(i);
+            if (slot.kind != WallPages.PageKind.HOME) continue;
+            int len = slot.pageIds.size();
+            if (globalHomeIndex < seen + len) return new int[] {i, Math.max(0, globalHomeIndex - seen)};
+            seen += len;
+            lastSlot = i;
+            lastLen = len;
+        }
+        return new int[] {lastSlot, lastLen - 1};
+    }
+
+    /** The global Home-page index of run page {@code pageInRun} of slot {@code slotIndex}. */
+    public static int globalHomeIndex(@NonNull WallPages pages, int slotIndex, int pageInRun) {
+        java.util.List<WallPages.Slot> slots = pages.slots();
+        int seen = 0;
+        for (int i = 0; i < slots.size() && i < slotIndex; i++) {
+            if (slots.get(i).kind == WallPages.PageKind.HOME) seen += slots.get(i).pageIds.size();
+        }
+        return seen + Math.max(0, pageInRun);
+    }
+
     /**
      * Whether a forward swipe past the last Home page has somewhere to go: a page after Home on
      * the row ({@code rowHasPageAfterHome}: a window, or the display window), or, with the

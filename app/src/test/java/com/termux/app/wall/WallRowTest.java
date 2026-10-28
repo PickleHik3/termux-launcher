@@ -148,4 +148,46 @@ public class WallRowTest {
         assertEquals(WallRow.homePage(0), WallRow.restore("WIDGETS", 2, 3, 3));
         assertEquals(WallRow.homePage(0), WallRow.restore(null, 2, 3, 3));
     }
+
+    /** [Home 1][Terminal][Home 2] (ids 1 3 2) and the default [Home 1][Home 2][Terminal]. */
+    private static WallPages mid() {
+        return WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages;
+    }
+
+    @Test
+    public void runEdgeSwipeEqualsSwipeLeavesHomeInTheDefaultOrder() {
+        for (int len = 1; len <= 3; len++) {
+            for (int page = 0; page < len; page++) {
+                assertEquals(WallRow.swipeLeavesHome(page, len, 1, true),
+                    WallRow.swipeLeavesRun(page, len, 1, true));
+                // Nothing lies before the first Home page: backward never leaves.
+                assertFalse(WallRow.swipeLeavesRun(page, len, -1, false));
+            }
+        }
+        assertFalse(WallRow.swipeLeavesRun(0, 2, 1, true));
+        assertTrue(WallRow.swipeLeavesRun(1, 2, 1, true));
+    }
+
+    @Test
+    public void aSlotBehindTheFirstPageOfARunLetsBackwardLeave() {
+        assertTrue(WallRow.swipeLeavesRun(0, 1, -1, true));
+        assertTrue(WallRow.swipeLeavesRun(0, 3, -1, true));
+        assertFalse(WallRow.swipeLeavesRun(1, 3, -1, true));
+        assertEquals(0, WallRow.arrivalPage(3, -1));
+        assertEquals(2, WallRow.arrivalPage(3, 1));
+    }
+
+    @Test
+    public void aSavedHomeIndexLandsOnTheSecondRun() {
+        WallPages p = mid();
+        assertEquals(0, WallRow.homeSlotOf(p, 0)[0]);
+        assertEquals(2, WallRow.homeSlotOf(p, 1)[0]);
+        assertEquals(0, WallRow.homeSlotOf(p, 1)[1]);
+        assertEquals(2, WallRow.homeSlotOf(p, 9)[0]);
+        assertEquals(1, WallRow.globalHomeIndex(p, 2, 0));
+        // Default order: one run, the index is the page in it.
+        WallPages d = WallPagesMigration.seed("home", 0, "home", 2);
+        assertEquals(1, WallRow.homeSlotOf(d, 1)[1]);
+        assertEquals(0, WallRow.homeSlotOf(d, 1)[0]);
+    }
 }
