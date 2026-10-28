@@ -55,7 +55,7 @@ public class SurfaceEditorHalvesTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
-        places = new PlaceLayoutStore(preferences);
+        places = com.termux.app.place.KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(preferences));
         places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
     }
 

@@ -134,7 +134,7 @@ public class PlaceLayoutLinkedKeysTest {
         launcher.setLayoutCornersDp(true, 30);
         launcher.setLayoutMarginDp(true, 20);
         assertEquals("set from Home, the window's follows",
-            WallHalfShape.of(LayoutStyle.FLOATING, 30, 20), WallHalfShape.read(launcher, false));
+            WallShape.of(LayoutStyle.FLOATING, 30, 20), WallShape.read(launcher));
         launcher.setLayoutCornersDp(false, 6);
         assertEquals("set from the window, Home's follows", 6, launcher.getLayoutCornersDp(true));
         assertFalse("Home keeps no copy", prefs.contains(TERMUX_APP.KEY_HOME_LAYOUT_STYLE)

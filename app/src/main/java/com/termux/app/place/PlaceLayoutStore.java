@@ -18,6 +18,7 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -88,7 +89,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 14;
+    @VisibleForTesting static final int MIGRATION_VERSION = 15;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -399,6 +400,7 @@ public final class PlaceLayoutStore {
         mStore = preferences.getSharedPreferences();
         mRevision = new AtomicInteger();
         mFixedVariant = null;
+        mMigrating = new java.util.concurrent.atomic.AtomicBoolean();
         mSeeded = new boolean[LayoutVariant.values().length][PlaceOrientation.values().length];
         mVariantViews = new PlaceLayoutStore[LayoutVariant.values().length];
         migrateIfNeeded();
@@ -406,11 +408,15 @@ public final class PlaceLayoutStore {
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
     }
 
+    /** True while the migration runs: slots read what the arrangement keys held. */
+    private final java.util.concurrent.atomic.AtomicBoolean mMigrating;
+
     private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull LayoutVariant variant) {
         mPreferences = root.mPreferences;
         mStore = root.mStore;
         mRevision = root.mRevision;
         mFixedVariant = variant;
+        mMigrating = root.mMigrating;
         mSeeded = root.mSeeded;
         mVariantViews = root.mVariantViews;
     }
@@ -539,6 +545,17 @@ public final class PlaceLayoutStore {
         }
         for (String key : LAYOUT_WIDE_KEYS)
             copy(editor, all, layoutWideKey(from, key), layoutWideKey(to, key));
+        // Which elements show comes along: the source layout's visibility becomes its kind's.
+        if (to != LayoutVariant.MINIMAL) {
+            PlaceLayoutStore source = forVariant(from);
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                for (Element element : Element.values()) {
+                    if (!from.offers(element) || !to.offers(element)) continue;
+                    editor.putBoolean(kindKey(kindOfVariant(to), orientation, element),
+                        !source.slot(orientation, element).hidden);
+                }
+            }
+        }
         editor.apply();
         // The target is whole now: it must not be seeded over on its next read.
         for (PlaceOrientation orientation : PlaceOrientation.values())
@@ -570,6 +587,12 @@ public final class PlaceLayoutStore {
         }
         for (String key : LAYOUT_WIDE_KEYS)
             keys.add(layoutWideKey(to, key));
+        if (to != LayoutVariant.MINIMAL) {
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                for (Element element : Element.values())
+                    keys.add(kindKey(kindOfVariant(to), orientation, element));
+            }
+        }
         return keys;
     }
 
@@ -655,12 +678,12 @@ public final class PlaceLayoutStore {
 
     /**
      * One half's Style, Corners and Margin as the preferences hold them now ({@link
-     * WallHalfShape#read}): what the Dress resolver shapes a page by. Linked like the sizes, so
+     * WallShape#read}): what the Dress resolver shapes a page by. Linked like the sizes, so
      * Home's half answers the Workspace's and a Home layout brings no shape of its own (#84).
      */
     @NonNull
-    public WallHalfShape halfShape(boolean home) {
-        return WallHalfShape.read(mPreferences, home);
+    public WallShape shape() {
+        return WallShape.read(mPreferences);
     }
 
     /**
@@ -669,6 +692,67 @@ public final class PlaceLayoutStore {
      */
     public int revision() {
         return mRevision.get();
+    }
+
+    // ---------------------------------------------------------------- kind visibility
+
+    /** The kind of page the layout {@code variant} dresses: Home's own, else the Terminal's. */
+    @NonNull
+    static PageKind kindOfVariant(@NonNull LayoutVariant variant) {
+        return variant == LayoutVariant.HOME ? PageKind.HOME : PageKind.TERMINAL;
+    }
+
+    /**
+     * {@code place.dress.<kind>.<orientation>.<element>}: whether pages of one kind show one element
+     * in one orientation (the page model, #171). A boolean; absent reads {@link #kindShowsByDefault}.
+     */
+    @VisibleForTesting
+    @NonNull
+    static String kindKey(@NonNull PageKind kind, @NonNull PlaceOrientation orientation,
+                          @NonNull Element element) {
+        return PREFIX + "dress." + kind.name().toLowerCase(Locale.ROOT) + "."
+            + orientation.storageValue() + "." + element.storageKey();
+    }
+
+    /**
+     * What a kind shows with nothing stored: Home pages the status bar and the dock (the apps row
+     * and the A-Z index); Terminal and Display pages the status bar and the extra keys.
+     */
+    public static boolean kindShowsByDefault(@NonNull PageKind kind, @NonNull Element element) {
+        if (element == Element.STATUS) return true;
+        if (kind == PageKind.HOME) return element == Element.APPS || element == Element.AZ;
+        return element == Element.EXTRA_KEYS;
+    }
+
+    /** Whether pages of {@code kind} show {@code element}, as stored. */
+    public boolean kindShows(@NonNull PageKind kind, @NonNull PlaceOrientation orientation,
+                             @NonNull Element element) {
+        boolean fallback = kindShowsByDefault(kind, element);
+        return mStore == null ? fallback
+            : mStore.getBoolean(kindKey(kind, orientation, element), fallback);
+    }
+
+    /** Whether a visibility is stored for the kind, orientation and element (else the default). */
+    @VisibleForTesting
+    boolean hasKindKey(@NonNull PageKind kind, @NonNull PlaceOrientation orientation,
+                       @NonNull Element element) {
+        return mStore != null && mStore.contains(kindKey(kind, orientation, element));
+    }
+
+    /** Whether {@code kind} shows {@code element} in either orientation: what a dress, which has no orientation, wears. */
+    public boolean kindShowsAny(@NonNull PageKind kind, @NonNull Element element) {
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            if (kindShows(kind, orientation, element)) return true;
+        }
+        return false;
+    }
+
+    /** Shows or hides {@code element} on every page of {@code kind}, in one orientation. */
+    public void setKindShows(@NonNull PageKind kind, @NonNull PlaceOrientation orientation,
+                             @NonNull Element element, boolean shown) {
+        if (kindShows(kind, orientation, element) == shown && (mStore == null
+            || mStore.contains(kindKey(kind, orientation, element)))) return;
+        writeBoolean(kindKey(kind, orientation, element), shown);
     }
 
     // ---------------------------------------------------------------- arrangement
@@ -706,10 +790,14 @@ public final class PlaceLayoutStore {
         PlaceLayoutStore layout = forVariant(variant);
         PlaceLayout resolved = layout.resolve(orientation);
         if (page != PaneWallPage.WIDGETS || variant == LayoutVariant.HOME) return resolved;
+        // A Home page on the shared arrangement shows what the Home kind shows, whatever the
+        // shared layout's own kind does.
+        PageKind kind = DressResolver.kindOf(page);
         for (Element element : Element.values()) {
             Slot slot = resolved.slot(element);
-            if (!DressResolver.wornBy(page, element) && !slot.hidden)
-                resolved = resolved.withSlot(element, slot.withHidden(true));
+            boolean shown = kindShows(kind, orientation, element)
+                && (element != Element.EXTRA_KEYS || mPreferences.shouldShowTerminalToolbar());
+            if (slot.hidden == shown) resolved = resolved.withSlot(element, slot.withHidden(!shown));
         }
         return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
             .withDockStyle(DockStyle.effectiveStyle(layout.dockStyle()));
@@ -722,9 +810,12 @@ public final class PlaceLayoutStore {
         EnumMap<Element, Slot> slots = new EnumMap<>(Element.class);
         for (Element element : Element.values()) {
             Slot slot = slot(orientation, element);
-            // An element the variant does not offer is never shown on it, whatever is stored: the
-            // Home layout has no extra keys.
-            slots.put(element, variant.offers(element) ? slot : slot.withHidden(true));
+            // An element the page's kind does not show is not shown, whatever is stored.
+            // Minimal mode's layout holds its own visibility; the others follow their kind.
+            boolean shown = mMigrating.get() ? variant.offers(element)
+                : variant == LayoutVariant.MINIMAL
+                    || kindShows(kindOfVariant(variant), orientation, element);
+            slots.put(element, shown || slot.hidden ? slot : slot.withHidden(true));
         }
         // The terminal's own toolbar switch can still have put the extra keys away everywhere.
         if (!mPreferences.shouldShowTerminalToolbar()) {
@@ -953,6 +1044,17 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public Slot slot(@NonNull PlaceOrientation orientation, @NonNull Element element) {
+        Slot stored = storedSlot(orientation, element);
+        // On the normal and Home layouts whether an element shows is its kind's, one value for
+        // both orientations (the page model, #171); the stored "hidden" is only legacy.
+        if (mMigrating.get() || activeVariant() == LayoutVariant.MINIMAL) return stored;
+        boolean shown = kindShows(kindOfVariant(activeVariant()), orientation, element);
+        return stored.hidden == !shown ? stored : stored.withHidden(!shown);
+    }
+
+    /** {@link #slot} as the arrangement keys hold it, before the kind's visibility. */
+    @NonNull
+    private Slot storedSlot(@NonNull PlaceOrientation orientation, @NonNull Element element) {
         int order = slotOrder(orientation, element);
         boolean under = slotUnderKeyboard(orientation, element);
         switch (element) {
@@ -999,6 +1101,7 @@ public final class PlaceLayoutStore {
                 writeString(orientation, KEY_EXTRA_KEYS, rowValue(slot));
                 break;
         }
+        syncKind(orientation, element, !slot.hidden);
         setSlotOrder(orientation, element, slot.order);
         // Written only once it is asked for or taken back, so a store that never had it keeps
         // reading as it always did.
@@ -1083,6 +1186,15 @@ public final class PlaceLayoutStore {
     /** Stands the status bar on an edge, which also brings a hidden one back. */
     public void setStatusBarEdge(@NonNull PlaceOrientation orientation, @NonNull Edge edge) {
         writeString(orientation, KEY_STATUS_BAR, edge.storageValue());
+        syncKind(orientation, Element.STATUS, true);
+    }
+
+    /** The kind this view dresses shows or hides {@code element}, as its writers say. */
+    private void syncKind(@NonNull PlaceOrientation orientation, @NonNull Element element,
+                          boolean shown) {
+        if (mMigrating.get() || activeVariant() == LayoutVariant.MINIMAL
+            || !activeVariant().offers(element)) return;
+        setKindShows(kindOfVariant(activeVariant()), orientation, element, shown);
     }
 
     /**
@@ -1114,6 +1226,7 @@ public final class PlaceLayoutStore {
     public void setAppsRow(@NonNull PlaceOrientation orientation,
                            @NonNull RowPlacement placement) {
         writeString(orientation, KEY_APPS_ROW, placement.storageValue());
+        syncKind(orientation, Element.APPS, placement != RowPlacement.HIDDEN);
     }
 
     /** The alphabets row is a switch, not a place: it rides on the apps row wherever that goes. */
@@ -1125,6 +1238,7 @@ public final class PlaceLayoutStore {
 
     public void setAzRowShown(@NonNull PlaceOrientation orientation, boolean shown) {
         writeBoolean(variantKey(orientation, KEY_AZ_ROW), shown);
+        syncKind(orientation, Element.AZ, shown);
     }
 
 
@@ -1162,6 +1276,7 @@ public final class PlaceLayoutStore {
             mPreferences.setShowTerminalToolbar(true);
         }
         writeString(orientation, KEY_EXTRA_KEYS, placement.storageValue());
+        syncKind(orientation, Element.EXTRA_KEYS, placement != RowPlacement.HIDDEN);
     }
 
     /**
@@ -1555,7 +1670,9 @@ public final class PlaceLayoutStore {
             : seededStore.resolve(orientation);
         for (Element element : Element.values()) {
             Slot stored = seededStore.slot(orientation, element);
-            if (seeded.slot(element).hidden && !stored.hidden)
+            boolean away = seeded.slot(element).hidden || (variant == LayoutVariant.MINIMAL
+                && !kindShows(PageKind.TERMINAL, orientation, element));
+            if (away && !stored.hidden)
                 seededStore.setSlot(orientation, element, stored.withHidden(true));
         }
     }
@@ -1599,6 +1716,31 @@ public final class PlaceLayoutStore {
         if (mStore == null) return;
         int fromVersion = mStore.getInt(KEY_MIGRATED, 0);
         if (fromVersion >= MIGRATION_VERSION) return;
+        boolean freshInstall = fromVersion == 0 && !holdsAnyPlaceKeys();
+        mMigrating.set(true);
+        try {
+            migrateFrom(fromVersion, freshInstall);
+        } finally {
+            mMigrating.set(false);
+        }
+    }
+
+    /** Whether the store holds any layout or place key: false for an install that never ran it. */
+    private boolean holdsAnyPlaceKeys() {
+        for (String key : mStore.getAll().keySet()) {
+            if (key.startsWith(LAYOUT_PREFIX) || key.startsWith(PREFIX)) return true;
+        }
+        // The keys the first migration steps fold: an install that predates the store has them.
+        return mStore.contains(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE)
+            || mStore.contains(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE)
+            || mStore.contains(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN)
+            || mStore.contains(TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED)
+            || !mPreferences.isAppLauncherAppsRowEnabled()
+            || !mPreferences.isAppLauncherExtraKeysRowEnabled()
+            || !mPreferences.isAppLauncherAzRowEnabled();
+    }
+
+    private void migrateFrom(int fromVersion, boolean freshInstall) {
         if (fromVersion < 5) {
             SharedPreferences.Editor editor = mStore.edit();
             migrateBeforeSharedLayout(editor, fromVersion);
@@ -1617,6 +1759,8 @@ public final class PlaceLayoutStore {
         if (fromVersion < 12) migrateTaskbarToTheDrawerTile();
         if (fromVersion < 13) migrateToLinkedKeys();
         if (fromVersion < 14) migrateToHomeLayoutAlways();
+        // A new install keeps the page kinds' defaults; an upgrade writes what each wore.
+        if (fromVersion < 15 && !freshInstall) migrateToKindVisibility();
         // A new install starts on the new default design; an install that ran this store before
         // (fromVersion above 0) or was updated from an earlier build keeps the absent key's tray.
         if (startsOnNewInstallDefault(fromVersion, installTimes())) seedNewInstallDockDesign();
@@ -1792,6 +1936,32 @@ public final class PlaceLayoutStore {
         if (mStore.getBoolean(homeLayoutKey(), false)) return;
         copyIntoHomeLayout(LayoutVariant.NORMAL);
         mStore.edit().putBoolean(homeLayoutKey(), true).apply();
+    }
+
+    /**
+     * Version 15: which elements show becomes a setting of the kind of page (the page model,
+     * #171). The Home layout's visibility becomes the Home kind's (the shared layout's while Home
+     * holds no layout of its own); the shared layout's becomes the Terminal kind's, and the
+     * Display kind's, which a display window shares with it for now, so the dock stays on the
+     * Terminal page and nothing moves. Each orientation is copied on its own. The extra keys were never worn on Home, so Home keeps them off. The stored
+     * "hidden" values stay where they are, as the legacy arrangement.
+     */
+    private void migrateToKindVisibility() {
+        LayoutVariant homeSource = mStore.getBoolean(homeLayoutKey(), false)
+            ? LayoutVariant.HOME : LayoutVariant.NORMAL;
+        SharedPreferences.Editor editor = mStore.edit();
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            for (Element element : Element.values()) {
+                boolean home = element != Element.EXTRA_KEYS
+                    && !forVariant(homeSource).storedSlot(orientation, element).hidden;
+                boolean terminal =
+                    !forVariant(LayoutVariant.NORMAL).storedSlot(orientation, element).hidden;
+                editor.putBoolean(kindKey(PageKind.HOME, orientation, element), home);
+                editor.putBoolean(kindKey(PageKind.TERMINAL, orientation, element), terminal);
+                editor.putBoolean(kindKey(PageKind.DISPLAY, orientation, element), terminal);
+            }
+        }
+        editor.apply();
     }
 
     /**

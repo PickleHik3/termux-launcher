@@ -17613,8 +17613,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ResolvedArrangement arrangement = arrangementOf(home);
         com.termux.app.place.LayoutVariant variant = arrangement.variant();
         PlaceLayoutStore sizes = store.forVariant(variant);
-        com.termux.app.place.WallHalfShape shape = store.halfShape(
-            home && variant == com.termux.app.place.LayoutVariant.HOME);
+        com.termux.app.place.WallShape shape = store.shape();
         float scale = sizes.dockHeightScale(orientation);
         int stripDp = sizes.wallStripHeightDp(orientation);
         // The same facts as last time: the same half, so a pass per frame of a crossing builds
@@ -23843,7 +23842,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.chrome.Dress dress,
             @NonNull com.termux.app.wall.PaneWallPage page, @NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
-        com.termux.app.place.WallHalfShape shape = dress.shape();
+        com.termux.app.place.WallShape shape = dress.shape();
         if (store == null)
             return com.termux.app.place.SeamDress.StackDress.of(shape, Float.NaN, Float.NaN, -1);
         PlaceLayoutStore sizes = store.forVariant(dress.layout());

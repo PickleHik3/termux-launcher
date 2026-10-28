@@ -46,7 +46,7 @@ public class SeamCrossingTest {
         Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
 
     /** The one Style, Corners and Margin both halves wear, a Home layout of its own too (#84). */
-    private static final WallHalfShape SHAPE = WallHalfShape.of(LayoutStyle.DOCKED, 12, 8);
+    private static final WallShape SHAPE = WallShape.of(LayoutStyle.DOCKED, 12, 8);
 
     /** Both directions across the seam: from the window, and from Home. */
     private static final PaneWallPage[] BOTH = {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS};
@@ -115,7 +115,12 @@ public class SeamCrossingTest {
             return searchFields.get(variant);
         }
         @Override public boolean drawerTile(@NonNull LayoutVariant variant) { return false; }
-        @NonNull @Override public WallHalfShape shape(boolean home) {
+        @Override public boolean shows(@NonNull com.termux.app.wall.WallPages.PageKind kind,
+                                       @NonNull Element element) {
+            return kind != com.termux.app.wall.WallPages.PageKind.HOME
+                || element != Element.EXTRA_KEYS;
+        }
+        @NonNull @Override public WallShape shape() {
             // Linked: the preferences answer the Workspace's on either half.
             return SHAPE;
         }

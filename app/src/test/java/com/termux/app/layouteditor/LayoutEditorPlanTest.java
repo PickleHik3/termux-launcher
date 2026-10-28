@@ -58,7 +58,7 @@ public class LayoutEditorPlanTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("layout-editor-plan-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+        places = com.termux.app.place.KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null)));
     }
 
     private LayoutEditorPlan enterOnTerminalInPortrait() {

@@ -43,7 +43,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 14;
+    private static final int MIGRATED = 15;
 
     private Application app;
     private SharedPreferences prefs;
@@ -58,7 +58,7 @@ public class PlaceLayoutStoreTest {
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
     }
 
     // ------------------------------------------------------------------ the dictation pill
@@ -680,7 +680,6 @@ public class PlaceLayoutStoreTest {
         // top it started on.
         prefs.edit().putString("layout.landscape.status_bar", "hidden").commit();
         Slot unremembered = store.slot(PlaceOrientation.LANDSCAPE, Element.STATUS);
-        assertTrue(unremembered.hidden);
         assertEquals(Edge.TOP, unremembered.edge);
 
         // Standing it on an edge brings it back.
@@ -700,7 +699,7 @@ public class PlaceLayoutStoreTest {
                     value).commit();
                 Slot slot = store().slot(orientation, Element.APPS);
                 if ("hidden".equals(value)) {
-                    assertTrue(value, slot.hidden);
+                    // Whether it shows is the kind's now; the spelling still names no edge.
                     assertEquals(value, Edge.BOTTOM, slot.edge);
                 } else {
                     assertFalse(value, slot.hidden);
@@ -1259,8 +1258,8 @@ public class PlaceLayoutStoreTest {
             0.001f);
         assertEquals(DockStyle.LENS_BEADS, home.dockStyle());
         assertEquals(DrawerTilePolicy.Position.END, home.drawerTilePosition());
-        assertEquals("Home wears the Workspace's shape", WallHalfShape.of(LayoutStyle.FLOATING,
-            launcher.getLayoutCornersDp(false), 14), store.halfShape(true));
+        assertEquals("Home wears the Workspace's shape", WallShape.of(LayoutStyle.FLOATING,
+            launcher.getLayoutCornersDp(false), 14), store.shape());
         assertFalse(store.arrangementsDiffer(LayoutVariant.HOME, LayoutVariant.NORMAL));
 
         // From then on its rows are Home's own.
@@ -1770,7 +1769,7 @@ public class PlaceLayoutStoreTest {
             .commit();
         PlaceLayoutStore store = store();
         assertHomeIsACopyOfTheWorkspace(store);
-        assertEquals(launcher.getLayoutMarginDp(false), store.halfShape(true).marginDp);
+        assertEquals(launcher.getLayoutMarginDp(false), store.shape().marginDp);
         assertFalse(prefs.contains(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP));
     }
 
