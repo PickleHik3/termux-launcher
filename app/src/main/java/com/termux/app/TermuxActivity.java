@@ -14311,6 +14311,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.setTopStatusBarExpandedForEditor(expanded, animate);
         }
 
+        @Override public boolean isPageOverviewOpen() {
+            return mPageOverview != null;
+        }
+
+        @Override public void openPageOverview() {
+            TermuxActivity.this.openPageOverview(false);
+        }
+
         @Override public void applyDockButtonCount(int count) {
             if (mSuggestionBarView == null) return;
             applyDockButtonCountNow(count);
@@ -27378,6 +27386,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onClosed(boolean byBack) {
                     mPageOverview = null;
+                    mSurfaceEditor.onPageOverviewChanged();
                     releaseWallpaperParallax();
                     // Back from Settings' row returns to the page the row is on, Settings › Home.
                     if (fromSettings && byBack) startActivity(
@@ -27389,6 +27398,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         holdWallpaperParallax();
         mPageOverview.open(content);
+        mSurfaceEditor.onPageOverviewChanged();
     }
 
     /**

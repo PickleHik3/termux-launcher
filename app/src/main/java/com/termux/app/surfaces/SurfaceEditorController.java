@@ -133,6 +133,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate);
         /** The dock now shows {@code count} app buttons: its row is rebuilt for them, live. */
         void applyDockButtonCount(int count);
+        /** Whether the page overview (Edit pages) is up over Home. */
+        default boolean isPageOverviewOpen() { return false; }
+        /** Opens the page overview, the way Home's actions sheet does. */
+        default void openPageOverview() {}
         /** The window's top status inset, as last delivered to the activity. */
         int statusBarInsetTop();
         int themeColor(int attr, int fallbackRes);
@@ -845,7 +849,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @NonNull
     private EditorRows.Offers offers() {
         return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available(),
-            useAs().showsHomePage());
+            useAs().showsHomePage(), mHost.isPageOverviewOpen());
+    }
+
+    /** The page overview opened or closed: the card's Edit pages chip shows or hides with it. */
+    public void onPageOverviewChanged() {
+        restateCard();
     }
 
     @NonNull
@@ -2514,8 +2523,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     R.string.settings_section_home, HOME_GESTURES_SECTION, null);
                 break;
             case LINK_PAGES:
-                openSettingsFromEditor(HomePreferencesFragment.class,
-                    R.string.settings_section_home, null, HOME_PAGES_SECTION);
+                mHost.openPageOverview();
                 break;
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
