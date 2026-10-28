@@ -3214,7 +3214,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             && isSurfaceInheriting(slot, property);
         // No half named: both halves show the value. The Workspace's link decides where it lands,
         // and a half that had a link of its own joins that one.
-        if (isPerPage(slot, property) && hasPageKey(surfaceInheritKey(slot, property)))
+        // A surface detached by the Terminal page's own value alone (no wall flag says so) is
+        // detached on the wall too: the plain key is written, so every page must read it.
+        if (!inheriting
+            || (isPerPage(slot, property) && hasPageKey(surfaceInheritKey(slot, property))))
             setSurfaceInheriting(slot, property, inheriting);
         if (inheriting)
             setSurfaceBaseValue(property, value);
@@ -3578,11 +3581,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         removePageKeys(editor, key);
         // Both halves: the Terminal page's own value goes too, as the half twins used to.
         String ownKey = surfaceOverrideKey(slot, property);
-        if (ownKey != null && isPerPage(slot, property)) {
-            String override = surfacePageKey(ownKey, sTerminalPageId);
-            if (!override.equals(ownKey) && containsKey(override))
-                editor.remove(override);
-        }
+        if (ownKey != null && isPerPage(slot, property))
+            removePageKeys(editor, ownKey);
         editor.apply();
     }
 
@@ -3712,10 +3712,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         editor.apply();
     }
 
+    /** Drops every page's own value of {@code key} (PAGE_ALL: the number shows on all pages). */
     private void removePageKeys(@NonNull SharedPreferences.Editor editor, @NonNull String key) {
-        String override = surfacePageKey(key, sTerminalPageId);
-        if (!override.equals(key) && containsKey(override))
-            editor.remove(override);
+        if (mSharedPreferences == null || !PageLookKeys.DETACHABLE.contains(key)) return;
+        String prefix = key + PageLookKeys.PAGE_SEPARATOR;
+        for (String stored : mSharedPreferences.getAll().keySet()) {
+            if (stored.startsWith(prefix) && isPageId(stored, prefix.length()))
+                editor.remove(stored);
+        }
+    }
+
+    private static boolean isPageId(@NonNull String key, int from) {
+        if (from >= key.length()) return false;
+        for (int i = from; i < key.length(); i++) {
+            if (!Character.isDigit(key.charAt(i))) return false;
+        }
+        return true;
     }
 
     /** The glass tint colour a preset chose; {@code scheme} unless it named another that we know. */
@@ -3877,7 +3889,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                                     String overrideKey, int overrideDefault,
                                     int pageId) {
         // A page's own value (the Workspace's override) wins over the link, as in PageLook.
-        if (pageId > PAGE_ALL && isPerPage(slot, property)) {
+        // The canvas is the Terminal page's own: its override there is honoured too.
+        if (pageId > PAGE_ALL && isPerPageProperty(property) && hasSurfaceProperty(slot, property)) {
             String pageKey = surfacePageKey(overrideKey, pageId);
             if (!pageKey.equals(overrideKey) && containsKey(pageKey))
                 return SharedPreferenceUtils.getInt(mSharedPreferences, pageKey, overrideDefault);
