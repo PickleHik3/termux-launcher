@@ -56,6 +56,8 @@ public class PaneWallControllerTest {
         final java.util.List<PaneWallPage> changes = new java.util.ArrayList<>();
 
         @Override public boolean reducedMotion() { return reduced; }
+        int homePress;
+        @Override public int homePressPage() { return homePress; }
         @Override public WallPages wallPages() { return pages; }
         @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
         @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
@@ -726,6 +728,30 @@ public class PaneWallControllerTest {
         assertEquals("no Workspace shell starts on the way", 0, host.shellsStarted);
         assertFalse("the wall is never handed to the Terminal page",
             host.changes.contains(PaneWallPage.TERMINAL));
+    }
+
+    @Test public void theHomePressToAHomePageOfAnotherRunSlidesThere() {
+        // [Home1][T2][Home3], the wall on Home 3; the press goes to Home 1 (W9).
+        host.pages = new WallPages(Arrays.asList(
+            new WallPages.Page(1, WallPages.PageKind.HOME, null, null),
+            new WallPages.Page(2, WallPages.PageKind.TERMINAL, null, null),
+            new WallPages.Page(3, WallPages.PageKind.HOME, null, null)),
+            Collections.<Integer>emptyList(), Collections.<WallPages.Page>emptyList(), 1, 4, false);
+        host.homePages = 2;
+        controller.refreshPages();
+        host.homePress = 1;
+        controller.goHome(false);
+        assertEquals(3, controller.currentPageId());
+        host.homePress = 0;
+        host.reduced = false;
+        controller.refreshPages();
+        controller.goHome(true);
+        assertEquals(1, controller.currentPageId());
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertTrue("the run arrives with a slide", wall.isMoving());
+        assertTrue("from the side it stands on", wall.offsetPx() < 0f);
+        idle();
+        assertEquals(0f, wall.offsetPx(), 0f);
     }
 
     @Test public void terminalOnlyKeepsTheDisplayPagesBesideTheWorkspace() {

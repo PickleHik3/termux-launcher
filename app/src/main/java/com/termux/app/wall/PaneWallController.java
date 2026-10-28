@@ -881,8 +881,26 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             goToWorkspace(animate);
             return;
         }
-        showHomePage(Math.max(0, mHost.homePressPage()));
+        int index = Math.max(0, mHost.homePressPage());
+        int side = animate ? homeRunSide(index) : 0;
+        showHomePage(index);
+        // On Home already, the frame re-bound to another run slides in from that run's side
+        // rather than jumping (W9).
+        if (side != 0) mWall.standOff(side);
         goTo(PaneWallPage.WIDGETS, animate);
+    }
+
+    /**
+     * The side Home page {@code index}'s run stands on from the run the wall rests on (+1: to
+     * the right), while the wall is on Home and the page is in another run; 0 otherwise.
+     */
+    private int homeRunSide(int index) {
+        java.util.List<WallPages.Slot> slots = mSlots;
+        if (slots == null || mDefaultOrder || mWall.currentPage() != PaneWallPage.WIDGETS)
+            return 0;
+        int target = PaneWallPolicy.homeSlotAt(slots, index);
+        int from = currentSlot(slots);
+        return target < 0 || from < 0 || target == from ? 0 : Integer.signum(target - from);
     }
 
     /** Whether the wall's pages name the Terminal page as home ({@link WallPages#setHome}). */

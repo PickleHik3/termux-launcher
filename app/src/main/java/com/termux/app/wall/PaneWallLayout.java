@@ -862,6 +862,21 @@ public final class PaneWallLayout extends ViewGroup {
         return true;
     }
 
+    /**
+     * Stands the current page {@code side} widths off its rest (+1: arriving from the right), so
+     * the {@link #goTo goTo(current)} that must follow slides it in: a frame re-bound to another
+     * run of its kind (a home press to a Home page of another run, W9) arrives as a page from
+     * elsewhere on the row does. Nothing at rest to move from (no width), nothing changes.
+     */
+    public void standOff(int side) {
+        if (side == 0 || getWidth() <= 0) return;
+        stopSlide();
+        stopNudge();
+        mOffsetPx = Integer.signum(side) * (float) getWidth();
+        mCrossSlide = true;
+        applyPagePositions();
+    }
+
     /** Go one place left ({@code -1}) or right ({@code +1}). */
     public boolean goBy(int steps, boolean animate) {
         return goTo(PaneWallPolicy.neighbour(mPages, mCurrent, steps), animate);
