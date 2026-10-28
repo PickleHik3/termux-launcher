@@ -428,6 +428,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return true;
     }
 
+    /** The id of the page the wall is on; -1 before the wall has pages. */
+    public int currentPageId() {
+        java.util.List<WallPages.Slot> slots = mSlots;
+        if (slots == null) return -1;
+        int slot = currentSlot(slots);
+        return slot < 0 ? -1 : slots.get(slot).id();
+    }
+
     /** Re-build the window around the wall as it stands (a re-bound Home frame, say). */
     private void rebuild() {
         mWall.setPages(builtWindow(mHost.hasWindow() || mSeamIntoEmpty));
