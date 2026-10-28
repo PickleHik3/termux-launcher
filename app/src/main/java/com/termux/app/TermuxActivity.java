@@ -6774,7 +6774,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // On the one shared layout Home wears the Workspace's shape: there is no other to wear.
         return homeHoldsOwnLayout()
             && com.termux.app.place.SeamDress.wearsHome(surface, mLastWallPage, stackDressPage(),
-                mCrossing.seam().sliding());
+                mCrossing.seam().barDressedAcross());
     }
 
     /**
@@ -6784,8 +6784,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private TermuxAppSharedPreferences.WallHalf lookHalf(@NonNull com.termux.app.place.SeamDress.Surface surface) {
+        // Between two Home pages the bar is Home's on both ends (SeamCrossing#barDressedAcross).
         return com.termux.app.place.SeamDress.lookHalf(surface, mLastWallPage, stackDressPage(),
-            mCrossing.seam().sliding());
+            mCrossing.seam().barDressedAcross());
     }
 
     /** The half whose look the stack (dock, extra keys, keyboard) wears now. */
@@ -15596,6 +15597,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDresses.dressOf(page);
     }
 
+    /**
+     * What {@code page} wears, named by its id: another Home page than the one in front, a
+     * crossing's other end between two Home pages (#173 slice E), wears its own layout's dress.
+     */
+    @NonNull
+    private com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PageRef page) {
+        return mDresses.dressOf(page);
+    }
+
     private PlaceOrientation currentPlaceOrientation() {
         return isLandscapeOrientation() ? PlaceOrientation.LANDSCAPE : PlaceOrientation.PORTRAIT;
     }
@@ -23867,6 +23877,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
             wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE,
             currentWallPlace() == mLastWallPage);
+        // A crossing between two Home pages is Home's pager's (syncHomePagesTravel): a wall at
+        // rest writes nothing over it. A gesture that carries on past the last Home page into the
+        // wall lands it here, on the page in front, before the wall's own crossing begins.
+        if (homePagesCrossing()) {
+            if (!wall.isMoving() && offsetPx == 0f) return;
+            landHomePagesCrossing();
+        }
         // A keyboard swipe drives the same travel by its finger while the wall stands still; the
         // layout passes it causes must not write the wall's resting frame over it.
         if (mKeyboardSwipeTravel) return;
@@ -23967,6 +23984,256 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the minimal layout's bars fade like the normal one's.
         if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
         mCrossing.fade(statusAlpha, frame.dockReveal);
+    }
+
+    // ---- The chrome between two Home pages (#173 slice E) -------------------------------------
+
+    /**
+     * The two Home pages a crossing on Home's own pager runs between, by id: the one in front as
+     * it began (its committed end) and the neighbour the shift opened; -1 while none runs.
+     */
+    private int mHomeCrossHereId = -1;
+    private int mHomeCrossThereId = -1;
+    /** Home's rest as that crossing began, which both of its ends stand in; null while none runs. */
+    @Nullable private com.termux.app.place.PlaceChromeTravel.Rest mHomeCrossRest;
+    /** The crossing's landing waits on Home's page settle (runWhenHomePageSettles), once. */
+    private boolean mHomeCrossLandingQueued;
+    private final Runnable mLandHomePagesCrossingAfterSettle = () -> {
+        mHomeCrossLandingQueued = false;
+        landHomePagesCrossing();
+    };
+    /**
+     * The pager's step as last read: the index of the Home page in front, the side its shift
+     * opens (-1 left, 1 right, 0 at rest), and the pages and store revision it was read against.
+     * A frame of the same step reads none of it again, so a slide between two Home pages that
+     * dress alike builds nothing per frame.
+     */
+    private int mHomeStepIndex = -1;
+    private int mHomeStepSide;
+    private int mHomeStepRevision;
+    @Nullable private com.termux.app.wall.WallPages mHomeStepPages;
+    /** That step's pages by id: the one in front and its neighbour on the side; -1 for none. */
+    private int mHomeStepFrontId = -1;
+    private int mHomeStepTowardId = -1;
+    /** Whether that step was already asked to begin a crossing, which it did or not, once. */
+    private boolean mHomeStepTried;
+
+    /** Whether the crossing that runs is one between two Home pages, on Home's own pager. */
+    private boolean homePagesCrossing() {
+        return mCrossing.crossing() && mCrossing.seam().oneKind();
+    }
+
+    /**
+     * One frame of Home's own pager (onHomePageShifted): where it slides between two Home pages
+     * whose chrome differs in the dock's rows or in a status bar only one of them wears, the
+     * chrome morphs with the slide, through the same crossing the wall's travel runs
+     * (doSyncChromeTravel) on a frame of the pager (PlaceChromeTravel#homePages). Begun on the
+     * finger's first frame toward a neighbour that crosses, begun again when the shift opens the
+     * other neighbour, landed where the pager's settle lands. Two Home pages that dress alike,
+     * reduced motion and Animation speed Off begin nothing: the layout switches at the settle, as
+     * before.
+     */
+    private void syncHomePagesTravel() {
+        if (mWidgetPaneController == null || mPaneWallController == null) return;
+        boolean running = homePagesCrossing();
+        float fraction = mWidgetPaneController.homePageShiftFraction();
+        // At rest with nothing running, or while the wall's own crossing owns the chrome, there is
+        // nothing to read. At rest the next gesture may ask to begin again, whatever refused the
+        // last one (the drawer, a keyboard swipe, reduced motion) having maybe let go.
+        if (!running && fraction == 0f) {
+            mHomeStepTried = false;
+            return;
+        }
+        if (!running && mCrossing.crossing()) return;
+        boolean settling = mWidgetPaneController.isHomePageSettling();
+        // The shift came back to rest with no settle to wait for: the crossing lands here.
+        if (running && fraction == 0f && !settling) {
+            landHomePagesCrossing();
+            return;
+        }
+        int side = fraction == 0f ? 0 : fraction > 0f ? -1 : 1;
+        int index = mWidgetPaneController.homePageIndex();
+        com.termux.app.wall.WallPages pages = wallPages();
+        int revision = arrangementRevision();
+        if (index != mHomeStepIndex || side != mHomeStepSide || pages != mHomeStepPages
+            || revision != mHomeStepRevision) {
+            readHomeStep(pages, index, side, revision);
+        }
+        int front = mHomeStepFrontId;
+        int toward = mHomeStepTowardId;
+        if (running) {
+            // At rest mid-settle the page in front's partner is the crossing's other end.
+            if (side == 0) toward = front == mHomeCrossHereId ? mHomeCrossThereId
+                : front == mHomeCrossThereId ? mHomeCrossHereId : -1;
+            // Either way round: after the pager's commit the arriving page is in front and the
+            // committed one is its neighbour.
+            boolean samePair = front >= 0 && toward >= 0
+                && ((front == mHomeCrossHereId && toward == mHomeCrossThereId)
+                    || (front == mHomeCrossThereId && toward == mHomeCrossHereId));
+            if (!samePair) {
+                // The shift opened another neighbour: this crossing lands on the page in front
+                // and a crossing toward the new one may begin below.
+                landHomePagesCrossing();
+                running = false;
+            }
+        }
+        if (!running) {
+            // Begun only under the finger: a page change from elsewhere switches at its settle.
+            if (side == 0 || front < 0 || toward < 0 || settling || mHomeStepTried) return;
+            mHomeStepTried = true;
+            if (!beginHomePagesCrossing(front, toward)) return;
+        }
+        com.termux.app.place.PlaceChromeTravel.Rest rest = mHomeCrossRest;
+        if (rest == null) return;
+        int widthPx = mPaneWallController.wall().getWidth();
+        com.termux.app.place.PlaceChromeTravel.Frame frame =
+            com.termux.app.place.PlaceChromeTravel.homePages(rest, front, toward,
+                fraction * widthPx, widthPx);
+        syncHomePagesFrame(frame);
+        // The landing waits for the settle under way, the page that comes in or the one coming back.
+        if (settling && !mHomeCrossLandingQueued) {
+            mHomeCrossLandingQueued = true;
+            mWidgetPaneController.runWhenHomePageSettles(mLandHomePagesCrossingAfterSettle);
+        }
+    }
+
+    /** The pager's step read once (mHomeStep*): which Home pages its frames name. */
+    private void readHomeStep(@NonNull com.termux.app.wall.WallPages pages, int index, int side,
+                              int revision) {
+        mHomeStepIndex = index;
+        mHomeStepSide = side;
+        mHomeStepPages = pages;
+        mHomeStepRevision = revision;
+        mHomeStepTried = false;
+        java.util.List<Integer> ids = pages.homePageIdsForRepository();
+        mHomeStepFrontId = index >= 0 && index < ids.size() ? ids.get(index) : -1;
+        int neighbour = index + side;
+        // A neighbour past the run Home's frame pages inside is never turned to (ADR 0015, A2a).
+        boolean inRun = mHomeRunLast < 0
+            || (neighbour >= mHomeRunFirst && neighbour <= mHomeRunLast);
+        mHomeStepTowardId = side != 0 && inRun && neighbour >= 0 && neighbour < ids.size()
+            ? ids.get(neighbour) : -1;
+    }
+
+    /**
+     * A crossing between Home pages {@code hereId}, in front, and {@code thereId}, its neighbour,
+     * modelled on the wall's (readSeamTravel): both ends with their dresses, arrangements resolved
+     * for their own ids, and rests from one snapshot holding the second Home half
+     * (DockGeometry.Snapshot#otherHome). Begun only where the two cross (SeamCrossing#crosses).
+     * Whether it began.
+     */
+    private boolean beginHomePagesCrossing(int hereId, int thereId) {
+        if (mPreferences == null || mChrome == null || mPaneWallController == null) return false;
+        // Reduced motion and Animation speed Off land the page at once: the layout switches with it.
+        if (isReducedMotionEnabled() || com.termux.app.AnimationSpeed.multiplier(this) <= 0f)
+            return false;
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+        if (mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS || wall.isMoving()
+            || mKeyboardSwipeTravel || isAppDrawerEngaged() || mSurfaceEditor.isActive()
+            || appliedContentReservationPx() < 0 || mCrossing.crossing()) return false;
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return false;
+        PlaceOrientation orientation = currentPlaceOrientation();
+        com.termux.app.wall.PageRef herePage =
+            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, hereId);
+        com.termux.app.wall.PageRef therePage =
+            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, thereId);
+        ResolvedArrangement hereArrangement = arrangementOf(herePage);
+        ResolvedArrangement thereArrangement = arrangementOf(therePage);
+        PlaceLayout hereLayout = hereArrangement.layout();
+        PlaceLayout thereLayout = thereArrangement.layout();
+        com.termux.app.chrome.Dress hereDress = dressOf(herePage);
+        com.termux.app.chrome.Dress thereDress = dressOf(therePage);
+        // One keyboard across Home's pages: up on both or on neither, as it is now.
+        boolean keyboardUp = committedKeyboardVisible() && !isKeyboardFloating();
+        // Both ends' docks at rest from one snapshot, the arriving page's as its second Home half.
+        com.termux.app.dock.DockGeometry.Snapshot rests =
+            dockSnapshot(hereLayout, com.termux.app.wall.PaneWallPage.WIDGETS).toBuilder()
+                .otherHome(dockHalf(therePage, orientation, thereLayout))
+                .build();
+        com.termux.app.dock.DockLayout hereRest =
+            com.termux.app.dock.DockGeometry.compute(rests.restOf(herePage));
+        com.termux.app.dock.DockLayout thereRest =
+            com.termux.app.dock.DockGeometry.compute(rests.restOf(therePage));
+        com.termux.app.place.SeamCrossing.Endpoint here =
+            com.termux.app.place.SeamCrossing.Endpoint.of(herePage, hereDress,
+                pageLookOf(herePage), hereArrangement, hereLayout,
+                stackDressOf(hereDress, com.termux.app.wall.PaneWallPage.WIDGETS, orientation),
+                keyboardUp, com.termux.app.dock.DockMorph.rowsPx(hereRest));
+        com.termux.app.place.SeamCrossing.Endpoint there =
+            com.termux.app.place.SeamCrossing.Endpoint.of(therePage, thereDress,
+                pageLookOf(therePage), thereArrangement, thereLayout,
+                stackDressOf(thereDress, com.termux.app.wall.PaneWallPage.WIDGETS, orientation),
+                keyboardUp, com.termux.app.dock.DockMorph.rowsPx(thereRest));
+        // Two Home pages that dress alike are a plain flip.
+        if (!com.termux.app.place.SeamCrossing.crosses(here, there)) return false;
+        mHomeCrossRest = chromeRestOf(com.termux.app.wall.PaneWallPage.WIDGETS);
+        mHomeCrossHereId = hereId;
+        mHomeCrossThereId = thereId;
+        // A bar only one of them wears rides with its page while Home's pages slide flat, and
+        // fades in place under a transition that turns them.
+        boolean pagesSlide = wall.pageTransition()
+            == com.termux.app.launcher.home.HomePageTransition.SLIDE;
+        mCrossing.begin(here, there,
+            com.termux.app.place.SeamCrossing.Stage.of(mDockBeads != null, mFrameStandsDown,
+                isSplitPanesEnabled(), pagesSlide),
+            hereRest, thereRest, arrangementRevision());
+        return true;
+    }
+
+    /**
+     * One frame of a crossing between two Home pages, the wall's travel pass (doSyncChromeTravel)
+     * without what only the wall's slide has: no keyboard or content pre-roll, no terminal
+     * displacement, no material blend, no band ease or bead melt (both ends dress the dock alike).
+     * The dock's rows morph and rise or sink by the crossing's answers, and the bar rides with the
+     * page that wears it or fades by the way toward it (SeamCrossing.Answers#statusFade).
+     */
+    private void syncHomePagesFrame(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        Trace.beginSection("Home.pagesTravel");
+        try {
+            com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame,
+                mPreferences != null && mChrome != null, mPromptFieldEase != null,
+                mPromptFieldUnderPalette);
+            float dockReveal = syncSeamTravel(seam);
+            int keyboardPx = travelKeyboardLaidOutPx();
+            int dockPx = travelDockLaidOutPx(keyboardPx);
+            boolean wasMoved = mDockTravelTranslationPx != 0f;
+            float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
+                travelDockRowsPx(keyboardPx));
+            if (translation != 0f || wasMoved) mChromeTravelMoved = true;
+            if (mCrossing.holdsContent()) mCrossing.coverAt(translation, stackPictureCoverPx());
+            boolean barRides = syncStatusTravel(frame, seam);
+            float fade = seam.statusFade();
+            float statusAlpha = barRides ? 1f : !Float.isNaN(fade) ? fade : frame.statusReveal;
+            if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
+            mCrossing.fade(statusAlpha, frame.dockReveal);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * The crossing between two Home pages lands on the Home page in front (the one the pager
+     * settled on, or the committed one after a settle back) through the wall's own settle, the
+     * wall resting on Home: transforms put back, the hold let go, the landed page's layout
+     * applied. Nothing while none runs.
+     */
+    private void landHomePagesCrossing() {
+        if (!homePagesCrossing()) return;
+        int committedId = mHomeCrossHereId;
+        int landedId = homePageInFront();
+        mHomeCrossHereId = -1;
+        mHomeCrossThereId = -1;
+        mHomeCrossRest = null;
+        settlePlaceChrome(com.termux.app.wall.PaneWallPage.WIDGETS,
+            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, landedId));
+        // Landed on the other page: its layout is applied now, even where a re-arrangement that
+        // waited for the settle (onWidgetPageRendered) already ran under the crossing's hold and
+        // noted the variant applied.
+        if (landedId != committedId) {
+            mAppliedChromeVariant = null;
+            syncChromeArrangement();
+        }
     }
 
     /**
@@ -24846,9 +25113,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * never moved.
      */
     private void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
+        settlePlaceChrome(page, null);
+    }
+
+    /**
+     * The same, with the page the crossing lands on named ({@code landed}): a crossing between two
+     * Home pages lands on the Home page Home's pager settled on, by its id, while the wall stays on
+     * Home throughout. Null lands on {@code page} as the store shows it.
+     */
+    private void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page,
+                                   @Nullable com.termux.app.wall.PageRef landed) {
         Trace.beginSection("Wall.settleChrome");
         try {
-            doSettlePlaceChrome(page);
+            doSettlePlaceChrome(page, landed);
             // The terminal effect is the Workspace's: Home's chrome lands plain (ChromeRetroEffect).
             if (mChromeRetroEffect != null)
                 mChromeRetroEffect.setOnHome(page == com.termux.app.wall.PaneWallPage.WIDGETS);
@@ -24857,7 +25134,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
+    private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page,
+                                     @Nullable com.termux.app.wall.PageRef landed) {
         // Everything the settle shows, hides and lays out asks for its geometry inside one batch:
         // a keyboard going away, the place's own keyboard coming up and the content's room are
         // one pass, run in this frame at the batch's end.
@@ -24889,7 +25167,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // dock's morph, the row laying out the landed rest its last frame already drew. From
             // here the chrome reads the store's arrangements again.
             com.termux.app.place.Crossing.Landing crossingLanding =
-                mCrossing.land(endpointPageOf(page), arrangementRevision());
+                mCrossing.land(landed != null ? landed : endpointPageOf(page),
+                    arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
@@ -29271,6 +29550,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Home page added or removed lands here too as the page re-renders at rest.
                 @Override public void onHomePageShifted() {
                     syncWallpaperParallax();
+                    // Between two Home pages that dress the chrome apart, it morphs with the
+                    // slide (#173 slice E).
+                    syncHomePagesTravel();
                 }
                 @Override public void onWidgetPageRendered() {
                     // A Terminal widget gone from Home takes its shell with it, however it went.
@@ -29291,6 +29573,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             mChromeArrangementAfterSettle = true;
                             mWidgetPaneController.runWhenHomePageSettles(() -> {
                                 mChromeArrangementAfterSettle = false;
+                                // A crossing between the two Home pages lands first, so the
+                                // landed layout is what is applied (slice E).
+                                landHomePagesCrossing();
                                 syncChromeArrangement();
                             });
                         }
