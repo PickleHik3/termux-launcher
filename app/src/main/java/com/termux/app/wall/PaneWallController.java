@@ -10,8 +10,8 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.PaneSurfaceStyle;
 
 /**
- * Owns the wall: its row of pages (Home pages, then the Workspace's windows, the display window
- * among them while a display is up; ADR 0008), which page is in front, and every way in and out
+ * Owns the wall: its row of pages (Home pages, the Workspace's windows, and the Display pages,
+ * each a page of its own; ADR 0008, ADR 0015 A3b), which page is in front, and every way in and out
  * of them. The activity hands it the layout and the answers it cannot work out for itself — whether
  * the current session has a window, how many Home pages and windows there are and which is in
  * front — and nothing else needs to know the wall exists.
@@ -23,8 +23,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         /** Honour the system's reduce-motion setting for the page slide. */
         boolean reducedMotion();
         /**
-         * Whether the current session's row has a window — a terminal window, or the display
-         * window — so the Workspace is on the row. Home is on it unless {@link #useAs} is
+         * Whether the current session's row has a terminal window, so the Workspace is on the
+         * row (a Display page is a page of its own, not one of the row's windows). Home is on it unless {@link #useAs} is
          * Terminal only.
          */
         default boolean hasWindow() { return true; }
@@ -45,8 +45,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default boolean startWorkspaceShell() { return false; }
         /**
-         * How many pages of its own kind {@code page} holds: the Home pages, or the windows of
-         * the current session's row, the display window's included.
+         * How many pages of its own kind {@code page} holds: the Home pages, or the terminal
+         * windows of the current session's row.
          */
         default int innerCount(@NonNull PaneWallPage page) { return 1; }
         /** Which of them is in front, counting from 0. */
@@ -62,6 +62,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * at the run's ends. {@code last} below 0 for every Home page, the default order's run.
          */
         default void bindHomeRun(int first, int last) { }
+        /**
+         * Bind the one display view to Display page {@code pageId} (ADR 0015, A3b): the Display
+         * page the wall is on or heading for, which shows the display live while the others show
+         * their picture or card. -1 while the wall has no Display page.
+         */
+        default void bindDisplayPage(int pageId) { }
+        /**
+         * The wall came to rest on Display page {@code pageId}, the bound one: the display starts
+         * here when it is down ({@link DisplayPagePolicy#startsOnLanding}).
+         */
+        default void onDisplayPageLanded(int pageId) { }
         /** Turn {@code page} to its {@code index}-th page at once (Home page n). */
         default void showInnerPage(@NonNull PaneWallPage page, int index) { }
         /**
@@ -230,6 +241,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The run last handed to the host ({@link Host#bindHomeRun}). */
     private int mBoundFirst = 0;
     private int mBoundLast = -1;
+    /** The Display page the display view is bound to (A3b); -1 for none, or the first one. */
+    private int mDisplayPageId = -1;
+    /** The Display page last handed to the host ({@link Host#bindDisplayPage}). */
+    private int mBoundDisplayPageId = -1;
+    /** The slots hold a Display page: the wallpaper's pan reads the pages' order. */
+    private boolean mHasDisplaySlot;
+    /**
+     * For one re-build: the slot the window is built around instead of the wall's current one,
+     * to bring a Display page that is not next door into the window ({@link #goToDisplayPage}).
+     */
+    private int mLandingSlot = -1;
     static final String SLOTS_TAG = "WallSlots";
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
@@ -308,38 +330,102 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     @NonNull
     private java.util.List<PaneWallPage> builtWindow(boolean onRow) {
-        WallPages pages = mHost.useAs() == UseAs.HOME ? mHost.wallPages() : null;
+        boolean homeShown = mHost.useAs() == UseAs.HOME;
+        WallPages pages = mHost.wallPages();
         // Outside the default order an empty Workspace keeps its slot, as a stop whose landing
         // starts the first shell: two Home runs never merge over it, and the far run stays
         // reachable through it. The default order keeps the Workspace off the row, as always.
-        boolean emptyStop = pages != null && !onRow && mHost.canStartWorkspace()
+        boolean emptyStop = homeShown && pages != null && !onRow && mHost.canStartWorkspace()
             && !PaneWallPolicy.isDefaultOrder(PaneWallPolicy.wallSlots(pages, true));
         mEmptyTerminalStop = emptyStop;
+        // Each Display page is a slot of its own (A3b). Under Terminal only the Home slots go and
+        // the Workspace stays on the row while it is empty too, as its kind-keyed row does.
         java.util.List<WallPages.Slot> slots = pages == null ? null
-            : PaneWallPolicy.wallSlots(pages, onRow || emptyStop);
-        if (slots == null || PaneWallPolicy.firstSlotOf(slots, PaneWallPage.WIDGETS) < 0
+            : PaneWallPolicy.wallSlots(pages, onRow || emptyStop || !homeShown, true);
+        if (slots != null && !homeShown) slots = withoutHome(slots);
+        boolean hasHome = slots != null
+            && PaneWallPolicy.firstSlotOf(slots, PaneWallPage.WIDGETS) >= 0;
+        boolean hasDisplay = slots != null
+            && PaneWallPolicy.firstSlotOf(slots, PaneWallPage.DISPLAY) >= 0;
+        if (slots == null || (homeShown ? !hasHome : !hasDisplay)
             || (onRow && PaneWallPolicy.firstSlotOf(slots, PaneWallPage.TERMINAL) < 0)) {
             mSlots = null;
             mSlotPages = null;
             mDefaultOrder = true;
+            mHasDisplaySlot = false;
             mEmptyTerminalStop = false;
             bindRun(0, -1);
+            bindDisplay(-1);
             return mHost.useAs().rowPages(onRow);
         }
         mSlots = slots;
         mSlotPages = pages;
         mDefaultOrder = PaneWallPolicy.isDefaultOrder(slots);
-        int current = currentSlot(slots);
-        int home = PaneWallPolicy.boundHomeSlot(slots, current,
-            PaneWallPolicy.slotHolding(slots, mHomeRunId));
-        mHomeRunId = slots.get(home).id();
-        if (mDefaultOrder) {
+        mHasDisplaySlot = hasDisplay;
+        int current = mLandingSlot >= 0 && mLandingSlot < slots.size() ? mLandingSlot
+            : currentSlot(slots);
+        int home = hasHome ? PaneWallPolicy.boundHomeSlot(slots, current,
+            PaneWallPolicy.slotHolding(slots, mHomeRunId)) : -1;
+        if (home >= 0) mHomeRunId = slots.get(home).id();
+        if (mDefaultOrder || home < 0) {
             bindRun(0, -1);
         } else {
             int first = PaneWallPolicy.runStart(slots, home);
             bindRun(first, first + PaneWallPolicy.runLength(slots, home) - 1);
         }
-        return PaneWallPolicy.builtWindow(slots, current, home);
+        int display = PaneWallPolicy.boundDisplaySlot(slots, current,
+            PaneWallPolicy.slotHolding(slots, mDisplayPageId));
+        bindDisplay(display >= 0 ? slots.get(display).id() : -1);
+        return PaneWallPolicy.builtWindow(slots, current, home, display);
+    }
+
+    /** {@code slots} without their Home slots: the row under Terminal only. */
+    @NonNull
+    private static java.util.List<WallPages.Slot> withoutHome(
+            @NonNull java.util.List<WallPages.Slot> slots) {
+        java.util.List<WallPages.Slot> out = new java.util.ArrayList<>(slots.size());
+        for (WallPages.Slot slot : slots) if (slot.kind != WallPages.PageKind.HOME) out.add(slot);
+        return out;
+    }
+
+    /** Bind the display view to Display page {@code pageId}, telling the host when it moved. */
+    private void bindDisplay(int pageId) {
+        if (pageId >= 0) mDisplayPageId = pageId;
+        if (pageId == mBoundDisplayPageId) return;
+        mBoundDisplayPageId = pageId;
+        mHost.bindDisplayPage(pageId);
+    }
+
+    /** The Display page the display view is bound to; -1 while the wall has none. */
+    public int boundDisplayPage() {
+        return mBoundDisplayPageId;
+    }
+
+    /**
+     * Go to Display page {@code pageId} (-1: the bound one, else the first): the window is
+     * re-built around it when it is not next door, and the wall slides there. False when the
+     * wall has no such Display page.
+     */
+    public boolean goToDisplayPage(int pageId, boolean animate) {
+        java.util.List<WallPages.Slot> slots = mSlots;
+        if (slots == null) return false;
+        int slot = PaneWallPolicy.slotHolding(slots, pageId >= 0 ? pageId : mDisplayPageId);
+        if (slot < 0 || slots.get(slot).kind != WallPages.PageKind.DISPLAY) {
+            slot = PaneWallPolicy.firstSlotOf(slots, PaneWallPage.DISPLAY);
+        }
+        if (slot < 0) return false;
+        mDisplayPageId = slots.get(slot).id();
+        mLandingSlot = mWall.currentPage() == PaneWallPage.DISPLAY
+            && mBoundDisplayPageId == mDisplayPageId ? -1 : slot;
+        try {
+            rebuild();
+        } finally {
+            mLandingSlot = -1;
+        }
+        if (!mWall.pages().contains(PaneWallPage.DISPLAY)) return false;
+        mWorkspacePending = false;
+        mWall.goTo(PaneWallPage.DISPLAY, animate);
+        return true;
     }
 
     /** Re-build the window around the wall as it stands (a re-bound Home frame, say). */
@@ -347,14 +433,26 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.setPages(builtWindow(mHost.hasWindow() || mSeamIntoEmpty));
     }
 
-    /** The slot the wall is on: the bound Home run on Home, else the slot of the page's kind. */
+    /**
+     * The slot the wall is on: the bound Home run on Home, the bound Display page on Display,
+     * else the slot of the page's kind; the first Home slot, else the Terminal's, else the
+     * first, where the page has none.
+     */
     private int currentSlot(@NonNull java.util.List<WallPages.Slot> slots) {
         PaneWallPage page = mWall.currentPage();
-        int slot = page == PaneWallPage.WIDGETS ? -1 : PaneWallPolicy.firstSlotOf(slots, page);
+        int slot;
+        if (page == PaneWallPage.DISPLAY) {
+            slot = PaneWallPolicy.slotHolding(slots, mDisplayPageId);
+            if (slot >= 0 && slots.get(slot).kind == WallPages.PageKind.DISPLAY) return slot;
+        }
+        slot = page == PaneWallPage.WIDGETS ? -1 : PaneWallPolicy.firstSlotOf(slots, page);
         if (slot >= 0) return slot;
         slot = PaneWallPolicy.slotHolding(slots, mHomeRunId);
         if (slot >= 0 && slots.get(slot).kind == WallPages.PageKind.HOME) return slot;
-        return PaneWallPolicy.firstSlotOf(slots, PaneWallPage.WIDGETS);
+        slot = PaneWallPolicy.firstSlotOf(slots, PaneWallPage.WIDGETS);
+        if (slot >= 0) return slot;
+        slot = PaneWallPolicy.firstSlotOf(slots, PaneWallPage.TERMINAL);
+        return slot >= 0 ? slot : (slots.isEmpty() ? -1 : 0);
     }
 
     /** The index among {@link #mSlots} of the Home run the frame is bound to. */
@@ -471,9 +569,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Build the display window's frame on the wall, waiting off screen until the display window
-     * is the Workspace's window in front ({@link #setDisplayInFront}). Inflated here rather than in
-     * the layout file so an install that never runs a display never builds its surface.
+     * Build the display's frame on the wall as the Display pages' one view (A3b): it stands on
+     * the bound Display page ({@link Host#bindDisplayPage}). Inflated here rather than in the
+     * layout file so an install that never runs a display never builds its surface.
      */
     @Nullable
     public com.termux.app.x11.X11PaneFrame attachDisplayWindow(@NonNull LayoutInflater inflater) {
@@ -482,7 +580,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             com.termux.R.layout.view_x11_pane, mWall, false);
         mWall.addView(frame);
         mDisplayWindow = frame;
-        mWall.setDisplayView(frame);
+        mWall.setPageView(PaneWallPage.DISPLAY, frame);
         applyStyle(mStyle);
         return frame;
     }
@@ -494,45 +592,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * Take the display window's frame off the wall: the view goes, and the X view's native context
-     * goes with it when the view leaves the window. A frame standing in front hands the
-     * Workspace's page back to the pane host first, and the row is re-read for a Workspace that
-     * held nothing else.
+     * goes with it when the view leaves the window. The Display page stays on the wall, with
+     * no view until a frame is built again.
      */
     public void detachDisplayWindow() {
         com.termux.app.x11.X11PaneFrame frame = mDisplayWindow;
         if (frame == null) return;
         mDisplayWindow = null;
-        mWall.setDisplayView(null);
+        mWall.setPageView(PaneWallPage.DISPLAY, null);
         refreshPages();
         mWall.removeView(frame);
-    }
-
-    /**
-     * Whether the display window is the Workspace's window in front: its frame then stands as the
-     * Workspace's page. At once, with no travel; {@link #swapDisplayInFront} travels.
-     */
-    public void setDisplayInFront(boolean front) {
-        mWall.setDisplayInFront(front);
-    }
-
-    /**
-     * The same as a window switch: the arriving window slides in from {@code fromPx} and the one
-     * that was in front goes off beside it ({@link PaneWallLayout#swapDisplayInFront}).
-     *
-     * @param fromWindow the row place the arrival left, for the wallpaper's pan
-     * @param onEnd runs however the travel ends, at once where none could start
-     * @return whether the front changed
-     */
-    public boolean swapDisplayInFront(boolean front, float fromPx, int fromWindow,
-                                      long durationMs,
-                                      @Nullable android.view.animation.Interpolator interpolator,
-                                      @Nullable Runnable onEnd) {
-        mNudgeFromWindow = fromWindow;
-        return mWall.swapDisplayInFront(front, fromPx, durationMs, interpolator, onEnd);
-    }
-
-    public boolean isDisplayInFront() {
-        return mWall.isDisplayInFront();
     }
 
     /**
@@ -559,7 +628,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return mWall.currentPage();
     }
 
-    /** Whether a terminal window is the place the user is on, at rest: not the display window. */
+    /** Whether a terminal window is the place the user is on, at rest. */
     public boolean isTerminalShowing() {
         return !mWall.isMoving() && terminalHasPixels();
     }
@@ -586,7 +655,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private boolean terminalHasPixels() {
         boolean pixels = mWall.isTerminalHostOnScreen();
-        boolean record = mWall.currentPage() == PaneWallPage.TERMINAL && !mWall.isDisplayInFront();
+        boolean record = mWall.currentPage() == PaneWallPage.TERMINAL;
         if (mWall.isMoving() || pixels == record) {
             mDisagreementLogged = false;
         } else if (!mDisagreementLogged) {
@@ -602,7 +671,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         View terminal = mWall.pageView(PaneWallPage.TERMINAL);
         return "page=" + mWall.currentPage() + " moving=" + mWall.isMoving()
             + " dragging=" + mWall.isDragging() + " offset=" + mWall.offsetPx()
-            + " displayInFront=" + mWall.isDisplayInFront()
+            + " displayPage=" + mBoundDisplayPageId
             + " width=" + mWall.getWidth()
             + " terminalX=" + (terminal == null ? "none" : String.valueOf(terminal.getTranslationX()))
             + " terminalVisibility=" + (terminal == null ? "none" : String.valueOf(terminal.getVisibility()));
@@ -640,7 +709,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * {@link WallParallax#rowCount}.
      */
     public int rowCount() {
-        if (!mDefaultOrder && mSlotPages != null) {
+        if ((!mDefaultOrder || mHasDisplaySlot) && mSlotPages != null) {
             return WallParallax.rowCount(mSlotPages, rowWindowCount(mWall.pages()));
         }
         return WallParallax.rowCount(rowHomeCount(), rowWindowCount(mWall.pages()));
@@ -711,11 +780,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private int rowIndexOf(@NonNull PaneWallPage kind, int index, int homes, int windows) {
         WallPages pages = mSlotPages;
-        if (mDefaultOrder || pages == null) {
+        if ((mDefaultOrder && !mHasDisplaySlot) || pages == null) {
             return WallParallax.rowIndex(kind, index, homes, windows);
         }
         WallPages.Stop stop;
-        if (kind == PaneWallPage.WIDGETS) {
+        if (kind == PaneWallPage.DISPLAY && mDisplayPageId >= 0) {
+            stop = WallPages.Stop.of(mDisplayPageId);
+        } else if (kind == PaneWallPage.WIDGETS) {
             java.util.List<WallPages.Page> homePages = pages.homePages();
             if (homePages.isEmpty()) return 0;
             stop = WallPages.Stop.of(homePages.get(
@@ -782,6 +853,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * while the launcher is in front.
      */
     public void goHome(boolean animate) {
+        // Edit pages set a Display page as home: the press lands there (A3b), and the landing
+        // starts the display.
+        int displayHome = DisplayPagePolicy.homeDisplayPage(mHost.wallPages());
+        if (displayHome >= 0 && goToDisplayPage(displayHome, animate)) return;
         if (!mHost.useAs().showsHomePage()) {
             // Terminal only: the home press lands on the Workspace.
             goToWorkspace(animate);
@@ -935,6 +1010,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             refreshPages();
         }
         mHost.onWallPageSettled(page);
+        if (page == PaneWallPage.DISPLAY && mBoundDisplayPageId >= 0) {
+            mHost.onDisplayPageLanded(mBoundDisplayPageId);
+        }
     }
 
     // The windows page inside the Workspace's view by the border drag; Home's pages page inside
@@ -1006,15 +1084,25 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallDragHeading(@NonNull PaneWallPage page, int steps) {
         java.util.List<WallPages.Slot> slots = mSlots;
-        if (mDefaultOrder || slots == null || page != PaneWallPage.TERMINAL) return;
+        if (slots == null || page == PaneWallPage.WIDGETS) return;
         // A step to the next window stays inside the Workspace.
-        if (hasInnerPage(PaneWallPage.TERMINAL, steps)) return;
-        int terminal = PaneWallPolicy.firstSlotOf(slots, PaneWallPage.TERMINAL);
-        int target = terminal + steps;
-        if (terminal < 0 || target < 0 || target >= slots.size()
-            || slots.get(target).kind != WallPages.PageKind.HOME) {
+        if (page == PaneWallPage.TERMINAL && hasInnerPage(PaneWallPage.TERMINAL, steps)) return;
+        int here = currentSlot(slots);
+        int target = here + steps;
+        if (here < 0 || target < 0 || target >= slots.size()) return;
+        if (slots.get(target).kind == WallPages.PageKind.DISPLAY) {
+            // The display view goes with the drag to the Display page it heads for (A3b). A
+            // Display page next to another is not re-bound from it: the window leaves the
+            // second out, so the wall does not slide from one Display page to the next.
+            int id = slots.get(target).id();
+            if (slots.get(here).kind != WallPages.PageKind.DISPLAY
+                && id != mBoundDisplayPageId) {
+                mDisplayPageId = id;
+                rebuild();
+            }
             return;
         }
+        if (mDefaultOrder || slots.get(target).kind != WallPages.PageKind.HOME) return;
         int was = boundSlot();
         if (was != target) {
             mHomeRunId = slots.get(target).id();
@@ -1046,8 +1134,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     @Override
     public boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
-        return page == PaneWallPage.TERMINAL && !mWall.isDisplayInFront()
-            && mHost.bodySwipePagesWall(rawX, rawY);
+        return page == PaneWallPage.TERMINAL && mHost.bodySwipePagesWall(rawX, rawY);
     }
 
     /**
@@ -1057,8 +1144,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     @Override
     public boolean isSeamSwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
-        return page == PaneWallPage.TERMINAL && !mWall.isDisplayInFront()
-            && mHost.seamSwipePagesWall(rawX, rawY);
+        return page == PaneWallPage.TERMINAL && mHost.seamSwipePagesWall(rawX, rawY);
     }
 
     @Override

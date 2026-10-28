@@ -42,9 +42,8 @@ import java.util.WeakHashMap;
  * The pane wall: fixed, full-size places side by side — Home and the Workspace — of which
  * exactly one is on screen at rest. It wraps the terminal's pane host as the Workspace's page, so
  * the terminal never resizes for the wall and {@code TerminalPaneController} never learns the wall
- * exists. The display window is a window of the Workspace ({@link DisplaySlot}): while it is the
- * one in front its frame stands as the Workspace's page in the pane host's stead, and the pane
- * host waits off screen ({@link #setDisplayInFront}).
+ * exists. The display's frame is the Display page's view ({@link PaneWallPage#DISPLAY}, ADR 0015
+ * A3b), a page of its own beside the others; the Workspace's page is the pane host alone.
  *
  * <p>Not a {@code ViewPager2}: its pages must never be recycled (a recreated terminal or X
  * surface is a lost session), and its centre page runs its own
@@ -260,18 +259,14 @@ public final class PaneWallLayout extends ViewGroup {
     private float mNudgePx;
     @Nullable private ValueAnimator mNudge;
     /**
-     * The Workspace's view a nudge carries off beside the one it brings in: the window that was
-     * in front before the display window came in front or went back ({@link #setDisplayInFront}).
+     * The view a nudge carries off beside the one it brings in; null for a nudge that carries
+     * nothing off.
      */
     @Nullable private View mNudgeLeaving;
     /** A swap and its nudge are being set up: their positions are applied once, together. */
     private boolean mDeferPositions;
     /** The Workspace's pane host: its page's view while a terminal window is in front. */
     @Nullable private View mTerminalHost;
-    /** The display window's frame while a display is up; on the row with the windows. */
-    @Nullable private View mDisplayView;
-    /** Whether the display window is the Workspace's window in front, standing as its page. */
-    private boolean mDisplayInFront;
     private boolean mReducedMotion;
     private boolean mGesturesEnabled = true;
     /**
@@ -539,87 +534,14 @@ public final class PaneWallLayout extends ViewGroup {
      * layout file, the others are added by their controllers).
      */
     public void setPageView(@NonNull PaneWallPage page, @Nullable View view) {
-        if (page == PaneWallPage.TERMINAL && (view == null || view != mDisplayView)) {
-            mTerminalHost = view;
-            // The display window stands in front: the pane host waits off screen until it is back.
-            if (mDisplayInFront) {
-                applyPagePositions();
-                return;
-            }
-        }
-        registerPageView(page, view);
-    }
-
-    /**
-     * The display window's frame, which stands as the Workspace's page while it is the window in
-     * front ({@link #setDisplayInFront}); null once the display is down. The view must already be
-     * a child of this layout.
-     */
-    public void setDisplayView(@Nullable View view) {
-        if (view == mDisplayView) return;
-        if (mDisplayInFront) setDisplayInFront(false);
-        View previous = mDisplayView;
-        mDisplayView = view;
-        if (previous != null) {
+        if (page == PaneWallPage.TERMINAL) mTerminalHost = view;
+        View previous = mPageViews.get(page);
+        if (previous != null && previous != view) {
+            // A Display page's frame going lets go of its still and any nudge carrying it.
             if (previous == mNudgeLeaving) stopNudge();
             if (previous instanceof SurfacePage) ((SurfacePage) previous).dropStill();
         }
-        applyPagePositions();
-    }
-
-    @Nullable
-    public View displayView() {
-        return mDisplayView;
-    }
-
-    /**
-     * Whether the display window is the Workspace's window in front. It then stands as the
-     * Workspace's page — the slide, the border drag, the sink, the plank and the grabbers are its —
-     * and the pane host waits off screen, laid out at its own size so the terminal never resizes
-     * for it. This swaps at once, with no travel; {@link #swapDisplayInFront} travels.
-     */
-    public void setDisplayInFront(boolean front) {
-        boolean wanted = front && mDisplayView != null;
-        if (wanted == mDisplayInFront) return;
-        stopNudge();
-        mDisplayInFront = wanted;
-        registerPageView(PaneWallPage.TERMINAL, wanted ? mDisplayView : mTerminalHost);
-    }
-
-    /**
-     * {@link #setDisplayInFront} as a window switch: the arriving window slides in from
-     * {@code fromPx} ({@link #nudgePage}) and the one that was in front goes off beside it, one
-     * width apart, in one motion. The swap and the nudge's first frame are placed together, so
-     * nothing is drawn, or reported off screen, at a position in between. Where no nudge can run
-     * (the wall moving, no travel) the swap simply lands. {@code onEnd} runs however it ends.
-     *
-     * @return whether the front changed
-     */
-    public boolean swapDisplayInFront(boolean front, float fromPx, long durationMs,
-                                      @Nullable android.view.animation.Interpolator interpolator,
-                                      @Nullable Runnable onEnd) {
-        boolean wanted = front && mDisplayView != null;
-        if (wanted == mDisplayInFront) {
-            if (onEnd != null) onEnd.run();
-            return false;
-        }
-        stopNudge();
-        View leaving = mPageViews.get(PaneWallPage.TERMINAL);
-        mDisplayInFront = wanted;
-        mDeferPositions = true;
-        try {
-            registerPageView(PaneWallPage.TERMINAL, wanted ? mDisplayView : mTerminalHost);
-        } finally {
-            mDeferPositions = false;
-        }
-        if (!startNudge(PaneWallPage.TERMINAL, fromPx, durationMs, interpolator, onEnd, leaving)) {
-            applyPagePositions();
-        }
-        return true;
-    }
-
-    public boolean isDisplayInFront() {
-        return mDisplayInFront;
+        registerPageView(page, view);
     }
 
     private void registerPageView(@NonNull PaneWallPage page, @Nullable View view) {
@@ -748,14 +670,13 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * Whether the terminal's pane host has pixels on screen: the Workspace's page while a terminal
-     * window is in front, or the window a nudge is carrying off. Not while the display window
-     * stands in front with the host waiting off screen.
+     * window is in front, or the window a nudge is carrying off.
      */
     public boolean isTerminalHostOnScreen() {
         View view = mTerminalHost;
         if (view == null || !mPages.contains(PaneWallPage.TERMINAL)) return false;
         int width = getWidth();
-        if (width <= 0) return mCurrent == PaneWallPage.TERMINAL && !mDisplayInFront;
+        if (width <= 0) return mCurrent == PaneWallPage.TERMINAL;
         return view.getAlpha() > 0f && Math.abs(slidePx(view)) < width;
     }
 
@@ -1462,7 +1383,7 @@ public final class PaneWallLayout extends ViewGroup {
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
         // The display window's picture is the Linux app's to its rim: its borders stay in the
         // air around it (BorderReach). A terminal window shares its edges as it always has.
-        BorderReach.apply(mBorderZone, BorderReach.ownsContent(mCurrent, mDisplayInFront),
+        BorderReach.apply(mBorderZone, BorderReach.ownsContent(mCurrent),
             density);
         // A window's bottom border is a seam band a fingertip tall, reaching into its last row
         // and the dock's top (SeamSwipe). Only for a press: the drawn borders never need it. A
@@ -2650,10 +2571,6 @@ public final class PaneWallLayout extends ViewGroup {
      * owns its own surface, which INVISIBLE is exactly right for. Because the Terminal page no
      * longer goes INVISIBLE, nothing in the view hierarchy notices it leaving on its own any more,
      * which is what {@link Listener#onTerminalOffScreenChanged} is for.
-     *
-     * <p>Of the Workspace's two views, the one not in front — the pane host while the display
-     * window is, or the display's frame while a terminal window is — waits off screen, unless a
-     * nudge is carrying it off one width from the one coming in.
      */
     private void applyPagePositions() {
         if (mDeferPositions) return;
@@ -2687,7 +2604,6 @@ public final class PaneWallLayout extends ViewGroup {
                 + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             placePage(view, x, width);
         }
-        placeWorkspaceViewOffFront(width);
         syncDrawingOrder(width);
         // The planks' angles are a function of where the pages stand, so the drag, the spring
         // back and the carry-out all read the same number and they are flat wherever they rest —
@@ -2718,27 +2634,6 @@ public final class PaneWallLayout extends ViewGroup {
             // the frame may have moved under it: it is laid out again before it is drawn.
             // Inside a layout pass, onLayout lays it out itself once the positions are set.
             if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
-        }
-    }
-
-    /**
-     * The Workspace's view that is not in front: carried off one width from the one a nudge brings
-     * in, on the far side from where it comes, or else waiting off screen — the pane host as an
-     * off-row terminal page waits, at zero alpha, and the display's frame INVISIBLE, which lets its
-     * surface go.
-     */
-    private void placeWorkspaceViewOffFront(int width) {
-        View offFront = mDisplayInFront ? mTerminalHost : mDisplayView;
-        if (offFront == null) return;
-        View front = mPageViews.get(PaneWallPage.TERMINAL);
-        if (offFront == mNudgeLeaving && mNudgePage == PaneWallPage.TERMINAL && front != null
-                && mPages.contains(PaneWallPage.TERMINAL) && width > 0) {
-            placePage(offFront, slidePx(front) - Math.signum(mNudgePx) * width, width);
-        } else if (offFront == mTerminalHost) {
-            parkTerminalPage(offFront, width);
-        } else {
-            parkFlat(offFront, 2f * Math.max(1, width));
-            offFront.setVisibility(INVISIBLE);
         }
     }
 
@@ -2935,13 +2830,13 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * What {@code child} stands as for its frame and its top: the pane host the terminal page
-     * wherever it is parked, the display window's frame a page the wall does not know (null), and
-     * anything else the page it is registered as.
+     * wherever it is parked, and anything else the page it is registered as (the display's frame
+     * the Display page, which stands at the opening).
      */
     @Nullable
     private PaneWallPage pageKindOf(@NonNull View child) {
         return child == mTerminalHost ? PaneWallPage.TERMINAL
-            : child == mDisplayView ? null : pageOf(child);
+            : pageOf(child);
     }
 
     /**
