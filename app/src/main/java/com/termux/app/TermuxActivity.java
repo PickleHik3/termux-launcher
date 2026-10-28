@@ -27544,6 +27544,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     applyStartIn(com.termux.app.wall.StartInPolicy.choose(kind));
                 }
+                // The wall's order (ADR 0015, A2a): the Terminal page anywhere among Home's.
+                @Override public int homePagesBeforeTerminal() {
+                    com.termux.app.wall.WallPages pages = wallPages();
+                    com.termux.app.wall.WallPages.Page terminal = pages.terminal();
+                    if (terminal == null) return Integer.MAX_VALUE;
+                    int n = 0;
+                    for (com.termux.app.wall.WallPages.Page page : pages.pages()) {
+                        if (page.id == terminal.id) return n;
+                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) n++;
+                    }
+                    return n;
+                }
+                @Override public void moveHomePageOnWall(int homeIndex, int wallIndex) {
+                    java.util.List<com.termux.app.wall.WallPages.Page> homes =
+                        wallPages().homePages();
+                    if (homeIndex < 0 || homeIndex >= homes.size()) return;
+                    int id = homes.get(homeIndex).id;
+                    editWallPages(pages -> pages.move(id, wallIndex));
+                }
+                @Override public void moveTerminalPage(int wallIndex) {
+                    com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
+                    if (terminal == null) return;
+                    int id = terminal.id;
+                    editWallPages(pages -> pages.move(id, wallIndex));
+                }
+                @Override public void setTerminalHome() {
+                    com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
+                    if (terminal == null) return;
+                    int id = terminal.id;
+                    editWallPages(pages -> pages.setHome(id));
+                }
                 @Override @NonNull public String startIn() {
                     return effectiveStartIn();
                 }
