@@ -31,7 +31,12 @@ public final class WallPages {
     /** Why an edit was refused. */
     public enum Error {
         UNKNOWN_PAGE, BAD_INDEX, SECOND_TERMINAL, LAST_HOME, LAST_PAGE, NEEDS_CONFIRM,
-        NOT_PENDING, BINDING_NOT_DISPLAY
+        NOT_PENDING, BINDING_NOT_DISPLAY,
+        /**
+         * A move would stand two Display pages side by side: the wall's one display frame cannot
+         * yet slide from one to the next, so the second would be unreachable (A3c2).
+         */
+        ADJACENT_DISPLAY
     }
 
     /** What an accepted edit did. */
@@ -396,7 +401,22 @@ public final class WallPages {
         int at = toIndex >= rest.size() ? list.size() : list.indexOf(rest.get(toIndex));
         list.add(at, page);
         WallPages next = copy(list, pending, detached, homeId, nextId, homeIsDisplayWindow);
+        if (next.hasAdjacentDisplays() && !hasAdjacentDisplays()) {
+            return refuse(Error.ADJACENT_DISPLAY);
+        }
         return new Result(next, ChangeType.MOVED, page, null, from, toIndex);
+    }
+
+    /** Whether two Display pages stand side by side among the pages on the wall. */
+    public boolean hasAdjacentDisplays() {
+        List<Page> visible = pages();
+        for (int i = 1; i < visible.size(); i++) {
+            if (visible.get(i).kind == PageKind.DISPLAY
+                    && visible.get(i - 1).kind == PageKind.DISPLAY) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Removes a page that has no windows to close; see {@link #remove(int, int, boolean)}. */

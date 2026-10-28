@@ -3,8 +3,6 @@ package com.termux.app.chrome;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.DisplaySlot;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -124,7 +122,7 @@ public final class WindowChips<W> {
 
     /**
      * The chips of the row {@code rowWindows} (the terminal windows, in order) with the display
-     * window at row place {@code displaySlot} ({@link DisplaySlot#NONE} when it is not on the row)
+     * window at row place {@code displaySlot} (-1 when it is not on the row: always, since ADR 0015 A3b moved the display to its own pages)
      * and row place {@code rowCurrent} in front, seen from Home when {@code home}. Without
      * {@code rowShown} (no session is current and the display window is not on the row) there is
      * no row, and only the floats are chips. Floats follow with {@link #addFloat}.
@@ -141,7 +139,7 @@ public final class WindowChips<W> {
             return;
         }
         int windows = rowWindows.size();
-        mRowCount = DisplaySlot.rowCount(windows, displaySlot);
+        mRowCount = windows + (displaySlot >= 0 ? 1 : 0);
         mDisplayChip = displaySlot >= 0 ? displaySlot : -1;
         for (int i = 0; i < windows; i++) {
             if (i == displaySlot) addDisplay();

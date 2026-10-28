@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 /**
  * The wall's row as a list of pages (ADR 0008): Home page 1 … Home page n, then the Workspace's
- * windows, the display window among them while a display is up ({@link DisplaySlot}). Pure, so the
+ * windows, the display window among them while a display was up (before ADR 0015 A3b). Pure, so the
  * seam, the insertion of a new window, Start in and the saved position read as arithmetic.
  *
  * <p>The wall does not hold a view per page. Home's pages are the widget grid's own pages, paged
