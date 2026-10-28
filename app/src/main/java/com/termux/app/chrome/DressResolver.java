@@ -42,8 +42,21 @@ public final class DressResolver {
         /** Whether the launcher is in minimal mode. */
         boolean minimal();
 
-        /** Whether Home holds a Home layout of its own (the Home layout switch). */
-        boolean homeLayout();
+        /**
+         * The old Home layout switch. No longer read by the resolver: since version 16 a Home page
+         * wears a page layout of its own ({@link #pageLayout}) or the normal one.
+         */
+        @Deprecated
+        default boolean homeLayout() { return false; }
+
+        /**
+         * The id of the page {@code page} stands for on screen: the Home page in front for {@link
+         * PaneWallPage#WIDGETS}, the Terminal page for a window; -1 where none is known.
+         */
+        default int pageIdOf(@NonNull PaneWallPage page) { return -1; }
+
+        /** Whether page {@code pageId} holds a page layout of its own (ADR 0015 §3). */
+        default boolean pageLayout(int pageId) { return false; }
 
         /** The Dock design picked on one layout, whether or not it is built yet. */
         @NonNull
@@ -101,9 +114,14 @@ public final class DressResolver {
                 return store != null && store.isMinimal();
             }
 
-            @Override public boolean homeLayout() {
+            @Override public int pageIdOf(@NonNull PaneWallPage page) {
                 PlaceLayoutStore store = places.get();
-                return store != null && store.hasHomeLayout();
+                return store != null ? store.shownPageId(page) : -1;
+            }
+
+            @Override public boolean pageLayout(int pageId) {
+                PlaceLayoutStore store = places.get();
+                return store != null && store.hasPageLayout(pageId);
             }
 
             @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
@@ -154,15 +172,19 @@ public final class DressResolver {
 
     /**
      * The layout the page wears ({@link Dress#layout}), read without the rest of the dress: the
-     * question the stack's sizes ask on every pass. Home's own only while it holds one, else the
-     * normal layout: minimal mode is the windows' alone.
+     * question the stack's sizes ask on every pass. A Home page wears its page layout while it
+     * holds one, else the normal layout: minimal mode is the windows' alone. A window wears the
+     * minimal layout while minimal mode is on, else the Terminal page's own while it holds one,
+     * else the normal one (ADR 0015 §3).
      */
     @NonNull
     public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS) {
-            return mSource.homeLayout() ? LayoutVariant.HOME : LayoutVariant.NORMAL;
-        }
-        return LayoutVariant.of(mSource.minimal());
+        boolean home = page == PaneWallPage.WIDGETS;
+        if (!home && mSource.minimal()) return LayoutVariant.MINIMAL;
+        int id = mSource.pageIdOf(page);
+        if (id >= 0 && mSource.pageLayout(id))
+            return LayoutVariant.page(id, home ? PageKind.HOME : PageKind.TERMINAL);
+        return LayoutVariant.NORMAL;
     }
 
     /**
@@ -205,7 +227,7 @@ public final class DressResolver {
      * page wears an element is its kind's visibility ({@link #wears}).
      */
     public static boolean wornOn(@NonNull LayoutVariant layout, @NonNull Element element) {
-        return layout != LayoutVariant.HOME || !HOME_NOT_OFFERED.contains(element);
+        return !layout.isHomeKind() || !HOME_NOT_OFFERED.contains(element);
     }
 
 }

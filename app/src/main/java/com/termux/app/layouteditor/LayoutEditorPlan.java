@@ -98,14 +98,16 @@ public final class LayoutEditorPlan {
      * sizes the Home and normal layouts share (linked, #84) come from the entry already kept for
      * the other ({@link #enterVariant}).
      */
-    @NonNull private final EnumMap<LayoutVariant, PlaceArrangeSnapshot> mEntries =
-        new EnumMap<>(LayoutVariant.class);
-    @NonNull private final EnumMap<LayoutVariant, String> mEntrySignatures =
-        new EnumMap<>(LayoutVariant.class);
+    @NonNull private final Map<LayoutVariant, PlaceArrangeSnapshot> mEntries =
+        new java.util.LinkedHashMap<>();
+    @NonNull private final Map<LayoutVariant, String> mEntrySignatures =
+        new java.util.LinkedHashMap<>();
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
-    /** Whether Home held a layout of its own at open: the switch Discard puts back too. */
-    private final boolean mEntryHomeLayout;
+    /** The page the editor opened on (-1: none known) and whether it held a page layout then:
+     *  the flag Discard puts back too. */
+    private final int mEntryPageId;
+    private final boolean mEntryPageLayout;
 
     private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
                              @NonNull PlaceOrientation deviceOrientation,
@@ -129,16 +131,14 @@ public final class LayoutEditorPlan {
                 keepEntry(entry);
         }
         enterVariant(variant);
-        // What the session may touch: the Workspace layout the launcher stands in, and Home's own
-        // always, while the launcher is not in minimal mode: a first hide gives Home a layout of its
-        // own, seeded over what Home's variant held, and Discard must put that back too. A session
-        // opened in normal mode never snapshots (so never reverts) Minimal; one opened in Minimal
-        // edits Minimal alone.
+        // What the session may touch: the layout the page wears and the Workspace layout the
+        // launcher stands in. A session opened in normal mode never snapshots (so never reverts)
+        // Minimal; one opened in Minimal edits Minimal alone. The page's own layout flag is
+        // remembered so Discard puts it back (ADR 0015 §3).
         LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
         enterVariant(workspace);
-        if (workspace != LayoutVariant.MINIMAL)
-            enterVariant(LayoutVariant.HOME);
-        mEntryHomeLayout = places.hasHomeLayout();
+        mEntryPageId = places.shownPageId(place);
+        mEntryPageLayout = places.hasPageLayout(mEntryPageId);
     }
 
     private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
@@ -599,7 +599,7 @@ public final class LayoutEditorPlan {
      * — the unsaved-changes question.
      */
     public boolean isDirty() {
-        if (mRoot.hasHomeLayout() != mEntryHomeLayout)
+        if (mRoot.hasPageLayout(mEntryPageId) != mEntryPageLayout)
             return true;
         for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
             if (!entry.getValue().equals(
@@ -614,9 +614,9 @@ public final class LayoutEditorPlan {
      * nothing moved is left unwritten.
      */
     public void revert() {
-        boolean switchMoved = mRoot.hasHomeLayout() != mEntryHomeLayout;
+        boolean switchMoved = mRoot.hasPageLayout(mEntryPageId) != mEntryPageLayout;
         if (switchMoved)
-            mRoot.setHomeLayout(mEntryHomeLayout);
+            mRoot.setPageLayout(mEntryPageId, mEntryPageLayout);
         for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
             String atOpen = mEntrySignatures.get(entry.getKey());
             if (atOpen == null || !atOpen.equals(
