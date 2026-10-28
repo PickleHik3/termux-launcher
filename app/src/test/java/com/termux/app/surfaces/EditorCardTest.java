@@ -1,11 +1,11 @@
 package com.termux.app.surfaces;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Test;
 
@@ -32,13 +32,13 @@ public class EditorCardTest {
 
     @Test
     public void homeStandsOnHomeAndTheTerminalOnTheWorkspace() {
-        assertTrue(EditorCard.HOME.standsOn(WallHalf.HOME));
-        assertFalse(EditorCard.HOME.standsOn(WallHalf.WORKSPACE));
-        assertTrue(EditorCard.TERMINAL.standsOn(WallHalf.WORKSPACE));
-        assertFalse(EditorCard.TERMINAL.standsOn(WallHalf.HOME));
+        assertTrue(EditorCard.HOME.standsOn(PaneWallPage.WIDGETS));
+        assertFalse(EditorCard.HOME.standsOn(PaneWallPage.TERMINAL));
+        assertTrue(EditorCard.TERMINAL.standsOn(PaneWallPage.TERMINAL));
+        assertFalse(EditorCard.TERMINAL.standsOn(PaneWallPage.WIDGETS));
         for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
             EditorCard.KEYBOARD, EditorCard.APPEARANCE}) {
-            for (WallHalf half : WallHalf.values())
+            for (PaneWallPage half : PaneWallPage.values())
                 assertTrue(card + " on " + half, card.standsOn(half));
         }
     }

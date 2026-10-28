@@ -305,7 +305,7 @@ public class SurfacePresetsTest {
 
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
         assertEquals(45, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
-        assertEquals(15, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(15, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
 
         // A Custom saved before the amount wore its own Look's colour in full: amount 0 now.
         java.util.Map<String, Object> older = SurfacePresets.deserialize(

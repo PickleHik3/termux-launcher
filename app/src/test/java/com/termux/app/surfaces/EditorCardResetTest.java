@@ -14,7 +14,6 @@ import com.termux.app.surfaces.cards.DockCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.junit.Before;
@@ -43,25 +42,25 @@ public class EditorCardResetTest {
 
     @Test
     public void homeFrostComesBackEvenWhenTheEditorOpenedOnIt() {
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME, 40);
-        prefs.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 90);
-        EditorCardReset.resetStore(prefs, EditorCard.HOME, WallHalf.HOME);
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 40);
+        prefs.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 90);
+        EditorCardReset.resetStore(prefs, EditorCard.HOME, TermuxAppSharedPreferences.PAGE_WALL);
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
-            prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
+            prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
-            prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+            prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
     }
 
     @Test
     public void workspaceResetLeavesHomeAlone() {
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME, 40);
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE, 41);
-        EditorCardReset.resetStore(prefs, EditorCard.WORKSPACE, WallHalf.WORKSPACE);
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 40);
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(), 41);
+        EditorCardReset.resetStore(prefs, EditorCard.WORKSPACE, TermuxAppSharedPreferences.terminalPageId());
         // Base is wall-wide: the reset is the wall's, so Home reads the default as well.
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
-            prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
+            prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
-            prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
+            prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -71,7 +70,7 @@ public class EditorCardResetTest {
         prefs.setAppLauncherButtonCount(12);
         PeekGlassPreferences.setReflection(store, 5);
         prefs.setSurfaceGlassPosition(SurfaceSlot.DOCK, 77);
-        EditorCardReset.resetStore(prefs, EditorCard.DOCK, WallHalf.WORKSPACE);
+        EditorCardReset.resetStore(prefs, EditorCard.DOCK, TermuxAppSharedPreferences.terminalPageId());
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS, prefs.getLayoutCornersDp(false));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP, prefs.getLayoutMarginDp(false));
         assertEquals(TERMUX_APP.DEFAULT_APP_LAUNCHER_BUTTON_COUNT, prefs.getAppLauncherButtonCount());
@@ -82,7 +81,7 @@ public class EditorCardResetTest {
     @Test
     public void keyboardResetReturnsKeyOpacityToTheTheme() {
         prefs.setInAppKeyboardKeyOpacity(59);
-        EditorCardReset.resetStore(prefs, EditorCard.KEYBOARD, WallHalf.WORKSPACE);
+        EditorCardReset.resetStore(prefs, EditorCard.KEYBOARD, TermuxAppSharedPreferences.terminalPageId());
         assertFalse(prefs.getInAppKeyboardKeyOpacity() >= 0);
     }
 
@@ -91,7 +90,7 @@ public class EditorCardResetTest {
         prefs.setInAppKeyboardOpacityLinked(true);
         prefs.setInAppKeyboardKeyCornerRadiusDp(3f);
         prefs.setInAppKeyboardKeyMarginScale(1.5f);
-        EditorCardReset.resetStore(prefs, EditorCard.KEYBOARD, WallHalf.WORKSPACE);
+        EditorCardReset.resetStore(prefs, EditorCard.KEYBOARD, TermuxAppSharedPreferences.terminalPageId());
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_OPACITY_LINKED,
             prefs.isInAppKeyboardOpacityLinked());
         assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP));
@@ -103,7 +102,7 @@ public class EditorCardResetTest {
         store.edit().putBoolean(DockCard.KEY_AZ_GLASS_BACKGROUND, true)
             .putString(DockCard.KEY_AZ_SHOW, "faint")
             .putBoolean(DockCard.KEY_COMMAND_PALETTE_BUTTON, false).commit();
-        EditorCardReset.resetStore(prefs, EditorCard.DOCK, WallHalf.WORKSPACE);
+        EditorCardReset.resetStore(prefs, EditorCard.DOCK, TermuxAppSharedPreferences.terminalPageId());
         assertFalse(store.contains(DockCard.KEY_AZ_GLASS_BACKGROUND));
         assertFalse(store.contains(DockCard.KEY_AZ_SHOW));
         assertFalse(store.contains(DockCard.KEY_COMMAND_PALETTE_BUTTON));
@@ -117,7 +116,7 @@ public class EditorCardResetTest {
         prefs.setStatusClockSecondsEnabled(!TERMUX_APP.DEFAULT_STATUS_CLOCK_SECONDS);
         prefs.setStatusWidgetCpuEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
         prefs.setStatusWidgetNotificationsEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
-        EditorCardReset.resetStore(prefs, EditorCard.STATUS, WallHalf.WORKSPACE);
+        EditorCardReset.resetStore(prefs, EditorCard.STATUS, TermuxAppSharedPreferences.terminalPageId());
         assertEquals(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE, prefs.getTopPaneClockStyle());
         assertEquals(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT, prefs.getTopPaneClockAlignment());
         assertEquals(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_AM_PM, prefs.isTopPaneClockAmPmEnabled());
@@ -133,7 +132,7 @@ public class EditorCardResetTest {
         prefs.setTerminalCursorTrailEnabled(false);
         prefs.setTerminalRetroEffect("crt_amber");
         prefs.setTerminalPaneGap(12);
-        EditorCardReset.resetStore(prefs, EditorCard.TERMINAL, WallHalf.WORKSPACE);
+        EditorCardReset.resetStore(prefs, EditorCard.TERMINAL, TermuxAppSharedPreferences.terminalPageId());
         assertEquals(TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL,
             prefs.getTerminalContrastLevel().value);
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL, prefs.isTerminalCursorTrailEnabled());

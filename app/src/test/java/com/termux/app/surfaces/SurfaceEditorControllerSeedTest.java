@@ -1,5 +1,6 @@
 package com.termux.app.surfaces;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -179,21 +180,21 @@ public class SurfaceEditorControllerSeedTest {
 
     @Test
     public void aScreenCardsFrostWritesItsOwnHalfOnly() {
-        TermuxAppSharedPreferences.WallHalf home = TermuxAppSharedPreferences.WallHalf.HOME;
-        TermuxAppSharedPreferences.WallHalf workspace =
-            TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        PaneWallPage home = PaneWallPage.WIDGETS;
+        PaneWallPage workspace =
+            PaneWallPage.TERMINAL;
         preferences.setSurfaceGlassPosition(null, 33);
-        int otherBlur = preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home);
-        int otherGrain = preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home);
+        int otherBlur = preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(home));
+        int otherGrain = preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(home));
         SurfaceEditorController.writeScreenFrost(preferences, workspace, 90);
         assertEquals("the shared position is the Appearance card's", 33,
             preferences.getSurfaceGlassPosition(null));
         // Base is wall-wide: the screen card's Frost is the wall's, so Home reads it too.
         assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, workspace));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(workspace)));
         assertEquals(AppearanceLooks.blurDp(GlassControls.blurForGlass(90)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, home));
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, workspace),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, home));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(home)));
+        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(workspace)),
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(home)));
     }
 }

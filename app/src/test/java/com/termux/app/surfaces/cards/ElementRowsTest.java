@@ -1,5 +1,6 @@
 package com.termux.app.surfaces.cards;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -11,7 +12,6 @@ import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.cards.ElementRows.Item;
 import com.termux.app.surfaces.cards.ElementRows.Visibility;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Test;
 
@@ -31,12 +31,12 @@ public class ElementRowsTest {
 
     @Test
     public void eachScreenListsTheSharedRowsThenItsOwnContent() {
-        List<Item> workspace = ElementRows.rows(WallHalf.WORKSPACE);
+        List<Item> workspace = ElementRows.rows(PaneWallPage.TERMINAL);
         assertEquals(SHARED, workspace.subList(0, SHARED.size()));
         assertEquals(Item.TERMINAL, workspace.get(workspace.size() - 1));
         assertFalse(workspace.contains(Item.WIDGETS));
 
-        List<Item> home = ElementRows.rows(WallHalf.HOME);
+        List<Item> home = ElementRows.rows(PaneWallPage.WIDGETS);
         assertEquals(SHARED, home.subList(0, SHARED.size()));
         assertEquals(Item.WIDGETS, home.get(home.size() - 1));
         assertFalse(home.contains(Item.TERMINAL));
@@ -98,8 +98,8 @@ public class ElementRowsTest {
 
     @Test
     public void onlyTheScreenCardsHoldTheList() {
-        assertEquals(WallHalf.HOME, ElementRows.screenOf(EditorCard.HOME));
-        assertEquals(WallHalf.WORKSPACE, ElementRows.screenOf(EditorCard.WORKSPACE));
+        assertEquals(PaneWallPage.WIDGETS, ElementRows.screenOf(EditorCard.HOME));
+        assertEquals(PaneWallPage.TERMINAL, ElementRows.screenOf(EditorCard.WORKSPACE));
         EditorRows.Offers offers = new EditorRows.Offers(true, true);
         for (EditorCard card : EditorCard.values()) {
             boolean screen = ElementRows.screenOf(card) != null;

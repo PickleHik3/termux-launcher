@@ -12,7 +12,6 @@ import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -49,20 +48,20 @@ public class SurfaceEditorHomeGlassTest {
         // Pong's Home half, and a Workspace that looks otherwise.
         // Base is wall-wide since the halves became pages: the Workspace's numbers first, then
         // Home's, which are the wall's.
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 40);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE,
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 40);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.blurForGlass(60));
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE,
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.grainForGlass(60));
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME, 92);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, WallHalf.HOME, 0);
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 92);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 0);
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 0);
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, TermuxAppSharedPreferences.PAGE_WALL, 0);
         // The Workspace's Frost was left at 60: Home's pair is not that position's.
         preferences.setSurfaceGlassPosition(null, 60);
         for (SurfaceSlot slot : new SurfaceSlot[] {SurfaceSlot.DOCK, SurfaceSlot.STATUS}) {
             for (SurfaceProperty property : SurfaceProperty.values())
-                preferences.setSurfaceInheriting(slot, property, WallHalf.HOME, true);
+                preferences.setSurfaceInheriting(slot, property, TermuxAppSharedPreferences.PAGE_WALL, true);
         }
     }
 
@@ -86,44 +85,42 @@ public class SurfaceEditorHomeGlassTest {
         model(editor).onValue(Row.FROST, 40, false);
         model(editor).onReleased(Row.FROST);
 
-        assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
-        assertEquals(25, preferences.getSurfaceBaseValue(SurfaceProperty.TINT, WallHalf.HOME));
+        assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals(25, preferences.getSurfaceBaseValue(SurfaceProperty.TINT, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(GlassControls.blurForGlass(40),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(GlassControls.grainForGlass(40),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME));
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals("the dock on Home follows", 70,
-            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, WallHalf.HOME));
+            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals("the status bar on Home follows", 70, preferences.getSurfaceValue(
-            SurfaceSlot.STATUS, SurfaceProperty.OPACITY, WallHalf.HOME));
+            SurfaceSlot.STATUS, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals("Base is the wall's, so the Workspace reads Home's write", 70,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(GlassControls.blurForGlass(40),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
         assertEquals("Frost reads back where it was left", 40, model(editor).value(Row.FROST));
     }
 
     @Test
     public void theStripWritesHomeWhicheverHalfTheFrameShows() {
         SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        assertEquals(WallHalf.HOME, EditorRows.halfFor(EditorCard.HOME, Row.OPACITY,
-            WallHalf.WORKSPACE));
         model(editor).onValue(Row.OPACITY, 55, false);
-        assertEquals(55, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+        assertEquals(55, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(55,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
     public void aDockGivenItsOwnHomeValueKeepsIt() {
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, WallHalf.HOME,
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL,
             30);
         SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
         model(editor).onValue(Row.OPACITY, 70, false);
         assertEquals(30,
-            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, WallHalf.HOME));
+            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            WallHalf.HOME));
+            TermuxAppSharedPreferences.PAGE_WALL));
     }
 
     /**
@@ -142,16 +139,16 @@ public class SurfaceEditorHomeGlassTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.HOME));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.HOME));
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(GlassControls.glassFor(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
             TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN), model(editor).value(Row.FROST));
         assertEquals("Base is the wall's, so the Workspace reads the reset too",
             TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
     }
 
     // ------------------------------------------------------------------------------- the drive

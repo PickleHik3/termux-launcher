@@ -1,5 +1,6 @@
 package com.termux.app.launcher.drawer;
 
+import com.termux.app.wall.PaneWallPage;
 import android.content.Context;
 import android.view.View;
 import android.widget.EditText;
@@ -42,8 +43,8 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return viewRoot == null ? null : (T) viewRoot.findViewById(viewId);
     }
 
-    @NonNull @Override public TermuxAppSharedPreferences.WallHalf restingPage() {
-        return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+    @Override public int restingPage() {
+        return TermuxAppSharedPreferences.terminalPageId();
     }
 
     @Nullable @Override public TermuxAppSharedPreferences preferences() {

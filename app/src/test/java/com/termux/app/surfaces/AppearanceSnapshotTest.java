@@ -253,7 +253,7 @@ public class AppearanceSnapshotTest {
 
         assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
-        assertEquals(55, preferences.getStatusBarTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf.WORKSPACE));
+        assertEquals(55, preferences.getStatusBarTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT));
         assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
     }
