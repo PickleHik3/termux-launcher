@@ -14344,7 +14344,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean pressBlocked(float rawX, float rawY) {
+            // Edit pages covers the whole window: the bars' long-press is not under it.
             return mSurfaceEditor.isActive() || isAppDrawerOpen()
+                || (mPageOverview != null && mPageOverview.isOpen())
                 || (mAzTabLayer != null && mAzTabLayer.isOnTab(rawX, rawY));
         }
 

@@ -242,6 +242,8 @@ public final class PageOverviewView extends FrameLayout {
     /** Where the finger stood when the block's drag began. */
     private float blockDownX;
     @NonNull private final RectF gripRect = new RectF();
+    /** The grip's label, read once. */
+    @NonNull private final String gripText;
 
     /** The strip's scroll, in card places: the focused card is the nearest whole one. */
     private float focus;
@@ -351,6 +353,7 @@ public final class PageOverviewView extends FrameLayout {
         surfaceColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHigh, 0xFF2B2930);
         deleteIcon = icon(context, R.drawable.ic_symbol_close);
+        gripText = context.getString(R.string.page_overview_terminal_grip);
         homeIcon = icon(context, R.drawable.ic_symbol_home);
 
         outlinePaint.setStyle(Paint.Style.STROKE);
@@ -1191,7 +1194,7 @@ public final class PageOverviewView extends FrameLayout {
         gripRect.setEmpty();
         if (rowCount <= 0 || zoom <= 0f || blockStart >= cards.size()) return;
         cardRect(blockStart, scratch);
-        String text = getContext().getString(R.string.page_overview_terminal_grip);
+        String text = gripText;
         float size = labelPaint.getTextSize();
         labelPaint.setTextSize(dp(13));
         labelPaint.setTextAlign(Paint.Align.LEFT);
@@ -1653,21 +1656,30 @@ public final class PageOverviewView extends FrameLayout {
         dragCard = null;
         dragTarget = PageOverviewPolicy.NONE;
         if (dropIt && to != PageOverviewPolicy.NONE && to != blockStart) {
-            commitPending();
-            Map<Object, Float> places = new java.util.HashMap<>();
-            for (Card c : cards) places.put(c.key, c.place);
-            mutate(() -> host.moveTerminalPage(to));
-            reload();
-            for (Card c : cards) {
-                Float was = places.get(c.key);
-                if (was != null) c.place = was;
-            }
-            invalidate();
-            onSettled();
+            moveBlock(to);
             return;
         }
         invalidate();
         scrollTo(Math.round(focus), this::onSettled);
+    }
+
+    /**
+     * The Terminal page moves to page index {@code to} (the Home pages before it); every card
+     * eases on from where it is drawn.
+     */
+    private void moveBlock(int to) {
+        commitPending();
+        Map<Object, Float> places = new java.util.HashMap<>();
+        for (Card c : cards) places.put(c.key, c.place);
+        mutate(() -> host.moveTerminalPage(to));
+        reload();
+        for (Card c : cards) {
+            Float was = places.get(c.key);
+            if (was != null) c.place = was;
+        }
+        invalidate();
+        onSettled();
+        accessibility.invalidateRoot();
     }
 
     /** The fractional place whose offset along the strip is {@code offset}. */
@@ -1735,15 +1747,38 @@ public final class PageOverviewView extends FrameLayout {
 
     /** Each card's body, its remove button and its home button as virtual views. */
     private final class Touch extends ExploreByTouchHelper {
+        /** Virtual view ids per card: its body, remove and home buttons, and the block's grip. */
+        private static final int IDS = 4;
+
         Touch(@NonNull View host) {
             super(host);
+        }
+
+        /** The grip: its label, where it is drawn, and a move left or right for the block. */
+        private void populateGrip(@NonNull AccessibilityNodeInfoCompat node) {
+            Rect bounds = new Rect();
+            gripRect.round(bounds);
+            if (bounds.isEmpty()) bounds.set(0, 0, 1, 1);
+            node.setBoundsInParent(bounds);
+            node.setContentDescription(getContext().getString(
+                R.string.page_overview_terminal_grip_description));
+            if (blockStart > 0) {
+                node.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                    R.id.page_overview_action_move_terminal_left,
+                    getContext().getString(R.string.page_overview_move_terminal_left)));
+            }
+            if (blockStart < homeCount) {
+                node.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                    R.id.page_overview_action_move_terminal_right,
+                    getContext().getString(R.string.page_overview_move_terminal_right)));
+            }
         }
 
         @Override protected int getVirtualViewAt(float x, float y) {
             Part[] part = new Part[1];
             Card card = cardAt(x, y, part);
             if (card == null) return INVALID_ID;
-            return cards.indexOf(card) * 3 + part[0].ordinal();
+            return cards.indexOf(card) * IDS + part[0].ordinal();
         }
 
         @Override protected void getVisibleVirtualViews(List<Integer> ids) {
@@ -1751,22 +1786,27 @@ public final class PageOverviewView extends FrameLayout {
                 cardRect(i, rect);
                 if (rect.right < 0 || rect.left > getWidth()) continue;
                 Card card = cards.get(i);
-                ids.add(i * 3);
-                if (PageOverviewPolicy.canDelete(card.kind, homeCount)) ids.add(i * 3 + 1);
-                if (showsHomeButton(card)) ids.add(i * 3 + 2);
+                ids.add(i * IDS);
+                if (PageOverviewPolicy.canDelete(card.kind, homeCount)) ids.add(i * IDS + 1);
+                if (showsHomeButton(card)) ids.add(i * IDS + 2);
+                if (i == blockStart && rowCount > 0) ids.add(i * IDS + 3);
             }
         }
 
         @Override protected void onPopulateNodeForVirtualView(int id,
                 @NonNull AccessibilityNodeInfoCompat node) {
-            int index = id / 3;
+            int index = id / IDS;
             if (index < 0 || index >= cards.size()) {
                 node.setContentDescription("");
                 node.setBoundsInParent(new Rect());
                 return;
             }
             Card card = cards.get(index);
-            Part part = Part.values()[id % 3];
+            Part part = Part.values()[id % IDS];
+            if (part == Part.GRIP) {
+                populateGrip(node);
+                return;
+            }
             cardRect(index, rect);
             Rect bounds = new Rect();
             float r = Math.max(buttonRadius, dp(24));
@@ -1800,11 +1840,20 @@ public final class PageOverviewView extends FrameLayout {
 
         @Override protected boolean onPerformActionForVirtualView(int id, int action,
                 @Nullable Bundle arguments) {
-            if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
-            int index = id / 3;
+            int index = id / IDS;
             if (index < 0 || index >= cards.size() || !isOpen()) return false;
+            if (Part.values()[id % IDS] == Part.GRIP) {
+                // Move the Terminal page one page left or right.
+                int to = action == R.id.page_overview_action_move_terminal_left ? blockStart - 1
+                    : action == R.id.page_overview_action_move_terminal_right ? blockStart + 1
+                    : PageOverviewPolicy.NONE;
+                if (to < 0 || to > homeCount) return false;
+                moveBlock(to);
+                return true;
+            }
+            if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
             Card card = cards.get(index);
-            switch (Part.values()[id % 3]) {
+            switch (Part.values()[id % IDS]) {
                 case DELETE: onDelete(card); break;
                 case HOME: onMakeHome(card); break;
                 default: closeInto(index, false); break;
