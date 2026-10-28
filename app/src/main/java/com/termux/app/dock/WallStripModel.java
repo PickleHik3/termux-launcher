@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * for a new window, built from the same chips the Workspace's window bar shows.
  *
  * <p>The chips come in the window chips' order ({@link WindowChips}): the row's windows, the
- * display window's among them at its place, then the Home floats. An entry
+ * then the Home floats (the display is a page of its own, never a chip). An entry
  * keeps its chip's index, so a tap goes wherever a tap on that chip goes. The entry in front is
  * lit, a minimised float is marked, and a window asking for the user (its bell, or an agent
  * blocked on it, as the chip column reads it) carries the attention mark. Nothing running is no
@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
 public final class WallStripModel {
 
     /** What an entry stands for. */
-    public enum Kind { WINDOW, DISPLAY, HOME_FLOAT, NEW_WINDOW }
+    public enum Kind { WINDOW, HOME_FLOAT, NEW_WINDOW }
 
     /** One entry of the strip. */
     public static final class Entry {
@@ -127,16 +127,15 @@ public final class WallStripModel {
      * The strip for {@code chips}.
      *
      * @param selectedChip the chip in front, as the bar selects it; -1 for none
-     * @param rowCount the row's windows among the chips, the display window's included; the
-     *                 chips after them are the Home floats
-     * @param displayChip the display window's chip, or -1 when it is not on the row
+     * @param rowCount the row's windows among the chips; the chips after them are the Home
+     *                 floats
      * @param floatMinimised for each Home float in chip order, whether it is minimised; missing
      *                       entries read as not minimised
      * @param newWindowSpoken what a screen reader says for {@code +}
      */
     @NonNull
     public static List<Entry> build(@Nullable List<WindowItem> chips, int selectedChip,
-                                    int rowCount, int displayChip,
+                                    int rowCount,
                                     @Nullable boolean[] floatMinimised,
                                     @NonNull String newWindowSpoken) {
         if (chips == null || chips.isEmpty()) return Collections.emptyList();
@@ -146,7 +145,7 @@ public final class WallStripModel {
         List<String> labels = new ArrayList<>(chips.size());
         for (int i = 0; i < chips.size(); i++) {
             String label = chips.get(i).label;
-            kinds.add(i >= row ? Kind.HOME_FLOAT : i == displayChip ? Kind.DISPLAY : Kind.WINDOW);
+            kinds.add(i >= row ? Kind.HOME_FLOAT : Kind.WINDOW);
             glyphs.add(leadingGlyph(label));
             labels.add(plainText(label));
         }
@@ -185,7 +184,7 @@ public final class WallStripModel {
                 minimised[chip.index] = chip.minimised;
             }
         }
-        return build(items, chips.selected(surface), chips.rowCount(), -1, minimised,
+        return build(items, chips.selected(surface), chips.rowCount(), minimised,
             newWindowSpoken);
     }
 
@@ -217,7 +216,7 @@ public final class WallStripModel {
     public static List<Entry> rowEntries(@NonNull List<Entry> entries) {
         List<Entry> row = new ArrayList<>(entries.size());
         for (Entry entry : entries) {
-            if (entry.kind == Kind.WINDOW || entry.kind == Kind.DISPLAY) row.add(entry);
+            if (entry.kind == Kind.WINDOW) row.add(entry);
         }
         return row;
     }
