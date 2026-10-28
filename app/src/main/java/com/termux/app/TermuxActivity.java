@@ -681,6 +681,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * display holds the window from then on — and when the row leaves the window before it does.
      */
     private boolean mDisplayRequested;
+    /** The Display page the drawer routed a Linux app to, and when (A3c); -1 for none. */
+    private int mRoutedLinuxPage = -1;
+    private long mRoutedLinuxAtMs;
+    /** True while a landing runs its bound app: the runner's show-display step must not slide. */
+    private boolean mLandingRunsApp;
     /**
      * Where the display window stands in its session's row and whether it is the window in front
      * (ADR 0008, amended 2026-10-19). The display is a window of the Workspace, kept beside the
@@ -26904,10 +26909,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * session's row held it, and the wall brought to the Workspace.
      */
     private void bringDisplayWindowInFront(boolean animateWall) {
+        bringDisplayWindowInFront(animateWall, -1);
+    }
+
+    /** {@code pageId}: the Display page to show it on (A3c, a routed Linux app); -1 the bound one. */
+    private void bringDisplayWindowInFront(boolean animateWall, int pageId) {
         if (mPaneWallController == null || !isDisplayUp()) return;
         mPaneWallController.refreshPages();
         // The wall goes to the bound Display page (A3b); a wall with none has nowhere to show it.
-        if (!mPaneWallController.goToDisplayPage(-1, animateWall)) {
+        if (!mPaneWallController.goToDisplayPage(pageId, animateWall)) {
             Logger.logWarn(LOG_TAG, "No Display page on the wall to show the display on");
         }
         onWallPlacesChanged();
@@ -26938,14 +26948,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The wall came to rest on Display page {@code pageId}: the display starts there when it is
      * neither running nor on its way ({@link com.termux.app.wall.DisplayPagePolicy#startsOnLanding}).
-     * Raising or maximising the page's bound app is wave c's (A3c).
+     * A page bound to a Linux app also brings its app up ({@link
+     * com.termux.app.wall.DisplayPagePolicy#landing}): its window raised, or the app run.
      */
     private void onDisplayPageLandedAt(int pageId) {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
-        if (!com.termux.app.wall.DisplayPagePolicy.startsOnLanding(
-                com.termux.app.wall.WallPages.PageKind.DISPLAY, isEmbeddedDisplayRunning(),
-                mDisplayRequested)) {
-            return;
+        com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
+        String binding = page == null ? null : page.binding;
+        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = null;
+        if (binding != null) {
+            app = com.termux.app.x11.LinuxAppCatalog.find(
+                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots()),
+                binding);
+            if (app == null) {
+                Logger.logWarn(LOG_TAG, "Display page " + pageId + " is bound to " + binding
+                    + ", which is gone; showing nothing new");
+            }
+        }
+        boolean running = isEmbeddedDisplayRunning();
+        boolean routed = com.termux.app.wall.DisplayPagePolicy.isRoutedLanding(pageId,
+            mRoutedLinuxPage, mRoutedLinuxAtMs, android.os.SystemClock.uptimeMillis());
+        // The drawer's route is answered by one landing; the next landing is the user's own.
+        if (routed) mRoutedLinuxPage = -1;
+        com.termux.app.wall.DisplayPagePolicy.Landing landing =
+            com.termux.app.wall.DisplayPagePolicy.landing(binding, app != null, running,
+                mDisplayRequested, app != null && !app.session && running
+                    && linuxWindowIdFor(app) >= 0,
+                routed);
+        switch (landing) {
+            case NOTHING:
+                return;
+            case RAISE_APP:
+                if (mLinuxAppsHost != null) mLinuxAppsHost.raiseWindowFor(app);
+                return;
+            case RUN_APP:
+                if (mLinuxApps == null) return;
+                attachEmbeddedDisplay();
+                if (mPaneWallController.displayWindow() == null) return;
+                mDisplayRequested = true;
+                // The wall is already here: the runner's own "show the display" must not slide it.
+                mLandingRunsApp = true;
+                try {
+                    mLinuxApps.run(app);
+                } finally {
+                    mLandingRunsApp = false;
+                }
+                syncDisplayOnRow();
+                return;
+            default:
+                break;
         }
         attachEmbeddedDisplay();
         if (mPaneWallController.displayWindow() == null) return;
@@ -27059,6 +27110,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * install them instead. A display window already in another session's row moves to this one.
      */
     private void openDisplayWindow(boolean start) {
+        openDisplayWindow(start, -1);
+    }
+
+    /** {@code pageId}: the Display page to show the display on (A3c); -1 the bound one. */
+    private void openDisplayWindow(boolean start, int pageId) {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
         attachEmbeddedDisplay();
         if (mPaneWallController.displayWindow() == null) return;
@@ -27073,7 +27129,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // a wall transition nobody can see would just spend real frames on an invisible window
         // (the same reasoning as TerminalWindowBar's animateSelectionSlide); animate only when
         // visible, otherwise land on the window directly so it is simply where the user finds it.
-        bringDisplayWindowInFront(isVisible());
+        bringDisplayWindowInFront(isVisible(), pageId);
         if (isDisplayUp() != mDisplayUpOnRow) {
             mDisplayUpOnRow = isDisplayUp();
             onWallPlacesChanged();
@@ -28409,13 +28465,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return true;
                 }
                 @Override public void showDisplayWindow() {
-                    // The runner starts the display itself, with the app queued behind it.
-                    openDisplayWindow(false);
+                    // The runner starts the display itself, with the app queued behind it. The
+                    // page a drawer tap was routed to is shown; a landing that runs its page's
+                    // app is already there (A3c).
+                    if (mLandingRunsApp) return;
+                    boolean routed = android.os.SystemClock.uptimeMillis() - mRoutedLinuxAtMs
+                        <= com.termux.app.wall.DisplayPagePolicy.ROUTED_LANDING_MS;
+                    openDisplayWindow(false, routed ? mRoutedLinuxPage : -1);
                 }
                 @Override public boolean raiseWindowFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
                     if (mX11Windows == null) return false;
-                    int id = com.termux.app.x11.DisplayWindowMatch.windowFor(
-                        mDisplayWindows, app.startupWmClass, app.exec, app.id);
+                    int id = linuxWindowIdFor(app);
                     if (id < 0) return false;
                     mX11Windows.activate(id);
                     return true;
@@ -28444,6 +28504,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 refreshLinuxApps(true);
                 return false;
             }
+            // A3c: the app opens on its Display page: the one bound to it, else the first unbound
+            // one, else a new unbound page after the current one. The runner's show-display step
+            // shows that page; the landing there leaves the app to the runner.
+            com.termux.app.wall.WallPages.Route route =
+                wallPages().routeLinuxApp(app.id, mPaneWallController == null ? -1
+                    : mPaneWallController.currentPageId());
+            int routedPage = route.pageId;
+            if (route.needsNewPage()) {
+                com.termux.app.wall.WallPages.Result added =
+                    wallPagesStore().edit(route::addTo);
+                routedPage = added.ok() && added.page != null ? added.page.id : -1;
+            }
+            mRoutedLinuxPage = routedPage;
+            mRoutedLinuxAtMs = android.os.SystemClock.uptimeMillis();
             mLinuxApps.run(app);
             return true;
         };
@@ -28526,6 +28600,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (reusable) return app;
         }
         return resolveLinuxApp(entry.appRef);
+    }
+
+    /** The display window of {@code app} on the running display, or -1. */
+    private int linuxWindowIdFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+        return com.termux.app.x11.DisplayWindowMatch.windowFor(
+            mDisplayWindows, app.startupWmClass, app.exec, app.id);
     }
 
     @Nullable
