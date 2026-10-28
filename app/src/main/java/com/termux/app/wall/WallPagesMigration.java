@@ -50,7 +50,8 @@ public final class WallPagesMigration {
      * Seeds {@code store} from {@code prefs} when this install has not been through it, or when
      * the store holds no pages. A stored value this build cannot read (bad JSON, a newer
      * version) is not seeded over: it is copied under {@link #KEY_UNREADABLE_BACKUP}, logged, and
-     * left as it was, so the build that wrote it finds its pages again. Otherwise a no-op.
+     * left as it was, so the build that wrote it finds its pages again; this run wears the seed
+     * in memory only ({@link WallPagesStore#useForThisRun}). Otherwise a no-op.
      *
      * @param homeCount the widget repository's Home page count, read only when seeding
      * @return whether it seeded
@@ -67,6 +68,11 @@ public final class WallPagesMigration {
             com.termux.shared.logger.Logger.logWarn(LOG_TAG, "The wall's stored pages cannot be"
                 + " read by this build (" + unreadable.length() + " chars); not seeding over"
                 + " them, a copy is kept under " + KEY_UNREADABLE_BACKUP);
+            // This run still needs a wall: the seed an upgrade would make, in memory only.
+            store.useForThisRun(seed(prefs.getString(TERMUX_APP.KEY_LAUNCHER_START_IN, null),
+                prefs.getInt(KEY_DEFAULT_PAGE, 0), prefs.getString(TERMUX_APP.KEY_USE_AS, null),
+                homeCount.get(), prefs.getBoolean(TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART,
+                    TERMUX_APP.DEFAULT_X11_DISPLAY_AUTOSTART)));
             return false;
         }
         if (gated && !empty) {

@@ -92,6 +92,7 @@ public final class WallPagesStore {
     private WallPages current;
     private final boolean seeded;
     private String lastJson;
+    private boolean memoryOnly;
 
     /** Reads the stored value; an absent or unreadable one leaves {@link WallPages#EMPTY}. */
     public WallPagesStore(@NonNull Storage storage) {
@@ -110,6 +111,7 @@ public final class WallPagesStore {
     }
 
     private void reloadIfChanged() {
+        if (memoryOnly) return;
         String json = storage.read();
         if (json == null || json.equals(lastJson)) return;
         WallPages loaded = fromJson(json);
@@ -143,9 +145,22 @@ public final class WallPagesStore {
     public void replace(@NonNull WallPages pages) {
         current = pages;
         lastJson = toJson(pages);
-        storage.write(lastJson);
+        // Over an unreadable stored value the run's pages live in memory only (W7).
+        if (!memoryOnly) storage.write(lastJson);
         for (Listener l : listeners) l.onChanged(pages);
     }
+
+    /**
+     * Gives this run {@code pages} without saving them, now or on any later change: the stored
+     * value this build cannot read stays as it was for the build that wrote it (W7).
+     */
+    public void useForThisRun(@NonNull WallPages pages) {
+        memoryOnly = true;
+        replace(pages);
+    }
+
+    /** Whether this run's pages are kept in memory only ({@link #useForThisRun}). */
+    public boolean isMemoryOnly() { return memoryOnly; }
 
     /**
      * Runs {@code edit} on the current value. An accepted change is saved and announced; a

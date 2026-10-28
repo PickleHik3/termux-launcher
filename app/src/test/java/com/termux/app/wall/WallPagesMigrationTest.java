@@ -264,9 +264,19 @@ public class WallPagesMigrationTest {
             assertEquals(raw, store.unreadable());
             assertFalse(WallPagesMigration.migrateIfNeeded(prefs, 3, store));
             assertEquals("the stored value is left as it was", raw, storage.read());
-            assertTrue(store.current().allPages().isEmpty());
             assertEquals("and a copy is kept", raw,
                 prefs.getString(WallPagesMigration.KEY_UNREADABLE_BACKUP, null));
+            // The run still has a wall: the seed an empty store gets, in memory only.
+            WallPagesStore seededStore = new WallPagesStore(new WallPagesStore.MemoryStorage());
+            WallPagesMigration.migrateIfNeeded(prefs, 3, seededStore);
+            assertFalse("this run is not left without pages", store.current().allPages().isEmpty());
+            assertEquals(seededStore.current(), store.current());
+            assertTrue(store.isMemoryOnly());
+            // A change in this run is not saved over the stored value either.
+            store.replace(store.current().separateDisplays());
+            store.edit(pages -> pages.rename(pages.allPages().get(0).id, "renamed"));
+            assertEquals("later changes keep the stored value too", raw, storage.read());
+            prefs.edit().clear().commit();
         }
         // Nothing stored: seeded as before, and nothing is unreadable.
         prefs.edit().clear().commit();
