@@ -50,10 +50,13 @@ public class ResolvedArrangementTest {
      * identical (editor-redesign §1).
      */
     private PlaceLayoutStore dressed(LayoutStyle style, DockStyle design) {
-        PlaceLayoutStore store = KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
+        // The Home page holds a page layout of its own (ADR 0015 §3), where the Home layout
+        // stood before version 16.
+        PlaceLayoutStore store = KindFixtures.withHomePageLayout(
+            KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher)));
         launcher.setLayoutStyle(style);
         store.forVariant(LayoutVariant.NORMAL).setDockStyle(design);
-        store.forVariant(LayoutVariant.HOME).setDockStyle(design);
+        store.forVariant(KindFixtures.HOME_PAGE).setDockStyle(design);
         return store;
     }
 
@@ -71,7 +74,7 @@ public class ResolvedArrangementTest {
 
                         assertEquals(cell, home, a.home());
                         assertEquals(cell, orientation, a.orientation());
-                        LayoutVariant variant = home ? LayoutVariant.HOME : LayoutVariant.NORMAL;
+                        LayoutVariant variant = home ? KindFixtures.HOME_PAGE : LayoutVariant.NORMAL;
                         assertEquals(cell, variant, a.variant());
                         assertEquals(cell, style, a.layoutStyle());
                         assertEquals(cell, style == LayoutStyle.FLOATING, a.floating());
@@ -118,13 +121,12 @@ public class ResolvedArrangementTest {
     @Test
     public void aHomeLayoutGivesHomeItsOwnDesignAndLeavesTheWorkspacesAlone() {
         PlaceLayoutStore store = dressed(LayoutStyle.DOCKED, DockStyle.GLASS_TRAY);
-        store.setHomeLayout(true);
-        store.forVariant(LayoutVariant.HOME).setDockStyle(DockStyle.LENS_BEADS);
+        store.forVariant(KindFixtures.HOME_PAGE).setDockStyle(DockStyle.LENS_BEADS);
         ResolvedArrangement home =
             ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, true);
         ResolvedArrangement workspace =
             ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, false);
-        assertEquals(LayoutVariant.HOME, home.variant());
+        assertEquals(KindFixtures.HOME_PAGE, home.variant());
         assertEquals(DockStyle.LENS_BEADS, home.design());
         assertFalse(home.frameRunsToBottom());
         assertFalse("the Home layout has no extra keys", home.extraKeysShown());
