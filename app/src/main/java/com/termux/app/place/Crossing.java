@@ -375,10 +375,10 @@ public final class Crossing {
     /**
      * The end {@code page} names while a crossing runs: the end that is that page or whose
      * arrangement is resolved for it, else the end of its kind (Home's end for any Home page, the
-     * window's for any window, as the one end of each kind a crossing between Home and a window
-     * holds). Between two pages of one kind (two Home pages), a page of that kind with no id said
-     * names the committed end: the reader asking by kind alone is asking what the chrome stands
-     * in. Null while none runs.
+     * Terminal's for the Terminal page); a page of a kind neither end has is no end, and the
+     * store answers it (a Home ↔ Home crossing holds no Workspace half). Between two pages of
+     * one kind (two Home pages), a page of that kind with no id said names the committed end:
+     * the reader asking by kind alone is asking what the chrome stands in. Null while none runs.
      */
     @Nullable
     private SeamCrossing.Endpoint heldEnd(@NonNull PageRef page) {
@@ -389,7 +389,9 @@ public final class Crossing {
             return here;
         if (standsFor(here, page)) return here;
         if (standsFor(there, page)) return there;
-        return here.page.isHome() == page.isHome() ? here : there;
+        if (here.page.kind == page.kind) return here;
+        if (there.page.kind == page.kind) return there;
+        return null;
     }
 
     private static boolean standsFor(@NonNull SeamCrossing.Endpoint end, @NonNull PageRef page) {

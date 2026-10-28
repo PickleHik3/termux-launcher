@@ -1551,7 +1551,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             com.termux.app.wall.WallPages.PageKind kind = layout.pageLayoutKind();
             String kindLabel = mHost.context().getString(
                 kind == com.termux.app.wall.WallPages.PageKind.HOME
-                    ? R.string.editor_elements_kind_home : R.string.editor_elements_kind_terminal);
+                    ? R.string.editor_elements_kind_home
+                    : kind == com.termux.app.wall.WallPages.PageKind.DISPLAY
+                        ? R.string.editor_elements_kind_display
+                        : R.string.editor_elements_kind_terminal);
             String page = layout.pageLayoutPageName();
             return page == null ? null : new CharSequence[] {kindLabel, page};
         }

@@ -15834,6 +15834,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mShownTerminalPageId;
             }
 
+            @Override public int displayPage() {
+                return mPaneWallController != null ? mPaneWallController.boundDisplayPage() : -1;
+            }
+
             @NonNull @Override public java.util.List<Integer> homePageIds() {
                 refreshShownPageIds();
                 return mShownHomePageIds;
@@ -24252,6 +24256,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * applied. Nothing while none runs.
      */
     private void landHomePagesCrossing() {
+        mHomeCrossLandingQueued = false;
         if (!homePagesCrossing()) return;
         int committedId = mHomeCrossHereId;
         int landedId = homePageInFront();
@@ -32918,7 +32923,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 rowShown ? rowWindows()
                     : java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>
                         emptyList(),
-                rowShown ? -1 : -1,
                 rowShown ? rowCurrentIndex() : 0);
         if (mPaneController == null) return chips;
         com.termux.app.terminal.TerminalPaneController.Window focused =

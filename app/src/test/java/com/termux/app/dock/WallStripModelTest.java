@@ -253,24 +253,22 @@ public class WallStripModelTest {
 
     @Test
     public void fromTheWindowChips_kindsSelectionAndMinimisedFloatsFollowTheChips() {
-        // a D b, then floats f (minimised) and g (in focus), as Home's dock sees them.
-        WindowChips<String> chips = new WindowChips<>(true, true, Arrays.asList("a", "b"), 1, 0)
+        // a b, then floats f (minimised) and g (in focus), as Home's dock sees them.
+        WindowChips<String> chips = new WindowChips<>(true, true, Arrays.asList("a", "b"), 0)
             .addFloat("f", true, false)
             .addFloat("g", false, true);
-        List<WindowItem> items = Arrays.asList(chip("a"), chip("Display"), chip("b"),
-            chip("f"), chip("g"));
+        List<WindowItem> items = Arrays.asList(chip("a"), chip("b"), chip("f"), chip("g"));
         List<WallStripModel.Entry> entries =
             WallStripModel.of(chips, WindowChips.Surface.WALL_STRIP, items, "New window");
-        assertEquals(6, entries.size());
+        assertEquals(5, entries.size());
         assertEquals(WallStripModel.Kind.WINDOW, entries.get(0).kind);
-        assertEquals(WallStripModel.Kind.DISPLAY, entries.get(1).kind);
-        assertEquals(WallStripModel.Kind.WINDOW, entries.get(2).kind);
-        assertEquals(WallStripModel.Kind.HOME_FLOAT, entries.get(3).kind);
-        assertTrue(entries.get(3).minimised);
-        assertFalse(entries.get(4).minimised);
-        assertTrue("the float in focus is lit", entries.get(4).current);
+        assertEquals(WallStripModel.Kind.WINDOW, entries.get(1).kind);
+        assertEquals(WallStripModel.Kind.HOME_FLOAT, entries.get(2).kind);
+        assertTrue(entries.get(2).minimised);
+        assertFalse(entries.get(3).minimised);
+        assertTrue("the float in focus is lit", entries.get(3).current);
         assertFalse(entries.get(0).current);
-        assertEquals(WallStripModel.Kind.NEW_WINDOW, entries.get(5).kind);
+        assertEquals(WallStripModel.Kind.NEW_WINDOW, entries.get(4).kind);
         assertEquals(entries,
             WallStripModel.of(chips, WindowChips.Surface.WALL_STRIP, items, "New window"));
     }

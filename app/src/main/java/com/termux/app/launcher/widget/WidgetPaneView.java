@@ -871,7 +871,7 @@ public final class WidgetPaneView extends FrameLayout {
                     pagingDragging = true;
                     // The move that claims the stream is not delivered to onTouchEvent: the
                     // page follows the finger from this move, not the next one.
-                    setContentTranslationX(resistedDrag(event.getX() - pagingDownX));
+                    dragContentTo(resistedDrag(event.getX() - pagingDownX));
                     return true;
                 }
                 break;
@@ -991,7 +991,7 @@ public final class WidgetPaneView extends FrameLayout {
         if (pagingVelocity != null) pagingVelocity.addMovement(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
-                setContentTranslationX(resistedDrag(event.getX() - pagingDownX));
+                dragContentTo(resistedDrag(event.getX() - pagingDownX));
                 return true;
             case MotionEvent.ACTION_UP:
                 finishPageDrag(event.getX() - pagingDownX);
@@ -1173,6 +1173,18 @@ public final class WidgetPaneView extends FrameLayout {
 
     private void setContentTranslationX(float value) {
         cancelContentSettle();
+        moveContent(value);
+    }
+
+    /**
+     * The finger moves the content: a settle under way is cut short, but what waits for it
+     * ({@link #runWhenContentSettles}) keeps waiting for the settle this drag ends in, so a Home
+     * crossing's landing never runs with the finger down (C7).
+     */
+    private void dragContentTo(float value) {
+        ValueAnimator settle = contentSettle;
+        contentSettle = null;
+        if (settle != null) settle.cancel();
         moveContent(value);
     }
 

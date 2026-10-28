@@ -24,7 +24,7 @@ import java.util.List;
 public final class WindowChips<W> {
 
     /** What a chip stands for. */
-    public enum Kind { WINDOW, DISPLAY, HOME_FLOAT }
+    public enum Kind { WINDOW, HOME_FLOAT }
 
     /** A surface that shows the chips, each counting its own index. */
     public enum Surface {
@@ -113,7 +113,6 @@ public final class WindowChips<W> {
     private final boolean mHome;
     private final boolean mRowShown;
     private final int mRowCount;
-    private final int mDisplayChip;
     private final int mRowCurrent;
     private final List<Chip<W>> mChips;
     private int mFloats;
@@ -121,35 +120,26 @@ public final class WindowChips<W> {
     private int mFocusedChip = -1;
 
     /**
-     * The chips of the row {@code rowWindows} (the terminal windows, in order) with the display
-     * window at row place {@code displaySlot} (-1 when it is not on the row: always, since ADR 0015 A3b moved the display to its own pages)
-     * and row place {@code rowCurrent} in front, seen from Home when {@code home}. Without
-     * {@code rowShown} (no session is current and the display window is not on the row) there is
-     * no row, and only the floats are chips. Floats follow with {@link #addFloat}.
+     * The chips of the row {@code rowWindows} (the terminal windows, in order) with row place
+     * {@code rowCurrent} in front, seen from Home when {@code home}. The display is never a chip:
+     * since ADR 0015 A3b it stands on Display pages of its own. Without {@code rowShown} (no
+     * session is current) there is no row, and only the floats are chips. Floats follow with
+     * {@link #addFloat}.
      */
     public WindowChips(boolean home, boolean rowShown, @NonNull List<W> rowWindows,
-                       int displaySlot, int rowCurrent) {
+                       int rowCurrent) {
         mHome = home;
         mRowShown = rowShown;
         mRowCurrent = rowCurrent;
         mChips = new ArrayList<>(rowWindows.size() + 2);
         if (!rowShown) {
             mRowCount = 0;
-            mDisplayChip = -1;
             return;
         }
         int windows = rowWindows.size();
-        mRowCount = windows + (displaySlot >= 0 ? 1 : 0);
-        mDisplayChip = displaySlot >= 0 ? displaySlot : -1;
-        for (int i = 0; i < windows; i++) {
-            if (i == displaySlot) addDisplay();
+        mRowCount = windows;
+        for (int i = 0; i < windows; i++)
             mChips.add(new Chip<>(Kind.WINDOW, rowWindows.get(i), i, mChips.size(), false));
-        }
-        if (displaySlot == windows) addDisplay();
-    }
-
-    private void addDisplay() {
-        mChips.add(new Chip<>(Kind.DISPLAY, null, -1, mChips.size(), false));
     }
 
     /**
@@ -172,7 +162,7 @@ public final class WindowChips<W> {
         return Collections.unmodifiableList(mChips);
     }
 
-    /** How many chips are the row's windows, the display window's included; the floats follow. */
+    /** How many chips are the row's windows; the floats follow. */
     public int rowCount() {
         return mRowCount;
     }
@@ -187,11 +177,6 @@ public final class WindowChips<W> {
             if (chip.kind == Kind.HOME_FLOAT && window.equals(chip.window)) return i;
         }
         return -1;
-    }
-
-    /** The display window's chip, or -1 while it is not on the row. */
-    public int displayChip() {
-        return mDisplayChip;
     }
 
     /**

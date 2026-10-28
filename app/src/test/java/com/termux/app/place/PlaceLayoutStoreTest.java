@@ -69,6 +69,24 @@ public class PlaceLayoutStoreTest {
         return store;
     }
 
+    /** A Display page is its own page to the store: the bound one, never the Terminal (C2). */
+    @Test
+    public void theDisplayPageShownIsTheBoundDisplayPageNotTheTerminal() {
+        PlaceLayoutStore store = store();
+        assertEquals("no Display page said", -1, store.shownPageId(PaneWallPage.DISPLAY));
+        store.setShownPages(new PlaceLayoutStore.ShownPages() {
+            @Override public int homePageInFront() { return HOME_ID; }
+            @Override public int terminalPage() { return 1; }
+            @Override public int displayPage() { return 5; }
+            @androidx.annotation.NonNull @Override public java.util.List<Integer> homePageIds() {
+                return Arrays.asList(HOME_ID);
+            }
+        });
+        assertEquals(5, store.shownPageId(PaneWallPage.DISPLAY));
+        assertEquals(1, store.shownPageId(PaneWallPage.TERMINAL));
+        assertEquals(HOME_ID, store.shownPageId(PaneWallPage.WIDGETS));
+    }
+
     // ------------------------------------------------------------------ the dictation pill
 
     @Test

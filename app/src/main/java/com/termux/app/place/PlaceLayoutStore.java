@@ -563,6 +563,9 @@ public final class PlaceLayoutStore {
         /** The id of the Terminal page, or -1 while there is none. */
         int terminalPage();
 
+        /** The id of the Display page the display is bound to, or -1 while there is none. */
+        default int displayPage() { return -1; }
+
         /** The ids of every Home page, in order; empty while the wall has none yet. */
         @NonNull
         java.util.List<Integer> homePageIds();
@@ -593,12 +596,15 @@ public final class PlaceLayoutStore {
 
     /**
      * The id of the page {@code page} stands for on screen: the Home page in front for {@link
-     * PaneWallPage#WIDGETS}, the Terminal page for a window; -1 where the launcher has not said.
+     * PaneWallPage#WIDGETS}, the bound Display page for {@link PaneWallPage#DISPLAY}, the
+     * Terminal page for a terminal window; -1 where the launcher has not said.
      */
     public int shownPageId(@NonNull PaneWallPage page) {
         ShownPages pages = mShownPages.get();
         if (pages == null) return -1;
-        return page == PaneWallPage.WIDGETS ? pages.homePageInFront() : pages.terminalPage();
+        if (page == PaneWallPage.WIDGETS) return pages.homePageInFront();
+        if (page == PaneWallPage.DISPLAY) return pages.displayPage();
+        return pages.terminalPage();
     }
 
     /** {@code place.page_layout.<id>}: whether page {@code id} holds a page layout of its own. */
