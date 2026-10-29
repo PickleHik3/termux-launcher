@@ -69,6 +69,18 @@ final class AiModelDownloads {
         };
     }
 
+    private static final String KEY_SELECTED = "setup_ai_selected";
+
+    /** The model ids the user chose to download on the AI card; empty until then. */
+    @NonNull
+    static Set<String> selected(@NonNull Context context) {
+        return new HashSet<>(prefs(context).getStringSet(KEY_SELECTED, new HashSet<>()));
+    }
+
+    static void saveSelected(@NonNull Context context, @NonNull List<String> modelIds) {
+        prefs(context).edit().putStringSet(KEY_SELECTED, new HashSet<>(modelIds)).apply();
+    }
+
     /** The catalogue ids already installed on the phone. */
     @NonNull
     static Set<String> installedIds(@NonNull Context context) {

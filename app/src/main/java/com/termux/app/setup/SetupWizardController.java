@@ -466,7 +466,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         if (prefs == null)
             return false;
         return SetupCards.isDue(prefs.getSetupWizardVersion() >= SetupWizardGate.CURRENT,
-            SetupCardSystem.cards(mHost.context()));
+            SetupCardSystem.cards(mHost.context()),
+            !AiModelDownloads.selected(mHost.context()).isEmpty());
     }
 
     /** Opens the card sheet when it is due; true when it is up. */

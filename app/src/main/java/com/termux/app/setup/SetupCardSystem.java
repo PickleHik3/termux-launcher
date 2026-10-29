@@ -80,6 +80,9 @@ public final class SetupCardSystem {
             done.add(SetupCards.PINNED);
         if (isDefaultHome(context))
             done.add(SetupCards.HOME);
+        Set<String> selected = AiModelDownloads.selected(context);
+        if (!selected.isEmpty() && AiModelDownloads.installedIds(context).containsAll(selected))
+            done.add(SetupCards.AI);
         return done;
     }
 

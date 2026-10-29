@@ -2,6 +2,9 @@ package com.termux.app.setup;
 
 import android.content.Context;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,6 +23,8 @@ import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiTierPolicy;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -44,6 +49,20 @@ final class AiCardPage implements SetupCardPage {
     @Nullable private List<String> mQueued;
     private boolean mFinished;
     @Nullable private TaiDownloadHub.Listener mListener;
+
+    private static final long UPDATE_INTERVAL_MS = 250L;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
+    private final Map<String, ProgressBar> mBars = new HashMap<>();
+    private final Map<String, TextView> mOfs = new HashMap<>();
+    private final Map<String, List<String>> mRowMissing = new HashMap<>();
+    @Nullable private TextView mFooterView;
+    private Set<String> mRenderedInstalled = new LinkedHashSet<>();
+    private long mLastUpdateMs;
+    private boolean mUpdatePending;
+    private final Runnable mUpdate = () -> {
+        mUpdatePending = false;
+        updateProgress();
+    };
 
     @NonNull
     @Override
@@ -72,6 +91,8 @@ final class AiCardPage implements SetupCardPage {
     }
 
     private void detach() {
+        mHandler.removeCallbacks(mUpdate);
+        mUpdatePending = false;
         if (mListener != null && mContext != null) {
             TaiDownloadHub.get(mContext).removeListener(mListener);
         }
@@ -92,10 +113,45 @@ final class AiCardPage implements SetupCardPage {
         if (progress.allInstalled) {
             mFinished = true;
             detach();
+            mHost.completeStep(SetupCards.AI, 1);
             mHost.completeCard(SetupCards.AI);
             return;
         }
-        render();
+        if (!AiModelDownloads.installedIds(mContext).equals(mRenderedInstalled)) {
+            mHandler.removeCallbacks(mUpdate);
+            mUpdatePending = false;
+            render();
+            return;
+        }
+        long wait = mLastUpdateMs + UPDATE_INTERVAL_MS - SystemClock.uptimeMillis();
+        if (wait <= 0L) {
+            updateProgress();
+        } else if (!mUpdatePending) {
+            mUpdatePending = true;
+            mHandler.postDelayed(mUpdate, wait);
+        }
+    }
+
+    /** Moves the bars, the "x of y MB" texts and the footer in place; no view is rebuilt. */
+    private void updateProgress() {
+        if (mQueued == null || mFinished) return;
+        mLastUpdateMs = SystemClock.uptimeMillis();
+        List<TaiDownloadHub.Snapshot> snapshots = TaiDownloadHub.get(mContext).snapshot();
+        Set<String> installed = AiModelDownloads.installedIds(mContext);
+        for (Map.Entry<String, ProgressBar> e : mBars.entrySet()) {
+            AiModelDownloads.Progress p = AiModelDownloads.progress(snapshots,
+                mRowMissing.get(e.getKey()), installed, mSizes);
+            e.getValue().setProgress(Math.round(p.fraction() * 1000f));
+            TextView of = mOfs.get(e.getKey());
+            if (of != null) of.setText(mContext.getString(R.string.setup_ai_row_progress,
+                AiModelRows.formatSize(p.doneBytes), AiModelRows.formatSize(p.totalBytes)));
+        }
+        if (mFooterView != null) {
+            AiModelDownloads.Progress p =
+                AiModelDownloads.progress(snapshots, mQueued, installed, mSizes);
+            mFooterView.setText(mContext.getString(R.string.setup_ai_footer_progress,
+                AiModelRows.formatSize(p.doneBytes), AiModelRows.formatSize(p.totalBytes)));
+        }
     }
 
     // ------------------------------------------------------------------------------------ views
@@ -103,6 +159,11 @@ final class AiCardPage implements SetupCardPage {
     private void render() {
         Context context = mContext;
         mRoot.removeAllViews();
+        mBars.clear();
+        mOfs.clear();
+        mRowMissing.clear();
+        mFooterView = null;
+        mLastUpdateMs = SystemClock.uptimeMillis();
         TextView title = SetupUi.text(context, 22f, true, SetupUi.onSurface(mRoot));
         title.setText(R.string.tai_welcome_title);
         mRoot.addView(title, SetupUi.matchWrap(0));
@@ -135,6 +196,8 @@ final class AiCardPage implements SetupCardPage {
         TextView footer = SetupUi.text(context, 13.5f, false, SetupUi.onSurfaceVariant(mRoot));
         AiModelRows.Footer foot = AiModelRows.footer(mRows, mTicked, free);
         if (downloading) {
+            mFooterView = footer;
+            mRenderedInstalled = installed;
             AiModelDownloads.Progress p =
                 AiModelDownloads.progress(snapshots, mQueued, installed, mSizes);
             footer.setText(context.getString(R.string.setup_ai_footer_progress,
@@ -186,6 +249,7 @@ final class AiCardPage implements SetupCardPage {
         if (start == AiModelDownloads.Start.NOTHING) return;
         mNeedWifiNote = false;
         mQueued = order;
+        AiModelDownloads.saveSelected(mContext, order);
         mHost.completeStep(SetupCards.AI, 0);
         attach();
         render();
@@ -257,9 +321,12 @@ final class AiCardPage implements SetupCardPage {
                 LinearLayout.LayoutParams bp = SetupUi.matchWrap(SetupUi.dp(context, 6));
                 bp.height = SetupUi.dp(context, 4);
                 words.addView(bar, bp);
+                mBars.put(row.id, bar);
+                mRowMissing.put(row.id, row.missingIds);
                 TextView of = SetupUi.text(context, 12f, false, SetupUi.onSurfaceVariant(mRoot));
                 of.setText(context.getString(R.string.setup_ai_row_progress,
                     AiModelRows.formatSize(p.doneBytes), AiModelRows.formatSize(p.totalBytes)));
+                mOfs.put(row.id, of);
                 words.addView(of, SetupUi.matchWrap(SetupUi.dp(context, 2)));
             }
         }

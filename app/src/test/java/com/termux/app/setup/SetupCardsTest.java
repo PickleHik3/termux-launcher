@@ -115,4 +115,22 @@ public class SetupCardsTest {
         assertTrue(SetupCards.openCount(cards) > 0);
         assertFalse(SetupCards.isDue(true, cards));
     }
+
+    @Test
+    public void aiCardIsDoneFromSystemAndDueOnlyOnceSelected() {
+        SetupCards.Facts facts = new SetupCards.Facts(false, true, false);
+        SetupCards.Stored stored = new SetupCards.Stored();
+        for (String id : new String[] {SetupCards.SHIZUKU, SetupCards.ACCESSIBILITY,
+            SetupCards.NOTIFICATIONS, SetupCards.NOTIFICATION_ACCESS, SetupCards.PINNED})
+            stored.setDismissed(id, true);
+        List<SetupCards.Card> untouched = SetupCards.build(facts, stored,
+            java.util.Collections.emptySet());
+        assertFalse(SetupCards.isDue(true, untouched, false));
+        assertTrue(SetupCards.isDue(true, untouched, true));
+        List<SetupCards.Card> landed = SetupCards.build(facts, stored,
+            java.util.Collections.singleton(SetupCards.AI));
+        for (SetupCards.Card card : landed)
+            if (SetupCards.AI.equals(card.id)) assertEquals(SetupCards.State.DONE, card.state);
+        assertFalse(SetupCards.isDue(true, landed, true));
+    }
 }
