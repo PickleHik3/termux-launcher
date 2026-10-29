@@ -21,15 +21,27 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-29 · the three Edit pages fixes after 93c35220f (chips with icons, the editor sheet folds
+  under the overview, the terminal holds its size under the overview) · on pong: Home actions ›
+  Appearance › sheet More › Edit pages: the sheet drops to its header (handle plus "Home") at the
+  bottom and the cards, the Home marker, the dots and the three chips all stand above it; tap the
+  terminal card to centre it, the header says Workspace, tap its home button: it fills and Settings
+  › Home › Start in reads Terminal; the same on the display card (Start in reads Display); Back
+  from the overview puts the sheet back at the detent it had. The chips read "Add page", "Add
+  terminal", "Add display" under a plus, a terminal and a display icon, whole at 420 dpi and at
+  font scale 1.3 (the label wraps to two lines). With herdr (or any full-screen TUI) running:
+  swipe Home ⇄ terminal card five times in the overview, the terminal does not repaint and
+  `adb logcat -s TermGeom` writes no resize line until the card is zoomed into (one line then,
+  and the keyboard the Workspace had comes back under the zoom); afterwards a normal page swipe
+  still brings the keyboard back on the Workspace · passes as on the emulator (emu, x86_64 debug,
+  2026-10-29 08:30) · pong, needs a new debug arm64 build.
 - 2026-10-29 · commits 6a688dc92, 247e13ab0, 69eef88db, 1504e53d4 and the two fixes after them
   (Edit pages overview round, `project-docs/active/edit-pages-overview-2026-10-27.md`) · on pong:
-  Home actions › Appearance › sheet More › Edit pages opens the overview at once (no splash, no
-  Settings); the chip is gone from More while the overview is up; the Home card fills its frame
-  with no page label or sheet inside it; swipe to the terminal card and the sheet says Workspace;
-  a tap on a side card centres it, a tap on the centred card zooms in; Back asks no Discard;
-  "+ Add terminal" is not clipped; Launcher settings opens with no black splash · passes when
-  each holds as on the emulator (`app/evidence/edit-pages-2026-10-27/` has the before frames) ·
-  pong, the debug arm64 build installed 2026-10-29 01:45.
+  the overview opens at once (no splash, no Settings); the chip is gone from More while the
+  overview is up; the Home card fills its frame with no page label or sheet inside it; a tap on a
+  side card centres it, a tap on the centred card zooms in; Back asks no Discard; Launcher settings
+  opens with no black splash · passes when each holds as on the emulator · pong, with the build
+  above (the 2026-10-29 01:45 build had the chip clipped and the sheet over the marker).
 - 2026-10-25 · commit "fix(statusbar): the status row flows around the camera and clears the
   screen's corners" (#163) · with the status bar along the top and Full screen on, screenshots in
   portrait show a gap at the camera with the chips left of it and the readings right of it, and

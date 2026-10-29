@@ -108,3 +108,27 @@ chip hidden under the overview, Home card fills its frame on the editor route, n
 card scale, sheet turns to Workspace on the terminal card and back to Home, a side tap centres,
 Back asks no Discard, "+ Add terminal" fits at 1080/420, Settings shares the launcher's task
 (no system splash). Pong: see the device-checks entry until the build has been seen there.
+
+## Found on pong (2026-10-29), fixed the same day
+
+Three findings from the developer's first pong pass, each reproduced on the emulator before the fix:
+
+- **The home button did nothing on the terminal and display cards.** On the editor route the sheet
+  stayed at its half detent over the lower part of the overview, so the Home marker, the dots and
+  the chips were under it and a tap there went to the sheet. The sheet now folds to its header
+  while the overview is up (`SurfaceEditorController.onPageOverviewChanged`), the overview keeps
+  its chips above that header (`Host.coveredBottom`), and the sheet rises back to its detent when
+  the overview closes. The Home-actions route never had the problem.
+- **"+ Add terminal" clipped at 420 dpi.** The chips are now an icon over a label that may wrap to
+  two lines, with no "+" in the text; the text-fit helper is gone.
+- **A full-screen TUI repainted on every swipe to the terminal card.** Settling the overview on the
+  terminal card moved the wall there, the Workspace raised the keyboard it remembered and the panes
+  were laid out by that half's arrangement, so the terminal's pty was resized (53 → 29 rows with the
+  keyboard, 53 → 44 without) and the program redrew. While the overview previews, no place raises
+  its keyboard or rewrites its memory of it, and the pane controller's host-resize hold coalesces
+  every resize into the one at the landing (`TermuxActivity.setOverviewPreviewing`).
+
+Still open from the pong pass: on the editor route the overview's background shows a light band
+along the left edge and the wallpaper offset to the right (seen on the emulator too, before and
+after these fixes); it is the editor's posed backdrop under the overview and was not chased.
+

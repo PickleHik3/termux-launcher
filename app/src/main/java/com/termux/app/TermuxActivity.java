@@ -24721,8 +24721,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // onto another place would otherwise write the terminal's memory down as closed.
         if (store == null || mInAppKeyboard == null) return;
         // Minimal mode put the keyboard away itself; recording that would lose the keyboard the
-        // place had before, which is what leaving minimal mode is meant to bring back.
-        if (store.isMinimal()) return;
+        // place had before, which is what leaving minimal mode is meant to bring back. So did the
+        // page overview, whose cards show every place with its keyboard down.
+        if (store.isMinimal() || mOverviewPreviewing) return;
         store.setKeyboardOpen(place, keyboardUp);
     }
 
@@ -24788,8 +24789,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean mKeyboardForRestoredFloat;
 
+    /**
+     * The page overview is showing the wall's places as its cards (preview, not a landing): no
+     * place raises its keyboard as the wall is moved under the cards, no place has its memory of
+     * the keyboard rewritten by being left that way, and the panes' grids hold their size through
+     * every move, so a terminal's program does not repaint for windows it never saw; the one
+     * resize lands with the landing or the close.
+     */
+    private boolean mOverviewPreviewing;
+
+    /** Whether {@link #mOverviewPreviewing} holds the panes' size (a pane controller existed). */
+    private boolean mOverviewHoldsPaneSizes;
+
+    private void setOverviewPreviewing(boolean previewing) {
+        if (mOverviewPreviewing == previewing) return;
+        mOverviewPreviewing = previewing;
+        if (previewing) {
+            if (mPaneController == null) return;
+            mOverviewHoldsPaneSizes = true;
+            mPaneController.beginHostSurfaceResize();
+        } else if (mOverviewHoldsPaneSizes) {
+            mOverviewHoldsPaneSizes = false;
+            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
+        }
+    }
+
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
+        if (mOverviewPreviewing) return false;
         if (mKeyboardForRestoredFloat && place == com.termux.app.wall.PaneWallPage.WIDGETS)
             return true;
         PlaceLayoutStore store = placeLayoutStore();
@@ -27405,6 +27432,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onClosed(boolean byBack) {
                     mPageOverview = null;
+                    setOverviewPreviewing(false);
                     mSurfaceEditor.onPageOverviewChanged();
                     releaseWallpaperParallax();
                     // Back from Settings' row returns to the page the row is on, Settings › Home.
@@ -27429,6 +27457,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void showWallPositionAtOnce(@NonNull com.termux.app.wall.WallRow.Position position,
                                         boolean landing) {
         if (mPaneWallController == null) return;
+        setOverviewPreviewing(!landing);
         if (position.kind == com.termux.app.wall.PaneWallPage.WIDGETS) {
             mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.WIDGETS, false);
             if (mWidgetPaneController != null) mWidgetPaneController.showHomePage(position.index);
