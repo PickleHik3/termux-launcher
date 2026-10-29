@@ -7,7 +7,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourRun;
 import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
@@ -236,11 +235,8 @@ public class HelpTopicsTest {
         assertEquals(HelpGesture.SCRUB, HelpTopics.entry("az").gesture);
     }
 
-    @Test public void everyPracticeIdNamesALessonTheRunActuallyHas() {
-        assertEquals(TourRun.lessons().size(), HelpTopics.LESSON_IDS.size());
-        for (String lessonId : HelpTopics.LESSON_IDS) {
-            assertTrue(lessonId, TourRun.lessons().contains(lessonId));
-        }
+    @Test public void everyPracticeIdIsOneOfTheLessonIds() {
+        assertEquals(6, HelpTopics.LESSON_IDS.size());
         Set<String> used = new HashSet<>();
         for (HelpTopics.Entry entry : HelpTopics.all()) {
             if (entry.lessonId == null) continue;

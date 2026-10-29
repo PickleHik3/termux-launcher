@@ -53,7 +53,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         setPreferencesFromResource(R.xml.termux_ai_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         configureModelCentreRow();
-        configureWelcomeCardRow();
         configureBenchmarkRow();
         configureHuggingFaceToken();
         openOnClick("tai_runtime_controls", TaiRuntimePreferencesFragment.class, R.string.termux_ai_runtime_screen_title);
@@ -130,18 +129,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         if (centre == null) return;
         centre.setOnPreferenceClickListener(preference -> {
             TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_INSTALLED);
-            return true;
-        });
-    }
-
-    /** Reopens the "What runs on this phone" card any time; it does not count as the automatic raise. */
-    private void configureWelcomeCardRow() {
-        Preference row = findPreference("tai_welcome_card");
-        if (row == null) return;
-        row.setOnPreferenceClickListener(preference -> {
-            if (getActivity() != null) {
-                com.termux.app.firstrun.TaiWelcomeCardHost.show(getActivity(), false, null);
-            }
             return true;
         });
     }

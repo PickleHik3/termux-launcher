@@ -46,7 +46,6 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         });
         configureAbout(context);
         configureWhatsNew(context);
-        configureTourReplay(context);
         configureLicenses(context);
         configureDonate(context);
     }
@@ -58,20 +57,6 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
 
     private void url(String key, String target) { click(key, preference -> { ShareUtils.openUrl(requireContext(), target); return true; }); }
     private void click(String key, Preference.OnPreferenceClickListener listener) { Preference row = findPreference(key); if (row != null) row.setOnPreferenceClickListener(listener); }
-
-    /**
-     * Hands the home screen back to the user on card one of the tour. The run itself is what
-     * forgets that it was ever finished, so there is nothing to clear here first.
-     */
-    private void configureTourReplay(@NonNull Context context) {
-        click("replay_tour", preference -> {
-            startActivity(new Intent(context, TermuxActivity.class)
-                .putExtra(TermuxActivity.EXTRA_SHOW_ONBOARDING, true));
-            // Settings gets out of the way: the run is on the home screen behind it.
-            if (getActivity() != null) getActivity().finish();
-            return true;
-        });
-    }
 
     private void configureAbout(@NonNull Context context) {
         click("about", preference -> {

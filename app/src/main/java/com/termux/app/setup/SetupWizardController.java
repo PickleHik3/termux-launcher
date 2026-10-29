@@ -31,8 +31,6 @@ import com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragme
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
-import com.termux.app.firstrun.TaiWelcomeCardHost;
-import com.termux.app.tour.TourController;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.ArrayList;
@@ -403,16 +401,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         mHost.holdPaneWall(false);
     }
 
-    /** Records that this wizard version ran, and that the old tour never needs to start. */
+    /** Records that this wizard version ran. */
     private void markDone() {
         TermuxAppSharedPreferences prefs = mHost.preferences();
         if (prefs == null)
             return;
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
-        if (prefs.getFirstBootTourCompletedVersion() < TourController.RUN_VERSION)
-            prefs.setFirstBootTourCompletedVersion(TourController.RUN_VERSION);
-        // The wizard's AI section and the AI card on the sheet replace the old welcome card.
-        TaiWelcomeCardHost.markShown(mHost.context());
+        // The old tour is gone, but this stays the "has used the app before" marker the gate
+        // reads, and older code paths that read it still see the tour as done (8 is its last run).
+        if (prefs.getFirstBootTourCompletedVersion() < 8)
+            prefs.setFirstBootTourCompletedVersion(8);
     }
 
     @Override

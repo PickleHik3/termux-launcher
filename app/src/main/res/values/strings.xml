@@ -2809,7 +2809,7 @@
     <string name="tour_end_practice">End practice</string>
     <string name="tour_close_description">End the tour</string>
     <string name="tour_got_it">Got it</string>
-    <string name="tour_card_kicker">Termux Launcher</string>
+    <string name="extra_keys_default_offer_kicker">Termux Launcher</string>
     <!-- The chapter label, shown in capitals: "1 of 3 · Home". -->
     <string name="tour_chapter_label">%1$d of %2$d · %3$s</string>
     <string name="tour_chapter_home">Home</string>
