@@ -21,6 +21,16 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-29 · the herdr theme hook keeps the user's sidebar rows (commit after c496185e3) · on
+  pong: `~/.config/herdr/config.toml` holds the developer's `claude = [["state_icon", "tab"],
+  [{ token = "workspace", fg = "#5fb3b3" }]]` row commented out with `# launcher-material:`;
+  the developer's `~/.termux/theme-templates/herdr/` copy of the old template shadows the
+  shipped one and must go (or be refreshed) first; then toggle the herdr tool in Settings ›
+  Appearance › Tools that follow the terminal colours, or flip light/dark: the `claude` row
+  comes back plain, no `claude` of ours in the marker block, the `[theme.custom.*]` tables and
+  `auto_switch` still spliced, herdr's Claude sidebar shows the project folder in teal and keeps
+  it across a re-theme · passes as `project-docs/verification/test-herdr-theme-hook.sh` says
+  (gawk and busybox, 2026-10-29) · pong, debug arm64 build.
 - 2026-10-29 · the home press follows Start in (commit after 7d753cc0c) · on pong: Edit pages, tap
   the terminal card's home button, leave the overview, swipe to Home page 2, press the Home key:
   the wall lands on the first terminal window (window 2 in front first: the press switches to
