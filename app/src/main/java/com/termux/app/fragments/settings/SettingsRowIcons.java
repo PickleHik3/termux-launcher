@@ -159,6 +159,7 @@ public final class SettingsRowIcons {
             "app_launcher_sub_lock");
         key(R.drawable.ic_ms_start, "app_launcher_start_in");
         key(R.drawable.ic_ms_home, "use_as");
+        key(R.drawable.ic_ms_tour, "app_launcher_setup_rerun");
 
         // Dock & drawer, app search
         key(R.drawable.ic_ms_push_pin, "app_launcher_default_buttons", "essential_notification_rules_manage");
