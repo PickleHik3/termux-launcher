@@ -55,7 +55,7 @@ public final class SettingsRowIcons {
         // About & help
         key(R.drawable.ic_ms_menu_book, "documentation", "gui_apps_nix_docs", "keyboard_docs_layouts");
         key(R.drawable.ic_ms_forum, "discord");
-        key(R.drawable.ic_ms_tour, "replay_tour");
+        key(R.drawable.ic_ms_tour, "open_guide");
         key(R.drawable.ic_ms_feedback, "report_issue");
         key(R.drawable.ic_ms_new_releases, "whats_new");
         key(R.drawable.ic_ms_license, "open_source_licenses");
@@ -179,7 +179,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_bedtime, "lazy_mode");
         key(R.drawable.ic_ms_memory, "low_memory_preset", "status_widget_ram", "tai_memory_limits");
         key(R.drawable.ic_ms_blur_on, "fancier_glass");
-        key(R.drawable.ic_ms_auto_awesome, "fancier_glass_motion_light", "tai_welcome_card");
+        key(R.drawable.ic_ms_auto_awesome, "fancier_glass_motion_light", "tai_models_card");
         key(R.drawable.ic_ms_tv, "terminal_retro_effect");
 
         // Voice output and speech models

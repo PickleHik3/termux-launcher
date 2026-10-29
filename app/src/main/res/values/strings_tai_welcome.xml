@@ -21,9 +21,7 @@
     <string name="tai_welcome_row_dawn_title">Dawn notes integration</string>
     <string name="tai_welcome_row_dawn_line">Lets Dawn notes find notes by meaning, not just by the words you typed.</string>
 
-    <string name="tai_welcome_background_warning">May close apps running in the background</string>
     <string name="tai_welcome_installed">Installed</string>
-    <string name="tai_welcome_model_centre_line">Assistants and smart features: add your own model in the Model Centre.</string>
 
     <!-- 1: selected download size, 2: free storage -->
     <string name="tai_welcome_footer">Selected: %1$s · %2$s free</string>
@@ -32,9 +30,7 @@
     <string name="tai_welcome_download">Download selected</string>
     <string name="tai_welcome_reason_nothing">Tick something to download it.</string>
     <string name="tai_welcome_reason_storage">Not enough free storage for this selection.</string>
-    <string name="tai_welcome_need_wifi">Connect to Wi-Fi to download, or switch Wi-Fi only off.</string>
-    <string name="tai_welcome_started">Downloads started. Progress is in the Model Centre.</string>
 
-    <string name="tai_welcome_pref_title">Models for this phone</string>
-    <string name="tai_welcome_pref_summary">Pick the models this phone can run and download them.</string>
+    <string name="tai_models_card_title">Models for this phone</string>
+    <string name="tai_models_card_summary">Pick the models this phone can run and download them.</string>
 </resources>

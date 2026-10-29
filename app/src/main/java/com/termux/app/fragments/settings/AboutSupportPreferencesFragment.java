@@ -46,6 +46,7 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         });
         configureAbout(context);
         configureWhatsNew(context);
+        configureGuide(context);
         configureLicenses(context);
         configureDonate(context);
     }
@@ -57,6 +58,17 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
 
     private void url(String key, String target) { click(key, preference -> { ShareUtils.openUrl(requireContext(), target); return true; }); }
     private void click(String key, Preference.OnPreferenceClickListener listener) { Preference row = findPreference(key); if (row != null) row.setOnPreferenceClickListener(listener); }
+
+    /** Learn the basics: the setup sheet, straight on the guide card's page. */
+    private void configureGuide(@NonNull Context context) {
+        click("open_guide", preference -> {
+            startActivity(new Intent(context, TermuxActivity.class)
+                .putExtra(TermuxActivity.EXTRA_SHOW_SETUP_CARDS, true)
+                .putExtra(TermuxActivity.EXTRA_SETUP_CARD_ID, "guide"));
+            if (getActivity() != null) getActivity().finish();
+            return true;
+        });
+    }
 
     private void configureAbout(@NonNull Context context) {
         click("about", preference -> {

@@ -2804,88 +2804,12 @@
     <string name="weather_card_unavailable_location">Weather needs a location fix</string>
     <string name="weather_card_unavailable_place">Can\'t find %1$s. Check Settings → Status bar.</string>
 
-    <!-- First-boot tour: six gestures in three chapters, taught on the wall itself -->
-    <string name="tour_skip">Skip</string>
-    <string name="tour_end_practice">End practice</string>
-    <string name="tour_close_description">End the tour</string>
-    <string name="tour_got_it">Got it</string>
+    <!-- The extra-keys offer card's heading kicker. -->
     <string name="extra_keys_default_offer_kicker">Termux Launcher</string>
-    <!-- The chapter label, shown in capitals: "1 of 3 · Home". -->
-    <string name="tour_chapter_label">%1$d of %2$d · %3$s</string>
-    <string name="tour_chapter_home">Home</string>
-    <string name="tour_chapter_workspace">The Workspace</string>
-    <string name="tour_chapter_anywhere">Anywhere</string>
-    <string name="tour_title_to_workspace">Swipe to the Workspace</string>
-    <string name="tour_body_to_workspace">Swipe left on an empty spot of Home. Past your last Home page, your first window slides in.</string>
-    <string name="tour_title_border_drag">Border drag back</string>
-    <string name="tour_body_border_drag">Swipe right along the window\'s bottom border, below the text, to slide back to Home.</string>
-    <string name="tour_title_keyboard_away">Put the keyboard away</string>
-    <string name="tour_body_keyboard_away">Swipe down from the window\'s bottom border, at the grabber.</string>
-    <string name="tour_title_keyboard_back">Bring it back</string>
-    <string name="tour_body_keyboard_back">Swipe up from the same border. The Workspace remembers which you chose.</string>
-    <string name="tour_title_status">Pull down the status bar</string>
-    <string name="tour_body_status">Pull down from the window\'s top border to open the full bar.</string>
-    <string name="tour_title_status_fold">Fold it back</string>
-    <string name="tour_body_status_fold">Swipe up from the same border to fold it.</string>
-    <string name="tour_title_apps">Open your apps</string>
-    <string name="tour_body_apps">Your pinned apps and the A–Z index float over Home. Swipe down on the apps row for all of them.</string>
-    <string name="tour_body_apps_left_rail">Your pinned apps and the A–Z index float over Home. Swipe right on the apps rail for all of them.</string>
-    <string name="tour_body_apps_right_rail">Your pinned apps and the A–Z index float over Home. Swipe left on the apps rail for all of them.</string>
-    <string name="tour_title_palette">Run anything</string>
-    <string name="tour_body_palette">Swipe up on an empty spot of Home for the command palette: apps, settings and commands. On a window, it\'s in the corner tab.</string>
-    <string name="tour_title_corner">Hold a corner</string>
-    <string name="tour_body_corner">Every window keeps a corner tab. Press and hold a corner of this window.</string>
-    <string name="tour_title_help">Tap ?</string>
-    <string name="tour_body_help">Help explains whatever you touch next. Every corner tab has it, Home\'s too.</string>
-    <!-- A card taught on a window, read while the wall rests on Home. -->
-    <string name="tour_card_go_to_workspace">Swipe left past your last Home page to reach your window and continue.</string>
-    <!-- A card taught on Home, read while the wall rests on a window. -->
-    <string name="tour_card_go_home">Swipe right along the window\'s bottom border, or press Home, to get back to Home and continue.</string>
-    <string name="tour_closing_title">You\'re set</string>
-    <string name="tour_tip_help">Hold any corner and tap ? to learn what something does.</string>
-    <string name="tour_tip_float">Hold an empty spot on Home and tap Terminal for a Home float.</string>
-    <string name="tour_tip_layout">Tap Layout in the same menu to arrange the dock.</string>
-    <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
-    <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->
-    <string name="tour_models_progress">Offline models · %1$s of %2$s</string>
-    <!-- The closing card's offer: "Offline voice & AI · 3.1 GB". -->
-    <string name="tour_models_offer">Offline voice &amp; AI · %1$s</string>
-    <string name="tour_download_models">Download models</string>
-    <string name="tour_models_mobile_title">Download on mobile data?</string>
-    <!-- %1$s is the size of the models, such as "3.1 GB". -->
-    <string name="tour_models_mobile_message">The offline models are %1$s. You can wait for Wi-Fi and get them from Settings instead.</string>
-    <string name="tour_models_mobile_download">Download</string>
-    <string name="tour_read_the_guide">Read the guide</string>
-    <string name="tour_start">Start</string>
 
-    <!-- The setup sheet the first-boot tour is offered on -->
-    <string name="welcome_sheet_title">Welcome</string>
-    <string name="welcome_sheet_intro">Pick what you want. All of it can be changed later in Settings.</string>
-    <string name="welcome_row_wallpaper_title">Wallpaper colours</string>
-    <string name="welcome_row_wallpaper_copy">Tint the launcher to match your wallpaper.</string>
-    <string name="welcome_row_weather_title">Weather</string>
-    <string name="welcome_row_weather_copy">Shown in the status bar, for a city you pick or where you are.</string>
-    <string name="welcome_row_contacts_title">Contacts in search</string>
-    <string name="welcome_row_contacts_copy">Find people by name or number from the command palette, and call them.</string>
-    <string name="welcome_row_contacts_copy_granted">People show up when you search the command palette.</string>
-    <string name="welcome_row_display_title">Linux display</string>
-    <string name="welcome_row_display_copy">Run desktop Linux apps in a window.</string>
-    <string name="welcome_row_ai_title">Offline voice and AI</string>
-    <!-- %1$s is the size of the ticked models, such as "3.1 GB". -->
-    <string name="welcome_row_ai_copy">Voice typing, read aloud and more. %1$s, ready to download when the tour ends.</string>
-    <string name="welcome_row_ai_copy_installed">Voice typing, read aloud and more. Already on this phone.</string>
-    <string name="welcome_choose_models">Choose models</string>
-    <string name="welcome_hide_models">Hide models</string>
-    <!-- Credit for the city search, which Open-Meteo answers. -->
-    <string name="welcome_weather_credit">Search by Open-Meteo</string>
-    <string name="welcome_weather_use_location">Use my location</string>
-    <string name="welcome_sheet_show_me_around">Show me around</string>
-    <string name="welcome_sheet_skip_tour">Skip the tour</string>
-    <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/docs/#wiki</string>
-
-    <!-- Settings: replay the first-boot tour -->
-    <string name="tour_replay_title">Replay tour</string>
-    <string name="tour_replay_summary"></string>
+    <!-- Settings: About & help, open the Learn the basics page -->
+    <string name="open_guide_title">Learn the basics</string>
+    <string name="open_guide_summary">Short chapters on getting around.</string>
 
     <string name="termux_ai_import_profile">Model format settings</string>
     <string name="termux_ai_import_profile_help">Use the settings supplied with this model file. Leave unknown values empty.</string>

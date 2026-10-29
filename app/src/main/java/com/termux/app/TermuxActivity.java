@@ -269,6 +269,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Settings asking for the setup cards' sheet. */
     public static final String EXTRA_SHOW_SETUP_CARDS =
         "com.termux.app.extra.SHOW_SETUP_CARDS";
+    /** With {@link #EXTRA_SHOW_SETUP_CARDS}: a card id whose page the sheet opens straight on. */
+    public static final String EXTRA_SETUP_CARD_ID =
+        "com.termux.app.extra.SETUP_CARD_ID";
 
     private static final int REQUEST_CODE_SETUP_NOTIFICATIONS = 4714;
     /** An alias for the help screen, for anything that still asks for help by intent. */
@@ -2081,10 +2084,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View contentView = findViewById(android.R.id.content);
             boolean rerunSetup = getIntent().getBooleanExtra(EXTRA_RERUN_SETUP, false);
             boolean showSetupCards = getIntent().getBooleanExtra(EXTRA_SHOW_SETUP_CARDS, false);
+            String setupCardId = getIntent().getStringExtra(EXTRA_SETUP_CARD_ID);
             contentView.post(() -> {
                 if (showSetupCards) {
                     getIntent().removeExtra(EXTRA_SHOW_SETUP_CARDS);
-                    if (!openSetupWizardIfDue()) setupWizard().openCards();
+                    getIntent().removeExtra(EXTRA_SETUP_CARD_ID);
+                    if (!openSetupWizardIfDue()) setupWizard().openCards(setupCardId);
                     return;
                 }
                 if (rerunSetup) {
@@ -2767,10 +2772,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void handleShowSetupCardsIntent(@Nullable Intent intent) {
         if (intent == null || !intent.getBooleanExtra(EXTRA_SHOW_SETUP_CARDS, false)) return;
         intent.removeExtra(EXTRA_SHOW_SETUP_CARDS);
+        String setupCardId = intent.getStringExtra(EXTRA_SETUP_CARD_ID);
+        intent.removeExtra(EXTRA_SETUP_CARD_ID);
         View contentView = findViewById(android.R.id.content);
         if (contentView == null) return;
         contentView.post(() -> {
-            if (!openSetupWizardIfDue()) setupWizard().openCards();
+            if (!openSetupWizardIfDue()) setupWizard().openCards(setupCardId);
         });
     }
 

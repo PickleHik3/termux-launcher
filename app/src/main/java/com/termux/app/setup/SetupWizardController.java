@@ -494,8 +494,19 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /** Opens the card sheet whatever is due (Settings' Setup row). */
     public void openCards() {
-        if (mOpen)
+        openCards(null);
+    }
+
+    /**
+     * Opens the card sheet, straight on one card's page when {@code pageId} names one (Settings'
+     * Learn the basics and Models for this phone rows).
+     */
+    public void openCards(@Nullable String pageId) {
+        if (mOpen) {
+            if (pageId != null)
+                showPage(pageId);
             return;
+        }
         View root = mHost.findView(R.id.terminal_root_container);
         FrameLayout content = mHost.findView(android.R.id.content);
         if (root == null || content == null)
@@ -514,6 +525,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             ViewGroup.LayoutParams.MATCH_PARENT));
         sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
         layoutCards();
+        if (pageId != null)
+            showPage(pageId);
     }
 
     /** The sheet is 78% of the window; the launcher root stays at rest beneath it. */
