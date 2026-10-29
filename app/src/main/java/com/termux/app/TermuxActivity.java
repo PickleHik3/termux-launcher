@@ -3027,7 +3027,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 // No Workspace window beside Home: no seam to cross, no border to drag back.
                 @Override public boolean hasOnePlace() {
-                    return !hasHome() || !mPaneWallController.pages()
+                    return !hasHome() || !mPaneWallController.pageKindsShim()
                         .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
                 }
 
@@ -3074,7 +3074,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController.widgetsPage() != null)
             mPaneWallController.widgetsPage().dismissControls();
         if (side == com.termux.app.tour.TourStep.Side.ANYWHERE) return;
-        boolean hasWorkspace = mPaneWallController.pages()
+        boolean hasWorkspace = mPaneWallController.pageKindsShim()
             .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
         boolean hasHome = mPaneWallController.hasWidgetsPage();
         boolean toWorkspace = side == com.termux.app.tour.TourStep.Side.WORKSPACE
@@ -12334,7 +12334,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     public java.util.List<com.termux.app.wall.PaneWallPage> availableWallPages() {
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController != null
-            ? mPaneWallController.pages() : com.termux.app.wall.PaneWallPolicy.rowPages(true);
+            ? mPaneWallController.pageKindsShim() : com.termux.app.wall.PaneWallPolicy.rowPages(true);
         if (!isDisplayUp()) return pages;
         java.util.List<com.termux.app.wall.PaneWallPage> places = new java.util.ArrayList<>(pages);
         places.add(com.termux.app.wall.PaneWallPage.DISPLAY);
@@ -24144,7 +24144,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || appliedContentReservationPx() < 0) return;
         // The Workspace's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(mPaneWallController.pages());
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(mPaneWallController.pageKindsShim());
         // The committed place is named so its keyboard, going away, is put away over the first
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         // A slide toward another window of the Workspace stays on its place: the wall's offset
@@ -26777,7 +26777,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (strip.getClipBounds() != null) strip.setClipBounds(null);
         }
         if (mPaneWallController == null) return;
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pageKindsShim();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
         com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);
         // The marks are the row's pages: the display is a window of the Workspace, not a mark.
