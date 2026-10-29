@@ -4320,6 +4320,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION, version, true);
     }
 
+    /** The setup wizard version the user has finished or skipped, or 0. */
+    public int getSetupWizardVersion() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_SETUP_WIZARD_VERSION, TERMUX_APP.DEFAULT_SETUP_WIZARD_VERSION);
+    }
+
+    public void setSetupWizardVersion(int version) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_SETUP_WIZARD_VERSION, version, true);
+    }
+
+    /** Whether Use as was ever stored: false on an install that never chose. */
+    public boolean isUseAsStored() {
+        return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_USE_AS);
+    }
+
     /** The version of the run an unfinished tour belongs to, or 0 for an older one. */
     public int getFirstBootTourRunVersion() {
         return SharedPreferenceUtils.getInt(mSharedPreferences,

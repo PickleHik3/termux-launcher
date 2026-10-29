@@ -46,6 +46,14 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
         offerStartIn(com.termux.app.settings.UseAsSetting.read(context));
+        // Run setup again opens the wizard on the launcher, as the tour replay does.
+        Preference rerun = findPreference("app_launcher_setup_rerun");
+        if (rerun != null) rerun.setOnPreferenceClickListener(row -> {
+            startActivity(new android.content.Intent(context, com.termux.app.TermuxActivity.class)
+                .putExtra(com.termux.app.TermuxActivity.EXTRA_RERUN_SETUP, true));
+            if (getActivity() != null) getActivity().finish();
+            return true;
+        });
         Preference setHome = findPreference("app_launcher_set_home");
         // The same chooser the tour's last card offers, so both doors behave the same way.
         if (setHome != null) setHome.setOnPreferenceClickListener(row -> {

@@ -3457,4 +3457,29 @@
         <item quantity="one">%1$d couldn\'t be added.</item>
         <item quantity="other">%1$d couldn\'t be added.</item>
     </plurals>
+    <!-- Setup wizard -->
+    <string name="setup_section_home">Home screen</string>
+    <string name="setup_section_review">Review</string>
+    <string name="setup_home_title">Use as your home screen?</string>
+    <string name="setup_home_description">Yes puts apps and widgets on the launcher. No opens straight into the terminal.</string>
+    <string name="setup_home_choice">Home screen</string>
+    <string name="setup_home_choice_summary">Apps, widgets and the terminal.</string>
+    <string name="setup_terminal_choice">Terminal only</string>
+    <string name="setup_terminal_choice_summary">Starts in the workspace. No Home page.</string>
+    <string name="setup_review_title">Review setup</string>
+    <string name="setup_review_note">You can change these settings later.</string>
+    <string name="setup_group_use">Use</string>
+    <string name="setup_row_use_as">Use as</string>
+    <string name="setup_row_start_in">Start in</string>
+    <string name="setup_value_home_screen">Home screen</string>
+    <string name="setup_value_terminal">Terminal</string>
+    <string name="setup_value_unchanged">Unchanged</string>
+    <string name="setup_value_workspace">Workspace</string>
+    <string name="setup_continue">Continue</string>
+    <string name="setup_finish">Finish</string>
+    <string name="setup_skip">Skip</string>
+    <string name="setup_back">Back</string>
+    <string name="setup_keep_current">Keep my current setup</string>
+    <string name="setup_rerun_title">Run setup again</string>
+    <string name="setup_rerun_summary">Choose again how you use the launcher.</string>
 </resources>

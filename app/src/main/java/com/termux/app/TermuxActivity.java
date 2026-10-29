@@ -266,6 +266,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Forces the first-launch experience for screenshots, product demos, and UI verification. */
     public static final String EXTRA_SHOW_ONBOARDING =
         "com.termux.app.extra.SHOW_ONBOARDING";
+    /** Settings asking for the setup wizard again, with the current settings pre-selected. */
+    public static final String EXTRA_RERUN_SETUP =
+        "com.termux.app.extra.RERUN_SETUP";
     /** An alias for the help screen, for anything that still asks for help by intent. */
     public static final String EXTRA_SHOW_HELP =
         "com.termux.app.extra.SHOW_HELP";
@@ -2092,7 +2095,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (savedInstanceState == null) {
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
+            boolean rerunSetup = getIntent().getBooleanExtra(EXTRA_RERUN_SETUP, false);
             contentView.post(() -> {
+                // The setup wizard replaces the tour: it shows instead of it, on any build.
+                if (rerunSetup) {
+                    getIntent().removeExtra(EXTRA_RERUN_SETUP);
+                    setupWizard().open(true);
+                    return;
+                }
+                if (!forceOnboarding && openSetupWizardIfDue()) return;
                 FirstBootTour tour = firstBootTour();
                 if (tour == null) return;
                 // Settings asking for the tour from a cold start: the whole run, sheet first.
@@ -2124,6 +2135,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (contentView == null) return;
         contentView.post(() -> {
             if (isFinishing() || isDestroyed() || mPreferences == null) return;
+            if (openSetupWizardIfDue()) return;
             FirstBootTour tour = firstBootTour();
             if (tour == null || tour.resumeIfInProgress()) return;
             tour.startIfNeeded();
@@ -2251,6 +2263,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleShowHelpIntent(intent);
         handleHelpScreenActionIntent(intent);
         handleReplayTourIntent(intent);
+        handleRerunSetupIntent(intent);
         handleShellNotificationIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
@@ -2725,6 +2738,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mIsOnResumeAfterOnCreate = false;
     }
 
+    @Nullable private com.termux.app.setup.SetupWizardController mSetupWizard;
+
+    private com.termux.app.setup.SetupWizardController setupWizard() {
+        if (mSetupWizard == null) {
+            mSetupWizard = new com.termux.app.setup.SetupWizardController(
+                new com.termux.app.setup.SetupWizardController.Host() {
+                    @Override public android.content.Context context() {
+                        return TermuxActivity.this;
+                    }
+                    @Override public <T extends View> T findView(int id) {
+                        return TermuxActivity.this.findViewById(id);
+                    }
+                    @Override public void holdPaneWall(boolean held) {
+                        if (mPaneWallController != null)
+                            mPaneWallController.setGesturesEnabled(!held);
+                    }
+                    @Override public int statusBarInsetTop() {
+                        return mLastStatusBarInsetTop;
+                    }
+                    @Override public com.termux.shared.termux.settings.preferences
+                        .TermuxAppSharedPreferences preferences() {
+                        return mPreferences;
+                    }
+                });
+        }
+        return mSetupWizard;
+    }
+
+    /** The wizard is up or due: the other first-run cards wait until it is done. */
+    private boolean setupWizardComesFirst() {
+        if (mSetupWizard != null && mSetupWizard.isOpen()) return true;
+        return mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
+            mPreferences.getSetupWizardVersion(), false, false).show;
+    }
+
+    /** Opens the setup wizard when its version has not been finished; true when it is up. */
+    private boolean openSetupWizardIfDue() {
+        if (mPreferences == null) return false;
+        com.termux.app.setup.SetupWizardGate.Decision decision =
+            com.termux.app.setup.SetupWizardGate.decide(mPreferences.getSetupWizardVersion(),
+                mPreferences.getFirstBootTourCompletedVersion() >= 1,
+                mPreferences.isUseAsStored());
+        if (!decision.show) return false;
+        setupWizard().open(decision.updater);
+        return true;
+    }
+
+    /** Settings asking for the setup wizard again, on the launcher that is already up. */
+    private void handleRerunSetupIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_RERUN_SETUP, false)) return;
+        intent.removeExtra(EXTRA_RERUN_SETUP);
+        View contentView = findViewById(android.R.id.content);
+        if (contentView == null) return;
+        contentView.post(() -> setupWizard().open(true));
+    }
+
     /**
      * Settings asking for the tour again, on the launcher that is already up. The run starts from
      * card one whatever came before; the permission chain is not replayed, because every one of its
@@ -2754,6 +2823,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void maybeOfferExtraKeysDefaultRow() {
         if (mExtraKeysDefaultOfferShowing || mPreferences == null) return;
+        if (setupWizardComesFirst()) return;
         if (isFinishing() || isDestroyed()) return;
         // Cheapest check first: once answered, nothing else is read on any later resume.
         if (mPreferences.isExtraKeysDefaultOffered()) return;
@@ -2852,6 +2922,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void maybeOfferTaiWelcomeCard() {
         if (isFinishing() || isDestroyed() || mPreferences == null) return;
+        if (setupWizardComesFirst()) return;
         // Cheapest check first: once shown, nothing else is read on any later resume.
         if (com.termux.app.firstrun.TaiWelcomeCardHost.wasShown(this)) return;
         FirstBootTour tour = firstBootTour();
@@ -9425,6 +9496,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void maybeRequestWallpaperReadPermission() {
         if (!mIsVisible || mPreferences == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (setupWizardComesFirst()) {
+            // Asked again by the next failed read once the wizard is done.
+            mWallpaperReadPermissionDenied = false;
             return;
         }
         // The overlay tour draws its cards over the live home screen; a system dialog opening on
@@ -19651,6 +19727,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
+        // The setup wizard is innermost: Back steps to the previous section, never out.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                return mSetupWizard != null && mSetupWizard.handleBack();
+            }
+            @Override public boolean isOpen() {
+                return mSetupWizard != null && mSetupWizard.isOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                // A turn re-fits the miniature; leaving the screen keeps the wizard where it is.
+                if (mSetupWizard != null && reason == com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION) mSetupWizard.relayout();
+            }
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
                 return onHelpBackPressed();
