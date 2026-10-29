@@ -162,4 +162,45 @@ public class StatusBarGesturePolicyTest {
         assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.LEFT));
         assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.RIGHT));
     }
+
+    private static StatusBarGesturePolicy twoFinger(boolean formEligible, TopStatusBarState state) {
+        return new StatusBarGesturePolicy(new StatusBarGesturePolicy.Down(0, 10, 10, 10, 10,
+            100, state, true, !formEligible, false, false, formEligible, 8), true);
+    }
+
+    @Test public void twoFingerModeOneFingerNeverClaims() {
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
+            twoFinger(true, TopStatusBarState.COMPACT).move(10, 90));
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED,
+            twoFinger(true, TopStatusBarState.EXPANDED).move(10, -90));
+        StatusBarGesturePolicy tap = twoFinger(true, TopStatusBarState.COMPACT);
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, tap.move(11, 12));
+    }
+
+    @Test public void twoFingerModeSecondFingerClaimsByNextMove() {
+        StatusBarGesturePolicy open = twoFinger(true, TopStatusBarState.COMPACT);
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, open.secondPointer(10, 10));
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, open.move(10, 14));
+        assertEquals(StatusBarGesturePolicy.Claim.EXPAND_SWIPE, open.move(10, 40));
+        StatusBarGesturePolicy fold = twoFinger(true, TopStatusBarState.EXPANDED);
+        fold.secondPointer(10, 10);
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE, fold.move(10, -30));
+    }
+
+    @Test public void twoFingerModeSidewaysAndChildOwnedStillWin() {
+        StatusBarGesturePolicy sideways = twoFinger(true, TopStatusBarState.COMPACT);
+        sideways.secondPointer(10, 10);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, sideways.move(50, 12));
+        StatusBarGesturePolicy owned = twoFinger(false, TopStatusBarState.COMPACT);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, owned.claim());
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, owned.secondPointer(10, 10));
+        StatusBarGesturePolicy late = twoFinger(true, TopStatusBarState.COMPACT);
+        late.move(10, 60);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, late.secondPointer(10, 60));
+    }
+
+    @Test public void flagOffSecondFingerStillCancels() {
+        StatusBarGesturePolicy p = policy(true, false, false, false, TopStatusBarState.COMPACT);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, p.secondPointer(10, 10));
+    }
 }
