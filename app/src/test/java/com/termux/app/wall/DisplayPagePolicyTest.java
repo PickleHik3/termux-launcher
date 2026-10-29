@@ -28,8 +28,8 @@ public class DisplayPagePolicyTest {
     }
 
     /**
-     * [Home 1][Home 2][Display 5 = firefox][Terminal 3][Display 4]: two Display pages, never side
-     * by side (WallPages keeps them apart).
+     * [Home 1][Home 2][Display 5 = firefox][Terminal 3][Display 4]: two Display pages, a Terminal
+     * page between them.
      */
     private static WallPages twoDisplays() {
         WallPages.Result r = oneDisplay().add(PageKind.DISPLAY, 2, "firefox");
@@ -143,9 +143,15 @@ public class DisplayPagePolicyTest {
     }
 
     @Test
-    public void twoDisplayPagesAreNeverSideBySide() {
-        // Added after a Display page's neighbour, the second keeps a page between them.
-        assertTrue(!twoDisplays().hasAdjacentDisplays());
+    public void twoDisplayPagesMayStandSideBySide() {
+        // Added right after the Display page, the second stands beside it.
+        WallPages.Result beside = oneDisplay().add(PageKind.DISPLAY, 4, "firefox");
+        assertTrue(beside.ok());
+        assertTrue(beside.pages.hasAdjacentDisplays());
+    }
+
+    @Test
+    public void onlyTheBoundDisplayPageStandsBesideTheTerminal() {
         List<WallPages.Slot> slots = PaneWallPolicy.wallSlots(twoDisplays(), true, true);
         // On the Terminal between them, only the bound Display page stands beside it.
         assertEquals(Arrays.asList(PaneWallPage.DISPLAY, PaneWallPage.TERMINAL),
