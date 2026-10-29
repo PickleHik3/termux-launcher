@@ -192,7 +192,7 @@ public final class SetupCards {
             if (!exists(id, facts)) continue;
             int[] steps = stepsOf(id);
             int completed = isSystemChecked(id) ? (systemDone.contains(id) ? steps.length : 0)
-                : stored.manualCount(id, steps.length);
+                : systemDone.contains(id) ? steps.length : stored.manualCount(id, steps.length);
             State state = completed >= steps.length ? State.DONE
                 : stored.isDismissed(id) ? State.DISMISSED : State.OPEN;
             cards.add(new Card(id, nameOf(id), descriptionOf(id), steps, state, completed));
@@ -210,12 +210,22 @@ public final class SetupCards {
 
     /** The sheet is due on a launcher start: the wizard is done and a card is still open. */
     public static boolean isDue(boolean wizardDone, @NonNull List<Card> cards) {
+        return isDue(wizardDone, cards, false);
+    }
+
+    /**
+     * As {@link #isDue(boolean, List)}; the AI card also keeps the sheet coming back once the user
+     * has chosen models to download ({@code aiSelected}), until they are installed.
+     */
+    public static boolean isDue(boolean wizardDone, @NonNull List<Card> cards,
+                                boolean aiSelected) {
         if (!wizardDone)
             return false;
         // Only cards that can be completed in this build keep the sheet coming back; the stubs
         // (desktop apps, AI, guide) wait for their flows.
         for (Card card : cards)
-            if (card.state == State.OPEN && isSystemChecked(card.id))
+            if (card.state == State.OPEN
+                && (isSystemChecked(card.id) || (AI.equals(card.id) && aiSelected)))
                 return true;
         return false;
     }
