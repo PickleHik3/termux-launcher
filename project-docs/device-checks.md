@@ -21,7 +21,7 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
-- 2026-10-29 · uncommitted LorieView fix (lastClipboardTimestamp starts at 0) · on pong: copy a
+- 2026-10-29 · a11264eec (LorieView lastClipboardTimestamp starts at 0) · on pong: copy a
   URL in the terminal (terminal-browser, or any selection + the keyboard's copy key) BEFORE the
   display is started, then start Firefox on the display, tap its address bar and use the
   keyboard's paste key: the URL appears; also copy in Firefox (Ctrl+C or the copy key) and paste

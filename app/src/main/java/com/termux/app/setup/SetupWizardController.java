@@ -604,16 +604,59 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         }
     }
 
+    @Nullable private SetupCardPage mPage;
+
     private void showPage(@NonNull String id) {
         SetupCardSheet sheet = mCards;
         if (sheet == null)
             return;
         for (SetupCards.Card card : SetupCardSystem.cards(mHost.context())) {
             if (card.id.equals(id)) {
-                sheet.bindPage(card);
+                hidePage();
+                SetupCardPage page = SetupCardPages.create(id);
+                if (page == null) {
+                    sheet.bindPage(card);
+                    return;
+                }
+                mPage = page;
+                sheet.bindPage(page.createView(mHost.context(), card, mPageHost));
                 return;
             }
         }
+    }
+
+    /** The page's way back and its bookkeeping, shared by every card page. */
+    private final SetupCardPage.Host mPageHost = new SetupCardPage.Host() {
+        @Override public @NonNull Context context() {
+            return mHost.context();
+        }
+        @Override public void back() {
+            onPageBack();
+        }
+        @Override public void completeStep(@NonNull String cardId, int step) {
+            SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+            stored.completeStep(cardId, step);
+            SetupCardSystem.save(mHost.context(), stored);
+        }
+        @Override public void completeCard(@NonNull String cardId) {
+            SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+            for (SetupCards.Card card : SetupCardSystem.cards(mHost.context()))
+                if (card.id.equals(cardId))
+                    for (int i = 0; i < card.steps.length; i++) stored.completeStep(cardId, i);
+            SetupCardSystem.save(mHost.context(), stored);
+            onPageBack();
+        }
+        @Override public void startSafely(@NonNull Intent intent) {
+            SetupWizardController.this.startSafely(intent);
+        }
+    };
+
+    /** Stops the page that is up, if any, before the list or another page shows. */
+    private void hidePage() {
+        SetupCardPage page = mPage;
+        mPage = null;
+        if (page != null)
+            page.onHidden();
     }
 
     @Override

@@ -145,7 +145,17 @@ final class SetupCardSheet extends LinearLayout {
         mScroll.post(() -> mScroll.scrollTo(0, scrollY));
     }
 
-    /** A card's page: the title, the line and Back. Wave 4 fills the stubs. */
+    /** A card's own page ({@link SetupCardPage}) in place of the list, until Back. */
+    void bindPage(@NonNull android.view.View pageView) {
+        mOnPage = true;
+        mFooter.setVisibility(GONE);
+        mScroll.removeAllViews();
+        mScroll.addView(pageView, new ScrollView.LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        mScroll.scrollTo(0, 0);
+    }
+
+    /** A card's stub page: the title, the line and Back, for a card with no page yet. */
     void bindPage(@NonNull SetupCards.Card card) {
         Context context = getContext();
         mOnPage = true;
