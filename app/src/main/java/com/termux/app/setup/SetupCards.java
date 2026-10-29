@@ -210,7 +210,14 @@ public final class SetupCards {
 
     /** The sheet is due on a launcher start: the wizard is done and a card is still open. */
     public static boolean isDue(boolean wizardDone, @NonNull List<Card> cards) {
-        return wizardDone && openCount(cards) > 0;
+        if (!wizardDone)
+            return false;
+        // Only cards that can be completed in this build keep the sheet coming back; the stubs
+        // (desktop apps, AI, guide) wait for their flows.
+        for (Card card : cards)
+            if (card.state == State.OPEN && isSystemChecked(card.id))
+                return true;
+        return false;
     }
 
     @StringRes

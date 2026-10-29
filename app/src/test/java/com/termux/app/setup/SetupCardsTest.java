@@ -104,4 +104,15 @@ public class SetupCardsTest {
         stored.setDismissed(SetupCards.PINNED, false);
         assertEquals(SetupCards.State.OPEN, build(false, false, false, stored).get(4).state);
     }
+
+    @Test
+    public void aSheetWithOnlyStubsOpenIsNotDue() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        List<SetupCards.Card> all = build(true, true, true, stored);
+        for (SetupCards.Card card : all)
+            if (SetupCards.isSystemChecked(card.id)) stored.setDismissed(card.id, true);
+        List<SetupCards.Card> cards = build(true, true, true, stored);
+        assertTrue(SetupCards.openCount(cards) > 0);
+        assertFalse(SetupCards.isDue(true, cards));
+    }
 }
