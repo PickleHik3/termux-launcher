@@ -327,6 +327,13 @@ public final class PaneWallPolicy {
         return hasNeighbour(pages, current, offsetPx > 0f ? -1 : 1);
     }
 
+    /** Whether {@code name} names Home outright ({@code home}, {@code widgets}), not a neighbour. */
+    public static boolean namesHome(@Nullable String name) {
+        if (name == null) return false;
+        String value = name.trim().toLowerCase(java.util.Locale.ROOT);
+        return "home".equals(value) || "widgets".equals(value);
+    }
+
     /**
      * Resolves the {@code page=} argument of {@code wall.go}, or null when it names nothing.
      * {@code display} names a window, not a page: the activity opens or brings in the display

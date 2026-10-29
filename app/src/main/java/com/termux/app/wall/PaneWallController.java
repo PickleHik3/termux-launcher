@@ -550,11 +550,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return Math.max(1, mHost.innerCount(PaneWallPage.TERMINAL));
     }
 
-    /** Navigate by the {@code page=} argument of {@code wall.go}: a name, or left/right. */
+    /**
+     * Navigate by the {@code page=} argument of {@code wall.go}: a name, or left/right. Home named
+     * outright (the extra keys' Home key, {@code wall.widgets}) opens on the Home page a home
+     * press would ({@link Host#homePressPage}); a neighbour keeps the page it was left on.
+     */
     public boolean goTo(@Nullable String name) {
         PaneWallPage page = PaneWallPolicy.parsePage(mWall.pages(), mWall.currentPage(), name);
         if (page == null) return false;
         mWorkspacePending = false;
+        if (page == PaneWallPage.WIDGETS && PaneWallPolicy.namesHome(name))
+            mHost.showInnerPage(PaneWallPage.WIDGETS, Math.max(0, mHost.homePressPage()));
         return mWall.goTo(page, true);
     }
 

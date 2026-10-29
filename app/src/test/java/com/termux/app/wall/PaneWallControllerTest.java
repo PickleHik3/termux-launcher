@@ -271,6 +271,26 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
     }
 
+    @Test public void homeNamedOutrightOpensOnTheHomePageAHomePressWould() {
+        host.homePage = 2;
+        controller.goTo(PaneWallPage.TERMINAL, false);
+
+        assertTrue("the extra keys' Home key", controller.goTo("widgets"));
+
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals("the default Home page, not the page left", 0, host.homePage);
+    }
+
+    @Test public void aNeighbourKeepsTheHomePageItWasLeftOn() {
+        host.homePage = 2;
+        controller.goTo(PaneWallPage.TERMINAL, false);
+
+        assertTrue(controller.goTo("left"));
+
+        assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
+        assertEquals(2, host.homePage);
+    }
+
     @Test public void thePagesAreALineNotARing() {
         controller.goTo(PaneWallPage.WIDGETS, false);
         assertTrue(controller.goTo("left"));

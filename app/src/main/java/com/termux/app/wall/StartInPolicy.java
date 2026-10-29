@@ -103,6 +103,16 @@ public final class StartInPolicy {
     }
 
     /**
+     * The Home page the Home half opens on under Start in {@code effective}, counting from 0: the
+     * page Edit pages chose ({@code defaultPage}) while Home is Start in, else page 1. A choice
+     * made on a Home page that no longer wears the marker is not kept behind it: with a window as
+     * Home, the Home key on the extra keys and a cold start's Home half both open on page 1.
+     */
+    public static int homePage(int defaultPage, @Nullable String effective) {
+        return WallRow.START_IN_HOME.equals(read(effective)) ? Math.max(0, defaultPage) : 0;
+    }
+
+    /**
      * Whether a card wears the Home marker under Start in {@code effective}
      * ({@link #effective}): the Home page Home opens on ({@code defaultPage}), the first terminal
      * window ({@code firstTerminal}), or the display window.

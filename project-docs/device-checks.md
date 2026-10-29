@@ -28,6 +28,12 @@ dropped; what follows is what still owes a look.
   page marked, on that page as before; a return from another app still shows the page left; after
   a force-stop the launcher opens where the marker is · passes as the unit tests say
   (PaneWallControllerTest, 2026-10-29) · pong, debug arm64 build.
+- 2026-10-29 · the extra keys' Home key opens on the Home page a home press would (commit after
+  0ab0ea5f4) · on pong with the terminal marked as Home: swipe to Home page 2, go to the
+  Workspace, tap the extra keys' house: Home page 1 comes in; mark Home page 2 as Home in Edit
+  pages, from the Workspace tap the house: page 2 comes in; `launcherctl wall go left` from the
+  Workspace still returns to the Home page left · passes as the unit tests say · pong, debug
+  arm64 build.
 - 2026-10-29 · the three Edit pages fixes after 93c35220f (chips with icons, the editor sheet folds
   under the overview, the terminal holds its size under the overview) · on pong: Home actions ›
   Appearance › sheet More › Edit pages: the sheet drops to its header (handle plus "Home") at the

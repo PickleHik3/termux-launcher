@@ -25241,10 +25241,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                     int index) {
                     showWallInnerPage(page, index);
                 }
-                // Edit pages' default page, held to the pages there are now.
+                // Edit pages' default page while Home is Start in, else page 1, held to the pages
+                // there are now.
                 @Override public int homePressPage() {
                     return com.termux.app.launcher.home.HomePageEdits.clampDefault(
-                        com.termux.app.launcher.home.HomeSettings.defaultPage(TermuxActivity.this),
+                        com.termux.app.wall.StartInPolicy.homePage(
+                            com.termux.app.launcher.home.HomeSettings.defaultPage(TermuxActivity.this),
+                            effectiveStartIn()),
                         wallInnerCount(com.termux.app.wall.PaneWallPage.WIDGETS));
                 }
                 @Override @NonNull public String startIn() {
