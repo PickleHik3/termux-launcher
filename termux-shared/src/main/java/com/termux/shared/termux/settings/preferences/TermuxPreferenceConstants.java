@@ -1968,6 +1968,10 @@ public final class TermuxPreferenceConstants {
             "first_boot_tour_completed_version";
         public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
 
+        /** The setup wizard version the user has finished or skipped, or 0 for never. */
+        public static final String KEY_SETUP_WIZARD_VERSION = "setup_wizard_version";
+        public static final int DEFAULT_SETUP_WIZARD_VERSION = 0;
+
         /**
          * The version of the run an unfinished tour belongs to, or 0 for one started before the
          * version was recorded. The card number alone says nothing across an update: card 3 of
