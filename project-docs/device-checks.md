@@ -21,6 +21,12 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-29 · uncommitted LorieView fix (lastClipboardTimestamp starts at 0) · on pong: copy a
+  URL in the terminal (terminal-browser, or any selection + the keyboard's copy key) BEFORE the
+  display is started, then start Firefox on the display, tap its address bar and use the
+  keyboard's paste key: the URL appears; also copy in Firefox (Ctrl+C or the copy key) and paste
+  in the terminal · passes when both directions carry the text · emulator pass 2026-10-29 with
+  Mousepad (clip copied before `launcherctl launch mousepad` pasted after the fix, not before).
 - 2026-10-29 · the terminal palette wears the pane band's ink as decided (branch
   fix/contrast-polarity-flap) · on pong with the blue wallpaper and herdr open: Appearance ›
   Terminal › Contrast › Harder, Done; reopen the editor, Done again; then leave and return to
