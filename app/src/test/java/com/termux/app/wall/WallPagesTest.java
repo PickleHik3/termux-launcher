@@ -555,43 +555,32 @@ public class WallPagesTest {
     }
 
     @Test
-    public void aDisplayPageAddedBesideADisplayPageGoesAfterTheNextNonDisplayPage() {
-        // [H1][D2][H3][T4]: the drawer on D2 adds after D2 (W4).
+    public void aDisplayPageAddedBesideADisplayPageStaysWhereItWasAsked() {
+        // [H1][D2][H3][T4]: the drawer on D2 adds right after D2.
         WallPages p = wall(PageKind.HOME, PageKind.DISPLAY, PageKind.HOME, PageKind.TERMINAL);
         WallPages bound = ok(p.bind(2, "gimp"));
         WallPages.Route route = bound.routeLinuxApp("krita", 2);
         assertEquals(2, route.addAfterId);
         Result added = route.addTo(bound);
         assertTrue(added.ok());
-        assertEquals(java.util.Arrays.asList(1, 2, 3, 5, 4), ids(added.pages));
-        assertEquals(3, added.toIndex);
-        // Added after H1, in front of D2: the new page goes after H3 instead.
-        assertEquals(java.util.Arrays.asList(1, 2, 3, 5, 4), ids(ok(p.add(PageKind.DISPLAY, 1, null))));
-        // At the end beside a last Display page, with nothing after: before the nearest gap.
+        assertEquals(java.util.Arrays.asList(1, 2, 5, 3, 4), ids(added.pages));
+        assertEquals(2, added.toIndex);
+        assertTrue(added.pages.hasAdjacentDisplays());
+        // At the end beside a last Display page: still last.
         WallPages end = wall(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY);
-        assertEquals(java.util.Arrays.asList(1, 4, 2, 3), ids(ok(end.add(PageKind.DISPLAY, WallPages.END, null))));
-        assertFalse(ok(end.add(PageKind.DISPLAY, 3, null)).hasAdjacentDisplays());
-        // Beside no Display page: where asked.
-        assertEquals(java.util.Arrays.asList(1, 2, 3, 5, 4),
-            ids(ok(wall(PageKind.HOME, PageKind.DISPLAY, PageKind.HOME, PageKind.TERMINAL)
-                .add(PageKind.HOME, 3, null))));
+        assertEquals(java.util.Arrays.asList(1, 2, 3, 4), ids(ok(end.add(PageKind.DISPLAY, WallPages.END, null))));
     }
 
     @Test
-    public void aRemovalThatWouldJoinTwoDisplayPagesMovesTheLaterAfterTheNextNonDisplayPage() {
-        // [H1][D2][T3][D4][H5]: removing T3 would stand D2 by D4.
+    public void aRemovalThatJoinsTwoDisplayPagesLeavesThemSideBySide() {
+        // [H1][D2][T3][D4][H5]: removing T3 stands D2 by D4, and undo puts T3 back between.
         WallPages p = wall(PageKind.HOME, PageKind.DISPLAY, PageKind.TERMINAL, PageKind.DISPLAY,
             PageKind.HOME);
         WallPages gone = ok(p.remove(3));
-        assertEquals(java.util.Arrays.asList(1, 2, 5, 4), ids(gone));
-        assertFalse(gone.hasAdjacentDisplays());
+        assertEquals(java.util.Arrays.asList(1, 2, 4, 5), ids(gone));
+        assertTrue(gone.hasAdjacentDisplays());
         WallPages back = ok(gone.undo(3));
-        assertFalse(back.hasAdjacentDisplays());
-        assertEquals(java.util.Arrays.asList(1, 2, 3, 5, 4), ids(back));
-        // Home pages detached under Terminal only: [D1][H2][D3][T4] -> [D1][T4][D3].
-        WallPages d = ok(wall(PageKind.DISPLAY, PageKind.HOME, PageKind.DISPLAY,
-            PageKind.TERMINAL).setHome(4)).detachHomes().pages;
-        assertEquals(java.util.Arrays.asList(1, 4, 3), ids(d));
+        assertEquals(java.util.Arrays.asList(1, 2, 3, 4, 5), ids(back));
         // Stored side by side (an older build): separated on request, the later one moved.
         WallPages stored = wall(PageKind.HOME, PageKind.DISPLAY, PageKind.DISPLAY,
             PageKind.TERMINAL);

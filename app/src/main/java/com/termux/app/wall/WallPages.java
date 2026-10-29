@@ -431,9 +431,8 @@ public final class WallPages {
 
     /**
      * Adds a page of {@code kind} after the page {@code afterId} ({@link #END}: last).
-     * {@code binding} is for a Display page only. The first page added becomes home. A Display
-     * page that would stand beside another Display page goes after the next non-Display page
-     * instead (before the nearest one when none follows), so {@link Route#addTo} never joins two.
+     * {@code binding} is for a Display page only. The first page added becomes home. Two Display
+     * pages may stand side by side.
      */
     @NonNull
     public Result add(@NonNull PageKind kind, int afterId, @Nullable String binding) {
@@ -448,7 +447,6 @@ public final class WallPages {
         Page page = new Page(nextId, kind, null, binding);
         List<Page> list = new ArrayList<>(all);
         list.add(at, page);
-        if (kind == PageKind.DISPLAY) relocateDisplay(list, pending, page);
         boolean first = pages().isEmpty() && !homeIsDisplayWindow;
         WallPages next = copy(list, pending, detached, first ? page.id : homeId,
             nextId + 1, homeIsDisplayWindow);
@@ -477,7 +475,7 @@ public final class WallPages {
         return new Result(next, ChangeType.MOVED, page, null, from, toIndex);
     }
 
-    /** Whether two Display pages stand side by side among the pages on the wall. */
+    /** Whether two Display pages stand side by side among the pages on the wall. Used by the migration only. */
     public boolean hasAdjacentDisplays() {
         List<Page> visible = pages();
         for (int i = 1; i < visible.size(); i++) {
@@ -490,10 +488,10 @@ public final class WallPages {
     }
 
     /**
-     * The same pages with no two Display pages side by side (W4): wherever two stand together,
-     * the later one goes after the next non-Display page (before the nearest gap when none
-     * follows). This value itself when nothing stands together. Every edit but a move already
-     * returns a separated value; this repairs one stored by an older build.
+     * The same pages with no two Display pages side by side: wherever two stand together, the
+     * later one goes after the next non-Display page (before the nearest gap when none follows).
+     * This value itself when nothing stands together. For the one-time migration only; no edit
+     * separates Display pages any more.
      */
     @NonNull
     public WallPages separateDisplays() {
@@ -971,7 +969,7 @@ public final class WallPages {
         for (Page d : dropped) if (d.id == homeId && !homeIsDisplayWindow) {
             home = firstVisible(list, marked);
         }
-        return new WallPages(separated(list, marked), marked, kept, home, nextId,
+        return new WallPages(list, marked, kept, home, nextId,
             homeIsDisplayWindow, lastHomePageId, homeParked);
     }
 
@@ -995,13 +993,13 @@ public final class WallPages {
 
     private WallPages copy(List<Page> all, List<Integer> pending, List<Page> detached,
                            int homeId, int nextId, boolean display) {
-        return new WallPages(separated(all, pending), pending, detached, homeId, nextId, display,
+        return new WallPages(all, pending, detached, homeId, nextId, display,
             lastHomePageId, homeParked);
     }
 
     private WallPages withHome(List<Page> all, List<Page> detached, int homeId, boolean display,
                                int last, boolean parked) {
-        return new WallPages(separated(all, pending), pending, detached, homeId, nextId, display,
+        return new WallPages(all, pending, detached, homeId, nextId, display,
             last, parked);
     }
 
