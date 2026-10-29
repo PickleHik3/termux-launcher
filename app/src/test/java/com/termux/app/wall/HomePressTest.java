@@ -5,7 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** A home press in front goes to Home page 1; one that brings the launcher back does not. */
+/** A home press in front goes to Home; one that brings the launcher back does not. */
 public class HomePressTest {
 
     @Test

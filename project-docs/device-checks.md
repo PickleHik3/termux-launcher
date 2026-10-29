@@ -21,6 +21,13 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-29 · the home press follows Start in (commit after 7d753cc0c) · on pong: Edit pages, tap
+  the terminal card's home button, leave the overview, swipe to Home page 2, press the Home key:
+  the wall lands on the first terminal window (window 2 in front first: the press switches to
+  window 1); with the display marked as Home the press lands on the display window; with a Home
+  page marked, on that page as before; a return from another app still shows the page left; after
+  a force-stop the launcher opens where the marker is · passes as the unit tests say
+  (PaneWallControllerTest, 2026-10-29) · pong, debug arm64 build.
 - 2026-10-29 · the three Edit pages fixes after 93c35220f (chips with icons, the editor sheet folds
   under the overview, the terminal holds its size under the overview) · on pong: Home actions ›
   Appearance › sheet More › Edit pages: the sheet drops to its header (handle plus "Home") at the

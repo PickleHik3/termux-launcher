@@ -2266,8 +2266,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // pinned icons.
             mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             restoreInAppKeyboardTypingClaim();
-            // A home press while the launcher is in front lands on Home page 1, from a window or
-            // from another Home page; a return from another app finds the page it left.
+            // A home press while the launcher is in front lands on the page Start in names as
+            // Home, from a window or from another Home page; a return from another app finds the
+            // page it left.
             if (mHomePress.goesHome() && mPaneWallController != null) {
                 mPaneWallController.goHome(isVisible());
                 // Home floats stay on their pages; a focused one gives the keyboard back.
@@ -25245,6 +25246,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return com.termux.app.launcher.home.HomePageEdits.clampDefault(
                         com.termux.app.launcher.home.HomeSettings.defaultPage(TermuxActivity.this),
                         wallInnerCount(com.termux.app.wall.PaneWallPage.WIDGETS));
+                }
+                @Override @NonNull public String startIn() {
+                    return effectiveStartIn();
+                }
+                // The display window's row place is NONE (-1) while it is not on this row.
+                @Override public int homeWindowRow(@NonNull String startIn) {
+                    int slot = displayRowSlot();
+                    if (com.termux.app.wall.WallRow.START_IN_DISPLAY.equals(startIn)) return slot;
+                    return rowWindows().isEmpty() ? com.termux.app.wall.DisplaySlot.NONE
+                        : com.termux.app.wall.DisplaySlot.rowOf(0, slot);
                 }
                 // Home's own swipe between Home pages, for the wallpaper's pan over the row.
                 @Override public float innerShiftFraction(

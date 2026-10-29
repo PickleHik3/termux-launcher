@@ -1,9 +1,9 @@
 package com.termux.app.wall;
 
 /**
- * What a home press means to the wall. Made while the launcher is in front it goes to Home page
- * 1, from a window or from another Home page; made from another app it brings the launcher back
- * to the page that was left.
+ * What a home press means to the wall. Made while the launcher is in front it goes to Home (the
+ * page Start in names, {@link PaneWallController#goHome}), from a window or from another Home
+ * page; made from another app it brings the launcher back to the page that was left.
  *
  * <p>The launcher is in front from its resume until its stop: a pause alone (the shade, a dialog
  * over it) keeps it in front. An activity starts as not in front, because the system can hand a
@@ -26,7 +26,7 @@ public final class HomePress {
         mInFront = false;
     }
 
-    /** Whether a home press now goes to Home page 1, rather than back to the page left. */
+    /** Whether a home press now goes to Home, rather than back to the page left. */
     public boolean goesHome() {
         return mInFront;
     }

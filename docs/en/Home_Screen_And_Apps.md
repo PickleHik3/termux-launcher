@@ -11,8 +11,9 @@ Most of these settings are on **Settings → Dock** and **Settings → Home**.
 The launcher is one row of pages. **Home** comes first: your widget pages, which you swipe through
 anywhere on the page, as on any home screen. The **Workspace** follows: your terminal windows, then
 any [Linux display](X11_Display.md). Swiping left past the last Home page reaches the first window;
-dragging right from the first window's border comes back. The home button always lands on Home
-page 1, and coming back from another app shows the page you left.
+dragging right from the first window's border comes back. The home button always lands on the
+page you marked as Home (Home page 1 until you choose another, see Start in below), and coming
+back from another app shows the page you left.
 
 Home wears the same chrome as the Workspace: the same status bar (with the same window chips), the
 same dock and the same look. Only the extra keys are the Workspace's alone; they fold away as you
@@ -30,8 +31,9 @@ nothing resizes on the swipe. It starts as **One layout**. On Home, Margin is th
 over Home and around the dock, all at once. Minimal mode affects only windows; Home ignores it. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
-**Settings → Home → Start in** says where the launcher opens after a restart: **Home** (the default) or
-**Terminal**, which opens the Workspace with one fresh shell window.
+**Settings → Home → Start in** says where the launcher opens after a restart and where the Home
+button takes you: **Home** (the default) or **Terminal**, which opens the Workspace with one fresh
+shell window and sends the Home button to its first window.
 
 (Older versions had a usage mode and three places, Widgets, Terminal and Display, on a pane wall.
 Home and the Workspace replace them.)
@@ -92,7 +94,9 @@ nothing on your Home pages can be moved by accident. While it is on:
 ### Edit pages
 
 **Edit pages** (Home's long-press menu, or Settings › Home) lists your Home pages: move each up
-or down, choose the one Home opens on (the house), add a page at the end, or remove one. Removing
+or down, choose the one Home opens on (the house, which also stands on the first terminal window
+and on the display: the page it fills is where the Home button and a restart land), add a page at
+the end, or remove one. Removing
 a page that holds something asks first; its widgets, icons and folders go with it, and a floating
 terminal on it moves to another page with its shell still running. The last page cannot be
 removed.
@@ -219,4 +223,5 @@ shortcut, and you can search by it. For the file format, see
 - **Settings → General → Set as default launcher** opens Android's default home app screen.
 - **Settings → General → Show in Recents when not the default launcher** keeps the launcher in
   Recents while another home app is active.
-- **Settings → Home → Start in** chooses whether a restart opens on Home or in the Workspace.
+- **Settings → Home → Start in** chooses whether a restart and the Home button open Home or the
+  Workspace.

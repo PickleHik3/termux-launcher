@@ -25,8 +25,8 @@ swipe down, double-tap, two-finger swipe up and down), then **Double-tap to lock
 the lock method), **Swipe up on app icons for quick reply** (on by default; off, a swipe up on an icon with a
 notification dot behaves like on any other icon) and **Swipe on the terminal to switch windows**.
 
-**Start in** is **Home** (the default) or **Terminal**: where the launcher opens after a restart;
-**Terminal** opens the Workspace with one fresh shell window. See
+**Start in** is **Home** (the default) or **Terminal**: where the launcher opens after a restart
+and where the Home button takes you; **Terminal** opens the Workspace with one fresh shell window. See
 [Home screen and apps](Home_Screen_And_Apps.md) and [Widgets](Widgets.md).
 
 ### Dock

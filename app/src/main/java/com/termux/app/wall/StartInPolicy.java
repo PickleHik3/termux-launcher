@@ -4,9 +4,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * Which page is Home: the one place Start in is decided. Start in is the only store — Edit pages'
- * Home marker is read from it, and choosing a card as Home writes it — so the marker and Settings
- * can never disagree. Start in names Home ({@link WallRow#START_IN_HOME}, the Home page Home opens
+ * Which page is Home, where a cold start and a home press land: the one place Start in is decided.
+ * Start in is the only store — Edit pages' Home marker is read from it, and choosing a card as
+ * Home writes it — so the marker and Settings can never disagree. Start in names Home ({@link WallRow#START_IN_HOME}, the Home page Home opens
  * on), the Workspace ({@link WallRow#START_IN_WORKSPACE}, its first terminal window) or the
  * display window ({@link WallRow#START_IN_DISPLAY}).
  *

@@ -59,6 +59,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default int homePressPage() { return 0; }
         /**
+         * Start in as it stands ({@link StartInPolicy#effective}), read fresh on every home press:
+         * the page that is Home, which the press lands on.
+         */
+        @NonNull default String startIn() { return WallRow.START_IN_HOME; }
+        /**
+         * The row place, counting from 0, of the window Start in {@code startIn} names as Home:
+         * the first terminal window, or the display window. -1 while the row has no such window;
+         * the press then lands on the Workspace as it stands.
+         */
+        default int homeWindowRow(@NonNull String startIn) { return -1; }
+        /**
          * How far the page in front of {@code page}'s view stands off its rest while that view's
          * own swipe turns it, as a fraction of a page width, positive to the right: Home's grid
          * mid-swipe and while the next Home page slides in. The windows' arrival is the wall's own
@@ -580,12 +591,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * The default Home page (page 1 unless Edit pages chose another): where the home press lands
-     * while the launcher is in front.
+     * Where the home press lands while the launcher is in front: the page Start in names as Home
+     * ({@link Host#startIn}), the same page a cold start opens on. Home: the default Home page
+     * (page 1 unless Edit pages chose another). The Workspace or Display, and all of Terminal
+     * only: the first terminal window or the display window ({@link Host#homeWindowRow}).
      */
     public void goHome(boolean animate) {
-        if (!mHost.useAs().showsHomePage()) {
-            // Terminal only: the home press lands on the Workspace.
+        String startIn = mHost.useAs().startIn(mHost.startIn());
+        if (WallRow.coldStart(startIn) == PaneWallPage.TERMINAL) {
+            int row = mHost.homeWindowRow(startIn);
+            if (row >= 0) mHost.showInnerPage(PaneWallPage.TERMINAL, row);
             goToWorkspace(animate);
             return;
         }

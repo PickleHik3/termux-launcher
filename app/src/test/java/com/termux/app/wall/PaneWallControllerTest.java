@@ -50,9 +50,13 @@ public class PaneWallControllerTest {
         boolean canStart;
         int shellsStarted;
         UseAs useAs = UseAs.HOME;
+        String startIn = WallRow.START_IN_HOME;
+        int homeRow = -1;
 
         @Override public boolean reducedMotion() { return reduced; }
         @Override public UseAs useAs() { return useAs; }
+        @Override public String startIn() { return startIn; }
+        @Override public int homeWindowRow(String startIn) { return homeRow; }
         @Override public boolean canStartWorkspace() { return canStart; }
         @Override public boolean startWorkspaceShell() {
             shellsStarted++;
@@ -131,6 +135,54 @@ public class PaneWallControllerTest {
         assertEquals(1, host.shellsStarted);
         assertEquals("the wall stands on the new window", PaneWallPage.TERMINAL,
             wall.currentPage());
+    }
+
+    @Test public void theHomePressLandsOnTheFirstWindowWhileStartInNamesTheWorkspace() {
+        host.startIn = WallRow.START_IN_WORKSPACE;
+        host.homeRow = 0;
+        host.current = 2;
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        host.homePage = 2;
+
+        controller.goHome(false);
+
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals("the first terminal window, the one the marker stands on", 0, host.current);
+        assertEquals("Home's own page is left where it was", 2, host.homePage);
+    }
+
+    @Test public void theHomePressLandsOnTheDisplayWindowWhileStartInNamesIt() {
+        host.startIn = WallRow.START_IN_DISPLAY;
+        host.homeRow = 3;
+        host.current = 0;
+        controller.goTo(PaneWallPage.WIDGETS, false);
+
+        controller.goHome(false);
+
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals("the display window's row place", 3, host.current);
+    }
+
+    @Test public void theHomePressLandsOnTheWorkspaceAsItStandsWhenHomesWindowIsGone() {
+        host.startIn = WallRow.START_IN_DISPLAY;
+        host.homeRow = -1;
+        host.current = 1;
+        controller.goTo(PaneWallPage.WIDGETS, false);
+
+        controller.goHome(false);
+
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals("the window in front stays", 1, host.current);
+    }
+
+    @Test public void theHomePressLandsOnTheDefaultHomePageWhileStartInNamesHome() {
+        host.homePage = 2;
+        controller.goTo(PaneWallPage.TERMINAL, false);
+
+        controller.goHome(false);
+
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(0, host.homePage);
     }
 
     @Test public void theEditorsSlideToAWorkspaceWithAWindowStartsNothing() {
