@@ -809,8 +809,9 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * A card still for every cell whose kind's view stands elsewhere, made the first time it is
-     * needed; the cards of pages that left go with them.
+     * A card still for every cell whose kind's view is bound to another page, made the first
+     * time it is needed; the cards of pages that left go with them. The bound cell of a kind
+     * whose view is not built yet shows nothing, as it always has.
      */
     private void syncCards() {
         java.util.Iterator<Map.Entry<Integer, PageCardView>> it = mCards.entrySet().iterator();
@@ -827,7 +828,7 @@ public final class PaneWallLayout extends ViewGroup {
                 card.setName(cell.name);
                 continue;
             }
-            if (isLive(cell.pageId)) continue;
+            if (boundPageId(cell.kind) == cell.pageId) continue;
             card = new PageCardView(getContext(), cell.pageId, cell.kind, cell.name);
             card.setVisibility(GONE);
             mCards.put(cell.pageId, card);
@@ -2930,7 +2931,7 @@ public final class PaneWallLayout extends ViewGroup {
         // Every other cell shows its card still.
         for (PageCardView card : mCards.values()) {
             int at = indexOfCell(card.pageId());
-            if (at < 0 || isLive(card.pageId())) {
+            if (at < 0 || boundPageId(card.kind()) == card.pageId()) {
                 unpose(card);
                 card.setVisibility(GONE);
                 continue;

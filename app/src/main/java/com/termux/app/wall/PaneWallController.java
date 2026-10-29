@@ -292,6 +292,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int home = mWall.boundPageId(PaneWallPage.WIDGETS);
         if (after != before && home == after) bindHome(after);
         else bindRunOf(home);
+        // A kind-only cell holds every page of its kind: handed the wall, it turns to its last.
+        if (after != before && after < 0 && mWall.currentPage() != PaneWallPage.TERMINAL) {
+            PaneWallPage kind = mWall.currentPage();
+            mHost.showInnerPage(kind, Math.max(0, mHost.innerCount(kind) - 1));
+        }
         int display = mWall.boundPageId(PaneWallPage.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
         // The last window closed under the wall while the empty Terminal page keeps its cell: the
@@ -1098,6 +1103,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public void onWallDragBegin(@NonNull PaneWallPage page) {
         mWorkspacePending = false;
         syncHomeCell();
+        // Off the first window a kind-only Home cell, which holds every Home page, comes in on
+        // its last page, the one beside the seam.
+        int left = mWall.neighbourId(-1);
+        if (page == PaneWallPage.TERMINAL && left < 0 && left != PaneWallLayout.NO_PAGE
+            && mWall.kindOf(left) == PaneWallPage.WIDGETS
+            && mHost.innerIndex(PaneWallPage.TERMINAL) == 0) {
+            int last = WallRow.lastHomePage(mHost.innerCount(PaneWallPage.WIDGETS));
+            if (mHost.innerIndex(PaneWallPage.WIDGETS) != last) {
+                mHost.showInnerPage(PaneWallPage.WIDGETS, last);
+            }
+        }
         // Leaving Home, the Terminal page's window beside the seam waits in front: the first
         // window when the Terminal page stands on Home's right, the last on its left.
         if (page != PaneWallPage.WIDGETS) return;
