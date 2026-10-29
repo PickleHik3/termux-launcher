@@ -29292,6 +29292,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Back to the form the bar had, from wherever the finger left it.
                     if (mStatusBarFoldDragging) setTopStatusBarCollapsed(isStatusBarCompact(), true, 0f);
                 }
+                @Override public boolean isTwoFingerOnly() {
+                    return mPreferences != null && mPreferences.isStatusSwipeTwoFingersEnabled();
+                }
                 @Override public boolean isStatusGestureBlocked() {
                     // A live COMPACT/EXPANDED animator is deliberately eligible for takeover.
                     return isCommandPaletteOpen() || isAppDrawerEngaged() || mSurfaceEditor.isActive();
