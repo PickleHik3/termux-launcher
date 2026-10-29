@@ -24,7 +24,7 @@ import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneBorderStyle;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.wall.PaneControlsView;
 import com.termux.app.wall.SurfacePage;
 import com.termux.app.wall.SurfaceStandIn;
@@ -746,7 +746,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     private void applyEmptyState() {
         DisplayEmptyStatePolicy.State state = DisplayEmptyStatePolicy.decide(mEnabled,
-            X11CliInstaller.hasKeyboardData(), TourEdition.of(getContext().getPackageName()),
+            X11CliInstaller.hasKeyboardData(), AppEdition.of(getContext().getPackageName()),
             mStartFailure);
         View message = findViewById(R.id.x11_pane_empty_message);
         if (message instanceof android.widget.TextView) {
@@ -823,7 +823,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private void installKeyboardData() {
         if (mHost == null) return;
         java.util.List<String> command =
-            KeyboardDataInstall.command(TourEdition.of(getContext().getPackageName()));
+            KeyboardDataInstall.command(AppEdition.of(getContext().getPackageName()));
         if (command != null) mHost.installKeyboardData(command);
     }
 

@@ -1,5 +1,7 @@
 package com.termux.app.tour;
 
+import com.termux.app.help.HelpGesture;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -68,24 +70,24 @@ public final class TourStep {
          * out in the row).
          */
         @Nullable public final String alsoSignal;
-        @NonNull public final TourGesture gesture;
+        @NonNull public final HelpGesture gesture;
 
         /** A stage read wherever the wall rests. */
         public Stage(@StringRes int titleRes, @StringRes int bodyRes, @NonNull String targetId,
-                     @NonNull String signal, @NonNull TourGesture gesture) {
+                     @NonNull String signal, @NonNull HelpGesture gesture) {
             this(Side.ANYWHERE, titleRes, bodyRes, targetId, signal, gesture);
         }
 
         public Stage(@NonNull Side side, @StringRes int titleRes, @StringRes int bodyRes,
                      @NonNull String targetId, @NonNull String signal,
-                     @NonNull TourGesture gesture) {
+                     @NonNull HelpGesture gesture) {
             this(side, titleRes, bodyRes, targetId, signal, null, gesture);
         }
 
         /** As above, cleared by {@code alsoSignal} too. */
         public Stage(@NonNull Side side, @StringRes int titleRes, @StringRes int bodyRes,
                      @NonNull String targetId, @NonNull String signal,
-                     @Nullable String alsoSignal, @NonNull TourGesture gesture) {
+                     @Nullable String alsoSignal, @NonNull HelpGesture gesture) {
             if (titleRes == 0 || bodyRes == 0)
                 throw new IllegalArgumentException("a stage needs a title and a sentence");
             this.side = side;
@@ -177,9 +179,9 @@ public final class TourStep {
 
     /** The gesture to demonstrate at {@code stage}. */
     @NonNull
-    public TourGesture gestureAt(int stage) {
+    public HelpGesture gestureAt(int stage) {
         Stage at = stageAt(stage);
-        return at == null ? TourGesture.NONE : at.gesture;
+        return at == null ? HelpGesture.NONE : at.gesture;
     }
 
     /** The title at {@code stage}, or 0 on the closing card. */

@@ -65,7 +65,7 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         if (setup != null && context != null) {
             setup.setSummary(com.termux.app.x11.GuiAppsSetupGuide.rowSummary(context,
                 com.termux.app.x11.GuiAppsSetupGuide.preferences(context),
-                com.termux.app.tour.TourEdition.of(context.getPackageName())));
+                com.termux.app.AppEdition.of(context.getPackageName())));
         }
         updateSoundStatus();
     }

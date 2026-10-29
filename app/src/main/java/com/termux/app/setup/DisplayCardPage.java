@@ -28,7 +28,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.GraphicsAccelerationFragment;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.GuiAppsSetup;
 import com.termux.app.x11.GuiAppsSetupGuide;
 import com.termux.app.x11.X11CliInstaller;
@@ -118,7 +118,7 @@ final class DisplayCardPage implements SetupCardPage {
         mCardId = card.id;
         mAlive = true;
         mRenderedKey = null;
-        TourEdition edition = edition();
+        AppEdition edition = edition();
         SharedPreferences prefs = GuiAppsSetupGuide.preferences(context);
         mRoute = DisplayCardLogic.resolveRoute(prefs.getString(PREF_ROUTE, null),
             DisplayCardLogic.offeredRoutes(edition));
@@ -152,8 +152,8 @@ final class DisplayCardPage implements SetupCardPage {
     // ---- shared pieces ----
 
     @NonNull
-    private TourEdition edition() {
-        return TourEdition.of(mContext.getPackageName());
+    private AppEdition edition() {
+        return AppEdition.of(mContext.getPackageName());
     }
 
     private int dp(float value) {

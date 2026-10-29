@@ -1,4 +1,4 @@
-package com.termux.app.tour;
+package com.termux.app;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -11,7 +11,7 @@ import androidx.annotation.Nullable;
  * be added to each branch's {@code app/build.gradle} by hand and would silently be wrong the first
  * time a merge took the other side. The package name cannot be wrong.
  */
-public enum TourEdition {
+public enum AppEdition {
 
     /** {@code com.termux}: the Termux repositories and {@code pkg}. */
     TERMUX,
@@ -25,7 +25,7 @@ public enum TourEdition {
 
     /** The edition that ships under {@code packageName}; anything unknown is treated as Termux. */
     @NonNull
-    public static TourEdition of(@Nullable String packageName) {
+    public static AppEdition of(@Nullable String packageName) {
         if (NIX_PACKAGE_NAME.equals(packageName)) return NIX;
         if (VAJ_PACKAGE_NAME.equals(packageName)) return VAJ;
         return TERMUX;

@@ -3,7 +3,7 @@ package com.termux.app.x11;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -123,7 +123,7 @@ public final class GuiAppsSetup {
      * (repo.pathayam.xyz, aarch64) now carries {@code xkeyboard-config}, {@code pcmanfm},
      * {@code mousepad}, {@code thunar} and {@code xfce4-terminal}, so its X11 route works there
      * after all and is offered again alongside the distro route — see
-     * {@link #command(Route, Distro, Set, TourEdition)} for the two things that route drops for
+     * {@link #command(Route, Distro, Set, AppEdition)} for the two things that route drops for
      * VAJ (the separate {@code x11-repo} step, which that repo has no equivalent of, and the
      * browser, which it ships none of). Decision (user, 2026-09-20): the nix edition offers
      * neither route — graphical apps there come from nixpkgs and {@code home.nix}, a third way
@@ -131,8 +131,8 @@ public final class GuiAppsSetup {
      * show neither a route choice nor a command to copy.
      */
     @NonNull
-    public static List<Route> routesFor(@NonNull TourEdition edition) {
-        if (edition == TourEdition.NIX) return Collections.emptyList();
+    public static List<Route> routesFor(@NonNull AppEdition edition) {
+        if (edition == AppEdition.NIX) return Collections.emptyList();
         return Collections.unmodifiableList(Arrays.asList(Route.X11_REPO, Route.DISTRO));
     }
 
@@ -141,7 +141,7 @@ public final class GuiAppsSetup {
      * choice no longer applies; {@code null} when {@code edition} offers no route at all.
      */
     @Nullable
-    public static Route defaultRoute(@NonNull TourEdition edition) {
+    public static Route defaultRoute(@NonNull AppEdition edition) {
         List<Route> routes = routesFor(edition);
         return routes.isEmpty() ? null : routes.get(0);
     }
@@ -334,7 +334,7 @@ public final class GuiAppsSetup {
 
     /**
      * The Termux edition's command for {@code route}. Kept for callers with no edition of their
-     * own to hand in yet; {@link #command(Route, Distro, Set, TourEdition)} is what the "Get GUI
+     * own to hand in yet; {@link #command(Route, Distro, Set, AppEdition)} is what the "Get GUI
      * apps" screen calls.
      *
      * @param distro   which Linux to put inside; ignored by {@link Route#X11_REPO}
@@ -343,7 +343,7 @@ public final class GuiAppsSetup {
     @NonNull
     public static String command(@NonNull Route route, @NonNull Distro distro,
                                  @NonNull Set<StarterApp> starters) {
-        return command(route, distro, starters, TourEdition.TERMUX);
+        return command(route, distro, starters, AppEdition.TERMUX);
     }
 
     /**
@@ -357,7 +357,7 @@ public final class GuiAppsSetup {
      */
     @NonNull
     public static String command(@NonNull Route route, @NonNull Distro distro,
-                                 @NonNull Set<StarterApp> starters, @NonNull TourEdition edition) {
+                                 @NonNull Set<StarterApp> starters, @NonNull AppEdition edition) {
         return command(route, distro, starters, edition, null, null);
     }
 
@@ -368,14 +368,14 @@ public final class GuiAppsSetup {
      * {@code chpasswd} from the shell-quoted {@code password} instead of an interactive
      * {@code passwd}. The password goes into the container as the environment variable
      * {@code PASS}; nothing here prints it. With a null {@code user} this is the interactive
-     * command of {@link #command(Route, Distro, Set, TourEdition)}. Both are ignored by
+     * command of {@link #command(Route, Distro, Set, AppEdition)}. Both are ignored by
      * {@link Route#X11_REPO}.
      *
      * @throws IllegalArgumentException when {@code user} is given without {@code password}
      */
     @NonNull
     public static String command(@NonNull Route route, @NonNull Distro distro,
-                                 @NonNull Set<StarterApp> starters, @NonNull TourEdition edition,
+                                 @NonNull Set<StarterApp> starters, @NonNull AppEdition edition,
                                  @Nullable String user, @Nullable String password) {
         if (user != null && password == null) {
             throw new IllegalArgumentException("a user needs a password");
@@ -414,8 +414,8 @@ public final class GuiAppsSetup {
      */
     @NonNull
     private static String x11Command(@NonNull Set<StarterApp> starters,
-                                     @NonNull TourEdition edition) {
-        boolean vaj = edition == TourEdition.VAJ;
+                                     @NonNull AppEdition edition) {
+        boolean vaj = edition == AppEdition.VAJ;
         List<String> packages = new ArrayList<>();
         // The display itself needs the keyboard data before it can start; it rides along with
         // whatever apps were ticked, so a fresh install gets a display that starts.

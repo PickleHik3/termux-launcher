@@ -9,7 +9,6 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import com.termux.R;
-import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.launcher.widget.WidgetGridView;
 import com.termux.app.terminal.TerminalWindowBar;
@@ -547,24 +546,24 @@ public class HelpPresentationTest {
         layout();
         assertEquals("dock", overlay.selectedTopicId());
         assertTrue(overlay.isShowingGesture());
-        assertEquals(TourGesture.DRAG_DOWN, overlay.playingGesture());
+        assertEquals(HelpGesture.DRAG_DOWN, overlay.playingGesture());
     }
 
     @Test public void aDockThatIsARailIsSwipedInwardInstead() {
         HelpTopics.Entry dockTopic = HelpTopics.entry("dock");
-        assertEquals(TourGesture.DRAG_DOWN, dockTopic.gesture);
+        assertEquals(HelpGesture.DRAG_DOWN, dockTopic.gesture);
         explore(PaneWallPage.TERMINAL);
         assertEquals("a row along the bottom is still pulled down",
-            TourGesture.DRAG_DOWN, overlay.gestureFor(dockTopic, new Rect(0, 600, 400, 700)));
+            HelpGesture.DRAG_DOWN, overlay.gestureFor(dockTopic, new Rect(0, 600, 400, 700)));
         // The wall off the left edge, and the dock a column beside it: the same topic, and the
         // movement the copy names -- inward off the rail.
         wall.layout(80, 60, 400, 560);
         overlay.refresh();
-        assertEquals(TourGesture.SWIPE_RIGHT,
+        assertEquals(HelpGesture.SWIPE_RIGHT,
             overlay.gestureFor(dockTopic, new Rect(0, 100, 60, 500)));
         wall.layout(0, 60, 320, 560);
         overlay.refresh();
-        assertEquals(TourGesture.SWIPE_LEFT,
+        assertEquals(HelpGesture.SWIPE_LEFT,
             overlay.gestureFor(dockTopic, new Rect(330, 100, 400, 500)));
     }
 

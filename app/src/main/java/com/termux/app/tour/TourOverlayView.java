@@ -1,5 +1,8 @@
 package com.termux.app.tour;
 
+import com.termux.app.help.HelpGesture;
+import com.termux.app.help.HelpFingerPainter;
+
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -819,7 +822,7 @@ public final class TourOverlayView extends FrameLayout {
                 placement = TourCardPlacement.placeUnderStatusBar(getWidth(), getHeight(), width,
                     height, margin, topMargin, bottomMargin, mTopBarRect, dp(CARD_GAP_DP));
             } else {
-                TourGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
+                HelpGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
                 int gap = dp(CARD_GAP_DP);
                 placement = TourCardPlacement.placeClear(getWidth(), getHeight(), width, height,
                     anchor, margin, topMargin, bottomMargin,
@@ -896,12 +899,12 @@ public final class TourOverlayView extends FrameLayout {
      * rather than pulled down.
      */
     @NonNull
-    private TourGesture gestureAsLaidOut(@NonNull TourGesture gesture) {
-        if (gesture != TourGesture.DRAG_DOWN || mTargetRect == null
+    private HelpGesture gestureAsLaidOut(@NonNull HelpGesture gesture) {
+        if (gesture != HelpGesture.DRAG_DOWN || mTargetRect == null
             || !TourTargets.DOCK.equals(glowTargetId())) return gesture;
         if (mTargetRect.height() < mTargetRect.width()) return gesture;
-        return mTargetRect.centerX() < getWidth() / 2 ? TourGesture.SWIPE_RIGHT
-            : TourGesture.SWIPE_LEFT;
+        return mTargetRect.centerX() < getWidth() / 2 ? HelpGesture.SWIPE_RIGHT
+            : HelpGesture.SWIPE_LEFT;
     }
 
     // ---- the demonstration ---------------------------------------------------------------------
@@ -920,15 +923,15 @@ public final class TourOverlayView extends FrameLayout {
             TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mGlowRect);
         FocusOutlineRenderer.drawRoundRectFallback(canvas, mGlowRect, GLOW_RADIUS_DP * mDensity,
             mAccent, playing ? TourDemoLoop.glowAlpha(mDemoElapsedMs) : 1f, 1f, mDensity);
-        TourGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
-        if (gesture == TourGesture.NONE) return;
+        HelpGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
+        if (gesture == HelpGesture.NONE) return;
         float reach = (TourDemoLoop.FINGER_DIAMETER_DP / 2f + TourDemoLoop.FINGER_HALO_DP)
             * mDensity;
         TourGlowGeometry.cueBounds(getWidth(), getHeight(), reach,
             TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mCueBounds);
         if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
             // A phone that plays no animations still gets the direction, as a still picture.
-            TourFingerPainter.drawStaticCue(canvas, mFingerPaint, mCuePath, gesture,
+            HelpFingerPainter.drawStaticCue(canvas, mFingerPaint, mCuePath, gesture,
                 mTargetRect.left, mTargetRect.top, mTargetRect.right, mTargetRect.bottom,
                 mDensity, mAccent, mPointA, mPointB);
             return;
@@ -936,7 +939,7 @@ public final class TourOverlayView extends FrameLayout {
         if (!playing) return;
         long pass = TourDemoLoop.passMs(gesture);
         TourDemoLoop.frame(gesture, (mDemoElapsedMs % pass) / (float) pass, mFrame);
-        TourFingerPainter.drawDemo(canvas, mFingerPaint, gesture, mTargetRect.left,
+        HelpFingerPainter.drawDemo(canvas, mFingerPaint, gesture, mTargetRect.left,
             mTargetRect.top, mTargetRect.right, mTargetRect.bottom, mDensity, mFrame, mAccent,
             mPointA, mPointB, mCueBounds);
     }
@@ -946,7 +949,7 @@ public final class TourOverlayView extends FrameLayout {
         stopDemo();
         if (mStep == null || mStep.isClosingCard()
             || mPresentation != TourCardVisibility.NORMAL
-            || mStep.gestureAt(mStage) == TourGesture.NONE
+            || mStep.gestureAt(mStage) == HelpGesture.NONE
             || !FocusOutlineRenderer.animationsEnabled(getContext())) {
             invalidate();
             return;

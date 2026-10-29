@@ -1,5 +1,7 @@
 package com.termux.app.tour;
 
+import com.termux.app.help.HelpGesture;
+
 import androidx.annotation.NonNull;
 
 import com.termux.R;
@@ -114,10 +116,10 @@ public final class TourRun {
             TourStep.Placement.AUTO,
             new TourStep.Stage(TourStep.Side.HOME, R.string.tour_title_to_workspace,
                 R.string.tour_body_to_workspace, TourTargets.HOME_PAGE,
-                TourSignals.SEAM_TO_WORKSPACE, TourGesture.SWIPE_LEFT),
+                TourSignals.SEAM_TO_WORKSPACE, HelpGesture.SWIPE_LEFT),
             new TourStep.Stage(TourStep.Side.WORKSPACE, R.string.tour_title_border_drag,
                 R.string.tour_body_border_drag, TourTargets.PAGE_BORDER,
-                TourSignals.SEAM_TO_HOME, TourGesture.SWIPE_RIGHT));
+                TourSignals.SEAM_TO_HOME, HelpGesture.SWIPE_RIGHT));
     }
 
     /**
@@ -133,7 +135,7 @@ public final class TourRun {
             TourStep.Placement.AUTO,
             new TourStep.Stage(TourStep.Side.HOME, R.string.tour_title_apps, body,
                 TourTargets.DOCK, TourSignals.DRAWER_OPENED, TourSignals.AZ_APPS_SHOWN,
-                TourGesture.DRAG_DOWN));
+                HelpGesture.DRAG_DOWN));
     }
 
     /**
@@ -145,10 +147,10 @@ public final class TourRun {
             TourStep.Placement.AUTO,
             new TourStep.Stage(TourStep.Side.WORKSPACE, R.string.tour_title_keyboard_away,
                 R.string.tour_body_keyboard_away, TourTargets.KEYBOARD_GRABBER,
-                TourSignals.KEYBOARD_HIDDEN, TourGesture.DRAG_DOWN),
+                TourSignals.KEYBOARD_HIDDEN, HelpGesture.DRAG_DOWN),
             new TourStep.Stage(TourStep.Side.WORKSPACE, R.string.tour_title_keyboard_back,
                 R.string.tour_body_keyboard_back, TourTargets.KEYBOARD_GRABBER,
-                TourSignals.KEYBOARD_SHOWN, TourGesture.SWIPE_UP));
+                TourSignals.KEYBOARD_SHOWN, HelpGesture.SWIPE_UP));
     }
 
     /**
@@ -159,10 +161,10 @@ public final class TourRun {
             TourStep.Placement.AUTO,
             new TourStep.Stage(TourStep.Side.WORKSPACE, R.string.tour_title_status,
                 R.string.tour_body_status, TourTargets.STATUS_GRABBER,
-                TourSignals.STATUS_BAR_EXPANDED, TourGesture.DRAG_DOWN),
+                TourSignals.STATUS_BAR_EXPANDED, HelpGesture.DRAG_DOWN),
             new TourStep.Stage(TourStep.Side.WORKSPACE, R.string.tour_title_status_fold,
                 R.string.tour_body_status_fold, TourTargets.STATUS_GRABBER,
-                TourSignals.STATUS_BAR_COLLAPSED, TourGesture.SWIPE_UP));
+                TourSignals.STATUS_BAR_COLLAPSED, HelpGesture.SWIPE_UP));
     }
 
     /**
@@ -175,7 +177,7 @@ public final class TourRun {
             TourStep.Placement.ABOVE,
             new TourStep.Stage(TourStep.Side.ANYWHERE, R.string.tour_title_palette,
                 R.string.tour_body_palette, TourTargets.HOME_PAGE, TourSignals.PALETTE_OPENED,
-                TourGesture.SWIPE_UP));
+                HelpGesture.SWIPE_UP));
     }
 
     /** The corner is held, not tapped; the ? the hold raises is tapped. Taught on a window. */
@@ -184,10 +186,10 @@ public final class TourRun {
             TourStep.Placement.AUTO,
             new TourStep.Stage(TourStep.Side.WORKSPACE, R.string.tour_title_corner,
                 R.string.tour_body_corner, TourTargets.PANE_CORNER, TourSignals.PANE_CORNER_MENU,
-                TourGesture.HOLD),
+                HelpGesture.HOLD),
             new TourStep.Stage(TourStep.Side.WORKSPACE, R.string.tour_title_help,
                 R.string.tour_body_help, TourTargets.HELP_BUTTON, TourSignals.HELP_OPENED,
-                TourGesture.TAP));
+                HelpGesture.TAP));
     }
 
     private TourRun() {}

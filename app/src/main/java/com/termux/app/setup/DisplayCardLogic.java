@@ -3,7 +3,7 @@ package com.termux.app.setup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.GuiAppsSetup;
 
 import java.util.ArrayList;
@@ -60,7 +60,7 @@ final class DisplayCardLogic {
 
     /** The routes the card offers {@code edition}: the ones it has and the wizard can run. */
     @NonNull
-    static List<GuiAppsSetup.Route> offeredRoutes(@NonNull TourEdition edition) {
+    static List<GuiAppsSetup.Route> offeredRoutes(@NonNull AppEdition edition) {
         List<GuiAppsSetup.Route> out = new ArrayList<>();
         for (GuiAppsSetup.Route route : GuiAppsSetup.routesFor(edition)) {
             if (route == GuiAppsSetup.Route.DISTRO && !DISTRO_RUNNABLE) continue;
@@ -80,7 +80,7 @@ final class DisplayCardLogic {
     /** The command a run executes: the one the guide would copy, with the default starter apps. */
     @NonNull
     static String command(@NonNull GuiAppsSetup.Route route, @NonNull GuiAppsSetup.Distro distro,
-                          @NonNull TourEdition edition, @Nullable String user,
+                          @NonNull AppEdition edition, @Nullable String user,
                           @Nullable String password) {
         return GuiAppsSetup.command(route, distro, GuiAppsSetup.defaultStarters(), edition,
             route == GuiAppsSetup.Route.DISTRO ? user : null,

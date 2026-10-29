@@ -7,7 +7,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourGesture;
 import com.termux.app.tour.TourRun;
 import com.termux.app.wall.PaneWallPage;
 
@@ -228,13 +227,13 @@ public class HelpTopicsTest {
         }
         assertEquals(new HashSet<>(Arrays.asList("dock", "status", "space", "az", "places",
             "keyboard_swipe")), withGesture);
-        assertEquals(TourGesture.DRAG_DOWN, HelpTopics.entry("dock").gesture);
+        assertEquals(HelpGesture.DRAG_DOWN, HelpTopics.entry("dock").gesture);
         // The status bar does not page any more; its swipe is the fold, down from the top border.
-        assertEquals(TourGesture.DRAG_DOWN, HelpTopics.entry("status").gesture);
-        assertEquals(TourGesture.HOLD_DRAG, HelpTopics.entry("places").gesture);
-        assertEquals(TourGesture.SWIPE_UP, HelpTopics.entry("keyboard_swipe").gesture);
-        assertEquals(TourGesture.SWIPE_UP, HelpTopics.entry("space").gesture);
-        assertEquals(TourGesture.SCRUB, HelpTopics.entry("az").gesture);
+        assertEquals(HelpGesture.DRAG_DOWN, HelpTopics.entry("status").gesture);
+        assertEquals(HelpGesture.HOLD_DRAG, HelpTopics.entry("places").gesture);
+        assertEquals(HelpGesture.SWIPE_UP, HelpTopics.entry("keyboard_swipe").gesture);
+        assertEquals(HelpGesture.SWIPE_UP, HelpTopics.entry("space").gesture);
+        assertEquals(HelpGesture.SCRUB, HelpTopics.entry("az").gesture);
     }
 
     @Test public void everyPracticeIdNamesALessonTheRunActuallyHas() {

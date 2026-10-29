@@ -1,5 +1,7 @@
 package com.termux.app.tour;
 
+import com.termux.app.help.HelpGesture;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -13,7 +15,7 @@ public class TourDemoLoopTest {
 
     private static final float EPSILON = 0.002f;
 
-    private static TourDemoLoop.Frame frame(TourGesture gesture, float progress) {
+    private static TourDemoLoop.Frame frame(HelpGesture gesture, float progress) {
         TourDemoLoop.Frame frame = new TourDemoLoop.Frame();
         TourDemoLoop.frame(gesture, progress, frame);
         return frame;
@@ -31,31 +33,31 @@ public class TourDemoLoopTest {
     }
 
     @Test public void aSwipeLandsPressesTravelsAndLifts() {
-        TourDemoLoop.Frame start = frame(TourGesture.DRAG_DOWN, 0f);
+        TourDemoLoop.Frame start = frame(HelpGesture.DRAG_DOWN, 0f);
         assertEquals(0f, start.fingerAlpha, EPSILON);
         assertEquals(1.35f, start.fingerScale, EPSILON);
-        TourDemoLoop.Frame pressed = frame(TourGesture.DRAG_DOWN, 0.24f);
+        TourDemoLoop.Frame pressed = frame(HelpGesture.DRAG_DOWN, 0.24f);
         assertEquals(1f, pressed.fingerAlpha, EPSILON);
         assertEquals(0.92f, pressed.fingerScale, EPSILON);
         assertEquals(0f, pressed.travel, EPSILON);
-        TourDemoLoop.Frame arrived = frame(TourGesture.DRAG_DOWN, 0.70f);
+        TourDemoLoop.Frame arrived = frame(HelpGesture.DRAG_DOWN, 0.70f);
         assertEquals(1f, arrived.travel, EPSILON);
         assertEquals(1f, arrived.trailLength, EPSILON);
-        TourDemoLoop.Frame gone = frame(TourGesture.DRAG_DOWN, 0.9f);
+        TourDemoLoop.Frame gone = frame(HelpGesture.DRAG_DOWN, 0.9f);
         assertEquals(0f, gone.fingerAlpha, EPSILON);
         assertEquals(0f, gone.trailAlpha, EPSILON);
         assertEquals(0f, gone.ringAlpha, EPSILON);
     }
 
     @Test public void aHoldPressesAndSendsARingOut() {
-        TourDemoLoop.Frame down = frame(TourGesture.HOLD, 0.5f);
+        TourDemoLoop.Frame down = frame(HelpGesture.HOLD, 0.5f);
         assertEquals(1f, down.fingerAlpha, EPSILON);
         assertEquals(0.86f, down.fingerScale, EPSILON);
         assertEquals(0f, down.travel, EPSILON);
         assertTrue(down.ringScale > 0.7f && down.ringScale < 2.3f);
         assertTrue(down.ringAlpha > 0f);
-        assertEquals(2.3f, frame(TourGesture.HOLD, 0.9f).ringScale, EPSILON);
-        assertEquals(0f, frame(TourGesture.HOLD, 1f).fingerAlpha, EPSILON);
+        assertEquals(2.3f, frame(HelpGesture.HOLD, 0.9f).ringScale, EPSILON);
+        assertEquals(0f, frame(HelpGesture.HOLD, 1f).fingerAlpha, EPSILON);
     }
 
     @Test public void theZoneBreathesBetweenItsFaintestAndFull() {
@@ -67,20 +69,20 @@ public class TourDemoLoopTest {
 
     @Test public void theLoopIsBoundedAndPlaysTheHandoffsTimings() {
         assertEquals(3, TourDemoLoop.PASSES);
-        assertEquals(1900L, TourDemoLoop.passMs(TourGesture.SWIPE_UP));
-        assertEquals(1900L, TourDemoLoop.passMs(TourGesture.HOLD_DRAG));
-        assertEquals(1800L, TourDemoLoop.passMs(TourGesture.HOLD));
-        assertEquals(1800L, TourDemoLoop.passMs(TourGesture.TAP));
+        assertEquals(1900L, TourDemoLoop.passMs(HelpGesture.SWIPE_UP));
+        assertEquals(1900L, TourDemoLoop.passMs(HelpGesture.HOLD_DRAG));
+        assertEquals(1800L, TourDemoLoop.passMs(HelpGesture.HOLD));
+        assertEquals(1800L, TourDemoLoop.passMs(HelpGesture.TAP));
     }
 
     @Test public void theCardIsKeptClearOfWhereTheFingerTravels() {
-        float travel = TourDemoLoop.reachDp(TourGesture.DRAG_DOWN, true);
-        float still = TourDemoLoop.reachDp(TourGesture.DRAG_DOWN, false);
+        float travel = TourDemoLoop.reachDp(HelpGesture.DRAG_DOWN, true);
+        float still = TourDemoLoop.reachDp(HelpGesture.DRAG_DOWN, false);
         assertTrue("a pull down reaches below its control", travel > still);
         assertTrue("a swipe up reaches above its control",
-            TourDemoLoop.reachDp(TourGesture.SWIPE_UP, false)
-                > TourDemoLoop.reachDp(TourGesture.SWIPE_UP, true));
-        assertEquals(TourDemoLoop.reachDp(TourGesture.HOLD, true),
-            TourDemoLoop.reachDp(TourGesture.HOLD, false), EPSILON);
+            TourDemoLoop.reachDp(HelpGesture.SWIPE_UP, false)
+                > TourDemoLoop.reachDp(HelpGesture.SWIPE_UP, true));
+        assertEquals(TourDemoLoop.reachDp(HelpGesture.HOLD, true),
+            TourDemoLoop.reachDp(HelpGesture.HOLD, false), EPSILON);
     }
 }

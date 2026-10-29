@@ -12,7 +12,7 @@ import androidx.preference.Preference;
 import com.termux.BuildConfig;
 import com.termux.R;
 import com.termux.app.settings.WhatsNewNotes;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.TermuxActivity;
 import com.termux.app.models.UserAction;
 import com.termux.shared.activities.ReportActivity;
@@ -92,7 +92,7 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
     private void configureWhatsNew(@NonNull Context context) {
         click("whats_new", preference -> {
             new Thread(() -> {
-                TourEdition edition = TourEdition.of(context.getPackageName());
+                AppEdition edition = AppEdition.of(context.getPackageName());
                 String version = BuildConfig.VERSION_NAME;
                 WhatsNewNotes.Notes notes = WhatsNewNotes.select(version,
                     readAsset(context, "whatsnew/release-notes.md"),

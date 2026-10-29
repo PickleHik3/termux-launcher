@@ -1,4 +1,4 @@
-package com.termux.app.tour;
+package com.termux.app.help;
 
 /**
  * Where the finger glyph sits at a moment of a trace, derived from the target's bounds.
@@ -7,13 +7,13 @@ package com.termux.app.tour;
  * checked without a screen. Every trace starts and ends on the control it is teaching: a finger
  * that flies in from off-screen reads as decoration, not as an instruction.
  */
-public final class TourFingerTrace {
+public final class HelpFingerTrace {
 
     /** One pass of the trace. Long enough to read, short enough not to become an animation. */
     public static final long TRACE_MS = 1100L;
 
     /** How far a swipe or drag travels beyond the control, in dp. */
-    static final float TRAVEL_DP = 56f;
+    public static final float TRAVEL_DP = 56f;
 
     /** The gap the finger keeps from the exact edge it is dragging from, in dp. */
     private static final float INSET_DP = 10f;
@@ -27,7 +27,7 @@ public final class TourFingerTrace {
      *
      * @param density the display density, so travel reads the same on every phone
      */
-    public static void pointAt(TourGesture gesture, float left, float top, float right,
+    public static void pointAt(HelpGesture gesture, float left, float top, float right,
                                float bottom, float density, float progress, float[] out) {
         float eased = ease(clamp01(progress));
         float centerX = (left + right) / 2f;
@@ -146,5 +146,5 @@ public final class TourFingerTrace {
         return value < 0f ? 0f : Math.min(1f, value);
     }
 
-    private TourFingerTrace() {}
+    private HelpFingerTrace() {}
 }

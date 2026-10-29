@@ -3,7 +3,7 @@ package com.termux.app.settings;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 
 /**
  * Picks this build's release notes out of the two files bundled with the app
@@ -42,8 +42,8 @@ public final class WhatsNewNotes {
 
     /** The edition's tag for a version: {@code v1.0.6}, {@code nix-v1.0.6} or {@code vaj-v1.0.6}. */
     @NonNull
-    public static String tag(@NonNull String versionName, @NonNull TourEdition edition) {
-        String prefix = edition == TourEdition.NIX ? "nix-" : edition == TourEdition.VAJ ? "vaj-" : "";
+    public static String tag(@NonNull String versionName, @NonNull AppEdition edition) {
+        String prefix = edition == AppEdition.NIX ? "nix-" : edition == AppEdition.VAJ ? "vaj-" : "";
         return prefix + "v" + core(versionName);
     }
 
@@ -53,7 +53,7 @@ public final class WhatsNewNotes {
      */
     @Nullable
     public static Notes select(@NonNull String versionName, @Nullable String stableMarkdown,
-                               @Nullable String rollingMarkdown, @NonNull TourEdition edition) {
+                               @Nullable String rollingMarkdown, @NonNull AppEdition edition) {
         String core = core(versionName);
         String body = core.contains("-pre")
             ? rollingBody(rollingMarkdown)
@@ -64,7 +64,7 @@ public final class WhatsNewNotes {
 
     /** The release page for a build, for when there are no bundled notes to show. */
     @NonNull
-    public static String url(@NonNull String versionName, @NonNull TourEdition edition) {
+    public static String url(@NonNull String versionName, @NonNull AppEdition edition) {
         return RELEASES_URL + tag(versionName, edition);
     }
 

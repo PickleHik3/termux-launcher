@@ -1,5 +1,8 @@
 package com.termux.app.tour;
 
+import com.termux.app.help.HelpGesture;
+import com.termux.app.help.HelpFingerTrace;
+
 import androidx.annotation.NonNull;
 
 /**
@@ -65,19 +68,19 @@ public final class TourDemoLoop {
     }
 
     /** Whether a gesture plays the hold pass rather than the swipe pass. */
-    public static boolean isHold(@NonNull TourGesture gesture) {
-        return gesture == TourGesture.HOLD || gesture == TourGesture.TAP;
+    public static boolean isHold(@NonNull HelpGesture gesture) {
+        return gesture == HelpGesture.HOLD || gesture == HelpGesture.TAP;
     }
 
     /** How long one pass of {@code gesture} takes. */
-    public static long passMs(@NonNull TourGesture gesture) {
+    public static long passMs(@NonNull HelpGesture gesture) {
         return isHold(gesture) ? HOLD_PASS_MS : SWIPE_PASS_MS;
     }
 
     /**
      * Fills {@code out} for {@code progress}, 0..1 through one pass.
      */
-    public static void frame(@NonNull TourGesture gesture, float progress, @NonNull Frame out) {
+    public static void frame(@NonNull HelpGesture gesture, float progress, @NonNull Frame out) {
         float t = clamp01(progress);
         if (isHold(gesture)) holdFrame(t, out);
         else swipeFrame(t, out);
@@ -88,13 +91,13 @@ public final class TourDemoLoop {
      * the travel when the finger moves that way, and otherwise the widest the finger itself draws —
      * its halo, or the hold's ring. A card standing closer than this would sit on the finger.
      */
-    public static float reachDp(@NonNull TourGesture gesture, boolean below) {
+    public static float reachDp(@NonNull HelpGesture gesture, boolean below) {
         float radius = FINGER_DIAMETER_DP / 2f;
         float still = isHold(gesture) ? radius * RING_TO_SCALE : radius + FINGER_HALO_DP;
-        boolean travelsDown = gesture == TourGesture.DRAG_DOWN || gesture == TourGesture.DRAG_UP
-            || gesture == TourGesture.SWIPE_DOWN_LEFT;
-        boolean travelsUp = gesture == TourGesture.SWIPE_UP || gesture == TourGesture.SWIPE_UP_LEFT;
-        if (below ? travelsDown : travelsUp) return TourFingerTrace.TRAVEL_DP + still;
+        boolean travelsDown = gesture == HelpGesture.DRAG_DOWN || gesture == HelpGesture.DRAG_UP
+            || gesture == HelpGesture.SWIPE_DOWN_LEFT;
+        boolean travelsUp = gesture == HelpGesture.SWIPE_UP || gesture == HelpGesture.SWIPE_UP_LEFT;
+        if (below ? travelsDown : travelsUp) return HelpFingerTrace.TRAVEL_DP + still;
         return still;
     }
 

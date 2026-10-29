@@ -1,5 +1,7 @@
 package com.termux.app.tour;
 
+import com.termux.app.help.HelpGesture;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -108,19 +110,19 @@ public class TourRunTest {
         assertEquals(R.string.tour_title_to_workspace, pageSwipe.titleResAt(0));
         assertEquals(R.string.tour_body_to_workspace, pageSwipe.bodyResAt(0));
         assertEquals(TourTargets.HOME_PAGE, pageSwipe.targetIdAt(0));
-        assertEquals(TourGesture.SWIPE_LEFT, pageSwipe.gestureAt(0));
+        assertEquals(HelpGesture.SWIPE_LEFT, pageSwipe.gestureAt(0));
         assertEquals(R.string.tour_title_border_drag, pageSwipe.titleResAt(1));
         assertEquals(R.string.tour_body_border_drag, pageSwipe.bodyResAt(1));
         assertEquals(TourTargets.PAGE_BORDER, pageSwipe.targetIdAt(1));
-        assertEquals(TourGesture.SWIPE_RIGHT, pageSwipe.gestureAt(1));
+        assertEquals(HelpGesture.SWIPE_RIGHT, pageSwipe.gestureAt(1));
 
         TourStep keyboard = step(TourRun.KEYBOARD);
         assertEquals(R.string.tour_title_keyboard_away, keyboard.titleResAt(0));
         assertEquals(R.string.tour_body_keyboard_away, keyboard.bodyResAt(0));
         assertEquals(R.string.tour_title_keyboard_back, keyboard.titleResAt(1));
         assertEquals(R.string.tour_body_keyboard_back, keyboard.bodyResAt(1));
-        assertEquals(TourGesture.DRAG_DOWN, keyboard.gestureAt(0));
-        assertEquals(TourGesture.SWIPE_UP, keyboard.gestureAt(1));
+        assertEquals(HelpGesture.DRAG_DOWN, keyboard.gestureAt(0));
+        assertEquals(HelpGesture.SWIPE_UP, keyboard.gestureAt(1));
         assertEquals(TourTargets.KEYBOARD_GRABBER, keyboard.targetIdAt(0));
         assertEquals(TourTargets.KEYBOARD_GRABBER, keyboard.targetIdAt(1));
 
@@ -129,20 +131,20 @@ public class TourRunTest {
         assertEquals(R.string.tour_title_status_fold, status.titleResAt(1));
         assertEquals(R.string.tour_body_status_fold, status.bodyResAt(1));
         assertEquals(TourTargets.STATUS_GRABBER, status.targetIdAt(0));
-        assertEquals(TourGesture.DRAG_DOWN, status.gestureAt(0));
-        assertEquals(TourGesture.SWIPE_UP, status.gestureAt(1));
+        assertEquals(HelpGesture.DRAG_DOWN, status.gestureAt(0));
+        assertEquals(HelpGesture.SWIPE_UP, status.gestureAt(1));
 
         TourStep help = step(TourRun.FIND_HELP);
         assertEquals(R.string.tour_title_corner, help.titleResAt(0));
         assertEquals(TourTargets.PANE_CORNER, help.targetIdAt(0));
-        assertEquals(TourGesture.HOLD, help.gestureAt(0));
+        assertEquals(HelpGesture.HOLD, help.gestureAt(0));
         assertEquals(R.string.tour_title_help, help.titleResAt(1));
         assertEquals(TourTargets.HELP_BUTTON, help.targetIdAt(1));
-        assertEquals(TourGesture.TAP, help.gestureAt(1));
+        assertEquals(HelpGesture.TAP, help.gestureAt(1));
 
         assertEquals(TourTargets.DOCK, step(TourRun.FIND_APPS).targetIdAt(0));
         assertEquals(TourTargets.HOME_PAGE, step(TourRun.FIND_ACTION).targetIdAt(0));
-        assertEquals(TourGesture.SWIPE_UP, step(TourRun.FIND_ACTION).gestureAt(0));
+        assertEquals(HelpGesture.SWIPE_UP, step(TourRun.FIND_ACTION).gestureAt(0));
     }
 
     /**

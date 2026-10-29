@@ -6,7 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 
 import org.junit.Test;
 
@@ -21,7 +21,7 @@ public class WhatsNewNotesTest {
 
     @Test
     public void aStableBuildGetsItsOwnSectionAndNoNeighbours() {
-        WhatsNewNotes.Notes notes = WhatsNewNotes.select("1.0.6", STABLE, ROLLING, TourEdition.TERMUX);
+        WhatsNewNotes.Notes notes = WhatsNewNotes.select("1.0.6", STABLE, ROLLING, AppEdition.TERMUX);
         assertNotNull(notes);
         assertTrue(notes.body.startsWith("A Low-memory preset."));
         assertTrue(notes.body.contains("- One."));
@@ -32,7 +32,7 @@ public class WhatsNewNotesTest {
     @Test
     public void aNightlyFollowsTheReleaseItBuildsOn() {
         WhatsNewNotes.Notes notes =
-            WhatsNewNotes.select("1.0.5+dev.abc1234", STABLE, ROLLING, TourEdition.TERMUX);
+            WhatsNewNotes.select("1.0.5+dev.abc1234", STABLE, ROLLING, AppEdition.TERMUX);
         assertNotNull(notes);
         assertTrue(notes.body.startsWith("Older."));
         assertEquals("1.0.5", notes.version);
@@ -41,7 +41,7 @@ public class WhatsNewNotesTest {
     @Test
     public void aPreReleaseReadsTheRollingListWithoutItsTitle() {
         WhatsNewNotes.Notes notes =
-            WhatsNewNotes.select("1.1.0-pre.6", STABLE, ROLLING, TourEdition.TERMUX);
+            WhatsNewNotes.select("1.1.0-pre.6", STABLE, ROLLING, AppEdition.TERMUX);
         assertNotNull(notes);
         assertTrue(notes.body.contains("- Glass."));
         assertFalse(notes.body.contains("# Pre-release channel"));
@@ -49,23 +49,23 @@ public class WhatsNewNotesTest {
 
     @Test
     public void aBuildAheadOfItsNotesHasNone() {
-        assertNull(WhatsNewNotes.select("1.2.0", STABLE, ROLLING, TourEdition.TERMUX));
-        assertNull(WhatsNewNotes.select("1.0.6", null, null, TourEdition.TERMUX));
-        assertNull(WhatsNewNotes.select("1.1.0-pre.1", STABLE, null, TourEdition.TERMUX));
+        assertNull(WhatsNewNotes.select("1.2.0", STABLE, ROLLING, AppEdition.TERMUX));
+        assertNull(WhatsNewNotes.select("1.0.6", null, null, AppEdition.TERMUX));
+        assertNull(WhatsNewNotes.select("1.1.0-pre.1", STABLE, null, AppEdition.TERMUX));
     }
 
     @Test
     public void aLongerVersionIsNotMistakenForAPrefix() {
         String notes = "## v1.0.60\n\nSixty.\n\n## v1.0.6\n\nSix.\n";
-        assertEquals("Six.", WhatsNewNotes.select("1.0.6", notes, null, TourEdition.TERMUX).body);
+        assertEquals("Six.", WhatsNewNotes.select("1.0.6", notes, null, AppEdition.TERMUX).body);
     }
 
     @Test
     public void theTagCarriesTheEditionPrefix() {
-        assertEquals("v1.0.6", WhatsNewNotes.tag("1.0.6+dev.x", TourEdition.TERMUX));
-        assertEquals("nix-v1.0.6", WhatsNewNotes.tag("1.0.6", TourEdition.NIX));
-        assertEquals("vaj-v1.1.0-pre.6", WhatsNewNotes.tag("1.1.0-pre.6", TourEdition.VAJ));
+        assertEquals("v1.0.6", WhatsNewNotes.tag("1.0.6+dev.x", AppEdition.TERMUX));
+        assertEquals("nix-v1.0.6", WhatsNewNotes.tag("1.0.6", AppEdition.NIX));
+        assertEquals("vaj-v1.1.0-pre.6", WhatsNewNotes.tag("1.1.0-pre.6", AppEdition.VAJ));
         assertEquals("https://github.com/PickleHik3/termux-launcher/releases/tag/nix-v1.0.6",
-            WhatsNewNotes.url("1.0.6", TourEdition.NIX));
+            WhatsNewNotes.url("1.0.6", AppEdition.NIX));
     }
 }
