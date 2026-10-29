@@ -225,9 +225,17 @@ public final class SetupCards {
         // (desktop apps, AI, guide) wait for their flows.
         for (Card card : cards)
             if (card.state == State.OPEN
-                && (isSystemChecked(card.id) || (AI.equals(card.id) && aiSelected)))
+                && isCompletable(card.id, aiSelected))
                 return true;
         return false;
+    }
+
+    /**
+     * A card that can be completed in this build: the system-checked ones, and the AI card once
+     * models are chosen. The rest are stubs; they neither bring the sheet back nor count as open.
+     */
+    public static boolean isCompletable(@NonNull String id, boolean aiSelected) {
+        return isSystemChecked(id) || (AI.equals(id) && aiSelected);
     }
 
     @StringRes

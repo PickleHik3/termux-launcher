@@ -80,7 +80,9 @@ final class ReviewSection implements SetupSection {
         SetupState.Values v = state.values();
         LinearLayout heading = new LinearLayout(context);
         heading.setOrientation(LinearLayout.HORIZONTAL);
-        heading.setGravity(Gravity.CENTER_VERTICAL);
+        // Baseline-aligned: the tag sits on the heading's baseline, not its vertical centre.
+        heading.setBaselineAligned(true);
+        heading.setGravity(Gravity.START | Gravity.TOP);
         TextView name = SetupUi.text(context, 12f, true, SetupUi.accent(page));
         name.setAllCaps(true);
         name.setLetterSpacing(0.1f);
@@ -88,6 +90,8 @@ final class ReviewSection implements SetupSection {
         heading.addView(name);
         TextView tag = SetupUi.text(context, 11f, false, SetupUi.onSurfaceVariant(page));
         tag.setText(R.string.setup_tag_already_applied);
+        tag.setAllCaps(true);
+        tag.setLetterSpacing(0.08f);
         tag.setPadding(SetupUi.dp(context, 8), 0, 0, 0);
         heading.addView(tag);
         page.addView(heading, SetupUi.matchWrap(SetupUi.dp(context, 12)));

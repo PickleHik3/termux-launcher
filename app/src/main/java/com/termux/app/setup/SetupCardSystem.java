@@ -97,6 +97,17 @@ public final class SetupCardSystem {
         return SetupCards.openCount(cards(context));
     }
 
+    /** Open cards that can be completed in this build (what brings the sheet back on start). */
+    public static int completableOpenCount(@NonNull Context context) {
+        boolean aiSelected = !AiModelDownloads.selected(context).isEmpty();
+        int count = 0;
+        for (SetupCards.Card card : cards(context))
+            if (card.state == SetupCards.State.OPEN
+                && SetupCards.isCompletable(card.id, aiSelected))
+                count++;
+        return count;
+    }
+
     static boolean isShizukuInstalled(@NonNull Context context) {
         try {
             context.getPackageManager().getPackageInfo(SHIZUKU_PACKAGE, 0);

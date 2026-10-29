@@ -91,13 +91,29 @@ final class PowerSection implements SetupSection {
         return chip;
     }
 
+    /** The renderer name only: cut at the first " (" or ",", trimmed, 28 characters at most. */
+    @NonNull
+    static String shortGpu(@NonNull String gpu) {
+        int cut = gpu.length();
+        int paren = gpu.indexOf(" (");
+        if (paren >= 0)
+            cut = paren;
+        int comma = gpu.indexOf(',');
+        if (comma >= 0 && comma < cut)
+            cut = comma;
+        String name = gpu.substring(0, cut).trim();
+        if (name.length() > 28)
+            name = name.substring(0, 27).trim() + "\u2026";
+        return name;
+    }
+
     private void bindDetected(@NonNull Context context, @NonNull TextView view,
                               @NonNull SetupState state) {
         DeviceTier.Detected d = state.detected();
         String ram = d.ramBytes > 0
             ? context.getString(R.string.setup_power_ram, d.ramBytes / DeviceTier.GIB) : "?";
         String gpu = d.gpu == null || d.gpu.isEmpty()
-            ? context.getString(R.string.setup_power_unknown_gpu) : d.gpu;
+            ? context.getString(R.string.setup_power_unknown_gpu) : shortGpu(d.gpu);
         int tier = d.tier == DeviceTier.Tier.LOW ? R.string.setup_tier_low
             : d.tier == DeviceTier.Tier.HIGH ? R.string.setup_tier_high : R.string.setup_tier_mid;
         view.setText(context.getString(R.string.setup_power_detected, d.model, ram, gpu,
