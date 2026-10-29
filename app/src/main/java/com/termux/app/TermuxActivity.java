@@ -269,6 +269,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Settings asking for the setup wizard again, with the current settings pre-selected. */
     public static final String EXTRA_RERUN_SETUP =
         "com.termux.app.extra.RERUN_SETUP";
+
+    /** Settings asking for the setup cards' sheet. */
+    public static final String EXTRA_SHOW_SETUP_CARDS =
+        "com.termux.app.extra.SHOW_SETUP_CARDS";
+
+    private static final int REQUEST_CODE_SETUP_NOTIFICATIONS = 4714;
     /** An alias for the help screen, for anything that still asks for help by intent. */
     public static final String EXTRA_SHOW_HELP =
         "com.termux.app.extra.SHOW_HELP";
@@ -2096,7 +2102,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
             boolean rerunSetup = getIntent().getBooleanExtra(EXTRA_RERUN_SETUP, false);
+            boolean showSetupCards = getIntent().getBooleanExtra(EXTRA_SHOW_SETUP_CARDS, false);
             contentView.post(() -> {
+                if (showSetupCards) {
+                    getIntent().removeExtra(EXTRA_SHOW_SETUP_CARDS);
+                    if (!openSetupWizardIfDue()) setupWizard().openCards();
+                    return;
+                }
                 // The setup wizard replaces the tour: it shows instead of it, on any build.
                 if (rerunSetup) {
                     getIntent().removeExtra(EXTRA_RERUN_SETUP);
@@ -2104,6 +2116,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return;
                 }
                 if (!forceOnboarding && openSetupWizardIfDue()) return;
+                if (!forceOnboarding && setupWizard().openCardsIfDue()) return;
                 FirstBootTour tour = firstBootTour();
                 if (tour == null) return;
                 // Settings asking for the tour from a cold start: the whole run, sheet first.
@@ -2136,6 +2149,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         contentView.post(() -> {
             if (isFinishing() || isDestroyed() || mPreferences == null) return;
             if (openSetupWizardIfDue()) return;
+            if (setupWizard().openCardsIfDue()) return;
             FirstBootTour tour = firstBootTour();
             if (tour == null || tour.resumeIfInProgress()) return;
             tour.startIfNeeded();
@@ -2264,6 +2278,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleHelpScreenActionIntent(intent);
         handleReplayTourIntent(intent);
         handleRerunSetupIntent(intent);
+        handleShowSetupCardsIntent(intent);
         handleShellNotificationIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
@@ -2606,6 +2621,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState)
             return;
         reopenAppearanceAfterRelaunch();
+        // A permission page the setup cards sent the person to may have been answered.
+        if (mSetupWizard != null) mSetupWizard.onActivityResumed();
         // A distro installed in a shell while we were away still needs its sound drop-in.
         if (com.termux.BuildConfig.X11_SERVER) {
             com.termux.app.sound.LauncherSound.get(this).onContainersMaybeChanged();
@@ -2764,6 +2781,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void openWallpaperPicker() {
                         openWallpaperPickerForSetup();
                     }
+                    @Override public void requestNotificationPermission() {
+                        androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
+                            new String[] {android.Manifest.permission.POST_NOTIFICATIONS},
+                            REQUEST_CODE_SETUP_NOTIFICATIONS);
+                    }
                     @Override public void requestWallpaperRead() {
                         // The same request the first-run wallpaper card makes.
                         if (mPreferences != null)
@@ -2803,7 +2825,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The wizard is up or due: the other first-run cards wait until it is done. */
     private boolean setupWizardComesFirst() {
-        if (mSetupWizard != null && mSetupWizard.isOpen()) return true;
+        if (mSetupWizard != null && (mSetupWizard.isOpen() || mSetupWizard.isCardSheetDue()))
+            return true;
         return mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
             mPreferences.getSetupWizardVersion(), false, false).show;
     }
@@ -2818,6 +2841,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!decision.show) return false;
         setupWizard().open(decision.updater);
         return true;
+    }
+
+    /** Settings asking for the setup cards, on the launcher that is already up. */
+    private void handleShowSetupCardsIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_SHOW_SETUP_CARDS, false)) return;
+        intent.removeExtra(EXTRA_SHOW_SETUP_CARDS);
+        View contentView = findViewById(android.R.id.content);
+        if (contentView == null) return;
+        contentView.post(() -> {
+            if (!openSetupWizardIfDue()) setupWizard().openCards();
+        });
     }
 
     /** Settings asking for the setup wizard again, on the launcher that is already up. */
@@ -21565,6 +21599,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             // Granted or refused, the sheet says where it now stands; it stays up either way.
             if (mWelcomeSheet != null) mWelcomeSheet.refresh();
+        } else if (requestCode == REQUEST_CODE_SETUP_NOTIFICATIONS) {
+            if (mSetupWizard != null) mSetupWizard.onNotificationPermissionResult(
+                grantResults.length > 0
+                    && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED);
         } else if (requestCode == REQUEST_CODE_WALLPAPER_READ_PERMISSION) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {

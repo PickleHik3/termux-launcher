@@ -1,6 +1,13 @@
 package com.termux.app.setup;
 
+import android.Manifest;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.graphics.Outline;
 import android.view.Gravity;
 import android.view.View;
@@ -11,12 +18,20 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.R;
+import com.termux.app.HomeAppChooser;
 import com.termux.app.ReducedMotion;
+import com.termux.app.activities.SettingsActivity;
+import com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragment;
+import com.termux.app.launcher.notifications.LauncherNotificationAccess;
+import com.termux.privileged.PrivilegedBackendManager;
+import com.termux.privileged.ShizukuBackend;
+import com.termux.app.firstrun.TaiWelcomeCardHost;
 import com.termux.app.tour.TourController;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -34,7 +49,7 @@ import java.util.List;
  * plus 16dp and its bottom 8dp over the card. The wall's gestures are held while the wizard is
  * open, as the editor's session does through {@code holdPaneWall}.
  */
-public final class SetupWizardController implements SetupSheetView.Callbacks {
+public final class SetupWizardController implements SetupSheetView.Callbacks, SetupCardSheet.Callbacks {
 
     /** What the wizard needs from the activity. */
     public interface Host {
@@ -57,8 +72,13 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
 
         /** Asks for the storage permission the first-run wallpaper card asks for. */
         void requestWallpaperRead();
+
+        /** Asks for POST_NOTIFICATIONS; the host calls {@link #onNotificationPermissionResult}. */
+        void requestNotificationPermission();
     }
 
+    private static final String SHIZUKU_GUIDE_URL =
+        "https://picklehik3.github.io/termux-launcher-site/docs/#wiki/permissions";
     private static final long POSE_MS = 280L;
     private static final int TOP_GAP_DP = 16;
     private static final int GAP_DP = 8;
@@ -77,6 +97,10 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
     private int mFurthest;
     @Nullable private FrameLayout mLayer;
     @Nullable private SetupSheetView mSheet;
+    /** The card sheet after the wizard; set instead of {@link #mSheet} while it is up. */
+    @Nullable private SetupCardSheet mCards;
+    /** The notification permission was asked and refused: Continue goes to the system page. */
+    private boolean mNotificationDenied;
     @Nullable private View mRoot;
     @Nullable private ViewOutlineProvider mSavedProvider;
     private boolean mSavedClip;
@@ -158,6 +182,12 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
     public boolean handleBack() {
         if (!isActive())
             return false;
+        SetupCardSheet cards = mCards;
+        if (cards != null) {
+            if (cards.isOnPage()) onPageBack();
+            else close(true);
+            return true;
+        }
         if (mIndex > 0)
             showSection(mIndex - 1, true);
         return true;
@@ -165,7 +195,9 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
 
     /** Fits the miniature and the card to the window again, after a turn. */
     public void relayout() {
-        if (isActive())
+        if (isActive() && mCards != null)
+            layoutCards();
+        else if (isActive())
             layout(false);
     }
 
@@ -365,6 +397,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
             ((ViewGroup) layer.getParent()).removeView(layer);
         mLayer = null;
         mSheet = null;
+        mCards = null;
         mRoot = null;
         mHost.holdPaneWall(false);
     }
@@ -377,6 +410,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
         if (prefs.getFirstBootTourCompletedVersion() < TourController.RUN_VERSION)
             prefs.setFirstBootTourCompletedVersion(TourController.RUN_VERSION);
+        // The wizard's AI section and the AI card on the sheet replace the old welcome card.
+        TaiWelcomeCardHost.markShown(mHost.context());
     }
 
     @Override
@@ -402,6 +437,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
             state.apply();
         markDone();
         close(true);
+        // Right after Finish: the cards, when any is still open.
+        openCardsIfDue();
     }
 
     @Override
@@ -417,5 +454,225 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
     public void onStepTapped(int index) {
         if (SetupStepPolicy.canJump(mIndex, mFurthest, mSections.size(), index))
             showSection(index, true);
+    }
+
+
+    // ------------------------------------------------------------------------------ card sheet
+
+    /** The cards are due: the wizard is done and a card is neither done nor dismissed. */
+    public boolean isCardSheetDue() {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        if (prefs == null)
+            return false;
+        return SetupCards.isDue(prefs.getSetupWizardVersion() >= SetupWizardGate.CURRENT,
+            SetupCardSystem.cards(mHost.context()));
+    }
+
+    /** Opens the card sheet when it is due; true when it is up. */
+    public boolean openCardsIfDue() {
+        if (mOpen)
+            return true;
+        if (!isCardSheetDue())
+            return false;
+        openCards();
+        return true;
+    }
+
+    /** Opens the card sheet whatever is due (Settings' Setup row). */
+    public void openCards() {
+        if (mOpen)
+            return;
+        View root = mHost.findView(R.id.terminal_root_container);
+        FrameLayout content = mHost.findView(android.R.id.content);
+        if (root == null || content == null)
+            return;
+        mOpen = true;
+        mSuspended = false;
+        mRoot = root;
+        mHost.holdPaneWall(true);
+        mLayer = new FrameLayout(mHost.context());
+        mLayer.setClickable(true);
+        SetupCardSheet sheet = new SetupCardSheet(mHost.context(), this);
+        mCards = sheet;
+        mLayer.addView(sheet, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        content.addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
+        layoutCards();
+    }
+
+    /** The sheet is 78% of the window; the launcher root stays at rest beneath it. */
+    private void layoutCards() {
+        FrameLayout content = mHost.findView(android.R.id.content);
+        SetupCardSheet sheet = mCards;
+        View root = mRoot;
+        if (content == null || sheet == null || root == null)
+            return;
+        if (content.getHeight() <= 0) {
+            content.postOnAnimation(() -> {
+                if (mOpen && mCards != null)
+                    layoutCards();
+            });
+            return;
+        }
+        mWindowHeightPx = content.getHeight();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
+        Insets bars = insets == null ? Insets.NONE
+            : insets.getInsets(WindowInsetsCompat.Type.systemBars());
+        int[] contentInWindow = new int[2];
+        content.getLocationInWindow(contentInWindow);
+        mNavInsetPx = Math.max(0, contentInWindow[1] + mWindowHeightPx
+            - (content.getRootView().getHeight() - bars.bottom));
+        sheet.setNavInset(mNavInsetPx);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) sheet.getLayoutParams();
+        int height = Math.round(mWindowHeightPx * REVIEW_SHEET_FRACTION);
+        if (params.height != height) {
+            params.height = height;
+            sheet.setLayoutParams(params);
+        }
+        moveRoot(1f, 0f, false);
+    }
+
+    /** The activity is back in front (a system page was left): the cards read the phone again. */
+    public void onActivityResumed() {
+        refreshCards();
+    }
+
+    /** POST_NOTIFICATIONS was answered. */
+    public void onNotificationPermissionResult(boolean granted) {
+        mNotificationDenied = !granted;
+        refreshCards();
+    }
+
+    private void refreshCards() {
+        SetupCardSheet sheet = mCards;
+        if (mOpen && sheet != null && !sheet.isOnPage())
+            sheet.bindList(SetupCardSystem.cards(mHost.context()), true);
+    }
+
+    private void startSafely(@NonNull Intent intent) {
+        try {
+            mHost.context().startActivity(intent);
+        } catch (ActivityNotFoundException | SecurityException unavailable) {
+            // The phone has no such page; the card stays open.
+        }
+    }
+
+    @Override
+    public void onContinue(@NonNull String id) {
+        Context context = mHost.context();
+        switch (id) {
+            case SetupCards.SHIZUKU: {
+                PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+                manager.initializeIfNeeded(context).thenAccept(ready -> {
+                    manager.requestPrivilegedPermission(ShizukuBackend.PERMISSION_REQUEST_CODE);
+                    FrameLayout layer = mLayer;
+                    if (layer != null)
+                        layer.post(this::refreshCards);
+                });
+                break;
+            }
+            case SetupCards.ACCESSIBILITY:
+                startSafely(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                break;
+            case SetupCards.NOTIFICATIONS:
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !mNotificationDenied
+                    && ContextCompat.checkSelfPermission(context,
+                        Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    mHost.requestNotificationPermission();
+                } else {
+                    startSafely(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName()));
+                }
+                break;
+            case SetupCards.NOTIFICATION_ACCESS:
+                onNotificationAccess();
+                break;
+            case SetupCards.PINNED:
+                startSafely(SettingsActivity.createFragmentIntent(context,
+                    EssentialNotificationRulesFragment.class,
+                    R.string.settings_essential_notifications_title));
+                break;
+            case SetupCards.HOME:
+                HomeAppChooser.open(context);
+                break;
+            default:
+                showPage(id);
+                break;
+        }
+    }
+
+    private void showPage(@NonNull String id) {
+        SetupCardSheet sheet = mCards;
+        if (sheet == null)
+            return;
+        for (SetupCards.Card card : SetupCardSystem.cards(mHost.context())) {
+            if (card.id.equals(id)) {
+                sheet.bindPage(card);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void onNotificationAccess() {
+        Context context = mHost.context();
+        try {
+            context.startActivity(LauncherNotificationAccess.detailSettingsIntent(context));
+        } catch (ActivityNotFoundException | SecurityException unavailable) {
+            startSafely(LauncherNotificationAccess.listSettingsIntent());
+        }
+    }
+
+    @Override
+    public void onDismiss(@NonNull String id) {
+        setDismissed(id, true);
+    }
+
+    @Override
+    public void onReopen(@NonNull String id) {
+        setDismissed(id, false);
+    }
+
+    private void setDismissed(@NonNull String id, boolean dismissed) {
+        Context context = mHost.context();
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        stored.setDismissed(id, dismissed);
+        SetupCardSystem.save(context, stored);
+        refreshCards();
+    }
+
+    @Override
+    public void onOpenLauncher() {
+        close(true);
+    }
+
+    @Override
+    public void onSettings() {
+        startSafely(new Intent(mHost.context(), SettingsActivity.class));
+    }
+
+    @Override
+    public void onPageBack() {
+        SetupCardSheet sheet = mCards;
+        if (mOpen && sheet != null)
+            sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
+    }
+
+    @Override
+    public void onShizukuGuide() {
+        startSafely(new Intent(Intent.ACTION_VIEW, Uri.parse(SHIZUKU_GUIDE_URL)));
+    }
+
+    @Override
+    public boolean isShizukuInstalled() {
+        return SetupCardSystem.isShizukuInstalled(mHost.context());
+    }
+
+    @Override
+    public boolean isNotificationAccessOn() {
+        return LauncherNotificationAccess.isEnabled(mHost.context());
     }
 }
