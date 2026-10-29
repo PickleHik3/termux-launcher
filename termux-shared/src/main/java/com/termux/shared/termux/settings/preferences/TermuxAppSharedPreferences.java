@@ -891,6 +891,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BODY_SWIPE, value, false);
     }
 
+    public boolean isStatusSwipeTwoFingersEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_SWIPE_TWO_FINGERS, TERMUX_APP.DEFAULT_STATUS_SWIPE_TWO_FINGERS);
+    }
+
+    public void setStatusSwipeTwoFingersEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_SWIPE_TWO_FINGERS, value, false);
+    }
+
     public boolean isStatusWidgetCpuEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_CPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);

@@ -75,6 +75,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "terminal_body_swipe":
                 mPreferences.setTerminalBodySwipeEnabled(value);
                 break;
+            case "status_swipe_two_fingers":
+                mPreferences.setStatusSwipeTwoFingersEnabled(value);
+                break;
             case "status_widget_cpu":
                 mPreferences.setStatusWidgetCpuEnabled(value);
                 break;
@@ -128,6 +131,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAgentPanesEnabled();
             case "terminal_body_swipe":
                 return mPreferences.isTerminalBodySwipeEnabled();
+            case "status_swipe_two_fingers":
+                return mPreferences.isStatusSwipeTwoFingersEnabled();
             case "status_widget_cpu":
                 return mPreferences.isStatusWidgetCpuEnabled();
             case "status_widget_ram":

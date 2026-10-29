@@ -144,6 +144,8 @@ public final class PaneWallLayout extends ViewGroup {
          * the top grabber on every frame the wall draws, so it has to be cheap.
          */
         default boolean isBorderStatusSwipeEnabled() { return false; }
+        /** Whether that swipe, opening and folding, needs two fingers on the top border. */
+        default boolean isBorderStatusSwipeTwoFingers() { return false; }
         /**
          * A swipe off the top border asked for the status bar unfolded ({@code expand}, down) or
          * folded (up): the release-only path, for a swipe the bar did not follow
@@ -1095,6 +1097,15 @@ public final class PaneWallLayout extends ViewGroup {
                 }
                 if (mBorderDrag.isStatusSwipe()) {
                     if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    if (mStatusEngageDeferred) {
+                        // Claimed by the second finger, so the way is known from the first move.
+                        if (Math.abs(event.getY() - mBorderDownY)
+                            >= ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
+                            mStatusEngageDeferred = false;
+                            engageStatusFold(event.getY());
+                        }
+                        return true;
+                    }
                     trackStatusFold(event.getY());
                     return true;
                 }
@@ -1122,7 +1133,12 @@ public final class PaneWallLayout extends ViewGroup {
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
                 if (isBorderClaimed()) return true;
-                if (mBorderDrag.secondPointer() == BorderDrag.Claim.ABANDONED) {
+                BorderDrag.Claim second = mBorderDrag.secondPointer();
+                if (second == BorderDrag.Claim.STATUS) {
+                    claimStatusSwipe(event);
+                    return true;
+                }
+                if (second == BorderDrag.Claim.ABANDONED) {
                     mHoldHandler.removeCallbacks(mHoldElapsed);
                 }
                 break;
@@ -1310,6 +1326,8 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /** Whether the wall owns the finger: the page drag, or one of the border swipes. */
+    private boolean mStatusEngageDeferred;
+
     private boolean isBorderClaimed() {
         return mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()
             || mBorderDrag.isStatusSwipe();
@@ -1361,6 +1379,7 @@ public final class PaneWallLayout extends ViewGroup {
             && mBorderZone.seamAt(event.getX(), event.getY()) == SeamSwipe.Start.PANE
             && (bodySwipe
                 || mListener.isSeamSwipePaging(mCurrent, event.getRawX(), event.getRawY()));
+        mBorderDrag.setTwoFingerStatus(statusSwipe && mListener.isBorderStatusSwipeTwoFingers());
         boolean armed = mBorderDrag.down(event.getX(), event.getY(), mBorderZone,
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardSwipe,
             statusSwipe, topGestureLimit(), bodySwipe, seamSwipe);
@@ -1703,7 +1722,9 @@ public final class PaneWallLayout extends ViewGroup {
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         mBorderVelocity = VelocityTracker.obtain();
         mBorderVelocity.addMovement(event);
-        engageStatusFold(event.getY());
+        // A second finger's landing has no direction yet: the fold waits for the first move.
+        mStatusEngageDeferred = event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN;
+        if (!mStatusEngageDeferred) engageStatusFold(event.getY());
     }
 
     /**
@@ -2125,6 +2146,7 @@ public final class PaneWallLayout extends ViewGroup {
     private void releaseBorderDrag() {
         mHoldHandler.removeCallbacks(mHoldElapsed);
         mBorderDrag.reset();
+        mStatusEngageDeferred = false;
         if (mBorderVelocity != null) {
             mBorderVelocity.recycle();
             mBorderVelocity = null;
