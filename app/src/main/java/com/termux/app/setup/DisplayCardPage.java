@@ -397,8 +397,9 @@ final class DisplayCardPage implements SetupCardPage {
                 updateContinue();
             }
         });
-        layout.addView(edit, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        // TextInputLayout is a LinearLayout: it casts the child's params to its own kind.
+        layout.addView(edit, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
         return layout;
     }
 
