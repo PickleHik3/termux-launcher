@@ -56,6 +56,8 @@ final class ReviewSection implements SetupSection {
             addRow(context, page, R.string.setup_row_focus_grows, onOff(context, v.focusGrows));
         }
 
+        addAppearanceGroup(context, page, state);
+
         addGroup(context, page, R.string.setup_group_power);
         addRow(context, page, R.string.setup_row_glass_motion,
             pair(onOff(context, v.fancierGlass), onOff(context, v.motionLight)));
@@ -70,6 +72,43 @@ final class ReviewSection implements SetupSection {
         addRow(context, page, R.string.setup_row_ai, context.getString(
             v.ai ? R.string.setup_value_card : R.string.setup_value_off));
         return page;
+    }
+
+    /** Customize wrote these live, so the heading says they are already on the launcher. */
+    private void addAppearanceGroup(@NonNull Context context, @NonNull LinearLayout page,
+                                    @NonNull SetupState state) {
+        SetupState.Values v = state.values();
+        LinearLayout heading = new LinearLayout(context);
+        heading.setOrientation(LinearLayout.HORIZONTAL);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = SetupUi.text(context, 12f, true, SetupUi.accent(page));
+        name.setAllCaps(true);
+        name.setLetterSpacing(0.1f);
+        name.setText(R.string.setup_group_appearance);
+        heading.addView(name);
+        TextView tag = SetupUi.text(context, 11f, false, SetupUi.onSurfaceVariant(page));
+        tag.setText(R.string.setup_tag_already_applied);
+        tag.setPadding(SetupUi.dp(context, 8), 0, 0, 0);
+        heading.addView(tag);
+        page.addView(heading, SetupUi.matchWrap(SetupUi.dp(context, 12)));
+        addRow(context, page, R.string.setup_row_wallpaper, v.useSystemWallpaper
+            ? R.string.setup_value_system_wallpaper : R.string.setup_value_in_app);
+        addRow(context, page, R.string.setup_row_look, lookName(context, v.lookId));
+        if (state.useAs() != UseAs.TERMINAL)
+            addRow(context, page, R.string.setup_row_dock_design,
+                context.getString(CustomizeSection.dockWord(v.dockStyle)));
+        // One row for the two switches, as Power's pairs do, to keep the Review compact.
+        addRow(context, page, R.string.setup_row_colours_trail,
+            pair(onOff(context, v.colours), onOff(context, v.trail)));
+    }
+
+    @NonNull
+    private static String lookName(@NonNull Context context, @androidx.annotation.Nullable String id) {
+        if (SetupState.LOOK_CLEAR.equals(id)) return context.getString(R.string.termux_surface_preset_minimal);
+        if (SetupState.LOOK_MIST.equals(id)) return context.getString(R.string.termux_surface_preset_frost);
+        if (SetupState.LOOK_TINT.equals(id)) return context.getString(R.string.termux_surface_preset_stock);
+        if (SetupState.LOOK_SOLID.equals(id)) return context.getString(R.string.termux_surface_preset_solid);
+        return context.getString(R.string.setup_value_custom);
     }
 
     @NonNull

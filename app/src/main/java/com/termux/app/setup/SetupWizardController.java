@@ -48,6 +48,15 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
         int statusBarInsetTop();
 
         @Nullable TermuxAppSharedPreferences preferences();
+
+        /**
+         * Opens the in-app wallpaper picker. The host calls {@link #resumeFromPicker} when the
+         * person is done with it (including after a photo pick and crop).
+         */
+        void openWallpaperPicker();
+
+        /** Asks for the storage permission the first-run wallpaper card asks for. */
+        void requestWallpaperRead();
     }
 
     private static final long POSE_MS = 280L;
@@ -59,6 +68,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
 
     @NonNull private final Host mHost;
     private boolean mOpen;
+    /** The wallpaper picker is up: the sheet is hidden and the root unposed, the state kept. */
+    private boolean mSuspended;
     private boolean mUpdater;
     @Nullable private SetupState mState;
     private final List<SetupSection> mSections = new ArrayList<>();
@@ -81,6 +92,15 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
         return mOpen;
     }
 
+    /** Open and showing: false while the wallpaper picker has the screen. */
+    public boolean isActive() {
+        return mOpen && !mSuspended;
+    }
+
+    public boolean isSuspended() {
+        return mOpen && mSuspended;
+    }
+
     /**
      * Opens the wizard, with the current settings pre-selected.
      *
@@ -98,8 +118,21 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
         mRoot = root;
         mHost.holdPaneWall(true);
         mState = new SetupState(mHost.context(), updater);
+        mState.setActions(new SetupState.Actions() {
+            @Override public void openWallpaperPicker() {
+                suspendForPicker();
+            }
+            @Override public void requestWallpaperRead() {
+                mHost.requestWallpaperRead();
+            }
+            @Override public void refresh() {
+                refreshCustomize();
+            }
+        });
+        mSuspended = false;
         mSections.clear();
         mSections.add(new HomeScreenSection());
+        mSections.add(new CustomizeSection());
         mSections.add(new MultiplexerSection());
         mSections.add(new DesktopAppsSection());
         mSections.add(new AiSection());
@@ -123,7 +156,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
 
     /** Back: the previous section; on the first one nothing (Skip is the way out). */
     public boolean handleBack() {
-        if (!mOpen)
+        if (!isActive())
             return false;
         if (mIndex > 0)
             showSection(mIndex - 1, true);
@@ -132,13 +165,61 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
 
     /** Fits the miniature and the card to the window again, after a turn. */
     public void relayout() {
-        if (mOpen)
+        if (isActive())
             layout(false);
     }
 
     /** Drops the wizard with no ceremony: the root back at rest, the wall released. */
     public void closeImmediately() {
         close(false);
+    }
+
+    // ------------------------------------------------------------------------- wallpaper picker
+
+    /**
+     * The picker takes the screen: the sheet layer goes, the root goes back to rest at once (the
+     * editor poses it itself), and the state, the section and the snapshot stay.
+     */
+    private void suspendForPicker() {
+        if (!mOpen || mSuspended)
+            return;
+        mSuspended = true;
+        FrameLayout layer = mLayer;
+        if (layer != null)
+            layer.setVisibility(View.GONE);
+        View root = mRoot;
+        if (root != null) {
+            root.animate().cancel();
+            root.setScaleX(1f);
+            root.setScaleY(1f);
+            root.setTranslationX(0f);
+            root.setTranslationY(0f);
+            unclip(root);
+        }
+        mHost.holdPaneWall(false);
+        mHost.openWallpaperPicker();
+    }
+
+    /** The picker is done: the sheet and the miniature come back on the same section. */
+    public void resumeFromPicker() {
+        if (!mOpen || !mSuspended)
+            return;
+        mSuspended = false;
+        mHost.holdPaneWall(true);
+        FrameLayout layer = mLayer;
+        if (layer != null)
+            layer.setVisibility(View.VISIBLE);
+        showSection(mIndex, false);
+    }
+
+    /** The storage permission was answered: Customize shows whether the wallpaper reads now. */
+    public void onWallpaperPermissionResult() {
+        refreshCustomize();
+    }
+
+    private void refreshCustomize() {
+        if (isActive() && mSections.get(mIndex) instanceof CustomizeSection)
+            showSection(mIndex, false);
     }
 
     // ------------------------------------------------------------------------------- sections
@@ -163,7 +244,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
         FrameLayout content = mHost.findView(android.R.id.content);
         SetupSheetView sheet = mSheet;
         View root = mRoot;
-        if (content == null || sheet == null || root == null)
+        if (content == null || sheet == null || root == null || mSuspended)
             return;
         if (content.getHeight() <= 0 || root.getHeight() <= 0) {
             // Not laid out yet: try again on the next frame.
@@ -269,6 +350,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
         if (!mOpen)
             return;
         mOpen = false;
+        mSuspended = false;
         View root = mRoot;
         if (root != null) {
             root.animate().cancel();

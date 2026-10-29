@@ -2761,9 +2761,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         .TermuxAppSharedPreferences preferences() {
                         return mPreferences;
                     }
+                    @Override public void openWallpaperPicker() {
+                        openWallpaperPickerForSetup();
+                    }
+                    @Override public void requestWallpaperRead() {
+                        // The same request the first-run wallpaper card makes.
+                        if (mPreferences != null)
+                            mPreferences.setWallpaperReadPermissionPrompted(true);
+                        androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
+                            new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE},
+                            REQUEST_CODE_WALLPAPER_READ_PERMISSION);
+                    }
                 });
         }
         return mSetupWizard;
+    }
+
+    /** The wizard's wallpaper picker, or a photo pick it started, is on screen. */
+    private boolean mSetupPickerPhotoTrip;
+
+    /**
+     * The wizard's Set an in-app wallpaper: the Appearance surface opens on the wallpaper picker.
+     * When the surface closes (and no photo pick is under way) the wizard comes back.
+     */
+    private void openWallpaperPickerForSetup() {
+        mAppearanceFromSettings = false;
+        mOverviewRestore = null;
+        resumeWallpaper(null);
+    }
+
+    /** Brings the wizard back from the picker once nothing of the picker trip is still running. */
+    private void resumeSetupWizardAfterPicker() {
+        if (mSetupWizard == null || !mSetupWizard.isSuspended() || mSetupPickerPhotoTrip) return;
+        View root = findViewById(R.id.activity_termux_root_view);
+        Runnable resume = () -> {
+            if (mSetupWizard != null && !mAppearance.isOpen()) mSetupWizard.resumeFromPicker();
+        };
+        if (root != null) root.post(resume);
+        else resume.run();
     }
 
     /** The wizard is up or due: the other first-run cards wait until it is done. */
@@ -18798,6 +18833,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back = mWallpaperPhotoReturn;
         mWallpaperPhotoSlot = null;
         mWallpaperPhotoReturn = null;
+        mSetupPickerPhotoTrip = false;
         if (isFinishing() || isDestroyed()) {
             if (photo != null) com.termux.app.chrome.wallpaper.WallpaperSlots.discardPendingPhoto(this, photo);
             return;
@@ -18806,7 +18842,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState.withPhoto(back,
                 slot != null ? slot : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME, photo,
                 com.termux.app.chrome.wallpaper.WallpaperSlots.read(this));
-        if (restore == null) return;
+        if (restore == null) {
+            resumeSetupWizardAfterPicker();
+            return;
+        }
         // The editor the photo picker interrupted comes back with its session, on the picker.
         final com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried = mWallpaperPhotoCarry;
         mWallpaperPhotoCarry = null;
@@ -19733,7 +19772,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mSetupWizard != null && mSetupWizard.handleBack();
             }
             @Override public boolean isOpen() {
-                return mSetupWizard != null && mSetupWizard.isOpen();
+                return mSetupWizard != null && mSetupWizard.isActive();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 // A turn re-fits the miniature; leaving the screen keeps the wizard where it is.
@@ -21534,6 +21573,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.onWallpaperChanged();
             }
             if (mWelcomeSheet != null) mWelcomeSheet.refresh();
+            if (mSetupWizard != null) mSetupWizard.onWallpaperPermissionResult();
         } else if (requestCode == REQUEST_CODE_WIDGET_CALENDAR) {
             if (mWidgetPaneController != null) mWidgetPaneController.onCalendarPermissionChanged();
         } else if (requestCode == REQUEST_CODE_PALETTE_CONTACTS) {
@@ -22860,6 +22900,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onClosed() {
             mOverviewRestore = null;
+            resumeSetupWizardAfterPicker();
             // Always on turned on in the editor: the keyboard Home wants is up now, whatever the
             // editor did with the one it raised, and the notice the editor held back follows on
             // the arrangement after the close.
@@ -22933,6 +22974,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The surface goes away while Android's photo picker and the crop run; it opens
                 // again on the Overview with the cropped photo as that card's pending choice.
                 mWallpaperPhotoCarry = mAppearance.carry();
+                mSetupPickerPhotoTrip = true;
                 mAppearance.closeNow();
                 launchManagedWallpaperPicker(slot, back);
             }
