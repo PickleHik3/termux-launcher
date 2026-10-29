@@ -444,11 +444,31 @@ What is painted between the wallpaper and a page: its wallpaper dim, plus the ca
 seam that travels with the pages. The ink solver reads the ground under a rect.
 _Avoid_: wall ground (the retired single colour), unified background dim
 
-**Wall slot**:
-The place one page takes on the wall while it is built: each Home page and Display page has its
-own, and the **Terminal page** one, inside which its windows page. Only the current slot and its
-neighbours are built.
-_Avoid_: page view, cell
+**Cell**:
+The stretch of the **wall** one page takes, in the order Edit pages arranged: every page has one,
+whatever its kind, and the wall pages from cell to cell. A cell shows its page **live** or as a
+**still**.
+_Avoid_: wall slot, place window (the retired list of at most one page per kind around the current
+one), slot
+
+**Live page**:
+The page its kind's one view is drawing right now: the widget grid for one Home page, the row of
+windows for the Terminal page, the X display for one Display page. At most one live page per kind;
+the page the wall stands on is always live once it has landed.
+_Avoid_: bound page (binding is the choice, live is the state), current page (that is the page the
+wall stands on, which may still be a still mid-slide)
+
+**Still**:
+What a cell shows while its page is not live: the page's last picture, else a card with the page's
+name and its kind's icon. A still takes no touch and wears no chrome of its own; the **Dress** is the
+page kind's whether the page is live or still. Landing on a still binds the kind's view to that page
+and the still gives way to the view.
+_Avoid_: stand-in (that is the surface's copy while a live display moves), placeholder, snapshot
+
+**Binding**:
+Which page of a kind the kind's one view draws. A landing re-binds; a far jump by name re-binds to
+the page landed on and never to the pages passed over.
+_Avoid_: bound run, bound slot
 
 **Page override**:
 A look value one page holds instead of the wall's: stored as the surface's key plus `@<page id>`,
