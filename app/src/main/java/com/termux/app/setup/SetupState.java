@@ -64,7 +64,9 @@ final class SetupState {
 
     /** Writes every choice as Finish does. */
     void apply() {
-        UseAsSetting.write(mContext, mUseAs);
+        // Only a changed Use as is written: the same value would still refresh the wall.
+        if (mUseAs != mSnapshot.useAs)
+            UseAsSetting.write(mContext, mUseAs);
         if (mUseAs == UseAs.TERMINAL) {
             TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
             if (prefs != null)

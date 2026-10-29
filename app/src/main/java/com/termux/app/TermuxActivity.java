@@ -2766,6 +2766,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mSetupWizard;
     }
 
+    /** The wizard is up or due: the other first-run cards wait until it is done. */
+    private boolean setupWizardComesFirst() {
+        if (mSetupWizard != null && mSetupWizard.isOpen()) return true;
+        return mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
+            mPreferences.getSetupWizardVersion(), false, false).show;
+    }
+
     /** Opens the setup wizard when its version has not been finished; true when it is up. */
     private boolean openSetupWizardIfDue() {
         if (mPreferences == null) return false;
@@ -2816,6 +2823,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void maybeOfferExtraKeysDefaultRow() {
         if (mExtraKeysDefaultOfferShowing || mPreferences == null) return;
+        if (setupWizardComesFirst()) return;
         if (isFinishing() || isDestroyed()) return;
         // Cheapest check first: once answered, nothing else is read on any later resume.
         if (mPreferences.isExtraKeysDefaultOffered()) return;
@@ -2914,6 +2922,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void maybeOfferTaiWelcomeCard() {
         if (isFinishing() || isDestroyed() || mPreferences == null) return;
+        if (setupWizardComesFirst()) return;
         // Cheapest check first: once shown, nothing else is read on any later resume.
         if (com.termux.app.firstrun.TaiWelcomeCardHost.wasShown(this)) return;
         FirstBootTour tour = firstBootTour();
@@ -9487,6 +9496,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void maybeRequestWallpaperReadPermission() {
         if (!mIsVisible || mPreferences == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (setupWizardComesFirst()) {
+            // Asked again by the next failed read once the wizard is done.
+            mWallpaperReadPermissionDenied = false;
             return;
         }
         // The overlay tour draws its cards over the live home screen; a system dialog opening on
