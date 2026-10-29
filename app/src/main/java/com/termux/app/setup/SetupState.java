@@ -9,16 +9,25 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.AnimationSpeed;
+import com.termux.app.dock.DockStyle;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
 import com.termux.app.settings.LowMemoryPreset;
 import com.termux.app.settings.UseAsSetting;
+import com.termux.app.surfaces.SurfacePresets;
 import com.termux.app.wall.UseAs;
 import com.termux.app.x11.GuiAppsSetupGuide;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * The choices the wizard holds until Finish, and the snapshot taken when it opened that
@@ -45,6 +54,13 @@ final class SetupState {
         boolean lazy;
         boolean lowMemory;
         @NonNull String animationSpeed = AnimationSpeed.NORMAL;
+        // Customize: written live, put back by a restore.
+        boolean useSystemWallpaper;
+        /** The SurfacePresets id the wall wears on both halves, null for a custom look. */
+        @Nullable String lookId;
+        boolean colours;
+        boolean trail;
+        @NonNull DockStyle dockStyle = DockStyle.GLASS_TRAY;
 
         @NonNull
         Values copy() {
@@ -61,6 +77,11 @@ final class SetupState {
             v.lazy = lazy;
             v.lowMemory = lowMemory;
             v.animationSpeed = animationSpeed;
+            v.useSystemWallpaper = useSystemWallpaper;
+            v.lookId = lookId;
+            v.colours = colours;
+            v.trail = trail;
+            v.dockStyle = dockStyle;
             return v;
         }
     }
@@ -78,7 +99,25 @@ final class SetupState {
         }
     }
 
+    /** What Customize asks of the activity; set by the controller. */
+    interface Actions {
+        void openWallpaperPicker();
+        void requestWallpaperRead();
+        /** Rebuilds the section on screen. */
+        void refresh();
+    }
+
+    /** SurfacePresets ids: Clear, Mist, Tint, Solid. */
+    static final String LOOK_CLEAR = "minimal";
+    static final String LOOK_MIST = "frost";
+    static final String LOOK_TINT = "stock";
+    static final String LOOK_SOLID = "solid";
+    private static final Object ABSENT = new Object();
+
     @NonNull private final Context mContext;
+    @NonNull private final Map<String, Object> mLookUndo = new LinkedHashMap<>();
+    private boolean mCustomizeTierApplied;
+    @Nullable private Actions mActions;
     @NonNull private final Snapshot mSnapshot;
     @NonNull private final Values mValues;
     private final boolean mUpdater;
@@ -101,6 +140,15 @@ final class SetupState {
         else
             applyTierToUnstored();
         readGpuAsync();
+    }
+
+    void setActions(@Nullable Actions actions) {
+        mActions = actions;
+    }
+
+    @Nullable
+    Actions actions() {
+        return mActions;
     }
 
     @NonNull
@@ -171,7 +219,135 @@ final class SetupState {
         if (prefs != null && !prefs.getLauncherStartIn().equals(snapshot.startIn))
             prefs.setLauncherStartIn(snapshot.startIn);
         writeValues(mContext, snapshot.values, false);
+        restoreAppearance(snapshot.values);
         mUseAs = snapshot.useAs;
+    }
+
+    // ---- customize (live) -------------------------------------------------------------------
+
+    /**
+     * First time Customize is shown on a fresh install: the tier's look and cursor trail go onto
+     * the wall. The snapshot was taken in the constructor, before this, so Keep undoes it.
+     */
+    void applyTierLookOnce() {
+        if (mCustomizeTierApplied)
+            return;
+        mCustomizeTierApplied = true;
+        if (mUpdater)
+            return;
+        DeviceTier.Tier tier = mDetected.tier;
+        setLook(tier == DeviceTier.Tier.LOW ? LOOK_SOLID
+            : tier == DeviceTier.Tier.MID ? LOOK_MIST : LOOK_TINT);
+        if (tier == DeviceTier.Tier.LOW)
+            setTrail(false);
+    }
+
+    void setUseSystemWallpaper(boolean system) {
+        mTouched = true;
+        mValues.useSystemWallpaper = system;
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
+        if (prefs != null && prefs.isUseSystemWallpaperEnabled() != system)
+            prefs.setUseSystemWallpaperEnabled(system);
+    }
+
+    /** Applies the Look wall-wide on both halves, as the Appearance editor does. */
+    void setLook(@NonNull String id) {
+        mTouched = true;
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
+        if (prefs == null)
+            return;
+        SurfacePresets.Preset found = null;
+        for (SurfacePresets.Preset candidate : SurfacePresets.presets(prefs))
+            if (candidate.id.equals(id))
+                found = candidate;
+        if (found == null)
+            return;
+        final SurfacePresets.Preset chosen = found;
+        tracked(() -> {
+            for (TermuxAppSharedPreferences.WallHalf half
+                : TermuxAppSharedPreferences.WallHalf.values())
+                SurfacePresets.applyLook(prefs, chosen, half);
+        });
+        mValues.lookId = id;
+    }
+
+    void setColours(boolean on) {
+        mTouched = true;
+        mValues.colours = on;
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
+        if (prefs != null && prefs.isTerminalDynamicColorsEnabled() != on)
+            prefs.setTerminalDynamicColorsEnabled(on);
+    }
+
+    void setTrail(boolean on) {
+        mTouched = true;
+        mValues.trail = on;
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
+        if (prefs != null && prefs.isTerminalCursorTrailEnabled() != on)
+            prefs.setTerminalCursorTrailEnabled(on);
+    }
+
+    void setDockStyle(@NonNull DockStyle style) {
+        mTouched = true;
+        mValues.dockStyle = style;
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
+        if (prefs != null)
+            new PlaceLayoutStore(prefs).setDockStyle(style);
+    }
+
+    /** Runs a look write and remembers what each key it moved held before, for a restore. */
+    private void tracked(@NonNull Runnable write) {
+        SharedPreferences store = store(mContext);
+        if (store == null) {
+            write.run();
+            return;
+        }
+        Map<String, Object> before = new HashMap<>(store.getAll());
+        write.run();
+        Map<String, ?> after = store.getAll();
+        Set<String> keys = new HashSet<>(before.keySet());
+        keys.addAll(after.keySet());
+        for (String key : keys) {
+            if (Objects.equals(before.get(key), after.get(key)) || mLookUndo.containsKey(key))
+                continue;
+            mLookUndo.put(key, before.containsKey(key) ? before.get(key) : ABSENT);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void restoreAppearance(@NonNull Values v) {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
+        if (prefs == null)
+            return;
+        if (prefs.isUseSystemWallpaperEnabled() != v.useSystemWallpaper)
+            prefs.setUseSystemWallpaperEnabled(v.useSystemWallpaper);
+        if (prefs.isTerminalDynamicColorsEnabled() != v.colours)
+            prefs.setTerminalDynamicColorsEnabled(v.colours);
+        if (prefs.isTerminalCursorTrailEnabled() != v.trail)
+            prefs.setTerminalCursorTrailEnabled(v.trail);
+        new PlaceLayoutStore(prefs).setDockStyle(v.dockStyle);
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store != null && !mLookUndo.isEmpty()) {
+            SharedPreferences.Editor editor = store.edit();
+            for (Map.Entry<String, Object> entry : mLookUndo.entrySet()) {
+                Object value = entry.getValue();
+                String key = entry.getKey();
+                if (value == ABSENT) editor.remove(key);
+                else if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
+                else if (value instanceof Integer) editor.putInt(key, (Integer) value);
+                else if (value instanceof Long) editor.putLong(key, (Long) value);
+                else if (value instanceof Float) editor.putFloat(key, (Float) value);
+                else if (value instanceof String) editor.putString(key, (String) value);
+                else if (value instanceof Set) editor.putStringSet(key, (Set<String>) value);
+            }
+            editor.apply();
+            mLookUndo.clear();
+        }
+        mValues.useSystemWallpaper = v.useSystemWallpaper;
+        mValues.lookId = v.lookId;
+        mValues.colours = v.colours;
+        mValues.trail = v.trail;
+        mValues.dockStyle = v.dockStyle;
     }
 
     // ---- tier ------------------------------------------------------------------------------
@@ -258,7 +434,24 @@ final class SetupState {
             ? store.getBoolean(KEY_WANTS_DESKTOP_APPS, false)
             : GuiAppsSetupGuide.isSetUp(context);
         v.ai = store != null && store.getBoolean(KEY_WANTS_AI, false);
+        v.useSystemWallpaper = prefs.isUseSystemWallpaperEnabled();
+        v.colours = prefs.isTerminalDynamicColorsEnabled();
+        v.trail = prefs.isTerminalCursorTrailEnabled();
+        v.dockStyle = places.dockStyle();
+        v.lookId = wornLook(prefs);
         return v;
+    }
+
+    /** The preset both halves of the wall wear, or null when the look is custom. */
+    @Nullable
+    private static String wornLook(@NonNull TermuxAppSharedPreferences prefs) {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
+            if (SurfacePresets.matches(prefs, preset, TermuxAppSharedPreferences.WallHalf.WORKSPACE)
+                && SurfacePresets.matches(prefs, preset,
+                    TermuxAppSharedPreferences.WallHalf.HOME))
+                return preset.id;
+        }
+        return null;
     }
 
     /**
