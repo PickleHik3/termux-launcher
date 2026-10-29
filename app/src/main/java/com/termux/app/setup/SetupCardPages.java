@@ -12,7 +12,9 @@ final class SetupCardPages {
         switch (cardId) {
             case SetupCards.AI:
                 return new AiCardPage();
-            // Wave 4 and 5 add: SetupCards.DISPLAY, SetupCards.GUIDE.
+            case SetupCards.GUIDE:
+                return new GuideCardPage();
+            // Wave 4 and 5 add: SetupCards.DISPLAY.
             default:
                 return null;
         }
