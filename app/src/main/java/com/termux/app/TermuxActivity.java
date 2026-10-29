@@ -33181,6 +33181,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mChrome.ink().terminalPaneGround(paneSurfaceStyle().paneGlassTintColor());
         }
 
+        @Override @Nullable public com.termux.app.chrome.ChromeInk.Polarity terminalBandPolarity() {
+            if (mPreferences == null || !shouldUseWallpaperPassthroughMode()) return null;
+            return mChrome.ink().bandPolarity();
+        }
+
         @Override public int terminalTextSurface() {
             return TermuxActivity.this.terminalTextSurface();
         }

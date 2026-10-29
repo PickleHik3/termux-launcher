@@ -21,6 +21,14 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-29 · the terminal palette wears the pane band's ink as decided (branch
+  fix/contrast-polarity-flap) · on pong with the blue wallpaper and herdr open: Appearance ›
+  Terminal › Contrast › Harder, Done; reopen the editor, Done again; then leave and return to
+  the launcher: the terminal keeps one ink across all three (the recording of 2026-10-29 showed
+  dark ink at the first Done and pale at the second), the miniature in the editor shows the same
+  ink as the live terminal, and herdr re-themes at most once (its sidebar does not keep swapping
+  between its dark and light palettes); Default and Softer unchanged · passes as
+  MaterialTerminalColorSchemeTest says (2026-10-29) · pong, debug arm64 build of the branch.
 - 2026-10-29 · the herdr theme hook keeps the user's sidebar rows (commit after c496185e3) · on
   pong: `~/.config/herdr/config.toml` holds the developer's `claude = [["state_icon", "tab"],
   [{ token = "workspace", fg = "#5fb3b3" }]]` row commented out with `# launcher-material:`;

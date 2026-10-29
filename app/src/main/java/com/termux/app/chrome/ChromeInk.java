@@ -727,6 +727,18 @@ public final class ChromeInk {
         mOnPaneGroundChanged = listener;
     }
 
+    /**
+     * The ink the pane band chose on its last measurement, weighing every live pane's shortfall
+     * for both inks ({@link #bandPolarity(EvenOutPolicy, Rect, double, double)}); null before a
+     * pane is measured or while the even-out stage is off. The palette wears this ink outright:
+     * the ground it is handed ({@link #terminalPaneGround}) is the band's worst end for this ink,
+     * and judging the ink again there would send it to the other side.
+     */
+    @Nullable
+    public Polarity bandPolarity() {
+        return mEvenOutPolicy == null ? null : mBandPolarity;
+    }
+
     /** The band's polarity as last chosen, for tests. */
     @Nullable Polarity bandPolarityForTests() {
         return mBandPolarity;

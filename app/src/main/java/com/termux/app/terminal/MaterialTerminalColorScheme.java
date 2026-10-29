@@ -162,7 +162,23 @@ public final class MaterialTerminalColorScheme {
     @NonNull
     public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level,
                                     @ColorInt int ground, @Nullable ChromeInk.Polarity current) {
-        return build(Seeds.of(context), level, ground, current);
+        return create(context, level, ground, current, false);
+    }
+
+    /**
+     * As {@link #create(Context, TerminalContrastLevel, int, ChromeInk.Polarity)}, with the ink
+     * already decided when {@code decided} is set: the pane band weighs both inks against every
+     * pane's shortfall before it hands the palette a ground, and that ground is the band's worst
+     * end for the ink it chose. Asking {@link #inkPolarity} again there would judge the chosen ink
+     * on its own worst end alone, and on a wallpaper neither ink reads at the level's target that
+     * sent the palette to the other side on every pass, each flip moving the worst end with it.
+     * A decided {@code current} is worn as it is; a null one is still answered by the ground.
+     */
+    @NonNull
+    public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level,
+                                    @ColorInt int ground, @Nullable ChromeInk.Polarity current,
+                                    boolean decided) {
+        return build(Seeds.of(context), level, ground, current, decided);
     }
 
     /** The four theme roles a palette is built from, read once so the build itself is pure. */
@@ -214,15 +230,24 @@ public final class MaterialTerminalColorScheme {
     @VisibleForTesting
     static Properties build(@NonNull Seeds seeds, @NonNull TerminalContrastLevel level,
                             @ColorInt int ground, @Nullable ChromeInk.Polarity current) {
+        return build(seeds, level, ground, current, false);
+    }
+
+    /** As {@link #build(Seeds, TerminalContrastLevel, int, ChromeInk.Polarity)}; see {@link #create(Context, TerminalContrastLevel, int, ChromeInk.Polarity, boolean)} for {@code decided}. */
+    @NonNull
+    @VisibleForTesting
+    static Properties build(@NonNull Seeds seeds, @NonNull TerminalContrastLevel level,
+                            @ColorInt int ground, @Nullable ChromeInk.Polarity current,
+                            boolean decided) {
         Properties props = new Properties();
         ChromeInk.Polarity natural = naturalPolarity(seeds.surface);
         boolean glass = Color.alpha(ground) != 0;
         // The glass floors belong to the even-out stage: only over a bounded band are they safe.
         // With the Debugging switch off the ground is the unbounded mean and today's floors hold.
         boolean glassFloors = glass && sGlassFloors;
-        ChromeInk.Polarity ink = glass
-            ? inkPolarity(ground, level.bodyTarget, current != null ? current : natural)
-            : natural;
+        ChromeInk.Polarity ink = !glass ? natural
+            : decided && current != null ? current
+            : inkPolarity(ground, level.bodyTarget, current != null ? current : natural);
         boolean dark = ink == ChromeInk.Polarity.PALE_INK;
         // Read before the tone move so a surface pushed to tone 2 or 100 — where HCT cannot hold
         // much chroma — still reports the neutral hue the rest of the theme was built from.
@@ -441,14 +466,16 @@ public final class MaterialTerminalColorScheme {
 
     /**
      * {@link #createPaletteSet(Context, TerminalContrastLevel)} with the active palette built on
-     * the last ground {@link #rememberGround} recorded.
+     * the last ground {@link #rememberGround} recorded, wearing the ink recorded with it: that
+     * ground was the band's worst end for that ink, and judging the ink again there would hand
+     * the files the other polarity than the terminal wears.
      */
     @NonNull
     public static PaletteSet createPaletteSetOnLastGround(@NonNull Context context,
                                                           @NonNull TerminalContrastLevel level) {
         LastGround last = lastGround(context);
         return createPaletteSet(context, level,
-            create(context, level, last.ground, last.polarity));
+            create(context, level, last.ground, last.polarity, last.polarity != null));
     }
 
     /**
@@ -1175,12 +1202,23 @@ public final class MaterialTerminalColorScheme {
      */
     public static int signature(@NonNull Context context, @NonNull TerminalContrastLevel level,
                                 @ColorInt int ground, @Nullable ChromeInk.Polarity current) {
+        return signature(context, level, ground, current, false);
+    }
+
+    /**
+     * As {@link #signature(Context, TerminalContrastLevel, int, ChromeInk.Polarity)}, with the ink
+     * decided by the pane band when {@code decided} is set, as
+     * {@link #create(Context, TerminalContrastLevel, int, ChromeInk.Polarity, boolean)} wears it.
+     */
+    public static int signature(@NonNull Context context, @NonNull TerminalContrastLevel level,
+                                @ColorInt int ground, @Nullable ChromeInk.Polarity current,
+                                boolean decided) {
         int result = signature(context, level);
         if (Color.alpha(ground) == 0) return result;
         ChromeInk.Polarity natural = naturalPolarity(materialColor(context,
             com.google.android.material.R.attr.colorSurface, R.color.termux_surface_base));
-        ChromeInk.Polarity ink = inkPolarity(ground, level.bodyTarget,
-            current != null ? current : natural);
+        ChromeInk.Polarity ink = decided && current != null ? current
+            : inkPolarity(ground, level.bodyTarget, current != null ? current : natural);
         result = 31 * result + 1 + ink.ordinal();
         return 31 * result + groundToneBucket(ground);
     }
