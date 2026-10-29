@@ -4826,6 +4826,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mGroundInkKey;
 
     @Nullable
+    /**
+     * The page kinds the ground strip reads, in the wall's order: through the wall's controller
+     * (a shim until #185 reads the page list); the page in view alone before it is built.
+     */
+    @NonNull
+    private java.util.List<com.termux.app.wall.PaneWallPage> groundKinds(
+            @NonNull com.termux.app.wall.PaneWallLayout wall) {
+        return mPaneWallController != null ? mPaneWallController.pageKindsShim()
+            : java.util.Collections.singletonList(wall.currentPage());
+    }
+
     private com.termux.app.wall.PaneWallLayout groundWall() {
         if (mGroundWall == null) {
             View wall = findViewById(R.id.terminal_pane_wall);
@@ -4894,7 +4905,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             strip.setVisibility(View.GONE);
             return;
         }
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = wall.pages();
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = groundKinds(wall);
         int count = Math.min(pages.size(), mGroundScratch.length);
         for (int i = 0; i < count; i++) mGroundScratch[i] = groundOfWallPage(pages.get(i));
         if (count == 0) {
@@ -4920,7 +4931,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GroundStripView strip = mGroundStrip;
         com.termux.app.wall.PaneWallLayout wall = mGroundWall;
         if (strip == null || wall == null || strip.getVisibility() != View.VISIBLE) return;
-        strip.setPosition(groundStopOf(wall.pages(), wall.currentPage()), wall.getWidth(),
+        strip.setPosition(groundStopOf(groundKinds(wall), wall.currentPage()), wall.getWidth(),
             offsetPx);
     }
 

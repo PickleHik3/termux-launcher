@@ -321,6 +321,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private java.util.List<PaneWallLayout.Cell> cells(boolean onRow) {
         boolean homeShown = mHost.useAs() == UseAs.HOME;
         WallPages pages = mHost.wallPages();
+        // Interim until #186 (ADR 0016 section 6): the Terminal page with no window is a cell only
+        // when a first shell can start from it; #186 makes it always a stop.
         // An empty Terminal page keeps its cell, as a stop whose landing starts the first shell.
         boolean emptyStop = homeShown && pages != null && !onRow && mHost.canStartWorkspace();
         java.util.List<PaneWallLayout.Cell> out = new java.util.ArrayList<>();
@@ -557,18 +559,22 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * The seam out of Home for the widget grid: whether a forward swipe on the last Home page has
-     * somewhere to go on the row, and the wall's plain drag to carry it there. With the Workspace
-     * empty the swipe still crosses: the Workspace's page joins the row for it, empty, and its
-     * first shell starts only if the release commits there.
+     * Whether the Terminal page stands in the cell beside the current one on side
+     * {@code direction}: where Home's swipe into an empty Workspace goes. Always forward where
+     * only the kinds are known.
      */
-    /** Whether the Terminal page stands in the cell beside the current one on side {@code direction}. */
     private boolean terminalBesideRun(int direction) {
         if (mKnownPages == null) return direction > 0;
         int terminal = mWall.indexOfCell(mWall.boundPageId(PaneWallPage.TERMINAL));
         return terminal >= 0 && terminal == mWall.indexOfCell(mWall.currentPageId()) + direction;
     }
 
+    /**
+     * The seam out of Home for the widget grid: whether a forward swipe on the last Home page has
+     * somewhere to go on the row, and the wall's plain drag to carry it there. With the Workspace
+     * empty the swipe still crosses: the Workspace's page joins the row for it, empty, and its
+     * first shell starts only if the release commits there.
+     */
     @NonNull
     public com.termux.app.launcher.widget.WidgetPaneView.Seam homeSeam() {
         return new com.termux.app.launcher.widget.WidgetPaneView.Seam() {
@@ -764,6 +770,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     // ---- The row's live position, for the wallpaper's pan ----------------------------------
 
+    /**
+     * How many stops the wallpaper's row spans: every Home page and window, and each Display
+     * page, in the order of the cells, so the pan reads the wall the user arranged.
+     */
     public int rowCount() {
         if ((!mDefaultOrder || mHasDisplaySlot) && mKnownPages != null) {
             return WallParallax.rowCount(mKnownPages, rowWindowCount());
@@ -771,6 +781,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return WallParallax.rowCount(rowHomeCount(), rowWindowCount());
     }
 
+    /**
+     * Where the wall stands on the wallpaper's row right now, in stops: the current cell's stop,
+     * shifted by Home's own swipe or a window's nudge, and blended toward the neighbouring cell
+     * while the wall slides. Read on every frame the wallpaper pans; it must not allocate.
+     */
     public float rowPosition() {
         int homes = rowHomeCount();
         int windows = rowWindowCount();
@@ -807,6 +822,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return WallParallax.slidePosition(at, neighbourAt, offsetPx, width);
     }
 
+    /**
+     * Whether a step of {@code steps} from the current cell stays inside its view (the next
+     * window of the Terminal page) rather than crossing to the neighbouring cell. Never during a
+     * slide from one cell to another.
+     */
     public boolean showsInnerPage(int steps) {
         return !mWall.isCrossSlide() && hasInnerPage(mWall.currentPage(), steps);
     }
@@ -853,6 +873,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return Math.max(1, mHost.innerCount(PaneWallPage.TERMINAL));
     }
 
+    /**
+     * Go to a page by name ({@code wall.go}, the extra keys): {@code left}/{@code right} the
+     * neighbouring cell whatever its kind; {@code home} the home press's page; {@code widgets}
+     * the home page when it is a Home page, else the nearest; {@code display} the bound Display
+     * page, else the nearest; {@code terminal}/{@code workspace} the Terminal page (ADR 0016
+     * section 5). The target's view is bound before the slide, so it arrives live; a far one
+     * arrives one width from a stand-off (W3). False when the wall has no such page.
+     */
     public boolean goTo(@Nullable String name) {
         WallPages pages = mKnownPages;
         if (pages == null) {
@@ -885,11 +913,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return target != null && goToPage(target.id, true);
     }
 
+    /**
+     * Go to a page of kind {@code page}: the current cell when it is of that kind, else the page
+     * its view is bound to.
+     */
     public boolean goTo(@NonNull PaneWallPage page, boolean animate) {
         mWorkspacePending = false;
         return mWall.goTo(page, animate);
     }
 
+    /**
+     * Go to the Terminal page: its window in front, or, with none, start its first shell and land
+     * there once the window arrives. Under Terminal only the empty Workspace is a cell too.
+     * False when there is nowhere to go.
+     */
     public boolean goToWorkspace(boolean animate) {
         boolean homeShown = mHost.useAs().showsHomePage();
         boolean hasWindow = mHost.hasWindow();
@@ -904,10 +941,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return true;
     }
 
+    /** Back to the Terminal page's cell, from wherever the wall stands. */
     public void returnToTerminal(boolean animate) {
         goTo(PaneWallPage.TERMINAL, animate);
     }
 
+    /**
+     * The Android home press: the home page Edit pages set (a Display page, the Terminal page, or
+     * the home press's Home page), wherever the wall is. A far one slides one width from a
+     * stand-off and the pages between are never shown or started (W3, W9).
+     */
     public void goHome(boolean animate) {
         // Edit pages set a Display page as home: the press lands there (A3b), and the landing
         // starts the display.
@@ -935,7 +978,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return home != null && home.kind == WallPages.PageKind.TERMINAL;
     }
 
-    /** Go to the Home page beside the Terminal page: the last one before it, else the first after. */
+    /**
+     * Go to the Home page beside the Terminal page, the last before it, else the first after:
+     * where the wall goes when the last window closes under it.
+     */
     public void goToLastHomePage(boolean animate) {
         if (!mHost.useAs().showsHomePage()) {
             goTo(PaneWallPage.TERMINAL, animate);
@@ -963,6 +1009,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         goTo(PaneWallPage.WIDGETS, animate);
     }
 
+    /**
+     * Land where Start in says on a cold start, without a slide: the Terminal page, or the home
+     * press's page.
+     */
     public void landOnColdStart(@Nullable String startIn) {
         if (WallRow.coldStart(mHost.useAs().startIn(startIn)) == PaneWallPage.TERMINAL) {
             landInWorkspace();
@@ -1099,6 +1149,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHost.onInnerStep(page, steps, fromPx);
     }
 
+    /**
+     * A drag is taking the wall from the current cell: the Home cell follows the Home page the
+     * frame shows, and the views that can arrive beside the seam are put on the page they will
+     * show while still off screen (the window next to Home, a kind-only Home cell's last page).
+     */
     @Override
     public void onWallDragBegin(@NonNull PaneWallPage page) {
         mWorkspacePending = false;
@@ -1124,6 +1179,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHost.showInnerPage(PaneWallPage.TERMINAL, right ? 0 : windows - 1);
     }
 
+    /**
+     * A drag now heads {@code steps} cells away: the view of the kind it heads for is bound to
+     * that cell before it comes on screen, so the page arrives live rather than as its card. The
+     * view under the finger is never taken from its cell.
+     */
     @Override
     public void onWallDragHeading(@NonNull PaneWallPage page, int steps) {
         // A step to the next window stays inside the Workspace.

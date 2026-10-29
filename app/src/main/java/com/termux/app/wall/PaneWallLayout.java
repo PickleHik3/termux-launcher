@@ -646,7 +646,7 @@ public final class PaneWallLayout extends ViewGroup {
      * a wall whose pages are not known, and the tests.
      */
     public static int kindPageId(@NonNull PaneWallPage kind) {
-        return -1 - kind.ordinal();
+        return -100 - kind.ordinal();
     }
 
     /**
@@ -694,9 +694,12 @@ public final class PaneWallLayout extends ViewGroup {
         return mCells;
     }
 
-    /** The page kinds the wall holds, in the order of their first cell. */
+    /**
+     * The page kinds the wall holds, in the order of their first cell: the controller's alone
+     * to read; everything else reads the page list (ADR 0016).
+     */
     @NonNull
-    public List<PaneWallPage> pages() {
+    List<PaneWallPage> pages() {
         return mKinds;
     }
 
