@@ -4345,41 +4345,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_USE_AS);
     }
 
-    /** The version of the run an unfinished tour belongs to, or 0 for an older one. */
-    public int getFirstBootTourRunVersion() {
-        return SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_RUN_VERSION,
-            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION);
-    }
-
-    public void setFirstBootTourRunVersion(int version) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_RUN_VERSION, version, true);
-    }
-
-    /** The card an unfinished run is on, or -1. */
-    public int getFirstBootTourStep() {
-        return SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP, TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_STEP);
-    }
-
-    public void setFirstBootTourStep(int step) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP, step, true);
-    }
-
-    /** How many of that card's gestures have been observed. */
-    public int getFirstBootTourStepStage() {
-        return SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE,
-            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE);
-    }
-
-    public void setFirstBootTourStepStage(int stage) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE, stage, true);
-    }
-
     /** Whether the Appearance editor's theme hint has been dismissed for good. */
     public boolean isAppearanceThemeHintSeen() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
@@ -4389,28 +4354,5 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setAppearanceThemeHintSeen(boolean seen) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, seen, true);
-    }
-
-    /** Whether a card was skipped in the run the user is on. */
-    public boolean getFirstBootTourSkipped() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_SKIPPED);
-    }
-
-    public void setFirstBootTourSkipped(boolean skipped) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, skipped, true);
-    }
-
-    /** Whether the removed footage onboarding's completion has already been folded in, or not. */
-    public boolean isFirstBootTourLegacyOnboardingMigrated() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED,
-            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED);
-    }
-
-    public void setFirstBootTourLegacyOnboardingMigrated(boolean migrated) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED, migrated, true);
     }
 }

@@ -1,4 +1,5 @@
-package com.termux.app.tour;
+package com.termux.app.help;
+
 
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -10,30 +11,24 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 /**
- * The finger glyph itself: one place that paints what {@link TourFingerTrace} works out, so the
+ * The finger glyph itself: one place that paints what {@link HelpFingerTrace} works out, so the
  * run's cards and help's "Show gesture" show the user the same movement rather than two drawings
  * that drifted apart.
  *
  * <p>A phone set to play no animations gets {@link #drawStaticCue} instead — the same path, with
  * a dot where the finger starts and an arrow where it ends, so the direction is still said.
  */
-public final class TourFingerPainter {
+public final class HelpFingerPainter {
 
     private static final float RADIUS_DP = 9f;
     private static final float TRAIL_WIDTH_DP = 3f;
     private static final float ARROW_DP = 7f;
-    /** The demonstration's finger: 60% of the accent, its halo 18%, its trail at most 65%. */
-    private static final float DEMO_FINGER_ALPHA = 153f;
-    private static final float DEMO_HALO_ALPHA = 46f;
-    private static final float DEMO_TRAIL_ALPHA = 166f;
-    private static final float DEMO_TRAIL_WIDTH_DP = 4f;
-    private static final float DEMO_RING_WIDTH_DP = 2f;
 
-    private TourFingerPainter() {}
+    private HelpFingerPainter() {}
 
     /** The finger partway through its pass, with the trail it has left behind it. */
     public static void draw(@NonNull Canvas canvas, @NonNull Paint paint,
-                            @NonNull TourGesture gesture, float left, float top, float right,
+                            @NonNull HelpGesture gesture, float left, float top, float right,
                             float bottom, float density, float progress, int accent,
                             @NonNull float[] scratchPoint, @NonNull float[] scratchTrail) {
         draw(canvas, paint, gesture, left, top, right, bottom, density, progress, accent,
@@ -50,21 +45,21 @@ public final class TourFingerPainter {
      * holding at all.
      */
     public static void draw(@NonNull Canvas canvas, @NonNull Paint paint,
-                            @NonNull TourGesture gesture, float left, float top, float right,
+                            @NonNull HelpGesture gesture, float left, float top, float right,
                             float bottom, float density, float progress, int accent,
                             @NonNull float[] scratchPoint, @NonNull float[] scratchTrail,
                             @Nullable RectF cueBounds) {
-        if (gesture == TourGesture.NONE) return;
-        TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, progress, scratchPoint);
-        TourGlowGeometry.clampPoint(scratchPoint, cueBounds);
+        if (gesture == HelpGesture.NONE) return;
+        HelpFingerTrace.pointAt(gesture, left, top, right, bottom, density, progress, scratchPoint);
+        clampPoint(scratchPoint, cueBounds);
         float radius = RADIUS_DP * density;
         int opaque = opaque(accent);
-        if (gesture == TourGesture.HOLD || gesture == TourGesture.HOLD_DRAG) {
+        if (gesture == HelpGesture.HOLD || gesture == HelpGesture.HOLD_DRAG) {
             // A press that stays down: the halo closes onto the finger and holds there, where a
             // tap's ring would already have expanded away. It is what tells the two apart.
-            float press = gesture == TourGesture.HOLD_DRAG
-                ? Math.min(1f, TourFingerTrace.holdPress(Math.min(progress, 0.5f)))
-                : TourFingerTrace.holdPress(progress);
+            float press = gesture == HelpGesture.HOLD_DRAG
+                ? Math.min(1f, HelpFingerTrace.holdPress(Math.min(progress, 0.5f)))
+                : HelpFingerTrace.holdPress(progress);
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(ColorUtils.setAlphaComponent(opaque, Math.round(38f * press)));
             canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * (1f + (0.9f * press)),
@@ -74,11 +69,11 @@ public final class TourFingerPainter {
             paint.setColor(ColorUtils.setAlphaComponent(opaque, Math.round(120f * press)));
             canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * (1f + (0.9f * press)),
                 paint);
-            if (gesture == TourGesture.HOLD_DRAG) {
+            if (gesture == HelpGesture.HOLD_DRAG) {
                 // Held, then dragged: the trail the finger leaves once it has given way.
-                TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f,
+                HelpFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f,
                     scratchTrail);
-                TourGlowGeometry.clampPoint(scratchTrail, cueBounds);
+                clampPoint(scratchTrail, cueBounds);
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeCap(Paint.Cap.ROUND);
                 paint.setStrokeWidth(TRAIL_WIDTH_DP * density);
@@ -86,9 +81,9 @@ public final class TourFingerPainter {
                 canvas.drawLine(scratchTrail[0], scratchTrail[1], scratchPoint[0], scratchPoint[1],
                     paint);
             }
-        } else if (gesture != TourGesture.TAP) {
-            TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
-            TourGlowGeometry.clampPoint(scratchTrail, cueBounds);
+        } else if (gesture != HelpGesture.TAP) {
+            HelpFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
+            clampPoint(scratchTrail, cueBounds);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND);
             paint.setStrokeWidth(TRAIL_WIDTH_DP * density);
@@ -96,7 +91,7 @@ public final class TourFingerPainter {
             canvas.drawLine(scratchTrail[0], scratchTrail[1], scratchPoint[0], scratchPoint[1],
                 paint);
         } else {
-            float pulse = TourFingerTrace.tapPulse(progress);
+            float pulse = HelpFingerTrace.tapPulse(progress);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(1f, 1.5f * density));
             paint.setColor(ColorUtils.setAlphaComponent(opaque, Math.round(90f * (1f - pulse))));
@@ -110,16 +105,16 @@ public final class TourFingerPainter {
      * it would end, and an arrow saying which way it went.
      */
     public static void drawStaticCue(@NonNull Canvas canvas, @NonNull Paint paint,
-                                     @NonNull Path scratchPath, @NonNull TourGesture gesture,
+                                     @NonNull Path scratchPath, @NonNull HelpGesture gesture,
                                      float left, float top, float right, float bottom,
                                      float density, int accent, @NonNull float[] scratchPoint,
                                      @NonNull float[] scratchTrail) {
-        if (gesture == TourGesture.NONE) return;
+        if (gesture == HelpGesture.NONE) return;
         int opaque = opaque(accent);
         float radius = RADIUS_DP * density;
-        TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
-        TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 1f, scratchPoint);
-        if (gesture == TourGesture.TAP || gesture == TourGesture.HOLD) {
+        HelpFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
+        HelpFingerTrace.pointAt(gesture, left, top, right, bottom, density, 1f, scratchPoint);
+        if (gesture == HelpGesture.TAP || gesture == HelpGesture.HOLD) {
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(1f, 1.5f * density));
             paint.setColor(ColorUtils.setAlphaComponent(opaque, 120));
@@ -127,7 +122,7 @@ public final class TourFingerPainter {
             // A second ring, drawn where the held halo rests, for the phone that plays no
             // animations: the still picture of a hold has to say more than the still picture of a
             // tap, and there is no direction to point in.
-            if (gesture == TourGesture.HOLD) {
+            if (gesture == HelpGesture.HOLD) {
                 paint.setColor(ColorUtils.setAlphaComponent(opaque, 72));
                 canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * 1.45f, paint);
             }
@@ -141,59 +136,6 @@ public final class TourFingerPainter {
         canvas.drawLine(scratchTrail[0], scratchTrail[1], scratchPoint[0], scratchPoint[1], paint);
         drawFinger(canvas, paint, scratchTrail[0], scratchTrail[1], radius * 0.45f, opaque, density);
         drawArrowHead(canvas, paint, scratchPath, scratchTrail, scratchPoint, density, opaque);
-    }
-
-    /**
-     * One frame of the run's looping demonstration ({@link TourDemoLoop}): the finger landing,
-     * pressing and travelling the gesture with a trail behind it, or pressing and sending a ring
-     * out for a hold. Help's "Show gesture" keeps {@link #draw}; this is the run's own.
-     *
-     * @param cueBounds where the finger's centre may be, or null for no holding at all
-     */
-    public static void drawDemo(@NonNull Canvas canvas, @NonNull Paint paint,
-                                @NonNull TourGesture gesture, float left, float top, float right,
-                                float bottom, float density, @NonNull TourDemoLoop.Frame frame,
-                                int accent, @NonNull float[] scratchStart,
-                                @NonNull float[] scratchEnd, @Nullable RectF cueBounds) {
-        if (gesture == TourGesture.NONE) return;
-        TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchStart);
-        TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 1f, scratchEnd);
-        TourGlowGeometry.clampPoint(scratchStart, cueBounds);
-        TourGlowGeometry.clampPoint(scratchEnd, cueBounds);
-        int opaque = opaque(accent);
-        float radius = (TourDemoLoop.FINGER_DIAMETER_DP / 2f) * density;
-        float x = scratchStart[0] + ((scratchEnd[0] - scratchStart[0]) * frame.travel);
-        float y = scratchStart[1] + ((scratchEnd[1] - scratchStart[1]) * frame.travel);
-
-        if (frame.trailAlpha > 0f && frame.trailLength > 0f) {
-            float trailX = scratchStart[0] + ((scratchEnd[0] - scratchStart[0]) * frame.trailLength);
-            float trailY = scratchStart[1] + ((scratchEnd[1] - scratchStart[1]) * frame.trailLength);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            paint.setStrokeWidth(DEMO_TRAIL_WIDTH_DP * density);
-            paint.setColor(ColorUtils.setAlphaComponent(opaque,
-                Math.round(DEMO_TRAIL_ALPHA * frame.trailAlpha)));
-            canvas.drawLine(scratchStart[0], scratchStart[1], trailX, trailY, paint);
-        }
-        if (frame.ringAlpha > 0f) {
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(1f, DEMO_RING_WIDTH_DP * density));
-            paint.setColor(ColorUtils.setAlphaComponent(opaque,
-                Math.round(255f * frame.ringAlpha)));
-            canvas.drawCircle(x, y, radius * frame.ringScale, paint);
-        }
-        if (frame.fingerAlpha <= 0f) return;
-        float scaled = radius * frame.fingerScale;
-        float halo = TourDemoLoop.FINGER_HALO_DP * density;
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(halo);
-        paint.setColor(ColorUtils.setAlphaComponent(opaque,
-            Math.round(DEMO_HALO_ALPHA * frame.fingerAlpha)));
-        canvas.drawCircle(x, y, scaled + (halo / 2f), paint);
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(ColorUtils.setAlphaComponent(opaque,
-            Math.round(DEMO_FINGER_ALPHA * frame.fingerAlpha)));
-        canvas.drawCircle(x, y, scaled, paint);
     }
 
     private static void drawFinger(@NonNull Canvas canvas, @NonNull Paint paint, float x, float y,
@@ -233,5 +175,12 @@ public final class TourFingerPainter {
     private static int opaque(int color) {
         return android.graphics.Color.rgb(android.graphics.Color.red(color),
             android.graphics.Color.green(color), android.graphics.Color.blue(color));
+    }
+
+    /** Holds a point the trace worked out inside {@code bounds}; a null bounds leaves it alone. */
+    private static void clampPoint(@NonNull float[] point, @Nullable RectF bounds) {
+        if (bounds == null) return;
+        point[0] = Math.max(bounds.left, Math.min(bounds.right, point[0]));
+        point[1] = Math.max(bounds.top, Math.min(bounds.bottom, point[1]));
     }
 }

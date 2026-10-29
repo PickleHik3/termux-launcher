@@ -5,7 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.R;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.DisplayEmptyStatePolicy.State;
 
 import org.junit.Test;
@@ -85,7 +85,7 @@ public class DisplayEmptyStatePolicyTest {
             for (boolean hasKeyboardData : new boolean[] {true, false}) {
                 State plain = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData);
                 State termux = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData,
-                    TourEdition.TERMUX);
+                    AppEdition.TERMUX);
                 assertEquals(plain.messageRes, termux.messageRes);
                 assertEquals(plain.startVisible, termux.startVisible);
                 assertEquals(plain.installVisible(), termux.installVisible());
@@ -99,7 +99,7 @@ public class DisplayEmptyStatePolicyTest {
      * nix rests exactly like Termux, start button and all.
      */
     @Test public void nixNamesItsOwnWayToTheKeyboardDataAndOtherwiseReadsLikeTermux() {
-        State withoutData = DisplayEmptyStatePolicy.decide(true, false, TourEdition.NIX);
+        State withoutData = DisplayEmptyStatePolicy.decide(true, false, AppEdition.NIX);
         assertEquals(R.string.termux_x11_needs_keyboard_data_nix, withoutData.messageRes);
         assertFalse("nothing to start without the keyboard data", withoutData.startVisible);
         assertTrue("there is something to read about it", withoutData.guideVisible());
@@ -107,7 +107,7 @@ public class DisplayEmptyStatePolicyTest {
             withoutData.installVisible());
         assertFalse(withoutData.resting());
 
-        State withData = DisplayEmptyStatePolicy.decide(true, true, TourEdition.NIX);
+        State withData = DisplayEmptyStatePolicy.decide(true, true, AppEdition.NIX);
         assertEquals(R.string.termux_x11_no_display, withData.messageRes);
         assertTrue(withData.startVisible);
         assertTrue(withData.resting());
@@ -116,38 +116,38 @@ public class DisplayEmptyStatePolicyTest {
     }
 
     @Test public void nixStillSaysTheSettingIsOffWhenItIs() {
-        State off = DisplayEmptyStatePolicy.decide(false, false, TourEdition.NIX);
+        State off = DisplayEmptyStatePolicy.decide(false, false, AppEdition.NIX);
         assertEquals(R.string.termux_x11_display_off, off.messageRes);
         assertTrue(off.startVisible);
     }
 
     @Test public void aFailedStartSpeaksOverTheRestingStateUntilCleared() {
-        State failed = DisplayEmptyStatePolicy.decide(true, true, TourEdition.TERMUX, "Boom");
+        State failed = DisplayEmptyStatePolicy.decide(true, true, AppEdition.TERMUX, "Boom");
         assertEquals(R.string.termux_x11_start_failed, failed.messageRes);
         assertEquals("Boom", failed.failureReason);
         assertTrue(failed.failed());
         assertTrue("Start stays out so it can be tried again", failed.startVisible);
         assertFalse(failed.resting());
 
-        State next = DisplayEmptyStatePolicy.decide(true, true, TourEdition.TERMUX, null);
+        State next = DisplayEmptyStatePolicy.decide(true, true, AppEdition.TERMUX, null);
         assertEquals(R.string.termux_x11_no_display, next.messageRes);
         assertFalse(next.failed());
     }
 
     @Test public void aFailureDoesNotHideTheThingToFixFirst() {
         assertEquals(R.string.termux_x11_display_off,
-            DisplayEmptyStatePolicy.decide(false, true, TourEdition.TERMUX, "Boom").messageRes);
+            DisplayEmptyStatePolicy.decide(false, true, AppEdition.TERMUX, "Boom").messageRes);
         assertEquals(R.string.termux_x11_needs_keyboard_data,
-            DisplayEmptyStatePolicy.decide(true, false, TourEdition.TERMUX, "Boom").messageRes);
+            DisplayEmptyStatePolicy.decide(true, false, AppEdition.TERMUX, "Boom").messageRes);
     }
 
     @Test public void vajReadsTheSameAsTermux() {
         for (boolean enabled : new boolean[] {true, false}) {
             for (boolean hasKeyboardData : new boolean[] {true, false}) {
                 State vaj = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData,
-                    TourEdition.VAJ);
+                    AppEdition.VAJ);
                 State termux = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData,
-                    TourEdition.TERMUX);
+                    AppEdition.TERMUX);
                 assertEquals(termux.messageRes, vaj.messageRes);
                 assertEquals(termux.startVisible, vaj.startVisible);
                 assertEquals("VAJ installs the package with pkg too",

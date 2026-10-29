@@ -53,7 +53,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         setPreferencesFromResource(R.xml.termux_ai_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         configureModelCentreRow();
-        configureWelcomeCardRow();
+        configureModelsCardRow();
         configureBenchmarkRow();
         configureHuggingFaceToken();
         openOnClick("tai_runtime_controls", TaiRuntimePreferencesFragment.class, R.string.termux_ai_runtime_screen_title);
@@ -134,13 +134,17 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         });
     }
 
-    /** Reopens the "What runs on this phone" card any time; it does not count as the automatic raise. */
-    private void configureWelcomeCardRow() {
-        Preference row = findPreference("tai_welcome_card");
+    /** Models for this phone: the setup sheet, straight on the AI card's page. */
+    private void configureModelsCardRow() {
+        Preference row = findPreference("tai_models_card");
         if (row == null) return;
         row.setOnPreferenceClickListener(preference -> {
             if (getActivity() != null) {
-                com.termux.app.firstrun.TaiWelcomeCardHost.show(getActivity(), false, null);
+                startActivity(new android.content.Intent(getActivity(),
+                    com.termux.app.TermuxActivity.class)
+                    .putExtra(com.termux.app.TermuxActivity.EXTRA_SHOW_SETUP_CARDS, true)
+                    .putExtra(com.termux.app.TermuxActivity.EXTRA_SETUP_CARD_ID, "ai"));
+                getActivity().finish();
             }
             return true;
         });

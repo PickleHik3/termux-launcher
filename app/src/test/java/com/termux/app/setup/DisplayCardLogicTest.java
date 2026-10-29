@@ -5,7 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.x11.GuiAppsSetup;
 
 import org.junit.Test;
@@ -17,13 +17,13 @@ public class DisplayCardLogicTest {
 
     @Test
     public void nixOffersNoRoute() {
-        assertTrue(DisplayCardLogic.offeredRoutes(TourEdition.NIX).isEmpty());
+        assertTrue(DisplayCardLogic.offeredRoutes(AppEdition.NIX).isEmpty());
         assertNull(DisplayCardLogic.resolveRoute("x11", Collections.<GuiAppsSetup.Route>emptyList()));
     }
 
     @Test
     public void bothRoutesAreOffered() {
-        List<GuiAppsSetup.Route> routes = DisplayCardLogic.offeredRoutes(TourEdition.TERMUX);
+        List<GuiAppsSetup.Route> routes = DisplayCardLogic.offeredRoutes(AppEdition.TERMUX);
         assertTrue(routes.contains(GuiAppsSetup.Route.DISTRO));
         assertTrue(routes.contains(GuiAppsSetup.Route.X11_REPO));
     }
@@ -61,12 +61,12 @@ public class DisplayCardLogicTest {
     @Test
     public void aDistroRunGetsTheAccountAndAnX11RunDoesNot() {
         String distro = DisplayCardLogic.command(GuiAppsSetup.Route.DISTRO,
-            GuiAppsSetup.Distro.DEBIAN, TourEdition.TERMUX, "alice", "s3cret");
+            GuiAppsSetup.Distro.DEBIAN, AppEdition.TERMUX, "alice", "s3cret");
         assertTrue(distro.contains("LUSER='alice'"));
         assertTrue(distro.contains("chpasswd"));
         assertFalse(distro.contains("read -r"));
         String x11 = DisplayCardLogic.command(GuiAppsSetup.Route.X11_REPO,
-            GuiAppsSetup.Distro.DEBIAN, TourEdition.TERMUX, "alice", "s3cret");
+            GuiAppsSetup.Distro.DEBIAN, AppEdition.TERMUX, "alice", "s3cret");
         assertFalse(x11.contains("s3cret"));
     }
 
@@ -88,9 +88,9 @@ public class DisplayCardLogicTest {
     @Test
     public void commandIsTheGuidesCommandWithDefaultStarters() {
         String command = DisplayCardLogic.command(GuiAppsSetup.Route.X11_REPO,
-            GuiAppsSetup.Distro.DEBIAN, TourEdition.TERMUX, null, null);
+            GuiAppsSetup.Distro.DEBIAN, AppEdition.TERMUX, null, null);
         assertEquals(GuiAppsSetup.command(GuiAppsSetup.Route.X11_REPO, GuiAppsSetup.Distro.DEBIAN,
-            GuiAppsSetup.defaultStarters(), TourEdition.TERMUX), command);
+            GuiAppsSetup.defaultStarters(), AppEdition.TERMUX), command);
         assertTrue(command.contains("pkg install -y x11-repo"));
         assertTrue(DisplayCardLogic.script(command).endsWith(command + "\n"));
     }

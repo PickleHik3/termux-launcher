@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 
 import org.junit.Test;
 
@@ -12,13 +12,13 @@ public class GuiAppsSetupUnattendedTest {
 
     private static String distro(GuiAppsSetup.Distro distro, String user, String password) {
         return GuiAppsSetup.command(GuiAppsSetup.Route.DISTRO, distro,
-            GuiAppsSetup.defaultStarters(), TourEdition.TERMUX, user, password);
+            GuiAppsSetup.defaultStarters(), AppEdition.TERMUX, user, password);
     }
 
     @Test
     public void nullUserKeepsTheInteractiveCommand() {
         String interactive = GuiAppsSetup.command(GuiAppsSetup.Route.DISTRO,
-            GuiAppsSetup.Distro.DEBIAN, GuiAppsSetup.defaultStarters(), TourEdition.TERMUX);
+            GuiAppsSetup.Distro.DEBIAN, GuiAppsSetup.defaultStarters(), AppEdition.TERMUX);
         assertEquals(interactive, distro(GuiAppsSetup.Distro.DEBIAN, null, null));
         assertTrue(interactive.contains("read -r LUSER"));
         assertTrue(interactive.contains("passwd \"$LUSER\""));
@@ -58,9 +58,9 @@ public class GuiAppsSetupUnattendedTest {
     @Test
     public void theX11RouteIgnoresTheAccount() {
         String plain = GuiAppsSetup.command(GuiAppsSetup.Route.X11_REPO,
-            GuiAppsSetup.Distro.DEBIAN, GuiAppsSetup.defaultStarters(), TourEdition.TERMUX);
+            GuiAppsSetup.Distro.DEBIAN, GuiAppsSetup.defaultStarters(), AppEdition.TERMUX);
         assertEquals(plain, GuiAppsSetup.command(GuiAppsSetup.Route.X11_REPO,
-            GuiAppsSetup.Distro.DEBIAN, GuiAppsSetup.defaultStarters(), TourEdition.TERMUX,
+            GuiAppsSetup.Distro.DEBIAN, GuiAppsSetup.defaultStarters(), AppEdition.TERMUX,
             "alice", "s3cret"));
     }
 

@@ -1,4 +1,4 @@
-package com.termux.app.tour;
+package com.termux.app.help;
 
 /**
  * The gesture a card is asking for, and the only thing the finger glyph needs to know to trace it.
@@ -7,7 +7,7 @@ package com.termux.app.tour;
  * is two traces over the same target, and the overlay should not have to guess the second one from
  * the first.
  */
-public enum TourGesture {
+public enum HelpGesture {
     /** No trace at all — the closing card. */
     NONE,
     TAP,

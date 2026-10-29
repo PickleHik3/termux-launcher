@@ -28,9 +28,9 @@
             app:title="@string/tai_model_centre_title"
             app:persistent="false"/>
         <Preference
-            app:key="tai_welcome_card"
-            app:title="@string/tai_welcome_pref_title"
-            app:summary="@string/tai_welcome_pref_summary"
+            app:key="tai_models_card"
+            app:title="@string/tai_models_card_title"
+            app:summary="@string/tai_models_card_summary"
             app:persistent="false"/>
         <Preference
             app:key="tai_voice_input"

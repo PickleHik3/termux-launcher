@@ -12,7 +12,7 @@ import androidx.preference.Preference;
 import com.termux.BuildConfig;
 import com.termux.R;
 import com.termux.app.settings.WhatsNewNotes;
-import com.termux.app.tour.TourEdition;
+import com.termux.app.AppEdition;
 import com.termux.app.TermuxActivity;
 import com.termux.app.models.UserAction;
 import com.termux.shared.activities.ReportActivity;
@@ -46,7 +46,7 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         });
         configureAbout(context);
         configureWhatsNew(context);
-        configureTourReplay(context);
+        configureGuide(context);
         configureLicenses(context);
         configureDonate(context);
     }
@@ -59,15 +59,12 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
     private void url(String key, String target) { click(key, preference -> { ShareUtils.openUrl(requireContext(), target); return true; }); }
     private void click(String key, Preference.OnPreferenceClickListener listener) { Preference row = findPreference(key); if (row != null) row.setOnPreferenceClickListener(listener); }
 
-    /**
-     * Hands the home screen back to the user on card one of the tour. The run itself is what
-     * forgets that it was ever finished, so there is nothing to clear here first.
-     */
-    private void configureTourReplay(@NonNull Context context) {
-        click("replay_tour", preference -> {
+    /** Learn the basics: the setup sheet, straight on the guide card's page. */
+    private void configureGuide(@NonNull Context context) {
+        click("open_guide", preference -> {
             startActivity(new Intent(context, TermuxActivity.class)
-                .putExtra(TermuxActivity.EXTRA_SHOW_ONBOARDING, true));
-            // Settings gets out of the way: the run is on the home screen behind it.
+                .putExtra(TermuxActivity.EXTRA_SHOW_SETUP_CARDS, true)
+                .putExtra(TermuxActivity.EXTRA_SETUP_CARD_ID, "guide"));
             if (getActivity() != null) getActivity().finish();
             return true;
         });
@@ -92,7 +89,7 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
     private void configureWhatsNew(@NonNull Context context) {
         click("whats_new", preference -> {
             new Thread(() -> {
-                TourEdition edition = TourEdition.of(context.getPackageName());
+                AppEdition edition = AppEdition.of(context.getPackageName());
                 String version = BuildConfig.VERSION_NAME;
                 WhatsNewNotes.Notes notes = WhatsNewNotes.select(version,
                     readAsset(context, "whatsnew/release-notes.md"),

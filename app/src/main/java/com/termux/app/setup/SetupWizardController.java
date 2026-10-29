@@ -31,8 +31,6 @@ import com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragme
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
-import com.termux.app.firstrun.TaiWelcomeCardHost;
-import com.termux.app.tour.TourController;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.ArrayList;
@@ -403,16 +401,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         mHost.holdPaneWall(false);
     }
 
-    /** Records that this wizard version ran, and that the old tour never needs to start. */
+    /** Records that this wizard version ran. */
     private void markDone() {
         TermuxAppSharedPreferences prefs = mHost.preferences();
         if (prefs == null)
             return;
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
-        if (prefs.getFirstBootTourCompletedVersion() < TourController.RUN_VERSION)
-            prefs.setFirstBootTourCompletedVersion(TourController.RUN_VERSION);
-        // The wizard's AI section and the AI card on the sheet replace the old welcome card.
-        TaiWelcomeCardHost.markShown(mHost.context());
+        // The old tour is gone, but this stays the "has used the app before" marker the gate
+        // reads, and older code paths that read it still see the tour as done (8 is its last run).
+        if (prefs.getFirstBootTourCompletedVersion() < 8)
+            prefs.setFirstBootTourCompletedVersion(8);
     }
 
     @Override
@@ -470,6 +468,20 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             !AiModelDownloads.selected(mHost.context()).isEmpty());
     }
 
+    /**
+     * The one-shot carry-over for someone who did the old tour: every guide chapter counts as
+     * watched. Called with the gate's decision before the wizard opens.
+     */
+    public void migrateFromOldTourIfDue(@NonNull SetupWizardGate.Decision decision) {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        android.content.SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        if (SetupWizardGate.shouldMigrate(decision,
+                store.getBoolean(SetupWizardGate.KEY_MIGRATED_V1, false)))
+            GuideChapters.migrateFromOldTour(store);
+    }
+
     /** Opens the card sheet when it is due; true when it is up. */
     public boolean openCardsIfDue() {
         if (mOpen)
@@ -482,8 +494,19 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /** Opens the card sheet whatever is due (Settings' Setup row). */
     public void openCards() {
-        if (mOpen)
+        openCards(null);
+    }
+
+    /**
+     * Opens the card sheet, straight on one card's page when {@code pageId} names one (Settings'
+     * Learn the basics and Models for this phone rows).
+     */
+    public void openCards(@Nullable String pageId) {
+        if (mOpen) {
+            if (pageId != null)
+                showPage(pageId);
             return;
+        }
         View root = mHost.findView(R.id.terminal_root_container);
         FrameLayout content = mHost.findView(android.R.id.content);
         if (root == null || content == null)
@@ -502,6 +525,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             ViewGroup.LayoutParams.MATCH_PARENT));
         sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
         layoutCards();
+        if (pageId != null)
+            showPage(pageId);
     }
 
     /** The sheet is 78% of the window; the launcher root stays at rest beneath it. */

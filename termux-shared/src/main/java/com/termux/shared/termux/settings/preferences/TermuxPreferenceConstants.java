@@ -1976,43 +1976,9 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SETUP_WIZARD_VERSION = "setup_wizard_version";
         public static final int DEFAULT_SETUP_WIZARD_VERSION = 0;
 
-        /**
-         * The version of the run an unfinished tour belongs to, or 0 for one started before the
-         * version was recorded. The card number alone says nothing across an update: card 3 of
-         * one run and card 3 of the next are different lessons.
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_RUN_VERSION = "first_boot_tour_run_version";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION = 0;
-
-        /**
-         * The card an unfinished run is on, or -1. The launcher is the home screen and is killed
-         * and restarted under the user constantly, so the run is written through on every move and
-         * resumes where it was rather than starting over.
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_STEP = "first_boot_tour_step";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP = -1;
-
-        /** How many of the current card's gestures have been observed. */
-        public static final String KEY_FIRST_BOOT_TOUR_STEP_STAGE = "first_boot_tour_step_stage";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE = 0;
-
         /** Whether the Appearance editor's "theme, colours and glass" hint has been dismissed. */
         public static final String KEY_APPEARANCE_THEME_HINT_SEEN = "first_run_appearance_theme_hint_seen";
         public static final boolean DEFAULT_APPEARANCE_THEME_HINT_SEEN = false;
-
-        /** Whether the user skipped past a card in the run they are on. */
-        public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";
-        public static final boolean DEFAULT_FIRST_BOOT_TOUR_SKIPPED = false;
-
-        /**
-         * Whether the one-time migration that folds a completed run of the removed footage
-         * onboarding into {@link #KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION} has already run. Guarded
-         * by its own flag, never by the completed version itself, since Replay legitimately zeroes
-         * that version and must not be read back as "never migrated".
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED =
-            "first_boot_tour_legacy_onboarding_migrated";
-        public static final boolean DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED = false;
     }
 
     /**

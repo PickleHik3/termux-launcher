@@ -177,7 +177,6 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_ACTIVITY;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.theme.LauncherSchemeTheme;
-import com.termux.app.tour.FirstBootTour;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -263,9 +262,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Opens the extra-keys row editor over the live terminal, from Settings. */
     public static final String EXTRA_EDIT_EXTRA_KEYS =
         "com.termux.app.extra.EDIT_EXTRA_KEYS";
-    /** Forces the first-launch experience for screenshots, product demos, and UI verification. */
-    public static final String EXTRA_SHOW_ONBOARDING =
-        "com.termux.app.extra.SHOW_ONBOARDING";
     /** Settings asking for the setup wizard again, with the current settings pre-selected. */
     public static final String EXTRA_RERUN_SETUP =
         "com.termux.app.extra.RERUN_SETUP";
@@ -273,6 +269,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Settings asking for the setup cards' sheet. */
     public static final String EXTRA_SHOW_SETUP_CARDS =
         "com.termux.app.extra.SHOW_SETUP_CARDS";
+    /** With {@link #EXTRA_SHOW_SETUP_CARDS}: a card id whose page the sheet opens straight on. */
+    public static final String EXTRA_SETUP_CARD_ID =
+        "com.termux.app.extra.SETUP_CARD_ID";
 
     private static final int REQUEST_CODE_SETUP_NOTIFICATIONS = 4714;
     /** An alias for the help screen, for anything that still asks for help by intent. */
@@ -314,9 +313,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPaneWallController.displayWindow() != null) mPaneWallController.displayWindow().dismissControls();
         }
         ensureHelpController(content);
-        // A run that is partway through a lesson has nowhere to put a practice card, so help does
-        // not offer one.
-        mHelpController.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
+        // The guided practice runs went with the first-boot tour, so help offers none.
+        mHelpController.setPracticeAvailable(false);
         mHelpController.show(currentWallPlace());
     }
 
@@ -330,9 +328,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.content.Intent intent = com.termux.app.help.HelpActivity.intent(this,
             place == null ? currentWallPlace() : place, topicId,
             topicId == null ? mHelpScreenNavigation : null,
-            // The same answer the sheet was given: a run partway through a lesson has nowhere to
-            // put a second one, so the screen does not offer to start one.
-            mFirstBootTour == null || mFirstBootTour.canStartPractice());
+            // The same answer the sheet was given: there is no practice run to start.
+            false);
         mHelpScreenNavigation = null;
         if (mHelpScreenLauncher != null) mHelpScreenLauncher.launch(intent);
         else startActivity(intent);
@@ -377,7 +374,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (content == null) return;
         if (mPaneController != null) mPaneController.dismissControlsForHelp();
         ensureHelpController(content);
-        mHelpController.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
+        mHelpController.setPracticeAvailable(false);
         com.termux.app.wall.PaneWallPage place = currentWallPlace();
         switch (action) {
             case com.termux.app.help.HelpActivity.ACTION_EXPLORE:
@@ -430,21 +427,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override public void onHelpVisibilityChanged(boolean showing) {
-                    // The one path every dismissal takes, so the run hears about help going away
-                    // however it went: the Close button, Back, a place change, or onPause.
-                    if (mFirstBootTour != null) mFirstBootTour.onHelpShownSettled(showing);
+                    // The one path every dismissal takes: the Close button, Back, a place
+                    // change, or onPause.
                     if (showing) return;
                     if (holdDisplayKeyboardFocus() || returnFocusToDisplayWindow()) return;
                     View pane = mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
                     if (pane != null) pane.requestFocus();
                 }
             });
-        // "Try it" closes help first and hands the lesson over: the run's own card comes up
-        // on the control the user was just reading about.
-        mHelpController.setPracticeListener(lessonId -> {
-            FirstBootTour tour = firstBootTour();
-            if (tour != null) tour.startPractice(lessonId);
-        });
     }
 
     /**
@@ -772,8 +762,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mDockImeLiftPx;
     /**
      * Set around a show or hide that the slide makes on its own behalf. Nobody asked for that
-     * keyboard, so it is not reported as a user's intent — to the display's keyboard policy or to
-     * the tour — any more than the settle it stands in for would be twice.
+     * keyboard, so it is not reported as a user's intent to the display's keyboard policy, any
+     * more than the settle it stands in for would be twice.
      */
     private boolean mQuietKeyboardChange;
     /**
@@ -798,8 +788,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.place.HomeAlwaysOnNotice();
     /** The shared arrangement and each place's memory; built on the preferences when first asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
-    /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
-    @Nullable private FirstBootTour mFirstBootTour;
 
     /** Whether the one-time "take the new key row?" card is up, so it is never raised twice. */
     private boolean mExtraKeysDefaultOfferShowing;
@@ -1238,7 +1226,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Height the in-app notice chip is occupying above the background stack; 0 when not showing. */
     private int mAppNoticeOccupancyPx;
     /** The setup sheet the first-boot run is offered on, built the first time it is asked for. */
-    @Nullable private com.termux.app.firstrun.WelcomeSheetHost mWelcomeSheet;
     /**
      * Nesting depth of {@link #runWithoutNotices}. Creating a window or a pane touches the focused
      * shell, which several unrelated listeners read as a session change worth announcing; the user
@@ -1472,8 +1459,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the suggestion bar, the three FX layers and the {@code Choreographer} loop below.
      */
     private final AzScrubGesture mAzGesture = new AzScrubGesture(SystemClock::uptimeMillis);
-    /** The touch on the A-Z letters now under way laid a letter's apps out (for the tour). */
-    private boolean mAzAppsShownThisTouch;
     @Nullable private Choreographer.FrameCallback mAzEdgePagingFrameCallback;
     @Nullable private SuggestionBarView.AzDragFocusResult mAzCurrentFocusResult;
     @Nullable private Runnable mAzOverflowRefreshRunnable;
@@ -2014,7 +1999,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyDockImeOffset(0);
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
-            if (mWelcomeSheet != null) mWelcomeSheet.applyInsets(insetsCompat);
             // The root consumes the insets, so the overlays after it in this frame are handed them.
             if (mHomeActionsSheet != null) mHomeActionsSheet.applyInsets(insetsCompat);
             // The drawer plane pins itself above a system keyboard; guarded on the field so a
@@ -2096,41 +2080,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TermuxUtils.sendTermuxOpenedBroadcast(this);
         registerPreferredHomeChangeReceiver();
         ensureAppNoticeHost();
-        // The GPU path settles in the background so the welcome card knows it when it renders.
-        com.termux.app.firstrun.TaiWelcomeCardHost.probeEarly(this);
         if (savedInstanceState == null) {
-            boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
             boolean rerunSetup = getIntent().getBooleanExtra(EXTRA_RERUN_SETUP, false);
             boolean showSetupCards = getIntent().getBooleanExtra(EXTRA_SHOW_SETUP_CARDS, false);
+            String setupCardId = getIntent().getStringExtra(EXTRA_SETUP_CARD_ID);
             // The intent the post sees can be gone by then (a relaunch after a crash cleared it).
             final Intent launchIntent = getIntent();
             contentView.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (showSetupCards) {
-                    if (launchIntent != null) launchIntent.removeExtra(EXTRA_SHOW_SETUP_CARDS);
-                    if (!openSetupWizardIfDue()) setupWizard().openCards();
+                    if (launchIntent != null) {
+                        launchIntent.removeExtra(EXTRA_SHOW_SETUP_CARDS);
+                        launchIntent.removeExtra(EXTRA_SETUP_CARD_ID);
+                    }
+                    if (!openSetupWizardIfDue()) setupWizard().openCards(setupCardId);
                     return;
                 }
-                // The setup wizard replaces the tour: it shows instead of it, on any build.
                 if (rerunSetup) {
                     if (launchIntent != null) launchIntent.removeExtra(EXTRA_RERUN_SETUP);
                     setupWizard().open(true);
                     return;
                 }
-                if (!forceOnboarding && openSetupWizardIfDue()) return;
-                if (!forceOnboarding && setupWizard().openCardsIfDue()) return;
-                FirstBootTour tour = firstBootTour();
-                if (tour == null) return;
-                // Settings asking for the tour from a cold start: the whole run, sheet first.
-                if (forceOnboarding) {
-                    tour.restart();
-                    return;
-                }
-                // A run a process death interrupted picks back up on its own card; otherwise
-                // someone who has never been through a run is offered one on the setup sheet.
-                if (tour.resumeIfInProgress()) return;
-                tour.startIfNeeded();
+                if (openSetupWizardIfDue()) return;
+                setupWizard().openCardsIfDue();
             });
         } else {
             resumeFirstRunAfterRestart();
@@ -2138,13 +2111,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The run, picked back up by an activity rebuilt from a saved state.
+     * The setup wizard, picked back up by an activity rebuilt from a saved state.
      *
-     * <p>The process can die while the setup sheet is up — the sheet is the very first thing a
-     * fresh install shows — and the activity that comes back would otherwise have no sheet and no
-     * run. The sheet is not stored, so the run is simply offered again; a run already past it picks
-     * back up on its own card. A rotation does not come through here: this activity keeps itself
-     * across one.
+     * <p>The process can die while the wizard is up, and the activity that comes back would
+     * otherwise have nothing on screen. The wizard is not stored, so it is simply offered again.
+     * A rotation does not come through here: this activity keeps itself across one.
      */
     private void resumeFirstRunAfterRestart() {
         View contentView = findViewById(android.R.id.content);
@@ -2152,43 +2123,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         contentView.post(() -> {
             if (isFinishing() || isDestroyed() || mPreferences == null) return;
             if (openSetupWizardIfDue()) return;
-            if (setupWizard().openCardsIfDue()) return;
-            FirstBootTour tour = firstBootTour();
-            if (tour == null || tour.resumeIfInProgress()) return;
-            tour.startIfNeeded();
+            setupWizard().openCardsIfDue();
         });
     }
 
     /** A place is picked in Settings, so the weather needs no location permission. */
     private boolean weatherFollowsPickedPlace() {
         return mPreferences != null && !mPreferences.getStatusWidgetWeatherLocation().isEmpty();
-    }
-
-    /**
-     * The setup sheet's city search took focus: the embedded keyboard steps aside, the system
-     * keyboard's insets are owned by this activity, and the system keyboard comes up for it —
-     * the drawer search's order.
-     */
-    private void beginFirstRunPlaceSearch(@NonNull EditText field) {
-        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
-            mInAppKeyboard.beginExternalTextInput(true);
-        }
-        onSystemImeRequested();
-        field.post(() -> {
-            if (mWelcomeSheet == null || !mWelcomeSheet.isShowing() || !field.hasFocus()) return;
-            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
-        });
-    }
-
-    /** The search gave up focus: the system keyboard goes, and the terminal and its keyboard return. */
-    private void endFirstRunPlaceSearch(@NonNull EditText field) {
-        if (field.hasFocus()) return;
-        if (getWindow() != null) {
-            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
-                .hide(Type.ime());
-        }
-        returnFocusToTerminalQuietly();
-        if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
     }
 
     /**
@@ -2279,7 +2220,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleEditExtraKeysIntent(intent);
         handleShowHelpIntent(intent);
         handleHelpScreenActionIntent(intent);
-        handleReplayTourIntent(intent);
         handleRerunSetupIntent(intent);
         handleShowSetupCardsIntent(intent);
         handleShellNotificationIntent(intent);
@@ -2654,9 +2594,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshWallpaperPictureOnArrival();
         com.termux.app.chrome.wallpaper.WallpaperSlots.dropRetiredLiveWallpapers(this);
         redressChromeAfterFirstLayout();
-        // A permission answered in the system settings page comes back here, so the sheet reads
-        // what was granted there rather than what it said before we left.
-        if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         // The DISPLAY opt-in can have been flipped in Settings while we were away.
         syncDisplayEnvironment();
         // `pkg install xkeyboard-config` in a shell leaves no broadcast behind either, so the
@@ -2738,23 +2675,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
         }
 
-        // The arrival the "come back to Termux" lesson is waiting for, however the user made it.
-        if (mFirstBootTour != null) mFirstBootTour.onLauncherResumed();
-
-        // The row card, for the update that has no first-run chain to hang it off and for the one
-        // that was held while the run had the screen.
+        // The row card, for the update that has no first-run chain to hang it off.
         maybeOfferExtraKeysDefaultRow();
-        // The on-device AI welcome card, for installs that skipped or finished the tour before it
-        // existed; the run itself raises it through the after-run listener below.
-        maybeOfferTaiWelcomeCard();
 
         // Check if a crash happened on last run of the app or if a plugin crashed and show a
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
-        // Step seven launches an app; the run is picked back up on the card it was on when the
-        // launcher returns.
-        FirstBootTour tour = firstBootTour();
-        if (tour != null) tour.resumeIfInProgress();
         mIsOnResumeAfterOnCreate = false;
     }
 
@@ -2842,6 +2768,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.getFirstBootTourCompletedVersion() >= 1,
                 mPreferences.isUseAsStored());
         if (!decision.show) return false;
+        setupWizard().migrateFromOldTourIfDue(decision);
         setupWizard().open(decision.updater);
         return true;
     }
@@ -2850,10 +2777,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void handleShowSetupCardsIntent(@Nullable Intent intent) {
         if (intent == null || !intent.getBooleanExtra(EXTRA_SHOW_SETUP_CARDS, false)) return;
         intent.removeExtra(EXTRA_SHOW_SETUP_CARDS);
+        String setupCardId = intent.getStringExtra(EXTRA_SETUP_CARD_ID);
+        intent.removeExtra(EXTRA_SETUP_CARD_ID);
         View contentView = findViewById(android.R.id.content);
         if (contentView == null) return;
         contentView.post(() -> {
-            if (!openSetupWizardIfDue()) setupWizard().openCards();
+            if (!openSetupWizardIfDue()) setupWizard().openCards(setupCardId);
         });
     }
 
@@ -2864,22 +2793,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View contentView = findViewById(android.R.id.content);
         if (contentView == null) return;
         contentView.post(() -> setupWizard().open(true));
-    }
-
-    /**
-     * Settings asking for the tour again, on the launcher that is already up. The run starts from
-     * card one whatever came before; the permission chain is not replayed, because every one of its
-     * links has already been asked once and would close on itself.
-     */
-    private void handleReplayTourIntent(@Nullable Intent intent) {
-        if (intent == null || !intent.getBooleanExtra(EXTRA_SHOW_ONBOARDING, false)) return;
-        intent.removeExtra(EXTRA_SHOW_ONBOARDING);
-        View contentView = findViewById(android.R.id.content);
-        if (contentView == null) return;
-        contentView.post(() -> {
-            FirstBootTour tour = firstBootTour();
-            if (tour != null) tour.restart();
-        });
     }
 
     /**
@@ -2899,8 +2812,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isFinishing() || isDestroyed()) return;
         // Cheapest check first: once answered, nothing else is read on any later resume.
         if (mPreferences.isExtraKeysDefaultOffered()) return;
-        FirstBootTour tour = firstBootTour();
-        boolean tourInTheWay = tour != null && tour.isRunPending();
         java.util.Properties properties = com.termux.app.settings.TermuxPropertiesFile.load(this);
         String pageOne = properties.getProperty(
             com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_EXTRA_KEYS);
@@ -2910,7 +2821,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.setExtraKeysDefaultOffered(true);
             return;
         }
-        if (!ExtraKeysDefaultOffer.shouldOffer(pageOne, false, tourInTheWay)) return;
+        if (!ExtraKeysDefaultOffer.shouldOffer(pageOne, false, false)) return;
         String pageTwo = properties.getProperty(
             com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_EXTRA_KEYS2);
         mExtraKeysDefaultOfferShowing = true;
@@ -2939,7 +2850,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         title.setOrientation(LinearLayout.VERTICAL);
         title.setPadding((int) (24 * density), (int) (20 * density), (int) (24 * density), 0);
         TextView kicker = new TextView(this);
-        kicker.setText(R.string.tour_card_kicker);
+        kicker.setText(R.string.extra_keys_default_offer_kicker);
         kicker.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
         kicker.setAllCaps(true);
         kicker.setLetterSpacing(0.08f);
@@ -2965,9 +2876,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                          @Nullable String previousPageTwo) {
         if (mPreferences != null) {
             mPreferences.setExtraKeysDefaultOffered(true);
-            // Only a row of their own is worth keeping. The tour card can be reached a second
-            // time with Back, by which point the row on file is the shipped one, and saving that
-            // as "Before the update" would lose the row the first tap kept.
+            // Only a row of their own is worth keeping: once the shipped row is on file,
+            // saving it as "Before the update" would lose the row the first tap kept.
             if (ExtraKeysDefaultOffer.isCustomRow(previousPageOne)) {
                 mPreferences.setPreviousExtraKeys(0,
                     previousPageOne == null ? "" : previousPageOne.trim());
@@ -2983,338 +2893,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         requestTermuxActivityStylingOnNextResume(this, false);
         AppNotice.show(this, R.string.extra_keys_default_offer_switched);
-    }
-
-    /**
-     * The "What runs on this phone" card (tai-device-tiers spec section 5.1): once, after the tour's
-     * closing card, or on the next idle home screen for an install that skipped the tour or finished
-     * it before this version. Never while the tour is going or still to be offered, never over the
-     * chrome the tour's own cards wait behind (help included) or another setup card, and never
-     * again once raised: Later is an answer, and Settings keeps the way back in.
-     */
-    private void maybeOfferTaiWelcomeCard() {
-        if (isFinishing() || isDestroyed() || mPreferences == null) return;
-        if (setupWizardComesFirst()) return;
-        // Cheapest check first: once shown, nothing else is read on any later resume.
-        if (com.termux.app.firstrun.TaiWelcomeCardHost.wasShown(this)) return;
-        FirstBootTour tour = firstBootTour();
-        TourChromeProbe chrome = new TourChromeProbe();
-        boolean chromeUp = chrome.isAppDrawerUp() || chrome.isCommandPaletteUp()
-            || chrome.isTerminalSheetUp() || chrome.isSurfaceEditorUp() || chrome.isHelpUp();
-        boolean otherCardUp = (mWelcomeSheet != null && mWelcomeSheet.isShowing())
-            || mExtraKeysDefaultOfferShowing
-            || com.termux.app.firstrun.TaiWelcomeCardHost.isShowing();
-        if (!com.termux.app.firstrun.TaiWelcomeCard.shouldShowOnHome(false,
-                tour != null && tour.isRunPending(), chromeUp, otherCardUp,
-                com.termux.app.firstrun.TaiWelcomeCardHost.hasRows(this))) {
-            return;
-        }
-        com.termux.app.firstrun.TaiWelcomeCardHost.show(this, true, null);
-    }
-
-    /** The tour, built on the preferences the first time anything asks for it. */
-    @Nullable
-    private FirstBootTour firstBootTour() {
-        if (!FirstBootTour.ENABLED) return null;
-        if (mFirstBootTour == null && mPreferences != null) {
-            mFirstBootTour = new FirstBootTour(this, mPreferences,
-                this::getInAppKeyboardKeyRect);
-            mFirstBootTour.setChromeProbe(new TourChromeProbe());
-            // The step after the closing card: the "What runs on this phone" card, once.
-            mFirstBootTour.setAfterRunListener(() -> {
-                View decor = getWindow().getDecorView();
-                decor.post(this::maybeOfferTaiWelcomeCard);
-            });
-            // Before each lesson the wall is put on the half the lesson starts on.
-            mFirstBootTour.setHomeHost(new FirstBootTour.HomeHost() {
-                @Override public void resetFor(
-                        @NonNull com.termux.app.tour.TourStep.Side side) {
-                    resetWallForTour(side);
-                }
-
-                // No Workspace window beside Home: no seam to cross, no border to drag back.
-                @Override public boolean hasOnePlace() {
-                    return !hasHome() || !mPaneWallController.pages()
-                        .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
-                }
-
-                @Override public boolean hasHome() {
-                    return mPaneWallController != null && mPaneWallController.hasWidgetsPage()
-                        && useAs().showsHomePage();
-                }
-            });
-            mFirstBootTour.setSetupHost(welcomeSheet());
-            // Every state signal is edge-triggered, so the run starts knowing where the chrome
-            // rests and a card is never cleared by a state the user did not put it in — nor, as
-            // the drawer card was on the first device pass, by having its first real open eaten
-            // as the priming call.
-            mFirstBootTour.onStatusBarCollapsedSettled(isStatusBarCompact());
-            mFirstBootTour.onDrawerOpenSettled(isAppDrawerOpen(), false);
-            com.termux.app.wall.PaneWallPage place = currentWallPlace();
-            mFirstBootTour.onPlaceSettled(place == null ? null : place.name());
-            mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
-            mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
-            mFirstBootTour.onKeyboardShownSettled(isInAppKeyboardShown());
-            mFirstBootTour.onHelpShownSettled(mHelpController != null && mHelpController.isShowing());
-        }
-        return mFirstBootTour;
-    }
-
-    /**
-     * The wall as a lesson of the run starting on {@code side} needs it. Help, the palette, the
-     * drawer, the corner tabs and the status bar's unfolded form close whatever the side (the
-     * status lesson starts folded). A Home lesson then gets what the home press does: Home page
-     * 1, the keyboard down there (unless always on keeps it). A Workspace lesson gets the first
-     * window, or the window already in front, with its keyboard up (the keyboard lesson's first
-     * half puts it away). Anywhere leaves the wall where it is: the closing card. Each through the
-     * call the launcher already makes for it, so nothing here replays a gesture. A keyboard the
-     * user switched off stays off; the keyboard lesson can be skipped.
-     */
-    private void resetWallForTour(@NonNull com.termux.app.tour.TourStep.Side side) {
-        if (isFinishing() || isDestroyed()) return;
-        dismissHelpOverlay();
-        if (mCommandPalette != null && mCommandPalette.isOpen()) mCommandPalette.collapse();
-        if (mAppDrawerController != null && isAppDrawerEngaged()) mAppDrawerController.close(true);
-        if (mPaneController != null) mPaneController.dismissControlsForHelp();
-        if (!isStatusBarCompact()) setTopStatusBarCollapsed(true, true);
-        if (mPaneWallController == null) return;
-        if (mPaneWallController.widgetsPage() != null)
-            mPaneWallController.widgetsPage().dismissControls();
-        if (side == com.termux.app.tour.TourStep.Side.ANYWHERE) return;
-        boolean hasWorkspace = mPaneWallController.pages()
-            .contains(com.termux.app.wall.PaneWallPage.TERMINAL);
-        boolean hasHome = mPaneWallController.hasWidgetsPage();
-        boolean toWorkspace = side == com.termux.app.tour.TourStep.Side.WORKSPACE
-            ? hasWorkspace : !hasHome;
-        if (toWorkspace) {
-            if (hasWorkspace) resetWorkspaceForTour();
-            return;
-        }
-        // Already resting on Home, no slide lands the keyboard: one left up goes down here.
-        boolean restingOnHome = isWidgetsPageShowing() && !mPaneWallController.wall().isMoving();
-        mPaneWallController.goHome(true);
-        if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
-        if (restingOnHome && !isHomeKeyboardAlwaysOn()) lowerHomePaletteKeyboard();
-    }
-
-    /**
-     * A window with its keyboard up, for a lesson taught in the Workspace. Resting on a window
-     * already, the wall stays and the keyboard comes up there; from Home the wall slides onto the
-     * first window, the one beside the seam, which comes back with the keyboard the Workspace
-     * remembers, set up before the slide.
-     */
-    private void resetWorkspaceForTour() {
-        boolean keyboardWanted = mInAppKeyboard != null && mInAppKeyboard.isEnabled()
-            && !mInAppKeyboard.isTurnedOff();
-        com.termux.app.wall.PaneWallPage page = currentWallPlace();
-        if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
-            if (keyboardWanted && !mInAppKeyboard.isVisible()) {
-                mInAppKeyboard.show(
-                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
-            }
-            return;
-        }
-        PlaceLayoutStore store = placeLayoutStore();
-        // Minimal mode keeps its own keyboard rule; the memory is what leaving it brings back.
-        if (keyboardWanted && store != null && !store.isMinimal())
-            store.setKeyboardOpen(com.termux.app.wall.PaneWallPage.TERMINAL, true);
-        if (page == com.termux.app.wall.PaneWallPage.WIDGETS)
-            showWallInnerPage(com.termux.app.wall.PaneWallPage.TERMINAL, 0);
-        mPaneWallController.returnToTerminal(true);
-    }
-
-    /** The setup sheet the run is offered on, built the first time the run asks for it. */
-    @NonNull
-    private com.termux.app.firstrun.WelcomeSheetHost welcomeSheet() {
-        if (mWelcomeSheet == null) {
-            mWelcomeSheet = new com.termux.app.firstrun.WelcomeSheetHost(this,
-                new WelcomeSheetEnv());
-        }
-        return mWelcomeSheet;
-    }
-
-    /** What only the launcher can do for the setup sheet. */
-    private final class WelcomeSheetEnv implements com.termux.app.firstrun.WelcomeSheetHost.Env {
-        /** Whether the sheet has asked for the location once already this showing. */
-        private boolean mLocationAsked;
-        /** Whether the sheet has asked for the contacts once already this showing. */
-        private boolean mContactsAsked;
-
-        @NonNull @Override public ViewGroup host() {
-            return findViewById(android.R.id.content);
-        }
-
-        @Override public boolean wallpaperColoursOn() {
-            return mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled();
-        }
-
-        /**
-         * The same switch as Settings' wallpaper colours, applied the same way: the palette is
-         * loaded at theme time, so a change restyles the launcher, which the run survives on its
-         * stored card.
-         */
-        @Override public void applyWallpaperColours(boolean on) {
-            if (mPreferences == null || mPreferences.isTerminalDynamicColorsEnabled() == on) return;
-            mPreferences.setTerminalDynamicColorsEnabled(on);
-            LauncherSchemeTheme.invalidate();
-            requestTermuxActivityStylingOnNextResume(TermuxActivity.this, true);
-        }
-
-        /** Asked once, as the sheet is left; the system stops asking after a second refusal. */
-        @Override public void askForWallpaperRead() {
-            String permission = android.Manifest.permission.READ_EXTERNAL_STORAGE;
-            if (androidx.core.content.ContextCompat.checkSelfPermission(TermuxActivity.this,
-                permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
-            boolean prompted = mPreferences != null
-                && mPreferences.isWallpaperReadPermissionPrompted();
-            if (prompted && !androidx.core.app.ActivityCompat
-                .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) return;
-            if (mPreferences != null) mPreferences.setWallpaperReadPermissionPrompted(true);
-            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
-                new String[] {permission}, REQUEST_CODE_WALLPAPER_READ_PERMISSION);
-        }
-
-        @Override public boolean weatherEnabled() {
-            return mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
-        }
-
-        @Override public void setWeatherEnabled(boolean on) {
-            if (mPreferences == null || mPreferences.isStatusWidgetWeatherEnabled() == on) return;
-            mPreferences.setStatusWidgetWeatherEnabled(on);
-            updateStatusWidgets();
-            if (on) ensureWeatherController().forceRefresh();
-        }
-
-        @NonNull @Override public String weatherPlace() {
-            return mPreferences == null ? "" : mPreferences.getStatusWidgetWeatherLocation();
-        }
-
-        @Override public void setWeatherPlace(@NonNull String label, double latitude,
-                                              double longitude) {
-            if (mPreferences == null) return;
-            mPreferences.setStatusWidgetWeatherPlace(label, latitude, longitude);
-            ensureWeatherController().forceRefresh();
-        }
-
-        @Override public boolean locationGranted() {
-            return androidx.core.content.ContextCompat.checkSelfPermission(TermuxActivity.this,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        }
-
-        /**
-         * The device instead of a place: the place is dropped first, so the weather follows the
-         * device whatever the permission question is answered. Past a second refusal the system
-         * no longer asks, so this app's settings page is where the location is turned on.
-         */
-        @Override public void useMyLocation() {
-            if (mPreferences != null && weatherFollowsPickedPlace()) {
-                mPreferences.clearStatusWidgetWeatherPlace();
-                ensureWeatherController().forceRefresh();
-            }
-            if (locationGranted()) return;
-            String permission = android.Manifest.permission.ACCESS_COARSE_LOCATION;
-            if (mLocationAsked && !androidx.core.app.ActivityCompat
-                    .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) {
-                openAppSettingsPage();
-                return;
-            }
-            mLocationAsked = true;
-            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
-                new String[] {permission}, REQUEST_CODE_WEATHER_LOCATION);
-        }
-
-        @Override public boolean contactsGranted() {
-            return androidx.core.content.ContextCompat.checkSelfPermission(TermuxActivity.this,
-                android.Manifest.permission.READ_CONTACTS)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        }
-
-        /**
-         * Asked with the palette's own request, so its answer reaches the palette too. Past a
-         * second refusal the system no longer asks, so this app's settings page is where contact
-         * access is turned on.
-         */
-        @Override public void askForContacts() {
-            if (contactsGranted()) return;
-            String permission = android.Manifest.permission.READ_CONTACTS;
-            if (mContactsAsked && !androidx.core.app.ActivityCompat
-                    .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) {
-                openAppSettingsPage();
-                return;
-            }
-            mContactsAsked = true;
-            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
-                new String[] {permission}, REQUEST_CODE_PALETTE_CONTACTS);
-        }
-
-        // The display has no switch any more (ADR 0008): it opens on demand, so the welcome
-        // sheet has no Display row to offer.
-        @Override public boolean displayOffered() {
-            return false;
-        }
-
-        @Override public boolean displayOn() {
-            return false;
-        }
-
-        @Override public void setDisplayOn(boolean on) { }
-
-        @Override public void onPlaceSearchFocusChanged(@NonNull EditText field, boolean focused) {
-            if (focused) {
-                beginFirstRunPlaceSearch(field);
-                return;
-            }
-            // Posted, and on the window rather than on the field: focus is given up while the
-            // sheet is being taken off the content view, and moving it to the terminal in the
-            // middle of that removal would leave the content view's focus chain pointing at a view
-            // it no longer holds.
-            if (getWindow() != null)
-                getWindow().getDecorView().post(() -> endFirstRunPlaceSearch(field));
-        }
-    }
-
-    /**
-     * What else is covering the home screen, for the run's card visibility policy. Read rather
-     * than pushed, because each of these surfaces opens and closes along a dozen paths and a card
-     * still drawing over one of them is what a missed path looks like.
-     */
-    private final class TourChromeProbe implements FirstBootTour.ChromeProbe {
-        @Override public boolean isAppDrawerUp() {
-            // Engaged rather than open: the plane covers the dock the whole way down and the
-            // whole way back, not only once it has settled.
-            return isAppDrawerEngaged();
-        }
-
-        @Override public boolean isCommandPaletteUp() {
-            return isCommandPaletteOpen();
-        }
-
-        @Override public boolean isTerminalSheetUp() {
-            return mTerminalSheet != null && mTerminalSheet.isOpen();
-        }
-
-        @Override public boolean isSurfaceEditorUp() {
-            return mSurfaceEditor.isActive();
-        }
-
-        @Override public boolean isHelpUp() {
-            return mHelpController != null && mHelpController.isShowing();
-        }
-
-        @Override public PlaceLayout.Edge appsEdge() {
-            ResolvedArrangement arranged = arrangement();
-            return arranged.appsShown() ? arranged.appsEdge() : PlaceLayout.Edge.BOTTOM;
-        }
-
-        @Override public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
-            return mPaneController != null && mPaneController.helpButtonRectOnScreen(out);
-        }
-
-        @Override public boolean commandPaletteRectOnScreen(@NonNull android.graphics.Rect out) {
-            // The live controller only: asking for one would build a palette nobody opened.
-            return mCommandPalette != null && mCommandPalette.frameOnScreen(out);
-        }
     }
 
     @Override
@@ -9575,15 +9153,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWallpaperReadPermissionDenied = false;
             return;
         }
-        // The overlay tour draws its cards over the live home screen; a system dialog opening on
-        // top of one would fight it for attention. The first-run permissions card already asks
-        // this same question before the tour starts, so a failed read while either is up means the
-        // user has not answered it yet — a later failed read re-arms this path once they are gone.
-        FirstBootTour tour = firstBootTour();
-        if ((mWelcomeSheet != null && mWelcomeSheet.isShowing())
-            || (tour != null && tour.isShowing())) {
-            return;
-        }
         boolean permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(this,
             android.Manifest.permission.READ_EXTERNAL_STORAGE)
             == android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -11911,7 +11480,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         mSuggestionBarView.setLaunchRippleListener((packageName, icon, sourceView) -> {
             // Every launch off the dock, the drawer and a folder comes through here.
-            if (mFirstBootTour != null) mFirstBootTour.onAppLaunched();
             playAppLaunchRipple(packageName, icon, sourceView);
         });
         mSuggestionBarView.setAppDrawerGestureListener(
@@ -12958,19 +12526,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
         });
-        // The pinned-apps sheet is a window of its own, so the tour cannot see it for itself: the
-        // dock is the one place that raises it, and it says so here.
-        mSuggestionBarView.setPinEditorListener(new com.termux.app.launcher.PinnedAppsEditor.Listener() {
-            @Override
-            public void onPinEditorOpened() {
-                if (mFirstBootTour != null) mFirstBootTour.onPinEditorOpened();
-            }
-
-            @Override
-            public void onPinEditorClosed(boolean saved, int pinnedCount) {
-                if (mFirstBootTour != null) mFirstBootTour.onPinEditorClosed(saved, pinnedCount);
-            }
-        });
         // The Lens beads ride under the icons while a page swipe carries them.
         mSuggestionBarView.setIconMotionListener(this::onDockIconsMoved);
         // The Peek glass reflection shows an icon's press, dot or change as the icon does.
@@ -13154,7 +12709,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         AzScrubGesture.Decision decision;
         switch (phase) {
             case DOWN:
-                mAzAppsShownThisTouch = false;
                 decision = mAzGesture.onDown(letter, selectionIndex, touchX, touchY,
                     canonicalX, canonicalY, eventTimeMs, geometry);
                 break;
@@ -13209,11 +12763,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (decision.persistPreview) {
             if (standalone) {
                 // No strip: the letter matched nothing, so nothing was laid out.
-                if (syncAzStandaloneStrip(decision.previewLetter, true) != null)
-                    mAzAppsShownThisTouch = true;
+                syncAzStandaloneStrip(decision.previewLetter, true);
             } else {
                 mSuggestionBarView.persistAzPreview(decision.previewLetter, decision.previewSelectionIndex);
-                mAzAppsShownThisTouch = true;
             }
         }
         updateAzOverflowAffordance();
@@ -13243,11 +12795,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ? mSuggestionBarView.launchAzStripEntry(focusResult.entry)
                     : mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
-            if (launched && mFirstBootTour != null) mFirstBootTour.onAppLaunchedFromScrub();
-            // A tap on a letter lays its apps out in the row and leaves them there: the apps found
-            // from the dock, as the drawer's pull finds them, so the apps lesson counts it.
-            else if (mAzAppsShownThisTouch && mFirstBootTour != null) mFirstBootTour.onAzAppsShown();
-            mAzAppsShownThisTouch = false;
             resetAzGestureState(false);
             updateAzOverflowAffordance();
             if (!launched) {
@@ -13793,8 +13340,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (clearPreview && mSuggestionBarView != null) {
             mSuggestionBarView.clearAzPreview();
         }
-        // The finger is off the letters, whichever way the scrub ended; the card comes back.
-        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
     }
 
     private float dpToPx(float dp) {
@@ -15070,10 +14615,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFloatingKeyboard != null)
                 mFloatingKeyboard.onKeyboardVisibilityRequested(visible);
             mKeyboardGeometry.onVisibilityRequested(visible);
-            // The one place the in-app keyboard's visibility is decided, whichever control asked.
-            // A pre-roll for the wall's slide is not a keyboard settling anywhere.
-            if (mFirstBootTour != null && !mQuietKeyboardChange)
-                mFirstBootTour.onKeyboardShownSettled(visible);
         }
 
         @Override
@@ -19392,9 +18933,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // re-read does not fire; the drawer opening is the moment the new apps are wanted.
             // Cheap when nothing changed: a signature compare, no listing.
             if (open) refreshLinuxApps(false);
-            if (mFirstBootTour == null) return;
-            mFirstBootTour.onDrawerOpenSettled(open, userDriven);
-            mFirstBootTour.onChromeChanged();
         }
 
         @Nullable @Override public <T extends View> T findView(int viewId) {
@@ -19590,15 +19128,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * </ul>
      */
     public void setCommandPaletteInterceptorActive(boolean active) {
-        // Ahead of the keyboard guard below: this is the one call both of the palette's open and
-        // both of its close paths make, so it is where the run hears that the palette moved — and
-        // where the card asking the user to close it again is cleared.
-        if (mFirstBootTour != null) {
-            // Every open, the Home palette gesture and the corner tab's included.
-            if (active) mFirstBootTour.onPaletteOpened();
-            else mFirstBootTour.onPaletteClosed();
-            mFirstBootTour.onChromeChanged();
-        }
         // The Search field is not a second search box under the open palette.
         setPromptFieldUnderPalette(active);
         if (mInAppKeyboard == null)
@@ -19614,9 +19143,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * behind a sheet the drawer itself never closed.
      */
     private void setTerminalSheetInterceptorActive(boolean active) {
-        // Ahead of the keyboard guard: this is the call every sheet makes on its way up and on
-        // its way down, so it is where the run hears that the plane moved.
-        if (mFirstBootTour != null) mFirstBootTour.onChromeChanged();
         if (mInAppKeyboard == null)
             return;
         applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), active, isAppDrawerOpen());
@@ -21600,8 +21126,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 ensureWeatherController().forceRefresh();
             }
-            // Granted or refused, the sheet says where it now stands; it stays up either way.
-            if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_SETUP_NOTIFICATIONS) {
             if (mSetupWizard != null) mSetupWizard.onNotificationPermissionResult(
                 grantResults.length > 0
@@ -21613,7 +21137,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 refreshWallpaperPicture();
                 mChrome.onWallpaperChanged();
             }
-            if (mWelcomeSheet != null) mWelcomeSheet.refresh();
             if (mSetupWizard != null) mSetupWizard.onWallpaperPermissionResult();
         } else if (requestCode == REQUEST_CODE_WIDGET_CALENDAR) {
             if (mWidgetPaneController != null) mWidgetPaneController.onCalendarPermissionChanged();
@@ -21623,7 +21146,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean granted = grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
             getCommandPaletteController().onContactsAccessChanged(granted);
-            if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -23481,13 +23003,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // So does the wallpaper's pan: a window opened or closed, or another session's windows,
         // re-spread the picture over the row (a snap; an arrival that follows pans from there).
         syncWallpaperParallax();
-        // The one funnel every structural change to the sessions and their windows already takes,
-        // so it is where the run reads them. Both are edge-triggered: a rebuild that moved neither
-        // says nothing.
-        if (mFirstBootTour != null) {
-            mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
-            mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
-        }
         mDrawerShape.beginRecord();
         feedDrawerShape();
         mDrawerShape.endRecord();
@@ -23497,30 +23012,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         scheduleArrangementAutosave();
         // And where the page overview's window cards follow the row.
         if (mPageOverview != null) mPageOverview.refresh();
-    }
-
-    /**
-     * How many sessions the tour should read, or -1 while there is nothing to count — before the
-     * first session exists, and after the last one goes. A zero counted during startup would read
-     * as a session closing, and the first real one as a session opening.
-     */
-    private int sessionCountForTour() {
-        return mCurrentWSession == null ? -1 : mWSessions.size();
-    }
-
-    /** The current session's stable id for the tour, or null when there is no session. */
-    @Nullable
-    private String currentSessionIdForTour() {
-        return mCurrentWSession == null ? null : String.valueOf(mCurrentWSession.id);
-    }
-
-    /** The visible window's stable id for the tour, or null when there is no window. */
-    @Nullable
-    private String currentWindowIdForTour() {
-        if (mCurrentWSession == null) return null;
-        int index = mCurrentWSession.current;
-        if (index < 0 || index >= mCurrentWSession.windows.size()) return null;
-        return String.valueOf(mCurrentWSession.windows.get(index).id);
     }
 
     /**
@@ -24770,10 +24261,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     GeometryScheduler.ResizePolicy.NOW);
             }
             if (seamLanding.barTravelled()) syncPlaceBar();
-            // The pre-roll came and went quietly; the tour still hears where the keyboard ended
-            // up, or it keeps the visibility from before the slide and misses the next change.
-            if (keyboardPreRolled && mFirstBootTour != null && mInAppKeyboard != null)
-                mFirstBootTour.onKeyboardShownSettled(mInAppKeyboard.isVisible());
             // The hold is over: one geometry pass gives the content the room the place it landed
             // on leaves it, which is the terminal's one resize for the whole slide. A slide that
             // gave the room back in its first frame finds it already right, and only the grid's
@@ -25560,9 +25047,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // rather than in the release frame (ADR 0003). The dock and the keyboard have
                     // already travelled there with the slide; this is where what they showed
                     // becomes the layout.
-                    // The tour hears the page first: the keyboard the settle lands is then heard
-                    // on the half the wall arrived on, not taken for a swipe on the one it left.
-                    if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(wallPage.name());
                     mSettledWallPage = page;
                     settlePlaceChrome(page);
                     noteTerminalPlaceMayBeVisible();
@@ -29252,9 +28736,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Every chip tap, not only the ones that change which window is current: the tap that
         // asks the selected chip for its close button is spent on that reveal and never reaches
         // the selection listener, and it is exactly the tap the run's window card asks for.
-        bar.setOnChipTappedListener(index -> {
-            if (mFirstBootTour != null) mFirstBootTour.onWindowSelected(String.valueOf(index));
-        });
         bar.setOnWindowCloseRequestedListener(index ->
             onWindowChip(com.termux.app.chrome.WindowChips.Surface.BAR, index, true));
         // A chip dragged along the row and dropped: the window moves there, and stays current if
@@ -29572,7 +29053,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (preferenceChanged) setStatusBarCompact(collapsed);
-        if (mFirstBootTour != null) mFirstBootTour.onStatusBarCollapsedSettled(collapsed);
         if (host == null) {
             refreshTerminalWindowBar();
             finishStatusBarTerminalResize(dragLease, true);
@@ -29939,13 +29419,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setWindows(items, selected);
         if (mScene != null && selected >= 0 && selected < items.size())
             mScene.onFocusedWindow(items.get(selected).label);
-        // The row is rebuilt whenever anything about a window changes, so the count is the edge
-        // the tour reads: one more chip is the +, one fewer is a chip's ×. Only the terminal
-        // windows, though — the display window coming or going is no terminal window opening or
-        // closing.
-        if (mFirstBootTour != null)
-            mFirstBootTour.onWindowCountSettled(mPaneController != null
-                && mCurrentWSession != null ? mCurrentWSession.windows.size() : -1);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
         if (windowColumn != null) windowColumn.setWindows(items, selected);
@@ -31590,9 +31063,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         runWithoutNotices(() -> mPaneController.splitAuto());
-        // Every way a split is asked for — the extra key's swipe, a keybinding, the palette, the
-        // agent — reaches this one method, past the guards that refuse it.
-        if (mFirstBootTour != null) mFirstBootTour.onPaneSplit();
     }
 
     /** Move focus to the pane in the given arrow direction (Ctrl+Alt+arrow). No-op if none. */
@@ -32494,14 +31964,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
 
-        @Override public void onPaneControlsShown() {
-            if (mFirstBootTour != null) mFirstBootTour.onPaneCornerMenuOpened();
-        }
-
-        @Override public void onPaneControlsDismissed() {
-            if (mFirstBootTour != null) mFirstBootTour.onPaneControlsDismissed();
-        }
-
         @Override public void openSurfaceEditor() {
             TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
         }
@@ -32611,10 +32073,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxTerminalExtraKeys.setTerminalView(v);
             }
             mCurrentTabPrimary = mPaneController.getActiveSession();
-            // Every window switch lands here — the bar, the space bar's swipes, the browser — so
-            // it is where the run hears that a different window became the visible one.
-            if (mFirstBootTour != null)
-                mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
             refreshTerminalWindowBar();
         }
 
