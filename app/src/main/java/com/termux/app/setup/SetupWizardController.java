@@ -397,6 +397,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             ((ViewGroup) layer.getParent()).removeView(layer);
         mLayer = null;
         mSheet = null;
+        hidePage();
         mCards = null;
         mRoot = null;
         mHost.holdPaneWall(false);
@@ -699,6 +700,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     @Override
     public void onPageBack() {
+        hidePage();
         SetupCardSheet sheet = mCards;
         if (mOpen && sheet != null)
             sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
