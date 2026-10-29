@@ -93,9 +93,9 @@
     <string name="page_overview_open">Open %1$s</string>
     <string name="page_overview_close_terminal">Close terminal %1$d</string>
     <string name="page_overview_close_display">Close the display</string>
-    <string name="page_overview_add_page">+ Add page</string>
-    <string name="page_overview_add_terminal">+ Add terminal</string>
-    <string name="page_overview_add_display">+ Add display</string>
+    <string name="page_overview_add_page">Add page</string>
+    <string name="page_overview_add_terminal">Add terminal</string>
+    <string name="page_overview_add_display">Add display</string>
     <string name="page_overview_page_removed">Page %1$d removed</string>
     <string name="page_overview_terminal_closed">Terminal closed</string>
     <string name="page_overview_display_closed">Display closed</string>

@@ -36,15 +36,4 @@ final class OverviewGeometry {
         return Math.round(focus) == index && Math.abs(focus - index) < 0.5f;
     }
 
-    /** Measures a text's width at a size, in px. */
-    interface Measure {
-        float width(float sizePx);
-    }
-
-    /** The largest size in {@code [minPx, maxPx]} whose width fits {@code availablePx}, else the least. */
-    static float fitTextSize(float maxPx, float minPx, float availablePx, Measure measure) {
-        float size = maxPx;
-        while (size > minPx && measure.width(size) > availablePx) size -= 0.5f;
-        return Math.max(minPx, size);
-    }
 }

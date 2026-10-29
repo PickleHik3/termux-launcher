@@ -30,11 +30,4 @@ public class OverviewGeometryTest {
         assertFalse(OverviewGeometry.tapZooms(3, 2f));
         assertFalse(OverviewGeometry.tapZooms(1, 2f));
     }
-
-    @Test public void chipTextShrinksToFit() {
-        // Width is 10 px per size unit: 100 px available fits size 10.
-        assertEquals(10f, OverviewGeometry.fitTextSize(14f, 8f, 100f, s -> s * 10f), 0.01f);
-        assertEquals(14f, OverviewGeometry.fitTextSize(14f, 8f, 500f, s -> s * 10f), 0.01f);
-        assertEquals(8f, OverviewGeometry.fitTextSize(14f, 8f, 10f, s -> s * 10f), 0.01f);
-    }
 }

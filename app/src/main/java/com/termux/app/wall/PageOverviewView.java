@@ -230,6 +230,8 @@ public final class PageOverviewView extends FrameLayout {
     @NonNull private final LinkedHashMap<Object, Snapshot> snapshots =
         new LinkedHashMap<>(16, 0.75f, true);
     private int homeCount;
+    /** The add chips' icon and label colour, on their dark glass. */
+    private static final int PILL_INK = 0xFFE6E1E5;
     private int rowCount;
 
     /** The strip's scroll, in card places: the focused card is the nearest whole one. */
@@ -353,9 +355,12 @@ public final class PageOverviewView extends FrameLayout {
         pills = new LinearLayout(context);
         pills.setOrientation(LinearLayout.HORIZONTAL);
         pills.setGravity(Gravity.CENTER);
-        addPage = pill(context, R.string.page_overview_add_page, v -> onAddPage());
-        addTerminal = pill(context, R.string.page_overview_add_terminal, v -> onAddWindow(false));
-        addDisplay = pill(context, R.string.page_overview_add_display, v -> onAddWindow(true));
+        addPage = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_add,
+            v -> onAddPage());
+        addTerminal = pill(context, R.string.page_overview_add_terminal,
+            R.drawable.ic_symbol_terminal, v -> onAddWindow(false));
+        addDisplay = pill(context, R.string.page_overview_add_display,
+            R.drawable.ic_symbol_desktop_windows, v -> onAddWindow(true));
         pills.addView(addPage);
         pills.addView(addTerminal);
         pills.addView(addDisplay);
@@ -1050,31 +1055,6 @@ public final class PageOverviewView extends FrameLayout {
         labelPaint.setTextSize(dp(16));
     }
 
-    /** Each chip's text at the largest size that fits its share of the row, ellipsized if none does. */
-    private void fitPills(float width) {
-        TextView[] all = {addPage, addTerminal, addDisplay};
-        int shown = 0;
-        for (TextView pill : all) if (pill.getVisibility() != GONE) shown++;
-        if (shown == 0) return;
-        float share = (width - pills.getPaddingLeft() - pills.getPaddingRight()) / shown
-            - dp(8) - dp(24);
-        float maxPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 14,
-            getResources().getDisplayMetrics());
-        float minPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 9,
-            getResources().getDisplayMetrics());
-        for (TextView pill : all) {
-            android.text.TextPaint paint = new android.text.TextPaint(pill.getPaint());
-            CharSequence text = pill.getText();
-            float size = OverviewGeometry.fitTextSize(maxPx, minPx, share, px -> {
-                paint.setTextSize(px);
-                return paint.measureText(text, 0, text.length());
-            });
-            if (Math.abs(pill.getTextSize() - size) > 0.25f) {
-                pill.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
-            }
-        }
-    }
-
     private static final class Insets {
         final int left;
         final int top;
@@ -1656,29 +1636,44 @@ public final class PageOverviewView extends FrameLayout {
 
     // ---- Small pieces ---------------------------------------------------------------------------
 
+    /**
+     * An add chip: its icon over a label that wraps to a second line when its share of the row
+     * is narrow (a 420 dpi phone, a large font), so the label is never cut short.
+     */
     @NonNull
-    private TextView pill(@NonNull Context context, int text, @NonNull OnClickListener action) {
+    private TextView pill(@NonNull Context context, int text, int icon,
+                          @NonNull OnClickListener action) {
         TextView pill = new TextView(context);
         pill.setText(text);
         pill.setGravity(Gravity.CENTER);
-        pill.setSingleLine(true);
-        pill.setMaxLines(1);
-        pill.setTextColor(0xFFE6E1E5);
-        pill.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        // The size is fitted in onLayout (fitPills); a text that still does not fit is ellipsized.
+        pill.setMaxLines(2);
         pill.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        pill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        pill.setTextColor(PILL_INK);
+        pill.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        Drawable symbol = ContextCompat.getDrawable(context, icon);
+        if (symbol != null) {
+            symbol = symbol.mutate();
+            symbol.setTint(PILL_INK);
+            int side = dp(22);
+            symbol.setBounds(0, 0, side, side);
+            pill.setCompoundDrawablesRelative(null, symbol, null, null);
+            pill.setCompoundDrawablePadding(dp(4));
+        }
         GradientDrawable background = new GradientDrawable();
         background.setColor(0xE61D1B20);
-        background.setCornerRadius(dp(24));
+        background.setCornerRadius(dp(20));
         pill.setBackground(background);
         int ripple = rippleOf(context);
         if (ripple != 0) pill.setForeground(ContextCompat.getDrawable(context, ripple));
-        pill.setPadding(dp(12), 0, dp(12), 0);
+        pill.setPadding(dp(8), dp(10), dp(8), dp(10));
         pill.setMinimumWidth(0);
+        pill.setMinHeight(dp(64));
         pill.setClickable(true);
         pill.setFocusable(true);
         pill.setOnClickListener(action);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         params.setMargins(dp(4), 0, dp(4), 0);
         pill.setLayoutParams(params);
         return pill;
