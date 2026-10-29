@@ -59,7 +59,7 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         if (cards != null) {
             java.util.List<com.termux.app.setup.SetupCards.Card> all =
                 com.termux.app.setup.SetupCardSystem.cards(context);
-            int open = com.termux.app.setup.SetupCards.openCount(all);
+            int open = com.termux.app.setup.SetupCardSystem.completableOpenCount(context);
             cards.setVisible(!all.isEmpty());
             cards.setSummary(getResources().getQuantityString(
                 R.plurals.setup_cards_row_summary, open, open));

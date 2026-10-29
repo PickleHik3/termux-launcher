@@ -88,12 +88,14 @@ final class CustomizeSection implements SetupSection {
             page.addView(nudge, SetupUi.matchWrap(SetupUi.dp(context, 8)));
         }
         addLabel(context, glass, R.string.setup_look_preset, 14);
-        glass.addView(lookChips(context, state), SetupUi.matchWrap(SetupUi.dp(context, 2)));
+        glass.addView(lookChips(context, state, readable), SetupUi.matchWrap(SetupUi.dp(context, 2)));
         SetupUi.toggleRow(glass, R.string.setup_colours, R.string.setup_colours_helper, v.colours,
             8, (button, on) -> state.setColours(on));
         page.addView(glass, SetupUi.matchWrap(0));
-        if (!readable)
-            grey(glass);
+        if (!readable) {
+            // Solid needs no wallpaper, so only the colours row (the last child) is greyed here.
+            grey(glass.getChildAt(glass.getChildCount() - 1));
+        }
 
         SetupUi.toggleRow(page, R.string.setup_trail, 0, v.trail, 8,
             (button, on) -> state.setTrail(on));
@@ -161,7 +163,8 @@ final class CustomizeSection implements SetupSection {
 
     /** Clear / Mist / Tint / Solid; the one the wall wears is checked, none for a custom look. */
     @NonNull
-    private static View lookChips(@NonNull Context context, @NonNull SetupState state) {
+    private static View lookChips(@NonNull Context context, @NonNull SetupState state,
+                                  boolean readable) {
         ChipGroup group = new ChipGroup(context);
         int gap = SetupUi.dp(context, 8);
         group.setChipSpacingHorizontal(gap);
@@ -180,6 +183,10 @@ final class CustomizeSection implements SetupSection {
                 for (int j = 0; j < chips.size(); j++)
                     chips.get(j).setChecked(j == index);
             });
+            if (!readable && !SetupState.LOOK_SOLID.equals(LOOK_IDS[i])) {
+                chip.setAlpha(0.4f);
+                chip.setEnabled(false);
+            }
             chips.add(chip);
             group.addView(chip);
         }

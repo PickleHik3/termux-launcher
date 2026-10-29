@@ -157,6 +157,11 @@ final class SetupCardSheet extends LinearLayout {
 
     /** A card's stub page: the title, the line and Back, for a card with no page yet. */
     void bindPage(@NonNull SetupCards.Card card) {
+        bindPage(card, false);
+    }
+
+    /** As above; {@code done} shows "Done" in place of the coming-soon line. */
+    void bindPage(@NonNull SetupCards.Card card, boolean done) {
         Context context = getContext();
         mOnPage = true;
         mFooter.setVisibility(GONE);
@@ -166,7 +171,7 @@ final class SetupCardSheet extends LinearLayout {
         title.setText(card.name);
         page.addView(title, SetupUi.matchWrap(0));
         TextView line = SetupUi.text(context, 14f, false, SetupUi.onSurfaceVariant(page));
-        line.setText(R.string.setup_cards_coming);
+        line.setText(done ? R.string.setup_cards_done : R.string.setup_cards_coming);
         page.addView(line, SetupUi.matchWrap(SetupUi.dp(context, 8)));
         MaterialButton back = new MaterialButton(context);
         back.setText(R.string.setup_back);
@@ -261,7 +266,14 @@ final class SetupCardSheet extends LinearLayout {
         MaterialButton primary = new MaterialButton(context);
         primary.setAllCaps(false);
         primary.setText(done ? R.string.setup_cards_review : R.string.setup_cards_continue);
-        primary.setOnClickListener(v -> mCallbacks.onContinue(card.id));
+        primary.setOnClickListener(v -> {
+            // Review of a done permission or home card has no page class: the stub says Done.
+            if (done && SetupCards.isSystemChecked(card.id)
+                && SetupCardPages.create(card.id) == null)
+                bindPage(card, true);
+            else
+                mCallbacks.onContinue(card.id);
+        });
         LayoutParams primaryParams = buttonParams(0);
         primaryParams.leftMargin = SetupUi.dp(context, 8);
         buttons.addView(primary, primaryParams);
