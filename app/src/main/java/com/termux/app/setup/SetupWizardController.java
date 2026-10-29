@@ -468,6 +468,20 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             !AiModelDownloads.selected(mHost.context()).isEmpty());
     }
 
+    /**
+     * The one-shot carry-over for someone who did the old tour: every guide chapter counts as
+     * watched. Called with the gate's decision before the wizard opens.
+     */
+    public void migrateFromOldTourIfDue(@NonNull SetupWizardGate.Decision decision) {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        android.content.SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        if (SetupWizardGate.shouldMigrate(decision,
+                store.getBoolean(SetupWizardGate.KEY_MIGRATED_V1, false)))
+            GuideChapters.migrateFromOldTour(store);
+    }
+
     /** Opens the card sheet when it is due; true when it is up. */
     public boolean openCardsIfDue() {
         if (mOpen)

@@ -22,7 +22,18 @@ public final class SetupWizardGate {
         }
     }
 
+    /** Set once the old tour's progress has been carried into the new guide. */
+    public static final String KEY_MIGRATED_V1 = "setup_migrated_v1";
+
     private SetupWizardGate() {}
+
+    /**
+     * Whether the old tour's progress is carried into the guide now: the wizard is due for
+     * someone who has used the app before (so they did the old tour), and it has not been done.
+     */
+    public static boolean shouldMigrate(Decision decision, boolean alreadyMigrated) {
+        return decision.show && decision.updater && !alreadyMigrated;
+    }
 
     /**
      * @param storedVersion the wizard version stored as done, 0 for never

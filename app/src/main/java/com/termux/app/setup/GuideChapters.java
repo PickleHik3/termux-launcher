@@ -29,6 +29,10 @@ final class GuideChapters {
     static final String PANES = "panes";
     static final String DESKTOP = "desktop";
 
+    /** Every chapter id, for the one-shot carry-over from the old tour. */
+    static final String[] ALL_IDS = {PAGES, APPS, DOCK, KEYBOARD, STATUS, PALETTE, HELP, PANES,
+        DESKTOP};
+
     static final class Chapter {
         @NonNull final String id;
         @StringRes final int title;
@@ -85,6 +89,18 @@ final class GuideChapters {
         if (prefs == null) return;
         Set<String> set = watched(prefs);
         if (set.add(id)) prefs.edit().putStringSet(KEY_WATCHED, set).apply();
+    }
+
+    /**
+     * Marks every chapter watched, once: someone who already did the old tour has seen what the
+     * chapters teach. Does nothing when the flag is already set.
+     */
+    static void migrateFromOldTour(@Nullable SharedPreferences prefs) {
+        if (prefs == null || prefs.getBoolean(SetupWizardGate.KEY_MIGRATED_V1, false)) return;
+        Set<String> set = watched(prefs);
+        for (String id : ALL_IDS) set.add(id);
+        prefs.edit().putStringSet(KEY_WATCHED, set)
+            .putBoolean(SetupWizardGate.KEY_MIGRATED_V1, true).apply();
     }
 
     /** True when every chapter in the list is in the watched set (an empty list is not done). */

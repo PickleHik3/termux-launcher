@@ -43,4 +43,11 @@ public class GuideChaptersTest {
             new HashSet<>(Arrays.asList("keyboard", "status", "palette", "help", "pages"))));
         assertFalse(GuideChapters.allWatched(new ArrayList<>(), new HashSet<>()));
     }
+
+    @Test
+    public void migrationIdsAreExactlyTheChaptersAnyAnswerCanShow() {
+        java.util.Set<String> expected = new java.util.HashSet<>();
+        for (GuideChapters.Chapter c : GuideChapters.forFacts(true, true, true)) expected.add(c.id);
+        assertEquals(expected, new java.util.HashSet<>(Arrays.asList(GuideChapters.ALL_IDS)));
+    }
 }

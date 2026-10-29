@@ -2758,6 +2758,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.getFirstBootTourCompletedVersion() >= 1,
                 mPreferences.isUseAsStored());
         if (!decision.show) return false;
+        setupWizard().migrateFromOldTourIfDue(decision);
         setupWizard().open(decision.updater);
         return true;
     }
