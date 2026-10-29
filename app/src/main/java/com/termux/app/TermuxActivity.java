@@ -28080,10 +28080,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Runs an edit of the wall's pages through the store (saved, announced). */
     private void editWallPages(@NonNull com.termux.app.wall.WallPagesStore.Edit edit) {
-        com.termux.app.wall.WallPages.Result result = wallPagesStore().edit(edit);
-        if (result.error == com.termux.app.wall.WallPages.Error.ADJACENT_DISPLAY) {
-            AppNotice.show(this, R.string.wall_pages_adjacent_display, false);
-        }
+        wallPagesStore().edit(edit);
     }
 
     /** Whether the display starts with the launcher here: switched on, on a build that has one. */

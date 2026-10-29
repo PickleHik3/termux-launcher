@@ -32,12 +32,7 @@ public final class WallPages {
     /** Why an edit was refused. */
     public enum Error {
         UNKNOWN_PAGE, BAD_INDEX, SECOND_TERMINAL, LAST_HOME, LAST_PAGE, NEEDS_CONFIRM,
-        NOT_PENDING, BINDING_NOT_DISPLAY,
-        /**
-         * A move would stand two Display pages side by side: the wall's one display frame cannot
-         * yet slide from one to the next, so the second would be unreachable (A3c2).
-         */
-        ADJACENT_DISPLAY
+        NOT_PENDING, BINDING_NOT_DISPLAY
     }
 
     /** What an accepted edit did. */
@@ -246,6 +241,77 @@ public final class WallPages {
         return null;
     }
 
+    // ---- cells and named targets ----------------------------------------------------------
+
+    /** The index of the page's cell among the pages on the wall; -1 when it is not on the wall. */
+    public int cellIndexOf(int pageId) {
+        List<Page> visible = pages();
+        for (int i = 0; i < visible.size(); i++) if (visible.get(i).id == pageId) return i;
+        return -1;
+    }
+
+    /** The page in the cell left of this page's; null at the left end or when it is not on the wall. */
+    @Nullable
+    public Page leftOf(int pageId) {
+        int i = cellIndexOf(pageId);
+        return i > 0 ? pages().get(i - 1) : null;
+    }
+
+    /** The page in the cell right of this page's; null at the right end or when it is not on the wall. */
+    @Nullable
+    public Page rightOf(int pageId) {
+        int i = cellIndexOf(pageId);
+        List<Page> visible = pages();
+        return i >= 0 && i + 1 < visible.size() ? visible.get(i + 1) : null;
+    }
+
+    /**
+     * Where "Home" goes from {@code currentPageId}: the home page when it is a Home page, else
+     * the Home page nearest by cells (the left one on a tie); null when the wall has no Home page.
+     */
+    @Nullable
+    public Page homeTarget(int currentPageId) {
+        Page home = home();
+        if (home != null && home.kind == PageKind.HOME) return home;
+        return nearest(PageKind.HOME, currentPageId);
+    }
+
+    /**
+     * Where "Display" goes from {@code currentPageId}: the bound (last used) Display page while it
+     * is on the wall, else the Display page nearest by cells (the left one on a tie); null when
+     * the wall has no Display page.
+     */
+    @Nullable
+    public Page displayTarget(int currentPageId, int boundDisplayPageId) {
+        Page bound = page(boundDisplayPageId);
+        if (bound != null && bound.kind == PageKind.DISPLAY) return bound;
+        return nearest(PageKind.DISPLAY, currentPageId);
+    }
+
+    /** Where "Terminal" goes: the Terminal page; null when the wall has none. */
+    @Nullable
+    public Page terminalTarget() {
+        return terminal();
+    }
+
+    /** The page of {@code kind} nearest the current page's cell (an absent page counts as cell 0). */
+    @Nullable
+    private Page nearest(PageKind kind, int currentPageId) {
+        List<Page> visible = pages();
+        int at = Math.max(0, cellIndexOf(currentPageId));
+        Page best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (int i = 0; i < visible.size(); i++) {
+            if (visible.get(i).kind != kind) continue;
+            int distance = Math.abs(i - at);
+            if (distance < bestDistance) {
+                best = visible.get(i);
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
     // ---- stops ----------------------------------------------------------------------------
 
     /**
@@ -404,12 +470,10 @@ public final class WallPages {
         rest.remove(page);
         int at = toIndex >= rest.size() ? list.size() : list.indexOf(rest.get(toIndex));
         list.add(at, page);
-        // Not through copy(): a move is refused rather than re-placed (A3c2).
+        // Not through copy(): a move puts the page exactly where it was dropped, even beside
+        // another Display page.
         WallPages next = new WallPages(list, pending, detached, homeId, nextId,
             homeIsDisplayWindow, lastHomePageId, homeParked);
-        if (next.hasAdjacentDisplays() && !hasAdjacentDisplays()) {
-            return refuse(Error.ADJACENT_DISPLAY);
-        }
         return new Result(next, ChangeType.MOVED, page, null, from, toIndex);
     }
 
@@ -428,9 +492,8 @@ public final class WallPages {
     /**
      * The same pages with no two Display pages side by side (W4): wherever two stand together,
      * the later one goes after the next non-Display page (before the nearest gap when none
-     * follows). This value itself when nothing stands together. Every edit but a move (which is
-     * refused instead) already returns a separated value; this repairs one stored by an older
-     * build.
+     * follows). This value itself when nothing stands together. Every edit but a move already
+     * returns a separated value; this repairs one stored by an older build.
      */
     @NonNull
     public WallPages separateDisplays() {

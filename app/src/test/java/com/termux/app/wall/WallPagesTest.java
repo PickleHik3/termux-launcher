@@ -530,7 +530,7 @@ public class WallPagesTest {
     }
 
     @Test
-    public void aMoveThatWouldStandTwoDisplayPagesSideBySideIsRefused() {
+    public void aMoveMayStandTwoDisplayPagesSideBySide() {
         WallPages d = ok(three().add(PageKind.DISPLAY, WallPages.END, null));
         List<WallPages.Page> v = d.pages();
         // A second Display page with one page between it and the first, the last.
@@ -539,10 +539,11 @@ public class WallPagesTest {
         assertFalse(two.hasAdjacentDisplays());
         int between = w.get(w.size() - 2).id;
         Result moved = two.move(between, 0);
-        assertEquals(Error.ADJACENT_DISPLAY, moved.error);
-        assertSame(two, moved.pages);
-        // A move that keeps them apart is taken.
-        assertTrue(two.move(w.get(w.size() - 1).id, 0).ok());
+        assertTrue(moved.ok());
+        assertEquals(WallPages.ChangeType.MOVED, moved.change);
+        assertTrue(moved.pages.hasAdjacentDisplays());
+        int other = w.get(w.size() - 1).id;
+        assertEquals(PageKind.DISPLAY, moved.pages.leftOf(other).kind);
     }
 
     /** A wall of these kinds, ids 1.. in order, home = the first page. */
@@ -598,5 +599,70 @@ public class WallPagesTest {
         assertEquals(java.util.Arrays.asList(1, 2, 4, 3), ids(stored.separateDisplays()));
         WallPages fine = three();
         assertSame(fine, fine.separateDisplays());
+    }
+
+    @Test
+    public void cellIndexAndNeighboursFollowThePageOrder() {
+        WallPages p = wall(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY);
+        assertEquals(0, p.cellIndexOf(1));
+        assertEquals(2, p.cellIndexOf(3));
+        assertEquals(-1, p.cellIndexOf(9));
+        assertNull(p.leftOf(1));
+        assertEquals(2, p.rightOf(1).id);
+        assertEquals(1, p.leftOf(2).id);
+        assertEquals(3, p.rightOf(2).id);
+        assertEquals(2, p.leftOf(3).id);
+        assertNull(p.rightOf(3));
+        assertNull(p.leftOf(9));
+        assertNull(p.rightOf(9));
+        assertNull(WallPages.EMPTY.rightOf(1));
+    }
+
+    @Test
+    public void homeTargetIsTheHomePageOrTheNearestHomePage() {
+        // One page of the kind.
+        WallPages one = wall(PageKind.HOME, PageKind.TERMINAL);
+        assertEquals(1, one.homeTarget(2).id);
+        // Home runs on both sides of the Terminal page: the home page itself.
+        WallPages runs = wall(PageKind.HOME, PageKind.TERMINAL, PageKind.HOME);
+        assertEquals(1, runs.homeTarget(3).id);
+        // The home page is the Display page: nearest Home from the right-hand Home, tie left.
+        WallPages d = wall(PageKind.HOME, PageKind.DISPLAY, PageKind.HOME, PageKind.TERMINAL,
+            PageKind.HOME);
+        WallPages dHome = ok(d.setHome(2));
+        assertEquals(3, dHome.homeTarget(4).id);
+        assertEquals(5, dHome.homeTarget(5).id);
+        assertEquals(1, dHome.homeTarget(2).id);
+        // The home page is the Terminal page: nearest Home page.
+        WallPages t = ok(wall(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY, PageKind.HOME)
+            .setHome(2));
+        assertEquals(1, t.homeTarget(2).id);
+        assertEquals(4, t.homeTarget(4).id);
+        // No Home page.
+        assertNull(wall(PageKind.TERMINAL, PageKind.DISPLAY).homeTarget(1));
+    }
+
+    @Test
+    public void displayTargetIsTheBoundPageElseTheNearestDisplayPage() {
+        // [D1][D2][T3][D4] with two Display pages side by side.
+        WallPages p = wall(PageKind.DISPLAY, PageKind.DISPLAY, PageKind.TERMINAL, PageKind.DISPLAY);
+        assertEquals(1, p.displayTarget(4, 1).id);
+        assertEquals(2, p.displayTarget(1, 2).id);
+        // Bound page gone: nearest by cell distance, tie to the left.
+        assertEquals(2, p.displayTarget(3, 9).id);
+        assertEquals(4, p.displayTarget(4, 0).id);
+        assertEquals(1, p.displayTarget(1, 0).id);
+        // A bound id that is not a Display page does not count.
+        assertEquals(2, p.displayTarget(3, 3).id);
+        assertNull(wall(PageKind.HOME, PageKind.TERMINAL).displayTarget(1, 0));
+        // A pending removal is not a target.
+        WallPages gone = ok(p.remove(1));
+        assertEquals(2, gone.displayTarget(2, 1).id);
+    }
+
+    @Test
+    public void terminalTargetIsTheTerminalPageOrNull() {
+        assertEquals(2, wall(PageKind.HOME, PageKind.TERMINAL).terminalTarget().id);
+        assertNull(wall(PageKind.HOME, PageKind.DISPLAY).terminalTarget());
     }
 }
