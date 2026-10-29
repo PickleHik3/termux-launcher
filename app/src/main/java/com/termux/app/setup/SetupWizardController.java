@@ -31,6 +31,7 @@ import com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragme
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
+import com.termux.app.firstrun.TaiWelcomeCardHost;
 import com.termux.app.tour.TourController;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -409,6 +410,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
         if (prefs.getFirstBootTourCompletedVersion() < TourController.RUN_VERSION)
             prefs.setFirstBootTourCompletedVersion(TourController.RUN_VERSION);
+        // The wizard's AI section and the AI card on the sheet replace the old welcome card.
+        TaiWelcomeCardHost.markShown(mHost.context());
     }
 
     @Override

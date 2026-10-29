@@ -2825,7 +2825,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The wizard is up or due: the other first-run cards wait until it is done. */
     private boolean setupWizardComesFirst() {
-        if (mSetupWizard != null && mSetupWizard.isOpen()) return true;
+        if (mSetupWizard != null && (mSetupWizard.isOpen() || mSetupWizard.isCardSheetDue()))
+            return true;
         return mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
             mPreferences.getSetupWizardVersion(), false, false).show;
     }
