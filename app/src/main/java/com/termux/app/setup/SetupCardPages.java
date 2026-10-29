@@ -10,9 +10,11 @@ final class SetupCardPages {
     @Nullable
     static SetupCardPage create(@NonNull String cardId) {
         switch (cardId) {
+            case SetupCards.DISPLAY:
+                return new DisplayCardPage();
             case SetupCards.AI:
                 return new AiCardPage();
-            // Wave 4 and 5 add: SetupCards.DISPLAY, SetupCards.GUIDE.
+            // Wave 5 adds: SetupCards.GUIDE.
             default:
                 return null;
         }
