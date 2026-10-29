@@ -1442,6 +1442,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_BODY_SWIPE = "terminal_body_swipe";
         public static final boolean DEFAULT_TERMINAL_BODY_SWIPE = true;
 
+        /** Whether the status bar's pull and fold from a window's top border need two fingers. */
+        public static final String KEY_STATUS_SWIPE_TWO_FINGERS = "status_swipe_two_fingers";
+        public static final boolean DEFAULT_STATUS_SWIPE_TWO_FINGERS = false;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 

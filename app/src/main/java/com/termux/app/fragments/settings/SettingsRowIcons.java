@@ -227,6 +227,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_auto_awesome_mosaic, "pane_dwindle_default");
         key(R.drawable.ic_ms_center_focus_strong, "pane_focus_grows");
         key(R.drawable.ic_ms_swipe, "terminal_body_swipe");
+        key(R.drawable.ic_ms_swipe, "status_swipe_two_fingers");
 
         // Terminal fonts
         key(R.drawable.ic_ms_emoji_symbols, "nerd_icons");

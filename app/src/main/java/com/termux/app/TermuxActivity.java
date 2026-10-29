@@ -25498,6 +25498,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isBorderStatusSwipeEnabled() {
                     return isBorderStatusSwipeAvailable();
                 }
+                @Override public boolean isBorderStatusSwipeTwoFingers() {
+                    return mPreferences != null && mPreferences.isStatusSwipeTwoFingersEnabled();
+                }
                 @Override public void onBorderStatusSwipe(boolean expand) {
                     if (isBorderStatusSwipeAvailable()) setTopStatusBarCollapsed(!expand, true);
                 }
