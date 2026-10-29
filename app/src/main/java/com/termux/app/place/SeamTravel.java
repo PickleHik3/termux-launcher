@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.List;
@@ -105,6 +106,79 @@ public final class SeamTravel {
         boolean towardOther = crosses(frame.toward, committed);
         if (fromOther == towardOther) return fromOther ? 1f : 0f;
         return towardOther ? frame.chromeFraction : 1f - frame.chromeFraction;
+    }
+
+    /**
+     * Whether two ends are different pages a crossing runs between (#173 slice E): pages of the
+     * two halves ({@link #crosses(PaneWallPage, PaneWallPage)}), or two Home pages whose ids are
+     * both said and differ. Two windows, or a page with no id said beside one of its kind, are
+     * not.
+     */
+    public static boolean crosses(@NonNull PageRef a, @NonNull PageRef b) {
+        return differs(a.kind, a.id, b);
+    }
+
+    /** Whether the side {@code kind}, {@code id} of a frame is on another page than {@code end}. */
+    private static boolean differs(@NonNull PaneWallPage kind, int id, @NonNull PageRef end) {
+        if (crosses(kind, end.kind)) return true;
+        return kind == PaneWallPage.WIDGETS && end.isHome() && id >= 0 && end.id >= 0
+            && id != end.id;
+    }
+
+    /**
+     * {@link #otherHalfProgress} for a crossing named by its committed end: how far, 0 to 1, the
+     * chrome has gone into the other end. On a frame of the wall, whose sides are named by kind,
+     * it is exactly {@link #otherHalfProgress}; on a frame of Home's pager ({@link
+     * PlaceChromeTravel#homePages}) between the committed Home page and another, it is the
+     * pager's chrome fraction toward the other page, so a slide between two Home pages reads the
+     * same way as one across the seam. Builds nothing.
+     */
+    public static float otherEndProgress(@NonNull Frame frame, @NonNull PageRef committed) {
+        boolean fromOther = differs(frame.from, frame.fromId, committed);
+        boolean towardOther = differs(frame.toward, frame.towardId, committed);
+        if (fromOther == towardOther) return fromOther ? 1f : 0f;
+        return towardOther ? frame.chromeFraction : 1f - frame.chromeFraction;
+    }
+
+    /** {@link #otherHalfFraction} for a crossing named by its committed end, as above. */
+    public static float otherEndFraction(@NonNull Frame frame, @NonNull PageRef committed) {
+        boolean fromOther = differs(frame.from, frame.fromId, committed);
+        boolean towardOther = differs(frame.toward, frame.towardId, committed);
+        if (fromOther == towardOther) return fromOther ? 1f : 0f;
+        return towardOther ? frame.fraction : 1f - frame.fraction;
+    }
+
+    /**
+     * Where Home page {@code end} stands on screen in a frame of Home's pager, as an x offset from
+     * its rest: the page in front at the pager's shift, the page coming in a width beyond it on
+     * the side the shift opens. A page the frame does not show stands a width off to the right,
+     * out of sight. What a status bar only one of two Home pages wears rides at.
+     */
+    public static float endScreenXPx(@NonNull Frame frame, @NonNull PageRef end, int widthPx) {
+        if (end.id >= 0 && end.id == frame.fromId) return -frame.towardSide * frame.fraction * widthPx;
+        if (end.id >= 0 && end.id == frame.towardId && frame.towardSide != 0)
+            return frame.towardSide * (1f - frame.fraction) * widthPx;
+        return widthPx;
+    }
+
+    /**
+     * Which of two Home pages' layouts wears the bar that crosses between them (#173 slice E):
+     * the one that stands it along the top while the other puts it away, so it can ride in or
+     * out with that page ({@link #statusRides}); toward it, only where the committed page stands
+     * nothing the bar's band would push in ({@link #statusCanArriveOver}). Null where the bar
+     * does not cross: both wear it alike, both put it away, or it stands elsewhere, and then it
+     * changes at the landing.
+     *
+     * @return {@code committed} or {@code other}, the layout that wears the bar; null for none
+     */
+    @Nullable
+    public static PlaceLayout homeBarWearer(@NonNull PlaceLayout committed,
+                                            @NonNull PlaceLayout other) {
+        boolean hereHides = committed.slot(Element.STATUS).hidden;
+        boolean thereHides = other.slot(Element.STATUS).hidden;
+        if (hereHides == thereHides) return null;
+        if (hereHides) return statusRides(other) && statusCanArriveOver(committed) ? other : null;
+        return statusRides(committed) ? committed : null;
     }
 
     /**

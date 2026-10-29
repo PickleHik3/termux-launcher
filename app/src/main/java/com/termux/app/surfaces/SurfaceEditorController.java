@@ -65,7 +65,6 @@ import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
@@ -117,6 +116,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @NonNull PlaceLayout placeLayout();
         /** The page the wall rests on, which the editor stands over. */
         @NonNull PaneWallPage pageOnScreen();
+
+        /**
+         * Every page on the wall, in order, for the scope chip (ADR 0015 §6): which surfaces show
+         * on two or more pages. Null by default, when the editor falls back to the pages the place
+         * store was told of (the Home pages and the Terminal page, no Display page).
+         */
+        @Nullable
+        default java.util.List<com.termux.app.wall.WallPages.Page> wallPages() { return null; }
+
+        /** The id of the page the wall rests on, or -1 to take the place store's word for it. */
+        default int pageIdOnScreen() { return -1; }
+
         @Nullable TermuxInAppKeyboard inAppKeyboard();
         boolean isInAppKeyboardShown();
         /**
@@ -322,18 +333,221 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * Look: Custom then writes nothing (the Look on screen is its seed), so without this the
      * slider would read the Look again and the All surfaces strip would never show.
      */
-    @NonNull private final java.util.EnumSet<WallHalf> mHeldCustom =
-        java.util.EnumSet.noneOf(WallHalf.class);
+    @NonNull private final java.util.EnumSet<PaneWallPage> mHeldCustom =
+        java.util.EnumSet.noneOf(PaneWallPage.class);
     /** The last Depth position the user set this session ({@link GlassEdgeControls}). */
     private int mDepthSet = GlassEdgeControls.NONE;
-    /** The half the frame shows: where a card writes. */
-    @NonNull private WallHalf mHalf = WallHalf.WORKSPACE;
     /**
-     * Each Match this visit that can still be taken back, by the screen it copied onto (the
-     * Match rows' Undo). Dropped when the editor closes or its Undo puts everything back.
+     * The kind of page the editor shows, Home's or the Terminal's, fixed for the visit: the page
+     * in front at the open, or the one a door names (ADR 0015 §6: no halves to switch between).
+     * Cards write at {@link #scopeFor}.
      */
-    @NonNull private final java.util.EnumMap<WallHalf, ScreenMatch.Undo> mMatchUndos =
-        new java.util.EnumMap<>(WallHalf.class);
+    @NonNull private PaneWallPage mScreen = PaneWallPage.TERMINAL;
+    /** The two kinds of page a screen is: Home's and the Terminal's. */
+    private static final PaneWallPage[] SCREENS = {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL};
+
+    // ---- the scope chip (ADR 0015 §6, #175) ---------------------------------------------------
+
+    /** The chip's page: the page the editor was opened from, -1 where none is known. */
+    private int mScopePageId = -1;
+    /** Whether the chip stands on the page side. The editor writes Global (Base) by default. */
+    private boolean mScopeOnPage;
+    /**
+     * The pages the Look slider was put on Custom this visit while their values still match a
+     * Look, as {@link #mHeldCustom} holds it for the wall.
+     */
+    @NonNull private final java.util.Set<Integer> mHeldCustomPages = new java.util.HashSet<>();
+    /** Each page's Custom as the slider left it this visit, put back by the next move to Custom. */
+    @NonNull private final java.util.Map<Integer, SurfacePresets.Preset> mPageCustoms =
+        new java.util.HashMap<>();
+    /** The editor's own PageLook over the preferences, for scoped writes; closed at close. */
+    @Nullable private com.termux.app.look.PageLook mPageLook;
+
+    @Nullable
+    private com.termux.app.look.PageLook pageLook() {
+        if (mPageLook == null) {
+            TermuxAppSharedPreferences prefs = prefs();
+            android.content.SharedPreferences store = prefs == null ? null
+                : prefs.getSharedPreferences();
+            if (store != null)
+                mPageLook = new com.termux.app.look.PageLook(
+                    new com.termux.app.look.PrefsLookStore(store));
+        }
+        return mPageLook;
+    }
+
+    private void closePageLook() {
+        if (mPageLook != null) mPageLook.close();
+        mPageLook = null;
+    }
+
+    @Nullable
+    private com.termux.app.place.PlaceLayoutStore scopePlaces() {
+        LayoutEditorController layout = mHost.layoutEditor();
+        return layout == null ? null : layout.places();
+    }
+
+    /** The wall's pages: the host's, else those the place store was told of. */
+    @NonNull
+    private java.util.List<com.termux.app.wall.WallPages.Page> scopePages() {
+        java.util.List<com.termux.app.wall.WallPages.Page> pages = mHost.wallPages();
+        if (pages != null)
+            return pages;
+        com.termux.app.place.PlaceLayoutStore places = scopePlaces();
+        com.termux.app.place.PlaceLayoutStore.ShownPages shown =
+            places == null ? null : places.shownPages();
+        java.util.List<com.termux.app.wall.WallPages.Page> out = new java.util.ArrayList<>();
+        if (shown == null)
+            return out;
+        for (int id : shown.homePageIds())
+            out.add(new com.termux.app.wall.WallPages.Page(id,
+                com.termux.app.wall.WallPages.PageKind.HOME, shown.pageName(id), null));
+        int terminal = shown.terminalPage();
+        if (terminal >= 0)
+            out.add(new com.termux.app.wall.WallPages.Page(terminal,
+                com.termux.app.wall.WallPages.PageKind.TERMINAL, shown.pageName(terminal), null));
+        return out;
+    }
+
+    /** Whether a page's dress shows an element: its own page layout's, else its kind's. */
+    @NonNull
+    private ScopeChip.Shows scopeShows() {
+        com.termux.app.place.PlaceLayoutStore places = scopePlaces();
+        return (page, element) -> {
+            if (places == null)
+                return com.termux.app.place.PlaceLayoutStore.kindShowsByDefault(page.kind, element);
+            if (places.hasPageLayout(page.id))
+                return places.forVariant(com.termux.app.place.LayoutVariant.page(page.id,
+                    page.kind)).showsAny(element);
+            return places.kindShowsAny(page.kind, element);
+        };
+    }
+
+    /** The chip's page, or null where the editor knows of none on the wall. */
+    @Nullable
+    private com.termux.app.wall.WallPages.Page scopePage() {
+        if (mScopePageId < 0)
+            return null;
+        for (com.termux.app.wall.WallPages.Page page : scopePages())
+            if (page.id == mScopePageId)
+                return page;
+        return null;
+    }
+
+    /** Whether {@code card} carries the chip: its surface shows on 2+ pages, this one among them. */
+    private boolean cardOffersScope(@Nullable EditorCard card) {
+        if (card == null || (card.slot == null && card != EditorCard.APPEARANCE))
+            return false;
+        com.termux.app.wall.WallPages.Page page = scopePage();
+        if (page == null)
+            return false;
+        ScopeChip.Shows shows = scopeShows();
+        if (card.slot != null && ScopeChip.pagesShowing(java.util.Collections.singletonList(page),
+                card.slot, shows) == 0)
+            return false;
+        return ScopeChip.offers(scopePages(), card.slot, shows);
+    }
+
+    /** Where {@code card}'s look rows read and write: the chip's side, Global without a chip. */
+    @NonNull
+    private com.termux.app.look.PageLook.Scope scopeFor(@Nullable EditorCard card) {
+        return mScopeOnPage && cardOffersScope(card)
+            ? com.termux.app.look.PageLook.Scope.page(mScopePageId)
+            : com.termux.app.look.PageLook.Scope.GLOBAL;
+    }
+
+    /** The key a page may hold its own value of for a surface's property, or null. */
+    @Nullable
+    private static String detachableKey(@NonNull SurfaceSlot slot,
+                                        @NonNull SurfaceProperty property) {
+        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+        return key != null && com.termux.app.look.PageLook.isDetachable(key) ? key : null;
+    }
+
+    /** A surface's property as {@code card}'s scope sees it: the page's own, else the wall's. */
+    private int scopedSurfaceValue(@NonNull TermuxAppSharedPreferences prefs,
+                                   @NonNull EditorCard card, @NonNull SurfaceSlot slot,
+                                   @NonNull SurfaceProperty property) {
+        int wall = prefs.getSurfaceValue(slot, property, SurfacePresets.pageOf(PaneWallPage.WIDGETS));
+        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
+        String key = detachableKey(slot, property);
+        com.termux.app.look.PageLook look = scope.isGlobal() || key == null ? null : pageLook();
+        return look == null ? wall : look.read(scope, key, wall);
+    }
+
+    /**
+     * Writes a surface's property on the page of {@code card}'s scope; false under Global (the
+     * caller writes the wall) or for a value a page may not hold.
+     */
+    private boolean writeOnPage(@NonNull EditorCard card, @NonNull SurfaceSlot slot,
+                                @NonNull SurfaceProperty property, int value) {
+        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
+        String key = detachableKey(slot, property);
+        com.termux.app.look.PageLook look = scope.isGlobal() || key == null ? null : pageLook();
+        return look != null && look.write(scope, key, value);
+    }
+
+    /** The Appearance card on a page: one property of every surface that page shows, as its own. */
+    private boolean writeAllOnPage(@NonNull EditorCard card, @NonNull SurfaceProperty property,
+                                   int value) {
+        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
+        if (scope.isGlobal())
+            return false;
+        com.termux.app.wall.WallPages.Page page = scopePage();
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            if (slot == SurfaceSlot.CANVAS && (page == null
+                    || page.kind != com.termux.app.wall.WallPages.PageKind.TERMINAL))
+                continue;
+            writeOnPage(card, slot, property, value);
+        }
+        return true;
+    }
+
+    /** Whether the level {@code card}'s scope edits holds its own value of a surface's property. */
+    private boolean scopedOwnValue(@NonNull TermuxAppSharedPreferences prefs,
+                                   @NonNull EditorCard card, @NonNull SurfaceSlot slot,
+                                   @NonNull SurfaceProperty property) {
+        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
+        if (scope.isGlobal())
+            return !prefs.isSurfaceInheriting(slot, property, SurfacePresets.pageOf(PaneWallPage.WIDGETS));
+        String key = detachableKey(slot, property);
+        com.termux.app.look.PageLook look = key == null ? null : pageLook();
+        return look != null && look.has(scope, key);
+    }
+
+    /**
+     * The keys a page's Reset drops for a card on {@code slot}: every detachable value of that
+     * surface, the keyboard's backdrop with the keyboard's; a card on no one surface (null) drops
+     * every value the page may hold, the material and its intensity included.
+     */
+    @NonNull
+    static java.util.Set<String> pageResetKeys(@Nullable SurfaceSlot slot) {
+        java.util.Set<String> keys = new java.util.LinkedHashSet<>();
+        if (slot == null) {
+            keys.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.DETACHABLE);
+            return keys;
+        }
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            String key = detachableKey(slot, property);
+            if (key != null) keys.add(key);
+        }
+        if (slot == SurfaceSlot.KEYBOARD)
+            keys.add(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+        return keys;
+    }
+
+    /** Reset under a page: every value the page holds of the card's surface goes back to Base. */
+    private void resetOnPage(@NonNull EditorCard card) {
+        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
+        com.termux.app.look.PageLook look = pageLook();
+        if (look == null || scope.isGlobal())
+            return;
+        for (String key : pageResetKeys(card.slot))
+            look.reset(scope, key);
+        mHeldCustomPages.remove(scope.pageId());
+        mPageCustoms.remove(scope.pageId());
+    }
     /** The card that is up, or null. */
     @Nullable private EditorCard mCard;
     /** Whether the editor raised the in-app keyboard itself, and so owes taking it down. */
@@ -514,7 +728,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         place = useAs.editorPlace(EditorDoor.placeFor(card, place, mHost.pageOnScreen()));
         if (mOpen) {
             if (place != null)
-                switchHalf(SeamDress.halfOf(place), true);
+                showPage(place, true);
             if (card != null) {
                 raiseOrReport(card);
                 raiseFromPeek();
@@ -562,7 +776,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             refreshSettingsSignature();
         }
         PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
-        mHalf = page == null ? WallHalf.WORKSPACE : SeamDress.halfOf(page);
+        mScreen = page == null ? PaneWallPage.TERMINAL : SeamDress.screenOf(page);
+        com.termux.app.place.PlaceLayoutStore scopePlaces = scopePlaces();
+        // The page in front, as the host knows it (a Display page included), unless a door named
+        // another page of the wall.
+        int hostPageId = page == null || page == mHost.pageOnScreen() ? mHost.pageIdOnScreen() : -1;
+        mScopePageId = hostPageId >= 0 ? hostPageId
+            : page == null || scopePlaces == null ? -1 : scopePlaces.shownPageId(page);
+        mScopeOnPage = false;
+        mHeldCustomPages.clear();
+        mPageCustoms.clear();
         mCard = null;
         mRaisedKeyboard = false;
 
@@ -589,7 +812,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mBar.setShown(true);
         mBar.setBarShown(true, false);
         mBarUp = true;
-        mBar.setHalf(mHalf);
+        mBar.setPageName(pageName());
         mBar.setOrientation(layout != null && layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
@@ -641,52 +864,61 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return mOpen ? mCard : null;
     }
 
-    /** The half the frame shows. */
+    /** The kind of page the editor shows (Home's or the Terminal's). */
     @NonNull
     @VisibleForTesting
-    WallHalf half() {
-        return mHalf;
+    PaneWallPage screen() {
+        return mScreen;
+    }
+
+    /** The name of the page the editor shows, for the line over the frame. */
+    @NonNull
+    private CharSequence pageName() {
+        com.termux.app.wall.WallPages.Page page = scopePage();
+        String name = page == null ? null : page.name;
+        if (name == null) {
+            com.termux.app.place.PlaceLayoutStore places = scopePlaces();
+            name = places == null || mScopePageId < 0 ? null : places.pageName(mScopePageId);
+        }
+        if (name != null && !name.isEmpty())
+            return name;
+        return getString(mScreen == PaneWallPage.WIDGETS ? R.string.appearance_half_home
+            : R.string.appearance_half_workspace);
     }
 
     // ---------------------------------------------------------------------- the halves and the bar
 
     /**
-     * Slides the frame to {@code half} (the real wall slides inside the scaled container), and a
-     * card up stays when its object stands there too; otherwise it goes down.
+     * A door named {@code place} while the editor is up: the frame shows its page, and the chip
+     * stands on it (back on Global). A card up stays when its object stands there too; otherwise
+     * that page's own card takes its place. Nothing in the editor itself moves between pages.
      */
-    private void switchHalf(@NonNull WallHalf half, boolean animate) {
-        switchHalf(half, animate, false);
-    }
-
-    /** {@code swiped}: the user swiped the preview, so a screen's card follows the page. */
-    private void switchHalf(@NonNull WallHalf half, boolean animate, boolean swiped) {
-        if (!mOpen || half == mHalf)
+    private void showPage(@NonNull PaneWallPage place, boolean animate) {
+        if (!mOpen)
             return;
-        if (half == WallHalf.HOME && !useAs().showsHomePage()) {
+        PaneWallPage screen = SeamDress.screenOf(place);
+        if (screen == PaneWallPage.WIDGETS && !useAs().showsHomePage()) {
             android.util.Log.i(EditorDoor.LOG_TAG, useAs().doorLine("editor-home-half"));
             return;
         }
-        mHalf = half;
+        com.termux.app.place.PlaceLayoutStore places = scopePlaces();
+        int pageId = places == null ? -1 : places.shownPageId(place);
+        if (screen == mScreen && (pageId < 0 || pageId == mScopePageId))
+            return;
+        mScreen = screen;
+        if (pageId >= 0 && pageId != mScopePageId) {
+            mScopePageId = pageId;
+            mScopeOnPage = false;
+        }
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null)
-            layout.showHome(half == WallHalf.HOME, animate);
+            layout.showHome(screen == PaneWallPage.WIDGETS, animate);
         if (mBar != null)
-            mBar.setHalf(half);
-        EditorCard followed = EditorDoor.cardAfterSwipe(mCard, half, useAs().showsHomePage());
-        if (followed != null && swiped) {
-            // A screen's card follows the page: same detent, rows rebuilt and scrolled to the top.
-            EditorCardSheet sheet = mSheet;
-            int detent = sheet != null ? sheet.detent() : -1;
-            EditorDoor.EDITOR_PAGE_SWIPE.log(followed);
-            openCard(followed, false);
-            if (sheet != null && detent >= 0 && mCard == followed)
-                sheet.setDetent(detent, false);
-        } else if (mCard != null && !mCard.standsOn(half)) {
-            // The card's object is not on this screen: the screen's own card takes its place, at
-            // the same detent.
-            EditorCard screen = EditorCard.forScreen(half);
-            EditorDoor.EDITOR_PAGE_SWIPE.log(screen);
-            openCard(screen, animate);
+            mBar.setPageName(pageName());
+        if (mCard != null && !mCard.standsOn(screen)) {
+            EditorCard own = EditorCard.forScreen(screen);
+            EditorDoor.EDITOR_PAGE_SWIPE.log(own);
+            openCard(own, animate);
         } else
             restateCard();
         positionTargets();
@@ -739,7 +971,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onPageLabel() {
             if (!mOpen)
                 return;
-            EditorCard card = EditorDoor.EDITOR_PAGE_LABEL.route(mHalf == WallHalf.HOME
+            EditorCard card = EditorDoor.EDITOR_PAGE_LABEL.route(mScreen == PaneWallPage.WIDGETS
                 ? com.termux.app.wall.PaneWallPage.WIDGETS
                 : com.termux.app.wall.PaneWallPage.TERMINAL, null);
             if (card != null) openCard(card, true);
@@ -771,8 +1003,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return "the editor has no card sheet";
         if (!useAs().reaches(card))
             return "Use as Terminal only has no Home card";
-        if (!card.standsOn(mHalf))
-            return "it does not stand on the " + mHalf + " half";
+        if (!card.standsOn(mScreen))
+            return "it does not stand on the " + mScreen + " half";
         return null;
     }
 
@@ -801,7 +1033,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The card of the screen the frame shows, at peek: the editor's resting state. */
     private void raiseScreenCard() {
-        openCard(EditorCard.forScreen(mHalf), true, EditorCardSheet.DETENT_PEEK);
+        openCard(EditorCard.forScreen(mScreen), true, EditorCardSheet.DETENT_PEEK);
     }
 
     /**
@@ -898,7 +1130,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * The page overview centred a card over the open editor: the editor shows that page. Home and
-     * terminal cards rebind the half (label, preview and the screen's card) at the sheet's folded
+     * terminal cards rebind the screen (label, preview and the screen's card) at the sheet's folded
      * detent; a display card keeps the card. Nothing is written: looking is not an edit.
      */
     public void onOverviewCard(@NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind) {
@@ -908,19 +1140,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         OverviewFollow follow = OverviewFollow.of(kind);
         if (follow == OverviewFollow.FOLD)
             return;
-        WallHalf half = follow == OverviewFollow.HOME ? WallHalf.HOME : WallHalf.WORKSPACE;
-        if (half == WallHalf.HOME && !useAs().showsHomePage())
+        PaneWallPage screen = follow == OverviewFollow.HOME ? PaneWallPage.WIDGETS
+            : PaneWallPage.TERMINAL;
+        if (screen == PaneWallPage.WIDGETS && !useAs().showsHomePage())
             return;
-        if (half != mHalf) {
-            mHalf = half;
+        if (screen != mScreen) {
+            mScreen = screen;
             LayoutEditorController layout = mHost.layoutEditor();
             if (layout != null)
-                layout.showHome(half == WallHalf.HOME, false);
+                layout.showHome(screen == PaneWallPage.WIDGETS, false);
             if (mBar != null)
-                mBar.setHalf(half);
+                mBar.setPageName(pageName());
         }
         if (mCard == null || mCard == EditorCard.HOME || mCard == EditorCard.WORKSPACE
-                || !mCard.standsOn(half)) {
+                || !mCard.standsOn(screen)) {
             int detent = sheet.isShown() ? sheet.detent() : EditorCardSheet.DETENT_PEEK;
             openCard(follow.card, false, detent);
             if (sheet.isShown() && sheet.detent() != detent)
@@ -979,7 +1212,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorCard card = mCard;
         if (prefs == null || card == null)
             return;
-        EditorCardReset.resetStore(prefs, card, mHalf);
+        if (!scopeFor(card).isGlobal()) {
+            // Under the page, Reset returns the page to Base and leaves the wall as it is.
+            resetOnPage(card);
+            requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+                | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+            if (mSheet != null) mSheet.restate();
+            return;
+        }
+        EditorCardReset.resetStore(prefs, card, SurfacePresets.pageOf(PaneWallPage.WIDGETS));
         mScreenFrostPosition.clear();
         mLinkAnchor = null;
         LayoutEditorController layout = mHost.layoutEditor();
@@ -1346,7 +1587,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The Elements list for {@code screen}'s card, as the sheet builds it. */
     @NonNull
-    private View elementsView(@NonNull WallHalf screen) {
+    private View elementsView(@NonNull PaneWallPage screen) {
         com.termux.app.surfaces.cards.ElementsList list =
             com.termux.app.surfaces.cards.ElementsList.build(mHost.context(), new ElementsHost(),
                 com.termux.app.surfaces.cards.ElementRows.rows(screen), true);
@@ -1385,6 +1626,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private final class ElementsHost implements com.termux.app.surfaces.cards.ElementsList.Host {
         @NonNull private final DockHost mDock = new DockHost();
+
+        @Nullable @Override public CharSequence[] chipLabels() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null || !layout.offersPageLayout())
+                return null;
+            com.termux.app.wall.WallPages.PageKind kind = layout.pageLayoutKind();
+            String kindLabel = mHost.context().getString(
+                kind == com.termux.app.wall.WallPages.PageKind.HOME
+                    ? R.string.editor_elements_kind_home
+                    : kind == com.termux.app.wall.WallPages.PageKind.DISPLAY
+                        ? R.string.editor_elements_kind_display
+                        : R.string.editor_elements_kind_terminal);
+            String page = layout.pageLayoutPageName();
+            return page == null ? null : new CharSequence[] {kindLabel, page};
+        }
+
+        @Override public boolean pageSide() {
+            LayoutEditorController layout = mHost.layoutEditor();
+            return layout != null && layout.pageLayoutSide();
+        }
+
+        @Override public void setPageSide(boolean pageSide) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            layout.setPageLayoutSide(pageSide);
+            if (mElements != null)
+                mElements.restate();
+            positionTargets();
+        }
 
         @Override public boolean offers(
                 @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
@@ -1938,18 +2209,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ------------------------------------------------------------------------- the card's model
 
-    /** The half a row of the card up writes, as {@link EditorRows#halfFor} says; null for both. */
+    /** The half a row of the card up writes, as {@link EditorRows#pageFor} says; null for both. */
     @Nullable
-    private WallHalf writeHalf(@NonNull Row row) {
+    private PaneWallPage writeScreen(@NonNull Row row) {
         EditorCard card = mCard;
-        return card == null ? null : EditorRows.halfFor(card, row, mHalf);
+        // ADR 0015 §6: the halves retire in the editor. Every write that named a half now lands
+        // on the wall (Home's keys are the plain ones); a page's own values go through the scope.
+        return card == null || EditorRows.pageFor(card, row) == TermuxAppSharedPreferences.PAGE_ALL
+            ? null : PaneWallPage.WIDGETS;
     }
 
     /** The half a row of the card up reads: its write half, or the Workspace's for a shared one. */
     @NonNull
-    private WallHalf readHalf(@NonNull Row row) {
-        WallHalf half = writeHalf(row);
-        return half == null ? WallHalf.WORKSPACE : half;
+    private PaneWallPage readScreen(@NonNull Row row) {
+        PaneWallPage half = writeScreen(row);
+        return half == null ? PaneWallPage.TERMINAL : half;
     }
 
     /** The Dock designs' names and glyphs, in {@link DockStyle#CHOICES} order. */
@@ -2015,9 +2289,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     if (property == null)
                         return 0;
                     // The Appearance card's are the shared glass of the half the frame shows.
-                    int stored = card.slot == null
-                        ? prefs.getSurfaceBaseValue(property, readHalf(row))
-                        : prefs.getSurfaceValue(card.slot, property, readHalf(row));
+                    int stored = card.slot != null
+                        ? scopedSurfaceValue(prefs, card, card.slot, property)
+                        : !scopeFor(card).isGlobal()
+                        ? scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, property)
+                        : prefs.getSurfaceBaseValue(property, SurfacePresets.pageOf(readScreen(row)));
                     return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
                         : AppearanceLooks.tintPercent(stored);
                 }
@@ -2075,9 +2351,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
-                case MATCH_WORKSPACE:
-                case MATCH_HOME:
-                    return mMatchUndos.containsKey(matchTarget(row)) ? 1 : 0;
                 case CLOCK_12H: return prefs.isTopPaneClockAmPmEnabled() ? 1 : 0;
                 case KEY_OPACITY: return keyOpacityValue(prefs);
                 case KEY_CORNERS:
@@ -2090,7 +2363,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         if (FORMS[i] == layout.keyboardForm()) return i;
                     return 0;
                 }
-                case LOOK: return lookStop(lookHalf());
+                case LOOK: return lookStop(lookScreen());
                 case CHANGE_WALLPAPER: return 0;
                 case THEME:
                     return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
@@ -2190,10 +2463,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         String.format(Locale.getDefault(), "%.2f", value / 100f));
                 case LOOK:
                     return lookStopName(value);
-                case MATCH_WORKSPACE:
-                case MATCH_HOME:
-                    return getString(value != 0 ? R.string.appearance_match_undo
-                        : R.string.appearance_match_copy);
                 default:
                     return cardRowReadout(row, value);
             }
@@ -2208,12 +2477,37 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             SurfaceProperty property = row.property();
             if (property == null)
                 return false;
-            WallHalf half = readHalf(row);
-            // Frost is the surface's own while either of the pair it writes is.
+            // The dot marks the level the chip edits: the page's own value under the page, the
+            // surface's own (not Base) under Global. Frost is set while either of its pair is.
             if (row == Row.FROST)
-                return !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.BLUR, half)
-                    || !prefs.isSurfaceInheriting(card.slot, SurfaceProperty.GRAIN, half);
-            return !prefs.isSurfaceInheriting(card.slot, property, half);
+                return scopedOwnValue(prefs, card, card.slot, SurfaceProperty.BLUR)
+                    || scopedOwnValue(prefs, card, card.slot, SurfaceProperty.GRAIN);
+            return scopedOwnValue(prefs, card, card.slot, property);
+        }
+
+        @Nullable @Override public CharSequence[] scopeLabels() {
+            if (!cardOffersScope(mCard))
+                return null;
+            com.termux.app.wall.WallPages.Page page = scopePage();
+            String name = page == null ? null : page.name;
+            if (name == null) {
+                com.termux.app.place.PlaceLayoutStore places = scopePlaces();
+                name = places == null ? null : places.pageName(mScopePageId);
+            }
+            return name == null ? null : new CharSequence[] {
+                mHost.context().getString(R.string.editor_scope_global), name};
+        }
+
+        @Override public boolean scopeOnPage() {
+            return !scopeFor(mCard).isGlobal();
+        }
+
+        @Override public void setScopeOnPage(boolean onPage) {
+            if (mScopeOnPage == onPage)
+                return;
+            // Nothing is written here: the page shows Base until a value is set on it, so
+            // detaching never jumps the look, and the first edit seeds the page's own value.
+            mScopeOnPage = onPage;
         }
 
         @Override public boolean enabled(@NonNull Row row) {
@@ -2321,7 +2615,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // All surfaces is the Custom stop's, as the Look page's Custom row was.
             if (mCard == EditorCard.APPEARANCE && EditorRows.isAllSurfaces(row)
                 && !com.termux.app.surfaces.cards.GlobalCard.isGlassMaterial(row))
-                return AppearanceLooks.isCustomStop(lookStop(mHalf));
+                return AppearanceLooks.isCustomStop(lookStop(lookScreen()));
             // Reflection is Peek glass's own knob: it stands only while that is the design.
             if (row == Row.REFLECTION) {
                 LayoutEditorController layout = mHost.layoutEditor();
@@ -2340,7 +2634,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
             EditorCard card = mCard;
             if (row == Row.ELEMENTS && card != null) {
-                WallHalf screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
+                PaneWallPage screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
                 if (screen != null)
                     return elementsView(screen);
             }
@@ -2601,10 +2895,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
                 break;
-            case MATCH_WORKSPACE:
-            case MATCH_HOME:
-                toggleMatch(matchTarget(row));
-                break;
             case LINK_GLOBAL: {
                 EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
                 if (global != null) openCard(global, true);
@@ -2613,40 +2903,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             default:
                 break;
         }
-    }
-
-    // ---- the Match rows ----------------------------------------------------------------------
-
-    /** The screen a Match row copies onto: Home for Match Workspace styling, else the Workspace. */
-    @NonNull
-    private static WallHalf matchTarget(@NonNull Row row) {
-        return row == Row.MATCH_WORKSPACE ? WallHalf.HOME : WallHalf.WORKSPACE;
-    }
-
-    /**
-     * A Match row tapped: Copy takes the other screen's layout and glass ({@link ScreenMatch});
-     * Undo, while the copy is still held this visit, puts this screen back as it was.
-     */
-    private void toggleMatch(@NonNull WallHalf target) {
-        TermuxAppSharedPreferences prefs = prefs();
-        LayoutEditorController layout = mHost.layoutEditor();
-        com.termux.app.place.PlaceLayoutStore places = layout == null ? null : layout.places();
-        if (prefs == null || layout == null || places == null)
-            return;
-        ScreenMatch.Undo undo = mMatchUndos.remove(target);
-        if (undo != null) {
-            undo.restore(prefs);
-        } else {
-            undo = ScreenMatch.match(prefs, places, target);
-            if (undo != null) mMatchUndos.put(target, undo);
-        }
-        // The Look slider reads the half's values again rather than a Custom held this visit.
-        mHeldCustom.remove(target);
-        layout.applyStoreWrite();
-        mHost.redressChrome();
-        syncAfterBulkWrite();
-        syncDirty();
-        if (mSheet != null) mSheet.restate();
     }
 
     /** Builds the icon packs once per session for the Appearance card's Icon pack row. */
@@ -2690,7 +2946,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 written = AppearanceLooks.opacityPercent(value);
                 break;
         }
-        prefs.detachSurfaceValue(card.slot, property, writeHalf(row), written);
+        if (!writeOnPage(card, card.slot, property, written))
+            prefs.detachSurfaceValue(card.slot, property, SurfacePresets.pageOf(writeScreen(row)), written);
         if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY)
             prefs.setTerminalBackgroundOpacity(written);
         requestPreview(scopes);
@@ -2707,25 +2964,30 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * still that position's ({@link GlassControls#readBack}).
      */
     private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
-        WallHalf half = readHalf(Row.FROST);
+        PaneWallPage half = readScreen(Row.FROST);
         if (isScreenCard(card) && half != null) {
             Integer held = mScreenFrostPosition.get(half);
             return GlassControls.readBack(held == null ? -1 : held,
-                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
-                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(half)),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(half)));
         }
+        if (card.slot == null && !scopeFor(card).isGlobal())
+            // The Appearance card on a page reads the page's status bar, which every page shows.
+            return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
+                scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.BLUR),
+                scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
         if (card.slot == null)
             return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
-                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, half),
-                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, half));
+                prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(half)),
+                prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(half)));
         return GlassControls.readBack(prefs.getSurfaceGlassPosition(card.slot),
-            prefs.getSurfaceValue(card.slot, SurfaceProperty.BLUR, half),
-            prefs.getSurfaceValue(card.slot, SurfaceProperty.GRAIN, half));
+            scopedSurfaceValue(prefs, card, card.slot, SurfaceProperty.BLUR),
+            scopedSurfaceValue(prefs, card, card.slot, SurfaceProperty.GRAIN));
     }
 
     /** Where Frost was left on a screen card this session, per half ({@link #writeFrost}). */
-    private final java.util.EnumMap<WallHalf, Integer> mScreenFrostPosition =
-        new java.util.EnumMap<>(WallHalf.class);
+    private final java.util.EnumMap<PaneWallPage, Integer> mScreenFrostPosition =
+        new java.util.EnumMap<>(PaneWallPage.class);
 
     /**
      * Frost: blur and grain together along {@link GlassControls}' curve, and the position it was
@@ -2738,11 +3000,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * keeps it, and neither the other half nor the shared glass position is touched.
      */
     @VisibleForTesting
-    static void writeScreenFrost(@NonNull TermuxAppSharedPreferences prefs, @NonNull WallHalf half,
+    static void writeScreenFrost(@NonNull TermuxAppSharedPreferences prefs, @NonNull PaneWallPage half,
                                  int glass) {
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, half,
+        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, SurfacePresets.pageOf(half),
             AppearanceLooks.blurDp(GlassControls.blurForGlass(glass)));
-        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, half,
+        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, SurfacePresets.pageOf(half),
             AppearanceLooks.grainPercent(GlassControls.grainForGlass(glass)));
     }
 
@@ -2753,7 +3015,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int glass = Control.GLASS.clamp(value);
         int blur = GlassControls.blurForGlass(glass);
         int grain = GlassControls.grainForGlass(glass);
-        WallHalf half = writeHalf(Row.FROST);
+        PaneWallPage half = writeScreen(Row.FROST);
         // The position key is one for every card that holds none of its own (the Appearance
         // card's); a screen card keeps its position for the session, per half, and writes its
         // own half's Base only.
@@ -2764,11 +3026,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (isScreenCard(card) && half != null) {
             writeScreenFrost(prefs, half, glass);
         } else if (card.slot == null) {
-            GlobalGlass.write(prefs, SurfaceProperty.BLUR, half, blur);
-            GlobalGlass.write(prefs, SurfaceProperty.GRAIN, half, grain);
+            if (!writeAllOnPage(card, SurfaceProperty.BLUR, AppearanceLooks.blurDp(blur))) {
+                GlobalGlass.write(prefs, SurfaceProperty.BLUR, SurfacePresets.pageOf(half), blur);
+                GlobalGlass.write(prefs, SurfaceProperty.GRAIN, SurfacePresets.pageOf(half), grain);
+            } else {
+                writeAllOnPage(card, SurfaceProperty.GRAIN, AppearanceLooks.grainPercent(grain));
+            }
+        } else if (!writeOnPage(card, card.slot, SurfaceProperty.BLUR, blur)) {
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.BLUR, SurfacePresets.pageOf(half), blur);
+            prefs.detachSurfaceValue(card.slot, SurfaceProperty.GRAIN, SurfacePresets.pageOf(half), grain);
         } else {
-            prefs.detachSurfaceValue(card.slot, SurfaceProperty.BLUR, half, blur);
-            prefs.detachSurfaceValue(card.slot, SurfaceProperty.GRAIN, half, grain);
+            writeOnPage(card, card.slot, SurfaceProperty.GRAIN, grain);
         }
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -2784,7 +3052,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         SurfaceProperty property = row.property();
         if (prefs == null || property == null)
             return;
-        GlobalGlass.write(prefs, property, writeHalf(row), value);
+        EditorCard card = mCard;
+        int pageValue = property == SurfaceProperty.TINT ? AppearanceLooks.tintPercent(value)
+            : AppearanceLooks.opacityPercent(value);
+        if (card == null || !writeAllOnPage(card, property, pageValue))
+            GlobalGlass.write(prefs, property, SurfacePresets.pageOf(writeScreen(row)), value);
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
         restateGlassRow(row);
@@ -2799,12 +3071,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void writeScreenGlass(@NonNull Row row, int value) {
         TermuxAppSharedPreferences prefs = prefs();
         SurfaceProperty property = row.property();
-        WallHalf half = writeHalf(row);
+        PaneWallPage half = writeScreen(row);
         if (prefs == null || property == null || half == null)
             return;
         int clamped = row == Row.OPACITY ? AppearanceLooks.opacityPercent(value)
             : AppearanceLooks.tintPercent(value);
-        prefs.setSurfaceBaseValue(property, half, clamped);
+        prefs.setSurfaceBaseValue(property, SurfacePresets.pageOf(half), clamped);
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
         restateGlassRow(row);
@@ -2840,12 +3112,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // ---- the Look slider ---------------------------------------------------------------------
 
     /**
-     * The half the Look row of the card up reads and writes, as {@link EditorRows#halfFor} says:
+     * The half the Look row of the card up reads and writes, as {@link EditorRows#pageFor} says:
      * a screen card's own half (Home's, the Workspace's), else the half the frame shows.
      */
     @NonNull
-    private WallHalf lookHalf() {
-        return readHalf(Row.LOOK);
+    private PaneWallPage lookScreen() {
+        return readScreen(Row.LOOK);
     }
 
     /**
@@ -2853,7 +3125,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * half wears in its own values ({@link SurfacePresets#wornOn}), so a Look picked on the other
      * screen, which writes the values one for the wall, never moves it.
      */
-    private int lookStop(@NonNull WallHalf half) {
+    private int lookStop(@NonNull PaneWallPage half) {
+        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
+        if (!scope.isGlobal()) {
+            if (mHeldCustomPages.contains(scope.pageId()))
+                return AppearanceLooks.CUSTOM_STOP;
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs == null ? AppearanceLooks.CUSTOM_STOP : pageStop(prefs, scope.pageId());
+        }
         if (mHeldCustom.contains(half))
             return AppearanceLooks.CUSTOM_STOP;
         TermuxAppSharedPreferences prefs = prefs();
@@ -2862,9 +3141,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The stop a half wears in its own values in {@code prefs} (the store, or a drag's batch). */
     private static int wornStop(@NonNull TermuxAppSharedPreferences prefs,
-                                @NonNull WallHalf half) {
+                                @NonNull PaneWallPage half) {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
             if (SurfacePresets.wornOn(prefs, preset, half))
+                return AppearanceLooks.stopForPresetId(preset.id);
+        }
+        return AppearanceLooks.CUSTOM_STOP;
+    }
+
+    /**
+     * The stop a page wears (ADR 0015 §6): the wall's where the page holds none of its own, else
+     * the Look its cells match ({@link SurfacePresets#wornAtPage}), else Custom. Read from the
+     * page's overrides, so the editor opened again on a detached page shows its stop.
+     */
+    @VisibleForTesting
+    static int pageStop(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
+        if (!SurfacePresets.holdsPageLook(prefs, pageId))
+            return wornStop(prefs, PaneWallPage.WIDGETS);
+        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
+            if (SurfacePresets.wornAtPage(prefs, preset, pageId))
                 return AppearanceLooks.stopForPresetId(preset.id);
         }
         return AppearanceLooks.CUSTOM_STOP;
@@ -2874,14 +3169,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * The stop a half wears with the values one for the wall compared too: the Look it matches
      * whole, or Custom. What decides whether Done keeps the saved Custom.
      */
-    private int matchingStop(@NonNull WallHalf half) {
+    private int matchingStop(@NonNull PaneWallPage half) {
         TermuxAppSharedPreferences prefs = prefs();
         return prefs == null ? AppearanceLooks.CUSTOM_STOP : matchingStop(prefs, half);
     }
 
     /** The stop a half wears in {@code prefs} (the store, or a drag's batch over it). */
     private static int matchingStop(@NonNull TermuxAppSharedPreferences prefs,
-                                    @NonNull WallHalf half) {
+                                    @NonNull PaneWallPage half) {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
             if (SurfacePresets.matches(prefs, preset, half))
                 return AppearanceLooks.stopForPresetId(preset.id);
@@ -2900,8 +3195,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean custom = AppearanceLooks.isCustomStop(stop);
         // Leaving Custom for the Look the values still match writes nothing, but the slider
         // and the All surfaces strip follow the stop.
-        WallHalf half = lookHalf();
-        boolean held = custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
+        PaneWallPage half = lookScreen();
+        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
+        boolean held = !scope.isGlobal()
+            ? (custom ? mHeldCustomPages.add(scope.pageId())
+                : mHeldCustomPages.remove(scope.pageId()))
+            : custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
         if (prefs != null && moveToStop(prefs, stop, half))
             syncAfterBulkWrite();
         else if (held && mSheet != null)
@@ -2917,7 +3216,32 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * when the half already wears that stop in its own values ({@link #wornStop}).
      */
     private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop,
-                               @NonNull WallHalf half) {
+                               @NonNull PaneWallPage half) {
+        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
+        if (!scope.isGlobal()) {
+            // A Look on one page: its surface cells land as that page's own values; the wall and
+            // every value a page may not hold stay as they are. Custom brings back the page's
+            // Custom of this visit, else the saved Custom's cells, else writes nothing.
+            int page = scope.pageId();
+            int worn = pageStop(into, page);
+            if (stop == worn)
+                return false;
+            SurfacePresets.Preset onPage = AppearanceLooks.presetForStop(
+                SurfacePresets.presets(into), stop);
+            if (onPage != null) {
+                if (AppearanceLooks.isCustomStop(worn))
+                    mPageCustoms.put(page, SurfacePresets.customAtPage(into, page));
+                SurfacePresets.applyLookAtPage(into, onPage, page);
+                return true;
+            }
+            SurfacePresets.Preset kept = mPageCustoms.get(page);
+            if (kept == null)
+                kept = SurfacePresets.custom(into);
+            if (kept == null)
+                return false;
+            SurfacePresets.applyLookAtPage(into, kept, page);
+            return true;
+        }
         int current = wornStop(into, half);
         if (stop == current)
             return false;
@@ -2937,7 +3261,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     static final class SessionCustom {
         @Nullable private AppearanceSnapshot mKept;
         /** {@link #mKept} half by half: what the Custom stop on one half puts back on it alone. */
-        @Nullable private java.util.Map<WallHalf, SurfacePresets.Preset> mKeptHalves;
+        @Nullable private java.util.Map<PaneWallPage, SurfacePresets.Preset> mKeptHalves;
         /**
          * What Custom stood at when the slider (or a tap at a Look) moved there, while nothing was
          * kept: the Look on screen, or the saved Custom just applied. Custom left exactly as it was
@@ -2957,8 +3281,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mKeptHalves = null;
             mSeedSignature = null;
             if (mKept != null) {
-                mKeptHalves = new java.util.EnumMap<>(WallHalf.class);
-                for (WallHalf half : WallHalf.values())
+                mKeptHalves = new java.util.EnumMap<>(PaneWallPage.class);
+                for (PaneWallPage half : SCREENS)
                     mKeptHalves.put(half, SurfacePresets.customOf(live, half));
                 SurfacePresets.saveCustom(live);
             }
@@ -2987,8 +3311,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
          * on Home from the Workspace's slider (pong, 2026-10-25: Home stood on Solid's numbers
          * nobody chose there).
          */
-        void enter(@NonNull TermuxAppSharedPreferences into, @NonNull WallHalf half) {
-            java.util.Map<WallHalf, SurfacePresets.Preset> kept = mKeptHalves;
+        void enter(@NonNull TermuxAppSharedPreferences into, @NonNull PaneWallPage half) {
+            java.util.Map<PaneWallPage, SurfacePresets.Preset> kept = mKeptHalves;
             if (mKept != null && kept != null && kept.get(half) != null) {
                 SurfacePresets.applyCustom(into, kept.get(half), half);
                 return;
@@ -3047,7 +3371,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null) {
-            if (moveToStop(prefs, stop, lookHalf()))
+            if (moveToStop(prefs, stop, lookScreen()))
                 syncAfterBulkWrite();
             return;
         }
@@ -3056,7 +3380,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mLookDrag = new SurfacePresets.Batch(store);
             mLookDragPrefs = SurfacePresets.writingInto(prefs, mLookDrag);
         }
-        if (!moveToStop(mLookDragPrefs, stop, lookHalf()))
+        if (!moveToStop(mLookDragPrefs, stop, lookScreen()))
             return;
         SharedPreferencesPreview.show(store, mLookDrag.frozen());
         previewLook();
@@ -3115,7 +3439,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (partner == null)
             return false;
         int background = AppearanceLooks.opacityPercent(prefs.getSurfaceValue(SurfaceSlot.KEYBOARD,
-            SurfaceProperty.OPACITY, readHalf(Row.OPACITY)));
+            SurfaceProperty.OPACITY, SurfacePresets.pageOf(readScreen(Row.OPACITY))));
         int keys = keyOpacityValue(prefs);
         if (mLinkAnchor == null || mLinkMoved != moved) {
             mLinkAnchor = moved == Control.KEY_OPACITY ? new int[] {keys, background}
@@ -3436,23 +3760,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private EditorCard cardOfGroup(int index) {
         EditorCard card = GROUP_CARDS[index];
         if (card == null)
-            return mHalf == WallHalf.HOME ? EditorCard.HOME : null;
+            return mScreen == PaneWallPage.WIDGETS ? EditorCard.HOME : null;
         return card;
     }
 
-    /** Where a finger on a group stands: a tap, a slide between halves, or a hold that drags. */
+    /** Where a finger on a group went down: the dock's card opens on the bar under it. */
     private float mDownRawX;
     private float mDownRawY;
-    private boolean mSwiping;
 
     /**
      * Every group takes its touches, so nothing under the frame receives them while the editor is
-     * up. A tap raises the group's card; a plain horizontal swipe slides to the other half. Where a
+     * up. A tap raises the group's card; nothing slides between pages (ADR 0015 §6). Where a
      * surface sits is its card's Position row: nothing in the frame is dragged.
      */
     @SuppressLint("ClickableViewAccessibility")
     private void bindTargets() {
-        final int slop = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
         for (int i = 0; i < GROUP_IDS.length; i++) {
             View group = mHost.findView(GROUP_IDS[i]);
             if (group == null)
@@ -3477,23 +3799,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         view.getParent().requestDisallowInterceptTouchEvent(true);
                         mDownRawX = event.getRawX();
                         mDownRawY = event.getRawY();
-                        mSwiping = false;
                         return true;
-                    case MotionEvent.ACTION_MOVE: {
-                        float dx = event.getRawX() - mDownRawX;
-                        float dy = event.getRawY() - mDownRawY;
-                        if (!mSwiping && Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy))
-                            mSwiping = true;
+                    case MotionEvent.ACTION_MOVE:
                         return true;
-                    }
                     case MotionEvent.ACTION_UP: {
                         view.getParent().requestDisallowInterceptTouchEvent(false);
-                        float dx = event.getRawX() - mDownRawX;
-                        if (mSwiping) {
-                            if (Math.abs(dx) >= dp(SWIPE_DP))
-                                switchHalf(dx > 0 ? WallHalf.HOME : WallHalf.WORKSPACE, true, true);
-                            return true;
-                        }
                         float x = event.getX();
                         float y = event.getY();
                         if (x >= 0 && y >= 0 && x <= view.getWidth() && y <= view.getHeight())
@@ -3509,9 +3819,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             });
         }
     }
-
-    /** A swipe this far across slides the frame to the other half. */
-    private static final int SWIPE_DP = 48;
 
     private void setOverlayVisible(boolean visible) {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
@@ -3599,7 +3906,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (group == null)
                 continue;
             EditorCard card = GROUP_CARDS[i];
-            if (card != null && !card.standsOn(mHalf)) {
+            if (card != null && !card.standsOn(mScreen)) {
                 EditorViews.setVisible(group, false);
                 continue;
             }
@@ -3790,7 +4097,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         for (int edge : frame == null ? new int[] {-1} : frame)
             signature = mix(signature, edge);
         signature = mix(signature, mHost.isFloatingDock() ? 1 : 0);
-        signature = mix(signature, mHalf.ordinal());
+        signature = mix(signature, mScreen.ordinal());
         return mix(signature, scene().signature());
     }
 
@@ -3908,14 +4215,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
     private void revertToEntry() {
         dropLookDrag();
-        // A Match onto a layout the session did not take on entry (Home's, opened in minimal
-        // mode) is put back by its own Undo; the session's revert covers the rest.
-        TermuxAppSharedPreferences matched = prefs();
-        if (matched != null) {
-            for (ScreenMatch.Undo undo : mMatchUndos.values())
-                undo.restore(matched);
-        }
-        mMatchUndos.clear();
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.isDirty())
             layout.revert();
@@ -3957,8 +4256,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mEntrySignature != null
             && mEntrySignature.equals(AppearanceSnapshot.signatureOf(prefs)))
             return;
-        boolean custom = AppearanceLooks.isCustomStop(matchingStop(WallHalf.HOME))
-            || AppearanceLooks.isCustomStop(matchingStop(WallHalf.WORKSPACE));
+        boolean custom = AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
+            || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL));
         if (!custom)
             prefs.setSurfaceCustomPreset(null);
         else if (mSessionCustom.isTouched(prefs))
@@ -4051,7 +4350,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSliderDragActive)
             endDrag();
         mOpen = false;
-        mMatchUndos.clear();
+        closePageLook();
         mHost.retainGlassCapture(false);
         mFramed = false;
         mPresentToken++;

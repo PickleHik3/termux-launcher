@@ -38,7 +38,6 @@ public class UseAsTest {
         assertTrue(home.showsHomeSettings());
         assertTrue(home.offersHomeStartIn());
         for (EditorCard card : EditorCard.values()) assertTrue(card.name(), home.reaches(card));
-        for (EditorRows.Row row : EditorRows.Row.values()) assertTrue(row.name(), home.shows(row));
         assertSame(EditorCard.HOME, home.doorCard(EditorCard.HOME));
         assertSame(PaneWallPage.WIDGETS, home.editorPlace(PaneWallPage.WIDGETS));
         assertSame(PaneWallPage.WIDGETS, home.homePage());
@@ -78,17 +77,13 @@ public class UseAsTest {
             Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_WORKSPACE)));
     }
 
-    @Test public void terminalOnlyHasNoHomeCardAndNoMatchRows() {
+    @Test public void terminalOnlyHasNoHomeCard() {
         UseAs terminal = UseAs.TERMINAL;
         assertFalse(terminal.reaches(EditorCard.HOME));
         assertTrue("the editor at rest is always reachable", terminal.reaches(null));
         for (EditorCard card : EditorCard.values()) {
             if (card != EditorCard.HOME) assertTrue(card.name(), terminal.reaches(card));
         }
-        assertFalse(terminal.shows(EditorRows.Row.MATCH_HOME));
-        assertFalse(terminal.shows(EditorRows.Row.MATCH_WORKSPACE));
-        assertTrue(terminal.shows(EditorRows.Row.LOOK));
-        assertTrue(terminal.shows(EditorRows.Row.LINK_GLOBAL));
     }
 
     @Test public void terminalOnlyHomeDoorsOpenTheEditorAtRest() {
@@ -101,18 +96,13 @@ public class UseAsTest {
         assertEquals("settings-home hidden by terminal -> REST", terminal.doorLine("settings-home"));
     }
 
-    @Test public void theWorkspaceCardLosesOnlyItsMatchRowUnderTerminalOnly() {
+    @Test public void theWorkspaceCardIsTheSameUnderTerminalOnly() {
+        // The Match row it lost under Terminal only retired with the halves (ADR 0015 §6).
         List<EditorRows.Spec> home = EditorRows.rows(EditorCard.WORKSPACE,
             new EditorRows.Offers(true, true, true));
         List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.WORKSPACE,
             new EditorRows.Offers(true, true, false));
-        assertEquals(home.size() - 1, terminal.size());
-        boolean homeMatches = false;
-        for (EditorRows.Spec spec : home) homeMatches |= spec.row == EditorRows.Row.MATCH_HOME;
-        assertTrue(homeMatches);
-        for (EditorRows.Spec spec : terminal) {
-            assertTrue(spec.row.name(), UseAs.TERMINAL.shows(spec.row));
-        }
+        assertEquals(home.size(), terminal.size());
     }
 
     @Test public void choosingTerminalOnlyOnHomeMovesTheWall() {

@@ -3,7 +3,9 @@ package com.termux.app.surfaces;
 import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -73,6 +75,9 @@ public final class GlassControlsMigration {
             : store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0);
         if (from >= FORMAT)
             return;
+        // The pages' own values the half upgrade wrote just before (ADR 0015 §6) are not this
+        // migration's: its wall-wide writes would drop them, so they are put back as they were.
+        Map<String, Object> pageValues = pageOverrides(store);
         SurfacePresets.Batch batch = new SurfacePresets.Batch(store);
         TermuxAppSharedPreferences into = SurfacePresets.writingInto(prefs, batch);
         if (from < 1) {
@@ -100,6 +105,41 @@ public final class GlassControlsMigration {
         }
         batch.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, FORMAT).apply();
         batch.applyToStore();
+        restore(store, pageValues);
+    }
+
+    /** Every page's own look value in {@code store} ({@code <detachable key>@<id>}). */
+    @NonNull
+    private static Map<String, Object> pageOverrides(@Nullable SharedPreferences store) {
+        Map<String, Object> values = new java.util.HashMap<>();
+        if (store == null) return values;
+        for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
+            String key = entry.getKey();
+            int at = key.lastIndexOf(PageLookKeys.PAGE_SEPARATOR);
+            if (at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+                values.put(key, entry.getValue());
+        }
+        return values;
+    }
+
+    /** Puts back each of {@code values} the migration removed; one it rewrote stays rewritten. */
+    private static void restore(@Nullable SharedPreferences store,
+                                @NonNull Map<String, Object> values) {
+        if (store == null || values.isEmpty()) return;
+        SharedPreferences.Editor editor = store.edit();
+        boolean changed = false;
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            if (store.contains(entry.getKey())) continue;
+            Object value = entry.getValue();
+            if (value instanceof Integer) editor.putInt(entry.getKey(), (Integer) value);
+            else if (value instanceof String) editor.putString(entry.getKey(), (String) value);
+            else if (value instanceof Float) editor.putFloat(entry.getKey(), (Float) value);
+            else if (value instanceof Boolean) editor.putBoolean(entry.getKey(), (Boolean) value);
+            else if (value instanceof Long) editor.putLong(entry.getKey(), (Long) value);
+            else continue;
+            changed = true;
+        }
+        if (changed) editor.apply();
     }
 
     /**

@@ -414,4 +414,25 @@ public class PaneWallPolicyTest {
         assertEquals(homeMarginDp,
             PaneWallPolicy.pageInsetPx(PaneWallPage.WIDGETS, homeMarginDp, 0) + homeMarginDp);
     }
+
+    @Test
+    public void rowSlotsEqualRowPagesInTheDefaultOrder() {
+        WallPages d = WallPagesMigration.seed("home", 0, "home", 2);
+        assertEquals(PaneWallPolicy.rowPages(true), PaneWallPolicy.kindsOf(PaneWallPolicy.rowSlots(d, true)));
+        assertEquals(PaneWallPolicy.rowPages(false), PaneWallPolicy.kindsOf(PaneWallPolicy.rowSlots(d, false)));
+    }
+
+    @Test
+    public void rowSlotsKeepTheOrderTheListHas() {
+        WallPages mid = WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages;
+        List<PaneWallPage> kinds = PaneWallPolicy.kindsOf(PaneWallPolicy.rowSlots(mid, true));
+        assertEquals(java.util.Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
+            PaneWallPage.WIDGETS), kinds);
+        assertEquals(2, PaneWallPolicy.rowSlots(mid, false).size());
+        assertEquals(1, PaneWallPolicy.relativeSlot(0, 1));
+        assertEquals(-2, PaneWallPolicy.relativeSlot(2, 0));
+        assertEquals(2, PaneWallPolicy.neighbourSlot(3, 1, 1));
+        assertEquals(2, PaneWallPolicy.neighbourSlot(3, 2, 1));
+        assertEquals(0, PaneWallPolicy.neighbourSlot(3, 0, -1));
+    }
 }

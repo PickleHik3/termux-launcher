@@ -14,11 +14,12 @@ import java.util.List;
 /** Versioned, declarative description of a terminal workspace. */
 public final class TerminalWorkspace {
 
-    public static final int VERSION = 4;
+    public static final int VERSION = 5;
     /**
      * Oldest schema this build still loads. Version 2 added per-window floating panes, version 3
-     * per-window names, version 4 a Home float's page and shape ({@code homeFloat}). All are
-     * optional keys, so every older file still loads unchanged.
+     * per-window names, version 4 a Home float's page and shape ({@code homeFloat}), version 5 the
+     * float's page by id ({@code pageId}; a v4 file's {@code page} is a position, read once
+     * against the Home pages as they stand). All are optional keys, so every older file still loads.
      */
     private static final int MIN_VERSION = 1;
     public static final int MAX_SESSIONS = 64;
@@ -98,20 +99,20 @@ public final class TerminalWorkspace {
     }
 
     /**
-     * A <b>Home float</b> as saved: the Home page it floated over (counting from 0), whether it
+     * A <b>Home float</b> as saved: the id of the Home page it floated over, whether it
      * was tucked into its chip, and its shape in each orientation it had one in, as fractions of
      * the room Home floats are laid out in. A shape not known is null; the float is then born there
      * as a new float is.
      */
     public static final class HomeFloat {
-        public final int page;
+        public final int pageId;
         public final boolean minimised;
         @Nullable public final FloatShape portrait;
         @Nullable public final FloatShape landscape;
 
-        public HomeFloat(int page, boolean minimised, @Nullable FloatShape portrait,
+        public HomeFloat(int pageId, boolean minimised, @Nullable FloatShape portrait,
                          @Nullable FloatShape landscape) {
-            this.page = page;
+            this.pageId = pageId;
             this.minimised = minimised;
             this.portrait = portrait;
             this.landscape = landscape;
@@ -231,10 +232,10 @@ public final class TerminalWorkspace {
                 if (window.activePane < 0 || window.activePane >= windowPanes)
                     invalid("activePane is outside the window's panes");
                 HomeFloat homeFloat = window.homeFloat;
-                if (homeFloat != null && (homeFloat.page < 0
+                if (homeFloat != null && (homeFloat.pageId < 0
                     || (homeFloat.portrait != null && !homeFloat.portrait.isValid())
                     || (homeFloat.landscape != null && !homeFloat.landscape.isValid())))
-                    invalid("a Home float needs a page from 0 and finite shapes with size in (0, 1]");
+                    invalid("a Home float needs a page id from 0 and finite shapes with size in (0, 1]");
                 panes += windowPanes;
                 if (panes > MAX_PANES) invalid("workspace has more than " + MAX_PANES + " panes");
             }
@@ -263,7 +264,12 @@ public final class TerminalWorkspace {
     @NonNull
     public JSONObject toJson() throws JSONException {
         JSONObject json = new JSONObject();
-        json.put("version", version);
+        // A Home float is written by page id, which only a v5 reader knows.
+        int written = version;
+        for (Session session : sessions) {
+            for (Window window : session.windows) if (window.homeFloat != null) written = Math.max(version, VERSION);
+        }
+        json.put("version", written);
         json.put("name", name);
         json.put("savedAtEpochMs", savedAtEpochMs);
         json.put("currentSession", currentSession);
@@ -300,8 +306,36 @@ public final class TerminalWorkspace {
         return json;
     }
 
+    /**
+     * The Home pages a v4 file's Home float positions are read against: the Home page ids in
+     * order and the id of home. A position names the page at that place; past the last, home,
+     * else the first Home page. Without one ({@code null}) a position {@code i} reads as id
+     * {@code i + 1}, the ids a fresh wall's Home pages are given.
+     */
+    public static final class HomePages {
+        @NonNull public final List<Integer> ids;
+        public final int homeId;
+
+        public HomePages(@NonNull List<Integer> ids, int homeId) {
+            this.ids = new ArrayList<>(ids);
+            this.homeId = homeId;
+        }
+
+        int idAtPosition(int position) {
+            if (position >= 0 && position < ids.size()) return ids.get(position);
+            if (ids.contains(homeId)) return homeId;
+            return ids.isEmpty() ? Math.max(0, position) + 1 : ids.get(0);
+        }
+    }
+
     @NonNull
     public static TerminalWorkspace fromJson(@NonNull JSONObject json) throws WorkspaceException {
+        return fromJson(json, null);
+    }
+
+    @NonNull
+    public static TerminalWorkspace fromJson(@NonNull JSONObject json, @Nullable HomePages pages)
+        throws WorkspaceException {
         try {
             int version = requiredInt(json, "version");
             String name = requiredString(json, "name");
@@ -336,7 +370,7 @@ public final class TerminalWorkspace {
                     }
                     windows.add(new Window(requiredInt(windowJson, "activePane"),
                         nodeFromJson(requiredObject(windowJson, "root"), 1), floats,
-                        optionalString(windowJson, "name"), homeFloatFromJson(windowJson)));
+                        optionalString(windowJson, "name"), homeFloatFromJson(windowJson, version, pages)));
                 }
                 sessions.add(new Session(sessionName, currentWindow, windows));
             }
@@ -354,7 +388,7 @@ public final class TerminalWorkspace {
     @NonNull
     private static JSONObject homeFloatToJson(@NonNull HomeFloat homeFloat) throws JSONException {
         JSONObject json = new JSONObject();
-        json.put("page", homeFloat.page);
+        json.put("pageId", homeFloat.pageId);
         json.put("minimised", homeFloat.minimised);
         if (homeFloat.portrait != null) json.put("portrait", shapeToJson(homeFloat.portrait));
         if (homeFloat.landscape != null) json.put("landscape", shapeToJson(homeFloat.landscape));
@@ -378,11 +412,19 @@ public final class TerminalWorkspace {
      * so the window comes back as a tiled window.
      */
     @Nullable
-    private static HomeFloat homeFloatFromJson(@NonNull JSONObject windowJson) {
+    private static HomeFloat homeFloatFromJson(@NonNull JSONObject windowJson, int version,
+                                               @Nullable HomePages pages) {
         JSONObject json = windowJson.optJSONObject("homeFloat");
         if (json == null) return null;
         try {
-            int page = requiredInt(json, "page");
+            int page;
+            if (version >= 5) {
+                page = requiredInt(json, "pageId");
+            } else {
+                int position = requiredInt(json, "page");
+                if (position < 0) return null;
+                page = pages != null ? pages.idAtPosition(position) : position + 1;
+            }
             if (page < 0) return null;
             boolean minimised = false;
             if (json.has("minimised") && !json.isNull("minimised")) {

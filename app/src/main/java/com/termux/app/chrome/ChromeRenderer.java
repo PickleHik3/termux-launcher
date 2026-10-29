@@ -55,14 +55,14 @@ public final class ChromeRenderer {
          * extra keys and the keyboard) wears now (ADR 0013): the half whose rows it stands.
          */
         @NonNull
-        default TermuxAppSharedPreferences.WallHalf stackLookHalf() {
-            return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        default int stackLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
         }
 
         /** The half of the wall whose look values the status bar wears now (ADR 0013). */
         @NonNull
-        default TermuxAppSharedPreferences.WallHalf statusLookHalf() {
-            return TermuxAppSharedPreferences.WallHalf.WORKSPACE;
+        default int statusLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
         }
 
         /** The frames' Vibrancy: the stored glass Vibrancy, today's frame without preferences. */
@@ -117,6 +117,17 @@ public final class ChromeRenderer {
          */
         default int wallpaperDimColor() {
             return android.graphics.Color.TRANSPARENT;
+        }
+
+        /**
+         * The ground under {@code screenRect}: the dim of the wall page (or pages, at a seam)
+         * the rect stands on, which on a Terminal page folds in the canvas tint when it is not
+         * glass. Home never carries the terminal's tint. Asked by the ink for a band, a widget or
+         * a pane instead of one wall-wide dim; the default is {@link #wallpaperDimColor()} for
+         * hosts that have no per-page ground.
+         */
+        default int groundUnder(@androidx.annotation.NonNull android.graphics.Rect screenRect) {
+            return wallpaperDimColor();
         }
 
         /**

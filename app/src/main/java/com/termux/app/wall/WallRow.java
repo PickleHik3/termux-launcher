@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 /**
  * The wall's row as a list of pages (ADR 0008): Home page 1 … Home page n, then the Workspace's
- * windows, the display window among them while a display is up ({@link DisplaySlot}). Pure, so the
+ * windows, the display window among them while a display was up (before ADR 0015 A3b). Pure, so the
  * seam, the insertion of a new window, Start in and the saved position read as arithmetic.
  *
  * <p>The wall does not hold a view per page. Home's pages are the widget grid's own pages, paged
@@ -95,6 +95,36 @@ public final class WallRow {
     public static boolean swipeLeavesHome(int homePage, int homeCount, int direction,
                                           boolean rowContinues) {
         return direction > 0 && rowContinues && homePage >= Math.max(1, homeCount) - 1;
+    }
+
+    // ---- Slots (ADR 0015, A2a): Home runs anywhere on the row -------------------------------
+
+    /**
+     * {@link #swipeLeavesHome} for any order: a swipe in {@code direction} leaves the Home run at
+     * the run's edge on that side, when a slot lies on that side ({@code slotOnSide}). Inside the
+     * run the swipe stays with Home, which pages. For the default order (no slot before the first
+     * Home page) this is {@code swipeLeavesHome}.
+     */
+    public static boolean swipeLeavesRun(int pageInRun, int runLength, int direction,
+                                         boolean slotOnSide) {
+        if (!slotOnSide || direction == 0) return false;
+        int last = Math.max(1, runLength) - 1;
+        return direction > 0 ? pageInRun >= last : pageInRun <= 0;
+    }
+
+    /** The run page the wall shows when it arrives from a slot on {@code side} of it. */
+    public static int arrivalPage(int runLength, int sideOfArrival) {
+        return sideOfArrival > 0 ? Math.max(0, runLength - 1) : 0;
+    }
+
+    /** The global Home-page index of run page {@code pageInRun} of slot {@code slotIndex}. */
+    public static int globalHomeIndex(@NonNull WallPages pages, int slotIndex, int pageInRun) {
+        java.util.List<WallPages.Slot> slots = pages.slots();
+        int seen = 0;
+        for (int i = 0; i < slots.size() && i < slotIndex; i++) {
+            if (slots.get(i).kind == WallPages.PageKind.HOME) seen += slots.get(i).pageIds.size();
+        }
+        return seen + Math.max(0, pageInRun);
     }
 
     /**

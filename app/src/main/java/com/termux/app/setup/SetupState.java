@@ -17,6 +17,7 @@ import com.termux.app.place.Slot;
 import com.termux.app.settings.LowMemoryPreset;
 import com.termux.app.settings.UseAsSetting;
 import com.termux.app.surfaces.SurfacePresets;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.UseAs;
 import com.termux.app.x11.GuiAppsSetupGuide;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -264,8 +265,7 @@ final class SetupState {
             return;
         final SurfacePresets.Preset chosen = found;
         tracked(() -> {
-            for (TermuxAppSharedPreferences.WallHalf half
-                : TermuxAppSharedPreferences.WallHalf.values())
+            for (PaneWallPage half : new PaneWallPage[] {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL})
                 SurfacePresets.applyLook(prefs, chosen, half);
         });
         mValues.lookId = id;
@@ -446,9 +446,8 @@ final class SetupState {
     @Nullable
     private static String wornLook(@NonNull TermuxAppSharedPreferences prefs) {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
-            if (SurfacePresets.matches(prefs, preset, TermuxAppSharedPreferences.WallHalf.WORKSPACE)
-                && SurfacePresets.matches(prefs, preset,
-                    TermuxAppSharedPreferences.WallHalf.HOME))
+            if (SurfacePresets.matches(prefs, preset, PaneWallPage.TERMINAL)
+                && SurfacePresets.matches(prefs, preset, PaneWallPage.WIDGETS))
                 return preset.id;
         }
         return null;

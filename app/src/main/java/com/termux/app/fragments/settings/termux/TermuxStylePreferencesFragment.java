@@ -573,7 +573,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 com.termux.app.wall.StartInPolicy.Choice choice =
                     com.termux.app.wall.StartInPolicy.choose(value);
                 if (choice.startsDisplay) mPreferences.setX11DisplayAutostartEnabled(true);
-                mPreferences.setLauncherStartIn(choice.startIn);
+                // Home lives in the wall's pages; the other holders of the store see it written.
+                final String startIn = choice.startIn;
+                com.termux.app.wall.WallPagesStore.open(mContext)
+                    .edit(pages -> pages.chooseStartIn(startIn));
                 break;
             }
             case "app_launcher_home_palette_gesture":
@@ -638,7 +641,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_start_in":
                 // As the launcher reads it: Home is the Workspace under Terminal only.
                 return com.termux.app.wall.UseAs.read(mPreferences.getUseAs())
-                    .startIn(mPreferences.getLauncherStartIn());
+                    .startIn(com.termux.app.wall.WallPagesStore.open(mContext)
+                        .current().startIn());
             case "app_launcher_home_palette_gesture":
                 return mPreferences.getHomePaletteGesture();
             case "app_launcher_drawer_view_type":

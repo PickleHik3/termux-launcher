@@ -77,6 +77,25 @@ public final class WallParallax {
         }
     }
 
+    /**
+     * {@link #rowCount} read off the page list, whatever its order: one entry per stop
+     * ({@link WallPages#stops}), at least 1.
+     */
+    public static int rowCount(@NonNull WallPages pages, int windowCount) {
+        return Math.max(1, pages.stops(windowCount).size());
+    }
+
+    /**
+     * {@link #rowIndex} read off the page list, whatever its order: the stop's place among
+     * {@link WallPages#stops}, held at the ends. For [Home...][Terminal] it equals the Home-first
+     * arithmetic above.
+     */
+    public static int rowIndex(@NonNull WallPages pages, @NonNull WallPages.Stop stop,
+                               int windowCount) {
+        int count = rowCount(pages, windowCount);
+        return clamp(pages.indexOf(stop, windowCount), 0, count - 1);
+    }
+
     /** {@link #innerPosition}'s departure when it is simply the page next door. */
     public static final int ADJACENT = -1;
 

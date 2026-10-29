@@ -27,7 +27,8 @@ public class LauncherWidgetRepositoryV3Test {
         JSONObject root = new JSONObject(storage.value);
         assertEquals(4, root.getInt("version"));
         assertEquals(2, root.getInt("pages"));
-        assertEquals(1, root.getJSONArray("records").getJSONObject(0).getInt("page"));
+        assertEquals("persisted by page id: index 1 is id 2", 2,
+            root.getJSONArray("records").getJSONObject(0).getInt("page"));
         LauncherWidgetRepository restored = new LauncherWidgetRepository(storage);
         assertEquals(2, restored.pageCount());
         assertEquals(1, restored.get(1).page);
@@ -50,7 +51,9 @@ public class LauncherWidgetRepositoryV3Test {
         JSONObject migrated = new JSONObject(storage.value);
         assertEquals(4, migrated.getInt("version"));
         assertEquals(1, migrated.getInt("pages"));
-        assertEquals(0, migrated.getJSONArray("records").getJSONObject(0).getInt("page"));
+        // Persisted by page id: the one page of a fresh wall is id 1.
+        assertEquals(1, migrated.getJSONArray("records").getJSONObject(0).getInt("page"));
+        assertEquals("id", migrated.getString("pageKey"));
     }
 
     @Test public void failedV2MigrationWriteRetainsIdentitiesAndRetriesNextConstruction()
@@ -115,7 +118,8 @@ public class LauncherWidgetRepositoryV3Test {
             new ComponentName("pkg", "P"), 0, WidgetAddTransaction.Stage.ALLOCATED,
             new WidgetCellRect(1, 1, 2, 2), 1, revision, null, new Bundle(), 10);
         assertTrue(repository.reservePending(revision, reservation));
-        assertEquals(1, new JSONObject(storage.value).getJSONObject("pending").getInt("page"));
+        // Persisted by page id: index 1 is id 2.
+        assertEquals(2, new JSONObject(storage.value).getJSONObject("pending").getInt("page"));
 
         WidgetTestFixtures.Memory future = new WidgetTestFixtures.Memory();
         // 5 is the built-ins' version, 6 the app icons', 7 the folders', 8 the large folders'; 9 is the first this build lacks.

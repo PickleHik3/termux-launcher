@@ -34,10 +34,10 @@ public class DockAppearancePreferencesTest {
     @Test
     public void blurRadiusUsesTheSameBoundsAsItsSlider() {
         preferences.setExtraKeysBlurRadius(-4);
-        assertEquals(0, preferences.getExtraKeysBlurRadius());
+        assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
 
         preferences.setExtraKeysBlurRadius(49);
-        assertEquals(48, preferences.getExtraKeysBlurRadius());
+        assertEquals(48, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -82,9 +82,9 @@ public class DockAppearancePreferencesTest {
         preferences.setDockGlassGrain(21);
         preferences.setAppLauncherDockCornerRadius(19);
 
-        assertEquals(17, preferences.getStatusBarBlurRadius());
-        assertEquals(63, preferences.getStatusBarOpacity());
-        assertEquals(21, preferences.getStatusBarGrain());
+        assertEquals(17, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(63, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(21, preferences.getStatusBarGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(19, preferences.getStatusBarCornerRadius());
     }
 
@@ -95,9 +95,9 @@ public class DockAppearancePreferencesTest {
         preferences.setStatusBarGrain(101);
         preferences.setStatusBarCornerRadius(44);
 
-        assertEquals(48, preferences.getStatusBarBlurRadius());
-        assertEquals(0, preferences.getStatusBarOpacity());
-        assertEquals(100, preferences.getStatusBarGrain());
+        assertEquals(48, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(0, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(100, preferences.getStatusBarGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(40, preferences.getStatusBarCornerRadius());
     }
 

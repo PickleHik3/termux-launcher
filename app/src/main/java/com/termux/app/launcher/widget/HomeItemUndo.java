@@ -3,7 +3,6 @@ package com.termux.app.launcher.widget;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.launcher.home.HomePageEdits;
 import com.termux.app.launcher.model.AppRef;
 
 import java.util.ArrayList;
@@ -51,15 +50,12 @@ public final class HomeItemUndo {
         }
     }
 
-    /** What the Undo did: the item as stored again, and how the pages were renumbered, if they were. */
+    /** What the Undo did: the item as stored again. */
     public static final class Result {
         @NonNull public final LauncherWidgetRecord record;
-        /** Each old page's new number when a page was put back in the middle, else null. */
-        @Nullable public final int[] renumbered;
 
-        Result(@NonNull LauncherWidgetRecord record, @Nullable int[] renumbered) {
+        Result(@NonNull LauncherWidgetRecord record) {
             this.record = record;
-            this.renumbered = renumbered;
         }
     }
 
@@ -118,7 +114,7 @@ public final class HomeItemUndo {
         LauncherWidgetRecord record = rekeyed(was, id).withCell(plan.cell);
         if (!plan.insertsPage && !plan.appendsPage) {
             return repository.putRecord(record.withPage(plan.page)) ? new Result(record.withPage(
-                plan.page), null) : null;
+                plan.page)) : null;
         }
         // The page is added after the last, with the item on it, then moved to where it stood: an
         // empty page could be trimmed between the two writes, a page with the item on it cannot.
@@ -129,10 +125,9 @@ public final class HomeItemUndo {
             return null;
         }
         if (!plan.insertsPage || plan.page >= fresh || !repository.movePage(fresh, plan.page)) {
-            return new Result(record.withPage(fresh), null);
+            return new Result(record.withPage(fresh));
         }
-        return new Result(record.withPage(plan.page),
-            HomePageEdits.moveMapping(fresh + 1, fresh, plan.page));
+        return new Result(record.withPage(plan.page));
     }
 
     /** {@code record} under {@code id}: itself when the key is its own. */

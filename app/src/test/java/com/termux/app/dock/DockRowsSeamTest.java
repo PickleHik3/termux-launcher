@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.dock.DockGeometry.Half;
-import com.termux.app.dock.DockGeometry.Side;
+import com.termux.app.wall.PageRef;
 import com.termux.app.dock.DockGeometry.Snapshot;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceChromePolicy;
@@ -141,7 +141,7 @@ public class DockRowsSeamTest {
             .pinnedSlotCount(7);
     }
 
-    private static DockLayout rest(Snapshot.Builder device, Side side) {
+    private static DockLayout rest(Snapshot.Builder device, PageRef side) {
         return DockGeometry.compute(device.build().restOf(side));
     }
 
@@ -153,7 +153,7 @@ public class DockRowsSeamTest {
             half(WINDOW, DockStyle.GLASS_TRAY));
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
-        DockLayout dock = rest(device, Side.HOME);
+        DockLayout dock = rest(device, PageRef.HOME);
         rows.applyLayout(dock);
         rows.apply(chrome(HOME, false), false, false);
 
@@ -179,7 +179,7 @@ public class DockRowsSeamTest {
             half(WINDOW, DockStyle.GLASS_TRAY));
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
-        rows.applyLayout(rest(device, Side.WORKSPACE));
+        rows.applyLayout(rest(device, PageRef.TERMINAL));
         rows.apply(chrome(WINDOW, false), false, false);
 
         assertTrue(views.stack);
@@ -296,7 +296,7 @@ public class DockRowsSeamTest {
         PlaceLayout towardHome = SeamTravel.withDockOf(WINDOW, HOME);
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
-        rows.applyLayout(DockGeometry.compute(device.rows(Side.HOME).arrangement(towardHome)
+        rows.applyLayout(DockGeometry.compute(device.rows(PageRef.HOME).arrangement(towardHome)
             .build()));
         rows.apply(chrome(towardHome, false), false, false);
         assertTrue("Home's pinned apps", views.row(Element.APPS));
@@ -305,7 +305,7 @@ public class DockRowsSeamTest {
 
         // And back, from Home toward a window: the window's rows.
         PlaceLayout towardWindow = SeamTravel.withDockOf(HOME, WINDOW);
-        rows.applyLayout(DockGeometry.compute(device.rows(Side.WORKSPACE)
+        rows.applyLayout(DockGeometry.compute(device.rows(PageRef.TERMINAL)
             .arrangement(towardWindow).build()));
         rows.apply(chrome(towardWindow, false), false, false);
         assertTrue(views.row(Element.APPS));
@@ -324,7 +324,7 @@ public class DockRowsSeamTest {
             DockRows rows = new DockRows(views);
 
             // Resting in a window: the window's design.
-            rows.applyLayout(rest(device, Side.WORKSPACE));
+            rows.applyLayout(rest(device, PageRef.TERMINAL));
             rows.apply(chrome(WINDOW, false), false, false);
             assertSame(DockSurfaceSpec.forStyle(windowDesign), rows.surface());
 
@@ -332,7 +332,7 @@ public class DockRowsSeamTest {
             // dock is dressed in Home's design from that frame, though nothing told the rows
             // which half is committed.
             PlaceLayout towardHome = SeamTravel.withDockOf(WINDOW, HOME);
-            rows.applyLayout(DockGeometry.compute(device.rows(Side.HOME)
+            rows.applyLayout(DockGeometry.compute(device.rows(PageRef.HOME)
                 .arrangement(towardHome).build()));
             rows.apply(chrome(towardHome, false), false, false);
             assertSame("home beads " + homeBeads, DockSurfaceSpec.forStyle(homeDesign),
@@ -353,18 +353,18 @@ public class DockRowsSeamTest {
 
             // At rest in a window the committed dress is worn, so a design just picked in the
             // Layout editor is worn before the pass that lays it out.
-            rows.applyLayout(rest(device, Side.WORKSPACE));
+            rows.applyLayout(rest(device, PageRef.TERMINAL));
             assertSame(window, rows.wornSurface(window, false));
             assertSame("a pick not laid out yet", home, rows.wornSurface(home, false));
 
             // A slide toward Home stands Home's rows while the window is committed: the
             // window's design, which the activity hands as the committed one, is never worn.
-            rows.applyLayout(DockGeometry.compute(device.rows(Side.HOME)
+            rows.applyLayout(DockGeometry.compute(device.rows(PageRef.HOME)
                 .arrangement(SeamTravel.withDockOf(WINDOW, HOME)).build()));
             assertSame("home beads " + homeBeads, home, rows.wornSurface(window, true));
 
             // And back from Home: the window's rows wear the window's design.
-            rows.applyLayout(DockGeometry.compute(device.rows(Side.WORKSPACE)
+            rows.applyLayout(DockGeometry.compute(device.rows(PageRef.TERMINAL)
                 .arrangement(SeamTravel.withDockOf(HOME, WINDOW)).build()));
             assertSame(window, rows.wornSurface(home, true));
         }
@@ -384,7 +384,7 @@ public class DockRowsSeamTest {
         Subscriber subscriber = new Subscriber(views);
         rows.addListener(subscriber);
 
-        rows.applyLayout(rest(device, Side.WORKSPACE));
+        rows.applyLayout(rest(device, PageRef.TERMINAL));
         assertEquals("the first design is a change", 1, subscriber.calls);
         rows.apply(chrome(WINDOW, false), false, false);
         assertEquals("the first rows are a change", 2, subscriber.calls);
@@ -392,7 +392,7 @@ public class DockRowsSeamTest {
         // The same answer again, as every chrome pass at rest hands it: no announcement, though
         // the views are written again (other code shares some of them, e.g. the letters' slot).
         int writes = views.log.size();
-        rows.applyLayout(rest(device, Side.WORKSPACE));
+        rows.applyLayout(rest(device, PageRef.TERMINAL));
         rows.apply(chrome(WINDOW, false), false, false);
         rows.apply(chrome(WINDOW, false), false, false);
         assertEquals(2, subscriber.calls);
@@ -415,9 +415,9 @@ public class DockRowsSeamTest {
         assertTrue(views.underKeyboard);
 
         // The design the rows wear changes with the half they show: one announcement.
-        rows.applyLayout(rest(device, Side.HOME));
+        rows.applyLayout(rest(device, PageRef.HOME));
         assertEquals(5, subscriber.calls);
-        rows.applyLayout(rest(device, Side.HOME));
+        rows.applyLayout(rest(device, PageRef.HOME));
         assertEquals(5, subscriber.calls);
 
         rows.removeListener(subscriber);
@@ -446,7 +446,7 @@ public class DockRowsSeamTest {
             half(WINDOW, DockStyle.GLASS_TRAY));
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
-        DockLayout window = rest(device, Side.WORKSPACE);
+        DockLayout window = rest(device, PageRef.TERMINAL);
         assertTrue("the first layout moves the rows", rows.applyLayout(window));
         assertEquals(window.appsBarHeightPx, (int) views.heights.get(Element.APPS));
         assertEquals(window.azRowHeightPx, (int) views.heights.get(Element.AZ));

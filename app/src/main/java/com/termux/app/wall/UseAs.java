@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.surfaces.EditorCard;
-import com.termux.app.surfaces.EditorRows;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -108,15 +107,6 @@ public enum UseAs {
     /** Whether {@code card} can be opened: the Home card is gone under Terminal only. */
     public boolean reaches(@Nullable EditorCard card) {
         return card == null || this == HOME || card != EditorCard.HOME;
-    }
-
-    /**
-     * Whether a card shows {@code row}: both Match rows copy from or to Home, so they go under
-     * Terminal only. The Workspace card itself stays.
-     */
-    public boolean shows(@NonNull EditorRows.Row row) {
-        return this == HOME
-            || (row != EditorRows.Row.MATCH_HOME && row != EditorRows.Row.MATCH_WORKSPACE);
     }
 
     /** The card a door opens under this mode: the editor at rest (null) for a card it took away. */

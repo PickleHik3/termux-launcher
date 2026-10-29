@@ -16,21 +16,19 @@ import org.junit.Test;
  */
 public class PageOverviewPolicyTest {
 
-    // A strip of 3 Home pages, then 3 windows with the display at row place 1.
+    // A strip of 3 Home pages, then 3 terminal windows.
     private static final int HOME = 3;
     private static final int ROW = 3;
-    private static final int SLOT = 1;
 
     @Test
-    public void homePagesComeFirstThenTheWindowsWithTheDisplayWhereItsSlotSays() {
+    public void homePagesComeFirstThenTheTerminalWindows() {
         assertEquals(6, PageOverviewPolicy.cardCount(HOME, ROW));
-        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(0, HOME, SLOT));
-        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(2, HOME, SLOT));
-        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(3, HOME, SLOT));
-        assertEquals(Kind.DISPLAY, PageOverviewPolicy.kindAt(4, HOME, SLOT));
-        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(5, HOME, SLOT));
-        assertEquals("no display: every window is a terminal",
-            Kind.TERMINAL, PageOverviewPolicy.kindAt(4, HOME, DisplaySlot.NONE));
+        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(0, HOME));
+        assertEquals(Kind.HOME_PAGE, PageOverviewPolicy.kindAt(2, HOME));
+        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(3, HOME));
+        assertEquals("the row holds terminal windows only (ADR 0015)",
+            Kind.TERMINAL, PageOverviewPolicy.kindAt(4, HOME));
+        assertEquals(Kind.TERMINAL, PageOverviewPolicy.kindAt(5, HOME));
         assertEquals(1, PageOverviewPolicy.rowPlace(4, HOME));
         assertEquals(4, PageOverviewPolicy.positionOfRow(1, HOME));
     }
@@ -166,5 +164,49 @@ public class PageOverviewPolicyTest {
         assertFalse("not a quarter of the span", PageOverviewPolicy.isPinchIn(1000f, 900f, 60f));
         assertFalse("spreading", PageOverviewPolicy.isPinchIn(400f, 500f, 60f));
         assertFalse("no start", PageOverviewPolicy.isPinchIn(0f, 0f, 60f));
+    }
+
+    private static java.util.List<Kind> strip(String shape) {
+        java.util.List<Kind> out = new java.util.ArrayList<>();
+        for (char c : shape.toCharArray()) out.add(c == 'H' ? Kind.HOME_PAGE : Kind.TERMINAL);
+        return out;
+    }
+
+    @Test
+    public void freeOrderEqualsTheOldArithmeticWhenHomeIsFirst() {
+        java.util.List<Kind> s = strip("HHHTTT");
+        assertArrayEquals(new int[] {3, 5}, PageOverviewPolicy.blockBounds(s));
+        assertEquals(PageOverviewPolicy.addPageIndex(1, HOME), PageOverviewPolicy.addPageIndex(1, s));
+        assertEquals(PageOverviewPolicy.addPageIndex(4, HOME),
+            PageOverviewPolicy.addPageIndex(4, s));
+        assertEquals(WallRow.homePage(2), PageOverviewPolicy.wallPosition(2, s));
+        assertEquals(WallRow.window(1), PageOverviewPolicy.wallPosition(4, s));
+        assertEquals(1, PageOverviewPolicy.dropTarget(0, 1, s));
+        assertEquals(PageOverviewPolicy.NONE, PageOverviewPolicy.dropTarget(3, 0, s));
+        assertEquals(5, PageOverviewPolicy.dropTarget(3, 5, s));
+    }
+
+    @Test
+    public void aHomeCardCrossesTheBlockAndSnapsOutOfIt() {
+        java.util.List<Kind> s = strip("HTTTH");
+        assertEquals(4, PageOverviewPolicy.dropTarget(0, 4, s));
+        assertEquals(0, PageOverviewPolicy.dropTarget(4, 0, s));
+        // Home 1 dropped over the middle window: block shifts to 0..2, so before or after it.
+        assertEquals(2 + 1, PageOverviewPolicy.dropTarget(0, 3, s));
+        assertEquals(1, PageOverviewPolicy.dropTarget(4, 1, s));
+        assertEquals(PageOverviewPolicy.NONE, PageOverviewPolicy.dropTarget(1, 0, s));
+    }
+
+    @Test
+    public void theBlockMovesAsOneAndAddGoesAfterIt() {
+        java.util.List<Kind> s = strip("HTTHH");
+        assertEquals(PageOverviewPolicy.NONE, PageOverviewPolicy.blockDropTarget(2, s));
+        assertEquals(0, PageOverviewPolicy.blockDropTarget(0, s));
+        assertEquals(3, PageOverviewPolicy.blockDropTarget(4, s));
+        assertEquals(1, PageOverviewPolicy.pageIndexAt(2, s));
+        assertEquals(2, PageOverviewPolicy.pageIndexAt(3, s));
+        assertEquals(1, PageOverviewPolicy.addPageIndex(0, s));
+        assertEquals(5, PageOverviewPolicy.addPageIndex(1, s));
+        assertEquals(WallRow.homePage(1), PageOverviewPolicy.wallPosition(3, s));
     }
 }
