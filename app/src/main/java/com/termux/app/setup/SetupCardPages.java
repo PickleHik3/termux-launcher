@@ -14,7 +14,8 @@ final class SetupCardPages {
                 return new DisplayCardPage();
             case SetupCards.AI:
                 return new AiCardPage();
-            // Wave 5 adds: SetupCards.GUIDE.
+            case SetupCards.GUIDE:
+                return new GuideCardPage();
             default:
                 return null;
         }
