@@ -22,10 +22,60 @@ public class DisplayCardLogicTest {
     }
 
     @Test
-    public void distroIsHeldBackWhileItAsksQuestions() {
+    public void bothRoutesAreOffered() {
         List<GuiAppsSetup.Route> routes = DisplayCardLogic.offeredRoutes(TourEdition.TERMUX);
-        assertEquals(DisplayCardLogic.DISTRO_RUNNABLE, routes.contains(GuiAppsSetup.Route.DISTRO));
+        assertTrue(routes.contains(GuiAppsSetup.Route.DISTRO));
         assertTrue(routes.contains(GuiAppsSetup.Route.X11_REPO));
+    }
+
+    @Test
+    public void userNamesAreLowercaseWordsNotStartingWithADigit() {
+        assertTrue(DisplayCardLogic.isValidUser("user"));
+        assertTrue(DisplayCardLogic.isValidUser("_a1"));
+        assertFalse(DisplayCardLogic.isValidUser(""));
+        assertFalse(DisplayCardLogic.isValidUser(null));
+        assertFalse(DisplayCardLogic.isValidUser("1abc"));
+        assertFalse(DisplayCardLogic.isValidUser("Alice"));
+        assertFalse(DisplayCardLogic.isValidUser("a-b"));
+        assertFalse(DisplayCardLogic.isValidUser("a b"));
+        assertFalse(DisplayCardLogic.isValidUser("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    }
+
+    @Test
+    public void passwordsNeedFourCharactersOnOneLine() {
+        assertTrue(DisplayCardLogic.isValidPassword("abcd"));
+        assertTrue(DisplayCardLogic.isValidPassword("a'b\"c"));
+        assertFalse(DisplayCardLogic.isValidPassword("abc"));
+        assertFalse(DisplayCardLogic.isValidPassword(null));
+        assertFalse(DisplayCardLogic.isValidPassword("abc\ndef"));
+    }
+
+    @Test
+    public void thePasswordIsHiddenWhereItWouldShow() {
+        assertEquals("login " + DisplayCardLogic.REDACTED + " ok",
+            DisplayCardLogic.redact("login hunter22 ok", "hunter22"));
+        assertEquals("nothing", DisplayCardLogic.redact("nothing", null));
+        assertEquals("nothing", DisplayCardLogic.redact("nothing", ""));
+    }
+
+    @Test
+    public void aDistroRunGetsTheAccountAndAnX11RunDoesNot() {
+        String distro = DisplayCardLogic.command(GuiAppsSetup.Route.DISTRO,
+            GuiAppsSetup.Distro.DEBIAN, TourEdition.TERMUX, "alice", "s3cret");
+        assertTrue(distro.contains("LUSER='alice'"));
+        assertTrue(distro.contains("chpasswd"));
+        assertFalse(distro.contains("read -r"));
+        String x11 = DisplayCardLogic.command(GuiAppsSetup.Route.X11_REPO,
+            GuiAppsSetup.Distro.DEBIAN, TourEdition.TERMUX, "alice", "s3cret");
+        assertFalse(x11.contains("s3cret"));
+    }
+
+    @Test
+    public void theScriptKeepsPackageQuestionsFromStallingTheRun() {
+        String script = DisplayCardLogic.script("pkg install -y foo");
+        assertTrue(script.startsWith("#!/bin/bash\nexport DEBIAN_FRONTEND=noninteractive\n"));
+        assertTrue(script.contains("Dpkg::Options::=--force-confnew"));
+        assertTrue(script.endsWith("pkg install -y foo\n"));
     }
 
     @Test
@@ -38,12 +88,11 @@ public class DisplayCardLogicTest {
     @Test
     public void commandIsTheGuidesCommandWithDefaultStarters() {
         String command = DisplayCardLogic.command(GuiAppsSetup.Route.X11_REPO,
-            GuiAppsSetup.Distro.DEBIAN, TourEdition.TERMUX);
+            GuiAppsSetup.Distro.DEBIAN, TourEdition.TERMUX, null, null);
         assertEquals(GuiAppsSetup.command(GuiAppsSetup.Route.X11_REPO, GuiAppsSetup.Distro.DEBIAN,
             GuiAppsSetup.defaultStarters(), TourEdition.TERMUX), command);
         assertTrue(command.contains("pkg install -y x11-repo"));
-        assertTrue(DisplayCardLogic.script(command).startsWith("#!/bin/bash\npkg install"));
-        assertTrue(DisplayCardLogic.script(command).endsWith("\n"));
+        assertTrue(DisplayCardLogic.script(command).endsWith(command + "\n"));
     }
 
     @Test

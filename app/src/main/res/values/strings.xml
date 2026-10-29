@@ -3625,6 +3625,10 @@
     <string name="setup_display_distro_debian">Debian</string>
     <string name="setup_display_distro_ubuntu">Ubuntu</string>
     <string name="setup_display_distro_arch">Arch</string>
+    <string name="setup_display_username">Username</string>
+    <string name="setup_display_password">Password</string>
+    <string name="setup_display_user_error">Lowercase letters, digits and underscores.</string>
+    <string name="setup_display_password_error">At least 4 characters.</string>
     <string name="setup_display_no_route">This build has no desktop app route.</string>
     <string name="setup_display_install_title">Install</string>
     <string name="setup_display_will_run_x11">Runs: Termux packages.</string>

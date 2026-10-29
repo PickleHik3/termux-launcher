@@ -358,9 +358,31 @@ public final class GuiAppsSetup {
     @NonNull
     public static String command(@NonNull Route route, @NonNull Distro distro,
                                  @NonNull Set<StarterApp> starters, @NonNull TourEdition edition) {
+        return command(route, distro, starters, edition, null, null);
+    }
+
+    /**
+     * The command for a run that cannot answer questions (the setup wizard's headless run). With a
+     * {@code user} the distro route asks nothing: the account name is set from the shell-quoted
+     * {@code user} instead of {@code read -r LUSER}, and the password is set with
+     * {@code chpasswd} from the shell-quoted {@code password} instead of an interactive
+     * {@code passwd}. The password goes into the container as the environment variable
+     * {@code PASS}; nothing here prints it. With a null {@code user} this is the interactive
+     * command of {@link #command(Route, Distro, Set, TourEdition)}. Both are ignored by
+     * {@link Route#X11_REPO}.
+     *
+     * @throws IllegalArgumentException when {@code user} is given without {@code password}
+     */
+    @NonNull
+    public static String command(@NonNull Route route, @NonNull Distro distro,
+                                 @NonNull Set<StarterApp> starters, @NonNull TourEdition edition,
+                                 @Nullable String user, @Nullable String password) {
+        if (user != null && password == null) {
+            throw new IllegalArgumentException("a user needs a password");
+        }
         return route == Route.X11_REPO
             ? x11Command(starters, edition) + " && " + markerStep(route, distro)
-            : distroCommand(distro, starters);
+            : distroCommand(distro, starters, user, password);
     }
 
     /** Where the command's last step records that it finished (Termux side, outside the container). */
@@ -451,7 +473,9 @@ public final class GuiAppsSetup {
      */
     @NonNull
     private static String distroCommand(@NonNull Distro distro,
-                                        @NonNull Set<StarterApp> starters) {
+                                        @NonNull Set<StarterApp> starters,
+                                        @Nullable String user, @Nullable String password) {
+        boolean unattended = user != null;
         StringBuilder out = new StringBuilder();
         out.append("( set -e\n");
         out.append("command -v proot-distro >/dev/null 2>&1 || pkg install -y proot-distro\n");
@@ -471,17 +495,24 @@ public final class GuiAppsSetup {
             .append("/rootfs\" ] || ").append(installStep(distro)).append('\n');
         // The name is asked for out here, not inside the container: the container is entered once,
         // and a name that was refused would mean entering it again.
-        out.append("LUSER=\n");
-        out.append("while [ -z \"$LUSER\" ]; do\n");
-        out.append("printf 'Choose a username for Linux: '\n");
-        out.append("read -r LUSER\n");
-        out.append("LUSER=$(printf '%s' \"$LUSER\" | tr 'A-Z' 'a-z')\n");
-        out.append("case \"$LUSER\" in ''|*[!a-z0-9_]*)"
-            + " printf 'Use lowercase letters, digits and underscores.\\n'; LUSER= ;; esac\n");
-        out.append("done\n");
+        if (unattended) {
+            // A run with nobody to answer: the name and the password are literals, quoted for the shell.
+            out.append("LUSER=").append(singleQuote(user)).append('\n');
+            out.append("PASS=").append(singleQuote(password)).append('\n');
+        } else {
+            out.append("LUSER=\n");
+            out.append("while [ -z \"$LUSER\" ]; do\n");
+            out.append("printf 'Choose a username for Linux: '\n");
+            out.append("read -r LUSER\n");
+            out.append("LUSER=$(printf '%s' \"$LUSER\" | tr 'A-Z' 'a-z')\n");
+            out.append("case \"$LUSER\" in ''|*[!a-z0-9_]*)"
+                + " printf 'Use lowercase letters, digits and underscores.\\n'; LUSER= ;; esac\n");
+            out.append("done\n");
+        }
         out.append("proot-distro login ").append(distro.alias)
-            .append(" -e LUSER=\"$LUSER\" -- /bin/sh -c ")
-            .append(singleQuote(insideScript(distro, starters))).append('\n');
+            .append(" -e LUSER=\"$LUSER\"").append(unattended ? " -e PASS=\"$PASS\"" : "")
+            .append(" -- /bin/sh -c ")
+            .append(singleQuote(insideScript(distro, starters, unattended))).append('\n');
         // Written after the login returns, so the file only ever names an account that exists.
         out.append("printf '%s\\n' \"$LUSER\" > \"").append(recordPath(distro)).append("\"\n");
         out.append(markerStep(Route.DISTRO, distro)).append('\n');
@@ -499,13 +530,21 @@ public final class GuiAppsSetup {
      */
     @NonNull
     static String insideScript(@NonNull Distro distro, @NonNull Set<StarterApp> starters) {
+        return insideScript(distro, starters, false);
+    }
+
+    /** {@code unattended}: the password comes from {@code $PASS} through chpasswd, no question asked. */
+    @NonNull
+    static String insideScript(@NonNull Distro distro, @NonNull Set<StarterApp> starters,
+                               boolean unattended) {
         StringBuilder out = new StringBuilder();
         // Its own stop-at-the-first-failure, so a container that would not take the account never
         // reaches the package install and never gets its name written down outside.
         out.append("set -e\n");
         out.append("id \"$LUSER\" >/dev/null 2>&1"
             + " || useradd -m -s \"$(command -v bash || command -v sh)\" \"$LUSER\"\n");
-        out.append("passwd \"$LUSER\"\n");
+        out.append(unattended ? "printf '%s:%s\\n' \"$LUSER\" \"$PASS\" | chpasswd\n"
+            : "passwd \"$LUSER\"\n");
         out.append(distro.packageManager.refresh()).append('\n');
         List<String> packages = new ArrayList<>();
         packages.addAll(Arrays.asList(distro.fontPackages.split(" ")));

@@ -79,6 +79,8 @@ final class SetupShellRun {
     @Nullable private TerminalSession session;
     @NonNull private State state = State.IDLE;
     private int exitStatus = -1;
+    /** The password a run was given, kept in memory only so it can be hidden from the transcript. */
+    @Nullable private String secret;
     @Nullable private Listener listener;
     private boolean notifyPending;
 
@@ -116,7 +118,7 @@ final class SetupShellRun {
 
     /** Starts the script in a session of its own; false when a run is going or it would not start. */
     @MainThread
-    boolean start(@NonNull Launch launch) {
+    boolean start(@NonNull Launch launch, @Nullable String secret) {
         if (isActive()) return false;
         release();
         TerminalSession created = new TerminalSession(launch.executable,
@@ -127,12 +129,14 @@ final class SetupShellRun {
         session = created;
         state = State.RUNNING;
         exitStatus = -1;
+        this.secret = secret;
         try {
             created.updateSize(START_COLUMNS, START_ROWS, START_CELL_WIDTH, START_CELL_HEIGHT);
         } catch (RuntimeException e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "The setup could not be started", e);
             session = null;
             state = State.FAILED;
+            deleteScript();
             changed();
             return false;
         }
@@ -147,6 +151,8 @@ final class SetupShellRun {
         release();
         state = State.IDLE;
         exitStatus = -1;
+        secret = null;
+        deleteScript();
         changed();
     }
 
@@ -167,7 +173,13 @@ final class SetupShellRun {
         TerminalEmulator emulator = s == null ? null : s.getEmulator();
         if (emulator == null) return "";
         String text = emulator.getScreen().getTranscriptText();
-        return text == null ? "" : text;
+        return text == null ? "" : DisplayCardLogic.redact(text, secret);
+    }
+
+    /** The script may hold the account password; it goes when the run is over. */
+    private static void deleteScript() {
+        //noinspection ResultOfMethodCallIgnored
+        new File(SCRIPT_PATH).delete();
     }
 
     private void release() {
@@ -198,6 +210,7 @@ final class SetupShellRun {
             handler.removeCallbacksAndMessages(null);
             notifyPending = false;
             exitStatus = finished.getExitStatus();
+            deleteScript();
             state = exitStatus == 0 ? State.FINISHED : State.FAILED;
             SetupShellRun.this.changed();
         }

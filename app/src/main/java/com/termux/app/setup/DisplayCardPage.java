@@ -7,6 +7,9 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -20,6 +23,8 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.GraphicsAccelerationFragment;
@@ -52,6 +57,7 @@ final class DisplayCardPage implements SetupCardPage {
 
     static final String PREF_ROUTE = "setup_display_route";
     static final String PREF_DISTRO = "setup_display_distro";
+    static final String PREF_USER = "setup_display_user";
 
     private static final String LOG_TAG = "DisplayCardPage";
     /** Where the benchmark script reads the profile table; the same file the Settings page writes. */
@@ -77,6 +83,10 @@ final class DisplayCardPage implements SetupCardPage {
     private int mSub;
     @Nullable private GuiAppsSetup.Route mRoute;
     private GuiAppsSetup.Distro mDistro = GuiAppsSetup.Distro.DEBIAN;
+    private String mUser = DisplayCardLogic.DEFAULT_USER;
+    /** Typed into the page and handed to the run; never stored. */
+    private String mPassword = "";
+    @Nullable private MaterialButton mContinue;
     private boolean mLogShown;
     private boolean mStarting;
     private boolean mPrepareFailed;
@@ -113,6 +123,9 @@ final class DisplayCardPage implements SetupCardPage {
         mRoute = DisplayCardLogic.resolveRoute(prefs.getString(PREF_ROUTE, null),
             DisplayCardLogic.offeredRoutes(edition));
         mDistro = GuiAppsSetup.Distro.of(prefs.getString(PREF_DISTRO, null));
+        String storedUser = prefs.getString(PREF_USER, null);
+        mUser = DisplayCardLogic.isValidUser(storedUser) ? storedUser : DisplayCardLogic.DEFAULT_USER;
+        mPassword = "";
         mSub = Math.min(card.completed, 2);
         if (SetupShellRun.get().isActive()) mSub = 1;
         if (X11GpuBenchmarkRun.get(context).isActive()) mSub = 2;
@@ -329,9 +342,64 @@ final class DisplayCardPage implements SetupCardPage {
                         mRoute = route;
                         render();
                     });
-            if (distro && route == mRoute) addDistroChips();
+            if (distro && route == mRoute) {
+                addDistroChips();
+                addAccountFields();
+            }
         }
-        footer(button(R.string.setup_cards_continue, true, this::continueFromWhere));
+        MaterialButton next = button(R.string.setup_cards_continue, true, this::continueFromWhere);
+        mContinue = next;
+        updateContinue();
+        footer(next);
+    }
+
+    /** Continue needs a route and, for a distro, a valid account. */
+    private void updateContinue() {
+        MaterialButton next = mContinue;
+        if (next == null) return;
+        next.setEnabled(mRoute != null && (mRoute != GuiAppsSetup.Route.DISTRO
+            || (DisplayCardLogic.isValidUser(mUser) && DisplayCardLogic.isValidPassword(mPassword))));
+    }
+
+    /** The Linux account the run sets up: a name and a password (kept in this page only). */
+    private void addAccountFields() {
+        mRoot.addView(field(R.string.setup_display_username, mUser, false,
+            R.string.setup_display_user_error, DisplayCardLogic::isValidUser, text -> mUser = text),
+            SetupUi.matchWrap(dp(12)));
+        mRoot.addView(field(R.string.setup_display_password, mPassword, true,
+            R.string.setup_display_password_error, DisplayCardLogic::isValidPassword,
+            text -> mPassword = text), SetupUi.matchWrap(dp(8)));
+    }
+
+    @NonNull
+    private View field(int hintRes, @NonNull String value, boolean password, int errorRes,
+                       @NonNull java.util.function.Predicate<String> valid,
+                       @NonNull java.util.function.Consumer<String> store) {
+        TextInputLayout layout = new TextInputLayout(mContext);
+        layout.setHint(mContext.getString(hintRes));
+        if (password) layout.setEndIconMode(TextInputLayout.END_ICON_PASSWORD_TOGGLE);
+        TextInputEditText edit = new TextInputEditText(layout.getContext());
+        edit.setSingleLine(true);
+        edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            | (password ? InputType.TYPE_TEXT_VARIATION_PASSWORD
+                : InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD));
+        edit.setText(value);
+        edit.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override public void afterTextChanged(Editable s) {
+                String text = s.toString();
+                store.accept(text);
+                boolean ok = valid.test(text);
+                layout.setError(ok || text.isEmpty() ? null : mContext.getString(errorRes));
+                updateContinue();
+            }
+        });
+        layout.addView(edit, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        return layout;
     }
 
     private void addChoice(int titleRes, int lineRes, boolean chosen, @NonNull Runnable action) {
@@ -381,10 +449,14 @@ final class DisplayCardPage implements SetupCardPage {
 
     private void continueFromWhere() {
         if (mRoute == null) return;
-        GuiAppsSetupGuide.preferences(mContext).edit()
+        if (mRoute == GuiAppsSetup.Route.DISTRO && !(DisplayCardLogic.isValidUser(mUser)
+            && DisplayCardLogic.isValidPassword(mPassword))) return;
+        SharedPreferences.Editor edit = GuiAppsSetupGuide.preferences(mContext).edit()
             .putString(PREF_ROUTE, mRoute.key)
-            .putString(PREF_DISTRO, mDistro.key)
-            .apply();
+            .putString(PREF_DISTRO, mDistro.key);
+        // The name is kept for next time; the password never is.
+        if (mRoute == GuiAppsSetup.Route.DISTRO) edit.putString(PREF_USER, mUser);
+        edit.apply();
         mHost.completeStep(mCardId, 0);
         mSub = 1;
         render();
@@ -475,8 +547,18 @@ final class DisplayCardPage implements SetupCardPage {
     private void startSetup() {
         GuiAppsSetup.Route route = mRoute;
         if (route == null || mStarting) return;
+        boolean distro = route == GuiAppsSetup.Route.DISTRO;
+        if (distro && !(DisplayCardLogic.isValidUser(mUser)
+            && DisplayCardLogic.isValidPassword(mPassword))) {
+            // The password lives in the page only; a page that was left has lost it, so ask again.
+            mSub = 0;
+            render();
+            return;
+        }
         Context app = mContext.getApplicationContext();
-        String command = DisplayCardLogic.command(route, mDistro, edition());
+        String password = distro ? mPassword : null;
+        String command = DisplayCardLogic.command(route, mDistro, edition(),
+            distro ? mUser : null, password);
         mStarting = true;
         mPrepareFailed = false;
         SetupShellRun.get().dismiss();
@@ -491,7 +573,7 @@ final class DisplayCardPage implements SetupCardPage {
             SetupShellRun.Launch prepared = launch;
             mHandler.post(() -> {
                 mStarting = false;
-                boolean started = prepared != null && SetupShellRun.get().start(prepared);
+                boolean started = prepared != null && SetupShellRun.get().start(prepared, password);
                 mPrepareFailed = !started && SetupShellRun.get().state() != SetupShellRun.State.FAILED;
                 if (mAlive) render();
             });

@@ -20,11 +20,43 @@ final class DisplayCardLogic {
     static final int LOG_LINES = 200;
 
     /**
-     * Whether the wizard can run the distro route itself. It cannot yet: that command asks for a
-     * username and a password ({@code read -r LUSER}, {@code passwd}), and the run is a headless
-     * session with a read-only log, so it would wait for an answer nobody can type.
+     * Whether the wizard can run the distro route itself. It can because the page asks for the
+     * username and password up front and the command takes them as literals (no
+     * {@code read}, no interactive {@code passwd}); the run is headless and read-only.
      */
-    static final boolean DISTRO_RUNNABLE = false;
+    static final boolean DISTRO_RUNNABLE = true;
+
+    static final String DEFAULT_USER = "user";
+    static final int USER_MAX_CHARS = 32;
+    static final int PASSWORD_MIN_CHARS = 4;
+
+    /** Lowercase letters, digits and underscores, not starting with a digit (useradd refuses that). */
+    static boolean isValidUser(@Nullable String user) {
+        if (user == null || user.isEmpty() || user.length() > USER_MAX_CHARS) return false;
+        for (int i = 0; i < user.length(); i++) {
+            char c = user.charAt(i);
+            boolean letter = c >= 'a' && c <= 'z';
+            boolean digit = c >= '0' && c <= '9';
+            if (!(letter || c == '_' || (digit && i > 0))) return false;
+        }
+        return true;
+    }
+
+    /** At least {@link #PASSWORD_MIN_CHARS} characters and one line (chpasswd reads lines). */
+    static boolean isValidPassword(@Nullable String password) {
+        return password != null && password.length() >= PASSWORD_MIN_CHARS
+            && password.indexOf('\n') < 0 && password.indexOf('\r') < 0;
+    }
+
+    /** What stands in for the password where it would show. */
+    static final String REDACTED = "••••";
+
+    /** {@code text} with every occurrence of {@code secret} replaced; unchanged when there is none. */
+    @NonNull
+    static String redact(@NonNull String text, @Nullable String secret) {
+        if (secret == null || secret.isEmpty()) return text;
+        return text.replace(secret, REDACTED);
+    }
 
     /** The routes the card offers {@code edition}: the ones it has and the wizard can run. */
     @NonNull
@@ -48,14 +80,32 @@ final class DisplayCardLogic {
     /** The command a run executes: the one the guide would copy, with the default starter apps. */
     @NonNull
     static String command(@NonNull GuiAppsSetup.Route route, @NonNull GuiAppsSetup.Distro distro,
-                          @NonNull TourEdition edition) {
-        return GuiAppsSetup.command(route, distro, GuiAppsSetup.defaultStarters(), edition);
+                          @NonNull TourEdition edition, @Nullable String user,
+                          @Nullable String password) {
+        return GuiAppsSetup.command(route, distro, GuiAppsSetup.defaultStarters(), edition,
+            route == GuiAppsSetup.Route.DISTRO ? user : null,
+            route == GuiAppsSetup.Route.DISTRO ? password : null);
     }
 
-    /** The script file's text: a bash shebang (resolved to the prefix's bash) and the command. */
+    /**
+     * What the script puts before the command so no package question can stall the run: the
+     * non-interactive frontend, and {@code pkg install} that keeps the new version of a config file.
+     */
+    static final String SCRIPT_PRELUDE =
+        "export DEBIAN_FRONTEND=noninteractive\n"
+            + "pkg() {\n"
+            + "  if [ \"$1\" = install ]; then\n"
+            + "    shift\n"
+            + "    command pkg install -y -o Dpkg::Options::=--force-confnew \"$@\"\n"
+            + "  else\n"
+            + "    command pkg \"$@\"\n"
+            + "  fi\n"
+            + "}\n";
+
+    /** The script file's text: a bash shebang (resolved to the prefix's bash), the prelude, the command. */
     @NonNull
     static String script(@NonNull String command) {
-        return "#!/bin/bash\n" + command + "\n";
+        return "#!/bin/bash\n" + SCRIPT_PRELUDE + command + "\n";
     }
 
     /** A setup run counts as done when it exited 0 and its last step left the marker file. */
