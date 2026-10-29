@@ -857,37 +857,60 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             useAs().showsHomePage(), mHost.isPageOverviewOpen());
     }
 
-    /** The page overview opened or closed: the card's Edit pages chip shows or hides with it. */
+    /**
+     * The page overview opened or closed: the card's Edit pages chip shows or hides with it, and
+     * the sheet folds to its header while the overview is up (its cards, Home marker and add chips
+     * stand where the rows would) and rises back to where it stood when the overview goes.
+     */
     public void onPageOverviewChanged() {
         if (mBar != null)
             mBar.setUnderOverview(mHost.isPageOverviewOpen());
         restateCard();
+        EditorCardSheet sheet = mSheet;
+        if (sheet == null || !sheetUp())
+            return;
+        if (mHost.isPageOverviewOpen()) {
+            if (sheet.detent() != EditorCardSheet.DETENT_PEEK) {
+                mDetentBeforeOverview = sheet.detent();
+                collapseCard(false);
+            }
+        } else if (mDetentBeforeOverview >= 0) {
+            int back = mDetentBeforeOverview;
+            mDetentBeforeOverview = -1;
+            if (sheet.detent() == EditorCardSheet.DETENT_PEEK) {
+                sheet.setDetent(back, false);
+                restateBar(false);
+                applyPose(false);
+            }
+        }
     }
 
-    private boolean mFoldedByOverview;
+    /** The sheet's detent before the page overview folded it to peek; -1 when it stood there. */
+    private int mDetentBeforeOverview = -1;
+
+    /** The height the folded sheet takes along the bottom while the page overview is up. */
+    public int overviewCoverPx() {
+        EditorCardSheet sheet = mSheet;
+        if (sheet == null || !sheetUp() || !mHost.isPageOverviewOpen())
+            return 0;
+        return sheet.heightAt(EditorCardSheet.DETENT_PEEK);
+    }
 
     /**
      * The page overview centred a card over the open editor: the editor shows that page. Home and
-     * terminal cards rebind the half (label, preview and the screen's card); a display card keeps
-     * the card and folds the sheet to its header. Nothing is written: looking is not an edit.
+     * terminal cards rebind the half (label, preview and the screen's card) at the sheet's folded
+     * detent; a display card keeps the card. Nothing is written: looking is not an edit.
      */
     public void onOverviewCard(@NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind) {
         EditorCardSheet sheet = mSheet;
         if (!mOpen || sheet == null)
             return;
         OverviewFollow follow = OverviewFollow.of(kind);
-        if (follow == OverviewFollow.FOLD) {
-            if (sheet.isShown() && sheet.detent() != EditorCardSheet.DETENT_PEEK) {
-                mFoldedByOverview = true;
-                collapseCard(false);
-            }
+        if (follow == OverviewFollow.FOLD)
             return;
-        }
         WallHalf half = follow == OverviewFollow.HOME ? WallHalf.HOME : WallHalf.WORKSPACE;
         if (half == WallHalf.HOME && !useAs().showsHomePage())
             return;
-        boolean unfold = mFoldedByOverview;
-        mFoldedByOverview = false;
         if (half != mHalf) {
             mHalf = half;
             LayoutEditorController layout = mHost.layoutEditor();
@@ -898,14 +921,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         if (mCard == null || mCard == EditorCard.HOME || mCard == EditorCard.WORKSPACE
                 || !mCard.standsOn(half)) {
-            int detent = sheet.isShown() && !unfold ? sheet.detent() : EditorCardSheet.DETENT_HALF;
+            int detent = sheet.isShown() ? sheet.detent() : EditorCardSheet.DETENT_PEEK;
             openCard(follow.card, false, detent);
             if (sheet.isShown() && sheet.detent() != detent)
                 sheet.setDetent(detent, false);
         } else
             restateCard();
-        if (unfold && sheet.detent() == EditorCardSheet.DETENT_PEEK)
-            sheet.setDetent(EditorCardSheet.DETENT_HALF, false);
         positionTargets();
     }
 

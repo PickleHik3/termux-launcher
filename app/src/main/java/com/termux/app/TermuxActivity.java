@@ -27387,6 +27387,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean editorOpen() {
                     return mSurfaceEditor.isOpen();
                 }
+                @Override public int coveredBottom() {
+                    return mSurfaceEditor.overviewCoverPx();
+                }
                 @Override @Nullable public View backdrop() {
                     return findViewById(R.id.wallpaper_backdrop);
                 }

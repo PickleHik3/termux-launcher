@@ -142,6 +142,8 @@ public final class PageOverviewView extends FrameLayout {
         @Nullable default View posedFrame() { return null; }
         /** Whether the surface editor is open: its chrome and sheet then stand beside the page. */
         default boolean editorOpen() { return false; }
+        /** The height of the editor's folded sheet along the bottom, which the chips stand above. */
+        default int coveredBottom() { return 0; }
         /** The launcher's own wallpaper, drawn full-screen behind the cards when it is showing. */
         @Nullable View backdrop();
         /** The display's surface, for its card's picture; null while there is none. */
@@ -1037,8 +1039,7 @@ public final class PageOverviewView extends FrameLayout {
         rootOffset[1] = theirs[1] - mine[1];
         Insets insets = insets();
         pills.setPadding(Math.max(dp(16), insets.left), dp(8), Math.max(dp(16), insets.right),
-            Math.max(dp(16), insets.bottom + dp(12)));
-        fitPills(width);
+            Math.max(dp(16), Math.max(insets.bottom, host.coveredBottom()) + dp(12)));
         gap = dp(16);
         seamGap = dp(28);
         corner = dp(24);
