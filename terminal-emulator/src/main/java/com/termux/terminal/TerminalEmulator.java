@@ -264,7 +264,7 @@ public final class TerminalEmulator {
     private static final int DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT = 1 << 7;
 
     /**
-     * DECSET 1004 - NOT implemented.
+     * DECSET 1004 - send focus events: the view reports focus through {@link #onFocusChanged(boolean)}.
      */
     private static final int DECSET_BIT_SEND_FOCUS_EVENTS = 1 << 8;
 
@@ -1296,6 +1296,16 @@ public final class TerminalEmulator {
      * brings it back is answered as the user's paste rather than as a program reading the
      * clipboard on its own.
      */
+    /**
+     * The view gained or lost keyboard focus (its own, or its window's). A program that asked for
+     * focus events (DECSET 1004) hears {@code CSI I} and {@code CSI O}; nothing is written otherwise.
+     * Touch handling is untouched: this is not a mouse-tracking mode.
+     */
+    public void onFocusChanged(boolean focused) {
+        if (isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS))
+            mSession.write(focused ? "\033[I" : "\033[O");
+    }
+
     public void sendPasteEvent(List<String> mimeTypes) {
         mKittyClipboard.pasteEvent(mimeTypes, System.currentTimeMillis(), mKittyClipboardHandler);
     }
@@ -2053,6 +2063,26 @@ public final class TerminalEmulator {
                             case "TN":
                             case "name":
                                 responseValue = "xterm";
+                                break;
+                            // What this terminal does beyond xterm-256color's terminfo, answered here
+                            // so a program that asks the terminal (neovim, among others) learns it
+                            // without a terminfo entry of our own: OSC 52 (taken, and a `?` read is
+                            // answered, see TerminalSessionClient), 24-bit colour, underline styles
+                            // (SGR 4:n) and underline colour (SGR 58). RGB, Tc and Su are booleans
+                            // and answer with an empty value, as kitty does.
+                            case "Ms":
+                                responseValue = "\033]52;%p1%s;%p2%s\007";
+                                break;
+                            case "RGB":
+                            case "Tc":
+                            case "Su":
+                                responseValue = "";
+                                break;
+                            case "Smulx":
+                                responseValue = "\033[4:%p1%dm";
+                                break;
+                            case "Setulc":
+                                responseValue = "\033[58:2::%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%d%;m";
                                 break;
                             default:
                                 responseValue = KeyHandler.getCodeFromTermcap(trans, isDecsetInternalBitSet(DECSET_BIT_APPLICATION_CURSOR_KEYS), isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD));
@@ -3602,6 +3632,10 @@ public final class TerminalEmulator {
                     continue;
                 int firstArg = mArgs[i + 1];
                 if (firstArg == 2) {
+                    // The colon form may carry an empty colour-space id before the components
+                    // ("58:2::R:G:B", the Setulc string kitty and neovim use): skip that slot.
+                    if (i + 5 <= mArgIndex && (mArgsSubParamsBitSet & (1 << (i + 2))) != 0 && mArgs[i + 2] < 0)
+                        i++;
                     if (i + 4 > mArgIndex) {
                         Logger.logWarn(mClient, LOG_TAG, "Too few CSI" + code + ";2 RGB arguments");
                     } else {

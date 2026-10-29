@@ -11,6 +11,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.RenderEffect;
 import android.graphics.Shader;
@@ -84,6 +85,12 @@ public final class TerminalView extends View {
     public TerminalEmulator mEmulator;
 
     public TerminalRenderer mRenderer;
+
+    /**
+     * The focus last reported to the emulator (DECSET 1004): this view's own focus and its window's
+     * together. Kept so a change in either reports once, and a session switch hands it over.
+     */
+    private boolean mReportedFocus;
 
     /**
      * Whether this pane's cursor trail listener is turned on: the preference and the device's
@@ -825,6 +832,28 @@ public final class TerminalView extends View {
         mEmulator = emulator;
     }
 
+    /** Focus as a program sees it: this view's own focus while its window has focus too. */
+    private void reportFocus() {
+        boolean focused = hasFocus() && hasWindowFocus();
+        if (focused == mReportedFocus)
+            return;
+        mReportedFocus = focused;
+        if (mEmulator != null)
+            mEmulator.onFocusChanged(focused);
+    }
+
+    @Override
+    protected void onFocusChanged(boolean gainFocus, int direction, Rect previouslyFocusedRect) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        reportFocus();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        reportFocus();
+    }
+
     /**
      * Attach a {@link TerminalSession} to this view.
      *
@@ -835,6 +864,11 @@ public final class TerminalView extends View {
             return false;
         mTopRow = 0;
         updateKittyAnimationVisibility();
+        // The session going out of view loses the focus it was told it had; the new one is told
+        // once its emulator is here (updateSize → reportFocus).
+        if (mReportedFocus && mEmulator != null)
+            mEmulator.onFocusChanged(false);
+        mReportedFocus = false;
         mTermSession = session;
         mEmulator = null;
         updateKittyAnimationVisibility();
@@ -3185,6 +3219,8 @@ public final class TerminalView extends View {
                 mEmulator = mTermSession.getEmulator();
                 updateKittyAnimationVisibility();
                 mClient.onEmulatorSet();
+                // A session that just came into a focused view is told so (DECSET 1004).
+                reportFocus();
                 // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
                 if (mTerminalCursorBlinkerRunnable != null)
                     mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
