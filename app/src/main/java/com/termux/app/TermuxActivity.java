@@ -2103,15 +2103,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View contentView = findViewById(android.R.id.content);
             boolean rerunSetup = getIntent().getBooleanExtra(EXTRA_RERUN_SETUP, false);
             boolean showSetupCards = getIntent().getBooleanExtra(EXTRA_SHOW_SETUP_CARDS, false);
+            // The intent the post sees can be gone by then (a relaunch after a crash cleared it).
+            final Intent launchIntent = getIntent();
             contentView.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
                 if (showSetupCards) {
-                    getIntent().removeExtra(EXTRA_SHOW_SETUP_CARDS);
+                    if (launchIntent != null) launchIntent.removeExtra(EXTRA_SHOW_SETUP_CARDS);
                     if (!openSetupWizardIfDue()) setupWizard().openCards();
                     return;
                 }
                 // The setup wizard replaces the tour: it shows instead of it, on any build.
                 if (rerunSetup) {
-                    getIntent().removeExtra(EXTRA_RERUN_SETUP);
+                    if (launchIntent != null) launchIntent.removeExtra(EXTRA_RERUN_SETUP);
                     setupWizard().open(true);
                     return;
                 }
