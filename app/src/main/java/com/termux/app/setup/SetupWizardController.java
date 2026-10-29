@@ -97,9 +97,13 @@ public final class SetupWizardController implements SetupSheetView.Callbacks {
         mUpdater = updater;
         mRoot = root;
         mHost.holdPaneWall(true);
-        mState = new SetupState(mHost.context());
+        mState = new SetupState(mHost.context(), updater);
         mSections.clear();
         mSections.add(new HomeScreenSection());
+        mSections.add(new MultiplexerSection());
+        mSections.add(new DesktopAppsSection());
+        mSections.add(new AiSection());
+        mSections.add(new PowerSection());
         mSections.add(new ReviewSection());
         mIndex = 0;
         mFurthest = 0;

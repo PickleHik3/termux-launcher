@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
+import com.termux.app.AnimationSpeed;
 import com.termux.app.wall.UseAs;
 
 /**
@@ -47,7 +48,53 @@ final class ReviewSection implements SetupSection {
         addRow(context, page, R.string.setup_row_start_in,
             state.startInChanges() ? R.string.setup_value_workspace
                 : R.string.setup_value_unchanged);
+        SetupState.Values v = state.values();
+        addRow(context, page, R.string.setup_row_multiplexer, onOff(context, v.multiplexer));
+        if (v.multiplexer) {
+            addRow(context, page, R.string.setup_row_status_autotiling,
+                pair(onOff(context, v.statusShown), onOff(context, v.autotiling)));
+            addRow(context, page, R.string.setup_row_focus_grows, onOff(context, v.focusGrows));
+        }
+
+        addGroup(context, page, R.string.setup_group_power);
+        addRow(context, page, R.string.setup_row_glass_motion,
+            pair(onOff(context, v.fancierGlass), onOff(context, v.motionLight)));
+        addRow(context, page, R.string.setup_row_parallax_lazy,
+            pair(onOff(context, v.parallax), onOff(context, v.lazy)));
+        addRow(context, page, R.string.setup_row_memory_animation,
+            pair(onOff(context, v.lowMemory), speedLabel(context, v.animationSpeed)));
+
+        addGroup(context, page, R.string.setup_group_cards);
+        addRow(context, page, R.string.setup_row_desktop_apps, context.getString(
+            v.desktopApps ? R.string.setup_value_card : R.string.setup_value_not_now));
+        addRow(context, page, R.string.setup_row_ai, context.getString(
+            v.ai ? R.string.setup_value_card : R.string.setup_value_off));
         return page;
+    }
+
+    @NonNull
+    private static String onOff(@NonNull Context context, boolean on) {
+        return context.getString(on ? R.string.setup_value_on : R.string.setup_value_off);
+    }
+
+    @NonNull
+    private static String pair(@NonNull String first, @NonNull String second) {
+        return first + " / " + second;
+    }
+
+    @NonNull
+    private static String speedLabel(@NonNull Context context, @NonNull String speed) {
+        switch (speed) {
+            case AnimationSpeed.SLOWER: return context.getString(R.string.setup_speed_slower);
+            case AnimationSpeed.FASTER: return context.getString(R.string.setup_speed_faster);
+            case AnimationSpeed.OFF: return context.getString(R.string.setup_speed_off);
+            default: return context.getString(R.string.setup_speed_normal);
+        }
+    }
+
+    private void addRow(@NonNull Context context, @NonNull LinearLayout page,
+                        @StringRes int label, @StringRes int value) {
+        addRow(context, page, label, context.getString(value));
     }
 
     private void addGroup(@NonNull Context context, @NonNull LinearLayout page,
@@ -56,11 +103,11 @@ final class ReviewSection implements SetupSection {
         view.setAllCaps(true);
         view.setLetterSpacing(0.1f);
         view.setText(heading);
-        page.addView(view, SetupUi.matchWrap(SetupUi.dp(context, 18)));
+        page.addView(view, SetupUi.matchWrap(SetupUi.dp(context, 12)));
     }
 
     private void addRow(@NonNull Context context, @NonNull LinearLayout page,
-                        @StringRes int label, @StringRes int value) {
+                        @StringRes int label, @NonNull String value) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -72,6 +119,6 @@ final class ReviewSection implements SetupSection {
         shown.setText(value);
         row.addView(shown, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
-        page.addView(row, SetupUi.matchWrap(SetupUi.dp(context, 10)));
+        page.addView(row, SetupUi.matchWrap(SetupUi.dp(context, 6)));
     }
 }
