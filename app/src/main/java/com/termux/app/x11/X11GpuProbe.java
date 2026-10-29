@@ -283,6 +283,12 @@ public final class X11GpuProbe {
     /** The same phones by {@code ro.board.platform} / {@code ro.hardware}: the MT6768 (Helio G85). */
     static final String[] KNOWN_FREEZE_PLATFORMS = {"mt6768"};
 
+    /** The renderer names of {@link #KNOWN_FREEZE_RENDERERS}, for the setup wizard's device tier. */
+    public static String[] knownFreezeRenderers() { return KNOWN_FREEZE_RENDERERS.clone(); }
+
+    /** The platform names of {@link #KNOWN_FREEZE_PLATFORMS}, for the setup wizard's device tier. */
+    public static String[] knownFreezePlatforms() { return KNOWN_FREEZE_PLATFORMS.clone(); }
+
     /** Whether {@code in} names a GPU on which the virgl profiles are known to freeze the phone. */
     static boolean knownFreeze(@NonNull Inputs in) {
         String renderer = in.glRenderer.toLowerCase(Locale.ROOT);
