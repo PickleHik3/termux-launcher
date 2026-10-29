@@ -83,7 +83,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     private static final int TOP_GAP_DP = 16;
     private static final int GAP_DP = 8;
     private static final float MIN_SCALE = 0.2f;
-    private static final float MINIATURE_SHEET_FRACTION = 0.46f;
+    private static final float MINIATURE_SHEET_FRACTION = 0.53f;
     private static final float REVIEW_SHEET_FRACTION = 0.78f;
 
     @NonNull private final Host mHost;
