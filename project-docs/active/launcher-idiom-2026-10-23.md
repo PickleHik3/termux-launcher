@@ -22,7 +22,7 @@ developer's words: the feature set is wider, so a sheet exposes the controls a m
   joins between rows of a group, a lone row a 100 dp pill, rows 216×52 dp.
 - Surface: Material You shade steps per group (the dynamic palette's first/second/third shades),
   2 dp elevation, no blur plate.
-- Rows, in order: notifications (only when badged) · the app's shortcuts (collapse past 6) ·
+- Rows, in order: notifications (only when badged) · the app's shortcuts (four show; five or more show four, then More shortcuts) ·
   Widgets · App info · Add to home · Pin or Unpin · Change icon (Reset icon beside it once a
   custom icon is set) · Uninstall. The category row goes.
 - Motion: open 200 ms with a slight overshoot, rows fade 83 ms; close 233 ms; emphasized

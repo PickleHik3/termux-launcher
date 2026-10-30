@@ -74,17 +74,22 @@ public class AppMenuPlanTest {
     }
 
     @Test
-    public void sixShortcutsAllShow_sevenCollapseBehindMore() {
+    public void fourShortcutsShow_fiveOrMoreShowFourThenMore() {
         AppMenuPlan.Inputs in = dockApp();
-        in.shortcutCount = 6;
-        assertEquals(Collections.nCopies(6, SHORTCUT), AppMenuPlan.groups(in).get(0));
+        in.shortcutCount = 4;
+        assertEquals(Collections.nCopies(4, SHORTCUT), AppMenuPlan.groups(in).get(0));
+
+        in.shortcutCount = 5;
+        List<AppMenuPlan.Row> five = AppMenuPlan.groups(in).get(0);
+        assertEquals(Collections.nCopies(4, SHORTCUT), five.subList(0, 4));
+        assertEquals(MORE_SHORTCUTS, five.get(4));
 
         in.shortcutCount = 9;
         List<AppMenuPlan.Row> shortcuts = AppMenuPlan.groups(in).get(0);
-        assertEquals(6, shortcuts.size());
-        assertEquals(Collections.nCopies(5, SHORTCUT), shortcuts.subList(0, 5));
-        assertEquals(MORE_SHORTCUTS, shortcuts.get(5));
-        assertEquals(5, AppMenuPlan.visibleShortcutCount(9));
+        assertEquals(5, shortcuts.size());
+        assertEquals(Collections.nCopies(4, SHORTCUT), shortcuts.subList(0, 4));
+        assertEquals(MORE_SHORTCUTS, shortcuts.get(4));
+        assertEquals(4, AppMenuPlan.visibleShortcutCount(9));
         assertEquals(0, AppMenuPlan.visibleShortcutCount(0));
     }
 

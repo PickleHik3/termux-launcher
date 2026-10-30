@@ -26,8 +26,8 @@ the widget editor and the wallpaper page.
    search text and scrolls it back to the top.
 3. ✔ **Back never leaves the launcher.** It closes the topmost open layer first; on a quiet page it
    does nothing.
-4. ✗ **App menu: four shortcuts.** The App menu shows at most four of an app's shortcuts, then
-   More shortcuts (`AppMenuPlan.MAX_SHORTCUT_ROWS` is 6 today, five shortcuts plus More). This
+4. ✔ **App menu: four shortcuts.** The App menu shows at most four of an app's shortcuts, then
+   More shortcuts (`AppMenuPlan.MAX_SHORTCUT_ROWS` is 4). This
    replaces "collapse past 6" in `launcher-idiom-2026-10-23.md` §1.
 5. *audit* **Every editor exits by Done or Back**, and leaving returns you to the page and card you
    came from. The wallpaper page's Done follows it since 418a2d7ef; the others are unchecked.
@@ -67,7 +67,6 @@ One change at a time, each with its own test and pong check:
 
 | Rule | Change |
 |---|---|
-| 4 | App menu cap from five shortcuts to four, then More shortcuts |
 | 5 | Audit Edit pages, the widget editor and the Appearance editor for Done/Back and the return place |
 | 6, 7, 8 | Audit outside tap, widget tap/long press/resize exit, folder dissolve at one app |
 | 10 | Audit the haptic call sites against the three moments |
