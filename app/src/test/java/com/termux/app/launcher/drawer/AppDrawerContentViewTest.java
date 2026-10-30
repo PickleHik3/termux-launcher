@@ -102,6 +102,26 @@ public class AppDrawerContentViewTest {
         layout();
     }
 
+    // ------------------------------------------------------------------ home press reset
+
+    @Test
+    public void aHomePressCloseEmptiesTheFieldAndScrollsToTop() {
+        content.setTextFieldSearch(true);
+        grid.scrollBy(0, 4000);
+        layout();
+        androidx.recyclerview.widget.LinearLayoutManager lm =
+            (androidx.recyclerview.widget.LinearLayoutManager) grid.getLayoutManager();
+        assertTrue(lm.findFirstVisibleItemPosition() > 0);
+
+        search.replaceQuery("app", 3);
+        content.searchInput().mirror("app", 3);
+        content.resetSearchToTop();
+        layout();
+        assertEquals("", content.searchInput().getText().toString());
+        assertFalse(search.hasQuery());
+        assertEquals(0, lm.findFirstVisibleItemPosition());
+    }
+
     // ------------------------------------------------------------------ the claim
 
     @Test
