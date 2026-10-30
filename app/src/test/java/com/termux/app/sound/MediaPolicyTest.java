@@ -92,10 +92,112 @@ public class MediaPolicyTest {
 
     private static FocusPolicy held(int streams, List<String> playing) {
         FocusPolicy focus = new FocusPolicy();
-        assertTrue(focus.onActivity(streams, playing).request);
+        FocusPolicy.Actions first = focus.onActivity(streams, playing);
+        assertTrue(first.request);
+        focus.onRequestResult(true);
+        // Still playing when the grace runs out: the full focus.
+        FocusPolicy.Actions full = focus.onGraceElapsed();
+        assertTrue(full.request);
+        assertSame(FocusPolicy.Kind.FULL, full.kind);
         focus.onRequestResult(true);
         assertSame(FocusPolicy.State.HELD, focus.state());
         return focus;
+    }
+
+    private static FocusPolicy probation(int streams, List<String> playing) {
+        FocusPolicy focus = new FocusPolicy();
+        FocusPolicy.Actions first = focus.onActivity(streams, playing);
+        assertTrue(first.request);
+        assertSame(FocusPolicy.Kind.TRANSIENT_DUCK, first.kind);
+        assertTrue(first.startGrace);
+        focus.onRequestResult(true);
+        assertSame(FocusPolicy.State.PROBATION, focus.state());
+        return focus;
+    }
+
+    @Test public void aShortSoundAsksOnlyForDuckableFocusAndPausesNobody() {
+        FocusPolicy focus = probation(1, NONE);
+
+        FocusPolicy.Actions quiet = focus.onActivity(0, NONE);
+        assertTrue(quiet.abandon);
+        assertTrue(quiet.cancelGrace);
+        assertFalse(quiet.request);
+        assertTrue(quiet.pause.isEmpty());
+        assertTrue(quiet.mute == false && quiet.duck == false);
+        assertSame(FocusPolicy.State.IDLE, focus.state());
+        // A late grace event does nothing.
+        assertTrue(focus.onGraceElapsed().isEmpty());
+    }
+
+    @Test public void aSoundThatOutlivesTheGraceAsksForTheFullFocus() {
+        FocusPolicy focus = probation(1, NONE);
+        assertTrue(focus.onActivity(2, NONE).isEmpty());
+
+        FocusPolicy.Actions grace = focus.onGraceElapsed();
+        assertTrue(grace.request);
+        assertSame(FocusPolicy.Kind.FULL, grace.kind);
+        assertTrue(grace.pause.isEmpty());
+        focus.onRequestResult(true);
+        assertSame(FocusPolicy.State.HELD, focus.state());
+        // Nothing more to ask for a second time.
+        assertTrue(focus.onGraceElapsed().isEmpty());
+    }
+
+    @Test public void aPlayerStartingDuringProbationReachesTheFullFocusAtTheGrace() {
+        FocusPolicy focus = probation(1, NONE);
+        assertTrue(focus.onActivity(0, KEW).isEmpty());
+
+        // The stream is over, the player plays on: still active at 3 s.
+        assertTrue(focus.onGraceElapsed().request);
+    }
+
+    @Test public void silenceDuringProbationGivesTheFocusBackAndStopsTheGrace() {
+        FocusPolicy focus = probation(0, KEW);
+        FocusPolicy.Actions quiet = focus.onActivity(0, NONE);
+        assertTrue(quiet.abandon);
+        assertTrue(quiet.cancelGrace);
+        assertSame(FocusPolicy.State.IDLE, focus.state());
+    }
+
+    @Test public void aLastingLossDuringProbationAbandonsAndWaitsForSomethingNew() {
+        FocusPolicy focus = probation(1, KEW);
+
+        FocusPolicy.Actions loss = focus.onFocusChange(FocusPolicy.Change.LOSS);
+        assertEquals(KEW, loss.pause);
+        assertTrue(loss.mute);
+        assertTrue(loss.abandon);
+        assertTrue(loss.cancelGrace);
+        assertSame(FocusPolicy.State.LOST, focus.state());
+        assertTrue(focus.onGraceElapsed().isEmpty());
+    }
+
+    @Test public void aShortLossDuringProbationDefersTheFullFocusToTheNextGain() {
+        FocusPolicy focus = probation(0, KEW);
+
+        FocusPolicy.Actions loss = focus.onFocusChange(FocusPolicy.Change.LOSS_TRANSIENT);
+        assertEquals(KEW, loss.pause);
+        assertSame(FocusPolicy.State.PAUSED_SHORT, focus.state());
+        assertTrue(focus.onGraceElapsed().isEmpty());
+
+        FocusPolicy.Actions gain = focus.onFocusChange(FocusPolicy.Change.GAIN);
+        assertEquals(KEW, gain.play);
+        assertTrue(gain.startGrace);
+        assertSame(FocusPolicy.State.PROBATION, focus.state());
+    }
+
+    @Test public void aDuckedProbationStillReachesTheFullFocus() {
+        FocusPolicy focus = probation(1, NONE);
+        assertTrue(focus.onFocusChange(FocusPolicy.Change.LOSS_TRANSIENT_CAN_DUCK).duck);
+        assertSame(FocusPolicy.State.DUCKED, focus.state());
+        assertTrue(focus.onGraceElapsed().request);
+    }
+
+    @Test public void aRefusedFullRequestKeepsTheDuckableFocusAndTriesAgainAfterAnotherGrace() {
+        FocusPolicy focus = probation(1, NONE);
+        assertTrue(focus.onGraceElapsed().request);
+        assertTrue(focus.onRequestResult(false).startGrace);
+        assertSame(FocusPolicy.State.PROBATION, focus.state());
+        assertTrue(focus.onGraceElapsed().request);
     }
 
     @Test public void focusIsAskedForWhileAnythingPlaysAndGivenBackAfter() {
