@@ -1,10 +1,12 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-29
 amends: 0015 (the wall slot and its window of neighbours; W3 kept, W4 lifted; the empty Terminal page is always a stop), 0012 (a crossing may land on a still)
 ---
 
 # The wall lays out one cell per page, with stills
+
+Implemented in #183 to #187. Emulator pass of the sweep's repro and of the extra-keys row: https://amal-build.taild9c5dc.ts.net/reports/wall-cells-2026-10-30/ . The pong checks are in `project-docs/device-checks.md`.
 
 ADR 0015 made the wall one ordered list of pages, but the layout kept the shape it had with two
 halves: one view per page kind (`PaneWallLayout`'s `EnumMap`), and a *window* of at most one page

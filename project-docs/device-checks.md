@@ -21,6 +21,26 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-30 · ADR 0016 (#183 to #187, feat/wall-cells) · on pong, with Home, a Terminal window and
+  a Display page in the wall: reach the Display page by its key, then press Home: the wall lands on
+  Home; press the Terminal key; swipe left on Home: the Terminal page slides in (not the Display
+  page); from the Display page press the Android home button: Home shows; fling right on the
+  Terminal page's seam to Home: it slides and lands, no rubber-band against a page that exists ·
+  passes when none of those is refused or skips a page · emulator pass of the sweep's repro:
+  https://amal-build.taild9c5dc.ts.net/reports/wall-cells-2026-10-30/ · pong, debug arm64 build.
+- 2026-10-30 · ADR 0016 (#185, #187) · on pong: with two Home runs, go from one to the other by
+  key and by swipe; with two adjacent Display pages, swipe between them · passes when the page that
+  is leaving shows its last picture (a still) while it slides, the arriving page turns live when
+  it lands, and the still wears the same ink as the chrome · emulator pass at the report above.
+- 2026-10-30 · ADR 0016 (#186) · on pong: close every Terminal window, then reach the empty Terminal
+  page by swipe from Home and by its key, and from the other side: the page is a stop, shows its
+  card, and the shell starts on landing, with no over-swipe needed · passes when both sides start
+  one shell and the card gives way to the shell · emulator verification of #186 still running, no
+  emulator pass claimed.
+- 2026-10-30 · ADR 0016 (#184) · on pong, on each page kind (Home, Terminal, Display, the empty
+  Terminal page): the extra-keys row shows the go-to keys for the page kinds the wall has, and keys
+  that cannot act on this page go faint · passes when no key is missing for a kind the wall has ·
+  emulator pass at the report above.
 - 2026-10-29 · a11264eec (LorieView lastClipboardTimestamp starts at 0) · on pong: copy a
   URL in the terminal (terminal-browser, or any selection + the keyboard's copy key) BEFORE the
   display is started, then start Firefox on the display, tap its address bar and use the
