@@ -749,7 +749,7 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** The cells, in order. */
     @NonNull
-    public List<Cell> cells() {
+    List<Cell> cells() {
         return mCells;
     }
 
@@ -763,7 +763,7 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /** The index of page {@code pageId}'s cell; -1 when the wall has no such page. */
-    public int indexOfCell(int pageId) {
+    int indexOfCell(int pageId) {
         List<Cell> cells = mCells;
         for (int i = 0; i < cells.size(); i++) if (cells.get(i).pageId == pageId) return i;
         return -1;
@@ -771,13 +771,13 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** The kind of page {@code pageId}; null when the wall has no such page. */
     @Nullable
-    public PaneWallPage kindOf(int pageId) {
+    PaneWallPage kindOf(int pageId) {
         int at = indexOfCell(pageId);
         return at < 0 ? null : mCells.get(at).kind;
     }
 
     /** The page {@code steps} cells from the current one; {@link #NO_PAGE} past either end. */
-    public int neighbourId(int steps) {
+    int neighbourId(int steps) {
         int at = indexOfCell(mCurrentId) + steps;
         return at < 0 || at >= mCells.size() ? NO_PAGE : mCells.get(at).pageId;
     }
