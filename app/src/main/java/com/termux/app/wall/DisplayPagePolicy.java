@@ -21,18 +21,6 @@ public final class DisplayPagePolicy {
     public static final String UNBOUND_NAME = "Display";
 
     /**
-     * What Display page {@code pageId} shows, with the display view bound to {@code boundPageId}
-     * (-1: none) and the display {@code running} or not.
-     *
-     * @param hasPicture the page has a picture kept from when it was last live
-     */
-    @NonNull
-    public static PageStillPolicy.Shows shows(int pageId, int boundPageId, boolean running,
-                                              boolean hasPicture) {
-        return PageStillPolicy.shows(pageId, boundPageId, running, hasPicture);
-    }
-
-    /**
      * The name on a Display page's card: the bound app's ({@code appName}, as the caller resolved
      * the binding), else {@link #UNBOUND_NAME}. The page's own name is the chip's, not the card's.
      */

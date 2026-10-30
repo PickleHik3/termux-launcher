@@ -27234,7 +27234,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * What the display frame shows on its bound page ({@link
-     * com.termux.app.wall.DisplayPagePolicy#shows}): live, the page's picture, or its card. A
+     * com.termux.app.wall.PageStillPolicy#shows}): live, the page's picture, or its card. A
      * page the frame just came to counts as not live until its landing. With the display down
      * and its keyboard data missing, the empty state's install prompt shows instead of a card.
      */
@@ -27250,7 +27250,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         android.graphics.Bitmap picture = mPaneWallController.wall().pictureOf(pageId);
-        switch (com.termux.app.wall.DisplayPagePolicy.shows(pageId,
+        switch (com.termux.app.wall.PageStillPolicy.shows(pageId,
                 mDisplayPageStillPending ? -1 : pageId, running, picture != null)) {
             case LIVE:
                 frame.hidePageStill();

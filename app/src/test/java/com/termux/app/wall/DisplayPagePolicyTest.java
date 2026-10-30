@@ -63,12 +63,12 @@ public class DisplayPagePolicyTest {
 
     @Test
     public void onlyTheBoundPageIsLiveAndOnlyWhileRunning() {
-        assertEquals(PageStillPolicy.Shows.LIVE, DisplayPagePolicy.shows(4, 4, true, false));
-        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(4, 4, false, false));
-        assertEquals(PageStillPolicy.Shows.PICTURE, DisplayPagePolicy.shows(4, 4, false, true));
-        assertEquals(PageStillPolicy.Shows.PICTURE, DisplayPagePolicy.shows(5, 4, true, true));
-        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(5, 4, true, false));
-        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(5, -1, true, false));
+        assertEquals(PageStillPolicy.Shows.LIVE, PageStillPolicy.shows(4, 4, true, false));
+        assertEquals(PageStillPolicy.Shows.CARD, PageStillPolicy.shows(4, 4, false, false));
+        assertEquals(PageStillPolicy.Shows.PICTURE, PageStillPolicy.shows(4, 4, false, true));
+        assertEquals(PageStillPolicy.Shows.PICTURE, PageStillPolicy.shows(5, 4, true, true));
+        assertEquals(PageStillPolicy.Shows.CARD, PageStillPolicy.shows(5, 4, true, false));
+        assertEquals(PageStillPolicy.Shows.CARD, PageStillPolicy.shows(5, -1, true, false));
     }
 
     @Test
