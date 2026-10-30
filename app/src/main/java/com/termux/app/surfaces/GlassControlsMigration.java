@@ -66,6 +66,7 @@ public final class GlassControlsMigration {
      */
     public static void runAtStartUp(@NonNull TermuxAppSharedPreferences prefs) {
         run(prefs);
+        SurfacePresets.rewriteStoredCustom(prefs);
         SurfacePresets.readoptMovedLooks(prefs);
     }
 
