@@ -334,8 +334,8 @@ public final class WallPages {
     }
 
     /**
-     * One wall slot (ADR 0015, slice A2a): a maximal contiguous run of Home pages, which
-     * {@code WidgetPaneView} pages inside, or one Terminal or Display page. Strict per-page slots
+     * One run of pages (ADR 0015, slice A2a; the wall lays out one cell per page since ADR 0016): a maximal contiguous run of Home pages, which
+     * {@code WidgetPaneView} pages inside, or one Terminal or Display page. Strict per-page runs
      * (one Home page each) come with the page-chrome slice.
      */
     public static final class Slot {

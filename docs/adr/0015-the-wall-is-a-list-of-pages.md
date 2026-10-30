@@ -7,6 +7,8 @@ amends: 0009 (one chrome, now dressed per page kind), 0012 (a crossing is any sl
 
 # The wall is a list of pages
 
+Amended by 0016 (2026-10-30): the wall slot and its window of neighbours are replaced by one cell per page; the adjacency rule W4 is lifted, so two Display pages may be neighbours; W8 and the empty-Terminal over-swipe (`emptyStop`, `seamIntoEmpty`) are retired, and the empty Terminal page is always a stop, as section 1 says.
+
 ADR 0008 split the wall into two halves, Home and the Workspace, and every later decision took
 the halves for granted: 0009 dressed them with one chrome and an opt-in Home layout, 0012 gave the
 slide between them one owner, 0013 let each half hold its own Look. Edit pages already lists Home

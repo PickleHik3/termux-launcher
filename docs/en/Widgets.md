@@ -12,6 +12,8 @@ The home button always brings you to Home (Home page 1 until Edit pages marks an
 terminal window or the display as Home). From the Workspace you can also tap **Home** at
 the bottom of the sessions drawer, or drag right from the first window's border.
 
+The wall is the page list that Edit pages arranges. Two Display pages may be neighbours.
+
 ## Add a widget
 
 1. **Hold an empty cell** on the page (an empty page says "Long-press to add widgets"). The menu
