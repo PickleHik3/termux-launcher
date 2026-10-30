@@ -86,12 +86,14 @@ public class GlassRowsTest {
     }
 
     @Test
-    public void marginAndVibrancyAreGreyedWhileWhatNamesAnElement() {
-        EditorChips dock = new EditorChips(LookGrid.NO_PAGE, LookGrid.Element.DOCK);
-        assertTrue(GlassRows.greyedByWhat(Row.MARGIN, dock));
-        assertTrue(GlassRows.greyedByWhat(Row.VIBRANCY, dock));
-        assertFalse(GlassRows.greyedByWhat(Row.OPACITY, dock));
-        assertFalse(GlassRows.greyedByWhat(Row.MARGIN, dock.withElement(null)));
+    public void marginAndVibrancyAreTheWhereChipsAllGlassWhateverWhatNames() {
+        assertTrue(GlassRows.allGlassOnly(Row.MARGIN));
+        assertTrue(GlassRows.allGlassOnly(Row.VIBRANCY));
+        assertFalse(GlassRows.allGlassOnly(Row.OPACITY));
+        EditorChips dockOnPage = new EditorChips(4, LookGrid.Element.DOCK);
+        LookGrid.Key margin = dockOnPage.cell(GlassRows.cellProperty(Row.MARGIN));
+        assertNull("no element column", margin.element);
+        assertEquals(4, margin.page);
     }
 
     @Test

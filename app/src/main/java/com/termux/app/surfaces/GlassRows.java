@@ -47,18 +47,17 @@ public final class GlassRows {
             case GRAIN: return LookGrid.Property.GRAIN;
             case RIM: return LookGrid.Property.RIM;
             case VIBRANCY: return LookGrid.Property.VIBRANCY;
+            case MARGIN: return LookGrid.Property.MARGIN;
             default: return null;
         }
     }
 
     /**
-     * Whether the What chip greys a row: Margin and Vibrancy have no element column, so while the
-     * chip names one element they are set for all glass only.
+     * Whether a row is set for all glass whatever the What chip names: Margin and Vibrancy have
+     * no element column, so they read and write the Where chip's all-glass cell and say so.
      */
-    public static boolean greyedByWhat(@NonNull Row row, @NonNull EditorChips chips) {
-        LookGrid.Property property = row == Row.MARGIN ? LookGrid.Property.MARGIN
-            : row == Row.VIBRANCY ? LookGrid.Property.VIBRANCY : null;
-        return property != null && chips.elementIgnored(property);
+    public static boolean allGlassOnly(@NonNull Row row) {
+        return row == Row.MARGIN || row == Row.VIBRANCY;
     }
 
     /** The grid property whose cell a row's dot and Reset this row speak of, or null. */

@@ -2613,14 +2613,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean enabled(@NonNull Row row) {
-            return !GlassRows.greyedByWhat(row, mChips);
+            return true;
         }
 
         @Nullable @Override public CharSequence summary(@NonNull Row row) {
             TermuxAppSharedPreferences prefs = prefs();
             if (prefs == null)
                 return null;
-            if (GlassRows.greyedByWhat(row, mChips))
+            if (GlassRows.allGlassOnly(row))
                 return getString(R.string.editor_row_all_glass_only);
             switch (row) {
                 case CURSOR_TRAIL:
@@ -2854,6 +2854,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return false;
         if (row == Row.GRAIN || row == Row.RIM)
             return true;
+        // Margin is the all-glass cell of the Where chip: on a page, that page's; Everywhere
+        // keeps its own writer (the same cell, Base).
+        if (row == Row.MARGIN)
+            return mChips.onPage();
         if (card == EditorCard.APPEARANCE)
             return !chipsPlain(card);
         return row != Row.VIBRANCY;
