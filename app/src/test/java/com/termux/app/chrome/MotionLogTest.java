@@ -62,6 +62,20 @@ public class MotionLogTest {
     }
 
     @Test
+    public void violationsAreRecordedAndCounted() {
+        MotionLog.record(1000, "crossing-begin", "revision=3");
+        MotionLog.record(1010, "presize", "taken=true");
+        MotionLog.record(1300, "wall-page-settled", "page=TERMINAL");
+        MotionLog.record(1436, "pty-resize", "from=70x44 to=70x41");
+        assertEquals(1, MotionLog.invariantCount());
+        List<String> lines = MotionLog.dump();
+        assertTrue(lines.toString(),
+            lines.get(lines.size() - 1).startsWith("t=1436 INVARIANT one-resize-per-crossing"));
+        MotionLog.clear();
+        assertEquals(0, MotionLog.invariantCount());
+    }
+
+    @Test
     public void callersNamesTheFramesAboveTheCaller() {
         String frames = MotionLog.callers(3);
         assertTrue(frames, frames.contains("callersNamesTheFramesAboveTheCaller") || !frames.isEmpty());

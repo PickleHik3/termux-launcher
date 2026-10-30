@@ -56,7 +56,7 @@ counted; never thrown:
 - `no-still-after-live`: a page that was live during the slide does not show its still after landing.
 - `no-frost-at-landing`: the reflow frost does not start within 500 ms after a settle.
 
-The emulator sweep (`project-docs/verification/`) greps the log for `INVARIANT` and fails on any.
+The emulator sweep greps the log for `INVARIANT` and fails on any: delivered as `MotionInvariants` (fed by `MotionLog.record`, counted in `launcherctl motion-log dump` as `invariants`) and `project-docs/verification/motion-invariants.sh <serial>`. A page "was live" when it logged `still-dropped` during the slide and no `still-kept` after it.
 
 ## 5. Layout fixtures
 
