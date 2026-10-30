@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import android.app.Activity;
 import android.content.Context;
 import android.os.Build;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -24,8 +25,10 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.Shadows;
 import org.robolectric.shadows.ShadowLooper;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -171,6 +174,101 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
+    public void thePickersDoneAppliesHoldsThenPutsThePickerDownOverTheCard() {
+        openPicker();
+        host.page.pending = true;
+        host.navigator.done();
+
+        assertTrue("the picker's choice was applied", host.page.committed);
+        assertTrue("held up while the colours land", surface.isWallpaperShown());
+        assertTrue("busy while held", host.page.held);
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertFalse("a relaunch now opens on the card", carried.where.wallpaper);
+        assertEquals(EditorCard.APPEARANCE, carried.where.editorCard());
+
+        settle();
+        assertTrue("still open", surface.isOpen());
+        assertFalse(surface.isWallpaperShown());
+        assertFalse(host.page.held);
+        assertEquals(EditorCard.APPEARANCE, editor.card);
+        assertEquals("the editor's session is not saved", 0, editor.saves);
+        assertTrue(host.closes.isEmpty());
+    }
+
+    @Test
+    public void aColoursCallbackHoldsThePickerForTheRelaunch() {
+        openPicker();
+        host.page.pending = true;
+        host.navigator.done();
+        surface.onWallpaperColoursChanged();
+
+        idle(WallpaperApplyHold.COLOURS_QUIET_MS + 100L);
+        assertTrue("past the quiet window, waiting for the relaunch", surface.isWallpaperShown());
+
+        idle(WallpaperApplyHold.RELAUNCH_WAIT_MS);
+        assertFalse("the backstop reveals the card", surface.isWallpaperShown());
+        assertTrue(surface.isOpen());
+    }
+
+    @Test
+    public void thePickersDoneWithNothingPendingPutsItDown() {
+        openPicker();
+        host.navigator.done();
+        settle();
+        assertFalse(host.page.committed);
+        assertTrue(surface.isOpen());
+        assertFalse(surface.isWallpaperShown());
+    }
+
+    @Test
+    public void aFailedApplyLeavesThePickerUp() {
+        openPicker();
+        host.page.pending = true;
+        host.page.fails = true;
+        host.navigator.done();
+        settle();
+        assertTrue(surface.isWallpaperShown());
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertTrue(carried.where.wallpaper);
+    }
+
+    @Test
+    public void thePickersOwnDoorStillClosesOnDone() {
+        surface.resumeWallpaper();
+        settle();
+        host.page.pending = true;
+        host.navigator.done();
+        settle();
+        assertTrue(host.page.committed);
+        assertFalse(surface.isOpen());
+        assertEquals(1, editor.saves);
+    }
+
+    @Test
+    public void aDestroyedActivityLetsGoWithoutATrace() {
+        openPicker();
+        host.page.pending = true;
+        host.page.deferCommit = true;
+        host.navigator.done();
+        AppearanceSurfaceController.Relaunch carried = surface.carry();
+        assertNotNull(carried);
+        assertFalse(carried.where.wallpaper);
+
+        surface.onHostDestroyed();
+        assertFalse("the apply runs on, its page kept", host.page.released);
+        host.page.finishCommit();
+        settle();
+
+        assertFalse(surface.isOpen());
+        assertTrue("the page lets go once its apply answered", host.page.released);
+        assertTrue("no close", host.closes.isEmpty());
+        assertNull("no return place written", host.returnState);
+        assertTrue("no session ended", editor.presented);
+    }
+
+    @Test
     public void aRelaunchHandsTheSessionAndTheCardOn() {
         surface.open(EditorCard.KEYBOARD, null);
         settle();
@@ -218,6 +316,18 @@ public class AppearanceSurfaceControllerTest {
 
     private static void settle() {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+    }
+
+    private static void idle(long ms) {
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms));
+    }
+
+    private void openPicker() {
+        surface.open(EditorCard.APPEARANCE, null);
+        settle();
+        editor.listener.onOpenWallpaper();
+        settle();
+        assertTrue(surface.isWallpaperShown());
     }
 
     // ------------------------------------------------------------------------------- the fakes
@@ -323,6 +433,12 @@ public class AppearanceSurfaceControllerTest {
         final View root;
         boolean pending;
         boolean committed;
+        boolean fails;
+        boolean held;
+        boolean released;
+        /** The apply answers only when {@link #finishCommit} runs. */
+        boolean deferCommit;
+        @Nullable Runnable answer;
 
         FakePage(@NonNull Context context) {
             root = new View(context);
@@ -340,7 +456,9 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void onHidden() {}
 
-        @Override public void release() {}
+        @Override public void release() {
+            released = true;
+        }
 
         @Override public boolean hasPendingChanges() {
             return pending;
@@ -348,8 +466,25 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
             committed = true;
+            if (fails) {
+                failed.run();
+                return;
+            }
             pending = false;
-            done.run();
+            answer = done;
+            if (!deferCommit)
+                finishCommit();
+        }
+
+        void finishCommit() {
+            Runnable done = answer;
+            answer = null;
+            if (done != null)
+                done.run();
+        }
+
+        @Override public void holdBusy(boolean held) {
+            this.held = held;
         }
     }
 
@@ -357,6 +492,7 @@ public class AppearanceSurfaceControllerTest {
         private final Activity mActivity;
         final FakePage page;
         @Nullable String returnState;
+        @Nullable AppearanceSurfaceController.Navigator navigator;
         boolean closedByUser;
         final List<String> closes = new ArrayList<>();
 
@@ -376,6 +512,7 @@ public class AppearanceSurfaceControllerTest {
         @Override public void createOverview(@NonNull AppearanceSurfaceController.Navigator navigator,
                                              @Nullable String centredSlot,
                                              @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
+            this.navigator = navigator;
             ready.accept(page);
         }
 

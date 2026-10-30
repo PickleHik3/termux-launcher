@@ -5,6 +5,9 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.LinearInterpolator;
@@ -36,8 +39,10 @@ import java.util.function.Consumer;
  * <p><b>One page.</b> There are no tabs and no mode: every door opens the editor, on the object
  * it names ({@link #open(EditorCard, PaneWallPage)}), or with no card up. The picker is not a
  * door of its own: the Appearance card's Wallpaper › Change raises it as a sheet over the editor: the editor's session, its frame and its Undo
- * stay where they are underneath, and Back puts the picker down. Done on the picker is the
- * editor's Done.</p>
+ * stay where they are underneath, and Back puts the picker down. Done on the picker applies its
+ * choice and goes back to the card it came from: the picker stays up, busy, until the new
+ * wallpaper's colours have landed ({@link WallpaperApplyHold}), so the editor is revealed once,
+ * already wearing them.</p>
  *
  * <p><b>Commit on Done.</b> Everything previews live and Done keeps it (the picker's pending
  * wallpaper with it); Back puts a card down first and, from rest, asks before throwing a change
@@ -104,6 +109,12 @@ public final class AppearanceSurfaceController {
         default void commit(@NonNull Runnable done, @NonNull Runnable failed) {
             done.run();
         }
+
+        /**
+         * Held: the page stays busy, showing its progress and taking no choice, after its apply
+         * while the surface waits for the new colours. Nothing by default.
+         */
+        default void holdBusy(boolean held) {}
     }
 
     /** What the picker asks of the surface. */
@@ -111,7 +122,12 @@ public final class AppearanceSurfaceController {
         /** Closes the surface at once, applying nothing. */
         void close();
 
-        /** Done: the session kept, the pending wallpaper applied, the surface closed. */
+        /**
+         * Done: the pending wallpaper applied and the picker put down over the card it was
+         * raised from, the editor's session continued. Opened onto the picker by a door of its
+         * own ({@link #resumeWallpaper}), it is the editor's Done: the session kept, the surface
+         * closed.
+         */
         void done();
 
         /** Back: the picker goes down, over the editor. */
@@ -250,6 +266,11 @@ public final class AppearanceSurfaceController {
             return System.currentTimeMillis();
         }
 
+        /** The monotonic clock {@link WallpaperApplyHold} measures in. */
+        default long uptime() {
+            return SystemClock.uptimeMillis();
+        }
+
         /** The surface closed, by any path. */
         void onClosed();
 
@@ -293,6 +314,24 @@ public final class AppearanceSurfaceController {
     private boolean mWallpaperShown;
     @Nullable private View mScrim;
     private final List<Animator> mRunning = new ArrayList<>();
+    /** The surface was opened onto the picker ({@link #resumeWallpaper}): its Done closes. */
+    private boolean mPickerIsDoor;
+    /**
+     * The picker's Done is applying, or holding for the colours: its destination is the card
+     * under it, which a relaunch now carries ({@link #carry}).
+     */
+    private boolean mReturningToCard;
+    /** The picker's apply has not answered yet. */
+    private boolean mApplying;
+    /** The apply answered; the picker stays up, busy, until {@link WallpaperApplyHold} says. */
+    private boolean mHolding;
+    private long mApplyFinishedAt;
+    /** The latest system colours callback since the apply began; {@link WallpaperApplyHold#NONE}. */
+    private long mColoursAt = WallpaperApplyHold.NONE;
+    private int mHoldSeq;
+    /** A page whose activity went down mid-apply: it lets go once the apply answers. */
+    @Nullable private OverviewPage mOrphan;
+    private final Handler mMain = new Handler(Looper.getMainLooper());
 
     public AppearanceSurfaceController(@NonNull Host host, @NonNull Editor editor) {
         mHost = host;
@@ -364,6 +403,7 @@ public final class AppearanceSurfaceController {
         if (content == null)
             return;
         beginOpen(content);
+        mPickerIsDoor = true;
         presentEditor(EditorCard.APPEARANCE, null, true, 1);
     }
 
@@ -372,6 +412,8 @@ public final class AppearanceSurfaceController {
         mOpen = true;
         mToken++;
         mLeaveRemembered = false;
+        mPickerIsDoor = false;
+        resetHold();
         mEditor.setOnDone(this::onEditorDone);
         mEditor.setPageListener(new PageListener() {
             @Override public void onFrameWallpaperMissing() {
@@ -435,12 +477,22 @@ public final class AppearanceSurfaceController {
     public Relaunch carry() {
         if (!mOpen)
             return null;
-        AppearanceReturnState.Builder out = new AppearanceReturnState.Builder(mWallpaperShown);
+        return new Relaunch(where(), mEditor.carrySession());
+    }
+
+    /**
+     * Where the person is: the card, and the picker over it unless its Done is already on the
+     * way back to the card (a relaunch mid-apply then opens on the card, not the picker).
+     */
+    @NonNull
+    private AppearanceReturnState where() {
+        AppearanceReturnState.Builder out = new AppearanceReturnState.Builder(
+            mWallpaperShown && !mReturningToCard);
         out.card(mEditor.shownCard());
         OverviewPage overview = mOverview;
         if (overview != null)
             out.wallpaperSlot(overview.centredSlotName());
-        return new Relaunch(out.build(mHost.now()), mEditor.carrySession());
+        return out.build(mHost.now());
     }
 
     /**
@@ -567,12 +619,19 @@ public final class AppearanceSurfaceController {
      * runs; a failure leaves everything as it was, the picker having told the person.
      */
     private void commitThen(@NonNull Runnable then) {
+        commitThen(then, () -> {});
+    }
+
+    /** {@link #commitThen(Runnable)}, with {@code failed} run when the apply did not succeed. */
+    private void commitThen(@NonNull Runnable then, @NonNull Runnable failed) {
         final OverviewPage overview = mOverview;
         if (!mOpen || overview == null || !overview.hasPendingChanges()) {
             then.run();
             return;
         }
         mCommitting = true;
+        mApplying = true;
+        mColoursAt = WallpaperApplyHold.NONE;
         final int token = mToken;
         final int commit = ++mCommitSeq;
         FrameLayout view = mView;
@@ -581,26 +640,149 @@ public final class AppearanceSurfaceController {
                 if (mCommitting && commit == mCommitSeq && mOpen && token == mToken) {
                     Logger.logWarn(LOG_TAG, "Applying the pending wallpaper did not answer; the surface is usable again");
                     mCommitting = false;
+                    mApplying = false;
+                    mReturningToCard = false;
                 }
             }, COMMIT_BACKSTOP_MS);
         }
         overview.commit(() -> {
-            if (!mOpen || token != mToken)
+            if (letGoAfterApply(overview) || !mOpen || token != mToken)
                 return;
+            mApplying = false;
             mCommitting = false;
             then.run();
         }, () -> {
-            if (!mOpen || token != mToken)
+            if (letGoAfterApply(overview) || !mOpen || token != mToken)
                 return;
+            mApplying = false;
             mCommitting = false;
+            failed.run();
         });
     }
 
-    /** The picker's Done: the editor's Done, which keeps the session and closes. */
+    /** The apply of a page whose activity went down has answered: that page lets go now. */
+    private boolean letGoAfterApply(@NonNull OverviewPage overview) {
+        if (mOrphan != overview)
+            return false;
+        mOrphan = null;
+        overview.release();
+        return true;
+    }
+
+    /**
+     * The picker's Done: its choice applied, then back to the card it was raised from, the
+     * editor's session continued. Opened onto the picker by a door of its own, the editor's Done.
+     */
     private void onPickerDone() {
         if (!mOpen || mCommitting)
             return;
-        mEditor.done();
+        if (mPickerIsDoor) {
+            mEditor.done();
+            return;
+        }
+        if (!hasPendingWallpaper()) {
+            hideWallpaper();
+            return;
+        }
+        mReturningToCard = true;
+        commitThen(this::holdForColours, () -> mReturningToCard = false);
+    }
+
+    // ------------------------------------------------------------------------- the colours hold
+
+    /**
+     * The picker's apply finished: it stays up, busy, until the new colours have landed, so the
+     * editor is revealed once. A relaunch ends this by itself, the next activity opening on the
+     * card; {@link WallpaperApplyHold} decides when none is coming.
+     */
+    private void holdForColours() {
+        OverviewPage overview = mOverview;
+        if (!mOpen || overview == null || !mWallpaperShown) {
+            mReturningToCard = false;
+            return;
+        }
+        mCommitting = true;
+        mHolding = true;
+        mApplyFinishedAt = mHost.uptime();
+        overview.holdBusy(true);
+        scheduleHoldCheck();
+    }
+
+    /** Ends the hold when its time is up, else looks again when it would be. */
+    private void scheduleHoldCheck() {
+        final int seq = ++mHoldSeq;
+        long wait = WallpaperApplyHold.remainingMs(mApplyFinishedAt, mColoursAt, mHost.uptime());
+        if (wait <= 0) {
+            endHold();
+            return;
+        }
+        mMain.postDelayed(() -> {
+            if (mOpen && mHolding && seq == mHoldSeq)
+                scheduleHoldCheck();
+        }, wait);
+    }
+
+    /** The colours have landed, or none are coming: the picker goes down over the card. */
+    private void endHold() {
+        OverviewPage overview = mOverview;
+        resetHold();
+        mCommitting = false;
+        if (overview != null)
+            overview.holdBusy(false);
+        hideWallpaper();
+    }
+
+    private void resetHold() {
+        mHoldSeq++;
+        mHolding = false;
+        mApplying = false;
+        mReturningToCard = false;
+        mColoursAt = WallpaperApplyHold.NONE;
+    }
+
+    /**
+     * The system wallpaper's colours changed: a relaunch for the new theme may follow. While the
+     * picker's Done holds, it waits for that relaunch.
+     */
+    public void onWallpaperColoursChanged() {
+        if (!mOpen)
+            return;
+        mColoursAt = mHost.uptime();
+        if (mHolding)
+            scheduleHoldCheck();
+    }
+
+    /**
+     * The activity went down (a relaunch has already carried the surface on, {@link #carry}):
+     * the surface lets go without a trace, writing nothing, closing nothing and ending no session,
+     * since the next activity continues it. A wallpaper apply still running finishes first (its
+     * Lock slot may not be set yet), and only then does its page let go.
+     */
+    public void onHostDestroyed() {
+        if (!mOpen)
+            return;
+        mOpen = false;
+        mToken++;
+        boolean applying = mApplying;
+        resetHold();
+        mCommitting = false;
+        mWallpaperShown = false;
+        mOverviewLoading = false;
+        for (Animator a : new ArrayList<>(mRunning))
+            a.cancel();
+        mRunning.clear();
+        mEditor.setOnDone(null);
+        mEditor.setPageListener(null);
+        mView = null;
+        mScrim = null;
+        OverviewPage overview = mOverview;
+        mOverview = null;
+        if (overview == null)
+            return;
+        if (applying)
+            mOrphan = overview;
+        else
+            overview.release();
     }
 
     /** Done in the editor: the look is saved; the picker's choice is applied, then the close. */
@@ -624,12 +806,7 @@ public final class AppearanceSurfaceController {
     private void rememberWhere() {
         if (!mOpen)
             return;
-        AppearanceReturnState.Builder where = new AppearanceReturnState.Builder(mWallpaperShown);
-        where.card(mEditor.shownCard());
-        OverviewPage overview = mOverview;
-        if (overview != null)
-            where.wallpaperSlot(overview.centredSlotName());
-        mHost.writeReturnState(where.build(mHost.now()).serialize());
+        mHost.writeReturnState(where().serialize());
         mLeaveRemembered = true;
     }
 
@@ -779,6 +956,8 @@ public final class AppearanceSurfaceController {
         mEditor.adoptSessionNext(null);
         mOpen = false;
         mToken++;
+        boolean applying = mApplying;
+        resetHold();
         mWallpaperShown = false;
         mOverviewLoading = false;
         for (Animator a : new ArrayList<>(mRunning))
@@ -788,7 +967,11 @@ public final class AppearanceSurfaceController {
         mOverview = null;
         if (overview != null) {
             overview.onHidden();
-            overview.release();
+            // An apply still running finishes its other slot first.
+            if (applying)
+                mOrphan = overview;
+            else
+                overview.release();
         }
         FrameLayout view = mView;
         mView = null;

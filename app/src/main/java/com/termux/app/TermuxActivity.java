@@ -1602,10 +1602,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.chrome.wallpaper.WallpaperSlots.Slot mWallpaperPhotoSlot;
     @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState mWallpaperPhotoReturn;
     /**
-     * The editor's session while Android's photo picker and the crop run: the editor goes down for
-     * them and comes back on the picker with its session (its Undo, its unsaved state) continued.
+     * The wallpaper page on screen, which stays up under Android's photo picker and the crop and
+     * takes the cropped photo in place; null while there is none.
      */
-    @Nullable private com.termux.app.surfaces.AppearanceSurfaceController.Relaunch mWallpaperPhotoCarry;
+    @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage mLiveWallpaperPage;
     /** The help screen, launched for its result: what the reader asked the launcher to do. */
     @Nullable private ActivityResultLauncher<android.content.Intent> mHelpScreenLauncher;
     /** The page the reader was on when they asked, so closing the overlay lands them back on it. */
@@ -4676,6 +4676,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if ((which & WallpaperManager.FLAG_SYSTEM) != 0) {
                     LifecycleTrail.activity("wallpaper-colours", "system wallpaper colours changed");
                     readSystemWallpaperHint(colors);
+                    // A relaunch for the new theme may follow: the wallpaper page's Done waits for it.
+                    mAppearance.onWallpaperColoursChanged();
                 }
                 // The new id first, so nothing that runs from here on cuts a frame for the old one.
                 com.termux.app.chrome.WallpaperSourceFacts facts = refreshWallpaperSourceFacts();
@@ -10902,6 +10904,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         if (sLiveActivity != null && sLiveActivity.get() == this) sLiveActivity = null;
+        // The surface was handed on at the save; this activity's callbacks must not close it,
+        // write its return place or end its session now.
+        mAppearance.onHostDestroyed();
+        mLiveWallpaperPage = null;
         rememberProcessPaneLayout();
         mArrangementAutosaveHandler.removeCallbacks(mArrangementAutosave);
         // First: what follows (the keyboard's teardown among it) must not book passes or holds
@@ -18771,9 +18777,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The photo pick and crop ended: open the Appearance surface on its Overview again where Photo… left it, with
-     * {@code photo} (when the crop finished) as that slot's pending choice. Nothing is applied here;
-     * the page's Apply sets it through {@code WallpaperSlots}.
+     * The photo pick and crop ended: {@code photo} (when the crop finished) becomes that slot's
+     * pending choice on the wallpaper page, which stayed up under them. Rebuilt meanwhile, the
+     * activity opens the page again where Photo… left it. Nothing is applied here; the page's Done
+     * sets it through {@code WallpaperSlots}.
      */
     private void returnFromWallpaperPhoto(@Nullable File photo) {
         com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot = mWallpaperPhotoSlot;
@@ -18785,6 +18792,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (photo != null) com.termux.app.chrome.wallpaper.WallpaperSlots.discardPendingPhoto(this, photo);
             return;
         }
+        com.termux.app.chrome.wallpaper.WallpaperPickerPage live = mLiveWallpaperPage;
+        if (live != null && mAppearance.isOpen()) {
+            live.takePhoto(slot != null ? slot : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME,
+                photo);
+            return;
+        }
         com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore = photo == null ? back
             : com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState.withPhoto(back,
                 slot != null ? slot : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME, photo,
@@ -18793,19 +18806,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             resumeSetupWizardAfterPicker();
             return;
         }
-        // The editor the photo picker interrupted comes back with its session, on the picker.
-        final com.termux.app.surfaces.AppearanceSurfaceController.Relaunch carried = mWallpaperPhotoCarry;
-        mWallpaperPhotoCarry = null;
-        if (carried != null && !mAppearance.isOpen()) {
+        // Rebuilt during the crop with the surface handed on: its reopen (posted at the resume
+        // that follows this result) builds the page with the photo, the session continued.
+        if (mAppearanceHandover.pending() != null && !mAppearance.isOpen()) {
             mOverviewRestore = restore;
-            View root = findViewById(R.id.activity_termux_root_view);
-            Runnable reopen = () -> {
-                if (isFinishing() || isDestroyed() || mAppearance.isOpen()) return;
-                if (!mAppearance.reopen(carried))
-                    resumeWallpaper(restore);
-            };
-            if (root != null) root.post(reopen);
-            else reopen.run();
             return;
         }
         // Posted by the opener: results arrive while the activity is still coming back to the front.
@@ -22813,12 +22817,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 final com.termux.app.surfaces.WallpaperSheet shell =
                     new com.termux.app.surfaces.WallpaperSheet(TermuxActivity.this, navigator,
                         picker.root());
+                mLiveWallpaperPage = picker;
                 ready.accept(new com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage() {
                     @NonNull @Override public View root() { return shell.root(); }
                     @NonNull @Override public CharSequence title() { return picker.title(); }
                     @Override public void onShown() { picker.onShown(); }
                     @Override public void onHidden() { picker.onHidden(); }
-                    @Override public void release() { picker.release(); }
+                    @Override public void release() {
+                        if (mLiveWallpaperPage == picker) mLiveWallpaperPage = null;
+                        picker.release();
+                    }
+                    @Override public void holdBusy(boolean held) { picker.holdBusy(held); }
                     @Nullable @Override public String centredSlotName() { return picker.centredSlot().name(); }
                     @Override public void whenReady(@NonNull Runnable ready) { picker.whenReady(ready); }
                     @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
@@ -22902,11 +22911,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void onPickPhoto(
                     @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot,
                     @NonNull com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
-                // The surface goes away while Android's photo picker and the crop run; it opens
-                // again on the Overview with the cropped photo as that card's pending choice.
-                mWallpaperPhotoCarry = mAppearance.carry();
+                // The surface stays up under Android's photo picker and the crop; the cropped photo
+                // becomes the page's pending choice in place (returnFromWallpaperPhoto).
                 mSetupPickerPhotoTrip = true;
-                mAppearance.closeNow();
                 launchManagedWallpaperPicker(slot, back);
             }
 
