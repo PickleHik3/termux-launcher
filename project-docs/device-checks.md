@@ -21,6 +21,29 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · W3 fix round (732a34e39..) · emulator at 1.0× and 1.3× font scale, light and
+  dark: the Rim row reads None · Thin · Bright and (once fixed) stands beside its name on the
+  Status and Dock cards; Margin and Vibrancy are never greyed, say "Applies to all glass", and on a
+  page change that page's glass only; Colour on the Dock card changes the dock alone and its
+  summary names the colour; the sheet's detent moves, the editor's enter and exit and the reveals
+  play the springs (a slight overshoot on the ring and body, none on fades), and with Remove
+  animations on, moves jump while fades still run · not run on a device.
+- 2026-10-31 · W3 goals 2, 3, 6, 4 (fb44e0fb2..) · emulator at 1.0× and 1.3× font scale, light,
+  dark and scheme chrome, keyboard up and down: every glass card reads Look, Frost, Opacity, Tint,
+  Colour, Corners, Depth, Edge, then More: Grain, Rim, its own rows; the Dock's Style and Design
+  are rails of 80 dp options. Dock card: a Look, Grain and Rim change the dock alone. Set Opacity
+  on the dock, then on its page: the dot turns tertiary, then primary; Home card Opacity on the
+  page: amber. Long-press a row name: "Reset this row" clears that cell only and is disabled where
+  the cell holds nothing. Margin greys on the Dock card until What is All glass. Appearance card,
+  Where on a page: Depth, Edge, Vibrancy change that page only. Home → Widgets link and
+  Appearance → Sheets link open plain glass cards; Sheets shows no ring · not run on a device.
+- 2026-10-31 · 5672889bc, the Where and What chips (W3 goal 1) · emulator at 1.0× and 1.3× font
+  scale, light and dark: every card shows two chips under its header (the Appearance card only
+  Where); labels truncate inside half the row, never the rows below; a narrowed chip fills with
+  the primary container. Dock card, What → All glass, move Opacity: every glass element in the
+  frame follows; Done keeps it, Undo returns it. The Home card opens on its page, and Opacity
+  there changes that page only. ⋮ Reset on a narrowed chip clears that cell only · not run on a
+  device.
 - 2026-10-30 · W1 of ADR 0017, every look value in one grid · a staging build installed over
   the current one on pong (no data cleared): Home, each Home page, the Terminal page and the
   Display page look as before (dock, status bar, keyboard up and down, terminal, Card widgets,

@@ -24,8 +24,9 @@ public final class WorkspaceCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.SECTION_GLASS, Row.FROST, Row.OPACITY,
-                Row.TINT);
-        return rows.tier(3, Row.ELEMENTS, Row.SECTION_MORE, Row.LINK_GLOBAL).build();
+            .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TINT_HUE,
+                Row.CORNERS);
+        return rows.tier(3, Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.ELEMENTS, Row.LINK_GLOBAL)
+            .build();
     }
 }

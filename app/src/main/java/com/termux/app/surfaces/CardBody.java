@@ -347,7 +347,8 @@ final class CardBody {
                 any |= shown;
                 strip.setValue(i, mModel.value(row));
                 // The set-here dot: the surface's own value, where Reset would take it back.
-                strip.columns.get(i).slider.setMarked(mModel.ownValue(row));
+                LegendSlider slider = strip.columns.get(i).slider;
+                slider.setMark(mModel.source(row).ink(slider.getContext()), null);
             }
             if (link != null)
                 strip.setLinked(mModel.value(link) != 0);

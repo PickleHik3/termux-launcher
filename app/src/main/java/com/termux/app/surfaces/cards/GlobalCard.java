@@ -31,7 +31,7 @@ public final class GlobalCard {
             rows.tier(2, Row.GLASS_EDGE, Row.DEPTH);
         return rows
             .tier(2, Row.HINT_GLASS_MATERIAL, Row.SECTION_OPTIONS, Row.FULL_SCREEN, Row.MINIMAL)
-            .tier(3, Row.SECTION_MORE, Row.ICON_PACK, Row.TOOL_COLOURS)
+            .tier(3, Row.SECTION_MORE, Row.ICON_PACK, Row.TOOL_COLOURS, Row.LINK_SHEETS)
             .build();
     }
 

@@ -85,6 +85,10 @@ public final class EditorRows {
          */
         FROST(Kind.STRIP, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         CORNERS(Kind.STRIP, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
+        /** The glass's grain at the chips' cell, 0 to 100%. */
+        GRAIN(Kind.STRIP, R.string.appearance_row_grain, R.drawable.ic_editor_grain),
+        /** The glass's rim at the chips' cell: None, Hairline or Bright. */
+        RIM(Kind.SEGMENTS, R.string.appearance_row_rim, R.drawable.ic_editor_corners),
         MARGIN(Kind.STRIP, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
         DEPTH(Kind.STRIP, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         /**
@@ -129,6 +133,10 @@ public final class EditorRows {
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
         GLASS_EDGE(Kind.STRIP, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
+        /** The Home card's way to the Widgets card. */
+        LINK_WIDGETS(Kind.LINK, R.string.editor_element_widgets, R.drawable.ic_symbol_stacks),
+        /** The Appearance card's way to the Sheets card. */
+        LINK_SHEETS(Kind.LINK, R.string.editor_element_sheets, R.drawable.ic_symbol_grid_view),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
         LINK_PAGES(Kind.LINK, R.string.appearance_row_pages, R.drawable.ic_symbol_grid_view),
         LINK_FONT(Kind.LINK, R.string.appearance_row_font, R.drawable.ic_editor_text_size),
@@ -293,6 +301,9 @@ public final class EditorRows {
             case TERMINAL: return TerminalCard.rows(offers);
             case DOCK: return DockCard.rows(offers);
             case KEYBOARD: return KeyboardCard.rows(offers);
+            case WIDGETS:
+            case SHEETS:
+                return GlassRows.card(offers).build();
             case APPEARANCE:
             default:
                 return GlobalCard.rows(offers);

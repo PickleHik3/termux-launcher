@@ -36,7 +36,13 @@ public enum EditorCard {
     KEYBOARD("keyboard", SurfaceSlot.KEYBOARD, R.string.appearance_card_keyboard,
         R.drawable.ic_symbol_keyboard),
     APPEARANCE("appearance", null, R.string.appearance_row_global,
-        R.drawable.ic_symbol_palette);
+        R.drawable.ic_symbol_palette),
+    /** The Card-form widgets' glass: a plain glass card (ADR 0017). */
+    WIDGETS("widgets", SurfaceSlot.WIDGETS, R.string.editor_element_widgets,
+        R.drawable.ic_symbol_stacks),
+    /** The sheets' glass (drawer, menus, palette): a plain glass card with no surface in the frame. */
+    SHEETS("sheets", SurfaceSlot.SHEETS, R.string.editor_element_sheets,
+        R.drawable.ic_symbol_grid_view);
 
     /** The name a door and a deep link use. */
     @NonNull public final String key;
@@ -78,7 +84,7 @@ public enum EditorCard {
      * Workspace and the terminal only on the Terminal's, everything else on both.
      */
     public boolean standsOn(@NonNull PaneWallPage screen) {
-        if (this == HOME) return screen == PaneWallPage.WIDGETS;
+        if (this == HOME || this == WIDGETS) return screen == PaneWallPage.WIDGETS;
         if (this == TERMINAL || this == WORKSPACE) return screen != PaneWallPage.WIDGETS;
         return true;
     }

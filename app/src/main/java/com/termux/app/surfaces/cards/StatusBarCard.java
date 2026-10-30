@@ -46,10 +46,8 @@ public final class StatusBarCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return new EditorRows.CardRows()
-            .tier(1, Row.STATUS_POSITION, Row.GLASS_SECTION, Row.FROST, Row.OPACITY, Row.TINT,
-                Row.CORNERS, Row.MARGIN)
-            .tier(2, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_OPTIONS,
+        return com.termux.app.surfaces.GlassRows.card(offers, Row.STATUS_POSITION,
+                Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.MARGIN, Row.STATUS_OPTIONS,
                 Row.STATUS_INDICATORS)
             .build();
     }

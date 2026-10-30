@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The two chips at the top of every Appearance editor card (ADR 0017). -->
+    <string name="editor_chip_where">Where it applies</string>
+    <string name="editor_chip_what">What it applies to</string>
+    <string name="editor_chip_everywhere">Everywhere</string>
+    <string name="editor_chip_all_glass">All glass</string>
+    <string name="editor_element_widgets">Widgets</string>
+    <string name="editor_element_sheets">Sheets</string>
+    <!-- A row's name with where its value comes from, as accessibility reads the row. -->
+    <string name="editor_source_from">%1$s, from %2$s</string>
+    <!-- The caption of a row's long-press menu: the row, then where its value comes from. -->
+    <string name="editor_source_caption">%1$s: from %2$s</string>
+    <!-- An element on one page, e.g. "Dock on Home". -->
+    <string name="editor_source_element_on_page">%1$s on %2$s</string>
+    <!-- An element on every page, e.g. "Dock everywhere". -->
+    <string name="editor_source_element">%1$s everywhere</string>
+    <string name="editor_row_reset">Reset this row</string>
+    <!-- Under Margin and Vibrancy, which every glass shares. -->
+    <string name="editor_row_all_glass_only">Applies to all glass</string>
+</resources>

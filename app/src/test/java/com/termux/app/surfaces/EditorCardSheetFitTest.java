@@ -147,7 +147,8 @@ public class EditorCardSheetFitTest {
                         + " inside " + tile.getHeight(),
                     textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
             }
-            assertEquals("four Dock types and six Options", 10, tiles);
+            // The Dock types are a picker rail now (the row set's picker rows): six Options.
+            assertEquals("six Dock options", 6, tiles);
         }
     }
 
@@ -174,7 +175,8 @@ public class EditorCardSheetFitTest {
                 assertEquals(tile.getText() + " at " + scale + ": under the glyph's centre",
                     tile.getWidth() / 2f, wordCentre, 2f);
             }
-            assertEquals("four Dock types and six Options", 10, tiles);
+            // The Dock types are a picker rail now (the row set's picker rows): six Options.
+            assertEquals("six Dock options", 6, tiles);
         }
     }
 
@@ -191,6 +193,7 @@ public class EditorCardSheetFitTest {
                 break;
             }
         }
+        // Style became a picker rail; Rim is the Dock card's segment row beside its label.
         assertTrue("the Dock card has a row of segments beside its label", style != null);
         ViewGroup row = (ViewGroup) style.getParent();
         View icon = row.getChildAt(0);
@@ -199,12 +202,11 @@ public class EditorCardSheetFitTest {
         int[] parentAt = new int[2];
         fixture.parent.getLocationInWindow(parentAt);
         assertTrue("the icon stands 16dp in", at[0] - parentAt[0] >= fixture.dp(16) - 1);
-        // The Style segments carry their glyph before the word, never a check mark.
+        // Rim's segments are words with no check mark.
         for (int i = 0; i < style.getChildCount(); i++) {
             MaterialButton button = (MaterialButton) style.getChildAt(i);
-            assertTrue(button.getText() + ": a glyph and its word", button.getIcon() != null
+            assertTrue(button.getText() + ": a word, no mark", button.getIcon() == null
                 && button.getText().length() > 0);
-            assertEquals(MaterialButton.ICON_GRAVITY_TEXT_START, button.getIconGravity());
         }
     }
 
@@ -218,7 +220,10 @@ public class EditorCardSheetFitTest {
             fixture.layOut();
             for (com.google.android.material.button.MaterialButtonToggleGroup group
                     : toggleGroups(fixture.sheet.rows())) {
-                assertEquals(card + ": a segment row stands label and control on one line",
+                ViewGroup holder = (ViewGroup) group.getParent();
+                assertEquals(card + ": " + group.getContentDescription() + " stands label and"
+                        + " control on one line (row " + holder.getWidth() + "px, parent "
+                        + fixture.parent.getWidth() + "px, control " + group.getWidth() + "px)",
                     LinearLayout.HORIZONTAL, ((LinearLayout) group.getParent()).getOrientation());
                 for (MaterialButton button : buttons(group))
                     assertTrue("the touch target is 48dp", button.getHeight() >= fixture.dp(48) - 1);
@@ -263,8 +268,12 @@ public class EditorCardSheetFitTest {
                 System.out.println("strip " + card + " at " + scale + ": " + legends.size()
                     + " columns, " + lines.size() + " lines, column " + legends.get(0).getWidth()
                     + "px, min " + min + "px");
+                // The row set splits the sliders into runs (Frost to Tint, Corners to Edge, then
+                // Grain and the card's own under More): each run that fits is one line.
+                int runs = stripRuns(card);
                 if (fits)
-                    assertEquals(card + " at " + scale + " is one line", 1, lines.size());
+                    assertTrue(card + " at " + scale + ": a line per run, " + lines.size() + " for "
+                        + runs, lines.size() <= runs);
             }
         }
     }
@@ -347,8 +356,7 @@ public class EditorCardSheetFitTest {
             }
             assertEquals(card + ": the Look's is the one horizontal slider", looks,
                 sliders.size());
-            for (TextView text : texts(fixture.sheet.rows()))
-                assertTrue(card + " has no More row", !"More".contentEquals(text.getText()));
+            // The row set has a More header by the spec (§3), so the old "no More" rule is gone.
         }
     }
 
@@ -696,5 +704,18 @@ public class EditorCardSheetFitTest {
         }
         @Override public void setOption(
                 @NonNull com.termux.app.surfaces.cards.DockCard.Option option, boolean on) {}
+    }
+
+    /** How many runs of strip rows a card's list holds, broken by any other row. */
+    private static int stripRuns(EditorCard card) {
+        int runs = 0;
+        boolean inRun = false;
+        for (EditorRows.Spec spec : EditorRows.rows(card, new EditorRows.Offers(true, true))) {
+            boolean strip = spec.row.kind == EditorRows.Kind.STRIP
+                || CardBody.shape(spec.row) == CardBody.Shape.STRIP_LINK;
+            if (strip && !inRun) runs++;
+            inRun = strip;
+        }
+        return runs;
     }
 }

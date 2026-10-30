@@ -110,7 +110,13 @@
     <string name="appearance_row_full_screen">Full screen</string>
     <string name="appearance_row_minimal">Minimal</string>
     <string name="appearance_row_vibrancy">Vibrancy</string>
-    <string name="appearance_row_tint_hue">Tint colour</string>
+    <string name="appearance_row_tint_hue">Colour</string>
+    <string name="appearance_row_grain">Grain</string>
+    <!-- The light line around the glass: none, a hairline, or a bright one. -->
+    <string name="appearance_row_rim">Rim</string>
+    <string name="appearance_rim_none">None</string>
+    <string name="appearance_rim_hairline">Thin</string>
+    <string name="appearance_rim_bright">Bright</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->
     <string name="appearance_row_glass_edge">Edge</string>
     <string name="appearance_row_tool_colours">Tool colours</string>

@@ -27,6 +27,7 @@ import com.termux.app.surfaces.rows.ChipsRow;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.surfaces.rows.RowKit;
 import com.termux.app.surfaces.rows.SectionHeader;
+import com.termux.app.surfaces.rows.PreviewTilesRow;
 import com.termux.app.surfaces.rows.SegmentRow;
 import com.termux.app.surfaces.rows.StepperRow;
 import com.termux.app.surfaces.rows.TileGrid;
@@ -151,11 +152,8 @@ public final class DockCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        return new EditorRows.CardRows()
-            .tier(1, Row.DOCK_STYLE, Row.DOCK_BARS, Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT,
-                Row.CORNERS, Row.MARGIN, Row.REFLECTION)
-            .tier(2, Row.DOCK_TYPE)
-            .tier(3, Row.DOCK_OPTIONS)
+        return com.termux.app.surfaces.GlassRows.card(offers, Row.HEIGHT, Row.DOCK_STYLE,
+                Row.DOCK_TYPE, Row.MARGIN, Row.REFLECTION, Row.DOCK_BARS, Row.DOCK_OPTIONS)
             .build();
     }
 
@@ -167,9 +165,9 @@ public final class DockCard {
 
     @NonNull private final Host mHost;
     @Nullable private Element mExpanded;
-    @Nullable private SegmentRow mStyle;
+    @Nullable private PreviewTilesRow mStyle;
     @Nullable private BarsList mBars;
-    @Nullable private TileGrid mType;
+    @Nullable private PreviewTilesRow mType;
     /** The Strip type's height, under the type tiles; shown while the Strip is the type. */
     @Nullable private StepperRow mStripHeight;
     @Nullable private TileGrid mOptions;
@@ -214,15 +212,13 @@ public final class DockCard {
         Context context = mHost.context();
         switch (row) {
             case DOCK_STYLE: {
-                mStyle = SegmentRow.build(context, Row.DOCK_STYLE.iconRes,
-                    context.getString(R.string.editor_dock_row_style),
-                    Arrays.asList(
-                        SegmentRow.Segment.both(EditorGlyphs.KB_DOCKED,
-                            context.getString(R.string.appearance_editor_style_docked)),
-                        SegmentRow.Segment.both(EditorGlyphs.KB_FLOATING,
-                            context.getString(R.string.appearance_editor_style_floating))),
-                    mHost.floating() ? 1 : 0, widthPx, index -> mHost.setFloating(index == 1));
-                return mStyle.root;
+                mStyle = PreviewTilesRow.build(context, Arrays.asList(
+                        glyphTile(context, EditorGlyphs.KB_DOCKED,
+                            R.string.appearance_editor_style_docked),
+                        glyphTile(context, EditorGlyphs.KB_FLOATING,
+                            R.string.appearance_editor_style_floating)),
+                    mHost.floating() ? 1 : 0, index -> mHost.setFloating(index == 1));
+                return mStyle.picker(context, context.getString(R.string.editor_dock_row_style));
             }
             case DOCK_BARS: {
                 mBarViews.clear();
@@ -230,17 +226,11 @@ public final class DockCard {
                 return mBars.root;
             }
             case DOCK_TYPE: {
-                List<TileGrid.Tile> tiles = new ArrayList<>(TYPE_GLYPHS.length);
+                List<PreviewTilesRow.Tile> tiles = new ArrayList<>(TYPE_GLYPHS.length);
                 for (int i = 0; i < TYPE_GLYPHS.length; i++)
-                    tiles.add(new TileGrid.Tile(TYPE_GLYPHS[i], context.getString(TYPE_WORDS[i])));
-                boolean[] on = new boolean[tiles.size()];
-                int type = mHost.dockType();
-                if (type >= 0 && type < on.length)
-                    on[type] = true;
-                mType = TileGrid.build(context, tiles, on, widthPx, (index, checked) -> {
-                    // One type at a time: a tap on the chosen one keeps it.
-                    if (checked)
-                        mHost.setDockType(index);
+                    tiles.add(glyphTile(context, TYPE_GLYPHS[i], TYPE_WORDS[i]));
+                mType = PreviewTilesRow.build(context, tiles, mHost.dockType(), index -> {
+                    mHost.setDockType(index);
                     restateType();
                 });
                 mStripHeight = StepperRow.build(context, R.drawable.ic_ms_height,
@@ -251,11 +241,11 @@ public final class DockCard {
                     mHost::setStripHeightDp);
                 LinearLayout body = new LinearLayout(context);
                 body.setOrientation(LinearLayout.VERTICAL);
-                body.addView(mType.root, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                body.addView(mType.picker(context,
+                    context.getString(R.string.editor_dock_row_type)));
                 body.addView(mStripHeight.root);
                 restateStripHeight();
-                return section(context, R.string.editor_dock_row_type, body);
+                return body;
             }
             case DOCK_OPTIONS: {
                 List<TileGrid.Tile> tiles = new ArrayList<>();
@@ -300,13 +290,20 @@ public final class DockCard {
     }
 
     private void restateType() {
-        TileGrid type = mType;
+        PreviewTilesRow type = mType;
         if (type == null)
             return;
-        int chosen = mHost.dockType();
-        for (int i = 0; i < type.tiles.size(); i++)
-            type.setOn(i, i == chosen);
+        type.select(mHost.dockType());
         restateStripHeight();
+    }
+
+    /** A picker option that previews its choice by its glyph. */
+    @NonNull
+    private static PreviewTilesRow.Tile glyphTile(@NonNull Context context, int glyph, int word) {
+        android.widget.ImageView preview = new android.widget.ImageView(context);
+        preview.setImageResource(glyph);
+        preview.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        return new PreviewTilesRow.Tile(context.getString(word), preview);
     }
 
     /** The Strip height row shows with the Strip type alone, at the stored height. */
