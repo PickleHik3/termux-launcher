@@ -161,6 +161,17 @@ public final class PageLook {
         return new LookGrid(LookKeys.gridStore(store));
     }
 
+    /**
+     * Whether a scope may hold this cell: the wall holds every one; a page only an element's
+     * glass number (blur, opacity, grain, tint), as before the grid.
+     */
+    private static boolean holds(@NonNull Scope scope, @NonNull LookGrid.Key cell) {
+        if (scope.isGlobal()) return true;
+        return cell.element != null && (cell.property == LookGrid.Property.FROST
+            || cell.property == LookGrid.Property.OPACITY || cell.property == LookGrid.Property.GRAIN
+            || cell.property == LookGrid.Property.TINT);
+    }
+
     private static int where(@NonNull Scope scope) {
         return scope.isGlobal() ? LookGrid.NO_PAGE : scope.pageId();
     }
@@ -191,6 +202,7 @@ public final class PageLook {
     public boolean write(@NonNull Scope scope, @NonNull String key, int value) {
         LookGrid.Key cell = LookKeys.cellOf(key);
         if (cell != null) {
+            if (!holds(scope, cell)) return false;
             grid().write(cell.property, cell.element, where(scope), LookKeys.toCell(cell.property, value));
             return true;
         }
@@ -220,7 +232,7 @@ public final class PageLook {
     public void reset(@NonNull Scope scope, @NonNull String key) {
         LookGrid.Key cell = LookKeys.cellOf(key);
         if (cell != null) {
-            grid().clear(cell.property, cell.element, where(scope));
+            if (holds(scope, cell)) grid().clear(cell.property, cell.element, where(scope));
             return;
         }
         if (!LookKeys.KNOWN.contains(key)) return;
@@ -233,7 +245,8 @@ public final class PageLook {
      */
     public boolean has(@NonNull Scope scope, @NonNull String key) {
         LookGrid.Key cell = LookKeys.cellOf(key);
-        if (cell != null) return grid().has(cell.property, cell.element, where(scope));
+        if (cell != null)
+            return holds(scope, cell) && grid().has(cell.property, cell.element, where(scope));
         if (!LookKeys.KNOWN.contains(key)) return false;
         if (scope.isGlobal()) return store.has(key);
         return LookKeys.OVERRIDABLE.contains(key)

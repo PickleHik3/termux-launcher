@@ -3192,10 +3192,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         }
     }
 
-    /** A named setter's write: Base, which every surface following it shows (ADR 0017 §3). */
+    /**
+     * A named setter's write: the surface's own cell everywhere when it holds one, else Base, which
+     * every surface following it shows. "Make this surface show X" (the Settings sliders, the
+     * wallpaper-mode and low-memory policies) neither detaches a surface nor misses a detached one.
+     */
     private void writeSurfaceValue(SurfaceSlot slot, SurfaceProperty property, String overrideKey,
                                    int value) {
-        setSurfaceBaseValue(property, value);
+        LookGrid.Element element = cellElement(slot, property);
+        LookGrid grid = lookGrid();
+        if (element != null && hasSurfaceProperty(slot, property)
+                && grid.has(property.grid, element, LookGrid.NO_PAGE))
+            grid.write(property.grid, element, LookGrid.NO_PAGE, toGrid(property, value));
+        else
+            setSurfaceBaseValue(property, value);
     }
 
 
@@ -3569,7 +3579,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** A half's Base value: its own once written, the shared one until then. */
     public int getSurfaceBaseValue(SurfaceProperty property, int pageId) {
-        return fromGrid(property, lookGrid().value(property.grid, null, gridPage(pageId)));
+        // Base has no page of its own in this wave (as before the grid: the Base keys were never
+        // page keys), so every page reads the wall's.
+        return fromGrid(property, lookGrid().value(property.grid, null, LookGrid.NO_PAGE));
     }
 
     /** Sets Base on both halves: the shared key, with either half's own dropped. */
@@ -3579,7 +3591,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Sets one half's Base; PAGE_ALL, or a property not held per half, sets both. */
     public void setSurfaceBaseValue(SurfaceProperty property, int pageId, int value) {
-        lookGrid().write(property.grid, null, gridPage(pageId), toGrid(property, value));
+        setSurfaceBaseValue(property, value);
     }
 
     /** The material family a half's Base triple was last set from. */

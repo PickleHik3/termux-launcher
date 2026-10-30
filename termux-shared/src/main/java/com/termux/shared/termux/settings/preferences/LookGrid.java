@@ -207,23 +207,33 @@ public final class LookGrid {
 
         public PrefsStore(@Nullable SharedPreferences prefs) { mPrefs = prefs; }
 
+        /** What a read sees: the store, or the Look shown over it while a drag previews one. */
+        @Nullable
+        private SharedPreferences reads() {
+            return com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(mPrefs);
+        }
+
         @Override public boolean contains(@NonNull String key) {
-            return mPrefs != null && mPrefs.contains(key);
+            SharedPreferences reads = reads();
+            return reads != null && reads.contains(key);
         }
 
         @Override public int getInt(@NonNull String key, int defaultValue) {
-            if (mPrefs == null) return defaultValue;
-            try { return mPrefs.getInt(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
+            SharedPreferences reads = reads();
+            if (reads == null) return defaultValue;
+            try { return reads.getInt(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
         }
 
         @Nullable @Override public String getString(@NonNull String key, @Nullable String defaultValue) {
-            if (mPrefs == null) return defaultValue;
-            try { return mPrefs.getString(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
+            SharedPreferences reads = reads();
+            if (reads == null) return defaultValue;
+            try { return reads.getString(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
         }
 
         @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
-            if (mPrefs == null) return defaultValue;
-            try { return mPrefs.getBoolean(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
+            SharedPreferences reads = reads();
+            if (reads == null) return defaultValue;
+            try { return reads.getBoolean(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
         }
 
         @Override public void putInt(@NonNull String key, int value) {
@@ -243,7 +253,8 @@ public final class LookGrid {
         }
 
         @NonNull @Override public Set<String> keys() {
-            return mPrefs == null ? new HashSet<>() : new HashSet<>(mPrefs.getAll().keySet());
+            SharedPreferences reads = reads();
+            return reads == null ? new HashSet<>() : new HashSet<>(reads.getAll().keySet());
         }
     }
 
