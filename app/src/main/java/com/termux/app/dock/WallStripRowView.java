@@ -1114,7 +1114,7 @@ public final class WallStripRowView extends ViewGroup implements TextScale.Follo
         int tile = mDownTile;
         if (tile < 0 || tile >= mTiles.size() || mListener == null) return;
         mLongPressed = true;
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        com.termux.app.haptics.Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         mListener.onTileLongPressed(mTiles.get(tile).chipIndex, tileBounds(tile));
     }
 

@@ -965,7 +965,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         chip.setScaleX(LIFT_SCALE);
         chip.setScaleY(LIFT_SCALE);
         chip.setTranslationZ(dpF(LIFT_ELEVATION_DP));
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        com.termux.app.haptics.Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         yieldStatusBarFold();
         mTabs.invalidate();
