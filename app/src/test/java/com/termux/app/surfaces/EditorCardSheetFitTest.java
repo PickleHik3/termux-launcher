@@ -211,6 +211,39 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void aCardSwapKeepsTheDetentAndRelabelsTheHeader() {
+        Fixture fixture = new Fixture(EditorCard.STATUS, 1f);
+        int detent = fixture.sheet.detent();
+        View firstRow = fixture.sheet.rows().getChildAt(0);
+        fixture.sheet.show(EditorCard.DOCK, EditorRows.rows(EditorCard.DOCK,
+            new EditorRows.Offers(true, true)), "Reset", true);
+        assertEquals("the detent is the one the last card stood at", detent,
+            fixture.sheet.detent());
+        String dock = fixture.themed.getString(EditorCard.DOCK.titleRes);
+        assertEquals(dock, String.valueOf(fixture.sheet.view().getContentDescription()));
+        assertTrue("the header reads the new card", hasText(fixture.sheet.view(), dock));
+        assertTrue("the old body has left the rows", firstRow.getParent()
+            != fixture.sheet.rows());
+        assertEquals("the new body waits to fade in", 0f, fixture.sheet.rows().getAlpha(), 0f);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        fixture.layOut();
+        assertEquals("the new body is in", 1f, fixture.sheet.rows().getAlpha(), 0.001f);
+        assertEquals("risen into place", 0f, fixture.sheet.rows().getTranslationY(), 0.5f);
+        assertEquals(detent, fixture.sheet.detent());
+    }
+
+    private static boolean hasText(@NonNull View view, @NonNull String text) {
+        if (view instanceof TextView && text.contentEquals(((TextView) view).getText()))
+            return view.getAlpha() >= 0f;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                if (hasText(group.getChildAt(i), text)) return true;
+        }
+        return false;
+    }
+
+    @Test
     public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
         for (EditorCard card : EditorCard.values()) {
             if (CardBody.redesigned(card))

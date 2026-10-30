@@ -1055,7 +1055,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         restateBar(animate);
         layoutSheet();
         applyPose(animate);
-        positionOutline();
+        positionOutline(animate);
     }
 
     /** The card of the screen the frame shows, at peek: the editor's resting state. */
@@ -1459,7 +1459,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Where the frame stands now: at rest, or with the card that is up at its detent. The card
-     * moves on the same clock and curve ({@link #POSE_MS}, {@link Motion#settle()}), so the frame
+     * moves on the same clock and spring ({@link #POSE_MS}, {@link EditorMotion.Use#FRAME_POSE}), so the frame
      * and the card's top edge keep their gap all the way.
      */
     private void applyPose(boolean animate) {
@@ -1532,7 +1532,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         final float fromTy = root.getTranslationY();
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(durationMs);
-        animator.setInterpolator(Motion.settle());
+        animator.setInterpolator(EditorMotion.Use.FRAME_POSE.curve(false));
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
             float nowScale = fromScale + (scale - fromScale) * f;
@@ -4067,7 +4067,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         overlay.animate().alpha(0f)
             .setDuration(SurfaceEditorMotion.overlayFadeMs(GlassMotion.of(prefs()), false))
-            .setInterpolator(Motion.settle())
+            .setInterpolator(EditorMotion.Use.OVERLAY_OUT.curve(false))
             .withEndAction(() -> {
                 overlay.setVisibility(View.GONE);
                 overlay.setAlpha(1f);
@@ -4228,10 +4228,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * outside its edge, inside the frame for Home. Nothing else glows.
      */
     private void positionOutline() {
+        positionOutline(false);
+    }
+
+    /**
+     * Places the ring on the card's surface; with {@code move}, a ring already on screen springs
+     * from where it stood (rule a, RING_MOVE): one view, its layout set once, the flight drawn by
+     * its translation and scale.
+     */
+    private void positionOutline(boolean move) {
         View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
         View outline = mHost.findView(R.id.surface_editor_selection_outline);
         if (overlay == null || outline == null)
             return;
+        boolean wasOn = outline.getVisibility() == View.VISIBLE && outline.getWidth() > 0
+            && outline.getHeight() > 0;
+        float fromLeft = outline.getLeft() + outline.getTranslationX();
+        float fromTop = outline.getTop() + outline.getTranslationY();
+        float fromWidth = outline.getWidth() * outline.getScaleX();
+        float fromHeight = outline.getHeight() * outline.getScaleY();
         EditorCard card = mOpen ? mCard : null;
         int[] rect = card == null || card == EditorCard.APPEARANCE ? null
             : targetRect(card, overlay);
@@ -4252,6 +4267,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             : Math.max(0f, outlineRadiusPx(card) + grow));
         outline.setBackground(ring);
         EditorViews.setVisible(outline, true);
+        outline.animate().cancel();
+        int width = Math.max(1, grown[2] - grown[0]);
+        int height = Math.max(1, grown[3] - grown[1]);
+        boolean reduced = com.termux.app.ReducedMotion.isEnabled(mHost.context());
+        if (!move || !wasOn || reduced || (fromLeft == grown[0] && fromTop == grown[1]
+                && fromWidth == width && fromHeight == height)) {
+            outline.setTranslationX(0f);
+            outline.setTranslationY(0f);
+            outline.setScaleX(1f);
+            outline.setScaleY(1f);
+            return;
+        }
+        outline.setPivotX(0f);
+        outline.setPivotY(0f);
+        outline.setTranslationX(fromLeft - grown[0]);
+        outline.setTranslationY(fromTop - grown[1]);
+        outline.setScaleX(fromWidth / width);
+        outline.setScaleY(fromHeight / height);
+        outline.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setDuration(EditorMotion.Use.RING_MOVE.durationMs(false))
+            .setInterpolator(EditorMotion.Use.RING_MOVE.curve(false)).start();
     }
 
     /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
