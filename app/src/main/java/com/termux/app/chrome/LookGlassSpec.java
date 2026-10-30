@@ -70,6 +70,22 @@ public final class LookGlassSpec {
     }
 
     /**
+     * One element's glass on one page as stored now (ADR 0017): its own cells where it holds them,
+     * Base where it follows; the shipped Base when there is no store.
+     */
+    public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences,
+                                     @NonNull TermuxAppSharedPreferences.SurfaceSlot slot,
+                                     int pageId) {
+        if (preferences == null) return read(null, pageId);
+        return of(preferences.isUseSystemWallpaperEnabled(),
+            preferences.getSurfaceValue(slot, SurfaceProperty.BLUR, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.OPACITY, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.GRAIN, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.TINT, pageId),
+            preferences.getSurfaceValue(slot, SurfaceProperty.CORNER_RADIUS, pageId));
+    }
+
+    /**
      * Base's Corners in dp. The -1 sentinel follows the rounded-surface token, as the chrome's
      * own Corners do: a widget is a card, never the Docked straight edge.
      */
