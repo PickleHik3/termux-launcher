@@ -18,11 +18,23 @@ pure policy, and the two phases share a parity test. Written into AGENTS.md ("Co
 
 ## 2. The audit (once)
 
-An inventory of today's two-phase numbers, each with its owner(s) and whether a parity test
-exists. Known pairs: the terminal's pre-size room vs the settle's resting room (fixed in this
-round); the keyboard reveal room at pre-roll vs at rest; the dock lift under the keyboard; the
-still's size vs the live view; the frame tint at the crossing vs at rest. Each pair with two owners
-becomes one ticket: move the number into one policy, add the parity test.
+The inventory (scouted 2026-10-30 at `0f2cf4a04`; "two" = two formulas that can diverge), ranked
+by how likely a layout (floating keyboard, dock rows under the keyboard, status bar at the bottom,
+split panes, Docked vs Floating) makes the two sides disagree:
+
+| # | Number | Predicting side | Settling side | Owners | Parity test |
+|---|---|---|---|---|---|
+| 1 | Terminal pre-size room | `TermuxActivity` :23714 `travelRoomChangePx` :24365 via `travelRestReservationPx` / `chromeRestOf` | `runAccessoryGeometryPass` :12479 → `StackLayout.layout` (:154 `underKeyboardTopMarginPx`), `applyUnderKeyboardBandAir` :17136 | two | none (the landing fix of this round unifies it) |
+| 2 | Dock lift / flush absorption under the keyboard | `PlaceChromeTravel` :385-386, `travelDockLaidOutPx` ~:23727 | `StackLayout` :154, `DockGeometry` :409-412 | two | `UnderKeyboardBandTest`, `DockRowsSeamTest` (rest only) |
+| 3 | Terminal resize prediction | `TerminalView` :3290-3294 `predictResize*` :3382-3397 | `updateSize` :3177-3186 | two | `TravelDisplacementTest` (prediction math only) |
+| 4 | Keyboard reveal at pre-roll vs rest | `Crossing.preRollKeyboard` :445 (`hold(reservationPx)`) | `PlaceChromeTravel` :377-378 rest `keyboardReveal()` | two | `PlaceChromeTravelTest` :177 (pre-roll asked, no rest parity) |
+| 5 | Status bar reveal and position | `PlaceChromeTravel` :378 `statusReveal` | `PlaceChromeTravel` :385 rest | one class, two states | `PlaceChromeTravelTest` :430 (fade only) |
+| 6 | Still size vs live view | `PageStillPolicy.pictureSide` :63 in `PaneWallLayout` :882-904 | the live view's bounds | one formula, compared to wall dims not live bounds | `PageStillsTest` :151 |
+| 7 | Frame tint in a crossing vs at rest | `GlassLook` :219-220, `ChromeRenderer` :85-90 | `GlassVibrancy` :58-59 | one (`GlassFrameTint.of`), two callers | `GlassFrameTintTest` (no crossing-vs-rest case) |
+| 8 | Held overlap | `PlaceChromeTravel` :438, :452 | `StackLayout` :180 | one formula, two input sources | `PlaceChromeTravelTest` :221, :238 |
+
+Pairs 1–4 become one ticket each (one policy both phases read, a parity test over the layout
+fixtures of §5); 5–8 get a parity case in their existing test.
 
 ## 3. Motion log (a product switch)
 
