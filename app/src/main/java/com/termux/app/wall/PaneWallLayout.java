@@ -688,12 +688,12 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * Lay out one cell per page, in order (ADR 0016). The wall stays on the current page's cell.
-     * When that page goes but the wall still has a page of its kind, the wall moves to that
-     * kind's bound page if it stays, else its first page, and announces nothing: the chrome keys
-     * off the page kind (ADR 0012), which has not changed (a kind-only list giving way to the
-     * real pages, say). Only when no page of the current kind is left is the wall handed to the
-     * nearest page on its left that stays, else the first, and that change announced once. Each
-     * kind keeps its binding while its page stays; a kind whose bound page went is bound to the
+     * When a kind-only list gives way to the real pages (or back), the pages are the same and
+     * only their ids changed: the wall moves to its kind's bound page if it stays, else its
+     * first page, and announces nothing, since the chrome keys off the page kind (ADR 0012).
+     * When a real page the wall is on is removed, the wall is handed to the nearest page on its
+     * left that stays, else the first, and that is announced once if the kind changed. Each kind
+     * keeps its binding while its page stays; a kind whose bound page went is bound to the
      * current page when it is of that kind, else to its first page.
      */
     public void setCells(@NonNull List<Cell> cells) {
@@ -714,8 +714,11 @@ public final class PaneWallLayout extends ViewGroup {
         PaneWallPage was = mCurrent;
         boolean moved = false;
         if (indexOfCell(mCurrentId) < 0) {
-            int sameKind = boundPageId(was);
-            if (kindOf(sameKind) != was) sameKind = firstPageOf(was);
+            int sameKind = NO_PAGE;
+            if (isKindOnly(before) || isKindOnly(mCells)) {
+                sameKind = boundPageId(was);
+                if (kindOf(sameKind) != was) sameKind = firstPageOf(was);
+            }
             if (sameKind != NO_PAGE) {
                 mCurrentId = sameKind;
             } else {
@@ -730,6 +733,12 @@ public final class PaneWallLayout extends ViewGroup {
         if (moved) notifyPageChanged();
         applyPagePositions();
         publishBackExclusion();
+    }
+
+    /** Whether {@code cells} is a kind-only list: every id its kind's ({@link #kindPageId}). */
+    private static boolean isKindOnly(@NonNull List<Cell> cells) {
+        for (Cell cell : cells) if (cell.pageId != kindPageId(cell.kind)) return false;
+        return true;
     }
 
     /** The cells, in order. */

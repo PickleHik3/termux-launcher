@@ -236,6 +236,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private int mDisplayPageId = -1;
     /** The Display page last handed to the host ({@link Host#bindDisplayPage}). */
     private int mBoundDisplayPageId = -1;
+    /**
+     * The last used Display page: the one the wall last came to rest on, or was sent to by its
+     * id. Not the display's first binding, which a new list makes on its own; -1 before any.
+     */
+    private int mLastDisplayPageId = -1;
     /** The cells hold a Display page: the wallpaper's pan reads the pages' order. */
     private boolean mHasDisplaySlot;
 
@@ -385,9 +390,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Go to Display page {@code pageId} (-1: the bound one, else the nearest): the display view
-     * is bound to it and the wall slides there, a far one from a stand-off (W3). False when the
-     * wall has no such Display page.
+     * Go to Display page {@code pageId} (-1: the last used one, else the nearest): the wall slides
+     * there, a far one from a stand-off (W3), and the landing binds the display view to it. False
+     * when the wall has no such Display page.
      */
     public boolean goToDisplayPage(int pageId, boolean animate) {
         WallPages pages = mKnownPages;
@@ -397,8 +402,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             return mWall.goTo(PaneWallPage.DISPLAY, animate);
         }
         int id = pageId;
-        if (mWall.kindOf(id) != PaneWallPage.DISPLAY) {
-            WallPages.Page target = pages.displayTarget(currentPageId(), mBoundDisplayPageId);
+        if (mWall.kindOf(id) == PaneWallPage.DISPLAY) {
+            mLastDisplayPageId = id;
+        } else {
+            WallPages.Page target = pages.displayTarget(currentPageId(), mLastDisplayPageId);
             id = target == null ? PaneWallLayout.NO_PAGE : target.id;
         }
         if (mWall.kindOf(id) != PaneWallPage.DISPLAY) return false;
@@ -413,9 +420,50 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Go to page {@code pageId}'s cell. Its kind's view is bound to it first, so the page arrives
-     * live: the Home frame turned to that page, the display view on that Display page. A Home
-     * page of the run the wall is on is shown by the frame where it stands.
+     * The page kind of the cell {@code steps} cells from the current one (0: the current cell),
+     * in cell order; null past either end of the wall. What the chrome dresses for during a
+     * slide: the arriving cell's kind, live or still (ADR 0016 section 3).
+     */
+    @Nullable
+    public PaneWallPage kindAt(int steps) {
+        syncHomeCell();
+        int id = steps == 0 ? mWall.currentPageId() : mWall.neighbourId(steps);
+        return id == PaneWallLayout.NO_PAGE ? null : mWall.kindOf(id);
+    }
+
+    /** The cells {@link #mCellKinds} was read from. */
+    @Nullable private java.util.List<PaneWallLayout.Cell> mCellKindsOf;
+    @NonNull private java.util.List<PaneWallPage> mCellKinds = java.util.Collections.emptyList();
+
+    /**
+     * The page kinds of the wall's cells, one entry per cell in cell order: what the chrome
+     * travel, the ground strip and the status lens read the cells around the current one from,
+     * with {@link #currentCellIndex}. Read on every frame of a slide; it allocates only when the
+     * cells change.
+     */
+    @NonNull
+    public java.util.List<PaneWallPage> cellKinds() {
+        java.util.List<PaneWallLayout.Cell> cells = mWall.cells();
+        if (cells != mCellKindsOf) {
+            java.util.List<PaneWallPage> kinds = new java.util.ArrayList<>(cells.size());
+            for (PaneWallLayout.Cell cell : cells) kinds.add(cell.kind);
+            mCellKinds = java.util.Collections.unmodifiableList(kinds);
+            mCellKindsOf = cells;
+        }
+        return mCellKinds;
+    }
+
+    /** The index of the current page's cell in {@link #cellKinds}. */
+    public int currentCellIndex() {
+        syncHomeCell();
+        return Math.max(0, mWall.indexOfCell(mWall.currentPageId()));
+    }
+
+    /**
+     * Go to page {@code pageId}'s cell. The slide shows the page as it stands, live or as its
+     * still (picture, else card); the landing binds its kind's view to it ({@link
+     * #onWallCellSettled}), so a slide caught and rested elsewhere leaves every binding as it was
+     * (ADR 0016). A Home page of the run the wall is on is shown by the frame where it stands.
      */
     private boolean goToPage(int pageId, boolean animate) {
         PaneWallPage kind = mWall.kindOf(pageId);
@@ -428,7 +476,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mWall.follow(pageId);
             return true;
         }
-        bindCell(pageId);
         return mWall.goToCell(pageId, animate);
     }
 
@@ -839,11 +886,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * Go to a page by name ({@code wall.go}, the extra keys): {@code left}/{@code right} the
-     * neighbouring cell whatever its kind; {@code home} the home press's page; {@code widgets}
-     * the home page when it is a Home page, else the nearest; {@code display} the bound Display
-     * page, else the nearest; {@code terminal}/{@code workspace} the Terminal page (ADR 0016
-     * section 5). The target's view is bound before the slide, so it arrives live; a far one
-     * arrives one width from a stand-off (W3). False when the wall has no such page.
+     * neighbouring cell whatever its kind; {@code home} and {@code widgets} alike the home
+     * press's Home page while the home page is a Home page, else the nearest Home page; {@code
+     * display} the last used Display page, else the nearest; {@code terminal}/{@code workspace} the Terminal page (ADR 0016
+     * section 5). The target arrives as it stands, live or as its still, and its view is bound
+     * when the wall lands; a far one arrives one width from a stand-off (W3). False when the wall
+     * has no such page.
      */
     public boolean goTo(@Nullable String name) {
         WallPages pages = mKnownPages;
@@ -861,20 +909,32 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
             case "left": target = pages.leftOf(current); break;
             case "right": target = pages.rightOf(current); break;
-            case "home": {
-                // The home press's page, Start in honoured (W9); else the nearest Home page.
-                int id = homeIdAt(Math.max(0, mHost.homePressPage()));
-                if (id != PaneWallLayout.NO_PAGE) return goToPage(id, true);
-                target = pages.homeTarget(current);
-                break;
+            case "home":
+            case "widgets": {
+                int id = homeKeyPage(pages, current);
+                return id != PaneWallLayout.NO_PAGE && goToPage(id, true);
             }
-            case "widgets": target = pages.homeTarget(current); break;
-            case "display": target = pages.displayTarget(current, mBoundDisplayPageId); break;
+            case "display": target = pages.displayTarget(current, mLastDisplayPageId); break;
             case "workspace":
             case "terminal": target = pages.terminalTarget(); break;
             default: return false;
         }
         return target != null && goToPage(target.id, true);
+    }
+
+    /**
+     * Where the Home key and {@code wall.widgets} go, one answer for both: while the home page is
+     * a Home page, the home press's Home page (Start in honoured, W9); else the Home page nearest
+     * the current cell (ADR 0016 section 5). {@link PaneWallLayout#NO_PAGE} when there is none.
+     */
+    private int homeKeyPage(@NonNull WallPages pages, int current) {
+        WallPages.Page home = pages.home();
+        if (home != null && home.kind == WallPages.PageKind.HOME) {
+            int id = homeIdAt(Math.max(0, mHost.homePressPage()));
+            if (id != PaneWallLayout.NO_PAGE) return id;
+        }
+        WallPages.Page target = pages.homeTarget(current);
+        return target == null ? PaneWallLayout.NO_PAGE : target.id;
     }
 
     /**
@@ -1081,6 +1141,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallCellSettled(int pageId, @NonNull PaneWallPage page) {
         if (page != PaneWallPage.TERMINAL) mLandingShellStarted = false;
+        if (page == PaneWallPage.DISPLAY && pageId >= 0) mLastDisplayPageId = pageId;
         bindCell(pageId);
         mHost.onWallPageSettled(page);
         if (page == PaneWallPage.TERMINAL) startShellOnLanding();
@@ -1138,23 +1199,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * A drag now heads {@code steps} cells away: the view of the kind it heads for is bound to
-     * that cell before it comes on screen, so the page arrives live rather than as its card. The
-     * view under the finger is never taken from its cell.
+     * A drag now heads {@code steps} cells away. Nothing is bound here: the cell it heads for
+     * shows its page as it stands, live or as its still, and the landing binds (ADR 0016; ADR
+     * 0015 asks nothing live under the finger), so a drag that springs back changes no binding.
      */
     @Override
     public void onWallDragHeading(@NonNull PaneWallPage page, int steps) {
-        // A step to the next window stays inside the Workspace.
-        if (page == PaneWallPage.TERMINAL && hasInnerPage(PaneWallPage.TERMINAL, steps)) return;
-        int target = mWall.neighbourId(steps);
-        PaneWallPage kind = mWall.kindOf(target);
-        // The view the finger holds is not taken from it: a Display page beside another shows
-        // its still until the landing binds it.
-        if (kind == null || kind == page) return;
-        // The view of the kind the drag heads for goes with it to the cell beside, so the page
-        // arrives live: the Home frame turned to the Home page next to the seam, the display
-        // view on that Display page.
-        if (kind == PaneWallPage.WIDGETS || kind == PaneWallPage.DISPLAY) bindCell(target);
     }
 
     @Override

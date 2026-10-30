@@ -75,7 +75,9 @@ nobody else's to read.
 - `PaneWallController.refreshPages()` and its ten callers in `TermuxActivity` stop deciding what
   the wall holds; they re-read the page list. `onWallPlacesChanged` and the row's eligibility read
   `WallPages`, not `pages()`.
-- Pictures need a capture for Home pages and the Terminal page (the display already keeps one).
+- Pictures need a capture for Home pages (the display already keeps one). The Terminal page
+  takes none: it is one page, always bound, so it is never a still with a picture; its only
+  still is its card, shown while it has no window.
 - Regression tests at the controller seam (`PaneWallControllerTest`'s fake host): a named jump,
   then a landing, then a drag release must find the arranged neighbour; the row's eligibility test
   reads the page list.

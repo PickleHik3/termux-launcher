@@ -4827,14 +4827,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable
     /**
-     * The page kinds the ground strip reads, in the wall's order: through the wall's controller
-     * (the arranged page list's kinds); the page in view alone before it is built.
+     * The page kinds the ground strip reads, one per cell in cell order, through the wall's
+     * controller (ADR 0016); the page in view alone before it is built.
      */
     @NonNull
     private java.util.List<com.termux.app.wall.PaneWallPage> groundKinds(
             @NonNull com.termux.app.wall.PaneWallLayout wall) {
-        return mPaneWallController != null ? availableWallPages()
+        return mPaneWallController != null ? mPaneWallController.cellKinds()
             : java.util.Collections.singletonList(wall.currentPage());
+    }
+
+    /** The ground strip's stop for the page in view: its cell's index, within the strip. */
+    private int groundStop() {
+        int at = mPaneWallController != null ? mPaneWallController.currentCellIndex() : 0;
+        return Math.max(0, Math.min(mGroundScratch.length - 1, at));
     }
 
     private com.termux.app.wall.PaneWallLayout groundWall() {
@@ -4888,13 +4894,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mGroundCanvasTint, pageDimColor(page));
     }
 
-    private static int groundStopOf(@NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages,
-                                    @NonNull com.termux.app.wall.PaneWallPage current) {
-        int at = pages.indexOf(current);
-        if (at < 0) at = pages.indexOf(com.termux.app.wall.PaneWallPage.TERMINAL);
-        return Math.max(0, at);
-    }
-
     /** Dresses the strip's grounds, position and visibility; hides it in opaque mode. */
     private void refreshGroundStrip() {
         if (mGroundStrip == null) mGroundStrip = findViewById(R.id.ground_strip);
@@ -4912,7 +4911,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mGroundScratch[0] = groundOfWallPage(wall.currentPage());
             count = 1;
         }
-        int current = Math.min(count - 1, groundStopOf(pages, wall.currentPage()));
+        int current = Math.min(count - 1, groundStop());
         strip.setWall(wall);
         strip.setCover(getManagedWallpaperFrameRect());
         strip.setGrounds(mGroundScratch, count, current);
@@ -4931,8 +4930,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GroundStripView strip = mGroundStrip;
         com.termux.app.wall.PaneWallLayout wall = mGroundWall;
         if (strip == null || wall == null || strip.getVisibility() != View.VISIBLE) return;
-        strip.setPosition(groundStopOf(groundKinds(wall), wall.currentPage()), wall.getWidth(),
-            offsetPx);
+        strip.setPosition(groundStop(), wall.getWidth(), offsetPx);
     }
 
     /** The ground under a screen rect, for the ink: the strip's, else the wall-wide dim. */
@@ -24162,7 +24160,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || appliedContentReservationPx() < 0) return;
         // The Workspace's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = placesOf(availableWallPages());
+        // The cells' kinds around the current cell, so a slide between two cells of a kind's
+        // pages and the one beside reads the arriving cell's dress (ADR 0016 section 3).
+        java.util.List<com.termux.app.wall.PaneWallPage> pages =
+            placesOf(mPaneWallController.cellKinds());
+        int cellAt = mPaneWallController.currentCellIndex();
         // The committed place is named so its keyboard, going away, is put away over the first
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         // A slide toward another window of the Workspace stays on its place: the wall's offset
@@ -24172,12 +24174,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController::showsInnerPage;
         float chromeOffsetPx = mChromeSettle.chromeOffsetPx();
         com.termux.app.place.PlaceChromeTravel.Frame frame =
-            com.termux.app.place.PlaceChromeTravel.at(pages, place, chromeOffsetPx,
+            com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, chromeOffsetPx,
                 mChromeSettle.keyboardOffsetPx(), wall.getWidth(), mChromeRestStates,
                 mLastWallPage, inner);
         // The status bar rides with the Workspace's page, so it reads where the wall stands.
         com.termux.app.place.PlaceChromeTravel.Frame wallFrame = chromeOffsetPx == offsetPx
-            ? frame : com.termux.app.place.PlaceChromeTravel.at(pages, place, offsetPx,
+            ? frame : com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, offsetPx,
                 wall.getWidth(), mChromeRestStates, mLastWallPage, inner);
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
@@ -26795,11 +26797,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (strip.getClipBounds() != null) strip.setClipBounds(null);
         }
         if (mPaneWallController == null) return;
-        java.util.List<com.termux.app.wall.PaneWallPage> pages = availableWallPages();
-        com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
+        // The marks are the wall's cells, read around the current one (ADR 0016).
         com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);
-        // The marks are the row's pages: the display is a window of the Workspace, not a mark.
-        if (lens != null) lens.setWallState(pages, current, offsetPx, width);
+        if (lens != null) {
+            lens.setWallState(mPaneWallController.cellKinds(),
+                mPaneWallController.currentCellIndex(), offsetPx, width);
+        }
     }
 
     /** The badge at the start of the status row is the terminal session's, on both halves. */

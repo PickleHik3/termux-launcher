@@ -269,6 +269,43 @@ public final class PlaceChromeTravel {
                            float offsetPx, float keyboardOffsetPx, int widthPx,
                            @NonNull States states, @Nullable PaneWallPage leaving,
                            @Nullable InnerPages inner) {
+        return frameAt(pages, pages.indexOf(current), current, offsetPx, keyboardOffsetPx,
+            widthPx, states, leaving, inner);
+    }
+
+    /**
+     * The chrome for the wall standing {@code offsetPx} from the rest of its cell
+     * {@code currentIndex}, read off the cells' page kinds ({@code cells}, one entry per cell in
+     * cell order): the dress is the kind of the cell beside, whichever cell of a kind the wall is
+     * on (ADR 0016 section 3), so a slide from the second Home run toward the Terminal page
+     * dresses for the Terminal page all the way. Otherwise as {@link #at(List, PaneWallPage,
+     * float, float, int, States, PaneWallPage, InnerPages)}.
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> cells, int currentIndex, float offsetPx,
+                           float keyboardOffsetPx, int widthPx, @NonNull States states,
+                           @Nullable PaneWallPage leaving, @Nullable InnerPages inner) {
+        return frameAt(cells, currentIndex, cells.get(currentIndex), offsetPx, keyboardOffsetPx,
+            widthPx, states, leaving, inner);
+    }
+
+    /**
+     * {@link #at(List, int, float, float, int, States, PaneWallPage, InnerPages)} with the
+     * keyboard read at {@code offsetPx} too.
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> cells, int currentIndex, float offsetPx,
+                           int widthPx, @NonNull States states, @Nullable PaneWallPage leaving,
+                           @Nullable InnerPages inner) {
+        return at(cells, currentIndex, offsetPx, offsetPx, widthPx, states, leaving, inner);
+    }
+
+    /** The frame for {@code current} standing at entry {@code index} of {@code pages} (-1: none). */
+    @NonNull
+    private static Frame frameAt(@NonNull List<PaneWallPage> pages, int index,
+                                 @NonNull PaneWallPage current, float offsetPx,
+                                 float keyboardOffsetPx, int widthPx, @NonNull States states,
+                                 @Nullable PaneWallPage leaving, @Nullable InnerPages inner) {
         if (widthPx <= 0 || offsetPx == 0f || Float.isNaN(offsetPx)) {
             return rest(current, states.restOf(current));
         }
@@ -283,8 +320,8 @@ public final class PlaceChromeTravel {
         float fraction = position - near;
         // On a line, a step past the outer page clamps back onto it (neighbour stops there), so a
         // drag into the edge's resistance blends the page with itself and nothing moves.
-        PaneWallPage from = PaneWallPolicy.neighbour(pages, current, near);
-        PaneWallPage toward = PaneWallPolicy.neighbour(pages, current, near + 1);
+        PaneWallPage from = PaneWallPolicy.neighbourAt(pages, index, near, current);
+        PaneWallPage toward = PaneWallPolicy.neighbourAt(pages, index, near + 1, current);
         Rest a = states.restOf(from);
         Rest b = toward == from ? a : states.restOf(toward);
         boolean keyboardInPlay = a.keyboardReveal() > 0f || b.keyboardReveal() > 0f;
