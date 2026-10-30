@@ -22,7 +22,7 @@ the widget editor and the wallpaper page.
 1. ✔ **Home press inside the launcher.** It closes every open layer, and the Appearance editor
    through its unsaved-changes rule, then lands on Start in. A home press that brings the launcher
    back from another app keeps the page you left (`wall/HomePress`).
-2. ✗ **Home press resets the drawer.** A home press that closes the app drawer also clears its
+2. ✔ **Home press resets the drawer.** A home press that closes the app drawer also clears its
    search text and scrolls it back to the top.
 3. ✔ **Back never leaves the launcher.** It closes the topmost open layer first; on a quiet page it
    does nothing.
@@ -67,7 +67,6 @@ One change at a time, each with its own test and pong check:
 
 | Rule | Change |
 |---|---|
-| 2 | Drawer search text and scroll reset on a home press |
 | 4 | App menu cap from five shortcuts to four, then More shortcuts |
 | 5 | Audit Edit pages, the widget editor and the Appearance editor for Done/Back and the return place |
 | 6, 7, 8 | Audit outside tap, widget tap/long press/resize exit, folder dissolve at one app |

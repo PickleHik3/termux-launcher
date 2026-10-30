@@ -102,6 +102,31 @@ public class AppDrawerContentViewTest {
         layout();
     }
 
+    // ------------------------------------------------------------------ home press reset
+
+    @Test
+    public void aHomePressCloseEmptiesTheFieldAndScrollsToTopWhileAnOrdinaryCloseKeepsTheOffset() {
+        content.setRememberPosition(true);
+        content.setTextFieldSearch(true);
+        grid.scrollBy(0, 4000);
+        layout();
+        androidx.recyclerview.widget.LinearLayoutManager lm =
+            (androidx.recyclerview.widget.LinearLayoutManager) grid.getLayoutManager();
+        assertTrue(lm.findFirstVisibleItemPosition() > 0);
+
+        content.resetSearch();
+        layout();
+        assertTrue("Back keeps the offset", lm.findFirstVisibleItemPosition() > 0);
+
+        search.replaceQuery("app", 3);
+        content.searchInput().mirror("app", 3);
+        content.resetSearchToTop();
+        layout();
+        assertEquals("", content.searchInput().getText().toString());
+        assertFalse(search.hasQuery());
+        assertEquals(0, lm.findFirstVisibleItemPosition());
+    }
+
     // ------------------------------------------------------------------ the claim
 
     @Test
