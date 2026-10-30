@@ -446,10 +446,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * Bind the Home frame to Home page {@code pageId}: to the run of Home cells that holds it,
-     * turned to that page.
+     * turned to that page. The page the frame leaves keeps its picture first, taken while the
+     * frame still shows it (W5: never one run's page while bound to another).
      */
     private void bindHome(int pageId) {
         if (mWall.kindOf(pageId) != PaneWallPage.WIDGETS) return;
+        mWall.takePicture(PaneWallPage.WIDGETS, pageId);
         bindRunOf(pageId);
         int index = homeIndexOf(pageId);
         if (index >= 0 && mHost.innerIndex(PaneWallPage.WIDGETS) != index) {

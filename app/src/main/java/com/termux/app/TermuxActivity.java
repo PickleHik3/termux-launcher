@@ -27221,18 +27221,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
             ? null : mPaneWallController.displayWindow();
         if (pageId < 0 || frame == null || !isEmbeddedDisplayRunning()) return;
-        frame.copyPagePicture(picture -> {
-            if (picture == null) return;
+        frame.copyPagePicture(full -> {
+            if (full == null) return;
             com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
             if (isFinishing() || page == null
                     || page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) {
-                picture.recycle();
+                full.recycle();
                 return;
             }
+            // Pictures are kept at half size (ADR 0016 section 2): a still is seen in motion.
+            android.graphics.Bitmap picture = halfPicture(full, frame.getWidth(), frame.getHeight());
+            if (picture == null) return;
             recycleDisplayPicture(mDisplayPictures.put(pageId, picture));
+            // The page's cell on the wall shows it too while the display is bound elsewhere.
+            if (mPaneWallController != null) {
+                try {
+                    mPaneWallController.wall().keepPicture(pageId,
+                        picture.copy(android.graphics.Bitmap.Config.ARGB_8888, false));
+                } catch (OutOfMemoryError ignored) {
+                    // The cell keeps its card.
+                }
+            }
             // A picture that lands after the frame came back to its page is that page's newest.
             if (pageId == mBoundDisplayPage) applyDisplayPageStill();
         });
+    }
+
+    /**
+     * {@code full} at half the frame's {@code frameWidth} by {@code frameHeight} ({@link
+     * com.termux.app.wall.PageStillPolicy#pictureSide}; the picture's own size while the frame
+     * has none), the full one recycled; null when it could not be scaled.
+     */
+    @Nullable
+    private static android.graphics.Bitmap halfPicture(@NonNull android.graphics.Bitmap full,
+                                                       int frameWidth, int frameHeight) {
+        int width = com.termux.app.wall.PageStillPolicy.pictureSide(
+            frameWidth > 0 ? frameWidth : full.getWidth());
+        int height = com.termux.app.wall.PageStillPolicy.pictureSide(
+            frameHeight > 0 ? frameHeight : full.getHeight());
+        if (full.getWidth() == width && full.getHeight() == height) return full;
+        android.graphics.Bitmap half;
+        try {
+            half = android.graphics.Bitmap.createScaledBitmap(full, width, height, true);
+        } catch (OutOfMemoryError | IllegalArgumentException e) {
+            half = null;
+        }
+        if (half != full) full.recycle();
+        return half;
     }
 
     private void recycleDisplayPicture(@Nullable android.graphics.Bitmap picture) {
