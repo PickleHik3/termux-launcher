@@ -335,12 +335,15 @@ _Avoid_: surface mode, dock style (it is no longer the dock's alone),
 capsule, rounded
 
 **Surface**:
-One piece of glass whose look can be set: the dock, the keyboard, the status bar or the canvas
-(the terminal pane). In code it is a `SurfaceSlot`. The user sets its **Frost**, opacity, tint,
-corner radius and side gap (Frost is stored as the blur and grain properties), and each of those
-either follows **Base** or holds an override of its own. AGENTS.md's "Hit every surface" uses the word more broadly, for every path a
-change has to cover.
-_Avoid_: panel, layer, widget
+One piece of glass whose look can be set, also called an **element** in the look grid: the status
+bar, the dock, the keyboard, the terminal (the canvas), the **Widgets** (the Card-form widgets'
+glass on a Home page) and the **Sheets** (the app drawer, folders, anchored menus, the command
+palette, notices and the Home float, which share one set of cells). In code it is a
+`SurfaceSlot`. Every element carries every look property it has a shape for (Frost, Grain,
+opacity, tint, tint colour, Depth, Edge, corners, rim); each either follows **Base** or holds a
+**Cell** of its own (ADR 0017). AGENTS.md's "Hit every surface" uses the word more broadly, for
+every path a change has to cover.
+_Avoid_: panel, layer, widget (for the Widgets element say "the Widgets surface")
 
 **Terminal** (the entry):
 The launcher's own app entry, pinned to the dock at migration and listed in the drawer: a tap goes
@@ -471,14 +474,23 @@ the page landed on and never to the pages passed over.
 _Avoid_: bound run, bound slot
 
 **Page override**:
-A look value one page holds instead of the wall's: stored as the surface's key plus `@<page id>`,
-resolved page override → the surface's wall-wide value → **Base**. Reset under the page's scope
-drops it.
+A look value one page holds instead of the wall's: a **Cell** in the page's row of the look grid
+(`look.<property>@<page id>`, or `look.<property>.<element>@<page id>` for one element). Reset at
+that cell deletes it (ADR 0017).
 _Avoid_: half value, per-page setting
 
+**Cell**:
+One slot of the look grid (ADR 0017): a property at one *Where* (everywhere or a page) and one
+*What* (all glass or one element), keyed `look.<property>[.<element>][@<page>]`. A present key
+is the cell's value; an absent key follows. Read order: the element on this page, all glass on
+this page, the element everywhere, **Base**, the shipped Look.
+_Avoid_: layer, level, override slot
+
 **Scope chip**:
-The Appearance card's **Global | <page name>** switch: Global writes **Base**, the page's name
-detaches that page's values. "Global" is the UI label; in prose and code say Base.
+The two chips at the top of every Appearance card: **Where it applies** (Everywhere | <page name>)
+and **What it applies to** (All glass | <element>). Together they name the **Cell** the card's
+rows read and write. Before ADR 0017 there was one chip, **Global | <page name>**, on four cards.
+_Avoid_: Global (the old label; in prose and code say Base)
 
 ### Look and motion
 
@@ -489,13 +501,15 @@ pane is not visible, and after about ten seconds without input, resuming on the 
 _Avoid_: animated background, live wallpaper (removed), animation
 
 **Base**:
-The shared value of a surface property (Frost, opacity, tint, corner radius, side gap; Frost is
-stored as blur and grain) that every surface follows until it is given its own. The Appearance
-card's All surfaces strip sets it. A surface that follows Base is **inherited**; one
-with its own value is **detached**, holding an override. The resolution happens in
-`TermuxAppSharedPreferences`, so every getter returns the resolved value. Setters write through the
-link, so a slider or the wallpaper mode leaves a surface inherited.
-_Avoid_: global, default (the shipped value is the default; Base is what the user set)
+The everywhere-and-all-glass **Cell** of a look property (`look.<property>`): the value every
+page and every element shows until a more specific cell holds one. The Appearance card writes it
+with both chips on Everywhere and All glass; Settings rows, presets, the wallpaper policy and
+launcherctl write it unless they name another cell. There are no inherit flags: a surface
+**follows** when its cells are absent and holds its own value when one is present (ADR 0017).
+The resolution happens in `LookGrid` under `TermuxAppSharedPreferences`, so every named getter
+returns the resolved value.
+_Avoid_: global, default (the shipped value is the default; Base is what the user set), inherited
+and detached (the old flag words)
 
 **Event effect**:
 A built-in shader effect that draws only in answer to something happening (a keystroke, a cursor
@@ -516,8 +530,11 @@ _Avoid_: glass mode, refraction mode
 The glass strip's first slider on every card with glass (and All surfaces' on the Appearance
 card), clear to frosted: it moves a surface's blur and grain together along
 one curve (`surfaces/GlassControls`; the code still calls it Glass, `GLASS`, `surface_glass_position`).
-Clear sits at 20, Tint at 40, Mist at 75; Solid has no frost and sits off it. Storage keeps blur and
-grain; the slider reads them back. Not the frost layer itself (the blurred picture a surface draws).
+Since ADR 0017 it snaps to eight **Frost stops** (0, 10, 20, 40, 55, 75, 90, 100 on the old
+scale) so that every distinct blur radius in use fits the shared-frame cache; Solid sits at 0,
+Clear at 20, Tint at 40, Mist at 75. Storage keeps the stop, and a **Grain** set on its own
+under More holds while Frost moves blur alone. Not the frost layer itself (the blurred picture a
+surface draws).
 _Avoid_: Glass (the old label; every control on that page is about the glass), material (the older
 family macro)
 
