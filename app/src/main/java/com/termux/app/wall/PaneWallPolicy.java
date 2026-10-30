@@ -80,90 +80,15 @@ public final class PaneWallPolicy {
         return Collections.unmodifiableList(pages);
     }
 
-    /**
-     * The wall's slots in page-list order ({@link WallPages#slots}), without the Terminal slot
-     * while the row has no window. For [Home...][Terminal] this is {@link #rowPages} one-to-one,
-     * a Home run being the one WIDGETS entry.
-     */
+    /** The wall's page kind of a page of the list: Home pages are shown by the widgets' view. */
     @NonNull
-    public static List<WallPages.Slot> rowSlots(@NonNull WallPages pages, boolean hasWindow) {
-        List<WallPages.Slot> out = new ArrayList<>();
-        for (WallPages.Slot slot : pages.slots()) {
-            if (slot.kind == WallPages.PageKind.TERMINAL && !hasWindow) continue;
-            out.add(slot);
-        }
-        return Collections.unmodifiableList(out);
-    }
-
-    /** The kind of page a slot is shown by. */
-    @NonNull
-    public static PaneWallPage kindOf(@NonNull WallPages.Slot slot) {
-        switch (slot.kind) {
+    public static PaneWallPage kindOf(@NonNull WallPages.PageKind kind) {
+        switch (kind) {
             case HOME: return PaneWallPage.WIDGETS;
             case DISPLAY: return PaneWallPage.DISPLAY;
+            case TERMINAL:
             default: return PaneWallPage.TERMINAL;
         }
-    }
-
-    /** The kinds of {@code slots}, in order: what the kind-keyed wall list becomes. */
-    @NonNull
-    public static List<PaneWallPage> kindsOf(@NonNull List<WallPages.Slot> slots) {
-        List<PaneWallPage> out = new ArrayList<>(slots.size());
-        for (WallPages.Slot slot : slots) out.add(kindOf(slot));
-        return out;
-    }
-
-    /**
-     * Where a slot sits relative to the current one, in whole pages (negative on the left): a
-     * plain line over the slots, whatever kinds they are.
-     */
-    public static int relativeSlot(int current, int slot) {
-        return slot - current;
-    }
-
-    /** The slot {@code steps} away from {@code current}, held at the row's ends. */
-    public static int neighbourSlot(int slotCount, int current, int steps) {
-        return Math.max(0, Math.min(Math.max(0, slotCount - 1), current + steps));
-    }
-
-    // ---- The built window (ADR 0015, A2a) ---------------------------------------------------
-
-    private static int boundSlotOf(@NonNull List<WallPages.Slot> slots,
-                                   @NonNull WallPages.PageKind kind, int current, int bound) {
-        if (isKind(slots, current, kind)) return current;
-        boolean left = isKind(slots, current - 1, kind);
-        boolean right = isKind(slots, current + 1, kind);
-        if ((left && bound == current - 1) || (right && bound == current + 1)) return bound;
-        if (left) return current - 1;
-        if (right) return current + 1;
-        if (isKind(slots, bound, kind)) return bound;
-        for (int i = 0; i < slots.size(); i++) if (slots.get(i).kind == kind) return i;
-        return -1;
-    }
-
-    private static boolean isKind(@NonNull List<WallPages.Slot> slots, int i,
-                                  @NonNull WallPages.PageKind kind) {
-        return i >= 0 && i < slots.size() && slots.get(i).kind == kind;
-    }
-
-    /**
-     * Where the wall goes when the page it rests on leaves the row: the nearest page to its left
-     * that is still there: the last window closing lands on Home. A page the old row did not have
-     * hands over to Home.
-     *
-     * @param before the row as it was
-     * @param after  the row as it is now
-     * @param gone   the page the wall rested on, no longer in {@code after}
-     */
-    @NonNull
-    public static PaneWallPage pageAfterRemoval(@NonNull List<PaneWallPage> before,
-                                                @NonNull List<PaneWallPage> after,
-                                                @NonNull PaneWallPage gone) {
-        for (int i = before.indexOf(gone) - 1; i >= 0; i--) {
-            if (after.contains(before.get(i))) return before.get(i);
-        }
-        if (after.contains(homePage())) return homePage();
-        return after.isEmpty() ? homePage() : after.get(0);
     }
 
     /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */

@@ -333,61 +333,6 @@ public final class WallPages {
         return out;
     }
 
-    /**
-     * One run of pages (ADR 0015, slice A2a; the wall lays out one cell per page since ADR 0016): a maximal contiguous run of Home pages, which
-     * {@code WidgetPaneView} pages inside, or one Terminal or Display page. Strict per-page runs
-     * (one Home page each) come with the page-chrome slice.
-     */
-    public static final class Slot {
-        @NonNull public final PageKind kind;
-        /** The pages of the slot, in order: several for a Home run, else one. */
-        @NonNull public final List<Integer> pageIds;
-
-        Slot(@NonNull PageKind kind, @NonNull List<Integer> pageIds) {
-            this.kind = kind;
-            this.pageIds = Collections.unmodifiableList(pageIds);
-        }
-
-        /** The slot's id: its first page's id. */
-        public int id() { return pageIds.get(0); }
-
-        @Override public boolean equals(Object o) {
-            return o instanceof Slot && kind == ((Slot) o).kind && pageIds.equals(((Slot) o).pageIds);
-        }
-
-        @Override public int hashCode() { return 31 * kind.hashCode() + pageIds.hashCode(); }
-
-        @Override public String toString() { return "Slot(" + kind + pageIds + ")"; }
-    }
-
-    /** The wall's slots in {@link #pages()} order: Home pages grouped into runs, the rest alone. */
-    @NonNull
-    public List<Slot> slots() {
-        List<Slot> out = new ArrayList<>();
-        List<Integer> run = null;
-        for (Page p : pages()) {
-            if (p.kind == PageKind.HOME) {
-                if (run == null) run = new ArrayList<>();
-                run.add(p.id);
-                continue;
-            }
-            if (run != null) { out.add(new Slot(PageKind.HOME, run)); run = null; }
-            List<Integer> one = new ArrayList<>(1);
-            one.add(p.id);
-            out.add(new Slot(p.kind, one));
-        }
-        if (run != null) out.add(new Slot(PageKind.HOME, run));
-        return out;
-    }
-
-    /** The index among {@link #slots()} of the slot holding page {@code pageId}; -1 if none. */
-    public int slotIndexOf(int pageId) {
-        List<Slot> slots = slots();
-        for (int i = 0; i < slots.size(); i++) {
-            if (slots.get(i).pageIds.contains(pageId)) return i;
-        }
-        return -1;
-    }
 
     /** The position of {@code stop} among {@link #stops}; -1 when it is not one. */
     public int indexOf(@NonNull Stop stop, int windowCount) {

@@ -329,7 +329,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean homeAfterTerminal = false;
         if (pages != null) {
             for (WallPages.Page page : pages.pages()) {
-                PaneWallPage kind = kindOf(page.kind);
+                PaneWallPage kind = PaneWallPolicy.kindOf(page.kind);
                 if (kind == PaneWallPage.WIDGETS && !homeShown) continue;
                 if (kind == PaneWallPage.WIDGETS && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PaneWallPage.WIDGETS;
@@ -346,7 +346,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mHasDisplaySlot = false;
             out.clear();
             // The Terminal page is on the row whether or not it has a window.
-            for (PaneWallPage kind : mHost.useAs().rowPages(true)) {
+            for (PaneWallPage kind : mHost.useAs().rowPages()) {
                 out.add(new PaneWallLayout.Cell(PaneWallLayout.kindPageId(kind), kind, null));
             }
             return out;
@@ -355,17 +355,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHasDisplaySlot = hasDisplay;
         mDefaultOrder = !hasDisplay && !homeAfterTerminal;
         return out;
-    }
-
-    /** The wall's page kind of a page of the list. */
-    @NonNull
-    static PaneWallPage kindOf(@NonNull WallPages.PageKind kind) {
-        switch (kind) {
-            case HOME: return PaneWallPage.WIDGETS;
-            case DISPLAY: return PaneWallPage.DISPLAY;
-            case TERMINAL:
-            default: return PaneWallPage.TERMINAL;
-        }
     }
 
     /** Whether the wall has a cell of {@code kind}. */

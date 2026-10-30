@@ -113,21 +113,6 @@ public final class WallRow {
         return direction > 0 ? pageInRun >= last : pageInRun <= 0;
     }
 
-    /** The run page the wall shows when it arrives from a slot on {@code side} of it. */
-    public static int arrivalPage(int runLength, int sideOfArrival) {
-        return sideOfArrival > 0 ? Math.max(0, runLength - 1) : 0;
-    }
-
-    /** The global Home-page index of run page {@code pageInRun} of slot {@code slotIndex}. */
-    public static int globalHomeIndex(@NonNull WallPages pages, int slotIndex, int pageInRun) {
-        java.util.List<WallPages.Slot> slots = pages.slots();
-        int seen = 0;
-        for (int i = 0; i < slots.size() && i < slotIndex; i++) {
-            if (slots.get(i).kind == WallPages.PageKind.HOME) seen += slots.get(i).pageIds.size();
-        }
-        return seen + Math.max(0, pageInRun);
-    }
-
     /**
      * The Home page the wall shows when it arrives at Home from the right, by the border drag
      * off the first window or when the last window closes: the last one, which is the page next

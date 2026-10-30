@@ -24,7 +24,7 @@ public final class WallKeys {
     public static List<PaneWallPage> kinds(@NonNull WallPages pages, @NonNull UseAs useAs) {
         List<PaneWallPage> out = new ArrayList<>(3);
         for (WallPages.Page page : pages.pages()) {
-            PaneWallPage kind = PaneWallController.kindOf(page.kind);
+            PaneWallPage kind = PaneWallPolicy.kindOf(page.kind);
             if (kind == PaneWallPage.WIDGETS && !useAs.showsHomePage()) continue;
             if (!out.contains(kind)) out.add(kind);
         }

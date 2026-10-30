@@ -52,10 +52,8 @@ public class UseAsTest {
     }
 
     @Test public void terminalOnlyRowIsTheWorkspaceAloneWindowOrNot() {
-        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), UseAs.TERMINAL.rowPages(true));
-        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), UseAs.TERMINAL.rowPages(false));
-        assertEquals(PaneWallPolicy.rowPages(true), UseAs.HOME.rowPages(true));
-        assertEquals(PaneWallPolicy.rowPages(false), UseAs.HOME.rowPages(false));
+        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), UseAs.TERMINAL.rowPages());
+        assertEquals(PaneWallPolicy.rowPages(true), UseAs.HOME.rowPages());
     }
 
     @Test public void terminalOnlyReadsStartInHomeAsTheWorkspace() {
