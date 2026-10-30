@@ -37,7 +37,10 @@ public class HalfLookUpgradeTest {
     }
 
     private PageLook.Snapshot snapshot(int id, PageKind kind) {
-        PageLook look = new PageLook(store);
+        // The half upgrade writes the old keys; start-up folds them into the grid next.
+        MemoryLookStore folded = store.copy();
+        fold(folded);
+        PageLook look = new PageLook(folded);
         try {
             return look.of(new Page(id, kind, null, null));
         } finally {
@@ -123,7 +126,7 @@ public class HalfLookUpgradeTest {
         store.putInt(TERMUX_APP.KEY_SURFACE_BASE_BLUR + "_home", 4);
         store.putInt(TERMUX_APP.KEY_SURFACE_BASE_BLUR + "_workspace", 12);
         assertTrue(upgrade());
-        assertEquals(30, snapshot(1, PageKind.HOME).extraKeysBlurRadius());
+        assertEquals(31, snapshot(1, PageKind.HOME).extraKeysBlurRadius());
         assertEquals(12, snapshot(TERMINAL_ID, PageKind.TERMINAL).extraKeysBlurRadius());
         // The status bar follows Base on both: Home shows 4, the Workspace 12.
         assertEquals(4, snapshot(1, PageKind.HOME).statusBarBlurRadius());
@@ -219,4 +222,17 @@ public class HalfLookUpgradeTest {
             if (!key.contains("inherit"))
                 assertEquals(key, once.getInt(key, -7), store.getInt(key, -7));
     }
+
+    /** The grid upgrade start-up runs next, over the pages the wall has. */
+    private void fold(MemoryLookStore store) {
+        store.putBoolean(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true);
+        store.putBoolean(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, true);
+        store.putBoolean(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, true);
+        com.termux.shared.termux.settings.preferences.LookGridMigration.run(
+            LookKeys.gridStore(store), java.util.Arrays.asList(TERMINAL_ID, DISPLAY_ID, 1, 3));
+    }
+
 }
