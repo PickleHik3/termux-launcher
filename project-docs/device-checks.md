@@ -21,6 +21,12 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-30 · W1 of ADR 0017, every look value in one grid · a staging build installed over
+  the current one on pong (no data cleared): Home, each Home page, the Terminal page and the
+  Display page look as before (dock, status bar, keyboard up and down, terminal, Card widgets,
+  drawer, folders); a blur of at most 2 dp may shift on upgrade, nothing else moves. Then the
+  Appearance editor: a Look on Everywhere and on one page, a page reset, Done and the
+  unsaved-changes dialog all still behave. Also a fresh emulator install shows Clear.
 - 2026-10-30 · 418a2d7ef, the wallpaper page's Done returns to its card · on pong (also set as
   phone wallpaper on, Lock same as Home), Appearance › Global › Change wallpaper › Choose photo ›
   crop › Done: no editor flash before the picker or after the crop; the page shows its progress

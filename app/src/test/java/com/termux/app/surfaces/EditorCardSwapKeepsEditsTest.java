@@ -76,7 +76,7 @@ public class EditorCardSwapKeepsEditsTest {
         swipe(editor, PaneWallPage.TERMINAL);
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertWorkspaceKept(editor);
-        assertEquals("Frost reads back where it was left", 70, model(editor).value(Row.FROST));
+        assertEquals("Frost reads back where it was left", 75, model(editor).value(Row.FROST));
         assertEquals(65, model(editor).value(Row.OPACITY));
     }
 
@@ -99,7 +99,7 @@ public class EditorCardSwapKeepsEditsTest {
         assertTrue(done[0]);
         assertEquals("Base is wall-wide: Home's 33 stands", 33,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(GlassControls.blurForGlass(70),
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70))),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
     }
@@ -122,7 +122,7 @@ public class EditorCardSwapKeepsEditsTest {
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertEquals("a door naming the card raises it from peek", EditorCardSheet.DETENT_HALF,
             sheet.detent());
-        assertEquals(70, model(editor).value(Row.FROST));
+        assertEquals(75, model(editor).value(Row.FROST));
         assertEquals(65, model(editor).value(Row.OPACITY));
         assertWorkspaceKept(editor);
     }
@@ -141,7 +141,7 @@ public class EditorCardSwapKeepsEditsTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertWorkspaceKept(editor);
-        assertEquals(70, model(editor).value(Row.FROST));
+        assertEquals(75, model(editor).value(Row.FROST));
     }
 
     // ------------------------------------------------------------------------------- the checks
@@ -153,7 +153,7 @@ public class EditorCardSwapKeepsEditsTest {
     private void assertWorkspaceKept(SurfaceEditorController editor, int opacity) {
         assertEquals(opacity,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(GlassControls.blurForGlass(70),
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(GlassControls.blurForGlass(70))),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(GlassControls.grainForGlass(70),
             preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId()));

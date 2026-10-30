@@ -127,7 +127,13 @@ public class TermuxApplication extends Application {
                 surfacePreferences.getSharedPreferences(),
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
                 terminalId);
-            surfacePreferences.migrateSurfaceInheritance();
+            // Every look value moves into the one grid (ADR 0017), once, before the glass
+            // controls' start-up work reads and writes looks through it.
+            java.util.List<Integer> lookPageIds = new java.util.ArrayList<>();
+            for (com.termux.app.wall.WallPages.Page page
+                    : com.termux.app.wall.WallPagesStore.open(context).current().allPages())
+                lookPageIds.add(page.id);
+            surfacePreferences.migrateLookGrid(lookPageIds);
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences);

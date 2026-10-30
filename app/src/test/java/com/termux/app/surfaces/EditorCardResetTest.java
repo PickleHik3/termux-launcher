@@ -45,7 +45,7 @@ public class EditorCardResetTest {
         prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 40);
         prefs.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 90);
         EditorCardReset.resetStore(prefs, EditorCard.HOME, TermuxAppSharedPreferences.PAGE_WALL);
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
             prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
             prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
@@ -57,9 +57,9 @@ public class EditorCardResetTest {
         prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(), 41);
         EditorCardReset.resetStore(prefs, EditorCard.WORKSPACE, TermuxAppSharedPreferences.terminalPageId());
         // Base is wall-wide: the reset is the wall's, so Home reads the default as well.
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
             prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
             prefs.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
     }
 

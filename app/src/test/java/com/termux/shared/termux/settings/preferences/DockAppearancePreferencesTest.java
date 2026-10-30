@@ -37,7 +37,7 @@ public class DockAppearancePreferencesTest {
         assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
 
         preferences.setExtraKeysBlurRadius(49);
-        assertEquals(48, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(36, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -95,7 +95,7 @@ public class DockAppearancePreferencesTest {
         preferences.setStatusBarGrain(101);
         preferences.setStatusBarCornerRadius(44);
 
-        assertEquals(48, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(36, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(0, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(100, preferences.getStatusBarGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(40, preferences.getStatusBarCornerRadius());

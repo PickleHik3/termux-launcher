@@ -1721,8 +1721,6 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
 
-        /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
-        public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
         /** A surface follows Base until the user moves that one control. */
         public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_BASE = true;
 

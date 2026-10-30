@@ -232,7 +232,8 @@ public class AppearanceSnapshotTest {
 
         session.restore(preferences);
 
-        assertEquals(63, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        // 63 dp is past the last Frost stop: its 36 dp.
+        assertEquals(36, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
         assertEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
     }

@@ -96,7 +96,9 @@ public final class HalfLookUpgrade {
                 if (!TermuxAppSharedPreferences.isPerPage(slot, property)) continue;
                 ENTRIES.add(new Entry(LookKeys.surfaceKey(slot, property), Write.Type.INT,
                     LookKeys.surfaceDefault(slot, property), true));
-                ENTRIES.add(new Entry(LookKeys.inheritKey(slot, property), Write.Type.BOOL,
+                // The old link flag; the grid upgrade that follows deletes it.
+                ENTRIES.add(new Entry("surface_inherit_" + slot.key + "_" + property.key,
+                    Write.Type.BOOL,
                     TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE, false));
             }
         }
@@ -181,8 +183,8 @@ public final class HalfLookUpgrade {
                 for (SurfaceSlot slot : SurfaceSlot.values()) {
                     for (SurfaceProperty property : SurfaceProperty.values()) {
                         if (!LookKeys.detachable(slot, property, kind)) continue;
-                        int want = shown.value(slot, property);
-                        if (got.value(slot, property) == want) continue;
+                        int want = legacyValue(new WorkspaceView(store), kind, id, slot, property);
+                        if (legacyValue(after, kind, id, slot, property) == want) continue;
                         String key = LookKeys.pageKey(LookKeys.surfaceKey(slot, property), id);
                         writes.put(key, new Write(key, Write.Type.INT, want, false, null));
                     }
@@ -193,6 +195,29 @@ public final class HalfLookUpgrade {
             before.close();
         }
         return Collections.unmodifiableList(new ArrayList<>(writes.values()));
+    }
+
+    /**
+     * What a surface showed on a page under the old keys this upgrade reads and writes: the
+     * page's own value, else Base while the surface's link held, else its own number. This
+     * upgrade runs before the look grid exists (the grid upgrade folds its output next), so it
+     * keeps the old rule for itself rather than reading the grid.
+     */
+    private static int legacyValue(@NonNull LookStore store, @NonNull PageKind kind, int pageId,
+                                   @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
+        String key = LookKeys.surfaceKey(slot, property);
+        if (key == null) return LookKeys.surfaceDefault(slot, property);
+        if (LookKeys.isShape(property)) return store.getInt(property.baseKey, property.baseDefault);
+        if (LookKeys.detachable(slot, property, kind)) {
+            String pageKey = LookKeys.pageKey(key, pageId);
+            if (store.has(pageKey))
+                return LookKeys.clamp(property, store.getInt(pageKey, LookKeys.surfaceDefault(slot, property)));
+        }
+        int value = store.getBoolean("surface_inherit_" + slot.key + "_" + property.key,
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE)
+            ? store.getInt(property.baseKey, property.baseDefault)
+            : store.getInt(key, LookKeys.surfaceDefault(slot, property));
+        return LookKeys.clamp(property, value);
     }
 
     private static Object read(LookStore store, Entry entry, String key) {

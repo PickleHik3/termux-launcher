@@ -220,7 +220,7 @@ public class SurfacePresetsGlassTest {
         preferences.getSharedPreferences().edit()
             .remove(com.termux.shared.termux.settings.preferences.PageLookKeys
                 .KEY_TERMINAL_PAGE_ID).commit();
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         com.termux.app.look.TerminalPageIdFixture.give(preferences);
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
         for (String id : new String[] {"frost", "stock", "solid"})

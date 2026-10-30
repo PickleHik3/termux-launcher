@@ -147,7 +147,7 @@ public class SavedCustomRestoreTest {
         SurfaceEditorController.SessionCustom session = new SurfaceEditorController.SessionCustom();
         session.enter(prefs);
 
-        assertEquals(21, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(prefs.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
         assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertTrue(prefs.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));

@@ -88,10 +88,17 @@ public class AppearanceSnapshotHalfTest {
         int display = 9;
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 31);
         AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
-        String dockKey = TermuxAppSharedPreferences.surfaceOverrideKey(SurfaceSlot.DOCK,
-            SurfaceProperty.OPACITY);
-        String homeKey = TermuxAppSharedPreferences.surfacePageKey(dockKey, home);
-        String displayKey = TermuxAppSharedPreferences.surfacePageKey(dockKey, display);
+        // A page's own dock opacity is the dock's cell on that page.
+        String dockKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK,
+            com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
+        String homeKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, home);
+        String displayKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, display);
         assertNotEquals("the dock's opacity is a page key", dockKey, homeKey);
 
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, home, 15);
@@ -150,6 +157,9 @@ public class AppearanceSnapshotHalfTest {
             // The halves are pages: the Workspace's own values are the Terminal page's overrides.
             String page = "@" + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID;
             if (key.endsWith(page)) {
+                // A grid cell on the Terminal page is one of its own values.
+                if (com.termux.shared.termux.settings.preferences.LookGrid.parse(key) != null)
+                    return true;
                 for (String halfAble : AppearanceSnapshot.halfAbleKeys()) {
                     if (key.equals(halfAble + page))
                         return true;

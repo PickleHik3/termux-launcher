@@ -81,7 +81,7 @@ public class SurfaceEditorControllerSeedTest {
         session.enter(preferences);
 
         assertEquals(tweaked, AppearanceSnapshot.signatureOf(preferences));
-        assertEquals(TWEAKED_BLUR, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
     }
 
     @Test
@@ -169,7 +169,7 @@ public class SurfaceEditorControllerSeedTest {
         SurfacePresets.apply(preferences, mist);
         session.enter(preferences);
 
-        assertEquals(TWEAKED_BLUR, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
     }
 
     private void tweak() {

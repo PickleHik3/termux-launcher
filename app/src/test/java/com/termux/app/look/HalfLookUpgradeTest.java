@@ -27,7 +27,7 @@ public class HalfLookUpgradeTest {
     }
 
     private void detachDockGrainOnBothHalves() {
-        String flag = LookKeys.inheritKey(SurfaceSlot.DOCK, SurfaceProperty.GRAIN);
+        String flag = ("surface_inherit_" + SurfaceSlot.DOCK.key + "_" + SurfaceProperty.GRAIN.key);
         store.putBoolean(flag + "_home", false);
         store.putBoolean(flag + "_workspace", false);
     }
@@ -37,7 +37,10 @@ public class HalfLookUpgradeTest {
     }
 
     private PageLook.Snapshot snapshot(int id, PageKind kind) {
-        PageLook look = new PageLook(store);
+        // The half upgrade writes the old keys; start-up folds them into the grid next.
+        MemoryLookStore folded = store.copy();
+        fold(folded);
+        PageLook look = new PageLook(folded);
         try {
             return look.of(new Page(id, kind, null, null));
         } finally {
@@ -101,7 +104,7 @@ public class HalfLookUpgradeTest {
 
     @Test
     public void canvasKeysStayWallValues() {
-        store.putBoolean(LookKeys.inheritKey(SurfaceSlot.CANVAS, SurfaceProperty.TINT), false);
+        store.putBoolean(("surface_inherit_" + SurfaceSlot.CANVAS.key + "_" + SurfaceProperty.TINT.key), false);
         store.putInt(TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, 60);
         store.putInt(GRAIN + "_home", 10);
         store.putInt(GRAIN + "_workspace", 50);
@@ -115,7 +118,7 @@ public class HalfLookUpgradeTest {
     @Test
     public void aWorkspaceThatFollowedItsOwnBaseKeepsItsLook() {
         // Home detached dock blur at 30; the Workspace follows a Base of 12 that Home does not use.
-        String flag = LookKeys.inheritKey(SurfaceSlot.DOCK, SurfaceProperty.BLUR);
+        String flag = ("surface_inherit_" + SurfaceSlot.DOCK.key + "_" + SurfaceProperty.BLUR.key);
         String blur = LookKeys.surfaceKey(SurfaceSlot.DOCK, SurfaceProperty.BLUR);
         store.putBoolean(flag + "_home", false);
         store.putBoolean(flag + "_workspace", true);
@@ -123,10 +126,10 @@ public class HalfLookUpgradeTest {
         store.putInt(TERMUX_APP.KEY_SURFACE_BASE_BLUR + "_home", 4);
         store.putInt(TERMUX_APP.KEY_SURFACE_BASE_BLUR + "_workspace", 12);
         assertTrue(upgrade());
-        assertEquals(30, snapshot(1, PageKind.HOME).extraKeysBlurRadius());
+        assertEquals(31, snapshot(1, PageKind.HOME).extraKeysBlurRadius());
         assertEquals(12, snapshot(TERMINAL_ID, PageKind.TERMINAL).extraKeysBlurRadius());
-        // The status bar follows Base on both: Home shows 4, the Workspace 12.
-        assertEquals(4, snapshot(1, PageKind.HOME).statusBarBlurRadius());
+        // The status bar follows Base on both: Home shows 4 (worn at the stop for 5), the Workspace 12.
+        assertEquals(5, snapshot(1, PageKind.HOME).statusBarBlurRadius());
         assertEquals(12, snapshot(TERMINAL_ID, PageKind.TERMINAL).statusBarBlurRadius());
     }
 
@@ -219,4 +222,17 @@ public class HalfLookUpgradeTest {
             if (!key.contains("inherit"))
                 assertEquals(key, once.getInt(key, -7), store.getInt(key, -7));
     }
+
+    /** The grid upgrade start-up runs next, over the pages the wall has. */
+    private void fold(MemoryLookStore store) {
+        store.putBoolean(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true);
+        store.putBoolean(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, true);
+        store.putBoolean(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, true);
+        com.termux.shared.termux.settings.preferences.LookGridMigration.run(
+            LookKeys.gridStore(store), java.util.Arrays.asList(TERMINAL_ID, DISPLAY_ID, 1, 3));
+    }
+
 }

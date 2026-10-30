@@ -4,6 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.wall.WallPages.PageKind;
+import com.termux.shared.termux.settings.preferences.FrostStops;
+import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
@@ -59,10 +61,6 @@ final class LookKeys {
         return !isLookProperty(property);
     }
 
-    @NonNull
-    static String inheritKey(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
-        return TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key;
-    }
 
     /** The surface's own key for a property, or null where the surface has none. */
     @Nullable
@@ -152,21 +150,71 @@ final class LookKeys {
      */
     static int resolve(@NonNull LookStore store, @NonNull PageKind kind, int pageId,
                        @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
-        String key = surfaceKey(slot, property);
-        if (key == null) return surfaceDefault(slot, property);
-        if (isShape(property)) return store.getInt(property.baseKey, property.baseDefault);
-        if (detachable(slot, property, kind)) {
-            String pageKey = pageKey(key, pageId);
-            if (store.has(pageKey))
-                return clamp(property, store.getInt(pageKey, surfaceDefault(slot, property)));
+        LookGrid grid = new LookGrid(gridStore(store));
+        LookGrid.Element element = property.grid.perElement ? slot.element : null;
+        // A page holds its own glass numbers only; the canvas's only on the Terminal page.
+        boolean pageHolds = pageId >= 0 && isLookProperty(property)
+            && (slot != SurfaceSlot.CANVAS || kind == PageKind.TERMINAL);
+        return fromCell(property.grid, grid.value(property.grid, element,
+            pageHolds ? pageId : LookGrid.NO_PAGE));
+    }
+
+    /** A value in the old unit of the cell's property: a Frost stop as its blur in dp. */
+    static int fromCell(@NonNull LookGrid.Property property, int value) {
+        return property == LookGrid.Property.FROST ? FrostStops.blurDpFor(value) : value;
+    }
+
+    /** A value in the old unit as the cell holds it: a blur as its nearest Frost stop. */
+    static int toCell(@NonNull LookGrid.Property property, int value) {
+        return property == LookGrid.Property.FROST ? FrostStops.nearestStopByBlur(value) : value;
+    }
+
+    /**
+     * The grid cell (everywhere) an old look key names, or null for a key outside the grid: a
+     * Base key is the all-glass cell, a surface's own key that surface's element cell. A grid key
+     * is read as itself, its page dropped.
+     */
+    @Nullable
+    static LookGrid.Key cellOf(@NonNull String key) {
+        LookGrid.Key grid = LookGrid.parse(key);
+        if (grid != null) return new LookGrid.Key(grid.property, grid.element, LookGrid.NO_PAGE);
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (property.baseKey.equals(key))
+                return new LookGrid.Key(property.grid, null, LookGrid.NO_PAGE);
+            for (SurfaceSlot slot : SurfaceSlot.values()) {
+                if (key.equals(surfaceKey(slot, property)))
+                    return new LookGrid.Key(property.grid,
+                        property.grid.perElement ? slot.element : null, LookGrid.NO_PAGE);
+            }
         }
-        int value;
-        if (store.getBoolean(inheritKey(slot, property),
-            TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE))
-            value = store.getInt(property.baseKey, property.baseDefault);
-        else
-            value = store.getInt(key, surfaceDefault(slot, property));
-        return clamp(property, value);
+        return null;
+    }
+
+    /** The grid's view of a look store. */
+    @NonNull
+    static LookGrid.Store gridStore(@NonNull LookStore store) {
+        return new LookGrid.Store() {
+            @Override public boolean contains(@NonNull String key) { return store.has(key); }
+            @Override public int getInt(@NonNull String key, int defaultValue) {
+                return store.getInt(key, defaultValue);
+            }
+            @Nullable @Override public String getString(@NonNull String key, @Nullable String defaultValue) {
+                return store.has(key) ? store.getString(key, defaultValue == null ? "" : defaultValue)
+                    : defaultValue;
+            }
+            @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
+                return store.getBoolean(key, defaultValue);
+            }
+            @Override public void putInt(@NonNull String key, int value) { store.putInt(key, value); }
+            @Override public void putString(@NonNull String key, @NonNull String value) {
+                store.putString(key, value);
+            }
+            @Override public void putBoolean(@NonNull String key, boolean value) {
+                store.putBoolean(key, value);
+            }
+            @Override public void remove(@NonNull String key) { store.remove(key); }
+            @NonNull @Override public Set<String> keys() { return new HashSet<>(store.keys()); }
+        };
     }
 
     /** Every key PageLook reads: a change to one of these (or its {@code @id} form) is a Look change. */
@@ -181,7 +229,6 @@ final class LookKeys {
                 String key = surfaceKey(slot, property);
                 if (key == null) continue;
                 KNOWN.add(key);
-                KNOWN.add(inheritKey(slot, property));
             }
         }
         for (SurfaceProperty property : SurfaceProperty.values()) KNOWN.add(property.baseKey);
@@ -194,6 +241,6 @@ final class LookKeys {
 
     /** True when the plain form of this key is one PageLook reads. */
     static boolean isKnown(@NonNull String key) {
-        return KNOWN.contains(plainOf(key));
+        return KNOWN.contains(plainOf(key)) || LookGrid.parse(key) != null;
     }
 }

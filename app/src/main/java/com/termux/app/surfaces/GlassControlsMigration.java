@@ -66,6 +66,7 @@ public final class GlassControlsMigration {
      */
     public static void runAtStartUp(@NonNull TermuxAppSharedPreferences prefs) {
         run(prefs);
+        SurfacePresets.rewriteStoredCustom(prefs);
         SurfacePresets.readoptMovedLooks(prefs);
     }
 
@@ -116,7 +117,10 @@ public final class GlassControlsMigration {
         for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
             String key = entry.getKey();
             int at = key.lastIndexOf(PageLookKeys.PAGE_SEPARATOR);
-            if (at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
+                com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
+            if ((at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+                    || (cell != null && cell.page >= 0))
                 values.put(key, entry.getValue());
         }
         return values;
@@ -185,8 +189,8 @@ public final class GlassControlsMigration {
         if (scaledBase != base)
             prefs.setSurfaceBaseValue(SurfaceProperty.TINT, scaledBase);
         for (SurfaceSlot slot : SurfaceSlot.values()) {
-            String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.TINT);
-            if (key == null || !store.contains(key))
+            if (prefs.isSurfaceInheriting(slot, SurfaceProperty.TINT,
+                    TermuxAppSharedPreferences.PAGE_WALL))
                 continue;
             int cell = prefs.getSurfaceOverrideValue(slot, SurfaceProperty.TINT);
             int scaled = com.termux.app.chrome.GlassLook.amountForLegacyPercent(cell);
@@ -198,14 +202,10 @@ public final class GlassControlsMigration {
     /** Writes the old default strength into every tint key the store never set. */
     private static void pinLegacyTintStrengths(@NonNull TermuxAppSharedPreferences prefs,
                                                @NonNull SharedPreferences store) {
-        if (!store.contains(TERMUX_APP.KEY_SURFACE_BASE_TINT))
+        // A surface following Base reads Base's pin; one with its own cell already has a number.
+        if (!prefs.lookGrid().has(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT,
+                null, com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE))
             prefs.setSurfaceBaseValue(SurfaceProperty.TINT, SurfacePresets.LEGACY_TINT_STRENGTH);
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.TINT);
-            if (key != null && !store.contains(key))
-                prefs.setSurfaceRawValue(slot, SurfaceProperty.TINT,
-                    SurfacePresets.LEGACY_TINT_STRENGTH);
-        }
     }
 
     /** The live look, not a shipped one, carried across with its look kept. */

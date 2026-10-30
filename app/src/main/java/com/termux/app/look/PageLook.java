@@ -1,5 +1,7 @@
 package com.termux.app.look;
 
+import com.termux.shared.termux.settings.preferences.LookGrid;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -154,6 +156,26 @@ public final class PageLook {
     }
 
     /** Stops listening to the store. */
+    @NonNull
+    private LookGrid grid() {
+        return new LookGrid(LookKeys.gridStore(store));
+    }
+
+    /**
+     * Whether a scope may hold this cell: the wall holds every one; a page only an element's
+     * glass number (blur, opacity, grain, tint), as before the grid.
+     */
+    private static boolean holds(@NonNull Scope scope, @NonNull LookGrid.Key cell) {
+        if (scope.isGlobal()) return true;
+        return cell.element != null && (cell.property == LookGrid.Property.FROST
+            || cell.property == LookGrid.Property.OPACITY || cell.property == LookGrid.Property.GRAIN
+            || cell.property == LookGrid.Property.TINT);
+    }
+
+    private static int where(@NonNull Scope scope) {
+        return scope.isGlobal() ? LookGrid.NO_PAGE : scope.pageId();
+    }
+
     public void close() {
         store.removeListener(storeListener);
     }
@@ -178,6 +200,12 @@ public final class PageLook {
      * wrote.
      */
     public boolean write(@NonNull Scope scope, @NonNull String key, int value) {
+        LookGrid.Key cell = LookKeys.cellOf(key);
+        if (cell != null) {
+            if (!holds(scope, cell)) return false;
+            grid().write(cell.property, cell.element, where(scope), LookKeys.toCell(cell.property, value));
+            return true;
+        }
         if (!LookKeys.KNOWN.contains(key)) return false;
         if (scope.isGlobal()) {
             store.putInt(key, value);
@@ -202,6 +230,11 @@ public final class PageLook {
 
     /** Clears the level of the scope: the page's override, or the wall-wide value of the key. */
     public void reset(@NonNull Scope scope, @NonNull String key) {
+        LookGrid.Key cell = LookKeys.cellOf(key);
+        if (cell != null) {
+            if (holds(scope, cell)) grid().clear(cell.property, cell.element, where(scope));
+            return;
+        }
         if (!LookKeys.KNOWN.contains(key)) return;
         store.remove(scope.isGlobal() ? key : LookKeys.pageKey(key, scope.pageId()));
     }
@@ -211,6 +244,9 @@ public final class PageLook {
      * under a page, the plain key under Global. The editor's dot.
      */
     public boolean has(@NonNull Scope scope, @NonNull String key) {
+        LookGrid.Key cell = LookKeys.cellOf(key);
+        if (cell != null)
+            return holds(scope, cell) && grid().has(cell.property, cell.element, where(scope));
         if (!LookKeys.KNOWN.contains(key)) return false;
         if (scope.isGlobal()) return store.has(key);
         return LookKeys.OVERRIDABLE.contains(key)
@@ -220,6 +256,10 @@ public final class PageLook {
     /** The number the level of the scope holds for {@code key}, or {@code fallback} where it holds none. */
     public int read(@NonNull Scope scope, @NonNull String key, int fallback) {
         if (!has(scope, key)) return fallback;
+        LookGrid.Key cell = LookKeys.cellOf(key);
+        if (cell != null)
+            return LookKeys.fromCell(cell.property,
+                grid().value(cell.property, cell.element, where(scope)));
         return store.getInt(scope.isGlobal() ? key : LookKeys.pageKey(key, scope.pageId()),
             fallback);
     }
@@ -232,6 +272,12 @@ public final class PageLook {
     public static int copyOverrides(@NonNull LookStore store, int fromPageId, int toPageId) {
         if (fromPageId < 0 || toPageId < 0 || fromPageId == toPageId) return 0;
         int copied = 0;
+        for (String stored : new ArrayList<>(store.keys())) {
+            LookGrid.Key cell = LookGrid.parse(stored);
+            if (cell == null || cell.page != fromPageId) continue;
+            store.putInt(LookGrid.key(cell.property, cell.element, toPageId), store.getInt(stored, 0));
+            copied++;
+        }
         for (String plain : LookKeys.OVERRIDABLE) {
             String from = LookKeys.pageKey(plain, fromPageId);
             if (!store.has(from)) continue;

@@ -697,14 +697,89 @@ public final class SurfacePresets {
         }
     }
 
+    /**
+     * The grid cell (everywhere) a look's old cell name stands for: Base's and each surface's
+     * own key of the four glass numbers; null for every other key, stored under its own name.
+     */
+    @Nullable
+    static com.termux.shared.termux.settings.preferences.LookGrid.Key cellOfOldKey(
+            @NonNull String key) {
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (!com.termux.shared.termux.settings.preferences.PageLookKeys.isLookProperty(property))
+                continue;
+            if (property.baseKey.equals(key))
+                return new com.termux.shared.termux.settings.preferences.LookGrid.Key(
+                    property.grid, null, com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
+            for (SurfaceSlot slot : SurfaceSlot.values()) {
+                if (key.equals(TermuxAppSharedPreferences.surfaceOverrideKey(slot, property)))
+                    return new com.termux.shared.termux.settings.preferences.LookGrid.Key(
+                        property.grid, slot.element,
+                        com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
+            }
+        }
+        return null;
+    }
+
+    /** The look's old cell name a stored grid key stands for, or null for any other key. */
+    @Nullable
+    static String oldKeyOfCell(@NonNull String stored) {
+        com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
+            com.termux.shared.termux.settings.preferences.LookGrid.parse(stored);
+        if (cell == null || cell.page >= 0) return null;
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (property.grid != cell.property
+                || !com.termux.shared.termux.settings.preferences.PageLookKeys.isLookProperty(property))
+                continue;
+            if (cell.element == null) return property.baseKey;
+            for (SurfaceSlot slot : SurfaceSlot.values()) {
+                if (slot.element == cell.element)
+                    return TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Rewrites a saved Custom look still naming its cells by the old keys under the grid keys,
+     * once: a blob with no old cell name is left as it is.
+     */
+    public static void rewriteStoredCustom(@NonNull TermuxAppSharedPreferences prefs) {
+        String stored = prefs.getSurfaceCustomPreset();
+        if (stored.isEmpty()) return;
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(stored);
+            boolean old = false;
+            for (java.util.Iterator<String> keys = json.keys(); keys.hasNext(); )
+                if (cellOfOldKey(keys.next()) != null) old = true;
+            if (!old) return;
+        } catch (org.json.JSONException e) {
+            return;
+        }
+        Map<String, Object> look = deserialize(stored);
+        if (look != null && !look.isEmpty())
+            prefs.setSurfaceCustomPreset(serialize(look));
+    }
+
     /** The stored form: the look as JSON, with the format version alongside it. */
     @NonNull
     public static String serialize(@NonNull Map<String, Object> look) {
         org.json.JSONObject json = new org.json.JSONObject();
         try {
             json.put(KEY_FORMAT_VERSION, FORMAT_VERSION);
-            for (Map.Entry<String, Object> entry : look.entrySet())
-                json.put(entry.getKey(), entry.getValue());
+            for (Map.Entry<String, Object> entry : look.entrySet()) {
+                // A surface cell is stored under its grid key (ADR 0017), blur as its Frost stop.
+                com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
+                    cellOfOldKey(entry.getKey());
+                if (cell != null && entry.getValue() instanceof Integer)
+                    json.put(com.termux.shared.termux.settings.preferences.LookGrid.key(
+                            cell.property, cell.element, cell.page),
+                        cell.property == com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST
+                            ? com.termux.shared.termux.settings.preferences.FrostStops
+                                .nearestStopByBlur((Integer) entry.getValue())
+                            : entry.getValue());
+                else
+                    json.put(entry.getKey(), entry.getValue());
+            }
         } catch (org.json.JSONException e) {
             return "";
         }
@@ -731,7 +806,19 @@ public final class SurfacePresets {
                     continue;
                 Object value = json.get(key);
                 // JSON widens on the way out; every numeric key in the format is an int.
-                look.put(key, value instanceof Number ? ((Number) value).intValue() : value);
+                if (value instanceof Number) value = ((Number) value).intValue();
+                // A grid key reads back as the cell's name in the look (a stop as its blur); a
+                // blob saved before the grid names the cells by their old keys, read as they are.
+                String old = oldKeyOfCell(key);
+                if (old != null && value instanceof Integer) {
+                    com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
+                        com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
+                    if (cell.property == com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST)
+                        value = com.termux.shared.termux.settings.preferences.FrostStops
+                            .blurDpFor((Integer) value);
+                    key = old;
+                }
+                look.put(key, value);
             }
         } catch (org.json.JSONException e) {
             return null;
@@ -1047,20 +1134,13 @@ public final class SurfacePresets {
         if (store == null || pageId < 0)
             return;
         Preset look = halfOf(preset, PaneWallPage.WIDGETS);
-        SharedPreferences.Editor editor = store.edit();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (isLayoutOwned(property)
-                        || !TermuxAppSharedPreferences.isPerPage(slot, property))
-                    continue;
-                String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-                if (key == null || !com.termux.app.look.PageLook.isDetachable(key))
-                    continue;
-                editor.putInt(com.termux.shared.termux.settings.preferences.PageLookKeys
-                    .pageKey(key, pageId), lookCellValue(prefs, look, slot, property));
+                if (isPageCell(slot, property))
+                    prefs.setSurfaceValue(slot, property, pageId,
+                        lookCellValue(prefs, look, slot, property));
             }
         }
-        editor.apply();
     }
 
     /** The keys a page may hold its own value of, as surface cells: what a page-scoped Look writes. */
@@ -1076,11 +1156,8 @@ public final class SurfacePresets {
     private static int pageCellValue(@NonNull TermuxAppSharedPreferences prefs,
                                      @NonNull SharedPreferences store, int pageId,
                                      @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
-        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-        String own = key == null ? null
-            : com.termux.shared.termux.settings.preferences.PageLookKeys.pageKey(key, pageId);
-        if (own != null && store.contains(own))
-            return store.getInt(own, 0);
+        if (prefs.lookGrid().has(property.grid, slot.element, pageId))
+            return prefs.getSurfaceValue(slot, property, pageId);
         return prefs.getSurfaceValue(slot, property, pageOf(PaneWallPage.WIDGETS));
     }
 
@@ -1096,9 +1173,7 @@ public final class SurfacePresets {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (!isPageCell(slot, property))
                     continue;
-                String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-                if (store.contains(com.termux.shared.termux.settings.preferences.PageLookKeys
-                        .pageKey(key, pageId)))
+                if (prefs.lookGrid().has(property.grid, slot.element, pageId))
                     return true;
             }
         }
@@ -1186,14 +1261,43 @@ public final class SurfacePresets {
     }
 
     /** The number a look gives a surface's property: its own cell, else the look's Base. */
+    /**
+     * The number a Look's stored value is worn as: a blur at its nearest Frost stop's blur (the
+     * grid holds blur as a stop, ADR 0017 §4), anything else as stored. A Look and the store it
+     * was applied to are compared through this, so a Look whose blur sits between stops still
+     * reads as worn.
+     */
+    @Nullable
+    static Object worn(@NonNull String key, @Nullable Object value) {
+        if (!(value instanceof Integer) || !isBlurKey(key)) return value;
+        return wornInt(SurfaceProperty.BLUR, (Integer) value);
+    }
+
+    private static int wornInt(@NonNull SurfaceProperty property, int value) {
+        return property == SurfaceProperty.BLUR
+            ? com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(
+                com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(value))
+            : value;
+    }
+
+    private static boolean isBlurKey(@NonNull String key) {
+        if (SurfaceProperty.BLUR.baseKey.equals(key)) return true;
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            if (key.equals(TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.BLUR)))
+                return true;
+        }
+        return false;
+    }
+
     private static int lookCellValue(@NonNull TermuxAppSharedPreferences prefs,
                                      @NonNull Preset look, @NonNull SurfaceSlot slot,
                                      @NonNull SurfaceProperty property) {
         String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
         Object own = key == null ? null : look.values.get(key);
-        if (own != null) return intOf(own);
+        if (own != null) return wornInt(property, intOf(own));
         Object base = look.values.get(property.baseKey);
-        return base != null ? intOf(base) : prefs.getSurfaceBaseValue(property, pageOf(PaneWallPage.WIDGETS));
+        return base != null ? wornInt(property, intOf(base))
+            : prefs.getSurfaceBaseValue(property, pageOf(PaneWallPage.WIDGETS));
     }
 
     /** Whether the Workspace's worn values are read as the Terminal page's own; see {@link #wornOn}. */
@@ -1364,7 +1468,7 @@ public final class SurfacePresets {
                     && !isMaterialKey(entry.getKey())))
                 continue;
             Object current = currentOne(prefs, entry.getKey(), half);
-            if (current != null && !current.equals(entry.getValue()))
+            if (current != null && !current.equals(worn(entry.getKey(), entry.getValue())))
                 return false;
         }
         return true;
@@ -1403,7 +1507,7 @@ public final class SurfacePresets {
                     || (scoped && isHalfKey(key) && !isMaterialKey(key)))
                 continue;
             Object current = currentOne(prefs, key, half);
-            if (current != null && !current.equals(entry.getValue()))
+            if (current != null && !current.equals(worn(entry.getKey(), entry.getValue())))
                 return false;
         }
         return true;

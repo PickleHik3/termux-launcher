@@ -140,11 +140,15 @@ public class SurfaceEditorHomeGlassTest {
 
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
             preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
             preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(GlassControls.glassFor(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+        // The shipped Base blur wears its nearest Frost stop, and Frost reads where that pair is.
+        assertEquals(GlassControls.glassFor(
+            com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(
+                com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(
+                    TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR)),
             TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN), model(editor).value(Row.FROST));
         assertEquals("Base is the wall's, so the Workspace reads the reset too",
             TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
