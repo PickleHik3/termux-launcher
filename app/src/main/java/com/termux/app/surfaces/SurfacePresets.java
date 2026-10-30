@@ -1047,20 +1047,13 @@ public final class SurfacePresets {
         if (store == null || pageId < 0)
             return;
         Preset look = halfOf(preset, PaneWallPage.WIDGETS);
-        SharedPreferences.Editor editor = store.edit();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (isLayoutOwned(property)
-                        || !TermuxAppSharedPreferences.isPerPage(slot, property))
-                    continue;
-                String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-                if (key == null || !com.termux.app.look.PageLook.isDetachable(key))
-                    continue;
-                editor.putInt(com.termux.shared.termux.settings.preferences.PageLookKeys
-                    .pageKey(key, pageId), lookCellValue(prefs, look, slot, property));
+                if (isPageCell(slot, property))
+                    prefs.setSurfaceValue(slot, property, pageId,
+                        lookCellValue(prefs, look, slot, property));
             }
         }
-        editor.apply();
     }
 
     /** The keys a page may hold its own value of, as surface cells: what a page-scoped Look writes. */
@@ -1076,11 +1069,8 @@ public final class SurfacePresets {
     private static int pageCellValue(@NonNull TermuxAppSharedPreferences prefs,
                                      @NonNull SharedPreferences store, int pageId,
                                      @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
-        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-        String own = key == null ? null
-            : com.termux.shared.termux.settings.preferences.PageLookKeys.pageKey(key, pageId);
-        if (own != null && store.contains(own))
-            return store.getInt(own, 0);
+        if (prefs.lookGrid().has(property.grid, slot.element, pageId))
+            return prefs.getSurfaceValue(slot, property, pageId);
         return prefs.getSurfaceValue(slot, property, pageOf(PaneWallPage.WIDGETS));
     }
 
@@ -1096,9 +1086,7 @@ public final class SurfacePresets {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (!isPageCell(slot, property))
                     continue;
-                String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-                if (store.contains(com.termux.shared.termux.settings.preferences.PageLookKeys
-                        .pageKey(key, pageId)))
+                if (prefs.lookGrid().has(property.grid, slot.element, pageId))
                     return true;
             }
         }
