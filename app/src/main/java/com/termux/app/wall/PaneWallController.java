@@ -34,14 +34,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         @NonNull default UseAs useAs() { return UseAs.HOME; }
         /**
-         * Whether an empty Workspace can be started by Home's swipe past its last page: a shell
-         * can be made now. Asked only while the Workspace has no window.
+         * Whether the empty Terminal page's first shell can be made now. Asked only while the
+         * Terminal page has no window; without one the page still stands as a stop, showing its
+         * card.
          */
         default boolean canStartWorkspace() { return false; }
         /**
-         * Home's swipe has carried the wall into an empty Workspace: start its first shell, as the
-         * Terminal entry does into an empty row. The wall already rests on (or slides to) the
-         * Workspace. False when no shell could be made; the wall then goes back to Home.
+         * The wall has landed on the empty Terminal page (ADR 0016 section 6), by any route:
+         * start its first shell, as the Terminal entry does into an empty row. The window takes
+         * the page when it arrives. False when no shell could be made; the page keeps its card.
          */
         default boolean startWorkspaceShell() { return false; }
         /**
@@ -214,14 +215,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private boolean mWorkspacePending;
     /**
-     * Home's seam is carrying a swipe into a Workspace with no window: the row holds the
-     * Workspace's page (its pane host, empty, under the Workspace's chrome) for the swipe to bring
-     * in, and the shell is started only when the wall commits there ({@link WallRow#seamStartsShell}).
-     * Cleared when the swipe springs back to Home or the shell's window arrives.
+     * This landing on the empty Terminal page has asked for its first shell: a second settle
+     * before the window arrives starts no second. Cleared when the wall lands elsewhere or the
+     * window arrives.
      */
-    private boolean mSeamIntoEmpty;
-    /** That crossing's shell has been asked for: a page change back and forth starts no second. */
-    private boolean mSeamShellStarted;
+    private boolean mLandingShellStarted;
 
     // ---- The cells and the binding (ADR 0016) -----------------------------------------------
     // The wall lays out one cell per page; each kind's one view is bound to one page.
@@ -229,11 +227,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Nullable private WallPages mKnownPages;
     /** The cells are [Home...][Terminal]: the wallpaper's row reads as it always did. */
     private boolean mDefaultOrder = true;
-    /**
-     * The Terminal page keeps its cell with no window, as a stop whose landing starts the first
-     * shell.
-     */
-    private boolean mEmptyTerminalStop;
     /** The row had a window at the last {@link #refreshPages}. */
     private boolean mHadWindow;
     /** The run last handed to the host ({@link Host#bindHomeRun}). */
@@ -283,10 +276,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean hasWindow = mHost.hasWindow();
         boolean lostWindow = mHadWindow && !hasWindow;
         mHadWindow = hasWindow;
-        if (hasWindow) { mSeamIntoEmpty = false; mSeamShellStarted = false; }
+        if (hasWindow) mLandingShellStarted = false;
         syncHomeCell();
         int before = mWall.currentPageId();
-        mWall.setCells(cells(hasWindow || mSeamIntoEmpty));
+        mWall.setCells(cells(hasWindow));
         int after = mWall.currentPageId();
         // The bindings follow the list: a bound page that went hands its view to another.
         int home = mWall.boundPageId(PaneWallPage.WIDGETS);
@@ -299,13 +292,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         int display = mWall.boundPageId(PaneWallPage.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
-        // The last window closed under the wall while the empty Terminal page keeps its cell: the
-        // wall hands to the Home page beside it, as it does when the Terminal page leaves.
-        if (lostWindow && mEmptyTerminalStop && !mSeamIntoEmpty && !mWorkspacePending
-            && mWall.currentPage() == PaneWallPage.TERMINAL) {
+        // The last window closed under the wall: the empty Terminal page keeps its cell, and the
+        // wall hands to the Home page beside it (ADR 0015). Closing a window is not a landing,
+        // so no shell starts.
+        if (lostWindow && !mWorkspacePending && mWall.currentPage() == PaneWallPage.TERMINAL) {
             goToLastHomePage(false);
         }
-        if (mWorkspacePending && has(PaneWallPage.TERMINAL)) {
+        // The Terminal page asked for before its window: the wall goes there once one arrives.
+        if (mWorkspacePending && hasWindow && has(PaneWallPage.TERMINAL)) {
             mWorkspacePending = false;
             mWall.goTo(PaneWallPage.TERMINAL, false);
         }
@@ -313,18 +307,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * The cells the wall lays out: one per page of {@link Host#wallPages}, in order, by page id;
-     * under Terminal only without the Home pages, and without the Terminal page while it has no
-     * window and no first shell can be started from it. A kind-only list ({@link UseAs#rowPages})
-     * where the pages are not known.
+     * under Terminal only without the Home pages. The Terminal page is a cell with or without a
+     * window: empty, it is a stop whose landing starts the first shell (ADR 0016 section 6). A
+     * kind-only list ({@link UseAs#rowPages}) where the pages are not known.
      */
     @NonNull
-    private java.util.List<PaneWallLayout.Cell> cells(boolean onRow) {
+    private java.util.List<PaneWallLayout.Cell> cells(boolean hasWindow) {
         boolean homeShown = mHost.useAs() == UseAs.HOME;
         WallPages pages = mHost.wallPages();
-        // Interim until #186 (ADR 0016 section 6): the Terminal page with no window is a cell only
-        // when a first shell can start from it; #186 makes it always a stop.
-        // An empty Terminal page keeps its cell, as a stop whose landing starts the first shell.
-        boolean emptyStop = homeShown && pages != null && !onRow && mHost.canStartWorkspace();
         java.util.List<PaneWallLayout.Cell> out = new java.util.ArrayList<>();
         boolean hasHome = false;
         boolean hasTerminal = false;
@@ -334,7 +324,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             for (WallPages.Page page : pages.pages()) {
                 PaneWallPage kind = kindOf(page.kind);
                 if (kind == PaneWallPage.WIDGETS && !homeShown) continue;
-                if (kind == PaneWallPage.TERMINAL && !(onRow || emptyStop || !homeShown)) continue;
                 if (kind == PaneWallPage.WIDGETS && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PaneWallPage.WIDGETS;
                 hasTerminal |= kind == PaneWallPage.TERMINAL;
@@ -342,20 +331,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                 out.add(new PaneWallLayout.Cell(page.id, kind, pages.displayName(page, null)));
             }
         }
+        // A row with windows and a list without the Terminal page do not agree: the kinds alone.
         if (pages == null || out.isEmpty() || (homeShown && !hasHome)
-            || (onRow && !hasTerminal)) {
+            || (hasWindow && !hasTerminal)) {
             mKnownPages = null;
             mDefaultOrder = true;
             mHasDisplaySlot = false;
-            mEmptyTerminalStop = false;
             out.clear();
-            for (PaneWallPage kind : mHost.useAs().rowPages(onRow)) {
+            // The Terminal page is on the row whether or not it has a window.
+            for (PaneWallPage kind : mHost.useAs().rowPages(true)) {
                 out.add(new PaneWallLayout.Cell(PaneWallLayout.kindPageId(kind), kind, null));
             }
             return out;
         }
         mKnownPages = pages;
-        mEmptyTerminalStop = emptyStop;
         mHasDisplaySlot = hasDisplay;
         mDefaultOrder = !hasDisplay && !homeAfterTerminal;
         return out;
@@ -559,21 +548,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Whether the Terminal page stands in the cell beside the current one on side
-     * {@code direction}: where Home's swipe into an empty Workspace goes. Always forward where
-     * only the kinds are known.
-     */
-    private boolean terminalBesideRun(int direction) {
-        if (mKnownPages == null) return direction > 0;
-        int terminal = mWall.indexOfCell(mWall.boundPageId(PaneWallPage.TERMINAL));
-        return terminal >= 0 && terminal == mWall.indexOfCell(mWall.currentPageId()) + direction;
-    }
-
-    /**
-     * The seam out of Home for the widget grid: whether a forward swipe on the last Home page has
-     * somewhere to go on the row, and the wall's plain drag to carry it there. With the Workspace
-     * empty the swipe still crosses: the Workspace's page joins the row for it, empty, and its
-     * first shell starts only if the release commits there.
+     * The seam out of Home for the widget grid: whether a swipe off the Home run's edge has a
+     * cell to go to on that side, and the wall's plain drag to carry it there. The empty Terminal
+     * page is such a cell like any other; its first shell starts when the wall lands on it.
      */
     @NonNull
     public com.termux.app.launcher.widget.WidgetPaneView.Seam homeSeam() {
@@ -582,25 +559,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                 syncHomeCell();
                 return mWall.currentPage() == PaneWallPage.WIDGETS && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
-                    && WallRow.seamContinues(mWall.neighbourId(1) != PaneWallLayout.NO_PAGE,
-                        !mHost.hasWindow() && mHost.canStartWorkspace() && terminalBesideRun(1));
+                    && mWall.neighbourId(1) != PaneWallLayout.NO_PAGE;
             }
             // A Home run after the Terminal page leaves backward from its first page.
             @Override public boolean canLeaveBackward() {
                 syncHomeCell();
                 return mWall.currentPage() == PaneWallPage.WIDGETS && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
-                    && WallRow.seamContinues(mWall.neighbourId(-1) != PaneWallLayout.NO_PAGE,
-                        !mHost.hasWindow() && mHost.canStartWorkspace() && terminalBesideRun(-1));
+                    && mWall.neighbourId(-1) != PaneWallLayout.NO_PAGE;
             }
             @Override public void begin() {
                 mWorkspacePending = false;
-                if (!mHost.hasWindow() && mHost.canStartWorkspace()) {
-                    // Only the page joins the row: nothing is started until the release commits.
-                    mSeamIntoEmpty = true;
-                    mSeamShellStarted = false;
-                    refreshPages();
-                }
                 mWall.beginPlainDrag();
             }
             @Override public void drag(float dxPx) { mWall.dragTo(dxPx); }
@@ -914,22 +883,36 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Go to the Terminal page: its window in front, or, with none, start its first shell and land
-     * there once the window arrives. Under Terminal only the empty Workspace is a cell too.
-     * False when there is nowhere to go.
+     * Go to the Terminal page: its cell, with or without a window. Empty, the landing starts its
+     * first shell (ADR 0016 section 6); with the wall already resting there, it starts now, as
+     * the Terminal entry does into an empty row. False when the wall has no Terminal page.
      */
     public boolean goToWorkspace(boolean animate) {
-        boolean homeShown = mHost.useAs().showsHomePage();
-        boolean hasWindow = mHost.hasWindow();
-        // Under Terminal only the Workspace is on the row while it is empty too; going there
-        // still starts its first shell, as the Terminal entry does.
-        if (has(PaneWallPage.TERMINAL) && (homeShown || hasWindow))
-            return goTo(PaneWallPage.TERMINAL, animate);
-        if (hasWindow || !mHost.canStartWorkspace() || !mHost.startWorkspaceShell())
-            return !homeShown && goTo(PaneWallPage.TERMINAL, animate);
-        mWorkspacePending = true;
+        if (!has(PaneWallPage.TERMINAL)) return false;
+        mWorkspacePending = false;
+        if (mWall.currentPage() == PaneWallPage.TERMINAL && !mWall.isMoving()) {
+            startShellOnLanding();
+            return true;
+        }
+        return goTo(PaneWallPage.TERMINAL, animate);
+    }
+
+    /**
+     * The wall rests on the Terminal page: with no window, its first shell starts, once per
+     * landing. A cold start or a restored state waiting for its windows starts none.
+     */
+    private void startShellOnLanding() {
+        if (mLandingShellStarted || mWorkspacePending || mHost.hasWindow()
+            || !mHost.canStartWorkspace()) {
+            return;
+        }
+        mLandingShellStarted = true;
+        if (!mHost.startWorkspaceShell()) {
+            // No shell could be made: the page keeps its card, and the next landing asks again.
+            mLandingShellStarted = false;
+            return;
+        }
         refreshPages();
-        return true;
     }
 
     /** Back to the Terminal page's cell, from wherever the wall stands. */
@@ -1013,11 +996,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     private void landInWorkspace() {
-        if (has(PaneWallPage.TERMINAL)) {
-            goTo(PaneWallPage.TERMINAL, false);
-        } else {
-            mWorkspacePending = true;
-        }
+        // A cold start or a restored state is not a landing: with no window yet the wall waits on
+        // the Terminal page's card for its windows, and starts no shell of its own.
+        if (!mHost.hasWindow()) mWorkspacePending = true;
+        if (has(PaneWallPage.TERMINAL)) mWall.goTo(PaneWallPage.TERMINAL, false);
     }
 
     /** The page in front, as a row position. */
@@ -1078,23 +1060,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallPageChanged(@NonNull PaneWallPage page) {
         mHost.onWallPageChanged(page);
-        boolean intoEmpty = mSeamIntoEmpty || (mEmptyTerminalStop && !mHost.hasWindow());
-        if (mSeamShellStarted || !WallRow.seamStartsShell(intoEmpty, page)) return;
-        mSeamShellStarted = true;
-        // The release committed to the empty Workspace: its first shell starts now, while the
-        // wall slides there. Its window takes the page the swipe brought in.
-        if (!mHost.startWorkspaceShell()) {
-            mSeamIntoEmpty = false;
-            boolean stop = mEmptyTerminalStop;
-            refreshPages();
-            // The empty stop stays on the row: with no shell to land on, the wall goes back.
-            if (stop && mWall.currentPage() == PaneWallPage.TERMINAL
-                && has(PaneWallPage.WIDGETS)) {
-                mWall.goTo(PaneWallPage.WIDGETS, true);
-            }
-            return;
-        }
-        refreshPages();
     }
 
     @Override
@@ -1105,18 +1070,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /**
      * The wall came to rest on page {@code pageId}'s cell: the landing binds that page's kind's
      * view to it, and the still there gives way (ADR 0016). The chrome is not touched here: it
-     * took the page kind's dress when the slide committed (ADR 0012).
+     * took the page kind's dress when the slide committed (ADR 0012). A landing on the empty
+     * Terminal page starts its first shell, by whatever route it came (section 6); a far jump
+     * that lands elsewhere starts none (W3).
      */
     @Override
     public void onWallCellSettled(int pageId, @NonNull PaneWallPage page) {
-        // The swipe sprang back to Home: the empty Terminal page leaves the wall again.
-        if (mSeamIntoEmpty && page == PaneWallPage.WIDGETS) {
-            mSeamIntoEmpty = false;
-            mSeamShellStarted = false;
-            refreshPages();
-        }
+        if (page != PaneWallPage.TERMINAL) mLandingShellStarted = false;
         bindCell(pageId);
         mHost.onWallPageSettled(page);
+        if (page == PaneWallPage.TERMINAL) startShellOnLanding();
         if (page == PaneWallPage.DISPLAY && mBoundDisplayPageId >= 0) {
             mHost.onDisplayPageLanded(mBoundDisplayPageId);
         }
