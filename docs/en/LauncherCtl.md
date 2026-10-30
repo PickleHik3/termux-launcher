@@ -300,6 +300,36 @@ launcherctl motion-log clear
 launcherctl motion-log dump > motion.txt
 ```
 
+## look
+
+```text
+launcherctl look get PROPERTY [--element ELEMENT] [--page ID]
+launcherctl look set PROPERTY VALUE [--element ELEMENT] [--page ID]
+launcherctl look reset [PROPERTY] [--element ELEMENT] [--page ID]
+```
+
+Reads and sets the glass look the way the Appearance editor does. **Properties**: `frost`,
+`opacity`, `tint`, `colour`, `corners`, `depth`, `edge`, `grain`, `rim`, `vibrancy` and `margin`.
+**Elements**: `status`, `dock`, `keyboard`, `terminal`, `widgets` and `sheets`. Without
+`--element` a value applies to all glass; without `--page`, everywhere. `vibrancy` and `margin`
+are for all glass only.
+
+Values are numbers, except `frost`, which takes a step from 0 to 7 or a blur in dp such as
+`12dp`; `colour`, which takes `primary`, `secondary` or `tertiary`; `rim`, which takes `off`,
+`hairline` or `bright`; and `corners`, which takes dp or `auto`. A value outside a property's range
+is held to it.
+
+`get` answers the value and where it is set (the element on a page, the page, the element
+everywhere, all glass everywhere, or the shipped look). `set` changes one place and the launcher
+redraws at once. `reset` puts a place back on what it followed before; without a property it
+resets everything that place holds.
+
+```sh
+launcherctl look set opacity 60 --element dock
+launcherctl look get opacity --element dock
+launcherctl look reset --element dock
+```
+
 ## wallpaper
 
 ```text

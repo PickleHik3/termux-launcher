@@ -41,18 +41,21 @@ those changes appear when you turn the phone.
 - **Look**: a slider with five stops, **Clear**, **Mist**, **Tint**, **Solid** and **Custom**, for
   the half the frame shows. Clear is the most see-through and Solid the least. Custom brings back the
   look you made yourself.
-- **All surfaces**, at the Custom stop: a row of upright sliders for what every surface shares.
+- **Where it applies** and **What it applies to**: the two chips at the top of every card with
+  glass (see below). On this card **What it applies to** stays on **All glass**.
+- **Glass rows**, at the Custom stop: a row of upright sliders for what all glass shares.
   **Frost** (clear to frosted: how much the glass blurs what is behind it, with a fine grain that
-  grows with it), **Opacity**, **Tint**, **Edge** and **Depth** where the glass edge is drawn (see
-  [Glass](#glass)), **Vibrancy** and **Text size**. Moving one puts every surface on the half back on
-  it; a surface's own card can set its own again.
+  grows with it, in eight steps), **Opacity**, **Tint**, **Colour**, **Corners**, **Depth** and
+  **Edge** where the glass edge is drawn (see [Glass](#glass)). **Vibrancy**, **Margin** and
+  **Text size** sit beside them and always apply everywhere. Moving a row puts all the glass in
+  that place back on it; a surface's own card can set its own again.
 - **Wallpaper**: shown behind the launcher or not, and **Change**, which opens the wallpaper picker
   over the editor (below). This is the only way to the picker.
 - **Theme**: **System**, **Light** or **Dark**.
 - **Icon pack**, **Monochrome**, **Wallpaper colours**, **Contrast**, **Full screen** and
   **Minimal**.
-- Under **More**: **Alignment** (lines the wallpaper behind the surfaces up with the one on your
-  screen), **Tint colour**, and **Tool colours** (see
+- Under **More**: **Grain**, **Rim**, **Alignment** (lines the wallpaper behind the surfaces up
+  with the one on your screen), and **Tool colours** (see
   [Tools that follow the terminal colours](#tools-that-follow-the-terminal-colours)).
 
 **Text size** makes the terminal text, the keyboard's letters and the labels on the status bar, the
@@ -61,33 +64,47 @@ a terminal pane, and Home's label size still applies.
 
 ## The surfaces' cards
 
-Every card with glass opens on a row of upright sliders, each with its name and value beside it
-("Frost · 20%"): **Frost**, **Opacity** and **Tint**, the surface's own glass. A dot after a
-slider's name means the value is set here, on this surface; **Reset** in the card's ⋮ menu puts it
-back on the Look. Sizes (**Height**, **Corners**, **Margin**) are sliders across the card.
+Every card with glass opens with two chips.
+
+- **Where it applies**: **Everywhere**, or one page (Home page, Workspace, a Display). A value set
+  for a page wins over the same value set everywhere.
+- **What it applies to**: **All glass**, or the surface the card is about (the status bar, the
+  dock, the keyboard, the terminal, widgets or sheets). A value set for one surface wins over the
+  value set for all glass.
+
+Below the chips every glass card shows the same rows in the same order: **Frost**, **Opacity**,
+**Tint**, **Colour**, **Corners**, **Depth** and **Edge**, each an upright slider with its name and
+value beside it ("Frost · 20%"); under More, **Grain** and **Rim**, then the surface's own rows.
+**Frost** has eight steps, from none to the most frosted, and moves the blur and the grain
+together; **Grain** under More sets the grain by itself. **Margin** is always for everywhere, and
+its row says so.
+
+A coloured dot after a row's name says where its value is set: on this surface on this page, for
+the page, or on this surface everywhere. No dot means the row follows all glass everywhere.
+Long-press a row's name to **Reset** that row; **Reset** in the card's ⋮ menu resets every row the
+chips name.
 
 - **Home**: **Icon size**, **Label size** and **Glass widgets**; **Two-line labels**,
   **Label shadow**, **Folders**, **Numerals** and **Page dots**; under More, **Folder limit**,
   **Wallpaper scroll**, **Own layout** (Home laid out unlike the Workspace) and links to Home's
   gestures and pages. Moving **Glass widgets** applies it to every widget; a widget can still choose
   its own look from its settings afterwards.
-- **Status bar**: **Frost**, **Opacity**, **Tint**, **Visible** and **Position**; **Corners**,
-  **Margin**, **12-hour clock** and **Clock face** (see [Status bar](Status_Bar.md#clock)); under
-  More, a link to its indicators.
-- **Terminal**: **Frost**, **Opacity**, **Tint** and **Text size**; **Corners**, **Margin** and
-  **Contrast**; under More, **Cursor trail**, **Effect**, **Split gap** and a link
-  to its font.
-- **Dock**: **Frost**, **Opacity**, **Tint**, **Height**, **Visible** and **Position**; **Style**
-  (Docked or Floating), **Design** (Tray, Beads or Strip), **Corners** and **Margin**; under More,
-  **Search field**, **App count** and a link to its items.
-- **Keyboard**: **Frost**, **Opacity**, **Key opacity**, **Tint**, **Key corners**, **Key
-  spacing**, **Height** and **Visible**; **Keyboard theme** (its colours and font, see
-  [Keyboard](Keyboard.md)), **Corners** and **Margin**; under More, **Type** (Docked, Floating or
-  Split) and links to its size and layouts.
+- **Status bar**: the glass rows, **Visible** and **Position**; **12-hour clock** and **Clock
+  face** (see [Status bar](Status_Bar.md#clock)); under More, a link to its indicators.
+- **Terminal**: the glass rows and **Text size**; **Contrast**; under More, **Cursor trail**,
+  **Effect**, **Split gap** and a link to its font.
+- **Dock**: the glass rows, **Height**, **Visible** and **Position**; **Style** (Docked or
+  Floating), **Design** (Tray, Beads or Strip) and **Margin**; under More, **Search field**,
+  **App count** and a link to its items.
+- **Keyboard**: the glass rows, **Key opacity**, **Key corners**, **Key spacing**, **Height** and
+  **Visible**; **Keyboard theme** (its colours and font, see [Keyboard](Keyboard.md)); under More,
+  **Type** (Docked, Floating or Split) and links to its size and layouts.
+- **Widgets**: the glass rows for widgets drawn on glass. Tap a widget, or open **Widgets** from
+  the Home card.
+- **Sheets**: the glass rows for the app drawer, folders, menus, the command palette, notices and
+  the Home float, which share one look. Open it from the drawer's corner tab.
 
-The glass of the dock, the status bar and the keyboard (frost, opacity and tint) and the Look are
-held per half. Corners, margin, heights, places, Style and Design are one for both halves, so
-nothing moves when you swipe.
+Heights, places, Style and Design are one for both halves, so nothing moves when you swipe.
 
 ## Wallpaper
 
