@@ -289,6 +289,8 @@ public final class PaneWallLayout extends ViewGroup {
      */
     private final PageStillPolicy.Pictures<android.graphics.Bitmap> mPictures =
         new PageStillPolicy.Pictures<>();
+    /** Told of each picture just before this layout recycles it; see {@link #setOnPictureDropped}. */
+    @Nullable private androidx.core.util.Consumer<android.graphics.Bitmap> mOnPictureDropped;
     /**
      * During a far jump's slide (W3), the page the wall left: it stands one width beside the
      * arriving cell, and every other cell is out of the slide. {@link #NO_PAGE} otherwise.
@@ -790,8 +792,9 @@ public final class PaneWallLayout extends ViewGroup {
         if (kindOf(pageId) != kind) return;
         Integer was = mBoundIds.put(kind, pageId);
         if (was != null && was == pageId) return;
-        // Live again: its picture is stale from here on.
-        keepPicture(pageId, null);
+        // Live again: its picture is stale from here on. Not a Display page's: the display
+        // frame shows that picture in its own still until the page's app comes forward.
+        if (kind != PaneWallPage.DISPLAY) keepPicture(pageId, null);
         syncCards();
         applyPagePositions();
     }
@@ -816,9 +819,12 @@ public final class PaneWallLayout extends ViewGroup {
      * Page {@code pageId}'s last picture (null: none, it is live again), shown in its still while
      * its kind's view is bound elsewhere. The layout owns the bitmap from here and recycles the
      * one it replaces; a picture for a page that is live, or not on the wall, is let go at once.
+     * A Display page's picture is its one copy (ADR 0016 section 2): kept while the page is bound
+     * too, for the display frame's still, until the next one replaces it.
      */
     public void keepPicture(int pageId, @Nullable android.graphics.Bitmap picture) {
-        if (picture != null && (kindOf(pageId) == null || isBoundHere(pageId))) {
+        boolean liveHere = isBoundHere(pageId) && kindOf(pageId) != PaneWallPage.DISPLAY;
+        if (picture != null && (kindOf(pageId) == null || liveHere)) {
             if (!picture.isRecycled()) picture.recycle();
             return;
         }
@@ -844,8 +850,57 @@ public final class PaneWallLayout extends ViewGroup {
         return kind != null && boundPageId(kind) == pageId;
     }
 
-    private static void releasePicture(@Nullable android.graphics.Bitmap picture) {
-        if (picture != null && !picture.isRecycled()) picture.recycle();
+    /**
+     * Tells {@code onDropped} of each kept picture just before this layout recycles it, so a view
+     * that draws one of them (the display frame's still) lets it go first; null for none.
+     */
+    public void setOnPictureDropped(
+            @Nullable androidx.core.util.Consumer<android.graphics.Bitmap> onDropped) {
+        mOnPictureDropped = onDropped;
+    }
+
+    private void releasePicture(@Nullable android.graphics.Bitmap picture) {
+        if (picture == null || picture.isRecycled()) return;
+        if (mOnPictureDropped != null) mOnPictureDropped.accept(picture);
+        picture.recycle();
+    }
+
+    /**
+     * {@code full} at half of {@code wallWidth} by {@code wallHeight} (the picture's own size
+     * for a side the wall does not have yet), the full one recycled; null when it could not be
+     * scaled. For a picture handed in from outside, as the display frame's.
+     */
+    @Nullable
+    public static android.graphics.Bitmap halfPicture(@NonNull android.graphics.Bitmap full,
+                                                      int wallWidth, int wallHeight) {
+        int sideWidth = wallWidth > 0 ? wallWidth : full.getWidth();
+        int sideHeight = wallHeight > 0 ? wallHeight : full.getHeight();
+        if (full.getWidth() == PageStillPolicy.pictureSide(sideWidth)
+                && full.getHeight() == PageStillPolicy.pictureSide(sideHeight)) {
+            return full;
+        }
+        android.graphics.Bitmap half = newPicture(sideWidth, sideHeight);
+        if (half != null) {
+            new android.graphics.Canvas(half).drawBitmap(full, null,
+                new Rect(0, 0, half.getWidth(), half.getHeight()),
+                new Paint(Paint.FILTER_BITMAP_FLAG));
+        }
+        full.recycle();
+        return half;
+    }
+
+    /**
+     * An empty picture half of {@code wallWidth} by {@code wallHeight} ({@link
+     * PageStillPolicy#pictureSide}); null when there is no memory for it.
+     */
+    @Nullable
+    private static android.graphics.Bitmap newPicture(int wallWidth, int wallHeight) {
+        try {
+            return android.graphics.Bitmap.createBitmap(PageStillPolicy.pictureSide(wallWidth),
+                PageStillPolicy.pictureSide(wallHeight), android.graphics.Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError | IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /**
@@ -857,18 +912,12 @@ public final class PaneWallLayout extends ViewGroup {
     static android.graphics.Bitmap drawPicture(@NonNull View view, int wallWidth, int wallHeight) {
         int viewWidth = view.getWidth() > 0 ? view.getWidth() : wallWidth;
         int viewHeight = view.getHeight() > 0 ? view.getHeight() : wallHeight;
-        int width = PageStillPolicy.pictureSide(wallWidth);
-        int height = PageStillPolicy.pictureSide(wallHeight);
-        android.graphics.Bitmap picture;
-        try {
-            picture = android.graphics.Bitmap.createBitmap(width, height,
-                android.graphics.Bitmap.Config.ARGB_8888);
-        } catch (OutOfMemoryError | IllegalArgumentException e) {
-            return null;
-        }
+        android.graphics.Bitmap picture = newPicture(wallWidth, wallHeight);
+        if (picture == null) return null;
         try {
             android.graphics.Canvas canvas = new android.graphics.Canvas(picture);
-            canvas.scale(width / (float) viewWidth, height / (float) viewHeight);
+            canvas.scale(picture.getWidth() / (float) viewWidth,
+                picture.getHeight() / (float) viewHeight);
             view.draw(canvas);
         } catch (RuntimeException e) {
             // A view that only draws in hardware: the page keeps its card.

@@ -26126,6 +26126,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void createPaneWallController(@Nullable View paneHost) {
         View wall = findViewById(R.id.terminal_pane_wall);
         if (!(wall instanceof com.termux.app.wall.PaneWallLayout) || paneHost == null) return;
+        // The display frame's still may be drawing a picture the wall lets go: it forgets it first.
+        ((com.termux.app.wall.PaneWallLayout) wall).setOnPictureDropped(picture -> {
+            com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+                ? null : mPaneWallController.displayWindow();
+            if (frame != null) frame.forgetPagePicture(picture);
+        });
         mPaneWallController = new com.termux.app.wall.PaneWallController(
             (com.termux.app.wall.PaneWallLayout) wall,
             new com.termux.app.wall.PaneWallController.Host() {
@@ -27191,12 +27197,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * Each Display page's last picture, by page id (A3c2, stories 28/29), taken as the display
-     * frame leaves the page; the bitmaps are this activity's to recycle.
-     */
-    @NonNull private final com.termux.app.wall.PageStillPolicy.Pictures<android.graphics.Bitmap>
-        mDisplayPictures = new com.termux.app.wall.PageStillPolicy.Pictures<>();
     /** The frame came to its bound page and has not landed there yet: the page's still shows. */
     private boolean mDisplayPageStillPending;
     /** Hides the bound page's still once its app was raised or run there. */
@@ -27215,69 +27215,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         frame.copyPagePicture(full -> {
             if (full == null) return;
             com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
-            if (isFinishing() || page == null
+            if (isFinishing() || page == null || mPaneWallController == null
                     || page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) {
                 full.recycle();
                 return;
             }
             // Pictures are kept at half size (ADR 0016 section 2): a still is seen in motion.
-            android.graphics.Bitmap picture = halfPicture(full, frame.getWidth(), frame.getHeight());
+            android.graphics.Bitmap picture = com.termux.app.wall.PaneWallLayout.halfPicture(
+                full, frame.getWidth(), frame.getHeight());
             if (picture == null) return;
-            recycleDisplayPicture(mDisplayPictures.put(pageId, picture));
-            // The page's cell on the wall shows it too while the display is bound elsewhere.
-            if (mPaneWallController != null) {
-                try {
-                    mPaneWallController.wall().keepPicture(pageId,
-                        picture.copy(android.graphics.Bitmap.Config.ARGB_8888, false));
-                } catch (OutOfMemoryError ignored) {
-                    // The cell keeps its card.
-                }
-            }
+            // The wall keeps the one copy: the page's cell shows it while the display is bound
+            // elsewhere, and the frame's still while the page's app comes forward.
+            mPaneWallController.wall().keepPicture(pageId, picture);
             // A picture that lands after the frame came back to its page is that page's newest.
             if (pageId == mBoundDisplayPage) applyDisplayPageStill();
         });
-    }
-
-    /**
-     * {@code full} at half the frame's {@code frameWidth} by {@code frameHeight} ({@link
-     * com.termux.app.wall.PageStillPolicy#pictureSide}; the picture's own size while the frame
-     * has none), the full one recycled; null when it could not be scaled.
-     */
-    @Nullable
-    private static android.graphics.Bitmap halfPicture(@NonNull android.graphics.Bitmap full,
-                                                       int frameWidth, int frameHeight) {
-        int width = com.termux.app.wall.PageStillPolicy.pictureSide(
-            frameWidth > 0 ? frameWidth : full.getWidth());
-        int height = com.termux.app.wall.PageStillPolicy.pictureSide(
-            frameHeight > 0 ? frameHeight : full.getHeight());
-        if (full.getWidth() == width && full.getHeight() == height) return full;
-        android.graphics.Bitmap half;
-        try {
-            half = android.graphics.Bitmap.createScaledBitmap(full, width, height, true);
-        } catch (OutOfMemoryError | IllegalArgumentException e) {
-            half = null;
-        }
-        if (half != full) full.recycle();
-        return half;
-    }
-
-    private void recycleDisplayPicture(@Nullable android.graphics.Bitmap picture) {
-        if (picture == null) return;
-        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
-        if (frame != null) frame.forgetPagePicture(picture);
-        if (!picture.isRecycled()) picture.recycle();
-    }
-
-    /** Only the Display pages still on the wall keep their pictures. */
-    private void retainDisplayPictures(@NonNull com.termux.app.wall.WallPages pages) {
-        java.util.List<Integer> ids = new java.util.ArrayList<>();
-        for (com.termux.app.wall.WallPages.Page page : pages.allPages()) {
-            if (page.kind == com.termux.app.wall.WallPages.PageKind.DISPLAY) ids.add(page.id);
-        }
-        for (android.graphics.Bitmap dropped : mDisplayPictures.retain(ids)) {
-            recycleDisplayPicture(dropped);
-        }
     }
 
     /**
@@ -27297,13 +27249,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             frame.hidePageStill();
             return;
         }
+        android.graphics.Bitmap picture = mPaneWallController.wall().pictureOf(pageId);
         switch (com.termux.app.wall.DisplayPagePolicy.shows(pageId,
-                mDisplayPageStillPending ? -1 : pageId, running, mDisplayPictures.has(pageId))) {
+                mDisplayPageStillPending ? -1 : pageId, running, picture != null)) {
             case LIVE:
                 frame.hidePageStill();
                 return;
             case PICTURE:
-                frame.showPageStill(mDisplayPictures.get(pageId), null, "");
+                frame.showPageStill(picture, null, "");
                 return;
             case CARD:
             default:
@@ -28426,8 +28379,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mKeyKinds = kinds;
                     onWallPlacesChanged();
                 }
-                // A removed Display page's picture goes with it (A3c2).
-                retainDisplayPictures(pages);
+                // A removed Display page's picture went with refreshPages (A3c2).
                 applyDisplayPageStill();
             }
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
@@ -28479,9 +28431,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWallPagesStore.removeListener(mWallPagesListener);
         }
         mWallPagesListener = null;
-        for (android.graphics.Bitmap picture : mDisplayPictures.clear()) {
-            recycleDisplayPicture(picture);
-        }
         if (mPageLookPruner != null) mPageLookPruner.close();
         mPageLookPruner = null;
         if (mGroundLook != null) mGroundLook.close();
