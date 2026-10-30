@@ -35,9 +35,9 @@ dropped; what follows is what still owes a look.
 - 2026-10-30 · ADR 0016 (#186) · on pong: close every Terminal window, then reach the empty Terminal
   page by swipe from Home and by its key, and from the other side: the page is a stop, shows its
   card, and the shell starts on landing, with no over-swipe needed · passes when both sides start
-  one shell and the card gives way to the shell · emulator verification of #186 still running, no
-  emulator pass claimed.
-- 2026-10-30 · ADR 0016 (#184) · on pong, on each page kind (Home, Terminal, Display, the empty
+  one shell and the card gives way to the shell · emulator pass on 7bfccc0f4 (emu3): the card
+  slides in, the shell starts on landing from Home and from the Display key; report above.
+- 2026-10-30 · ADR 0016 (#185) · on pong, on each page kind (Home, Terminal, Display, the empty
   Terminal page): the extra-keys row shows the go-to keys for the page kinds the wall has, and keys
   that cannot act on this page go faint · passes when no key is missing for a kind the wall has ·
   emulator pass at the report above.
