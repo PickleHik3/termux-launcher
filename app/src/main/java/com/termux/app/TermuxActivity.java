@@ -14149,6 +14149,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mInAppKeyboard.hide(
                     com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
         }
+
+        @Override public boolean statusBarFoldable() {
+            return mBorderStatusBarFoldable && mPreferences != null;
+        }
+
+        @Override public boolean statusBarCompact() {
+            return isStatusBarCompact();
+        }
+
+        @Override public void setStatusBarCompact(boolean compact) {
+            setTopStatusBarCollapsed(compact, true);
+        }
     }
 
     /** The activity's half of the surface editor's seam: its views, its prefs, its render pipeline. */
