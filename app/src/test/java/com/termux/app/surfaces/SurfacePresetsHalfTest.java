@@ -81,7 +81,7 @@ public class SurfacePresetsHalfTest {
         // The dock follows Base: Home shows the wall's 15, the Terminal page keeps its 70.
         assertEquals(15, preferences.getAppBarOpacity(TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(70, preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
-        assertTrue(preferences.getSharedPreferences().contains("app_bar_opacity@"
+        assertTrue(preferences.getSharedPreferences().contains("look.opacity.dock@"
             + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID));
     }
 
@@ -106,7 +106,7 @@ public class SurfacePresetsHalfTest {
         assertEquals(60, preferences.getDockTintStrength(TermuxAppSharedPreferences.PAGE_WALL));
         assertFalse("the detach is wall-wide, so the Terminal page holds it too", preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
             TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(30, preferences.getStatusBarBlurRadius(TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(30)), preferences.getStatusBarBlurRadius(TermuxAppSharedPreferences.terminalPageId()));
         // Home's cells are all named, so the status bar Home never detached follows Home's Base.
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
             TermuxAppSharedPreferences.PAGE_WALL));

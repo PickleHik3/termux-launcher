@@ -53,14 +53,15 @@ public class WallpaperModePreferencesTest {
         assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(37, preferences.getWallpaperEnabledTerminalBackgroundOpacity());
         assertEquals(63, preferences.getWallpaperEnabledAppBarOpacity());
-        assertEquals(19, preferences.getWallpaperEnabledExtraKeysBlurRadius());
+        // The remembered blur is the blur worn, which sits on a Frost stop: 19 wears 17.
+        assertEquals(17, preferences.getWallpaperEnabledExtraKeysBlurRadius());
 
         ChromePolicy.applyWallpaperModePreferences(preferences, true);
 
         assertTrue(preferences.isUseSystemWallpaperEnabled());
         assertEquals(37, preferences.getTerminalBackgroundOpacity());
         assertEquals(63, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(19, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(17, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test

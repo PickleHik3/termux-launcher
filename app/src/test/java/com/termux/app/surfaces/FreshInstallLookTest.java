@@ -77,7 +77,7 @@ public class FreshInstallLookTest {
             preferences.getFancierGlassClarityPercent());
         // Written, not read through from a default: a later change to the DEFAULT_* constants
         // cannot restyle this install.
-        assertTrue(store.contains(TERMUX_APP.KEY_FANCIER_GLASS_BEND));
+        assertTrue(store.contains("look.depth"));
         assertTrue(store.contains(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH));
         assertTrue(SurfacePresets.matches(preferences, clear()));
     }

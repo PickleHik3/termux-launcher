@@ -108,7 +108,7 @@ public class GlassControlsMigrationTest {
             storeOldLook(id);
             assertFalse(id, SurfacePresets.matches(preferences, preset(id)));
 
-            GlassControlsMigration.run(preferences);
+            foldThenRun();
 
             assertTrue(id + " keeps its stop", SurfacePresets.matches(preferences, preset(id)));
             assertEquals(id + " draws the colour it drew", oldColour(id), dockColourNow());
@@ -126,7 +126,7 @@ public class GlassControlsMigrationTest {
         preferences.setFancierGlassEdgeLightPercent(50);
         preferences.setFancierGlassDispersionPercent(35);
         preferences.setFancierGlassClarityPercent(100);
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
     }
 
@@ -139,7 +139,7 @@ public class GlassControlsMigrationTest {
         // The old Material blend at strength 0.6, read off the old formula.
         int before = 0xFF2F2742;
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
         assertEquals("scaled onto the stretched Tint", 21, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -155,7 +155,7 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 40);
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT, 70);
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
         assertEquals(0, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -170,7 +170,7 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
         assertFalse(store.contains(TERMUX_APP.KEY_SURFACE_BASE_TINT));
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getTerminalTintStrength());
@@ -182,7 +182,7 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR, 20);
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         assertEquals(13, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
@@ -199,7 +199,7 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 0);
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 0);
         preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 80);
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
     }
@@ -210,7 +210,7 @@ public class GlassControlsMigrationTest {
             + "\"surface_glass_tint\":\"material\",\"surface_base_tint\":80,"
             + "\"surface_base_blur\":4,\"surface_base_grain\":4,\"surface_base_opacity\":30}");
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         JSONObject saved = new JSONObject(preferences.getSurfaceCustomPreset());
         assertEquals(SurfacePresets.FORMAT_VERSION, saved.getInt("format_version"));
@@ -276,7 +276,7 @@ public class GlassControlsMigrationTest {
         int before = oldColour("stock");
         assertFalse(SurfacePresets.matches(preferences, preset("stock")));
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
         assertEquals("a detached cell", 14, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -297,11 +297,11 @@ public class GlassControlsMigrationTest {
     public void formatOneAtTintZeroStaysAndTheScaleRunsOnce() {
         SurfacePresets.apply(preferences, preset("minimal"));
         storeFormatOne();
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
         assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertEquals("the user's 100 after the scale is left alone", 100,
             preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
     }
@@ -309,10 +309,10 @@ public class GlassControlsMigrationTest {
     @Test
     public void itRunsOnce() {
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 45);
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertEquals(45, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
         assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
     }
@@ -425,7 +425,7 @@ public class GlassControlsMigrationTest {
         }
         assertEquals("nothing written", before, store.getAll());
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
         assertEquals("the colour is kept", 25, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
@@ -437,7 +437,7 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
         preferences.setWallpaperEnabledExtraKeysBlurRadius(10);
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         int grain = preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN);
         int remembered = preferences.getWallpaperEnabledExtraKeysBlurRadius();
@@ -451,7 +451,7 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR, 30);
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         int base = preferences.getSurfaceGlassPosition(null);
         assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.BLUR),
             GlassControls.blurForGlass(base));
@@ -497,7 +497,7 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 50);
         preferences.setFancierGlassDispersionPercent(80);
 
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
 
         assertFalse("the Shade is gone from the store", store.contains(SurfacePresets.RETIRED_SHADE_KEY));
         assertEquals(3, store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
@@ -510,7 +510,7 @@ public class GlassControlsMigrationTest {
     public void anOlderStoreDropsTheShadeInTheSameEdit() {
         storeOldLook("frost");
         store.edit().putInt(SurfacePresets.RETIRED_SHADE_KEY, 100).commit();
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertFalse(store.contains(SurfacePresets.RETIRED_SHADE_KEY));
         assertTrue(SurfacePresets.matches(preferences, preset("frost")));
     }
@@ -526,7 +526,7 @@ public class GlassControlsMigrationTest {
         store.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 2).commit();
         preferences.setSurfaceCustomPreset("{\"format_version\":6,\"surface_glass_shade\":80,"
             + "\"surface_base_opacity\":30}");
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         JSONObject saved = new JSONObject(preferences.getSurfaceCustomPreset());
         assertFalse(saved.has(SurfacePresets.RETIRED_SHADE_KEY));
         assertEquals(30, saved.getInt(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
@@ -540,7 +540,16 @@ public class GlassControlsMigrationTest {
         String own = com.termux.shared.termux.settings.preferences.PageLookKeys.pageKey(tint,
             com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID);
         store.edit().putInt(own, 23).commit();
-        GlassControlsMigration.run(preferences);
+        foldThenRun();
         assertEquals(23, store.getInt(own, -1));
     }
+
+    /** The start-up order: the grid upgrade, then this one. */
+    private void foldThenRun() {
+        com.termux.shared.termux.settings.preferences.LookGridMigration.run(
+            new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
+                preferences.getSharedPreferences()), java.util.Collections.emptyList());
+        GlassControlsMigration.run(preferences);
+    }
+
 }

@@ -105,7 +105,8 @@ public class GlassStackTest {
         preferences.setInAppKeyboardBackdropOpacity(70);
 
         GlassStack.Spec keyboard = keyboardSpec(null);
-        assertEquals(3, keyboard.blurRadiusDp);
+        // Blur 3 is no Frost stop; the nearest stop's blur is 5.
+        assertEquals(5, keyboard.blurRadiusDp);
         assertEquals(80, keyboard.grainPercent);
         assertEquals(0.9f, keyboard.tintAlpha, 0f);
         assertEquals("the whole-stack alpha is the keyboard's own row", 70,
