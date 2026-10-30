@@ -116,7 +116,7 @@ public class LayoutStyleMigrationTest {
         assertFalse(store.contains(TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET));
         assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET));
         for (String key : store.getAll().keySet()) {
-            assertFalse(key, key.startsWith(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX)
+            assertFalse(key, key.startsWith("surface_inherit_")
                 && (key.endsWith("_corner_radius") || key.endsWith("_side_gap")));
         }
 
@@ -209,7 +209,7 @@ public class LayoutStyleMigrationTest {
         store.edit()
             .putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true)
             .putBoolean(TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, true)
-            .putBoolean(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + "dock_side_gap", false)
+            .putBoolean("surface_inherit_" + "dock_side_gap", false)
             .putInt(TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET, 4)
             .commit();
 
@@ -217,7 +217,7 @@ public class LayoutStyleMigrationTest {
 
         assertEquals(LayoutStyle.FLOATING, preferences.getLayoutStyle());
         assertFalse(store.contains(TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET));
-        assertFalse(store.contains(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + "dock_side_gap"));
+        assertFalse(store.contains("surface_inherit_" + "dock_side_gap"));
     }
 
     // ---------------------------------------------------------------- the accessor and writers
