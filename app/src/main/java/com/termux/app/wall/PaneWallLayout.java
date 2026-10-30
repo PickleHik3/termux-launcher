@@ -279,6 +279,12 @@ public final class PaneWallLayout extends ViewGroup {
     /** The card still of each page whose cell has needed one, by page id. */
     private final Map<Integer, PageCardView> mCards = new java.util.HashMap<>();
     /**
+     * Each page's last picture, taken as its kind's view left it (ADR 0016 section 2), shown in
+     * its still; half the wall's size. The bitmaps are this layout's to recycle.
+     */
+    private final PageStillPolicy.Pictures<android.graphics.Bitmap> mPictures =
+        new PageStillPolicy.Pictures<>();
+    /**
      * During a far jump's slide (W3), the page the wall left: it stands one width beside the
      * arriving cell, and every other cell is out of the slide. {@link #NO_PAGE} otherwise.
      */
@@ -752,8 +758,92 @@ public final class PaneWallLayout extends ViewGroup {
         if (kindOf(pageId) != kind) return;
         Integer was = mBoundIds.put(kind, pageId);
         if (was != null && was == pageId) return;
+        // Live again: its picture is stale from here on.
+        keepPicture(pageId, null);
         syncCards();
         applyPagePositions();
+    }
+
+    /**
+     * The binding of {@code kind}'s view is about to move to page {@code nextPageId}: keep a
+     * picture of the page it leaves, drawn from the view while it still shows that page (W5:
+     * before the view turns, so the picture is never the arriving page's). Called before
+     * anything turns the view. Half the wall's size. Nothing for the display, whose surface
+     * does not draw into a picture; its frame hands its own in through {@link #keepPicture}.
+     */
+    public void takePicture(@NonNull PaneWallPage kind, int nextPageId) {
+        int leaving = PageStillPolicy.pictureOnRebind(boundPageId(kind), nextPageId);
+        if (leaving < 0 || kind == PaneWallPage.DISPLAY) return;
+        View view = mPageViews.get(kind);
+        if (view == null || getWidth() <= 0 || getHeight() <= 0) return;
+        // Still bound to the leaving page here, so stored without keepPicture's live check.
+        storePicture(leaving, drawPicture(view, getWidth(), getHeight()));
+    }
+
+    /**
+     * Page {@code pageId}'s last picture (null: none, it is live again), shown in its still while
+     * its kind's view is bound elsewhere. The layout owns the bitmap from here and recycles the
+     * one it replaces; a picture for a page that is live, or not on the wall, is let go at once.
+     */
+    public void keepPicture(int pageId, @Nullable android.graphics.Bitmap picture) {
+        if (picture != null && (kindOf(pageId) == null || isBoundHere(pageId))) {
+            if (!picture.isRecycled()) picture.recycle();
+            return;
+        }
+        storePicture(pageId, picture);
+    }
+
+    /** Keep {@code picture} as page {@code pageId}'s and show it in the page's still. */
+    private void storePicture(int pageId, @Nullable android.graphics.Bitmap picture) {
+        PageCardView card = mCards.get(pageId);
+        if (card != null) card.setPicture(picture);
+        releasePicture(mPictures.put(pageId, picture));
+    }
+
+    /** Page {@code pageId}'s picture, kept for its still; null while it has none. */
+    @Nullable
+    public android.graphics.Bitmap pictureOf(int pageId) {
+        return mPictures.get(pageId);
+    }
+
+    /** Whether page {@code pageId}'s kind's view is bound to it. */
+    private boolean isBoundHere(int pageId) {
+        PaneWallPage kind = kindOf(pageId);
+        return kind != null && boundPageId(kind) == pageId;
+    }
+
+    private static void releasePicture(@Nullable android.graphics.Bitmap picture) {
+        if (picture != null && !picture.isRecycled()) picture.recycle();
+    }
+
+    /**
+     * {@code view} drawn into a picture half of {@code wallWidth} by {@code wallHeight}
+     * ({@link PageStillPolicy#pictureSide}); null when it cannot be drawn. A synchronous draw on
+     * a scaled canvas: no window needed, and a still is only seen in motion.
+     */
+    @Nullable
+    static android.graphics.Bitmap drawPicture(@NonNull View view, int wallWidth, int wallHeight) {
+        int viewWidth = view.getWidth() > 0 ? view.getWidth() : wallWidth;
+        int viewHeight = view.getHeight() > 0 ? view.getHeight() : wallHeight;
+        int width = PageStillPolicy.pictureSide(wallWidth);
+        int height = PageStillPolicy.pictureSide(wallHeight);
+        android.graphics.Bitmap picture;
+        try {
+            picture = android.graphics.Bitmap.createBitmap(width, height,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError | IllegalArgumentException e) {
+            return null;
+        }
+        try {
+            android.graphics.Canvas canvas = new android.graphics.Canvas(picture);
+            canvas.scale(width / (float) viewWidth, height / (float) viewHeight);
+            view.draw(canvas);
+        } catch (RuntimeException e) {
+            // A view that only draws in hardware: the page keeps its card.
+            picture.recycle();
+            return null;
+        }
+        return picture;
     }
 
     /**
@@ -765,6 +855,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (pageId == mCurrentId || kindOf(pageId) != mCurrent) return;
         mCurrentId = pageId;
         mBoundIds.put(mCurrent, pageId);
+        keepPicture(pageId, null);
         syncCards();
         applyPagePositions();
     }
@@ -833,8 +924,9 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * A card still for every cell whose kind's view is bound to another page, made the first
-     * time it is needed; the cards of pages that left go with them. The bound cell of a kind
+     * A still for every cell whose kind's view is bound to another page, made the first time it
+     * is needed, showing the page's picture when it has one; the stills and pictures of pages
+     * that left go with them. The bound cell of a kind
      * whose view is not built yet shows nothing, as it always has.
      */
     private void syncCards() {
@@ -842,18 +934,25 @@ public final class PaneWallLayout extends ViewGroup {
         while (it.hasNext()) {
             Map.Entry<Integer, PageCardView> entry = it.next();
             if (kindOf(entry.getKey()) != entry.getValue().kind()) {
+                entry.getValue().setPicture(null);
                 removeView(entry.getValue());
                 it.remove();
             }
         }
+        // A page that left the wall takes its picture with it.
+        List<Integer> ids = new java.util.ArrayList<>();
+        for (Cell cell : mCells) ids.add(cell.pageId);
+        for (android.graphics.Bitmap dropped : mPictures.retain(ids)) releasePicture(dropped);
         for (Cell cell : mCells) {
             PageCardView card = mCards.get(cell.pageId);
             if (card != null) {
                 card.setName(cell.name);
+                card.setPicture(mPictures.get(cell.pageId));
                 continue;
             }
             if (boundPageId(cell.kind) == cell.pageId) continue;
             card = new PageCardView(getContext(), cell.pageId, cell.kind, cell.name);
+            card.setPicture(mPictures.get(cell.pageId));
             card.setVisibility(GONE);
             mCards.put(cell.pageId, card);
             // Under the kinds' views: a card is only ever seen beside them.
