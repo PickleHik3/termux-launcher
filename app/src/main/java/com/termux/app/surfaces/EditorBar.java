@@ -345,6 +345,9 @@ final class EditorBar {
         return bubble;
     }
 
+    /** How far the bar drops into place as it comes in. */
+    static final int BAR_DROP_DP = 8;
+
     /** The bar shown (at rest) or hidden (a card is up). */
     void setBarShown(boolean shown, boolean animate) {
         mHint.animate().cancel();
@@ -357,16 +360,31 @@ final class EditorBar {
         }
         mBar.animate().cancel();
         float to = shown ? 1f : 0f;
-        if (shown && mBar.getVisibility() != View.VISIBLE) {
+        boolean arriving = shown && mBar.getVisibility() != View.VISIBLE;
+        if (arriving) {
             mBar.setAlpha(animate ? 0f : 1f);
             mBar.setVisibility(View.VISIBLE);
         }
         if (!animate) {
             mBar.setAlpha(to);
+            mBar.setTranslationY(0f);
             mBar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
             return;
         }
-        mBar.animate().alpha(to).setDuration(150L).withEndAction(() -> {
+        boolean reduced = com.termux.app.ReducedMotion.isEnabled(mBar.getContext());
+        // Coming in it fades in (effects-default) dropping 8dp into place (BAR_DROP); going it
+        // fades out on effects-fast.
+        EditorMotion.Use fade = shown ? EditorMotion.Use.REVEAL_IN : EditorMotion.Use.REVEAL_OUT;
+        if (arriving && !reduced) {
+            mBar.setTranslationY(-BAR_DROP_DP * mBar.getResources().getDisplayMetrics().density);
+            android.animation.ObjectAnimator drop = android.animation.ObjectAnimator.ofFloat(mBar,
+                View.TRANSLATION_Y, mBar.getTranslationY(), 0f);
+            drop.setDuration(EditorMotion.Use.BAR_DROP.durationMs(false));
+            drop.setInterpolator(EditorMotion.Use.BAR_DROP.curve(false));
+            drop.start();
+        }
+        mBar.animate().alpha(to).setDuration(fade.durationMs(reduced))
+            .setInterpolator(fade.curve(reduced)).withEndAction(() -> {
             if (!shown) mBar.setVisibility(View.INVISIBLE);
         }).start();
     }
