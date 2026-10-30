@@ -312,4 +312,38 @@ public class SurfacePresetsTest {
             "{\"format_version\":2,\"surface_base_blur\":21}");
         assertEquals(0, older.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
     }
+
+    /** A saved look stores its cells under grid keys and reads them back as the look names them. */
+    @Test
+    public void aSavedLookStoresGridKeysAndReadsThemBack() throws Exception {
+        java.util.Map<String, Object> look = new java.util.LinkedHashMap<>();
+        look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, 12);
+        look.put(TERMUX_APP.KEY_APP_BAR_OPACITY, 70);
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_HAIRLINE);
+        org.json.JSONObject json = new org.json.JSONObject(SurfacePresets.serialize(look));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.TINT,
+            json.getInt("look.frost"));
+        assertEquals(70, json.getInt("look.opacity.dock"));
+        assertFalse(json.has(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertFalse(json.has(TERMUX_APP.KEY_APP_BAR_OPACITY));
+        java.util.Map<String, Object> back = SurfacePresets.deserialize(json.toString());
+        assertEquals(12, back.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertEquals(70, back.get(TERMUX_APP.KEY_APP_BAR_OPACITY));
+    }
+
+    /** A Custom look saved before the grid is rewritten under grid keys, once. */
+    @Test
+    public void anOldSavedCustomIsRewrittenUnderGridKeys() throws Exception {
+        org.json.JSONObject old = new org.json.JSONObject();
+        old.put("format_version", 5);
+        old.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 30);
+        preferences.setSurfaceCustomPreset(old.toString());
+        SurfacePresets.rewriteStoredCustom(preferences);
+        org.json.JSONObject now = new org.json.JSONObject(preferences.getSurfaceCustomPreset());
+        assertEquals(30, now.getInt("look.opacity"));
+        assertFalse(now.has(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertEquals(30, SurfacePresets.custom(preferences).values
+            .get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+    }
+
 }

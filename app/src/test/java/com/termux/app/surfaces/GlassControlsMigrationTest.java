@@ -217,9 +217,9 @@ public class GlassControlsMigrationTest {
         JSONObject saved = new JSONObject(preferences.getSurfaceCustomPreset());
         assertEquals(SurfacePresets.FORMAT_VERSION, saved.getInt("format_version"));
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, saved.getString(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
-        assertEquals(28, saved.getInt(TERMUX_APP.KEY_SURFACE_BASE_TINT));
-        assertEquals(5, saved.getInt(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
-        assertEquals(3, saved.getInt(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+        assertEquals(28, saved.getInt("look.tint"));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(5), saved.getInt("look.frost"));
+        assertEquals(3, saved.getInt("look.grain"));
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT_HUE,
             saved.getString(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE));
         assertFalse("the retired Shade is not written", saved.has(SurfacePresets.RETIRED_SHADE_KEY));
@@ -288,8 +288,8 @@ public class GlassControlsMigrationTest {
         assertTrue("the Tint Look's stop", SurfacePresets.matches(preferences, preset("stock")));
         JSONObject saved = new JSONObject(preferences.getSurfaceCustomPreset());
         assertEquals(SurfacePresets.FORMAT_VERSION, saved.getInt("format_version"));
-        assertEquals(GlassLook.TINT_LOOK_PERCENT, saved.getInt(TERMUX_APP.KEY_SURFACE_BASE_TINT));
-        assertEquals(21, saved.getInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH));
+        assertEquals(GlassLook.TINT_LOOK_PERCENT, saved.getInt("look.tint"));
+        assertEquals(21, saved.getInt("look.tint.keyboard"));
         assertEquals(GlassControlsMigration.FORMAT,
             store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
     }
@@ -532,7 +532,7 @@ public class GlassControlsMigrationTest {
         foldThenRun();
         JSONObject saved = new JSONObject(preferences.getSurfaceCustomPreset());
         assertFalse(saved.has(SurfacePresets.RETIRED_SHADE_KEY));
-        assertEquals(30, saved.getInt(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertEquals(30, saved.getInt("look.opacity"));
     }
 
     /** L5: the Terminal page's own tint the half upgrade wrote survives this migration. */
