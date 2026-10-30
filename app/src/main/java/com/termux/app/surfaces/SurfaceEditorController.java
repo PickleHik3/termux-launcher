@@ -2632,6 +2632,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return optionLabel(R.array.settings_terminal_retro_effect_entries,
                         R.array.settings_terminal_retro_effect_values, prefs.getTerminalRetroEffect());
                 case TINT_HUE:
+                    if (mCard != null && cellRow(mCard, row)) {
+                        String[] hues = getResources().getStringArray(
+                            R.array.appearance_editor_tint_hue_entries);
+                        return hues[clamp(value(row), 0, hues.length - 1)];
+                    }
                     return optionLabel(R.array.appearance_editor_tint_hue_entries,
                         R.array.appearance_editor_tint_hue_values, prefs.getSurfaceGlassTintHue());
                 case CLOCK_FACE:

@@ -42,6 +42,7 @@ public final class GlassRows {
     public static LookGrid.Property cellProperty(@NonNull Row row) {
         switch (row) {
             case CORNERS: return LookGrid.Property.CORNERS;
+            case TINT_HUE: return LookGrid.Property.TINT_HUE;
             case DEPTH: return LookGrid.Property.DEPTH;
             case GLASS_EDGE: return LookGrid.Property.EDGE;
             case GRAIN: return LookGrid.Property.GRAIN;

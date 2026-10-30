@@ -55,6 +55,8 @@ public class GlassRowsTest {
         assertEquals(LookGrid.Property.RIM, GlassRows.cellProperty(Row.RIM));
         assertEquals(LookGrid.Property.EDGE, GlassRows.cellProperty(Row.GLASS_EDGE));
         assertEquals(LookGrid.Property.DEPTH, GlassRows.cellProperty(Row.DEPTH));
+        assertEquals("Colour has an element column", LookGrid.Property.TINT_HUE,
+            GlassRows.cellProperty(Row.TINT_HUE));
         assertNull("Opacity goes through the surface properties",
             GlassRows.cellProperty(Row.OPACITY));
     }
