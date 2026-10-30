@@ -21,6 +21,13 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · W3 fix round (732a34e39..) · emulator at 1.0× and 1.3× font scale, light and
+  dark: the Rim row reads None · Thin · Bright and (once fixed) stands beside its name on the
+  Status and Dock cards; Margin and Vibrancy are never greyed, say "Applies to all glass", and on a
+  page change that page's glass only; Colour on the Dock card changes the dock alone and its
+  summary names the colour; the sheet's detent moves, the editor's enter and exit and the reveals
+  play the springs (a slight overshoot on the ring and body, none on fades), and with Remove
+  animations on, moves jump while fades still run · not run on a device.
 - 2026-10-31 · W3 goals 2, 3, 6, 4 (fb44e0fb2..) · emulator at 1.0× and 1.3× font scale, light,
   dark and scheme chrome, keyboard up and down: every glass card reads Look, Frost, Opacity, Tint,
   Colour, Corners, Depth, Edge, then More: Grain, Rim, its own rows; the Dock's Style and Design

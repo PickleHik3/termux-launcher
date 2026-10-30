@@ -7,7 +7,10 @@ import androidx.annotation.Nullable;
 
 /**
  * The Appearance editor's motion tokens (editor-cards spec §6): four M3 Expressive springs of
- * mass 1, and every use in the editor named against one. A use's duration is its spring's settle
+ * mass 1, and every use in the editor named against one. With {@code ω = √k}, a spring settles
+ * to within 2% at {@code t = ln(1/0.02) / (ζω)} when underdamped (its envelope), and at
+ * {@code t = 5.83 / ω} when critically damped ({@code ζ = 1}, the standard 2% settle of an
+ * approach with no overshoot). A use's duration is its spring's settle
  * time (to within 2% of the distance) and its curve is the spring's own step response, so a
  * property animator plays the spring exactly. The page swipe keeps {@code SettleSpring}.
  * Reduced motion: a spatial use jumps (or, where it also fades, runs its fade spring); fades run.
@@ -119,12 +122,12 @@ public final class EditorMotion {
         return (1 + w * t) * Math.exp(-w * t);
     }
 
-    /** The first millisecond after which the spring never leaves 2% of its distance again. */
+    /** The 2% settle of a critically damped spring, in units of 1/ω. */
+    static final double CRITICAL_SETTLE = 5.83;
+
+    /** The 2% settle time in ms: the envelope's when underdamped, 5.83/ω when critical. */
     static long settle(double zeta, double w) {
-        long last = 0;
-        for (long ms = 0; ms <= 2000; ms++) {
-            if (Math.abs(displacement(zeta, w, ms / 1000.0)) > 0.02) last = ms + 1;
-        }
-        return last;
+        double seconds = zeta < 1.0 ? Math.log(1 / 0.02) / (zeta * w) : CRITICAL_SETTLE / w;
+        return Math.round(seconds * 1000.0);
     }
 }

@@ -14,7 +14,8 @@ public class EditorMotionTest {
 
     @Test
     public void theFourSpringsSettleWhereTheSpecSays() {
-        // Spec §6: ≈ 235, ≈ 255, ≈ 95 and ≈ 145 ms to within 2%.
+        // Spec §6: ≈ 235, ≈ 255, ≈ 95 and ≈ 145 ms to within 2%: ln(50)/(ζω) underdamped,
+        // 5.83/ω critically damped.
         assertNear(235, Token.SPATIAL_FAST.settleMs());
         assertNear(255, Token.SPATIAL_DEFAULT.settleMs());
         assertNear(95, Token.EFFECTS_FAST.settleMs());
@@ -66,6 +67,6 @@ public class EditorMotionTest {
 
     private static void assertNear(long expected, long actual) {
         assertTrue("expected about " + expected + " ms, was " + actual,
-            Math.abs(expected - actual) <= expected * 0.15);
+            Math.abs(expected - actual) <= expected * 0.03);
     }
 }
