@@ -2613,13 +2613,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean enabled(@NonNull Row row) {
-            return true;
+            return !GlassRows.greyedByWhat(row, mChips);
         }
 
         @Nullable @Override public CharSequence summary(@NonNull Row row) {
             TermuxAppSharedPreferences prefs = prefs();
             if (prefs == null)
                 return null;
+            if (GlassRows.greyedByWhat(row, mChips))
+                return getString(R.string.editor_row_all_glass_only);
             switch (row) {
                 case CURSOR_TRAIL:
                     return optionLabel(R.array.appearance_editor_cursor_trail_entries,

@@ -73,4 +73,26 @@ public class GlassRowsTest {
         assertEquals(80, com.termux.app.surfaces.rows.PreviewTilesRow.tileWidth(80, 20, 6, 4));
         assertTrue(com.termux.app.surfaces.rows.PreviewTilesRow.tileWidth(80, 90, 6, 4) > 80);
     }
+
+    @Test
+    public void marginAndVibrancyAreGreyedWhileWhatNamesAnElement() {
+        EditorChips dock = new EditorChips(LookGrid.NO_PAGE, LookGrid.Element.DOCK);
+        assertTrue(GlassRows.greyedByWhat(Row.MARGIN, dock));
+        assertTrue(GlassRows.greyedByWhat(Row.VIBRANCY, dock));
+        assertFalse(GlassRows.greyedByWhat(Row.OPACITY, dock));
+        assertFalse(GlassRows.greyedByWhat(Row.MARGIN, dock.withElement(null)));
+    }
+
+    @Test
+    public void theAppearanceCardsDepthEdgeAndVibrancyLandOnTheWhereChipsPage() {
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
+        EditorChips onPage = EditorChips.openFor(EditorCard.APPEARANCE, 4).withPage(4);
+        for (Row row : new Row[] {Row.DEPTH, Row.GLASS_EDGE, Row.VIBRANCY}) {
+            LookGrid.Key cell = onPage.cell(GlassRows.cellProperty(row));
+            grid.write(cell.property, cell.element, cell.page, GlassRows.toCell(row, 30));
+            assertEquals(row + " is the page's", LookGrid.Cell.PAGE,
+                grid.resolve(cell.property, null, 4).cell);
+            assertFalse(row + " leaves the wall", grid.has(cell.property, null, LookGrid.NO_PAGE));
+        }
+    }
 }

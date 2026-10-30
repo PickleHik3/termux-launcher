@@ -16,4 +16,6 @@
     <!-- An element on every page, e.g. "Dock everywhere". -->
     <string name="editor_source_element">%1$s everywhere</string>
     <string name="editor_row_reset">Reset this row</string>
+    <!-- Under Margin or Vibrancy while What it applies to names one element. -->
+    <string name="editor_row_all_glass_only">Set for all glass at once</string>
 </resources>

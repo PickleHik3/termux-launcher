@@ -51,6 +51,16 @@ public final class GlassRows {
         }
     }
 
+    /**
+     * Whether the What chip greys a row: Margin and Vibrancy have no element column, so while the
+     * chip names one element they are set for all glass only.
+     */
+    public static boolean greyedByWhat(@NonNull Row row, @NonNull EditorChips chips) {
+        LookGrid.Property property = row == Row.MARGIN ? LookGrid.Property.MARGIN
+            : row == Row.VIBRANCY ? LookGrid.Property.VIBRANCY : null;
+        return property != null && chips.elementIgnored(property);
+    }
+
     /** The grid property whose cell a row's dot and Reset this row speak of, or null. */
     @Nullable
     public static LookGrid.Property gridProperty(@NonNull Row row) {
