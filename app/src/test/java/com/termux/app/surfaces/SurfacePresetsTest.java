@@ -104,11 +104,11 @@ public class SurfacePresetsTest {
         // Wander off, then come back through the card.
         SurfacePresets.apply(preferences, preset("stock"));
         assertFalse(SurfacePresets.matches(preferences, custom));
-        assertEquals(21, SurfacePresets.custom(preferences).values
+        assertEquals(17, SurfacePresets.custom(preferences).values
             .get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
 
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
-        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
         assertEquals(63,
             preferences.getSurfaceOverrideValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
@@ -141,7 +141,7 @@ public class SurfacePresetsTest {
         preferences.setSurfaceCustomPreset(stored);
         preferences.setAppLauncherDockStyle("docked");
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
-        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals("docked", preferences.getAppLauncherDockStyle());
         assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
     }
@@ -268,7 +268,7 @@ public class SurfacePresetsTest {
         SurfacePresets.Preset custom = SurfacePresets.custom(preferences);
         assertNotNull(custom);
         SurfacePresets.apply(preferences, custom);
-        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(30, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
         assertEquals(30, preferences.getTerminalCornerRadius());
         assertEquals(16, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));

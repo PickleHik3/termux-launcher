@@ -57,27 +57,29 @@ public class GlassControlsMigrationTest {
     /** {@code id} as a build before the glass controls stored it. */
     private void storeOldLook(String id) {
         SurfacePresets.apply(preferences, preset(id));
-        SharedPreferences.Editor editor = store.edit()
-            .remove(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE)
-            .remove(TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY)
-            .putInt(TERMUX_APP.KEY_SURFACE_BASE_TINT, 100);
+        com.termux.shared.termux.settings.preferences.LookGrid grid = preferences.lookGrid();
+        grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT_HUE, null,
+            com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
+        grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.VIBRANCY, null,
+            com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
         switch (id) {
             case "minimal":
-                editor.putInt(TERMUX_APP.KEY_SURFACE_BASE_BLUR, 4)
-                    .putInt(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 4);
+                preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 4);
+                preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 4);
                 break;
             case "frost":
-                editor.putInt(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 8);
+                preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 8);
                 break;
             case "stock":
-                editor.putInt(TERMUX_APP.KEY_SURFACE_BASE_BLUR, 10)
-                    .putInt(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 10)
-                    .putString(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_MATERIAL);
+                preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
+                preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
+                store.edit().putString(TERMUX_APP.KEY_SURFACE_GLASS_TINT,
+                    TERMUX_APP.GLASS_TINT_MATERIAL).commit();
                 break;
             default:
                 break;
         }
-        editor.commit();
     }
 
     /** The base colour the dock's tint is drawn in now, its accent resolved. */
@@ -184,10 +186,10 @@ public class GlassControlsMigrationTest {
 
         foldThenRun();
 
-        assertEquals(13, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         int[] dock = GlassControls.snapped(20, 10);
-        assertEquals(dock[0], preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(dock[0])), preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(dock[1], preferences.getDockGlassGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.GRAIN));
         assertTrue("an untouched surface still follows Base",
@@ -314,7 +316,8 @@ public class GlassControlsMigrationTest {
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
         foldThenRun();
         assertEquals(45, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
-        assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        // Blur 10 wears the nearest Frost stop's 12.
+        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
     }
 
     /** The new knobs are clamped on the way in and out, and default to today's glass. */
@@ -326,7 +329,7 @@ public class GlassControlsMigrationTest {
         assertEquals(150, preferences.getSurfaceGlassVibrancy());
         preferences.setSurfaceGlassVibrancy(10);
         assertEquals(70, preferences.getSurfaceGlassVibrancy());
-        store.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY, 999)
+        store.edit().putInt("look.vibrancy", 999)
             .commit();
         assertEquals("clamped on read", 150, preferences.getSurfaceGlassVibrancy());
         preferences.setSurfaceGlassTintHue("tertiary");
@@ -540,15 +543,17 @@ public class GlassControlsMigrationTest {
         String own = com.termux.shared.termux.settings.preferences.PageLookKeys.pageKey(tint,
             com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID);
         store.edit().putInt(own, 23).commit();
-        foldThenRun();
-        assertEquals(23, store.getInt(own, -1));
+        foldThenRun(com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID);
+        // The page's own value is the dock's cell on that page now.
+        assertEquals(23, store.getInt("look.tint.dock@"
+            + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID, -1));
     }
 
     /** The start-up order: the grid upgrade, then this one. */
-    private void foldThenRun() {
+    private void foldThenRun(Integer... pageIds) {
         com.termux.shared.termux.settings.preferences.LookGridMigration.run(
             new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
-                preferences.getSharedPreferences()), java.util.Collections.emptyList());
+                preferences.getSharedPreferences()), java.util.Arrays.asList(pageIds));
         GlassControlsMigration.run(preferences);
     }
 
