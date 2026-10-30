@@ -314,8 +314,10 @@ public final class SuggestionBarView extends GridLayout
     private int searchTolerance = 70;
     private float iconScale = 1.0f;
     private int appBarOpacity = 80;
-    private boolean blurEnabled = false;
-    private int blurRadiusDp = 10;
+    /** Whether the wallpaper blurs here (the host's call); the menus' radius is the Sheets'. */
+    private boolean wallpaperBlurs = false;
+    /** The host's radius, used only without a store to read the Sheets element from. */
+    private int hostBlurRadiusDp = 10;
     private int inheritedTintColor = 0;
     private boolean notificationBadgesEnabled = false;
     /** Whether a swipe up on a badged icon opens its quick reply; off, the icon swipes like any other. */
@@ -384,7 +386,7 @@ public final class SuggestionBarView extends GridLayout
     /**
      * The launcher's look-and-feel, read live by the popup module. Menus and folders are sheets:
      * their opacity, blur and grain are the Sheets element's (ADR 0017), not the dock's; whether
-     * blur runs at all stays the host's call ({@link #setBlurConfig}).
+     * blur can run at all (the wallpaper blurs here) stays the host's call ({@link #setBlurConfig}).
      */
     private final AnchoredMenuTheme menuTheme = new AnchoredMenuTheme() {
         @Override public int textColor() { return resolveLauncherTextColor(); }
@@ -393,11 +395,14 @@ public final class SuggestionBarView extends GridLayout
             com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
             return sheets == null ? appBarOpacity : sheets.opacityPercent;
         }
-        @Override public boolean blurEnabled() { return blurEnabled; }
+        // Blur runs where the wallpaper blurs and the Sheets Frost stop is above 0 (ADR 0017).
+        @Override public boolean blurEnabled() {
+            return com.termux.app.chrome.ChromePolicy.dockBlurEnabled(blurRadiusDp());
+        }
         @Override public int blurRadiusDp() {
+            if (!wallpaperBlurs) return 0;
             com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
-            // The host's 0 means the wallpaper does not blur here; it stays 0.
-            return sheets == null || blurRadiusDp <= 0 ? blurRadiusDp : sheets.blurDp;
+            return sheets == null ? hostBlurRadiusDp : sheets.blurDp;
         }
         @Override public int grainPercent() {
             com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
@@ -2022,9 +2027,9 @@ public final class SuggestionBarView extends GridLayout
         this.appBarOpacity = appBarOpacity;
     }
 
-    public void setBlurConfig(boolean blurEnabled, int blurRadiusDp) {
-        this.blurEnabled = blurEnabled;
-        this.blurRadiusDp = Math.max(0, blurRadiusDp);
+    public void setBlurConfig(boolean wallpaperBlurs, int blurRadiusDp) {
+        this.wallpaperBlurs = wallpaperBlurs;
+        this.hostBlurRadiusDp = Math.max(0, blurRadiusDp);
     }
 
     /** Settings › Notifications › Badge style: a dot, or the number of notifications. */

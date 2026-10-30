@@ -3984,8 +3984,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
                         // The Widgets element's own Depth and Edge where it holds them (ADR 0017).
                         return com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS,
-                            TermuxAppSharedPreferences.PAGE_WALL, mFancierGlassLook);
+                            pageId(), mFancierGlassLook);
                     }
+                    // The Home page at rest: the one whose widgets the chrome pass dresses.
+                    @Override public int pageId() { return restingPage(); }
                     @Override public com.termux.app.chrome.WallpaperParallax parallax() {
                         return mWallpaperParallax;
                     }
@@ -12667,7 +12669,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The row's sizes are the dock's to hand over (applyDockLayout), not the styling's.
         mSuggestionBarView.setAppBarOpacity(mPreferences.getAppBarOpacity(stackLookPage()));
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
-        mSuggestionBarView.setBlurConfig(ChromePolicy.dockBlurEnabled(blurRadiusDp), blurRadiusDp);
+        // Whether the wallpaper blurs here; the menus' own radius is the Sheets element's.
+        mSuggestionBarView.setBlurConfig(wallpaperPicture().blurs(), blurRadiusDp);
         mSuggestionBarView.setInheritedTintColor(resolveAccessoryGlassBaseColor());
         int maxButtons = dockSlotCount(getResources().getDisplayMetrics());
         if (mLastStyledDockButtonCount != Integer.MIN_VALUE

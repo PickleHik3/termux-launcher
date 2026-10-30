@@ -39,6 +39,11 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
         int glassBaseColor();
         /** Fancier Glass as it stands, or null for the plain frost. */
         @Nullable GlassRefraction.Look refraction();
+        /**
+         * The page whose widgets are being dressed, so its own Widgets and page cells apply
+         * (ADR 0017); everywhere by default.
+         */
+        default int pageId() { return TermuxAppSharedPreferences.PAGE_WALL; }
         @Nullable WallpaperParallax parallax();
     }
 
@@ -59,10 +64,9 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     /** The Look as stored this instant. */
     @NonNull
     public LookGlassSpec spec() {
-        // The Card-form widgets wear the Widgets element (ADR 0017), everywhere: one style dresses
-        // every page's widgets, so a page's own Widgets cells are not read here.
+        // The Card-form widgets wear the Widgets element (ADR 0017) on the page being drawn.
         return LookGlassSpec.read(mHost.preferences(),
-            TermuxAppSharedPreferences.SurfaceSlot.WIDGETS, TermuxAppSharedPreferences.PAGE_WALL);
+            TermuxAppSharedPreferences.SurfaceSlot.WIDGETS, mHost.pageId());
     }
 
     /**
