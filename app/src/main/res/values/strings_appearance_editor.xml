@@ -115,7 +115,7 @@
     <!-- The light line around the glass: none, a hairline, or a bright one. -->
     <string name="appearance_row_rim">Rim</string>
     <string name="appearance_rim_none">None</string>
-    <string name="appearance_rim_hairline">Hairline</string>
+    <string name="appearance_rim_hairline">Thin</string>
     <string name="appearance_rim_bright">Bright</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->
     <string name="appearance_row_glass_edge">Edge</string>

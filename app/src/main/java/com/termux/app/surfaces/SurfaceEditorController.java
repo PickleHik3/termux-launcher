@@ -2740,6 +2740,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
             EditorCard card = mCard;
+            if (row == Row.RIM) {
+                // Rim's three words beside its name, as the cards' own segment rows stand.
+                Context context = mHost.context();
+                java.util.List<com.termux.app.surfaces.rows.SegmentRow.Segment> words =
+                    new java.util.ArrayList<>();
+                for (String choice : choices(row))
+                    words.add(com.termux.app.surfaces.rows.SegmentRow.Segment.word(choice));
+                mRimRow = com.termux.app.surfaces.rows.SegmentRow.build(context, row.iconRes,
+                    context.getString(row.labelRes), words, value(row), widthPx,
+                    index -> onValue(Row.RIM, index, false));
+                return mRimRow.root;
+            }
             if (row == Row.ELEMENTS && card != null) {
                 PaneWallPage screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
                 if (screen != null)
@@ -2754,6 +2766,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public void restateRowView(@NonNull Row row, @NonNull View view) {
             EditorCard card = mCard;
+            if (row == Row.RIM) {
+                com.termux.app.surfaces.rows.SegmentRow rim = mRimRow;
+                if (rim != null && rim.root == view) rim.select(value(row));
+                return;
+            }
             com.termux.app.surfaces.cards.ElementsList elements = mElements;
             if (row == Row.ELEMENTS && elements != null && elements.root == view) {
                 elements.restate();
@@ -2818,6 +2835,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
         return prefs.lookGrid().resolve(cell.property, cell.element, cell.page);
     }
+
+    /** The Rim row the card up shows, read again on restate. */
+    @Nullable private com.termux.app.surfaces.rows.SegmentRow mRimRow;
 
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
     @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
