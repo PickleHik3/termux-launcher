@@ -4,8 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * What a Display page is on the wall (ADR 0015, A3b): each Display page is a slot of its own, and
- * the one display view is the bound page's ({@link PaneWallPolicy#boundDisplaySlot}). Only the
+ * What a Display page is on the wall (ADR 0016): each Display page is a cell of its own, and the
+ * one display view is bound to one of them at a time ({@link PaneWallLayout#boundPageId}). Only the
  * bound page, with the display running, is live; every other Display page stands as a still: its
  * last picture once it has one, else a card naming what it shows ({@link PageStillPolicy}, the
  * one rule for every kind). Landing on a Display page starts the display; leaving keeps it
@@ -19,18 +19,6 @@ public final class DisplayPagePolicy {
 
     /** The card's name for an unbound page, or a bound one whose app could not be named. */
     public static final String UNBOUND_NAME = "Display";
-
-    /**
-     * What Display page {@code pageId} shows, with the display view bound to {@code boundPageId}
-     * (-1: none) and the display {@code running} or not.
-     *
-     * @param hasPicture the page has a picture kept from when it was last live
-     */
-    @NonNull
-    public static PageStillPolicy.Shows shows(int pageId, int boundPageId, boolean running,
-                                              boolean hasPicture) {
-        return PageStillPolicy.shows(pageId, boundPageId, running, hasPicture);
-    }
 
     /**
      * The name on a Display page's card: the bound app's ({@code appName}, as the caller resolved

@@ -119,6 +119,22 @@ public class WallPagesMigrationTest {
     }
 
     @Test
+    public void aWallAtThisVersionKeepsTwoDisplayPagesSideBySide() {
+        // [H1][D2][D3][T4], stored by this build: the next start leaves the order alone.
+        java.util.List<WallPages.Page> list = new java.util.ArrayList<>();
+        PageKind[] kinds = {PageKind.HOME, PageKind.DISPLAY, PageKind.DISPLAY, PageKind.TERMINAL};
+        for (int i = 0; i < kinds.length; i++) list.add(new WallPages.Page(i + 1, kinds[i], null, null));
+        WallPages stored = new WallPages(list, java.util.Collections.<Integer>emptyList(),
+            java.util.Collections.<WallPages.Page>emptyList(), 1, 5, false);
+        WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
+        store.replace(stored);
+        prefs.edit().putInt(WallPagesMigration.KEY_VERSION, WallPagesMigration.VERSION).commit();
+        assertFalse(WallPagesMigration.migrateIfNeeded(prefs, 1, store));
+        assertEquals("HDDT", kinds(store.current()));
+        assertEquals(stored, store.current());
+    }
+
+    @Test
     public void aSeededWallWithoutTheFlagIsLeftAlone() {
         WallPagesStore store = new WallPagesStore(new WallPagesStore.MemoryStorage());
         store.replace(WallPagesMigration.seed("home", 0, "home", 2));
@@ -273,7 +289,6 @@ public class WallPagesMigrationTest {
             assertEquals(seededStore.current(), store.current());
             assertTrue(store.isMemoryOnly());
             // A change in this run is not saved over the stored value either.
-            store.replace(store.current().separateDisplays());
             store.edit(pages -> pages.rename(pages.allPages().get(0).id, "renamed"));
             assertEquals("later changes keep the stored value too", raw, storage.read());
             prefs.edit().clear().commit();

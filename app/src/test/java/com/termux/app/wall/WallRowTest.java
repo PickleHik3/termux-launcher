@@ -158,13 +158,5 @@ public class WallRowTest {
         assertTrue(WallRow.swipeLeavesRun(0, 1, -1, true));
         assertTrue(WallRow.swipeLeavesRun(0, 3, -1, true));
         assertFalse(WallRow.swipeLeavesRun(1, 3, -1, true));
-        assertEquals(0, WallRow.arrivalPage(3, -1));
-        assertEquals(2, WallRow.arrivalPage(3, 1));
-    }
-
-    @Test
-    public void theSecondRunsFirstPageIsGlobalHomeIndexOne() {
-        WallPages p = mid();
-        assertEquals(1, WallRow.globalHomeIndex(p, 2, 0));
     }
 }

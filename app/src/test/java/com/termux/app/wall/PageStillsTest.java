@@ -243,10 +243,42 @@ public class PageStillsTest {
         Bitmap kept = Bitmap.createBitmap(WIDTH / 2, HEIGHT / 2, Bitmap.Config.ARGB_8888);
         wall.keepPicture(4, kept);
         assertEquals(PageStillPolicy.Shows.PICTURE, wall.cardOf(4).shows());
+        // A picture landing after the frame came back to its page is kept for the frame's own
+        // still, but the live page's cell does not wear it.
         Bitmap onLive = Bitmap.createBitmap(WIDTH / 2, HEIGHT / 2, Bitmap.Config.ARGB_8888);
         wall.keepPicture(3, onLive);
-        assertNull(wall.pictureOf(3));
-        assertTrue(onLive.isRecycled());
+        assertSame(onLive, wall.pictureOf(3));
+        assertTrue(wall.isLive(3));
+    }
+
+    @Test public void aDisplayPageHasOneBitmapFromItsCaptureOn() {
+        start(twoDisplays());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertTrue(controller.goTo("display"));
+        idle();
+        List<Bitmap> dropped = new ArrayList<>();
+        wall.setOnPictureDropped(dropped::add);
+        // The frame's capture, at the frame's full size, is kept at half size, once.
+        Bitmap full = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        Bitmap half = PaneWallLayout.halfPicture(full, WIDTH, HEIGHT);
+        assertNotNull(half);
+        assertTrue(full.isRecycled());
+        assertEquals(PageStillPolicy.pictureSide(WIDTH), half.getWidth());
+        assertEquals(PageStillPolicy.pictureSide(HEIGHT), half.getHeight());
+        wall.keepPicture(4, half);
+        assertSame(half, wall.pictureOf(4));
+        assertSame(half, wall.cardOf(4).picture());
+        // The display bound to the page: the same bitmap stays for the frame's still.
+        wall.bind(PaneWallPage.DISPLAY, 4);
+        assertSame(half, wall.pictureOf(4));
+        assertFalse(half.isRecycled());
+        // The next capture replaces it: the old one is let go, the frame told first.
+        Bitmap next = Bitmap.createBitmap(WIDTH / 2, HEIGHT / 2, Bitmap.Config.ARGB_8888);
+        wall.bind(PaneWallPage.DISPLAY, 3);
+        wall.keepPicture(4, next);
+        assertSame(next, wall.pictureOf(4));
+        assertEquals(Collections.singletonList(half), dropped);
+        assertTrue(half.isRecycled());
     }
 
     // ---- the card's ink and type --------------------------------------------------------------

@@ -55,19 +55,20 @@ public class DisplayPagePolicyTest {
         // Added right after the Display page, the second stands beside it.
         WallPages.Result beside = oneDisplay().add(PageKind.DISPLAY, 4, "firefox");
         assertTrue(beside.ok());
-        assertTrue(beside.pages.hasAdjacentDisplays());
+        List<WallPages.Page> v = beside.pages.pages();
+        assertEquals(PageKind.DISPLAY, v.get(v.indexOf(beside.page) - 1).kind);
     }
 
     // ---- what a Display page shows ------------------------------------------------------------
 
     @Test
     public void onlyTheBoundPageIsLiveAndOnlyWhileRunning() {
-        assertEquals(PageStillPolicy.Shows.LIVE, DisplayPagePolicy.shows(4, 4, true, false));
-        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(4, 4, false, false));
-        assertEquals(PageStillPolicy.Shows.PICTURE, DisplayPagePolicy.shows(4, 4, false, true));
-        assertEquals(PageStillPolicy.Shows.PICTURE, DisplayPagePolicy.shows(5, 4, true, true));
-        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(5, 4, true, false));
-        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(5, -1, true, false));
+        assertEquals(PageStillPolicy.Shows.LIVE, PageStillPolicy.shows(4, 4, true, false));
+        assertEquals(PageStillPolicy.Shows.CARD, PageStillPolicy.shows(4, 4, false, false));
+        assertEquals(PageStillPolicy.Shows.PICTURE, PageStillPolicy.shows(4, 4, false, true));
+        assertEquals(PageStillPolicy.Shows.PICTURE, PageStillPolicy.shows(5, 4, true, true));
+        assertEquals(PageStillPolicy.Shows.CARD, PageStillPolicy.shows(5, 4, true, false));
+        assertEquals(PageStillPolicy.Shows.CARD, PageStillPolicy.shows(5, -1, true, false));
     }
 
     @Test

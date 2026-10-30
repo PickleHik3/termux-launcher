@@ -184,13 +184,13 @@ public class PaneWallControllerTest {
     }
 
     @Test public void theRowIsHomeThenTheWorkspace() {
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.wall().pages());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.cellKinds());
 
         // No window: the Terminal page stays on the row, a stop that starts its first shell.
         host.hasWindow = false;
         controller.refreshPages();
         assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL),
-            controller.wall().pages());
+            controller.cellKinds());
     }
 
     @Test public void terminalOnlyTakesHomeOffTheRowAndMovesTheWallOffIt() {
@@ -202,7 +202,7 @@ public class PaneWallControllerTest {
         controller.refreshPages();
 
         assertEquals("the window in front stays in front", 1, host.current);
-        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), controller.wall().pages());
+        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), controller.cellKinds());
         assertEquals("the wall left the Home page it stood on", PaneWallPage.TERMINAL,
             controller.currentPage());
         assertFalse("launcherctl's wall.go home is refused", controller.goTo("home"));
@@ -226,7 +226,7 @@ public class PaneWallControllerTest {
         host.canStart = true;
         controller.refreshPages();
         assertEquals("never a Home page to fall back on",
-            Collections.singletonList(PaneWallPage.TERMINAL), controller.wall().pages());
+            Collections.singletonList(PaneWallPage.TERMINAL), controller.cellKinds());
 
         controller.goHome(false);
 
@@ -239,7 +239,7 @@ public class PaneWallControllerTest {
         controller.refreshPages();
         host.useAs = UseAs.HOME;
         controller.refreshPages();
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.wall().pages());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.cellKinds());
         controller.goHome(false);
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
     }
@@ -655,15 +655,15 @@ public class PaneWallControllerTest {
 
     @Test public void theEmptyTerminalPageIsACellWhetherOrNotAShellCanStart() {
         emptyTerminalBetweenHomeAndDisplay(false);
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
-            PaneWallPage.DISPLAY), wall.pages());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.WIDGETS,
+            PaneWallPage.TERMINAL, PaneWallPage.DISPLAY), controller.cellKinds());
         assertTrue("the Terminal page keeps its cell", wall.indexOfCell(3) >= 0);
     }
 
     @Test public void theEmptyTerminalPageIsACellWhereOnlyTheKindsAreKnown() {
         host.hasWindow = false;
         controller.refreshPages();
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), wall.pages());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.cellKinds());
     }
 
     @Test public void aSwipeFromHomeOntoTheEmptyTerminalPageStartsItsFirstShellOnLanding() {
@@ -760,8 +760,8 @@ public class PaneWallControllerTest {
     @Test public void aDisplayPageIsAPageOfTheWallBesideTheTerminal() {
         displayPages();
         controller.goTo(PaneWallPage.TERMINAL, false);
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
-            PaneWallPage.DISPLAY), wall.pages());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.WIDGETS,
+            PaneWallPage.TERMINAL, PaneWallPage.DISPLAY), controller.cellKinds());
         assertEquals("the display view is bound to the Display page", 4, host.boundDisplay);
         assertEquals("the Terminal page is the pane host alone", 3, host.innerCount(
             PaneWallPage.TERMINAL));
@@ -838,7 +838,7 @@ public class PaneWallControllerTest {
         displayPages();
         host.useAs = UseAs.TERMINAL;
         controller.refreshPages();
-        assertEquals(Arrays.asList(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY), wall.pages());
+        assertEquals(Arrays.asList(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY), controller.cellKinds());
     }
 
     @Test public void homesOwnSwipeMovesTheRowBetweenHomePages() {

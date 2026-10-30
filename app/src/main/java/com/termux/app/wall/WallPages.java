@@ -333,61 +333,6 @@ public final class WallPages {
         return out;
     }
 
-    /**
-     * One run of pages (ADR 0015, slice A2a; the wall lays out one cell per page since ADR 0016): a maximal contiguous run of Home pages, which
-     * {@code WidgetPaneView} pages inside, or one Terminal or Display page. Strict per-page runs
-     * (one Home page each) come with the page-chrome slice.
-     */
-    public static final class Slot {
-        @NonNull public final PageKind kind;
-        /** The pages of the slot, in order: several for a Home run, else one. */
-        @NonNull public final List<Integer> pageIds;
-
-        Slot(@NonNull PageKind kind, @NonNull List<Integer> pageIds) {
-            this.kind = kind;
-            this.pageIds = Collections.unmodifiableList(pageIds);
-        }
-
-        /** The slot's id: its first page's id. */
-        public int id() { return pageIds.get(0); }
-
-        @Override public boolean equals(Object o) {
-            return o instanceof Slot && kind == ((Slot) o).kind && pageIds.equals(((Slot) o).pageIds);
-        }
-
-        @Override public int hashCode() { return 31 * kind.hashCode() + pageIds.hashCode(); }
-
-        @Override public String toString() { return "Slot(" + kind + pageIds + ")"; }
-    }
-
-    /** The wall's slots in {@link #pages()} order: Home pages grouped into runs, the rest alone. */
-    @NonNull
-    public List<Slot> slots() {
-        List<Slot> out = new ArrayList<>();
-        List<Integer> run = null;
-        for (Page p : pages()) {
-            if (p.kind == PageKind.HOME) {
-                if (run == null) run = new ArrayList<>();
-                run.add(p.id);
-                continue;
-            }
-            if (run != null) { out.add(new Slot(PageKind.HOME, run)); run = null; }
-            List<Integer> one = new ArrayList<>(1);
-            one.add(p.id);
-            out.add(new Slot(p.kind, one));
-        }
-        if (run != null) out.add(new Slot(PageKind.HOME, run));
-        return out;
-    }
-
-    /** The index among {@link #slots()} of the slot holding page {@code pageId}; -1 if none. */
-    public int slotIndexOf(int pageId) {
-        List<Slot> slots = slots();
-        for (int i = 0; i < slots.size(); i++) {
-            if (slots.get(i).pageIds.contains(pageId)) return i;
-        }
-        return -1;
-    }
 
     /** The position of {@code stop} among {@link #stops}; -1 when it is not one. */
     public int indexOf(@NonNull Stop stop, int windowCount) {
@@ -473,75 +418,6 @@ public final class WallPages {
         WallPages next = new WallPages(list, pending, detached, homeId, nextId,
             homeIsDisplayWindow, lastHomePageId, homeParked);
         return new Result(next, ChangeType.MOVED, page, null, from, toIndex);
-    }
-
-    /** Whether two Display pages stand side by side among the pages on the wall. Used by the migration only. */
-    public boolean hasAdjacentDisplays() {
-        List<Page> visible = pages();
-        for (int i = 1; i < visible.size(); i++) {
-            if (visible.get(i).kind == PageKind.DISPLAY
-                    && visible.get(i - 1).kind == PageKind.DISPLAY) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * The same pages with no two Display pages side by side: wherever two stand together, the
-     * later one goes after the next non-Display page (before the nearest gap when none follows).
-     * This value itself when nothing stands together. For the one-time migration only; no edit
-     * separates Display pages any more.
-     */
-    @NonNull
-    public WallPages separateDisplays() {
-        if (!hasAdjacentDisplays()) return this;
-        return new WallPages(separated(all, pending), pending, detached, homeId, nextId,
-            homeIsDisplayWindow, lastHomePageId, homeParked);
-    }
-
-    /** {@code all} with each Display page that follows a Display page re-placed; see above. */
-    @NonNull
-    static List<Page> separated(@NonNull List<Page> all, @NonNull List<Integer> pending) {
-        List<Page> list = new ArrayList<>(all);
-        for (int guard = 0; guard < all.size(); guard++) {
-            List<Page> visible = visible(list, pending);
-            Page later = null;
-            for (int i = 1; i < visible.size() && later == null; i++) {
-                if (visible.get(i).kind == PageKind.DISPLAY
-                        && visible.get(i - 1).kind == PageKind.DISPLAY) {
-                    later = visible.get(i);
-                }
-            }
-            if (later == null || !relocateDisplay(list, pending, later)) break;
-        }
-        return list;
-    }
-
-    /**
-     * Moves Display page {@code page} within {@code list} to the first gap at or after where it
-     * stands that has no Display page on either side, else the nearest such gap before it.
-     * False (and {@code list} untouched) when there is none.
-     */
-    private static boolean relocateDisplay(List<Page> list, List<Integer> pending, Page page) {
-        List<Page> visible = visible(list, pending);
-        int from = visible.indexOf(page);
-        if (from < 0) return false;
-        List<Page> rest = new ArrayList<>(visible);
-        rest.remove(page);
-        int gap = -1;
-        for (int g = from; g <= rest.size() && gap < 0; g++) if (gapFits(rest, g)) gap = g;
-        for (int g = from - 1; g >= 0 && gap < 0; g--) if (gapFits(rest, g)) gap = g;
-        if (gap < 0) return false;
-        if (gap == from) return true;
-        list.remove(page);
-        list.add(gap >= rest.size() ? list.size() : list.indexOf(rest.get(gap)), page);
-        return true;
-    }
-
-    private static boolean gapFits(List<Page> rest, int g) {
-        return (g == 0 || rest.get(g - 1).kind != PageKind.DISPLAY)
-            && (g == rest.size() || rest.get(g).kind != PageKind.DISPLAY);
     }
 
     private static List<Page> visible(List<Page> list, List<Integer> pending) {

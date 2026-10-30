@@ -225,7 +225,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     // The wall lays out one cell per page; each kind's one view is bound to one page.
     /** The page list the cells were laid out from; null where only the kinds are known. */
     @Nullable private WallPages mKnownPages;
-    /** The cells are [Home...][Terminal]: the wallpaper's row reads as it always did. */
+    /**
+     * The cells hold no Display page and no Home page after the Terminal page ([Home...][Terminal]
+     * or less): the wallpaper's row reads by kind, as it always did, not by the pages' order.
+     */
     private boolean mDefaultOrder = true;
     /** The row had a window at the last {@link #refreshPages}. */
     private boolean mHadWindow;
@@ -242,7 +245,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private int mLastDisplayPageId = -1;
     /** The cells hold a Display page: the wallpaper's pan reads the pages' order. */
-    private boolean mHasDisplaySlot;
+    private boolean mHasDisplayPage;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
         mWall = wall;
@@ -329,7 +332,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean homeAfterTerminal = false;
         if (pages != null) {
             for (WallPages.Page page : pages.pages()) {
-                PaneWallPage kind = kindOf(page.kind);
+                PaneWallPage kind = PaneWallPolicy.kindOf(page.kind);
                 if (kind == PaneWallPage.WIDGETS && !homeShown) continue;
                 if (kind == PaneWallPage.WIDGETS && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PaneWallPage.WIDGETS;
@@ -343,29 +346,18 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             || (hasWindow && !hasTerminal)) {
             mKnownPages = null;
             mDefaultOrder = true;
-            mHasDisplaySlot = false;
+            mHasDisplayPage = false;
             out.clear();
             // The Terminal page is on the row whether or not it has a window.
-            for (PaneWallPage kind : mHost.useAs().rowPages(true)) {
+            for (PaneWallPage kind : mHost.useAs().rowPages()) {
                 out.add(new PaneWallLayout.Cell(PaneWallLayout.kindPageId(kind), kind, null));
             }
             return out;
         }
         mKnownPages = pages;
-        mHasDisplaySlot = hasDisplay;
+        mHasDisplayPage = hasDisplay;
         mDefaultOrder = !hasDisplay && !homeAfterTerminal;
         return out;
-    }
-
-    /** The wall's page kind of a page of the list. */
-    @NonNull
-    static PaneWallPage kindOf(@NonNull WallPages.PageKind kind) {
-        switch (kind) {
-            case HOME: return PaneWallPage.WIDGETS;
-            case DISPLAY: return PaneWallPage.DISPLAY;
-            case TERMINAL:
-            default: return PaneWallPage.TERMINAL;
-        }
     }
 
     /** Whether the wall has a cell of {@code kind}. */
@@ -701,6 +693,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mDisplayWindow != null) mDisplayWindow.applyStyle(style);
     }
 
+    /** The kind of the page the wall is on. */
     @NonNull
     public PaneWallPage currentPage() {
         return mWall.currentPage();
@@ -786,7 +779,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * page, in the order of the cells, so the pan reads the wall the user arranged.
      */
     public int rowCount() {
-        if ((!mDefaultOrder || mHasDisplaySlot) && mKnownPages != null) {
+        if ((!mDefaultOrder || mHasDisplayPage) && mKnownPages != null) {
             return WallParallax.rowCount(mKnownPages, rowWindowCount());
         }
         return WallParallax.rowCount(rowHomeCount(), rowWindowCount());
@@ -854,7 +847,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private int rowIndexOf(@NonNull PaneWallPage kind, int index, int pageId, int homes,
                            int windows) {
         WallPages pages = mKnownPages;
-        if ((mDefaultOrder && !mHasDisplaySlot) || pages == null) {
+        if ((mDefaultOrder && !mHasDisplayPage) || pages == null) {
             return WallParallax.rowIndex(kind, index, homes, windows);
         }
         WallPages.Stop stop;
