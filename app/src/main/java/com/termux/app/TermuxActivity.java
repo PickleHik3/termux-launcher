@@ -27204,8 +27204,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Each Display page's last picture, by page id (A3c2, stories 28/29), taken as the display
      * frame leaves the page; the bitmaps are this activity's to recycle.
      */
-    @NonNull private final com.termux.app.wall.DisplayPagePolicy.Pictures<android.graphics.Bitmap>
-        mDisplayPictures = new com.termux.app.wall.DisplayPagePolicy.Pictures<>();
+    @NonNull private final com.termux.app.wall.PageStillPolicy.Pictures<android.graphics.Bitmap>
+        mDisplayPictures = new com.termux.app.wall.PageStillPolicy.Pictures<>();
     /** The frame came to its bound page and has not landed there yet: the page's still shows. */
     private boolean mDisplayPageStillPending;
     /** Hides the bound page's still once its app was raised or run there. */

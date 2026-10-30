@@ -62,12 +62,12 @@ public class DisplayPagePolicyTest {
 
     @Test
     public void onlyTheBoundPageIsLiveAndOnlyWhileRunning() {
-        assertEquals(DisplayPagePolicy.Shows.LIVE, DisplayPagePolicy.shows(4, 4, true, false));
-        assertEquals(DisplayPagePolicy.Shows.CARD, DisplayPagePolicy.shows(4, 4, false, false));
-        assertEquals(DisplayPagePolicy.Shows.PICTURE, DisplayPagePolicy.shows(4, 4, false, true));
-        assertEquals(DisplayPagePolicy.Shows.PICTURE, DisplayPagePolicy.shows(5, 4, true, true));
-        assertEquals(DisplayPagePolicy.Shows.CARD, DisplayPagePolicy.shows(5, 4, true, false));
-        assertEquals(DisplayPagePolicy.Shows.CARD, DisplayPagePolicy.shows(5, -1, true, false));
+        assertEquals(PageStillPolicy.Shows.LIVE, DisplayPagePolicy.shows(4, 4, true, false));
+        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(4, 4, false, false));
+        assertEquals(PageStillPolicy.Shows.PICTURE, DisplayPagePolicy.shows(4, 4, false, true));
+        assertEquals(PageStillPolicy.Shows.PICTURE, DisplayPagePolicy.shows(5, 4, true, true));
+        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(5, 4, true, false));
+        assertEquals(PageStillPolicy.Shows.CARD, DisplayPagePolicy.shows(5, -1, true, false));
     }
 
     @Test
@@ -103,7 +103,7 @@ public class DisplayPagePolicyTest {
 
     @Test
     public void picturesAreKeptPerPage() {
-        DisplayPagePolicy.Pictures<String> pictures = new DisplayPagePolicy.Pictures<>();
+        PageStillPolicy.Pictures<String> pictures = new PageStillPolicy.Pictures<>();
         assertNull(pictures.put(4, "a"));
         assertNull(pictures.put(5, "b"));
         assertEquals("a", pictures.get(4));
@@ -116,7 +116,7 @@ public class DisplayPagePolicyTest {
 
     @Test
     public void picturesOfPagesGoneAreHandedBack() {
-        DisplayPagePolicy.Pictures<String> pictures = new DisplayPagePolicy.Pictures<>();
+        PageStillPolicy.Pictures<String> pictures = new PageStillPolicy.Pictures<>();
         pictures.put(4, "a");
         pictures.put(5, "b");
         assertEquals(Collections.singletonList("b"),
@@ -128,7 +128,7 @@ public class DisplayPagePolicyTest {
 
     @Test
     public void picturesHandBackTheSameObjectNever() {
-        DisplayPagePolicy.Pictures<String> pictures = new DisplayPagePolicy.Pictures<>();
+        PageStillPolicy.Pictures<String> pictures = new PageStillPolicy.Pictures<>();
         String a = "a";
         pictures.put(4, a);
         assertSame(a, pictures.get(4));
