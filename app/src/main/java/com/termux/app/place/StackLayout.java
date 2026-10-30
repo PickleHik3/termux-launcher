@@ -298,6 +298,29 @@ public final class StackLayout {
             this.dock = dock;
             this.page = page;
         }
+
+        /**
+         * The half's own dock rows, as a pass on it sets them: whether its dock stands, whether
+         * its extra-keys row does, and that row at {@code measuredExtraKeysRowPx}. Read off the
+         * half's layout in the snapshot, never the half on screen: from Home, whose layout has no
+         * extra-keys row, the row is laid out 0 tall and the Terminal's rest came out a row short.
+         */
+        @NonNull
+        public RestInput ownRows(int measuredExtraKeysRowPx) {
+            PlaceLayout layout = dock.half(page).layout;
+            toolbarShown = PlaceChromePolicy.dockShown(layout);
+            extraKeysRowEnabled = PlaceChromePolicy.extraKeysRowShown(layout);
+            toolbarHeightPx = extraKeysRowPx(layout, measuredExtraKeysRowPx);
+            return this;
+        }
+    }
+
+    /**
+     * The extra-keys row {@code layout} stands on its dock, at the height a pass gives the row
+     * ({@code measuredRowPx}: the device's row for its key rows and scale); 0 while it stands none.
+     */
+    public static int extraKeysRowPx(@NonNull PlaceLayout layout, int measuredRowPx) {
+        return PlaceChromePolicy.extraKeysRowShown(layout) ? Math.max(0, measuredRowPx) : 0;
     }
 
     /**
