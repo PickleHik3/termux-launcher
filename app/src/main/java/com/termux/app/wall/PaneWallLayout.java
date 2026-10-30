@@ -687,7 +687,9 @@ public final class PaneWallLayout extends ViewGroup {
         List<PaneWallPage> kinds = new ArrayList<>(3);
         for (Cell cell : mCells) if (!kinds.contains(cell.kind)) kinds.add(cell.kind);
         mKinds = Collections.unmodifiableList(kinds);
-        if (mJumpFromId != NO_PAGE && indexOfCell(mJumpFromId) < 0) mJumpFromId = NO_PAGE;
+        // A far jump's stand-off is drawn against the list it was made on: a changed list mid-slide
+        // drops it, and the cells between may come into the rest of the slide.
+        clearJump();
         PaneWallPage was = mCurrent;
         boolean moved = false;
         if (indexOfCell(mCurrentId) < 0) {
@@ -965,12 +967,27 @@ public final class PaneWallLayout extends ViewGroup {
      * cells, but during a far jump only the arriving cell and the one left are in the slide.
      */
     private int cellPosition(int index, int current) {
-        if (mJumpFromId != NO_PAGE) {
+        int jumpFrom = jumpFromId();
+        if (jumpFrom != NO_PAGE) {
             if (index == current) return 0;
-            if (mCells.get(index).pageId == mJumpFromId) return mJumpSide;
+            if (mCells.get(index).pageId == jumpFrom) return mJumpSide;
             return HIDDEN;
         }
         return index - current;
+    }
+
+    /**
+     * The page a far jump left, while its slide is under way: the stand-off belongs to that slide
+     * alone, so at rest (no slide, the wall on its rest) it is {@link #NO_PAGE} whatever was left
+     * behind, and every cell stands at its distance.
+     */
+    private int jumpFromId() {
+        return mSliding || mOffsetPx != 0f ? mJumpFromId : NO_PAGE;
+    }
+
+    /** Drops a far jump's stand-off: the slide it belonged to is over or no longer its own. */
+    private void clearJump() {
+        mJumpFromId = NO_PAGE;
     }
 
     @NonNull
@@ -1256,6 +1273,8 @@ public final class PaneWallLayout extends ViewGroup {
         if (side == 0 || getWidth() <= 0) return;
         stopSlide();
         stopNudge();
+        // The far jump's slide this stops is over: the page now stands off on its own.
+        clearJump();
         mOffsetPx = Integer.signum(side) * (float) getWidth();
         mCrossSlide = true;
         applyPagePositions();
@@ -1292,7 +1311,7 @@ public final class PaneWallLayout extends ViewGroup {
             stopSlide();
             stopNudge();
             if (mJumpFromId != NO_PAGE) {
-                mJumpFromId = NO_PAGE;
+                clearJump();
                 applyPagePositions();
             }
             if (mListener != null) mListener.onWallDragBegin(mCurrent);
@@ -2974,7 +2993,7 @@ public final class PaneWallLayout extends ViewGroup {
             stopSlide();
             mOffsetPx = 0f;
             mCrossSlide = false;
-            mJumpFromId = NO_PAGE;
+            clearJump();
             applyPagePositions();
             // A page still springing up keeps its plank until it lands (finishSink), so its
             // press lies down with the spring rather than snapping flat here.
@@ -3492,6 +3511,8 @@ public final class PaneWallLayout extends ViewGroup {
         mDrawnDockTop = Float.NaN;
         mSliding = false;
         stopSlide();
+        // The slide stopped here never settles: its stand-off goes with it.
+        clearJump();
         stopNudge();
         // A keyboard the finger or its settle was carrying lands where it was going.
         settleKeyboardRevealNow();
