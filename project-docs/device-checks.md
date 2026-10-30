@@ -21,6 +21,11 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-30 · b324fb00f, the status bar's long-press Expand/Compact item · on pong, long-press
+  the status bar along the top: a compact bar offers Expand status bar, an expanded one Compact
+  status bar, and each lands the bar as the status swipe does and is still that way after a
+  restart; with the bar down a side the item is absent. Emulator-verified 2026-10-30 (top bar
+  only); the glyphs owe a look at pong's density.
 - 2026-10-30 · the setup card sheet stays away across a recreate (commit after 47f2e0316) · on
   pong with a card still open (Setup in Settings shows one): with wallpaper mode off, apply a
   wallpaper from the Appearance editor so the launcher rebuilds; the card sheet must not open.
