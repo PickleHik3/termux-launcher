@@ -21,6 +21,12 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-30 · the setup card sheet stays away across a recreate (commit after 47f2e0316) · on
+  pong with a card still open (Setup in Settings shows one): with wallpaper mode off, apply a
+  wallpaper from the Appearance editor so the launcher rebuilds; the card sheet must not open.
+  Then open the card sheet from Settings › Setup, apply another wallpaper that switches the mode
+  (turn wallpaper mode off first); the sheet is back after the rebuild. A cold start with an open
+  card still shows the sheet.
 - 2026-10-30 · ADR 0016 (#183 to #187, feat/wall-cells) · on pong, with Home, a Terminal window and
   a Display page in the wall: reach the Display page by its key, then press Home: the wall lands on
   Home; press the Terminal key; swipe left on Home: the Terminal page slides in (not the Display

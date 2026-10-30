@@ -114,6 +114,11 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         return mOpen;
     }
 
+    /** The card sheet after the wizard is up (the wizard's own sheet does not count). */
+    public boolean isCardSheetShowing() {
+        return mOpen && mCards != null;
+    }
+
     /** Open and showing: false while the wallpaper picker has the screen. */
     public boolean isActive() {
         return mOpen && !mSuspended;

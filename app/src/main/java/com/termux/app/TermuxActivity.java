@@ -1526,6 +1526,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
     private static final String ARG_ACTIVITY_RECREATED = "activity_recreated";
+    /** The setup card sheet was up when the state was saved, so the rebuilt activity shows it again. */
+    private static final String ARG_SETUP_CARDS_SHOWING = "setup_cards_showing";
+    /** Read from the saved state: the card sheet to put back once the content view is up. */
+    private boolean mSetupCardsWereShowing;
     private static final String ARG_PANE_LAYOUT = "pane_layout";
     private static final String PANE_STATE_SESSIONS = "sessions";
     private static final String PANE_STATE_WINDOWS = "windows";
@@ -1894,6 +1898,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mCreatedThisMessage.mark();
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
+            mSetupCardsWereShowing = savedInstanceState.getBoolean(ARG_SETUP_CARDS_SHOWING, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
             mPendingWallState = savedInstanceState;
             mAppearanceHandover.take(savedInstanceState);
@@ -2111,15 +2116,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * <p>The process can die while the wizard is up, and the activity that comes back would
      * otherwise have nothing on screen. The wizard is not stored, so it is simply offered again.
-     * A rotation does not come through here: this activity keeps itself across one.
+     * The card sheet after it comes back only if it was up when the state was saved: it is
+     * offered on a launcher start, not on every rebuild, and a recreate the launcher asks for
+     * itself (a wallpaper applied with wallpaper mode off switches the window theme) is not a
+     * start. A rotation does not come through here: this activity keeps itself across one.
      */
     private void resumeFirstRunAfterRestart() {
         View contentView = findViewById(android.R.id.content);
         if (contentView == null) return;
+        boolean cardsWereShowing = mSetupCardsWereShowing;
+        mSetupCardsWereShowing = false;
         contentView.post(() -> {
             if (isFinishing() || isDestroyed() || mPreferences == null) return;
             if (openSetupWizardIfDue()) return;
-            setupWizard().openCardsIfDue();
+            if (cardsWereShowing) setupWizard().openCards();
         });
     }
 
@@ -11017,6 +11027,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
+        savedInstanceState.putBoolean(ARG_SETUP_CARDS_SHOWING,
+            mSetupWizard != null && mSetupWizard.isCardSheetShowing());
         // Before the service connected, the layout this activity was handed is still waiting:
         // it is passed on rather than lost to a second recreate.
         Bundle paneLayout = mTermuxService != null ? savePaneLayoutState() : mPendingPaneLayoutState;
