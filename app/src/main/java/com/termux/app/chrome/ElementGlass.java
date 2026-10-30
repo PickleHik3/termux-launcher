@@ -117,11 +117,35 @@ public final class ElementGlass {
      */
     @Nullable
     public GlassRefraction.Look refraction(@Nullable GlassRefraction.Look global) {
-        if (global == null || (ownDepthDp == null && ownEdgePercent == null)) return global;
-        return new GlassRefraction.Look(
-            ownDepthDp != null ? ownDepthDp : global.bendDp,
+        return withOwn(global, ownDepthDp, ownEdgePercent);
+    }
+
+    /**
+     * {@link #refraction} for {@code element} on {@code pageId} straight from the store, reading
+     * only Depth and Edge, and nothing at all while Fancier Glass is off: the path a surface that
+     * re-asks for its refraction on every dress pass takes.
+     */
+    @Nullable
+    public static GlassRefraction.Look refraction(@Nullable TermuxAppSharedPreferences preferences,
+                                                  @NonNull LookGrid.Element element, int pageId,
+                                                  @Nullable GlassRefraction.Look global) {
+        if (global == null || preferences == null) return global;
+        LookGrid grid = preferences.lookGrid();
+        int page = pageId >= 0 ? pageId : LookGrid.NO_PAGE;
+        LookGrid.Resolved depth = grid.resolve(LookGrid.Property.DEPTH, element, page);
+        LookGrid.Resolved edge = grid.resolve(LookGrid.Property.EDGE, element, page);
+        return withOwn(global, ownCell(depth) ? depth.value : null,
+            ownCell(edge) ? edge.value : null);
+    }
+
+    @Nullable
+    private static GlassRefraction.Look withOwn(@Nullable GlassRefraction.Look global,
+                                                @Nullable Integer depthDp,
+                                                @Nullable Integer edgePercent) {
+        if (global == null || (depthDp == null && edgePercent == null)) return global;
+        return new GlassRefraction.Look(depthDp != null ? depthDp : global.bendDp,
             global.edgeWidthDp, global.edgeLightPercent, global.specularPercent,
-            ownEdgePercent != null ? ownEdgePercent : global.dispersionPercent,
+            edgePercent != null ? edgePercent : global.dispersionPercent,
             global.clarityPercent);
     }
 

@@ -96,6 +96,27 @@ public class ElementGlassTest {
     }
 
     @Test
+    public void storeRefraction_followsBaseUntilAnElementHoldsItsOwn() {
+        Context context = RuntimeEnvironment.getApplication().getApplicationContext();
+        SharedPreferences store = context.getSharedPreferences("element-glass-refraction",
+            Context.MODE_PRIVATE);
+        store.edit().clear().commit();
+        TermuxAppSharedPreferences preferences = new TermuxAppSharedPreferences(context, store, null);
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
+        for (LookGrid.Element element : LookGrid.Element.values()) {
+            assertSame(FANCIER, ElementGlass.refraction(preferences, element, PAGE, FANCIER));
+            assertNull(ElementGlass.refraction(preferences, element, PAGE, null));
+        }
+        preferences.lookGrid().write(LookGrid.Property.DEPTH, LookGrid.Element.KEYBOARD, PAGE, 2);
+        assertEquals(2, ElementGlass.refraction(preferences, LookGrid.Element.KEYBOARD, PAGE,
+            FANCIER).bendDp);
+        assertSame(FANCIER, ElementGlass.refraction(preferences, LookGrid.Element.KEYBOARD,
+            OTHER_PAGE, FANCIER));
+        assertSame(FANCIER, ElementGlass.refraction(preferences, LookGrid.Element.DOCK, PAGE,
+            FANCIER));
+    }
+
+    @Test
     public void elementCell_changesOnlyThatElement() {
         LookGrid grid = baseOnly();
         grid.write(LookGrid.Property.OPACITY, LookGrid.Element.SHEETS, LookGrid.NO_PAGE, 80);

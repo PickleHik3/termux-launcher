@@ -3651,8 +3651,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reset that runs just before leaves a transparent colour drawable and hides the view, and
         // taking that for the glass left the gutter bare from the second pass on.
         // The dock's material, with the dock's own Depth and Edge where it holds them (ADR 0017).
-        com.termux.app.chrome.GlassRefraction.Look gutterLook = com.termux.app.chrome.ElementGlass.of(mPreferences,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, restingPage()).refraction(mFancierGlassLook);
+        com.termux.app.chrome.GlassRefraction.Look gutterLook = com.termux.app.chrome.ElementGlass.refraction(mPreferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, restingPage(), mFancierGlassLook);
         List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(restingPage()),
             mPreferences.getDockGlassGrain(restingPage()), gutterLook, mPreferences.getDockTintStrength(restingPage()));
         if (mFrameGutterShown && mFrameGutterDrawable != null
@@ -3820,8 +3820,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return new com.termux.app.chrome.GlassRefraction.Look(0,
                         mFancierGlassLook.edgeWidthDp, mFancierGlassLook.edgeLightPercent);
                 // The Terminal element's own Depth and Edge where it holds them (ADR 0017).
-                return com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.TERMINAL, terminalLookPageId())
-                    .refraction(mFancierGlassLook);
+                return com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.TERMINAL, terminalLookPageId(), mFancierGlassLook);
             }
 
             @Override @Nullable public Bitmap paneGlassClearFrame() {
@@ -3984,8 +3983,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
                     @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
                         // The Widgets element's own Depth and Edge where it holds them (ADR 0017).
-                        return com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS,
-                            TermuxAppSharedPreferences.PAGE_WALL).refraction(mFancierGlassLook);
+                        return com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS,
+                            TermuxAppSharedPreferences.PAGE_WALL, mFancierGlassLook);
                     }
                     @Override public com.termux.app.chrome.WallpaperParallax parallax() {
                         return mWallpaperParallax;
@@ -6419,8 +6418,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 state.blurRadiusDp, state.barAlpha, mPreferences != null
                     ? mPreferences.getDockGlassGrain(stackLookPage())
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
-                radiusPx, com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, stackLookPage())
-                    .refraction(mFancierGlassLook))
+                radiusPx, com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, stackLookPage(), mFancierGlassLook))
             .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength(stackLookPage())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
             // A card under Floating, with its whole rim. Docked it joins the frame below the
