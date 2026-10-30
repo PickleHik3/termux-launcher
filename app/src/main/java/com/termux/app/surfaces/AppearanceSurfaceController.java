@@ -548,7 +548,8 @@ public final class AppearanceSurfaceController {
             if (!mOpen || token != mToken || !mWallpaperShown)
                 return;
             page.setVisibility(View.VISIBLE);
-            fade(page, 0f, 1f, null);
+            page.setAlpha(1f);
+            rise(page, true, null);
         });
     }
 
@@ -560,7 +561,7 @@ public final class AppearanceSurfaceController {
         mWallpaperShown = false;
         setTakesTouches(false);
         final View page = overview.root();
-        fade(page, page.getAlpha(), 0f, () -> {
+        rise(page, false, () -> {
             if (!mWallpaperShown) {
                 page.setVisibility(View.INVISIBLE);
                 overview.onHidden();
@@ -991,6 +992,49 @@ public final class AppearanceSurfaceController {
     }
 
     /** Fades {@code view} from {@code from} to {@code to}; {@code end} runs unless cancelled. */
+    /**
+     * Rule d: the Wallpaper page rises from the screen's bottom over the card sheet, or falls
+     * back to it, on WALLPAPER_PAGE (spatial-default); under reduced motion it jumps.
+     */
+    private void rise(@NonNull View view, boolean up, @Nullable Runnable end) {
+        float below = view.getHeight() > 0 ? view.getHeight()
+            : view.getResources().getDisplayMetrics().heightPixels;
+        float from = up ? below : view.getTranslationY();
+        float to = up ? 0f : below;
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            view.setTranslationY(0f);
+            if (!up) view.setAlpha(0f);
+            if (end != null) end.run();
+            return;
+        }
+        view.setTranslationY(from);
+        ValueAnimator animator = ValueAnimator.ofFloat(from, to);
+        animator.setDuration(EditorMotion.Use.WALLPAPER_PAGE.durationMs(false));
+        animator.setInterpolator(EditorMotion.Use.WALLPAPER_PAGE.curve(false));
+        animator.addUpdateListener(a -> view.setTranslationY((Float) a.getAnimatedValue()));
+        mRunning.add(animator);
+        animator.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override public void onAnimationCancel(Animator a) {
+                mCancelled = true;
+            }
+
+            @Override public void onAnimationEnd(Animator a) {
+                mRunning.remove(a);
+                if (!mCancelled) {
+                    // Put down, it waits in place, unseen, for the next rise.
+                    if (!up) {
+                        view.setAlpha(0f);
+                        view.setTranslationY(0f);
+                    }
+                    if (end != null) end.run();
+                }
+            }
+        });
+        animator.start();
+    }
+
     private void fade(@NonNull View view, float from, float to, @Nullable Runnable end) {
         if (ReducedMotion.isEnabled(mHost.context())) {
             view.setAlpha(to);
