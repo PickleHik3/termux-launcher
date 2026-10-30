@@ -81,7 +81,8 @@ public class LookGridTest {
         assertEquals(LookGrid.CORNERS_AUTO, grid.value(Property.CORNERS, null, LookGrid.NO_PAGE));
         // A stored value out of range (a hand edit) is clamped on the read.
         grid.store().putInt("look.margin", 400);
-        assertEquals(40, grid.value(Property.MARGIN, null, LookGrid.NO_PAGE));
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
+            grid.value(Property.MARGIN, null, LookGrid.NO_PAGE));
     }
 
     @Test

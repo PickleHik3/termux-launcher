@@ -26,6 +26,10 @@ import java.util.Set;
  * that cell's value; an absent key follows; Reset deletes the key. Vibrancy and Margin have only
  * the all-glass column. Clamps live here, once.</p>
  *
+ * <p>Who writes which cell: a setter named for an element (the dock's opacity, the status bar's
+ * blur) writes that element's everywhere-cell when it holds one and Base when it follows; the
+ * unnamed Base setters write Base, and only the editor's chips name a page or another cell.</p>
+ *
  * <p>Pure over {@link Store}: {@link MemoryStore} for tests, {@link PrefsStore} on a device.</p>
  */
 public final class LookGrid {
@@ -73,8 +77,8 @@ public final class LookGrid {
         VIBRANCY("vibrancy", TermuxPreferenceConstants.TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY,
             TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY, false),
-        MARGIN("margin", 0, 40, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP,
-            false);
+        MARGIN("margin", 0, TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP, false);
 
         public final String key;
         public final int min;

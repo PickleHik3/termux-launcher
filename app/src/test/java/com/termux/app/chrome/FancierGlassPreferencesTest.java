@@ -115,6 +115,7 @@ public class FancierGlassPreferencesTest {
         preferences.setInAppKeyboardBlurRadius(99);
         assertEquals(36, preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         preferences.setExtraKeysBlurRadius(44);
-        assertEquals(44, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        // 44 dp is past the last Frost stop: its 36.
+        assertEquals(36, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 }
