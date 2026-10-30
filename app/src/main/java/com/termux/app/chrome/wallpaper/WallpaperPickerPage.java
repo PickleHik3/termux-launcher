@@ -63,11 +63,11 @@ import java.util.function.Supplier;
  * window: built once per session, hidden (not destroyed) while Look, Layout or Icons shows, and
  * released when the surface closes. What it reads from disk (the slots, the recent photos) is read
  * off the main thread ({@link #load}, then {@link Io}). Look, Layout and Icon pack go to
- * the surface through {@link Listener}; Photo… closes the surface and hands the host a
- * {@link ReturnState}, with which the host opens it again when the photo pick and the crop end. A
- * cropped photo comes back as the centred slot's pending choice ({@link ReturnState#withPhoto}),
- * previewed in its card and set only by Done. Leaving without Done discards a pending photo's
- * file.</p>
+ * the surface through {@link Listener}; Photo… hands the host a {@link ReturnState} and the page
+ * stays up under Android's photo picker and the crop. The cropped photo comes back as that slot's
+ * pending choice ({@link #takePhoto}), previewed in its card and set only by Done; an activity
+ * rebuilt during the crop opens a new page from the {@link ReturnState} instead
+ * ({@link ReturnState#withPhoto}). Leaving without Done discards a pending photo's file.</p>
  *
  * <p>Photos are first-class on every API level: a slot holding a photo shows it in its card, and
  * the strip holds Same as Home (Lock only) then the photos last applied, evenly spaced across the
@@ -124,9 +124,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     /** What the host does. Every call is on the main thread. */
     public interface Listener {
         /**
-         * Photo… was tapped for {@code slot}; the page has asked to close. Run the photo picker and
-         * the crop, then open the surface again with {@link ReturnState#withPhoto}{@code (back, …)},
-         * or with {@code back} itself when the pick or the crop was cancelled.
+         * Photo… was tapped for {@code slot}; the page stays up. Run the photo picker and the crop,
+         * then hand the result to {@link #takePhoto}. Should the page be gone by then (the
+         * activity was rebuilt), open the surface again with
+         * {@link ReturnState#withPhoto}{@code (back, …)}, or with {@code back} itself when the
+         * pick or the crop was cancelled.
          */
         void onPickPhoto(@NonNull WallpaperSlots.Slot slot, @NonNull ReturnState back);
 
@@ -380,8 +382,10 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private boolean mReleased;
     /** On screen. False while another page shows. */
     private boolean mShown = true;
-    /** Closed for Photo…: the host brings the page back, pending photos and all. */
+    /** Out for Photo…: a page let go meanwhile keeps its pending photos for the next one. */
     private boolean mHandedOff;
+    /** Held busy by the surface after its apply, while the new colours land. */
+    private boolean mHeld;
     private final WallpaperPreviewView[] mCards = new WallpaperPreviewView[2];
     /**
      * Per pager position: the card's picture has arrived, or there is none to wait for (no file,
@@ -625,9 +629,25 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         if (mBusy || mReleased) return;
         WallpaperSlots.Slot slot = mCentred;
         ReturnState back = returnState();
-        // The host closes the surface and brings it back with the cropped photo.
+        // The page stays up under the pick; the host hands the cropped photo to takePhoto.
         mHandedOff = true;
         mListener.onPickPhoto(slot, back);
+    }
+
+    /**
+     * The photo pick for {@code slot} ended: {@code photo}, cropped, becomes that card's pending
+     * choice and the card comes to the middle; null (cancelled) leaves the page as it was.
+     */
+    @MainThread
+    public void takePhoto(@NonNull WallpaperSlots.Slot slot, @Nullable File photo) {
+        mHandedOff = false;
+        if (mReleased || photo == null) return;
+        WallpaperSlots.Slot target = mLauncherOnly ? WallpaperSlots.Slot.HOME : slot;
+        mPending[target.ordinal()] = WallpaperSlots.Choice.photo(photo);
+        refreshCards();
+        refreshSameAsHomeThumb();
+        centre(target);
+        refreshSelection();
     }
 
     /** Where the page is now, for {@link Listener#onOpenLook}. */
@@ -779,8 +799,17 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
     private void setBusy(boolean busy) {
         mBusy = busy;
-        mProgress.setVisibility(busy ? View.VISIBLE : View.INVISIBLE);
-        mStrip.setAlpha(busy ? 0.5f : 1f);
+        boolean shown = busy || mHeld;
+        mProgress.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
+        mStrip.setAlpha(shown ? 0.5f : 1f);
+    }
+
+    /** The surface holds the page busy after its apply, until the new colours have landed. */
+    @Override
+    public void holdBusy(boolean held) {
+        if (mReleased) return;
+        mHeld = held;
+        setBusy(held);
     }
 
     // --- apply, photo, shortcuts ---
