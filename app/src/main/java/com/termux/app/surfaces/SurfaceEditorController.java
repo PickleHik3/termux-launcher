@@ -180,6 +180,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean isGlassRefractionActive();
         /** The terminal's own frame in {@code terminal_root_container}'s unscaled coordinates. */
         @Nullable int[] terminalFrameRectInRoot();
+        /**
+         * The Card-form widget (one wearing glass) under the screen point {@code rawX, rawY}, as
+         * {left, top, right, bottom} in the root container's unscaled space; null where none is.
+         */
+        @Nullable default int[] cardWidgetAt(float rawX, float rawY) { return null; }
         /** The corner that frame actually draws with. */
         float terminalFrameCornerRadiusPx();
         /** The corner the keyboard surface itself is clipped to. */
@@ -1049,6 +1054,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mCard != card)
             mChips = EditorChips.openFor(card, mScopePageId);
         mCard = card;
+        mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
+        mTappedWidget = null;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
         sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
@@ -4016,6 +4023,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 continue;
             final int index = i;
             group.setOnClickListener(view -> {
+                if (openWidgetsAt(index))
+                    return;
                 EditorCard card = cardOfGroup(index);
                 if (card != null) {
                     EditorDoor.EDITOR_OUTLINE.log(card);
@@ -4053,6 +4062,30 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 }
             });
         }
+    }
+
+    /** The tapped Card-form widget's rect, for the next {@link #openCard} of the Widgets card. */
+    @Nullable private int[] mTappedWidget;
+    /** The widget the Widgets card's ring stands around while that card is up. */
+    @Nullable private int[] mWidgetRing;
+
+    /**
+     * A tap on the bare frame or the canvas that lands on a Card-form widget raises the Widgets
+     * card, ringed around that widget. False when no such widget is under the finger.
+     */
+    private boolean openWidgetsAt(int groupIndex) {
+        EditorCard groupCard = GROUP_CARDS[groupIndex];
+        if (groupCard != null && groupCard != EditorCard.TERMINAL)
+            return false;
+        if (cardRefusal(EditorCard.WIDGETS) != null)
+            return false;
+        int[] widget = mHost.cardWidgetAt(mDownRawX, mDownRawY);
+        if (widget == null)
+            return false;
+        EditorDoor.EDITOR_OUTLINE.log(EditorCard.WIDGETS);
+        mTappedWidget = widget;
+        openCard(EditorCard.WIDGETS, true);
+        return true;
     }
 
     private void setOverlayVisible(boolean visible) {
@@ -4095,6 +4128,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return null;
         if (card == null || isScreenCard(card))
             return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
+        int[] widget = mWidgetRing;
+        if (card == EditorCard.WIDGETS && widget != null)
+            return new int[] {widget[0] - overlayOffset[0], widget[1] - overlayOffset[1],
+                widget[2] - overlayOffset[0], widget[3] - overlayOffset[1]};
         if (card == EditorCard.TERMINAL) {
             int[] frame = mHost.terminalFrameRectInRoot();
             if (frame == null || frame[2] - frame[0] < dp(24) || frame[3] - frame[1] < dp(24))

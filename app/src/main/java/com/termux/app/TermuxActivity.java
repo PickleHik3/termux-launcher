@@ -14450,6 +14450,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentFancierGlassLook() != null;
         }
 
+        @Override @Nullable public int[] cardWidgetAt(float rawX, float rawY) {
+            View root = findViewById(R.id.terminal_root_container);
+            if (mWidgetPaneController == null || !(root instanceof ViewGroup))
+                return null;
+            com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget =
+                cardWidgetUnder((ViewGroup) root, Math.round(rawX), Math.round(rawY));
+            if (widget == null)
+                return null;
+            int[] location = new int[2];
+            if (!com.termux.app.surfaces.SurfaceEditorController.offsetInRoot(widget, root,
+                    location))
+                return null;
+            return new int[] {location[0], location[1], location[0] + widget.getWidth(),
+                location[1] + widget.getHeight()};
+        }
+
         @Override @Nullable public int[] terminalFrameRectInRoot() {
             View host = findViewById(R.id.terminal_surface_host);
             View root = findViewById(R.id.terminal_root_container);
@@ -35135,4 +35151,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+
+    /**
+     * The Card-form (glass) built-in widget whose drawn bounds hold the screen point, searched
+     * under {@code group}; null where none does.
+     */
+    @Nullable
+    private static com.termux.app.launcher.widget.builtin.BuiltinWidgetView cardWidgetUnder(
+            @NonNull ViewGroup group, int rawX, int rawY) {
+        android.graphics.Rect bounds = new android.graphics.Rect();
+        for (int i = group.getChildCount() - 1; i >= 0; i--) {
+            View child = group.getChildAt(i);
+            if (child.getVisibility() != View.VISIBLE)
+                continue;
+            if (child instanceof com.termux.app.launcher.widget.builtin.BuiltinWidgetView) {
+                com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget =
+                    (com.termux.app.launcher.widget.builtin.BuiltinWidgetView) child;
+                if (widget.isGlassOn() && widget.getGlobalVisibleRect(bounds)
+                    && bounds.contains(rawX, rawY))
+                    return widget;
+            } else if (child instanceof ViewGroup) {
+                com.termux.app.launcher.widget.builtin.BuiltinWidgetView found =
+                    cardWidgetUnder((ViewGroup) child, rawX, rawY);
+                if (found != null)
+                    return found;
+            }
+        }
+        return null;
+    }
 }
