@@ -113,11 +113,16 @@ public class ElementRowsTest {
     }
 
     @Test
-    public void theListStandsBeforeTheMoreChips() {
-        List<Row> home = rowsOf(EditorCard.HOME);
-        assertEquals(home.indexOf(Row.ELEMENTS) + 1, home.indexOf(Row.SECTION_MORE));
-        List<Row> workspace = rowsOf(EditorCard.WORKSPACE);
-        assertEquals(workspace.indexOf(Row.ELEMENTS) + 1, workspace.indexOf(Row.SECTION_MORE));
+    public void theListStandsBeforeTheLinkChips() {
+        // ADR 0017 (fb44e0fb2): every glass card's own rows go under More, after Grain and Rim,
+        // so the Elements list closes the More section and the link chips follow it.
+        for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.WORKSPACE}) {
+            List<Row> rows = rowsOf(card);
+            int list = rows.indexOf(Row.ELEMENTS);
+            assertTrue(card + ": the list is under More", list > rows.indexOf(Row.SECTION_MORE));
+            assertTrue(card + ": a link chip follows the list",
+                rows.get(list + 1).name().startsWith("LINK_"));
+        }
     }
 
     private static List<Row> rowsOf(EditorCard card) {
