@@ -72,6 +72,6 @@ One change at a time, each with its own test and pong check:
 | 5 | Audit Edit pages, the widget editor and the Appearance editor for Done/Back and the return place |
 | 6, 7, 8 | Audit outside tap, widget tap/long press/resize exit, folder dissolve at one app |
 | 10 | Audit the haptic call sites against the three moments |
-| 11 | List every custom gesture with its tap path and cue; the gaps become tickets |
+| 11 | See the inventory (`reference/launcher/gesture-inventory-2026-10-31.md`); gaps are tickets |
 
 Delete each row as it lands; move this file to `project-docs/reference/` when the table is empty.
