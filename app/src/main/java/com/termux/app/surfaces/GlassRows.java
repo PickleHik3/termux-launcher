@@ -95,22 +95,18 @@ public final class GlassRows {
     // ------------------------------------------------------------------ a Look at one cell
 
     /**
-     * Each shipped Look's Frost stop, Opacity and Tint on dark glass, in the slider's order
-     * (Clear, Mist, Tint, Solid). Mirrors SurfacePresets.PRESETS; to be read through
-     * SurfacePresets.shippedLook(stop) once that accessor is on this branch.
+     * The Frost stop, Opacity and Tint a Look stop writes into the chips' cell, read from the
+     * shipped Looks ({@link SurfacePresets#shippedLook}, one owner); null for Custom.
      */
-    static final int[][] LOOK_CELLS = {{2, 10, 0}, {5, 60, 0}, {3, 46, 35}, {0, 92, 0}};
-
-    /** The Frost stop, Opacity and Tint a Look stop writes into the chips' cell; null for Custom. */
     @Nullable
     public static int[] lookCell(int stop) {
-        if (stop < 0 || stop >= LOOK_CELLS.length) return null;
-        return LOOK_CELLS[stop].clone();
+        SurfacePresets.ShippedLook look = SurfacePresets.shippedLook(stop);
+        return look == null ? null : new int[] {look.frostStop, look.opacity, look.tint};
     }
 
     /** The Look stop a cell's Frost stop, Opacity and Tint wear; Custom where none matches. */
     public static int lookStopFor(int frostStop, int opacity, int tint) {
-        for (int i = 0; i < LOOK_CELLS.length; i++) {
+        for (int i = 0; i < AppearanceLooks.CUSTOM_STOP; i++) {
             int[] cell = lookCell(i);
             if (cell != null && cell[0] == frostStop && cell[1] == opacity && cell[2] == tint) return i;
         }

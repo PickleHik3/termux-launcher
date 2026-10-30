@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -72,15 +73,14 @@ public class GlassRowsTest {
 
     @Test
     public void aLookWritesItsFrostOpacityAndTintAndIsReadBack() {
-        // The shipped Looks on dark glass (SurfacePresets.PRESETS): switch to
-        // SurfacePresets.shippedLook(stop) once it is on this branch.
-        int[][] shipped = {{2, 10, 0}, {5, 60, 0}, {3, 46, 35}, {0, 92, 0}};
-        assertEquals("a cell per Look", AppearanceLooks.CUSTOM_STOP, shipped.length);
-        for (int stop = 0; stop < shipped.length; stop++) {
+        // One owner: the shipped Looks on dark glass, as SurfacePresets answers them.
+        for (int stop = 0; stop < AppearanceLooks.CUSTOM_STOP; stop++) {
+            SurfacePresets.ShippedLook shipped = SurfacePresets.shippedLook(stop);
+            assertNotNull(stop + ": a shipped Look", shipped);
             int[] cell = GlassRows.lookCell(stop);
-            assertEquals(stop + ": its Frost stop", shipped[stop][0], cell[0]);
-            assertEquals(stop + ": its opacity", shipped[stop][1], cell[1]);
-            assertEquals(stop + ": its tint", shipped[stop][2], cell[2]);
+            assertEquals(stop + ": its Frost stop", shipped.frostStop, cell[0]);
+            assertEquals(stop + ": its opacity", shipped.opacity, cell[1]);
+            assertEquals(stop + ": its tint", shipped.tint, cell[2]);
             assertEquals(stop, GlassRows.lookStopFor(cell[0], cell[1], cell[2]));
         }
         assertNull("Custom writes nothing", GlassRows.lookCell(AppearanceLooks.CUSTOM_STOP));
