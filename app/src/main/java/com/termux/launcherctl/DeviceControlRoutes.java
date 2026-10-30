@@ -119,7 +119,7 @@ final class DeviceControlRoutes {
     static JSONObject motionLogDump() throws JSONException {
         List<String> lines = MotionLog.dump();
         return ok().put("enabled", MotionLog.enabled).put("count", lines.size())
-            .put("lines", new org.json.JSONArray(lines));
+            .put("invariants", MotionLog.invariantCount()).put("lines", new org.json.JSONArray(lines));
     }
 
     // ------------------------------------------------------------------------------------ vibrate

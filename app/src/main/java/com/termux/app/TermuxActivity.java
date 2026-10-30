@@ -593,6 +593,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Built once; read live by the notice pill and the sessions drawer. */
     @Nullable private TerminalDress.Source mTerminalDressSource;
     private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
+    /** Lets the motion invariants close a crossing's window after its settle; posted only while the Motion log is on. */
+    private final Handler mMotionInvariantHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mMotionInvariantTick = MotionLog::tick;
     private static final long WINDOW_LABEL_POLL_MS = 2000L;
     /** Trailing CPU/RAM/weather widgets, their data controllers, and the shared detail card host. */
     @Nullable private com.termux.app.statusbar.SystemStatsController mStatsController;
@@ -25817,7 +25820,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
-                    if (MotionLog.enabled) MotionLog.log("wall-page-settled", "page=" + page);
+                    if (MotionLog.enabled) {
+                        MotionLog.log("wall-page-settled", "page=" + page);
+                        mMotionInvariantHandler.removeCallbacks(mMotionInvariantTick);
+                        mMotionInvariantHandler.postDelayed(mMotionInvariantTick,
+                            com.termux.app.chrome.MotionInvariants.WINDOW_MS + 50);
+                    }
                     Trace.beginSection("Wall.pageSettled");
                     try {
                         onWallPageSettledTraced(page);

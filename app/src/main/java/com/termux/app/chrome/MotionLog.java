@@ -32,6 +32,13 @@ public final class MotionLog {
     /** Read at every event site before any string is built. */
     public static volatile boolean enabled;
 
+    /** The event a broken invariant is recorded under: {@code INVARIANT <name> <kv>}. */
+    static final String INVARIANT = "INVARIANT";
+
+    private static MotionInvariants sInvariants; // guarded by BUFFER; created on the first event
+    private static final java.util.concurrent.atomic.AtomicInteger sInvariantCount =
+        new java.util.concurrent.atomic.AtomicInteger();
+
     private static final ArrayDeque<String> BUFFER = new ArrayDeque<>();
 
     private MotionLog() {
@@ -51,6 +58,29 @@ public final class MotionLog {
             BUFFER.addLast(line);
         }
         Log.d(TAG, line);
+        if (INVARIANT.equals(event)) return;
+        List<MotionInvariants.Violation> broken;
+        synchronized (BUFFER) {
+            if (sInvariants == null) sInvariants = new MotionInvariants();
+            broken = sInvariants.onEvent(uptimeMs, event, kv);
+        }
+        for (MotionInvariants.Violation v : broken) {
+            sInvariantCount.incrementAndGet();
+            record(uptimeMs, INVARIANT, v.toString());
+        }
+    }
+
+    /** Lets a crossing's window close when no event follows its settle; posted once per settle. */
+    public static void tick() {
+        if (!enabled) return;
+        synchronized (BUFFER) {
+            if (sInvariants != null) sInvariants.tick(SystemClock.uptimeMillis());
+        }
+    }
+
+    /** Violations counted since the process started or the log was last cleared. */
+    public static int invariantCount() {
+        return sInvariantCount.get();
     }
 
     /** The first {@code count} frames above the caller, as {@code Class.method:line>...}. */
@@ -79,6 +109,8 @@ public final class MotionLog {
     public static void clear() {
         synchronized (BUFFER) {
             BUFFER.clear();
+            sInvariants = null;
+            sInvariantCount.set(0);
         }
     }
 

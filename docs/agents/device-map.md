@@ -76,6 +76,8 @@ ad -s emu runas com.termux 'launcherctl pane list'
 | Widgets page | tl16 1080×2400: long-press a free Home cell (e.g. 540,1990) → "Add a widget" ≈806,1338 ("Edit widgets" ≈300,1633); Termux Launcher group ≈400,630; edit mode gear ≈143,195, X ≈60,195, ✓ ≈827,178; page swipe `swipe 900 2060 150 2060 250`. Wall store `shared_prefs/launcher_widget_repository.xml` (built-in ids negative; an overlap refuses the whole wall, tag `LauncherWidgets`; force-stop before seeding) | `WidgetPaneView` |
 | Voice pill | needs a microphone: pong only | — |
 
+Motion invariants: with Settings › Debugging › Motion log on, drive the page changes, then `project-docs/verification/motion-invariants.sh <serial>` exits 1 and lists any `INVARIANT` line the log recorded; `launcherctl motion-log dump` carries the count as `"invariants"`.
+
 ## Routes since the editor redesign (2026-10-26)
 
 Several rows above predate the 10-26 editor redesign; where they disagree, these win.
