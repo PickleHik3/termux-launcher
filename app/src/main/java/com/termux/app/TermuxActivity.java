@@ -3650,8 +3650,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The test is for the glass this method built, not for any background: the body-surface
         // reset that runs just before leaves a transparent colour drawable and hides the view, and
         // taking that for the glass left the gutter bare from the second pass on.
+        // The dock's material, with the dock's own Depth and Edge where it holds them (ADR 0017).
+        com.termux.app.chrome.GlassRefraction.Look gutterLook = com.termux.app.chrome.ElementGlass.of(mPreferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, restingPage()).refraction(mFancierGlassLook);
         List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(restingPage()),
-            mPreferences.getDockGlassGrain(restingPage()), mFancierGlassLook, mPreferences.getDockTintStrength(restingPage()));
+            mPreferences.getDockGlassGrain(restingPage()), gutterLook, mPreferences.getDockTintStrength(restingPage()));
         if (mFrameGutterShown && mFrameGutterDrawable != null
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
@@ -3666,7 +3669,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.chrome.GlassAnchor.layout(body, () -> 0f));
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
             blurRadiusDp, mPreferences.getAppBarOpacity(restingPage()) / 100f,
-            mPreferences.getDockGlassGrain(restingPage()), 0f, mFancierGlassLook).withRim(false)
+            mPreferences.getDockGlassGrain(restingPage()), 0f, gutterLook).withRim(false)
             .withTintStrength(mPreferences.getDockTintStrength(restingPage()))
             // Every edge of this sheet is the screen's own. The gathered light, which every side
             // takes a share of, would run a glow round the screen, so all four are seams.
@@ -3816,7 +3819,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mFancierGlassLook != null && frameStandsDown())
                     return new com.termux.app.chrome.GlassRefraction.Look(0,
                         mFancierGlassLook.edgeWidthDp, mFancierGlassLook.edgeLightPercent);
-                return mFancierGlassLook;
+                // The Terminal element's own Depth and Edge where it holds them (ADR 0017).
+                return com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.TERMINAL, terminalLookPageId())
+                    .refraction(mFancierGlassLook);
             }
 
             @Override @Nullable public Bitmap paneGlassClearFrame() {
@@ -3978,7 +3983,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public boolean wallpaperBlurs() { return wallpaperPicture().blurs(); }
                     @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
                     @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
-                        return mFancierGlassLook;
+                        // The Widgets element's own Depth and Edge where it holds them (ADR 0017).
+                        return com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS,
+                            TermuxAppSharedPreferences.PAGE_WALL).refraction(mFancierGlassLook);
                     }
                     @Override public com.termux.app.chrome.WallpaperParallax parallax() {
                         return mWallpaperParallax;
@@ -6412,7 +6419,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 state.blurRadiusDp, state.barAlpha, mPreferences != null
                     ? mPreferences.getDockGlassGrain(stackLookPage())
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
-                radiusPx, mFancierGlassLook)
+                radiusPx, com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, stackLookPage())
+                    .refraction(mFancierGlassLook))
             .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength(stackLookPage())
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
             // A card under Floating, with its whole rim. Docked it joins the frame below the

@@ -179,6 +179,10 @@ public final class GlassStack {
             TermuxAppSharedPreferences.SurfaceProperty.OPACITY, pageId);
         float tint = linked ? dockAlpha
             : preferences.getInAppKeyboardBackgroundOpacity(pageId) / 100f;
+        // The keyboard's own Depth and Edge where it holds them (ADR 0017).
+        fancierLook = ElementGlass.of(preferences,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.KEYBOARD, pageId)
+            .refraction(fancierLook);
         return Spec.of(preferences.getInAppKeyboardBlurRadius(pageId), tint,
             preferences.getInAppKeyboardGrain(pageId), cornerRadiusPx, fancierLook)
             .withTintStrength(preferences.getInAppKeyboardTintStrength(pageId))
