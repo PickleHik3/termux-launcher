@@ -21,6 +21,15 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · W3 goals 2, 3, 6, 4 (fb44e0fb2..) · emulator at 1.0× and 1.3× font scale, light,
+  dark and scheme chrome, keyboard up and down: every glass card reads Look, Frost, Opacity, Tint,
+  Colour, Corners, Depth, Edge, then More: Grain, Rim, its own rows; the Dock's Style and Design
+  are rails of 80 dp options. Dock card: a Look, Grain and Rim change the dock alone. Set Opacity
+  on the dock, then on its page: the dot turns tertiary, then primary; Home card Opacity on the
+  page: amber. Long-press a row name: "Reset this row" clears that cell only and is disabled where
+  the cell holds nothing. Margin greys on the Dock card until What is All glass. Appearance card,
+  Where on a page: Depth, Edge, Vibrancy change that page only. Home → Widgets link and
+  Appearance → Sheets link open plain glass cards; Sheets shows no ring · not run on a device.
 - 2026-10-31 · 5672889bc, the Where and What chips (W3 goal 1) · emulator at 1.0× and 1.3× font
   scale, light and dark: every card shows two chips under its header (the Appearance card only
   Where); labels truncate inside half the row, never the rows below; a narrowed chip fills with

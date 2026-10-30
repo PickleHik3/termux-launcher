@@ -118,8 +118,9 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.SECTION_GRID,
             Row.HOME_COLUMNS, Row.HOME_ROWS, Row.SECTION_LABELS_FOLDERS, Row.LABEL_SIZE,
             Row.HOME_ICON_SIZE, Row.FOLDERS, Row.NUMERALS, Row.SECTION_OPTIONS,
-            Row.GLASS_WIDGETS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS, Row.PAGE_TRANSITION,
-            Row.WALLPAPER_SCROLL, Row.ELEMENTS, Row.LINK_GLOBAL, Row.LINK_GESTURES,
+            Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS, Row.PAGE_TRANSITION,
+            Row.WALLPAPER_SCROLL, Row.ELEMENTS, Row.LINK_WIDGETS, Row.LINK_GLOBAL,
+            Row.LINK_GESTURES,
             Row.LINK_PAGES), EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PaneWallPage frame : PaneWallPage.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
@@ -140,7 +141,7 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.SECTION_GLASS_MATERIAL, Row.VIBRANCY,
             Row.HINT_GLASS_MATERIAL, Row.SECTION_OPTIONS, Row.FULL_SCREEN, Row.MINIMAL),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 2));
-        assertEquals(Arrays.asList(Row.SECTION_MORE, Row.ICON_PACK, Row.TOOL_COLOURS),
+        assertEquals(Arrays.asList(Row.SECTION_MORE, Row.ICON_PACK, Row.TOOL_COLOURS, Row.LINK_SHEETS),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
         for (Row gone : new Row[] {Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT, Row.TEXT_SIZE})

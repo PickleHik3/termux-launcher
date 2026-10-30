@@ -3099,6 +3099,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
                 break;
+            case LINK_WIDGETS:
+                openCard(EditorCard.WIDGETS, true);
+                break;
+            case LINK_SHEETS:
+                openCard(EditorCard.SHEETS, true);
+                break;
             case LINK_GLOBAL: {
                 EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
                 if (global != null) openCard(global, true);

@@ -33,6 +33,17 @@ public class GlassRowsTest {
     }
 
     @Test
+    public void widgetsAndSheetsArePlainGlassCards() {
+        for (EditorCard card : new EditorCard[] {EditorCard.WIDGETS, EditorCard.SHEETS}) {
+            assertEquals(card.toString(), GlassRows.card(ALL).build(), EditorRows.rows(card, ALL));
+            assertFalse(card.hasEye());
+        }
+        assertEquals(LookGrid.Element.SHEETS, EditorChips.elementOf(EditorCard.SHEETS));
+        assertTrue(EditorRows.rows(EditorCard.HOME, ALL).toString().contains("LINK_WIDGETS"));
+        assertTrue(EditorRows.rows(EditorCard.APPEARANCE, ALL).toString().contains("LINK_SHEETS"));
+    }
+
+    @Test
     public void depthAndEdgeOnlyWhereTheDeviceDrawsThem() {
         assertFalse(EditorRows.tier(EditorCard.DOCK, NO_EDGE, 1).contains(Row.DEPTH));
         assertFalse(EditorRows.tier(EditorCard.DOCK, NO_EDGE, 1).contains(Row.GLASS_EDGE));
