@@ -24532,7 +24532,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup.LayoutParams params = stack.getLayoutParams();
         int margin = params instanceof ViewGroup.MarginLayoutParams
             ? Math.max(0, ((ViewGroup.MarginLayoutParams) params).bottomMargin) : 0;
-        return travelDockRowsPx(keyboardPx) + margin;
+        return com.termux.app.place.PlaceChromeTravel.dockLaidOutPx(travelDockRowsPx(keyboardPx),
+            margin);
     }
 
     /** The dock's rows alone as the stack lays them out above the keyboard, without the margin. */
@@ -24541,7 +24542,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (stack == null) return 0;
         ViewGroup.LayoutParams params = stack.getLayoutParams();
         int height = params != null && params.height > 0 ? params.height : 0;
-        return Math.max(0, height - keyboardPx - bottomStatusBandPx());
+        return com.termux.app.place.PlaceChromeTravel.dockRowsLaidOutPx(height, keyboardPx,
+            bottomStatusBandPx());
     }
 
     /** The dock rows' layers, which sink into the keyboard together (CrossingViews#sink). */

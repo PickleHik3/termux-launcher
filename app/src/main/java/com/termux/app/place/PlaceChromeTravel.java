@@ -417,6 +417,26 @@ public final class PlaceChromeTravel {
     }
 
     /**
+     * The dock's rows as the stack lays them out above the keyboard: the stack's height less the
+     * keyboard in it ({@code keyboardLaidOutPx}, 0 while it is down or floating) and a status bar
+     * standing along the bottom, which is a band of the stack but not the dock's.
+     */
+    public static int dockRowsLaidOutPx(int stackHeightPx, int keyboardLaidOutPx,
+                                        int bottomStatusBandPx) {
+        return Math.max(0, Math.max(0, stackHeightPx) - Math.max(0, keyboardLaidOutPx)
+            - Math.max(0, bottomStatusBandPx));
+    }
+
+    /**
+     * What has to slide down for the dock to leave the screen ({@link #stackTranslationPx}'s
+     * {@code dockLaidOutPx}): its rows as laid out ({@link #dockRowsLaidOutPx}) and the margin
+     * under the stack.
+     */
+    public static int dockLaidOutPx(int dockRowsLaidOutPx, int stackBottomMarginPx) {
+        return Math.max(0, dockRowsLaidOutPx) + Math.max(0, stackBottomMarginPx);
+    }
+
+    /**
      * Whether a frame is going to show more keyboard than the stack lays out, which is the cue to
      * pre-roll it: lay it out at its full height below the screen, so the slide can bring it up.
      * Read off the places in play rather than the reveal, which rests over the first
