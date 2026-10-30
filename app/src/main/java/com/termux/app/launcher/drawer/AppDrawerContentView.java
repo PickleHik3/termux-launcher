@@ -1139,11 +1139,26 @@ public final class AppDrawerContentView extends FrameLayout
     /** Empties the query and puts the grid back to the top. For a drawer that has closed. */
     public void resetSearch() {
         captureReopenPosition();
-        resetSearchToTop();
+        clearSearchState();
         restoreReopenPosition();
     }
 
-    private void resetSearchToTop() {
+    /**
+     * A home press closed the drawer: no query in the model or the field, and the list back at the
+     * top whatever "remember position" says.
+     */
+    public void resetSearchToTop() {
+        clearSearchState();
+        mInput.mirror("", 0);
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            mGrid.stopScroll();
+            mGrid.scrollToPosition(0);
+        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mHorizontalPager.setSelectedPage(0, false);
+        }
+    }
+
+    private void clearSearchState() {
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
         mKeyboardDismissedByScroll = false;

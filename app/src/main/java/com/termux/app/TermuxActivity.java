@@ -19440,9 +19440,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>Deliberately does not go through {@link #getAppDrawerController()}: a drawer that was never
      * opened has nothing to close, and building the controller here would defeat the lazy accessor.
      */
-    private void closeAppDrawerImmediate() {
+    private void closeAppDrawerImmediate(boolean homePress) {
         try {
-            if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
+            if (mAppDrawerController != null) mAppDrawerController.closeImmediate(homePress);
         } finally {
             flushPendingAccessoryGeometry();
         }
@@ -19879,7 +19879,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return isFolderRenameActive() || isAppDrawerOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                closeAppDrawerImmediate();
+                closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             }
         });
         registry.register(() -> {

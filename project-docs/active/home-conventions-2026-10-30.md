@@ -22,15 +22,16 @@ the widget editor and the wallpaper page.
 1. ✔ **Home press inside the launcher.** It closes every open layer, and the Appearance editor
    through its unsaved-changes rule, then lands on Start in. A home press that brings the launcher
    back from another app keeps the page you left (`wall/HomePress`).
-2. ✗ **Home press resets the drawer.** A home press that closes the app drawer also clears its
+2. ✔ **Home press resets the drawer.** A home press that closes the app drawer also clears its
    search text and scrolls it back to the top.
 3. ✔ **Back never leaves the launcher.** It closes the topmost open layer first; on a quiet page it
    does nothing.
-4. ✗ **App menu: four shortcuts.** The App menu shows at most four of an app's shortcuts, then
-   More shortcuts (`AppMenuPlan.MAX_SHORTCUT_ROWS` is 6 today, five shortcuts plus More). This
+4. ✔ **App menu: four shortcuts.** The App menu shows at most four of an app's shortcuts, then
+   More shortcuts (`AppMenuPlan.MAX_SHORTCUT_ROWS` is 4). This
    replaces "collapse past 6" in `launcher-idiom-2026-10-23.md` §1.
-5. *audit* **Every editor exits by Done or Back**, and leaving returns you to the page and card you
-   came from. The wallpaper page's Done follows it since 418a2d7ef; the others are unchecked.
+5. ✔ **Every editor exits by Done or Back**, and leaving returns you to the page and card you
+   came from. The wallpaper page's Done follows it since 418a2d7ef. In the widget editor Back keeps the edit, like
+   Done; the cross is the only discard.
 6. *audit* **An outside tap closes a layer.** The App menu, Home's long-press sheet, folders, a
    widget in resize and the app drawer each close on a tap outside them. The Appearance editor is
    exempt: a tap there picks a surface ("tap the thing").
@@ -41,10 +42,11 @@ the widget editor and the wallpaper page.
    dissolves into that app's icon.
 9. ✔ **Remove and Uninstall are two words.** Remove takes an item off Home and offers Undo
    (`HomeItemUndo`); Uninstall removes the app.
-10. *audit* **Haptics only at moments.** A tick on long-press recognition, pick-up, and a snap or
+10. ✔ **Haptics only at moments.** A tick on long-press recognition, pick-up, and a snap or
     detent crossing; never per frame. Each goes through `Haptics.tick` (the app's Haptics switch)
     and `performHapticFeedback` (Android's touch-feedback setting). The drag ticks comply
-    (`IconCarry.move` ticks only when the drop target changes); the other call sites are unchecked.
+    (`IconCarry.move` ticks only when the drop target changes); the page overview, strip row, bars
+    list and window bar now go through `Haptics.tick` too.
 11. *audit* **Every custom gesture has a tap path and a visible cue.** A gesture without one is a
     gap to fix. The status bar's long-press menu item Expand/Compact status bar (baf9a1a3b) is the
     tap path for the status swipe's fold.
@@ -67,11 +69,8 @@ One change at a time, each with its own test and pong check:
 
 | Rule | Change |
 |---|---|
-| 2 | Drawer search text and scroll reset on a home press |
-| 4 | App menu cap from five shortcuts to four, then More shortcuts |
-| 5 | Audit Edit pages, the widget editor and the Appearance editor for Done/Back and the return place |
+| 5 | Edit pages: Back; widget editor: Back keeps (decided); Appearance: ✔ |
 | 6, 7, 8 | Audit outside tap, widget tap/long press/resize exit, folder dissolve at one app |
-| 10 | Audit the haptic call sites against the three moments |
 | 11 | See the inventory (`reference/launcher/gesture-inventory-2026-10-31.md`); gaps are tickets |
 
 Delete each row as it lands; move this file to `project-docs/reference/` when the table is empty.

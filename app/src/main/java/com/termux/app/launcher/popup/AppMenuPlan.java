@@ -20,8 +20,8 @@ import java.util.List;
  */
 public final class AppMenuPlan {
 
-    /** Most shortcuts the card lists before the rest collapse behind a More row. */
-    public static final int MAX_SHORTCUT_ROWS = 6;
+    /** Most shortcuts the card lists; five or more show this many, then the More row. */
+    public static final int MAX_SHORTCUT_ROWS = 4;
 
     public enum Row {
         NOTIFICATIONS,
@@ -76,8 +76,8 @@ public final class AppMenuPlan {
     /** How many shortcut rows the card lists for {@code count} shortcuts. */
     public static int visibleShortcutCount(int count) {
         if (count <= MAX_SHORTCUT_ROWS) return Math.max(0, count);
-        // Past the cap the last slot becomes the More row, so the group never grows past six.
-        return MAX_SHORTCUT_ROWS - 1;
+        // Past the cap the card shows the cap and then the More row.
+        return MAX_SHORTCUT_ROWS;
     }
 
     /** The groups, top to bottom; never an empty group. */

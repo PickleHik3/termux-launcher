@@ -723,7 +723,7 @@ public final class PageOverviewView extends FrameLayout {
         PageOverviewPolicy.Removal removal =
             PageOverviewPolicy.removal(card.kind, homeCount, contents, busy);
         if (removal == PageOverviewPolicy.Removal.REFUSED) return;
-        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.VIRTUAL_KEY);
         if (removal == PageOverviewPolicy.Removal.AT_ONCE) {
             removeNow(card);
         } else {
@@ -837,7 +837,7 @@ public final class PageOverviewView extends FrameLayout {
 
     private void onMakeHome(@NonNull Card card) {
         if (!showsHomeButton(card)) return;
-        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+        com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.VIRTUAL_KEY);
         if (card.kind == PageOverviewPolicy.Kind.TERMINAL) host.setTerminalHome();
         else host.chooseHome(card.kind, card.index);
         accessibility.invalidateRoot();
@@ -1690,7 +1690,7 @@ public final class PageOverviewView extends FrameLayout {
         dragGrab = lastX - rect.left;
         dragX = lastX;
         handler.removeCallbacks(capture);
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        com.termux.app.haptics.Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         invalidate();
     }
 

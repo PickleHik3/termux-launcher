@@ -543,12 +543,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * a settling spring would otherwise be resumed against geometry that no longer exists.
      */
     public void closeImmediate() {
+        closeImmediate(false);
+    }
+
+    /** As {@link #closeImmediate()}; {@code homePress} also empties the search and scrolls to the top. */
+    public void closeImmediate(boolean homePress) {
         mDragging = false;
         mOpen = false;
         mProgress.reset(0f);
         if (!mEngaged) return;
         applyFrame(0f);
-        onClosed(false);
+        onClosed(false, homePress);
     }
 
     private void settle(boolean open, float velocityPxPerSec) {
@@ -787,7 +792,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             applyFrame(0f);
             // Reached only by a settle the finger asked for: a release, a cancelled drag, Back.
             // The lifecycle's own teardown goes through closeImmediate() and says so.
-            onClosed(true);
+            onClosed(true, false);
             return;
         }
         if (moving || revealMoving || fxMoving || mTextFieldFocusPending) kick();
@@ -2014,7 +2019,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * {@code applyAccessoryGeometryIfNeeded} suppressed for the life of the activity — a dock that
      * silently stops responding to every style and height change.
      */
-    private void onClosed(boolean userDriven) {
+    private void onClosed(boolean userDriven, boolean homePress) {
         mHost.onDrawerOpenSettled(false, userDriven);
         try {
             // First, and before anything that can throw: a full-screen grid left interactive and
@@ -2025,7 +2030,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 content.cancelCloseDrag();
                 // Routed through the grid rather than straight at the search, so the pill, the
                 // scroll position and the reveal request are emptied with the query.
-                content.resetSearch();
+                if (homePress) content.resetSearchToTop();
+                else content.resetSearch();
                 content.disarm();
                 content.stopOverpullSpring();
                 // A re-open must never start from a stale chain or a dim cell: the rope goes back to

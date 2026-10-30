@@ -722,3 +722,7 @@ Agent
 - 2026-10-31 · look grid W2, sheets keep their look · `run-as` write `look.opacity.dock` 90 and `look.frost.dock` 0 (force-stop first, edit, relaunch): the dock turns solid, the drawer, folder popups, menus, the terminal sheet and the rename chip keep the glass they had · not run on a device.
 - 2026-10-31 · look grid W2, Widgets cells · Write `look.opacity.widgets` 70 and `look.tint.widgets` 40: a Card widget on a Home page changes, the dock and terminal do not; write `look.opacity.widgets` 100 and `look.frost.widgets` 0: the Card widgets are solid cards · not run on a device.
 - 2026-10-31 · look grid W2, idle PSS · Same scene on the emulator before and after W2 (Home, one Card widget, drawer closed): `dumpsys meminfo` PSS within noise of the W1 build · not run.
+- 2026-10-31 · home press resets the drawer · Open the drawer, type, scroll, press home, reopen: empty search at the top · not run on a device.
+- 2026-10-31 · App menu four shortcuts · Long-press an app with many shortcuts: four, then More shortcuts · not run on a device.
+- 2026-10-31 · haptics through the switch · Haptics off in Settings: no tick from the page overview, the strip row, the bars list or the window bar · not run on a device.
+- 2026-10-31 · widget editor Back keeps · Widget editor: Back keeps the edit, the cross discards it · not run on a device.

@@ -432,7 +432,7 @@ public final class BarsList {
             parent.requestDisallowInterceptTouchEvent(true);
         item.container.setElevation(RowKit.dp(mContext, DRAG_ELEVATION_DP));
         item.container.setBackground(dragBackground());
-        item.container.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        com.termux.app.haptics.Haptics.tick(item.container, android.view.HapticFeedbackConstants.LONG_PRESS);
     }
 
     private void moveDrag(float rawY) {
