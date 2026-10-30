@@ -660,10 +660,14 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     /**
-     * Lay out one cell per page, in order (ADR 0016). The wall stays on the current page's cell;
-     * when that page goes, the wall is handed to the nearest page on its left that stays, else
-     * the first. Each kind keeps its binding while its page stays; a kind whose bound page went
-     * is bound to the current page when it is of that kind, else to its first page.
+     * Lay out one cell per page, in order (ADR 0016). The wall stays on the current page's cell.
+     * When that page goes but the wall still has a page of its kind, the wall moves to that
+     * kind's bound page if it stays, else its first page, and announces nothing: the chrome keys
+     * off the page kind (ADR 0012), which has not changed (a kind-only list giving way to the
+     * real pages, say). Only when no page of the current kind is left is the wall handed to the
+     * nearest page on its left that stays, else the first, and that change announced once. Each
+     * kind keeps its binding while its page stays; a kind whose bound page went is bound to the
+     * current page when it is of that kind, else to its first page.
      */
     public void setCells(@NonNull List<Cell> cells) {
         List<Cell> resolved = new ArrayList<>(cells);
@@ -678,9 +682,20 @@ public final class PaneWallLayout extends ViewGroup {
         for (Cell cell : mCells) if (!kinds.contains(cell.kind)) kinds.add(cell.kind);
         mKinds = Collections.unmodifiableList(kinds);
         if (mJumpFromId != NO_PAGE && indexOfCell(mJumpFromId) < 0) mJumpFromId = NO_PAGE;
-        boolean moved = indexOfCell(mCurrentId) < 0;
-        if (moved) mCurrentId = cellAfterRemoval(before, mCurrentId);
+        PaneWallPage was = mCurrent;
+        boolean moved = false;
+        if (indexOfCell(mCurrentId) < 0) {
+            int sameKind = boundPageId(was);
+            if (kindOf(sameKind) != was) sameKind = firstPageOf(was);
+            if (sameKind != NO_PAGE) {
+                mCurrentId = sameKind;
+            } else {
+                mCurrentId = cellAfterRemoval(before, mCurrentId);
+                moved = true;
+            }
+        }
         mCurrent = mCells.get(indexOfCell(mCurrentId)).kind;
+        moved &= mCurrent != was;
         resolveBindings();
         syncCards();
         if (moved) notifyPageChanged();
@@ -778,6 +793,12 @@ public final class PaneWallLayout extends ViewGroup {
         if (id == NO_PAGE) return null;
         PaneWallPage kind = kindOf(id);
         return kind != null && boundPageId(kind) == id ? kind : null;
+    }
+
+    /** The first page of {@code kind} among the cells; {@link #NO_PAGE} when there is none. */
+    private int firstPageOf(@NonNull PaneWallPage kind) {
+        for (Cell cell : mCells) if (cell.kind == kind) return cell.pageId;
+        return NO_PAGE;
     }
 
     /** Where the wall goes when page {@code removedId} leaves it; see {@link #setCells}. */

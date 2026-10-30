@@ -47,6 +47,9 @@ public class PaneWallCellsTest {
         int boundDisplay = -1;
         int landedDisplay = -1;
         final List<PaneWallPage> changes = new ArrayList<>();
+        /** False until the controller's constructor has returned. */
+        boolean constructed = true;
+        int callsWhileConstructing;
 
         @Override public boolean reducedMotion() { return reduced; }
         @Override public boolean canStartWorkspace() { return canStart; }
@@ -62,7 +65,10 @@ public class PaneWallCellsTest {
         @Override public int homePressPage() { return homePress; }
         @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
         @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
-        @Override public void onWallPageChanged(PaneWallPage page) { changes.add(page); }
+        @Override public void onWallPageChanged(PaneWallPage page) {
+            if (!constructed) callsWhileConstructing++;
+            changes.add(page);
+        }
         @Override public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? Math.max(1, pages.homePages().size())
                 : page == PaneWallPage.TERMINAL ? (hasWindow ? windows : 0) : 1;
@@ -72,6 +78,7 @@ public class PaneWallCellsTest {
                 : page == PaneWallPage.TERMINAL ? current : 0;
         }
         @Override public void showInnerPage(PaneWallPage page, int index) {
+            if (!constructed) callsWhileConstructing++;
             if (page == PaneWallPage.WIDGETS) homePage = index;
             if (page == PaneWallPage.TERMINAL) current = index;
         }
@@ -110,7 +117,9 @@ public class PaneWallCellsTest {
         layout.addView(widgets);
         layout.addView(terminal);
         layout.addView(display);
+        host.constructed = false;
         controller = new PaneWallController(layout, host);
+        host.constructed = true;
         controller.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);
         layout.setPageView(PaneWallPage.DISPLAY, display);
@@ -167,6 +176,17 @@ public class PaneWallCellsTest {
         assertEquals(3, on());
         assertEquals(3, host.boundDisplay);
         assertTrue(wall.isLive(3));
+    }
+
+    @Test public void buildingTheWallOverTheRealPagesAnnouncesNothingAndAColdStartLandsOnHome() {
+        // The layout starts on a kind-only Terminal cell; the real pages replace it while the
+        // controller is still being built, when the activity cannot take a page change yet.
+        start(homeTerminalDisplay());
+        assertEquals(0, host.callsWhileConstructing);
+        assertTrue(host.changes.isEmpty());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertEquals(1, on());
+        assertTrue(wall.isLive(1));
     }
 
     // ---- the sweep of 2026-10-29 -----------------------------------------------------------

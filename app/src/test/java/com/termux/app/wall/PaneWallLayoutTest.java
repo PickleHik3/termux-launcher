@@ -347,6 +347,30 @@ public class PaneWallLayoutTest {
     }
 
     @Test
+    public void realCellsReplacingAKindOnlyListOfTheSameKindsAnnounceNothing() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        final int[] changes = {0};
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onWallPageChanged(PaneWallPage page) { changes[0]++; }
+        });
+        wall.setCells(java.util.Arrays.asList(
+            new PaneWallLayout.Cell(1, PaneWallPage.WIDGETS, "Home"),
+            new PaneWallLayout.Cell(2, PaneWallPage.TERMINAL, "Terminal"),
+            new PaneWallLayout.Cell(3, PaneWallPage.DISPLAY, "Display")));
+        assertEquals("the kind is unchanged, so nothing is announced", 0, changes[0]);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(2, wall.currentPageId());
+
+        // A list without the current kind hands the wall over, and says so once.
+        wall.setCells(java.util.Arrays.asList(
+            new PaneWallLayout.Cell(1, PaneWallPage.WIDGETS, "Home"),
+            new PaneWallLayout.Cell(3, PaneWallPage.DISPLAY, "Display")));
+        assertEquals(1, changes[0]);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+    }
+
+    @Test
     public void aFarJumpSlidesOnlyThePageLeftAndThePageArriving() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
