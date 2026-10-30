@@ -27,7 +27,7 @@ public class HalfLookUpgradeTest {
     }
 
     private void detachDockGrainOnBothHalves() {
-        String flag = LookKeys.inheritKey(SurfaceSlot.DOCK, SurfaceProperty.GRAIN);
+        String flag = ("surface_inherit_" + SurfaceSlot.DOCK.key + "_" + SurfaceProperty.GRAIN.key);
         store.putBoolean(flag + "_home", false);
         store.putBoolean(flag + "_workspace", false);
     }
@@ -101,7 +101,7 @@ public class HalfLookUpgradeTest {
 
     @Test
     public void canvasKeysStayWallValues() {
-        store.putBoolean(LookKeys.inheritKey(SurfaceSlot.CANVAS, SurfaceProperty.TINT), false);
+        store.putBoolean(("surface_inherit_" + SurfaceSlot.CANVAS.key + "_" + SurfaceProperty.TINT.key), false);
         store.putInt(TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, 60);
         store.putInt(GRAIN + "_home", 10);
         store.putInt(GRAIN + "_workspace", 50);
@@ -115,7 +115,7 @@ public class HalfLookUpgradeTest {
     @Test
     public void aWorkspaceThatFollowedItsOwnBaseKeepsItsLook() {
         // Home detached dock blur at 30; the Workspace follows a Base of 12 that Home does not use.
-        String flag = LookKeys.inheritKey(SurfaceSlot.DOCK, SurfaceProperty.BLUR);
+        String flag = ("surface_inherit_" + SurfaceSlot.DOCK.key + "_" + SurfaceProperty.BLUR.key);
         String blur = LookKeys.surfaceKey(SurfaceSlot.DOCK, SurfaceProperty.BLUR);
         store.putBoolean(flag + "_home", false);
         store.putBoolean(flag + "_workspace", true);

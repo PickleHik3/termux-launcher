@@ -44,7 +44,7 @@ public class FreshInstallLookTest {
     }
 
     private void launch() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         SurfacePresets.readoptMovedLooks(preferences);
     }
 

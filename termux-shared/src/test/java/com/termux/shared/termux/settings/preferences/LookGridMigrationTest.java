@@ -212,9 +212,16 @@ public class LookGridMigrationTest {
         for (String key : store.keys()) {
             if (LookGrid.parse(key) == null) rest.add(key);
         }
+        // The keyboard's opacity link and backdrop and the wallpaper-mode memory stay its own keys
+        // in W1; the pre-grid upgrades' markers stay with them.
         assertEquals(new HashSet<>(Arrays.asList(TERMUX_APP.KEY_LOG_LEVEL,
             LookGridMigration.KEY_MIGRATED, "dock_icon_size",
-            TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH)), rest);
+            TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_OPACITY_LINKED,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+            TERMUX_APP.KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY,
+            TERMUX_APP.KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY,
+            TERMUX_APP.KEY_WALLPAPER_ENABLED_EXTRAKEYS_BLUR_RADIUS)), rest);
     }
 
     @Test

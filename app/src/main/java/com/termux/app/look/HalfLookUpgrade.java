@@ -96,7 +96,9 @@ public final class HalfLookUpgrade {
                 if (!TermuxAppSharedPreferences.isPerPage(slot, property)) continue;
                 ENTRIES.add(new Entry(LookKeys.surfaceKey(slot, property), Write.Type.INT,
                     LookKeys.surfaceDefault(slot, property), true));
-                ENTRIES.add(new Entry(LookKeys.inheritKey(slot, property), Write.Type.BOOL,
+                // The old link flag; the grid upgrade that follows deletes it.
+                ENTRIES.add(new Entry("surface_inherit_" + slot.key + "_" + property.key,
+                    Write.Type.BOOL,
                     TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE, false));
             }
         }

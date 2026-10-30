@@ -51,7 +51,7 @@ public class GlassStackTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         for (SurfaceSlot slot : SurfaceSlot.values())
             preferences.reattachSurface(slot);
         surfaces = new FakeChromeSurfaces(context);

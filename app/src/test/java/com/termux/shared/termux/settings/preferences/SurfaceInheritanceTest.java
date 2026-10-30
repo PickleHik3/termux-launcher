@@ -193,7 +193,7 @@ public class SurfaceInheritanceTest {
         putRaw(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, 16);
         putRaw(TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, 16);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.BLUR));
@@ -207,7 +207,7 @@ public class SurfaceInheritanceTest {
         putRaw(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 10);
         putRaw(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, 27);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.BLUR));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
@@ -223,7 +223,7 @@ public class SurfaceInheritanceTest {
         // Stale differing values are what the old switch was overriding anyway.
         putRaw(TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, 3);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
         assertEquals(14, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -235,7 +235,7 @@ public class SurfaceInheritanceTest {
         // survives, and every surface reads Base.
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, 17);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertTrue(preferences.isSurfaceInheriting(
             SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP));
@@ -256,7 +256,7 @@ public class SurfaceInheritanceTest {
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
             TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
         assertEquals("the keyboard renders the shared material again",
@@ -276,7 +276,7 @@ public class SurfaceInheritanceTest {
             .putBoolean(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + "keyboard_opacity", false)
             .commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
     }
@@ -286,7 +286,7 @@ public class SurfaceInheritanceTest {
         putRaw(TERMUX_APP.KEY_APP_BAR_OPACITY, 46);
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, 60);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
         assertEquals(60, preferences.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -294,13 +294,13 @@ public class SurfaceInheritanceTest {
 
     @Test
     public void sentinelHeal_runsOnceAndNeverUndoesALaterDeliberateDetach() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         // The editor's drag path lands the user on exactly 100 — a real opinion now, because the
         // heal has already spent itself.
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
             TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
         assertEquals(TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL,
@@ -313,7 +313,7 @@ public class SurfaceInheritanceTest {
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, 22);
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, 0);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR));
         assertEquals(22, preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -328,7 +328,7 @@ public class SurfaceInheritanceTest {
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, -1);
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, -1);
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN));
@@ -340,12 +340,12 @@ public class SurfaceInheritanceTest {
     public void migration_keyboardGlassTakesADetachedDocksOwnNumber() {
         // Where the dock itself was detached, the follower takes the dock's number so the look it
         // followed does not move.
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR, 4);
         store.edit().putInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, -1)
             .putBoolean(TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, false).commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR));
         assertEquals(4, preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -357,7 +357,7 @@ public class SurfaceInheritanceTest {
         // start detached purely because its shipped default differed.
         markInstallAsExisting();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         for (SurfaceSlot slot : SurfaceSlot.values())
             assertEquals(slot.toString(), 0, preferences.surfaceOverrideCount(slot));
@@ -376,7 +376,7 @@ public class SurfaceInheritanceTest {
 
     @Test
     public void freshInstall_wearsTheClearLookWithAnEightDpMargin() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals("the shared layer", 10, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals("the dock follows it", 10, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -398,7 +398,7 @@ public class SurfaceInheritanceTest {
 
     @Test
     public void freshInstall_applyingAWallpaperKeepsTheClearLook() {
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         com.termux.app.chrome.ChromePolicy.applyWallpaperModePreferences(preferences, true);
 
         assertEquals(10, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -414,7 +414,7 @@ public class SurfaceInheritanceTest {
         // radius, the screen-edge gaps that only a floating surface can show — and must not change
         // any of them. Without this, per-shape presets would be the only way to keep the Floating
         // look right, and there is nothing here that needs them.
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         int blur = preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId());
         int dockOpacity = preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId());
         int baseOpacity = preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId());
@@ -448,7 +448,7 @@ public class SurfaceInheritanceTest {
         markInstallAsExisting();
         store.edit().putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true).commit();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals(1, preferences.getTerminalPaneGap());
         assertEquals(0, preferences.getTerminalCornerRadius());
@@ -458,7 +458,7 @@ public class SurfaceInheritanceTest {
     public void existingInstall_keepsThePreShippedLook() {
         markInstallAsExisting();
 
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertEquals(PRE_SHIPPED_SIDE_GAP, preferences.getDockHorizontalInset());
         assertEquals(46, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
@@ -472,11 +472,11 @@ public class SurfaceInheritanceTest {
     @Test
     public void migration_runsOnce() {
         putRaw(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 11);
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR, 29);
 
         // A second pass must not re-baseline and swallow the user's later override.
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
         assertEquals(29, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));

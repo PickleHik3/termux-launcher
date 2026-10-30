@@ -46,7 +46,7 @@ public class PageLookTest {
     private static String dockGrain() { return TERMUX_APP.KEY_DOCK_GLASS_GRAIN; }
 
     private void detach(SurfaceSlot slot, SurfaceProperty property) {
-        store.putBoolean(LookKeys.inheritKey(slot, property), false);
+        store.putBoolean(("surface_inherit_" + slot.key + "_" + property.key), false);
     }
 
     // ---- resolution order
@@ -179,7 +179,7 @@ public class PageLookTest {
     public void baseAndInheritFlagsAreWallWide() {
         assertFalse(PageLook.isDetachable(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
         assertFalse(PageLook.isDetachable(
-            LookKeys.inheritKey(SurfaceSlot.DOCK, SurfaceProperty.GRAIN)));
+            ("surface_inherit_" + SurfaceSlot.DOCK.key + "_" + SurfaceProperty.GRAIN.key)));
         assertFalse(look.write(PageLook.Scope.page(3), TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 1));
         assertFalse(store.has(LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 3)));
     }

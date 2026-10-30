@@ -83,6 +83,8 @@ final class AppearanceSnapshot {
      * half that followed the shared value at open follows it again after a restore.
      */
     private final java.util.TreeMap<String, Object> mHalfKeys;
+    /** Every look-grid cell the store held (ADR 0017), by key: put back exactly on restore. */
+    private final java.util.TreeMap<String, Integer> mGridCells;
 
     private AppearanceSnapshot(@NonNull TermuxAppSharedPreferences prefs) {
         mLinks = linkSignature(prefs);
@@ -141,6 +143,7 @@ final class AppearanceSnapshot {
         mClockAlignment = prefs.getTopPaneClockAlignment();
         mStatusSwitches = statusSwitches(prefs);
         mHalfKeys = halfKeys(prefs);
+        mGridCells = gridCells(prefs);
     }
 
     /** The status bar's switches, as {@link #mStatusSwitches} keeps them. */
@@ -224,6 +227,7 @@ final class AppearanceSnapshot {
         restoreStatusSwitches(prefs, mStatusSwitches);
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
+        restoreGridCells(prefs, mGridCells);
     }
 
     /** The captured state as one string; equal strings mean nothing to save or put back. */
@@ -252,7 +256,7 @@ final class AppearanceSnapshot {
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
             .append('|').append(java.util.Arrays.toString(mStatusSwitches))
-            .append('|').append(mHalfKeys)
+            .append('|').append(mHalfKeys).append('|').append(mGridCells)
             .toString();
     }
 
@@ -281,13 +285,36 @@ final class AppearanceSnapshot {
                     continue;
                 String own = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
                 if (own != null) keys.add(own);
-                keys.add(TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key);
             }
         }
         keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL);
         keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY);
         keys.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
         return keys;
+    }
+
+    /** Every look-grid cell the store holds, everywhere and on every page. */
+    @NonNull
+    private static java.util.TreeMap<String, Integer> gridCells(
+            @NonNull TermuxAppSharedPreferences prefs) {
+        java.util.TreeMap<String, Integer> out = new java.util.TreeMap<>();
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        for (String key : grid.gridKeys())
+            out.put(key, grid.store().getInt(key, 0));
+        return out;
+    }
+
+    /** Leaves the grid holding exactly {@code cells}: every other cell dropped, these written. */
+    private static void restoreGridCells(@NonNull TermuxAppSharedPreferences prefs,
+                                         @NonNull java.util.Map<String, Integer> cells) {
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        for (String key : grid.gridKeys()) {
+            if (!cells.containsKey(key)) grid.store().remove(key);
+        }
+        for (java.util.Map.Entry<String, Integer> cell : cells.entrySet()) {
+            if (grid.store().getInt(cell.getKey(), Integer.MIN_VALUE) != cell.getValue())
+                grid.store().putInt(cell.getKey(), cell.getValue());
+        }
     }
 
     /** Every page's own key that the store holds (any page, not only the Terminal's), by name. */

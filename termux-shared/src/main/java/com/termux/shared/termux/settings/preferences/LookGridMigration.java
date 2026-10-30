@@ -110,11 +110,7 @@ public final class LookGridMigration {
         TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.KEY_FANCIER_GLASS_BEND,
         TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS,
         TERMUX_APP.KEY_WIDGETS_ON_GLASS,
-        TERMUX_APP.KEY_IN_APP_KEYBOARD_OPACITY_LINKED, TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
         TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED,
-        TERMUX_APP.KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY,
-        TERMUX_APP.KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY,
-        TERMUX_APP.KEY_WALLPAPER_ENABLED_EXTRAKEYS_BLUR_RADIUS,
     };
 
     /** Whether the store is a fresh install's: nothing in it but the log level. */
@@ -140,6 +136,10 @@ public final class LookGridMigration {
 
     private static void fold(@NonNull LookGrid.Store store, @NonNull LookGrid grid,
                              @NonNull Collection<Integer> pageIds) {
+        foldPreInheritance(store);
+        healKeyboardOpacitySentinel(store);
+        foldKeyboardGlassKeys(store);
+
         List<Integer> pages = new ArrayList<>();
         for (Integer id : pageIds) {
             if (id != null && id >= 0 && !pages.contains(id)) pages.add(id);
@@ -210,6 +210,53 @@ public final class LookGridMigration {
         deleteOldKeys(store);
     }
 
+    /**
+     * An install from before Base existed: Base takes the dock's number, and a surface follows it
+     * unless it stored a number of its own that differs (none does once tuning was normalised).
+     */
+    private static void foldPreInheritance(@NonNull LookGrid.Store store) {
+        if (store.getBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, false)) return;
+        boolean normalized = store.getBoolean(TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED,
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED);
+        for (OldProperty property : OldProperty.values()) {
+            int base = store.getInt(OldSlot.DOCK.ownKey(property), OldSlot.DOCK.ownDefault(property));
+            store.putInt(property.baseKey, base);
+            for (OldSlot slot : OldSlot.values()) {
+                String own = slot.ownKey(property);
+                boolean matches = normalized || !store.contains(own)
+                    || store.getInt(own, slot.ownDefault(property)) == base;
+                store.putBoolean(flagKey(slot, property), matches);
+            }
+        }
+        store.putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true);
+    }
+
+    /** A keyboard detached at the old opacity sentinel follows Base again. */
+    private static void healKeyboardOpacitySentinel(@NonNull LookGrid.Store store) {
+        if (store.getBoolean(TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, false)) return;
+        if (!inherits(store, OldSlot.KEYBOARD, OldProperty.OPACITY)
+            && store.getInt(OldSlot.KEYBOARD.ownKey(OldProperty.OPACITY), Integer.MIN_VALUE)
+                == TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL)
+            store.putBoolean(flagKey(OldSlot.KEYBOARD, OldProperty.OPACITY), true);
+    }
+
+    /** The keyboard's blur and grain stored as -1 followed the dock's own number. */
+    private static void foldKeyboardGlassKeys(@NonNull LookGrid.Store store) {
+        if (store.getBoolean(TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, false)) return;
+        for (OldProperty property : new OldProperty[] {OldProperty.BLUR, OldProperty.GRAIN}) {
+            String own = OldSlot.KEYBOARD.ownKey(property);
+            int raw = store.getInt(own, -1);
+            if (raw < 0 && !inherits(store, OldSlot.DOCK, property))
+                raw = store.getInt(OldSlot.DOCK.ownKey(property), OldSlot.DOCK.ownDefault(property));
+            store.putBoolean(flagKey(OldSlot.KEYBOARD, property), raw < 0);
+            if (raw >= 0) store.putInt(own, raw);
+        }
+    }
+
+    private static String flagKey(@NonNull OldSlot slot, @NonNull OldProperty property) {
+        return INHERIT_PREFIX + slot.key + "_" + property.key;
+    }
+
     /** The old resolver's answer, from the old keys alone. */
     static int oldValue(@NonNull LookGrid.Store store, @NonNull OldSlot slot,
                         @NonNull OldProperty property, int page) {
@@ -225,7 +272,7 @@ public final class LookGridMigration {
 
     private static boolean inherits(@NonNull LookGrid.Store store, @NonNull OldSlot slot,
                                     @NonNull OldProperty property) {
-        return store.getBoolean(INHERIT_PREFIX + slot.key + "_" + property.key,
+        return store.getBoolean(flagKey(slot, property),
             TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE);
     }
 
