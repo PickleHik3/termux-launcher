@@ -62,6 +62,7 @@ final class DeviceControlRoutes {
             case "/v1/vibrate":
             case "/v1/torch":
             case "/v1/toast":
+            case "/v1/look":
                 return "POST".equals(method);
             case "/v1/battery":
             case "/v1/motion-log":
@@ -101,6 +102,8 @@ final class DeviceControlRoutes {
             case "/v1/motion-log/clear":
                 MotionLog.clear();
                 return ok();
+            case "/v1/look":
+                return look(context, arguments);
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
             case "/v1/toast":
@@ -120,6 +123,18 @@ final class DeviceControlRoutes {
         List<String> lines = MotionLog.dump();
         return ok().put("enabled", MotionLog.enabled).put("count", lines.size())
             .put("invariants", MotionLog.invariantCount()).put("lines", new org.json.JSONArray(lines));
+    }
+
+    // ------------------------------------------------------------------------------------- look
+
+    /** {@code launcherctl look}: the look grid, answered by {@link LookCommand}. */
+    @NonNull
+    private static JSONObject look(@NonNull Context context, @NonNull JSONObject arguments)
+            throws JSONException {
+        Context app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
+        if (preferences == null) return error(503, "unavailable", "The launcher's settings are not ready");
+        return LookCommand.handle(preferences.lookGrid(), arguments);
     }
 
     // ------------------------------------------------------------------------------------ vibrate

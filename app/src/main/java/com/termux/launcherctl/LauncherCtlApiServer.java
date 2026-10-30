@@ -2096,6 +2096,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/vibrate", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/torch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/battery", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/look", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/motion-log", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/motion-log/clear", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/volume", new SimpleRateLimiter(120, 60_000));
@@ -3001,6 +3002,7 @@ public class LauncherCtlApiServer {
             "  launcherctl torch on|off\n" +
             "  launcherctl battery\n" +
             "  launcherctl motion-log dump|clear\n" +
+            "  launcherctl look get|set|reset ...\n" +
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
@@ -3010,7 +3012,7 @@ public class LauncherCtlApiServer {
             "\n" +
             "Each group explains its commands and flags: launcherctl <group> --help, for launch, pane,\n" +
             "window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch,\n" +
-            "battery, motion-log, volume, toast, wallpaper, x11 and media.\n" +
+            "battery, motion-log, look, volume, toast, wallpaper, x11 and media.\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
@@ -3234,6 +3236,27 @@ public class LauncherCtlApiServer {
             "With Settings > Debugging > Motion log on, the launcher notes page changes and\n" +
             "resizes, one line each with its uptime in milliseconds. dump prints the last 2,000\n" +
             "lines; clear empties them.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    look) cat <<'EOF'\n" +
+            "launcherctl look - the glass look\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl look get PROPERTY [--element E] [--page ID]\n" +
+            "  launcherctl look set PROPERTY VALUE [--element E] [--page ID]\n" +
+            "  launcherctl look reset [PROPERTY] [--element E] [--page ID]\n" +
+            "\n" +
+            "Properties: frost opacity tint colour corners depth edge grain rim vibrancy margin.\n" +
+            "Elements: status dock keyboard terminal widgets sheets. Without --element a value\n" +
+            "applies to all glass; without --page, everywhere. Vibrancy and margin are for all glass.\n" +
+            "Values: a number; frost takes a stop 0-7 or a blur such as 12dp; colour takes primary,\n" +
+            "secondary or tertiary; rim takes off, hairline or bright; corners takes dp or auto.\n" +
+            "get prints the value and where it is set; reset puts back what the cell followed.\n" +
+            "\n" +
+            "Examples:\n" +
+            "  launcherctl look set opacity 60 --element dock\n" +
+            "  launcherctl look get opacity --element dock\n" +
+            "  launcherctl look reset --element dock\n" +
             "EOF\n" +
             "      ;;\n" +
             "    volume) cat <<'EOF'\n" +
@@ -3718,6 +3741,28 @@ public class LauncherCtlApiServer {
             "    *) echo 'usage: launcherctl torch on|off' >&2; exit 2 ;;\n" +
             "  esac\n" +
             "}\n" +
+            "look_cmd() {\n" +
+            "  usage='usage: launcherctl look get|set|reset ... (see launcherctl look --help)'\n" +
+            "  op=\"${1:-}\"\n" +
+            "  case \"$op\" in get|set|reset) shift ;; *) echo \"$usage\" >&2; exit 2 ;; esac\n" +
+            "  prop='' val='' elem='' page='' have_val=0\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --element) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; elem=\"$2\"; shift 2 ;;\n" +
+            "      --page) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; page=\"$2\"; shift 2 ;;\n" +
+            "      -*) echo \"launcherctl look: unknown option $1\" >&2; exit 2 ;;\n" +
+            "      *) if [ -z \"$prop\" ]; then prop=\"$1\"; elif [ \"$have_val\" -eq 0 ] && [ \"$op\" = set ]; then val=\"$1\"; have_val=1; else echo \"$usage\" >&2; exit 2; fi; shift ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  case \"$page\" in *[!0-9]*) echo 'launcherctl look: --page takes a page number' >&2; exit 2 ;; esac\n" +
+            "  [ \"$op\" = reset ] || [ -n \"$prop\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  [ \"$op\" != set ] || [ \"$have_val\" -eq 1 ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  body=\"{\\\"op\\\":\\\"$op\\\",\\\"property\\\":$(printf '%s' \"$prop\" | json_str)\"\n" +
+            "  [ \"$op\" != set ] || body=\"$body,\\\"value\\\":$(printf '%s' \"$val\" | json_str)\"\n" +
+            "  [ -z \"$elem\" ] || body=\"$body,\\\"element\\\":$(printf '%s' \"$elem\" | json_str)\"\n" +
+            "  [ -z \"$page\" ] || body=\"$body,\\\"page\\\":$page\"\n" +
+            "  api POST /v1/look \"$body}\"\n" +
+            "}\n" +
             "volume_cmd() {\n" +
             "  if [ \"$#\" -eq 0 ]; then api GET /v1/volume; return; fi\n" +
             "  [ \"$#\" -eq 2 ] || { echo 'usage: launcherctl volume [STREAM VALUE]' >&2; exit 2; }\n" +
@@ -3847,6 +3892,10 @@ public class LauncherCtlApiServer {
             "      *) echo 'usage: launcherctl motion-log dump|clear' >&2; exit 2 ;;\n" +
             "    esac\n" +
             "    ;;\n" +
+            "  look)\n" +
+            "    shift || true\n" +
+            "    look_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  volume)\n" +
             "    shift || true\n" +
             "    volume_cmd \"$@\"\n" +
@@ -3936,7 +3985,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, volume, toast, wallpaper, x11, media. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, look, volume, toast, wallpaper, x11, media. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

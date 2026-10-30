@@ -29,6 +29,14 @@ Latest stable: v1.2.1.
 - Scrolling a card's content moves the card sheet like a standard bottom sheet: up grows it to half and full height, down at the top of the content shrinks it a stop. Sliders and strips still drag sideways.
 - A swipe on a glass slider in the Appearance sheet moves it straight away, without tapping it first.
 - Change wallpaper opens its picker above the card sheet, so Choose photo can be tapped again.
+- Every glass card opens with two chips, Where it applies (Everywhere or one page) and What it applies to (All glass or one surface), so a look can be set for one surface on one page.
+- Every glass card shows the same rows in the same order: Frost, Opacity, Tint, Colour, Corners, Depth and Edge, with Grain and Rim under More. Frost has eight steps and moves blur and grain together.
+- A coloured dot after a row's name says where its value is set, and a long-press on the name resets that row.
+- Widgets and Sheets (the drawer, folders, menus, the command palette, notices and the Home float) have cards of their own.
+- A short sound no longer pauses the music that is playing.
+- The terminal lands on its new size without a reflow when a window opens, closes or moves.
+- The terminal's More sheet holds Cursor trail, Effect, Split gap and its font.
+- Settings > Debugging > Motion log notes page changes and resizes, and launcherctl look reads and sets any look value from a shell.
 
 ### Launcher
 - Opening or closing a window behind the one you are looking at no longer makes the wallpaper jump; it glides to its new place.

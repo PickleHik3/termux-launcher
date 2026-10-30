@@ -726,3 +726,4 @@ Agent
 - 2026-10-31 · App menu four shortcuts · Long-press an app with many shortcuts: four, then More shortcuts · not run on a device.
 - 2026-10-31 · haptics through the switch · Haptics off in Settings: no tick from the page overview, the strip row, the bars list or the window bar · not run on a device.
 - 2026-10-31 · widget editor Back keeps · Widget editor: Back keeps the edit, the cross discards it · not run on a device.
+- 2026-10-31 · look grid W4a, launcherctl look · `launcherctl look set opacity 60 --element dock` darkens the dock only; `launcherctl look get opacity --element dock` answers 60 from the dock's cell; `launcherctl look reset --element dock` puts it back · not run on a device.
