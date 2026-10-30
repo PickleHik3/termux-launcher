@@ -87,6 +87,7 @@ import com.termux.app.notice.TerminalDress;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.MotionLog;
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.ChromeSpec;
@@ -1877,6 +1878,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The wall's pages, one store for this activity. A removal still pending from a process
         // that was killed becomes final before any owner attaches.
         wallPagesStore().flushPending();
+        MotionLog.syncFromPreferences(this);
         com.termux.terminal.LatencyProbe.setDebugBuild(com.termux.BuildConfig.DEBUG);
         mIsOnResumeAfterOnCreate = true;
         mCreatedThisMessage.mark();
@@ -23711,6 +23713,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (arriving == com.termux.app.wall.PaneWallPage.TERMINAL
             && mCrossing.terminalPreSizePx() == 0) {
             int taken = -travelRoomChangePx(arriving);
+            if (MotionLog.enabled) {
+                MotionLog.log("presize", "taken=" + taken + " reservationPx=" + appliedContentReservationPx());
+            }
             if (taken > 0) mCrossing.preSizeTerminal(taken, appliedContentReservationPx());
         }
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
@@ -24334,6 +24339,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void preRollTravelKeyboard(@NonNull com.termux.app.wall.PaneWallPage target) {
         if (mInAppKeyboard == null) return;
+        if (MotionLog.enabled) {
+            MotionLog.log("keyboard-preroll", "target=" + target + " can=" + canPreRollTravelKeyboard());
+        }
         Trace.beginSection("Wall.preRollKeyboard");
         try {
             // Under the hold, which the keyboard's room starts if nothing has yet; the crossing's
@@ -25711,6 +25719,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onInnerStepBegin(
                         @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
+                    if (MotionLog.enabled) MotionLog.log("inner-step-begin", "page=TERMINAL steps=" + steps);
                     mStatusCardHost.dismiss();
                     // A terminal window leaving for another is pictured.
                     captureTerminalDeparture();
@@ -25718,6 +25727,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onInnerStep(@NonNull com.termux.app.wall.PaneWallPage page,
                                                   int steps, float fromPx) {
                     if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
+                        if (MotionLog.enabled) {
+                            MotionLog.log("inner-step", "page=TERMINAL steps=" + steps + " fromPx=" + fromPx);
+                        }
                         stepWindowFromWall(steps, fromPx);
                     } else {
                         dropTerminalDepartureSnapshot();
@@ -25805,6 +25817,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    if (MotionLog.enabled) MotionLog.log("wall-page-settled", "page=" + page);
                     Trace.beginSection("Wall.pageSettled");
                     try {
                         onWallPageSettledTraced(page);
@@ -31634,6 +31647,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Home can be turned to the right page, and where Home's swipe is given the seam.
      */
     private void landWall() {
+        if (MotionLog.enabled) MotionLog.log("land-wall", "ready=" + (mPaneWallController != null));
         if (mPaneWallController == null) return;
         // The run may have been bound before the grid existed; read the order again now.
         mPaneWallController.refreshPages();
@@ -31848,6 +31862,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * outgoing session into a solid glass card the pan can physically carry away.
      */
     void captureTerminalDeparture() {
+        if (MotionLog.enabled) MotionLog.log("departure-capture", "callers=" + MotionLog.callers(6));
         dropTerminalDepartureSnapshot();
         if (isReducedMotionEnabled()) return;
         View terminal = findViewById(R.id.terminal_surface_host);
@@ -31940,6 +31955,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void dropTerminalDepartureSnapshot() {
+        if (MotionLog.enabled) {
+            MotionLog.log("departure-drop", "had=" + (mTerminalDepartureSnapshot != null));
+        }
         if (mTerminalDepartureSnapshot != null) {
             mTerminalDepartureSnapshot.recycle();
             mTerminalDepartureSnapshot = null;
@@ -31959,6 +31977,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTerminalDepartureSnapshot = null;
         mTerminalDepartureTranslucent = false;
         if (departure == null) return;
+        if (MotionLog.enabled) {
+            MotionLog.log("departure-animate-start", "offset=" + offset + " horizontal=" + horizontal
+                + " durationMs=" + durationMs);
+        }
         // A translucent snapshot stays translucent and bare: an opaque plate here is the black
         // flash the capture just avoided. The plate and its shadow belong only to the
         // opaque-ground cards.
@@ -31984,6 +32006,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .setDuration(durationMs)
             .setInterpolator(settle)
             .withEndAction(() -> {
+                if (MotionLog.enabled) MotionLog.log("departure-animate-end", "kind=slide");
                 surfaceHost.removeView(ghost);
                 ghost.setImageDrawable(null);
                 departure.recycle();
@@ -32049,6 +32072,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         travel.addUpdateListener(poseCard);
         travel.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (MotionLog.enabled) MotionLog.log("departure-animate-end", "kind=turn");
                 surfaceHost.removeView(ghost);
                 ghost.setImageDrawable(null);
                 departure.recycle();

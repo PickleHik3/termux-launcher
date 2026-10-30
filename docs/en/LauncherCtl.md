@@ -283,6 +283,23 @@ otherwise. Long by default; `--short` for a brief one.
 launcherctl toast --short 'build done'
 ```
 
+## motion-log
+
+```text
+launcherctl motion-log dump
+launcherctl motion-log clear
+```
+
+With **Settings > Debugging > Motion log** on, the launcher notes each page change and resize as
+one line with its uptime in milliseconds, in memory and in `adb logcat -s TermuxMotion`. `dump`
+prints the last 2,000 lines, oldest first; `clear` empties them. Nothing is recorded while the
+switch is off.
+
+```sh
+launcherctl motion-log clear
+launcherctl motion-log dump > motion.txt
+```
+
 ## wallpaper
 
 ```text

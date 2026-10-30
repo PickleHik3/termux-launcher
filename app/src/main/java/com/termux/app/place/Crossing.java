@@ -3,6 +3,7 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.MotionLog;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockMorph;
 import com.termux.app.place.PlaceChromeTravel.Frame;
@@ -219,6 +220,7 @@ public final class Crossing {
             throw new IllegalArgumentException("a crossing's ends carry their arrangements");
         mSeam.begin(here, there, stage);
         if (!begins) return;
+        if (MotionLog.enabled) MotionLog.log("crossing-begin", "revision=" + revision);
         // A whole-stack dip pictures the committed half's stack now, before anything of the
         // crossing has touched it (the row's morph below included); a picture that cannot be
         // taken leaves the dip as it was.
@@ -417,6 +419,7 @@ public final class Crossing {
     /** From here to the landing, the content keeps the room it was committed with. */
     public void hold(int reservationPx) {
         if (mHoldsContent) return;
+        if (MotionLog.enabled) MotionLog.log("hold", "reservationPx=" + reservationPx);
         mHoldsContent = true;
         mHeldReservationPx = reservationPx;
     }
@@ -570,6 +573,7 @@ public final class Crossing {
      */
     @NonNull
     public Landing land(@NonNull PageRef landed, int revision) {
+        if (MotionLog.enabled) MotionLog.log("land", "landed=" + landed + " revision=" + revision);
         // The picture goes in the frame the stack is put back at its rest, whichever half that is.
         if (mSeam.pictured()) mStack.dropPicture();
         Landing landing = releaseInto(mLanding);
@@ -618,6 +622,9 @@ public final class Crossing {
         landing.gridHold = mGridHold;
         landing.terminalPreSizePx = mTerminalPreSizePx;
         boolean covered = mHoldsContent || mCoverPx != 0;
+        if (MotionLog.enabled) {
+            MotionLog.log("hold-released", "held=" + mHoldsContent + " preSizePx=" + mTerminalPreSizePx);
+        }
         mHoldsContent = false;
         mHeldReservationPx = 0;
         mHeldOverlapPx = 0;

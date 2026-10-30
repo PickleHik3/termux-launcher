@@ -837,6 +837,11 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Keep {@code picture} as page {@code pageId}'s and show it in the page's still. */
     private void storePicture(int pageId, @Nullable android.graphics.Bitmap picture) {
+        if (com.termux.app.chrome.MotionLog.enabled) {
+            com.termux.app.chrome.MotionLog.log(picture == null ? "still-dropped" : "still-kept",
+                "page=" + pageId + (picture == null ? ""
+                    : " size=" + picture.getWidth() + "x" + picture.getHeight()));
+        }
         PageCardView card = mCards.get(pageId);
         if (card != null) card.setPicture(picture);
         releasePicture(mPictures.put(pageId, picture));

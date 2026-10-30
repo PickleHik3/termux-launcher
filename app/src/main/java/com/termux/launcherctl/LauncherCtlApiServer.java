@@ -2096,6 +2096,8 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/vibrate", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/torch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/battery", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("GET:/v1/motion-log", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/motion-log/clear", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/volume", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/volume", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/toast", new SimpleRateLimiter(60, 60_000));
@@ -2998,6 +3000,7 @@ public class LauncherCtlApiServer {
             "  launcherctl vibrate [-d MS] [--force]\n" +
             "  launcherctl torch on|off\n" +
             "  launcherctl battery\n" +
+            "  launcherctl motion-log dump|clear\n" +
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
@@ -3007,7 +3010,7 @@ public class LauncherCtlApiServer {
             "\n" +
             "Each group explains its commands and flags: launcherctl <group> --help, for launch, pane,\n" +
             "window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch,\n" +
-            "battery, volume, toast, wallpaper, x11 and media.\n" +
+            "battery, motion-log, volume, toast, wallpaper, x11 and media.\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
@@ -3219,6 +3222,18 @@ public class LauncherCtlApiServer {
             "\n" +
             "Prints health, percentage, plugged, status, temperature (°C) and current\n" +
             "(microamperes) as JSON, as termux-battery-status does.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    motion-log) cat <<'EOF'\n" +
+            "launcherctl motion-log - the motion log\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl motion-log dump\n" +
+            "  launcherctl motion-log clear\n" +
+            "\n" +
+            "With Settings > Debugging > Motion log on, the launcher notes page changes and\n" +
+            "resizes, one line each with its uptime in milliseconds. dump prints the last 2,000\n" +
+            "lines; clear empties them.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    volume) cat <<'EOF'\n" +
@@ -3818,6 +3833,20 @@ public class LauncherCtlApiServer {
             "  battery)\n" +
             "    api GET /v1/battery\n" +
             "    ;;\n" +
+            "  motion-log)\n" +
+            "    case \"${2:-}\" in\n" +
+            "      dump)\n" +
+            "        # The buffered lines, one per line, oldest first.\n" +
+            "        out=$(api GET /v1/motion-log) || { printf '%s\\n' \"$out\"; exit 1; }\n" +
+            "        case \"$out\" in\n" +
+            "          *'\"lines\":[]'*) ;;\n" +
+            "          *) printf '%s\\n' \"$out\" | sed 's/^.*\"lines\":\\[\"//; s/\"\\]}$//; s/\",\"/\\n/g' ;;\n" +
+            "        esac\n" +
+            "        ;;\n" +
+            "      clear) api POST /v1/motion-log/clear '{}' ;;\n" +
+            "      *) echo 'usage: launcherctl motion-log dump|clear' >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
             "  volume)\n" +
             "    shift || true\n" +
             "    volume_cmd \"$@\"\n" +
@@ -3907,7 +3936,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, volume, toast, wallpaper, x11, media. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, volume, toast, wallpaper, x11, media. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

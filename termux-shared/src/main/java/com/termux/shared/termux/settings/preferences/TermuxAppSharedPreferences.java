@@ -4212,6 +4212,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_GLASS_EVEN_OUT_ENABLED, TERMUX_APP.DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED);
     }
 
+    public boolean isMotionLogEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_MOTION_LOG_ENABLED, TERMUX_APP.DEFAULT_VALUE_MOTION_LOG_ENABLED);
+    }
+
+    public void setMotionLogEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_MOTION_LOG_ENABLED, value, false);
+    }
+
     public void setGlassEvenOutEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_GLASS_EVEN_OUT_ENABLED, value, false);
     }
