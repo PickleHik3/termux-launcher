@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.shared.termux.settings.preferences.FrostStops;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -137,15 +138,19 @@ public class SurfaceLookResetTest {
             assertEquals(slot.toString(), -1, preferences.getSurfaceGlassPosition(slot));
         }
         assertEquals(-1, preferences.getSurfaceGlassPosition(null));
-        int clearBlur = (Integer) clear.values.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR);
-        int clearGrain = (Integer) clear.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN);
-        int clearOpacity = (Integer) clear.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY);
-        int clearTint = (Integer) clear.values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT);
-        assertEquals(clearBlur, preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(clearGrain, preferences.getInAppKeyboardGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(clearOpacity, preferences.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(clearTint, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(clearBlur, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        // A Look names its cells by grid key (ADR 0017, W4b): Frost as its stop, the rest as values.
+        int page = TermuxAppSharedPreferences.terminalPageId();
+        int clearStop = (Integer) clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR));
+        int clearGrain = (Integer) clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN));
+        int clearOpacity = (Integer) clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY));
+        int clearTint = (Integer) clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT));
+        assertEquals(clearStop,
+            FrostStops.nearestStopByBlur(preferences.getInAppKeyboardBlurRadius(page)));
+        assertEquals(clearGrain, preferences.getInAppKeyboardGrain(page));
+        assertEquals(clearOpacity, preferences.getInAppKeyboardBackgroundOpacity(page));
+        assertEquals(clearTint, preferences.getInAppKeyboardTintStrength(page));
+        assertEquals(clearStop,
+            FrostStops.nearestStopByBlur(preferences.getExtraKeysBlurRadius(page)));
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY,
             preferences.getInAppKeyboardKeyOpacity());
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS,
