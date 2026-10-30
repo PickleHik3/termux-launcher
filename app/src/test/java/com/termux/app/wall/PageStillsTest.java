@@ -296,4 +296,21 @@ public class PageStillsTest {
         float at = PageCardView.nameTextPx(metrics);
         assertEquals(16f * com.termux.app.theme.TextScale.get() * metrics.scaledDensity, at, 0.5f);
     }
+
+    /**
+     * Motion audit pair 6: a still's picture ({@link PageStillPolicy#pictureSide}), drawn back
+     * at twice its size over the live page, covers the wall's side on every layout fixture, and
+     * is never more than a pixel short of any side.
+     */
+    @Test public void aPictureStretchedBackCoversTheLiveSideOnEveryLayout() {
+        for (com.termux.app.place.LayoutFixtures.Fixture f
+                : com.termux.app.place.LayoutFixtures.ALL) {
+            assertEquals(f.toString(), f.widthPx, 2 * PageStillPolicy.pictureSide(f.widthPx));
+            assertEquals(f.toString(), f.heightPx, 2 * PageStillPolicy.pictureSide(f.heightPx));
+        }
+        for (int side = 2; side < 3000; side++) {
+            int back = 2 * PageStillPolicy.pictureSide(side);
+            assertTrue("side " + side, back <= side && side - back <= 1);
+        }
+    }
 }
