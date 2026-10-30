@@ -51,6 +51,17 @@ public final class GlassRows {
         }
     }
 
+    /** The grid property whose cell a row's dot and Reset this row speak of, or null. */
+    @Nullable
+    public static LookGrid.Property gridProperty(@NonNull Row row) {
+        switch (row) {
+            case FROST: return LookGrid.Property.FROST;
+            case OPACITY: return LookGrid.Property.OPACITY;
+            case TINT: return LookGrid.Property.TINT;
+            default: return cellProperty(row);
+        }
+    }
+
     /** A cell's value as the row shows it: Depth's bend as its slider position. */
     public static int toRow(@NonNull Row row, int cell) {
         switch (row) {

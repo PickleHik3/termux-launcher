@@ -130,6 +130,9 @@ public final class LegendSlider extends View {
     private final float mDotPx;
     private final float mDotGapPx;
     private boolean mMarked;
+    /** The dot's colour, by where the value comes from; 0 for the active colour. */
+    private int mMarkColor;
+    @Nullable private CharSequence mMarkSpoken;
     private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     /** The legend as last drawn, fitted to the column's height. */
@@ -351,9 +354,18 @@ public final class LegendSlider extends View {
      * accessibility reads after the value. Compares before it redraws.
      */
     public void setMarked(boolean marked) {
-        if (mMarked == marked)
+        setMark(marked ? mActiveColor : 0, null);
+    }
+
+    /** The dot's colour after the legend (0 for none) and the words accessibility reads for it. */
+    public void setMark(int color, @Nullable CharSequence spoken) {
+        boolean marked = color != 0;
+        if (mMarked == marked && mMarkColor == color
+                && android.text.TextUtils.equals(mMarkSpoken, spoken))
             return;
         mMarked = marked;
+        mMarkColor = color;
+        mMarkSpoken = spoken;
         invalidate();
     }
 
@@ -622,6 +634,8 @@ public final class LegendSlider extends View {
         canvas.drawText(mShown, 0, mShown.length(), baselineX - run / 2f, cy, mTextPaint);
         if (mMarked) {
             // After the legend's last glyph, at the middle of its line.
+            if (mMarkColor != 0)
+                mDotPaint.setColor(mMarkColor);
             mDotPaint.setAlpha(enabled ? 255 : DISABLED_ALPHA);
             canvas.drawCircle(baselineX - run / 2f + textWidth + mDotGapPx + mDotPx / 2f,
                 cy + (metrics.ascent + metrics.descent) / 2f, mDotPx / 2f, mDotPaint);
@@ -790,8 +804,8 @@ public final class LegendSlider extends View {
         LabelFormatter spoken = mSpoken != null ? mSpoken : mLegend;
         if (spoken != null) {
             CharSequence value = spoken.getFormattedValue(mValue);
-            CharSequence state = mMarked ? value + ", "
-                + getContext().getString(R.string.appearance_row_own_value) : value;
+            CharSequence state = !mMarked ? value : value + ", " + (mMarkSpoken != null
+                ? mMarkSpoken : getContext().getString(R.string.appearance_row_own_value));
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
                 info.setStateDescription(state);
             else

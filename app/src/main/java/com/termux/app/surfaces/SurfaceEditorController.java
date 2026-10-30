@@ -2563,6 +2563,50 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return mChips.onPage();
         }
 
+        @NonNull @Override public RowSource source(@NonNull Row row) {
+            com.termux.shared.termux.settings.preferences.LookGrid.Resolved resolved = rowResolved(row);
+            return resolved == null ? RowSource.NONE : RowSource.of(resolved.cell);
+        }
+
+        @Nullable @Override public CharSequence sourceName(@NonNull Row row) {
+            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
+            if (property == null)
+                return null;
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
+            com.termux.shared.termux.settings.preferences.LookGrid.Element element = cell.element != null ? cell.element : EditorChips.elementOf(mCard);
+            switch (source(row)) {
+                case ELEMENT_ON_PAGE:
+                    return getString(R.string.editor_source_element_on_page, elementName(element),
+                        pageName());
+                case PAGE: return pageName();
+                case ELEMENT: return getString(R.string.editor_source_element, elementName(element));
+                case NONE:
+                default:
+                    return null;
+            }
+        }
+
+        @Override public boolean resettable(@NonNull Row row) {
+            TermuxAppSharedPreferences prefs = prefs();
+            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
+            if (prefs == null || property == null)
+                return false;
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
+            return prefs.lookGrid().has(cell.property, cell.element, cell.page);
+        }
+
+        @Override public void resetRow(@NonNull Row row) {
+            TermuxAppSharedPreferences prefs = prefs();
+            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
+            if (prefs == null || property == null)
+                return;
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
+            prefs.lookGrid().clear(cell.property, cell.element, cell.page);
+            mHeldCustomCells.remove(mChips);
+            requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+                | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+        }
+
         @Override public void setScopeOnPage(boolean onPage) {
             // Nothing is written here: the cell shows what it follows until a value is set on it.
             mChips = mChips.withPage(onPage ? mScopePageId : -1);
@@ -2760,6 +2804,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         for (int i = 0; i < values.length && i < entries.length; i++)
             if (values[i].equals(id)) return entries[i];
         return entries.length > 0 ? entries[0] : id;
+    }
+
+    /** The cell a grid row's value comes from at the chips (for its dot), or null. */
+    @Nullable
+    private com.termux.shared.termux.settings.preferences.LookGrid.Resolved rowResolved(@NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
+        if (prefs == null || mCard == null || property == null)
+            return null;
+        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
+        return prefs.lookGrid().resolve(cell.property, cell.element, cell.page);
     }
 
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */

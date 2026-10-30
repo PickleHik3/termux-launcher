@@ -138,6 +138,22 @@ final class EditorCardSheet {
         /** The What chip's menu picked option {@code index}. */
         default void pickWhat(int index) {}
 
+        /** Where a row's value comes from, for its dot; a model with no grid says own or not. */
+        @NonNull
+        default RowSource source(@NonNull Row row) {
+            return ownValue(row) ? RowSource.ELEMENT : RowSource.NONE;
+        }
+
+        /** Where a row's value comes from, in words ("Dock on Home"), or null for none. */
+        @Nullable
+        default CharSequence sourceName(@NonNull Row row) { return null; }
+
+        /** Whether the chips' cell holds the row's value itself: Reset this row is offered. */
+        default boolean resettable(@NonNull Row row) { return false; }
+
+        /** Reset this row: the chips' cell gives its value up and follows again. */
+        default void resetRow(@NonNull Row row) {}
+
         /** Whether the Where chip stands on a page: the card's rows read and write the page. */
         default boolean scopeOnPage() { return false; }
 
@@ -1768,7 +1784,7 @@ final class EditorCardSheet {
                 views.root.setEnabled(enabled);
             views.root.setAlpha(enabled ? 1f : 0.5f);
             if (views.dot != null)
-                EditorViews.setVisible(views.dot, mModel.ownValue(row));
+                markDot(views.dot, row);
             if (row.kind == Kind.ACTION && views.value != null)
                 EditorViews.setText(views.value, mModel.readout(row, value));
             if (views.summary != null) {
@@ -1803,7 +1819,7 @@ final class EditorCardSheet {
                 if (legend.getValueTo() != to) legend.setValueTo(to);
                 if (legend.getStepSize() != step) legend.setStepSize(step);
                 if (legend.getValue() != value) legend.setValue(value);
-                legend.setMarked(mModel.ownValue(row));
+                legend.setMark(mModel.source(row).ink(mContext), spokenSource(row));
             }
             if (views.toggle != null) {
                 boolean on = value != 0;
@@ -1888,6 +1904,7 @@ final class EditorCardSheet {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         line.addView(label, labelParams);
         views.label = label;
+        bindRowMenu(label, row);
         View dot = ownDot();
         line.addView(dot);
         views.dot = dot;
@@ -1918,6 +1935,7 @@ final class EditorCardSheet {
         TextView label = label(row.labelRes);
         top.addView(label, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
+        bindRowMenu(label, row);
         View dot = ownDot();
         top.addView(dot);
         column.addView(top);
@@ -1947,7 +1965,56 @@ final class EditorCardSheet {
         return label;
     }
 
-    /** The small dot after a label: this surface's own value. */
+    /** The dot after a row's name, coloured by where its value comes from, and its words. */
+    private void markDot(@NonNull View dot, @NonNull Row row) {
+        RowSource source = mModel.source(row);
+        EditorViews.setVisible(dot, source.marked());
+        if (!source.marked())
+            return;
+        if (dot.getBackground() instanceof GradientDrawable)
+            ((GradientDrawable) dot.getBackground()).setColor(source.ink(mContext));
+        CharSequence spoken = spokenSource(row);
+        if (!TextUtils.equals(dot.getContentDescription(), spoken))
+            dot.setContentDescription(spoken);
+    }
+
+    /** "<Row>, from <where>", or null where the row's value is shared. */
+    @Nullable
+    private CharSequence spokenSource(@NonNull Row row) {
+        CharSequence from = mModel.source(row).marked() ? mModel.sourceName(row) : null;
+        return from == null ? null
+            : mContext.getString(R.string.editor_source_from, mContext.getString(row.labelRes), from);
+    }
+
+    /**
+     * A long press on a row's name (the system's long-press time, cancelled past the touch slop)
+     * opens its menu: where the value comes from, and Reset this row.
+     */
+    private void bindRowMenu(@NonNull TextView label, @NonNull Row row) {
+        label.setOnLongClickListener(v -> {
+            openRowMenu(v, row);
+            return true;
+        });
+    }
+
+    private void openRowMenu(@NonNull View anchor, @NonNull Row row) {
+        android.widget.PopupMenu menu = new android.widget.PopupMenu(mContext, anchor);
+        CharSequence name = mContext.getString(row.labelRes);
+        CharSequence from = mModel.source(row).marked() ? mModel.sourceName(row) : null;
+        menu.getMenu().add(0, -1, 0, from == null ? name
+            : mContext.getString(R.string.editor_source_caption, name, from)).setEnabled(false);
+        menu.getMenu().add(0, 1, 1, R.string.editor_row_reset).setEnabled(mModel.resettable(row));
+        menu.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() != 1)
+                return false;
+            mModel.resetRow(row);
+            restate();
+            return true;
+        });
+        menu.show();
+    }
+
+    /** The small dot after a label: where the row's value comes from ({@link #markDot}). */
     @NonNull
     private View ownDot() {
         View dot = new View(mContext);
