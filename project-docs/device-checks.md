@@ -21,6 +21,13 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-31 · 5672889bc, the Where and What chips (W3 goal 1) · emulator at 1.0× and 1.3× font
+  scale, light and dark: every card shows two chips under its header (the Appearance card only
+  Where); labels truncate inside half the row, never the rows below; a narrowed chip fills with
+  the primary container. Dock card, What → All glass, move Opacity: every glass element in the
+  frame follows; Done keeps it, Undo returns it. The Home card opens on its page, and Opacity
+  there changes that page only. ⋮ Reset on a narrowed chip clears that cell only · not run on a
+  device.
 - 2026-10-30 · W1 of ADR 0017, every look value in one grid · a staging build installed over
   the current one on pong (no data cleared): Home, each Home page, the Terminal page and the
   Display page look as before (dock, status bar, keyboard up and down, terminal, Card widgets,
