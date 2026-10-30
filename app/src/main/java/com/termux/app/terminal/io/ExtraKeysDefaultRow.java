@@ -12,7 +12,7 @@ import java.util.List;
  * The shipped key row, cut to the wall it is built for.
  *
  * <p>{@link TermuxPropertyConstants#DEFAULT_IVALUE_EXTRA_KEYS} carries a switch for each of the
- * three places. An install whose wall lacks a place has no use for that place's switch so the switches for the
+ * three places. An install whose wall lacks a place has no use for that place's switch, so the switches for the
  * places the wall does not have are left out of the row rather than built and greyed. Only the
  * shipped row is cut: a row the user wrote is theirs, every key of it, and the ones that cannot
  * act are drawn dead by {@link ExtraKeyEligibility} instead.

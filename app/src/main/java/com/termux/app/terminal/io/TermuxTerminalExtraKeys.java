@@ -72,7 +72,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             // The shipped row carries a switch for each place; the ones whose place the wall
             // does not have are dropped from it — and from it only, since a row the user wrote
             // keeps every key and has the dead ones greyed instead.
-            extrakeys = ExtraKeysDefaultRow.forWall(extrakeys, mActivity.availableWallPages());
+            extrakeys = ExtraKeysDefaultRow.forWall(extrakeys, mActivity.wallKindsForRow());
             String extraKeysStyle = (String) mActivity.getProperties().getInternalPropertyValue(TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE, true);
             ExtraKeysConstants.ExtraKeyDisplayMap extraKeyDisplayMap = ExtraKeysInfo.getCharDisplayMapForStyle(extraKeysStyle);
             if (ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS.DEFAULT_CHAR_DISPLAY.equals(extraKeyDisplayMap) && !TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE.equals(extraKeysStyle)) {
