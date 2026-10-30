@@ -938,7 +938,7 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * The dock's grain over the tab's scrim, 0..100; 0 draws none. Static: the shared seeded tile,
+     * The Sheets grain over the tab's scrim, 0..100; 0 draws none. Static: the shared seeded tile,
      * so a tab at rest costs nothing more than before.
      */
     public void setGrainPercent(int percent) {
