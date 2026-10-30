@@ -12,8 +12,7 @@ import java.util.List;
  * The shipped key row, cut to the wall it is built for.
  *
  * <p>{@link TermuxPropertyConstants#DEFAULT_IVALUE_EXTRA_KEYS} carries a switch for each of the
- * three places. An install whose wall lacks a place has no use for that place's switch — and a
- * wall of one place, terminal mode, has no use for a switcher at all — so the switches for the
+ * three places. An install whose wall lacks a place has no use for that place's switch so the switches for the
  * places the wall does not have are left out of the row rather than built and greyed. Only the
  * shipped row is cut: a row the user wrote is theirs, every key of it, and the ones that cannot
  * act are drawn dead by {@link ExtraKeyEligibility} instead.
@@ -54,14 +53,13 @@ public final class ExtraKeysDefaultRow {
     }
 
     /**
-     * A place switch goes when its place is not on the wall, and every place switch goes when
-     * the wall is a single place: with nowhere to switch to, the switch for the place in front
-     * would only ever say where the user already is.
+     * A place switch goes when the arranged page list has no page of its kind
+     * ({@link com.termux.app.wall.WallKeys}); the switch for the kind in front stays, held back.
      */
     private static boolean dropped(@NonNull ExtraKeysLayoutModel.Key key,
                                    @NonNull List<PaneWallPage> pages) {
         PaneWallPage target = ExtraKeyEligibility.placeSwitchTarget(key.key);
         if (target == null) return false;
-        return pages.size() < 2 || !pages.contains(target);
+        return !pages.contains(target);
     }
 }

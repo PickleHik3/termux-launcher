@@ -180,12 +180,12 @@ public class PaneWallControllerTest {
     }
 
     @Test public void theRowIsHomeThenTheWorkspace() {
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.pageKindsShim());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.wall().pages());
 
         // No window: the Workspace leaves the row, and Home is all there is.
         host.hasWindow = false;
         controller.refreshPages();
-        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.pageKindsShim());
+        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.wall().pages());
     }
 
     @Test public void terminalOnlyTakesHomeOffTheRowAndMovesTheWallOffIt() {
@@ -197,7 +197,7 @@ public class PaneWallControllerTest {
         controller.refreshPages();
 
         assertEquals("the window in front stays in front", 1, host.current);
-        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), controller.pageKindsShim());
+        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), controller.wall().pages());
         assertEquals("the wall left the Home page it stood on", PaneWallPage.TERMINAL,
             controller.currentPage());
         assertFalse("launcherctl's wall.go home is refused", controller.goTo("home"));
@@ -221,7 +221,7 @@ public class PaneWallControllerTest {
         host.canStart = true;
         controller.refreshPages();
         assertEquals("never a Home page to fall back on",
-            Collections.singletonList(PaneWallPage.TERMINAL), controller.pageKindsShim());
+            Collections.singletonList(PaneWallPage.TERMINAL), controller.wall().pages());
 
         controller.goHome(false);
 
@@ -234,7 +234,7 @@ public class PaneWallControllerTest {
         controller.refreshPages();
         host.useAs = UseAs.HOME;
         controller.refreshPages();
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.pageKindsShim());
+        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.wall().pages());
         controller.goHome(false);
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
     }
@@ -313,11 +313,11 @@ public class PaneWallControllerTest {
         host.hasWindow = false;
         host.canStart = true;
         controller.refreshPages();
-        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.pageKindsShim());
+        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.wall().pages());
 
         controller.homeSeam().begin();
         assertEquals("the empty Workspace's page joins the row for the swipe",
-            Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.pageKindsShim());
+            Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL), controller.wall().pages());
         assertEquals("nothing is started at touch-down", 0, host.shellsStarted);
         controller.homeSeam().drag(-900f);
         assertEquals("nor while the finger drives it", 0, host.shellsStarted);
@@ -356,14 +356,14 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
         assertEquals(0, host.shellsStarted);
         assertEquals("the empty page leaves the row again",
-            Collections.singletonList(PaneWallPage.WIDGETS), controller.pageKindsShim());
+            Collections.singletonList(PaneWallPage.WIDGETS), controller.wall().pages());
 
         controller.homeSeam().begin();
         controller.homeSeam().drag(-300f);
         controller.homeSeam().cancel();
         assertEquals(PaneWallPage.WIDGETS, controller.currentPage());
         assertEquals(0, host.shellsStarted);
-        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.pageKindsShim());
+        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), controller.wall().pages());
     }
 
     @Test public void theSeamFromHomeReachesTheFirstWindow() {
