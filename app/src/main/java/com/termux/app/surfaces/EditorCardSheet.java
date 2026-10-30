@@ -199,7 +199,7 @@ final class EditorCardSheet {
     /** A header button's touch target, and the gap the last one keeps from the edge. */
     private static final int HEADER_BUTTON_DP = 48;
     private static final int HEADER_END_DP = 8;
-    private static final long MOVE_MS = 240L;
+    private static final long MOVE_MS = EditorMotion.Use.SHEET_DETENT.settleMs();
 
     @NonNull private final Context mContext;
     @NonNull private final Model mModel;
@@ -586,7 +586,8 @@ final class EditorCardSheet {
             if (done != null) done.run();
             return;
         }
-        mSheet.animate().translationY(to).setDuration(MOVE_MS).setInterpolator(Motion.settle())
+        mSheet.animate().translationY(to).setDuration(EditorMotion.Use.SHEET_FALL.settleMs())
+            .setInterpolator(EditorMotion.Use.SHEET_FALL.curve(false))
             .setUpdateListener(a -> mListener.onSheetMoved(mDetent, sheetTopPx()))
             .withEndAction(() -> {
                 mSheet.setVisibility(View.GONE);
@@ -653,7 +654,8 @@ final class EditorCardSheet {
             mListener.onSheetSettled(detent, sheetTopPx());
             return;
         }
-        mSheet.animate().translationY(target).setDuration(MOVE_MS).setInterpolator(Motion.settle())
+        mSheet.animate().translationY(target).setDuration(MOVE_MS)
+            .setInterpolator(EditorMotion.Use.SHEET_DETENT.curve(false))
             .setUpdateListener(a -> mListener.onSheetMoved(detent, sheetTopPx()))
             .withEndAction(() -> {
                 mSheet.animate().setUpdateListener(null);

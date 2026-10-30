@@ -570,7 +570,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static final int QUIET_DP = 1;
     /** The quiet outline's share of colorOutline. */
     private static final float QUIET_ALPHA = 0.4f;
-    private static final long POSE_MS = 240L;
+    private static final long POSE_MS = EditorMotion.Use.FRAME_POSE.settleMs();
 
     /** The activity resumed with the editor open: the status pane rests as it is stored. */
     public void collapseStatusPaneIfLeftExpanded() {

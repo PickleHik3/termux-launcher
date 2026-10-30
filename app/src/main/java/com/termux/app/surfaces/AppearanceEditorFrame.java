@@ -50,8 +50,8 @@ final class AppearanceEditorFrame {
     static final float MIN_SCALE = 0.5f;
     /** The radius used where the platform cannot say what the display's corners are. */
     static final float FALLBACK_CORNER_DP = 28f;
-    static final long ENTER_MS = 260L;
-    static final long EXIT_MS = 220L;
+    static final long ENTER_MS = EditorMotion.Use.EDITOR_ENTER.settleMs();
+    static final long EXIT_MS = EditorMotion.Use.EDITOR_EXIT.settleMs();
 
     @NonNull private final View mRoot;
     private float mCornerRadiusPx;
@@ -186,7 +186,7 @@ final class AppearanceEditorFrame {
         }
         mRoot.animate().scaleX(scale).scaleY(scale).translationX(translationXPx)
             .translationY(translationYPx)
-            .setDuration(ENTER_MS).setInterpolator(Motion.settle()).start();
+            .setDuration(ENTER_MS).setInterpolator(EditorMotion.Use.EDITOR_ENTER.curve(false)).start();
     }
 
     /**
@@ -220,7 +220,7 @@ final class AppearanceEditorFrame {
         }
         // The Home card is centred across the page: the side column's offset goes on the way.
         mRoot.animate().scaleX(scale).scaleY(scale).translationX(0f).translationY(translationYPx)
-            .setDuration(EXIT_MS).setInterpolator(Motion.settle())
+            .setDuration(EXIT_MS).setInterpolator(EditorMotion.Use.EDITOR_EXIT.curve(false))
             .withEndAction(() -> {
                 if (onEnd != null) onEnd.run();
             }).start();
@@ -270,7 +270,7 @@ final class AppearanceEditorFrame {
             return;
         }
         mRoot.animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f)
-            .setDuration(EXIT_MS).setInterpolator(Motion.settle())
+            .setDuration(EXIT_MS).setInterpolator(EditorMotion.Use.EDITOR_EXIT.curve(false))
             .withEndAction(finish).start();
     }
 

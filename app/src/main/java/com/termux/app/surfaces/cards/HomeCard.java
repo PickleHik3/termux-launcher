@@ -29,7 +29,7 @@ public final class HomeCard {
                 Row.CORNERS)
             .tier(3, Row.SECTION_MORE, Row.GRAIN, Row.RIM, Row.SECTION_GRID, Row.HOME_COLUMNS,
                 Row.HOME_ROWS, Row.SECTION_LABELS_FOLDERS, Row.LABEL_SIZE, Row.HOME_ICON_SIZE, Row.FOLDERS,
-                Row.NUMERALS, Row.SECTION_OPTIONS, Row.TWO_LINE,
+                Row.NUMERALS, Row.SECTION_OPTIONS, Row.GLASS_WIDGETS, Row.TWO_LINE,
                 Row.LABEL_SHADOW, Row.PAGE_DOTS, Row.PAGE_TRANSITION, Row.WALLPAPER_SCROLL)
             .tier(3, Row.ELEMENTS, Row.LINK_WIDGETS, Row.LINK_GLOBAL,
                 Row.LINK_GESTURES);
