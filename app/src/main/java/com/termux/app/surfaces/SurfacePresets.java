@@ -340,6 +340,21 @@ public final class SurfacePresets {
             TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY);
     }
 
+    /**
+     * A shipped Look's Base blur (dp), opacity and tint, as it ships on dark glass; null for an
+     * id this build lacks.
+     */
+    @Nullable
+    public static int[] baseGlass(@NonNull String id) {
+        Preset preset = byId(PRESETS, id);
+        if (preset == null)
+            return null;
+        return new int[] {
+            ((Number) preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR)).intValue(),
+            ((Number) preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY)).intValue(),
+            ((Number) preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT)).intValue()};
+    }
+
     /** The Looks as they ship on dark glass; {@link #presets(boolean)} for the glass on screen. */
     @NonNull
     public static List<Preset> presets() {

@@ -96,24 +96,24 @@ public final class GlassRows {
     // ------------------------------------------------------------------ a Look at one cell
 
     /**
-     * Each Look's Frost (blur dp), Opacity and Tint, in the slider's order (Clear, Mist, Tint,
-     * Solid): what picking it writes into the chips' cell on an element's card.
+     * The Frost stop, Opacity and Tint a Look stop writes into the chips' cell on an element's
+     * card: the shipped Look's own blur, opacity and tint ({@link SurfacePresets#baseGlass});
+     * null for Custom.
      */
-    static final int[][] LOOK_CELLS = {{2, 14, 0}, {8, 34, 0}, {8, 34, 40}, {0, 78, 0}};
-
-    /** The Frost stop, Opacity and Tint a Look stop writes; null for Custom. */
     @Nullable
     public static int[] lookCell(int stop) {
-        if (stop < 0 || stop >= LOOK_CELLS.length) return null;
-        int[] look = LOOK_CELLS[stop];
+        if (stop < 0 || stop >= AppearanceLooks.CUSTOM_STOP) return null;
+        String id = AppearanceLooks.presetIdForStop(stop);
+        int[] look = id == null ? null : SurfacePresets.baseGlass(id);
+        if (look == null) return null;
         return new int[] {FrostStops.nearestStopByBlur(look[0]), look[1], look[2]};
     }
 
     /** The Look stop a cell's Frost stop, Opacity and Tint wear; Custom where none matches. */
     public static int lookStopFor(int frostStop, int opacity, int tint) {
-        for (int i = 0; i < LOOK_CELLS.length; i++) {
+        for (int i = 0; i < AppearanceLooks.CUSTOM_STOP; i++) {
             int[] cell = lookCell(i);
-            if (cell[0] == frostStop && cell[1] == opacity && cell[2] == tint) return i;
+            if (cell != null && cell[0] == frostStop && cell[1] == opacity && cell[2] == tint) return i;
         }
         return AppearanceLooks.CUSTOM_STOP;
     }
