@@ -21,7 +21,16 @@ public class LookGridMigrationTest {
     private static final List<Integer> PAGES = Arrays.asList(0, 3, 5);
     private static final int NO_PAGE = LookGrid.NO_PAGE;
 
+    /** An install every earlier upgrade has brought along. */
     private static LookGrid.MemoryStore store() {
+        LookGrid.MemoryStore store = bare();
+        store.putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true);
+        store.putBoolean(TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, true);
+        store.putBoolean(TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, true);
+        return store;
+    }
+
+    private static LookGrid.MemoryStore bare() {
         LookGrid.MemoryStore store = new LookGrid.MemoryStore();
         store.putString(TERMUX_APP.KEY_LOG_LEVEL, "1");
         return store;
@@ -34,7 +43,7 @@ public class LookGridMigrationTest {
 
     @Test
     public void aFreshInstallStaysFresh() {
-        LookGrid.MemoryStore store = store();
+        LookGrid.MemoryStore store = bare();
         migrate(store);
         assertEquals(Collections.singleton(TERMUX_APP.KEY_LOG_LEVEL), store.keys());
     }
@@ -96,7 +105,8 @@ public class LookGridMigrationTest {
             assertEquals(20, grid.value(Property.TINT, element, 0));
         }
         for (String key : store.keys())
-            assertTrue(key, key.startsWith("look") || key.equals(TERMUX_APP.KEY_LOG_LEVEL));
+            assertTrue(key, key.startsWith("look") || key.equals(TERMUX_APP.KEY_LOG_LEVEL)
+                || key.equals(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED));
     }
 
     @Test
@@ -123,6 +133,32 @@ public class LookGridMigrationTest {
         assertEquals(4, grid.value(Property.GRAIN, Element.DOCK, NO_PAGE));
         assertEquals(4, grid.value(Property.GRAIN, Element.DOCK, 5));
         assertEquals(FrostStops.TINT, grid.value(Property.FROST, Element.STATUS, 5));
+    }
+
+    @Test
+    public void anInstallFromBeforeBaseTakesTheDocksNumbersAsBase() {
+        LookGrid.MemoryStore store = bare();
+        store.putInt(TERMUX_APP.KEY_APP_BAR_OPACITY, 60);
+        store.putInt(TERMUX_APP.KEY_STATUS_BAR_OPACITY, 60);
+        store.putInt(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, 25);
+        LookGrid grid = migrate(store);
+        assertEquals(60, grid.value(Property.OPACITY, null, NO_PAGE));
+        assertEquals(60, grid.value(Property.OPACITY, Element.STATUS, 3));
+        assertFalse(store.contains("look.opacity.status"));
+        assertEquals(25, grid.value(Property.OPACITY, Element.TERMINAL, NO_PAGE));
+    }
+
+    @Test
+    public void aKeyboardBlurAtMinusOneFollowsADetachedDock() {
+        LookGrid.MemoryStore store = store();
+        store.putBoolean(TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, false);
+        store.putInt("surface_base_blur", 12);
+        store.putBoolean("surface_inherit_dock_blur", false);
+        store.putInt(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 25);
+        store.putInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, -1);
+        LookGrid grid = migrate(store);
+        assertEquals(FrostStops.MIST, grid.value(Property.FROST, Element.KEYBOARD, NO_PAGE));
+        assertEquals(FrostStops.TINT, grid.value(Property.FROST, Element.STATUS, NO_PAGE));
     }
 
     @Test
