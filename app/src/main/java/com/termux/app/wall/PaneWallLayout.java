@@ -648,10 +648,14 @@ public final class PaneWallLayout extends ViewGroup {
      * of a page kind, with the name its card still shows.
      */
     public static final class Cell {
+        /** The page's id; a kind-only id ({@link #kindPageId}) before the page list is known. */
         public final int pageId;
+        /** The page kind whose view shows this page when it is bound. */
         @NonNull public final PaneWallPage kind;
+        /** The page's name, as its card still shows it; null for the kind's own. */
         @Nullable public final String name;
 
+        /** The cell of page {@code pageId}, of {@code kind}, named {@code name} on its card. */
         public Cell(int pageId, @NonNull PaneWallPage kind, @Nullable String name) {
             this.pageId = pageId;
             this.kind = kind;
@@ -1086,6 +1090,7 @@ public final class PaneWallLayout extends ViewGroup {
         mJumpFromId = NO_PAGE;
     }
 
+    /** The kind of the page whose cell the wall is on. */
     @NonNull
     public PaneWallPage currentPage() {
         return mCurrent;

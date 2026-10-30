@@ -4,8 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * What a Display page is on the wall (ADR 0015, A3b): each Display page is a slot of its own, and
- * the one display view is the bound page's ({@link PaneWallPolicy#boundDisplaySlot}). Only the
+ * What a Display page is on the wall (ADR 0016): each Display page is a cell of its own, and the
+ * one display view is bound to one of them at a time ({@link PaneWallLayout#boundPageId}). Only the
  * bound page, with the display running, is live; every other Display page stands as a still: its
  * last picture once it has one, else a card naming what it shows ({@link PageStillPolicy}, the
  * one rule for every kind). Landing on a Display page starts the display; leaving keeps it

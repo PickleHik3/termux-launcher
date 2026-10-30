@@ -30,6 +30,10 @@ public final class PageCardView extends View {
 
     /** The card's wash as authored for pale ink; {@link ChromeShade#fill} restates it. */
     @ColorInt private static final int FILL_SEED = Color.argb(40, 255, 255, 255);
+    /** The card's corner radius in dp. */
+    private static final float CORNER_DP = 24f;
+    /** The kind's icon size in dp: Material's standard icon. */
+    private static final float ICON_DP = 24f;
     /** The name's size in sp at a Text size of 1: Material's title-medium. */
     private static final float NAME_SP = 16f;
 
@@ -44,6 +48,10 @@ public final class PageCardView extends View {
     @NonNull private String mName;
     @Nullable private Bitmap mPicture;
 
+    /**
+     * The card still of page {@code pageId}, of {@code kind}, naming {@code name} (null: none)
+     * until it has a picture.
+     */
     public PageCardView(@NonNull Context context, int pageId, @NonNull PaneWallPage kind,
                         @Nullable String name) {
         super(context);
@@ -141,12 +149,12 @@ public final class PageCardView extends View {
         }
         applyInk();
         float density = getResources().getDisplayMetrics().density;
-        float radius = 24f * density;
+        float radius = CORNER_DP * density;
         mRect.set(0f, 0f, getWidth(), getHeight());
         canvas.drawRoundRect(mRect, radius, radius, mFill);
         float cx = getWidth() / 2f;
         float cy = getHeight() / 2f;
-        float icon = 24f * density;
+        float icon = ICON_DP * density;
         drawIcon(canvas, cx, cy - icon, icon);
         canvas.drawText(mName, cx, cy + icon + mText.getTextSize(), mText);
     }
