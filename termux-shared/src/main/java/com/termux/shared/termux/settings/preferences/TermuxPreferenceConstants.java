@@ -1870,6 +1870,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED = true;
 
+        /** Whether motion events are logged (tag TermuxMotion and the in-memory ring buffer). */
+        public static final String KEY_MOTION_LOG_ENABLED = "motion_log_enabled";
+
+        public static final boolean DEFAULT_VALUE_MOTION_LOG_ENABLED = false;
+
         /*
          * There is no key for the launcher chrome's colour source any more. It was a second name
          * for a decision the wallpaper-colours switch already makes, and the two could disagree —

@@ -3246,6 +3246,28 @@ public final class TerminalView extends View {
     /** The cause a resume carries when a return hold covered the paused span it ends. */
     public static final String CAUSE_RETURN_HOLD = "return-hold";
 
+    /**
+     * Where the motion log hears about resizes and reflow frosts: installed by the app, null in
+     * other hosts. Callers read {@link #sMotionLogEnabled} first, so a build with the log off
+     * builds no line.
+     */
+    public interface MotionSink {
+        void log(String event, String kv);
+    }
+
+    private static volatile MotionSink sMotionSink;
+    /** True while the motion log is on; the app keeps it in step with its switch. */
+    public static volatile boolean sMotionLogEnabled;
+
+    public static void setMotionSink(@Nullable MotionSink sink) {
+        sMotionSink = sink;
+    }
+
+    private static void motionLog(String event, String kv) {
+        MotionSink sink = sMotionSink;
+        if (sink != null) sink.log(event, kv);
+    }
+
     private void logSessionResize(int newColumns, int newRows,
                                   @NonNull String cause) {
         // The session's emulator, not this view's: a freshly attached session already has a size.
@@ -3254,6 +3276,10 @@ public final class TerminalView extends View {
         android.util.Log.d(GEOMETRY_LOG_TAG, "resize " + from + " -> " + newColumns + "x" + newRows
             + " cause=" + cause
             + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
+        if (sMotionLogEnabled) {
+            motionLog("pty-resize", "from=" + from + " to=" + newColumns + "x" + newRows
+                + " cause=" + cause + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
+        }
     }
 
     // ---- The place slide's travel (see mTravelActive) ------------------------------------------
@@ -3470,6 +3496,7 @@ public final class TerminalView extends View {
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private void frostReflow() {
+        if (sMotionLogEnabled) motionLog("reflow-frost-start", "radiusPx=" + reflowFrostRadiusPx());
         cancelReflowFrostAnimation();
         mReflowFrostLevel = 1f;
         applyReflowFrost(reflowFrostRadiusPx());

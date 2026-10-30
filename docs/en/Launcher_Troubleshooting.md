@@ -162,6 +162,11 @@ Open **Settings → Appearance** and test against the real home screen.
 
 See [Look and themes](Look_And_Themes.md).
 
+## A page change looks wrong
+
+Turn on **Settings > Debugging > Motion log**, repeat the page change once, then run
+`launcherctl motion-log dump` and attach the lines to your report.
+
 ## A font change is ignored
 
 The terminal resolves font configuration in this order:

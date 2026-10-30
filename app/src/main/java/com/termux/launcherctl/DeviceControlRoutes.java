@@ -19,6 +19,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.ManagedWallpaper;
+import com.termux.app.chrome.MotionLog;
 import com.termux.app.chrome.wallpaper.WallpaperSlots;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
@@ -63,7 +64,10 @@ final class DeviceControlRoutes {
             case "/v1/toast":
                 return "POST".equals(method);
             case "/v1/battery":
+            case "/v1/motion-log":
                 return "GET".equals(method);
+            case "/v1/motion-log/clear":
+                return "POST".equals(method);
             case "/v1/volume":
             case "/v1/wallpaper":
                 return "GET".equals(method) || "POST".equals(method);
@@ -92,6 +96,11 @@ final class DeviceControlRoutes {
                 return torch(context, arguments);
             case "/v1/battery":
                 return battery(context);
+            case "/v1/motion-log":
+                return motionLogDump();
+            case "/v1/motion-log/clear":
+                MotionLog.clear();
+                return ok();
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
             case "/v1/toast":
@@ -101,6 +110,16 @@ final class DeviceControlRoutes {
             default:
                 return error(404, "not_found", "Unknown endpoint");
         }
+    }
+
+    // ---------------------------------------------------------------------------------- motion log
+
+    /** {@code {"ok":true,"enabled":bool,"count":N,"lines":[...]}}, oldest line first. */
+    @NonNull
+    static JSONObject motionLogDump() throws JSONException {
+        List<String> lines = MotionLog.dump();
+        return ok().put("enabled", MotionLog.enabled).put("count", lines.size())
+            .put("lines", new org.json.JSONArray(lines));
     }
 
     // ------------------------------------------------------------------------------------ vibrate
