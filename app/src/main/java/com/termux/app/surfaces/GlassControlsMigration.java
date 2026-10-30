@@ -116,7 +116,10 @@ public final class GlassControlsMigration {
         for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
             String key = entry.getKey();
             int at = key.lastIndexOf(PageLookKeys.PAGE_SEPARATOR);
-            if (at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+            com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
+                com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
+            if ((at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+                    || (cell != null && cell.page >= 0))
                 values.put(key, entry.getValue());
         }
         return values;

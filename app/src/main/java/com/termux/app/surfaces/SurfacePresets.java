@@ -1174,14 +1174,43 @@ public final class SurfacePresets {
     }
 
     /** The number a look gives a surface's property: its own cell, else the look's Base. */
+    /**
+     * The number a Look's stored value is worn as: a blur at its nearest Frost stop's blur (the
+     * grid holds blur as a stop, ADR 0017 §4), anything else as stored. A Look and the store it
+     * was applied to are compared through this, so a Look whose blur sits between stops still
+     * reads as worn.
+     */
+    @Nullable
+    static Object worn(@NonNull String key, @Nullable Object value) {
+        if (!(value instanceof Integer) || !isBlurKey(key)) return value;
+        return wornInt(SurfaceProperty.BLUR, (Integer) value);
+    }
+
+    private static int wornInt(@NonNull SurfaceProperty property, int value) {
+        return property == SurfaceProperty.BLUR
+            ? com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(
+                com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(value))
+            : value;
+    }
+
+    private static boolean isBlurKey(@NonNull String key) {
+        if (SurfaceProperty.BLUR.baseKey.equals(key)) return true;
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            if (key.equals(TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.BLUR)))
+                return true;
+        }
+        return false;
+    }
+
     private static int lookCellValue(@NonNull TermuxAppSharedPreferences prefs,
                                      @NonNull Preset look, @NonNull SurfaceSlot slot,
                                      @NonNull SurfaceProperty property) {
         String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
         Object own = key == null ? null : look.values.get(key);
-        if (own != null) return intOf(own);
+        if (own != null) return wornInt(property, intOf(own));
         Object base = look.values.get(property.baseKey);
-        return base != null ? intOf(base) : prefs.getSurfaceBaseValue(property, pageOf(PaneWallPage.WIDGETS));
+        return base != null ? wornInt(property, intOf(base))
+            : prefs.getSurfaceBaseValue(property, pageOf(PaneWallPage.WIDGETS));
     }
 
     /** Whether the Workspace's worn values are read as the Terminal page's own; see {@link #wornOn}. */
@@ -1352,7 +1381,7 @@ public final class SurfacePresets {
                     && !isMaterialKey(entry.getKey())))
                 continue;
             Object current = currentOne(prefs, entry.getKey(), half);
-            if (current != null && !current.equals(entry.getValue()))
+            if (current != null && !current.equals(worn(entry.getKey(), entry.getValue())))
                 return false;
         }
         return true;
@@ -1391,7 +1420,7 @@ public final class SurfacePresets {
                     || (scoped && isHalfKey(key) && !isMaterialKey(key)))
                 continue;
             Object current = currentOne(prefs, key, half);
-            if (current != null && !current.equals(entry.getValue()))
+            if (current != null && !current.equals(worn(entry.getKey(), entry.getValue())))
                 return false;
         }
         return true;
