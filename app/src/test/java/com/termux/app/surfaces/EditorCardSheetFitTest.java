@@ -244,6 +244,28 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
+    public void aResetSpringsItsValuesOnTheSlidersStepsAndKeepsEveryRow() {
+        Fixture fixture = new Fixture(EditorCard.STATUS, 1f);
+        java.util.List<Row> rows = fixture.sheet.shownRows();
+        assertTrue("the card shows rows in touch order", rows.size() > 1);
+        int before = fixture.sheet.rows().getChildCount();
+        EditorCardSheet.ResetMotion motion = fixture.sheet.beginReset(rows);
+        fixture.sheet.restate();
+        fixture.sheet.endReset(motion, EditorCardSheet.RESET_STAGGER_MS);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(2, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals("a reset keeps every row", before, fixture.sheet.rows().getChildCount());
+        com.google.android.material.slider.Slider slider =
+            new com.google.android.material.slider.Slider(fixture.themed);
+        slider.setValueFrom(0f);
+        slider.setValueTo(100f);
+        slider.setStepSize(5f);
+        assertEquals("an overshoot stays on the range", 100f,
+            EditorCardSheet.onSliderSteps(slider, 104f), 0f);
+        assertEquals("a value in flight lands on a step", 45f,
+            EditorCardSheet.onSliderSteps(slider, 43.6f), 0f);
+    }
+
+    @Test
     public void everySegmentRowStandsOnOneLineAtTheDefaultTextSize() {
         for (EditorCard card : EditorCard.values()) {
             if (CardBody.redesigned(card))

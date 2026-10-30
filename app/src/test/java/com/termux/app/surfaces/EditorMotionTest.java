@@ -140,6 +140,13 @@ public class EditorMotionTest {
             Use.DOT_OUT.tokenFor(true));
     }
 
+    @Test
+    public void ruleC_theRingComesBackWhenThePageSpringSettles() {
+        assertNear(324L, SurfaceEditorController.PAGE_SETTLE_MS);
+        assertTrue("the ring is out before the page lands",
+            Use.RING_FADE_OUT.settleMs() < SurfaceEditorController.PAGE_SETTLE_MS);
+    }
+
     private static void assertNear(long expected, long actual) {
         assertTrue("expected about " + expected + " ms, was " + actual,
             Math.abs(expected - actual) <= expected * 0.03);

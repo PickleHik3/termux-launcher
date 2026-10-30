@@ -2135,11 +2135,137 @@ final class EditorCardSheet {
         menu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() != 1)
                 return false;
+            ResetMotion motion = beginReset(java.util.Collections.singletonList(row));
             mModel.resetRow(row);
             restate();
+            endReset(motion, 0L);
             return true;
         });
         menu.show();
+    }
+
+    // ------------------------------------------------------------------ rule g, Reset motion
+
+    /** The time between rows on a whole-card Reset, in touch order. */
+    static final long RESET_STAGGER_MS = 30L;
+
+    /** What the reset rows showed before the reset: their slider values, in touch order. */
+    static final class ResetMotion {
+        @NonNull final List<Row> rows = new ArrayList<>();
+        @NonNull final List<Float> before = new ArrayList<>();
+    }
+
+    /** Every row the card shows, in touch order: what a whole-card Reset moves. */
+    @NonNull
+    List<Row> shownRows() {
+        List<Row> rows = new ArrayList<>();
+        for (int i = 0; i < mRows.getChildCount(); i++) {
+            for (RowViews views : mRowViews.values()) {
+                if (views.root == mRows.getChildAt(i)) {
+                    rows.add(views.row);
+                    break;
+                }
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * Before a reset: notes each row's value and fades its dot out as it stands (DOT_OUT), so
+     * {@link #endReset} can spring the values from there and bring the dots back.
+     */
+    @NonNull
+    ResetMotion beginReset(@NonNull List<Row> rows) {
+        ResetMotion motion = new ResetMotion();
+        boolean reduced = ReducedMotion.isEnabled(mContext);
+        for (Row row : rows) {
+            RowViews views = mRowViews.get(row);
+            if (views == null)
+                continue;
+            motion.rows.add(row);
+            motion.before.add(views.slider != null ? views.slider.getValue()
+                : views.legend != null ? views.legend.getValue() : Float.NaN);
+            if (views.dot != null)
+                ghost(views.dot, EditorMotion.Use.DOT_OUT.durationMs(reduced));
+        }
+        return motion;
+    }
+
+    /**
+     * After a reset and its restate: each row's value springs from where it stood to its new one
+     * (VALUE_SPRING; a jump under reduced motion) and its dot fades in (DOT_IN) in its new colour
+     * or stays off, {@code staggerMs} apart in touch order.
+     */
+    void endReset(@NonNull ResetMotion motion, long staggerMs) {
+        boolean reduced = ReducedMotion.isEnabled(mContext);
+        long dotAfter = EditorMotion.Use.DOT_OUT.durationMs(reduced);
+        for (int i = 0; i < motion.rows.size(); i++) {
+            RowViews views = mRowViews.get(motion.rows.get(i));
+            if (views == null)
+                continue;
+            long delay = i * staggerMs;
+            if (views.dot != null && views.dot.getVisibility() == View.VISIBLE) {
+                views.dot.animate().cancel();
+                views.dot.setAlpha(0f);
+                views.dot.animate().alpha(1f).setStartDelay(delay + dotAfter)
+                    .setDuration(EditorMotion.Use.DOT_IN.durationMs(reduced))
+                    .setInterpolator(EditorMotion.Use.DOT_IN.curve(reduced)).start();
+            }
+            float from = motion.before.get(i);
+            if (Float.isNaN(from) || reduced)
+                continue;
+            springValue(views, from, delay);
+        }
+    }
+
+    /** A row's slider springing from {@code from} to the value it now shows, from code only. */
+    private void springValue(@NonNull RowViews views, float from, long delayMs) {
+        Slider slider = views.slider;
+        LegendSlider legend = views.legend;
+        float to = slider != null ? slider.getValue() : legend != null ? legend.getValue() : from;
+        if (to == from)
+            return;
+        android.animation.ValueAnimator spring = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        spring.setStartDelay(delayMs);
+        spring.setDuration(EditorMotion.Use.VALUE_SPRING.durationMs(false));
+        // The overshoot shows on the fill; the value stays on the slider's range and steps.
+        spring.setInterpolator(EditorMotion.Use.VALUE_SPRING.curve(false));
+        spring.addUpdateListener(a -> {
+            float now = from + (to - from) * (float) a.getAnimatedValue();
+            mRestating = true;
+            try {
+                if (slider != null)
+                    slider.setValue(onSliderSteps(slider, now));
+                else if (legend != null)
+                    legend.setValue(now);
+            } finally {
+                mRestating = false;
+            }
+        });
+        spring.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                mRestating = true;
+                try {
+                    if (slider != null) slider.setValue(to);
+                    else if (legend != null) legend.setValue(to);
+                } finally {
+                    mRestating = false;
+                }
+            }
+        });
+        if (slider != null) slider.setValue(onSliderSteps(slider, from));
+        spring.start();
+    }
+
+    /** {@code value} clamped to {@code slider}'s range and put on its steps, as it accepts. */
+    static float onSliderSteps(@NonNull Slider slider, float value) {
+        float lo = slider.getValueFrom();
+        float hi = slider.getValueTo();
+        float clamped = Math.max(lo, Math.min(hi, value));
+        float step = slider.getStepSize();
+        if (step > 0f)
+            clamped = Math.max(lo, Math.min(hi, lo + Math.round((clamped - lo) / step) * step));
+        return clamped;
     }
 
     /** The small dot after a label: where the row's value comes from ({@link #markDot}). */

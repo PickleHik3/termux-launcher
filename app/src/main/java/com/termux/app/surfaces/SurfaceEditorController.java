@@ -572,6 +572,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static final int FRAME_GAP_DP = EditorFramePose.GAP_DP;
     /** The selected surface's ring and every surface's quiet outline, on screen. */
     private static final int RING_DP = 2;
+    /** The Appearance card's ring around the whole frame: outset and radius (SPEC 1). */
+    private static final int FRAME_RING_OUTSET_DP = 4;
+    private static final int FRAME_RING_RADIUS_DP = 28;
     private static final int QUIET_DP = 1;
     /** The quiet outline's share of colorOutline. */
     private static final float QUIET_ALPHA = 0.4f;
@@ -935,6 +938,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int pageId = places == null ? -1 : places.shownPageId(place);
         if (screen == mScreen && (pageId < 0 || pageId == mScopePageId))
             return;
+        if (animate)
+            fadeRingAcross();
         mScreen = screen;
         if (pageId >= 0 && pageId != mScopePageId) {
             mScopePageId = pageId;
@@ -953,6 +958,44 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             restateCard();
         positionTargets();
     }
+
+    /** The ring is fading across a page change: it jumps to its new target, never flies. */
+    private boolean mRingFading;
+
+    /**
+     * Rule c: the ring fades out (RING_FADE_OUT) as the page moves, the card swaps by rule a
+     * meanwhile, and the ring fades back in on its new target (RING_FADE_IN) once the page has
+     * settled (the page spring's settle).
+     */
+    private void fadeRingAcross() {
+        View outline = mHost.findView(R.id.surface_editor_selection_outline);
+        if (outline == null)
+            return;
+        boolean reduced = com.termux.app.ReducedMotion.isEnabled(mHost.context());
+        mRingFading = true;
+        android.animation.ObjectAnimator out = android.animation.ObjectAnimator.ofFloat(outline,
+            View.ALPHA, outline.getAlpha(), 0f);
+        out.setDuration(EditorMotion.Use.RING_FADE_OUT.durationMs(reduced));
+        out.setInterpolator(EditorMotion.Use.RING_FADE_OUT.curve(reduced));
+        android.animation.ObjectAnimator in = android.animation.ObjectAnimator.ofFloat(outline,
+            View.ALPHA, 0f, 1f);
+        in.setStartDelay(Math.max(0L, PAGE_SETTLE_MS
+            - EditorMotion.Use.RING_FADE_OUT.durationMs(reduced)));
+        in.setDuration(EditorMotion.Use.RING_FADE_IN.durationMs(reduced));
+        in.setInterpolator(EditorMotion.Use.RING_FADE_IN.curve(reduced));
+        android.animation.AnimatorSet across = new android.animation.AnimatorSet();
+        across.playSequentially(out, in);
+        across.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                mRingFading = false;
+                outline.setAlpha(1f);
+            }
+        });
+        across.start();
+    }
+
+    /** The page spring's settle (spec 6: omega 18, critically damped): the ring comes back then. */
+    static final long PAGE_SETTLE_MS = EditorMotion.settle(1.0, 18.0);
 
     /**
      * The orientation chip names the orientation being edited, which is the phone's: the other
@@ -1223,7 +1266,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private final class SheetListener implements EditorCardSheet.Listener {
         @Override public void onReset() {
+            EditorCardSheet sheet = mSheet;
+            EditorCardSheet.ResetMotion motion = sheet == null ? null
+                : sheet.beginReset(sheet.shownRows());
             resetCard();
+            if (sheet != null && motion != null)
+                sheet.endReset(motion, EditorCardSheet.RESET_STAGGER_MS);
         }
 
         @Override public void onSheetMoved(int detent, float topPx) {
@@ -4285,30 +4333,34 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         float fromWidth = outline.getWidth() * outline.getScaleX();
         float fromHeight = outline.getHeight() * outline.getScaleY();
         EditorCard card = mOpen ? mCard : null;
-        int[] rect = card == null || card == EditorCard.APPEARANCE ? null
+        float scale = mTargetScale > 0f ? mTargetScale : 1f;
+        // The Appearance card rings the whole frame, its outline standing 4dp out (SPEC 1).
+        int frameOut = Math.round(dp(FRAME_RING_OUTSET_DP) / scale);
+        int[] rect = card == null ? null : card == EditorCard.APPEARANCE
+            ? new int[] {-frameOut, -frameOut, overlay.getWidth() + frameOut,
+                overlay.getHeight() + frameOut}
             : targetRect(card, overlay);
         if (rect == null) {
             EditorViews.setVisible(outline, false);
             return;
         }
-        float scale = mTargetScale > 0f ? mTargetScale : 1f;
         int stroke = Math.max(1, Math.round(dp(RING_DP) / scale));
-        int grow = isScreenCard(card) ? -stroke : stroke;
+        int grow = card == EditorCard.APPEARANCE ? 0 : isScreenCard(card) ? -stroke : stroke;
         int[] grown = {rect[0] - grow, rect[1] - grow, rect[2] + grow, rect[3] + grow};
         placeInOverlay(outline, overlay, grown);
         GradientDrawable ring = new GradientDrawable();
         ring.setColor(0);
         ring.setStroke(stroke, mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary));
-        ring.setCornerRadius(isScreenCard(card) ? 0f
-            : Math.max(0f, outlineRadiusPx(card) + grow));
+        ring.setCornerRadius(card == EditorCard.APPEARANCE ? dp(FRAME_RING_RADIUS_DP) / scale
+            : isScreenCard(card) ? 0f : Math.max(0f, outlineRadiusPx(card) + grow));
         outline.setBackground(ring);
         EditorViews.setVisible(outline, true);
         outline.animate().cancel();
         int width = Math.max(1, grown[2] - grown[0]);
         int height = Math.max(1, grown[3] - grown[1]);
         boolean reduced = com.termux.app.ReducedMotion.isEnabled(mHost.context());
-        if (!move || !wasOn || reduced || (fromLeft == grown[0] && fromTop == grown[1]
+        if (!move || !wasOn || reduced || mRingFading || (fromLeft == grown[0] && fromTop == grown[1]
                 && fromWidth == width && fromHeight == height)) {
             outline.setTranslationX(0f);
             outline.setTranslationY(0f);
