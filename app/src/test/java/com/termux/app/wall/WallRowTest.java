@@ -23,21 +23,6 @@ public class WallRowTest {
     }
 
     @Test
-    public void anEmptyWorkspaceStillTakesTheSwipeWhenItCanStart() {
-        assertTrue(WallRow.seamContinues(true, false));
-        assertTrue("an empty Workspace that can start", WallRow.seamContinues(false, true));
-        assertFalse("nothing after Home and nothing to start", WallRow.seamContinues(false, false));
-    }
-
-    @Test
-    public void onlyACommittedCrossingIntoAnEmptyWorkspaceStartsAShell() {
-        assertTrue(WallRow.seamStartsShell(true, PaneWallPage.TERMINAL));
-        assertFalse("sprang back to Home", WallRow.seamStartsShell(true, PaneWallPage.WIDGETS));
-        assertFalse("a Workspace with a window starts nothing",
-            WallRow.seamStartsShell(false, PaneWallPage.TERMINAL));
-    }
-
-    @Test
     public void theWorkspaceIsOnTheRowOnlyWhileTheCurrentSessionHasAWindow() {
         assertTrue(WallRow.hasWorkspace(true, 1));
         assertFalse("the last window closed: the Workspace is gone", WallRow.hasWorkspace(true, 0));

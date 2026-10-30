@@ -88,9 +88,10 @@ public final class WallRow {
 
     /**
      * The seam from Home: a plain swipe forward on Home page {@code homePage} leaves Home only
-     * from the last Home page, and only when the swipe has somewhere to go ({@code rowContinues},
-     * {@link #seamContinues}). Otherwise the swipe stays with Home, which pages or stops at its
-     * end. Backward never leaves Home: Home page 1 is the row's first page.
+     * from the last Home page, and only when the swipe has somewhere to go ({@code rowContinues}:
+     * a cell after Home, the empty Terminal page's included). Otherwise the swipe stays with Home,
+     * which pages or stops at its end. Backward never leaves Home: Home page 1 is the row's first
+     * page.
      */
     public static boolean swipeLeavesHome(int homePage, int homeCount, int direction,
                                           boolean rowContinues) {
@@ -125,28 +126,6 @@ public final class WallRow {
             if (slots.get(i).kind == WallPages.PageKind.HOME) seen += slots.get(i).pageIds.size();
         }
         return seen + Math.max(0, pageInRun);
-    }
-
-    /**
-     * Whether a forward swipe past the last Home page has somewhere to go: a page after Home on
-     * the row ({@code rowHasPageAfterHome}: a window, or the display window), or, with the
-     * Workspace empty, a Workspace the crossing can start ({@code canStartWorkspace}). An empty
-     * Workspace no longer stops the swipe: the crossing brings an empty window in under the finger
-     * and the shell comes with it ({@link #seamStartsShell}).
-     */
-    public static boolean seamContinues(boolean rowHasPageAfterHome, boolean canStartWorkspace) {
-        return rowHasPageAfterHome || canStartWorkspace;
-    }
-
-    /**
-     * Whether the wall committing to {@code committed} starts the Workspace's first shell: only
-     * when the seam is carrying a swipe into an empty Workspace ({@code crossingIntoEmpty}) and the
-     * release lands on it. A swipe that springs back to Home starts nothing, and nothing is started
-     * at touch-down, so an aborted swipe leaves no shell behind.
-     */
-    public static boolean seamStartsShell(boolean crossingIntoEmpty,
-                                          @NonNull PaneWallPage committed) {
-        return crossingIntoEmpty && committed == PaneWallPage.TERMINAL;
     }
 
     /**
