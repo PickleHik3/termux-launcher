@@ -126,8 +126,4 @@ public final class GlassControls {
         }
         return best >= 0 ? blurForGlass(best) : snapped(blur, grain)[0];
     }
-
-    private static int clampGlass(int glass) {
-        return Math.max(GLASS_MIN, Math.min(GLASS_MAX, glass));
-    }
 }
