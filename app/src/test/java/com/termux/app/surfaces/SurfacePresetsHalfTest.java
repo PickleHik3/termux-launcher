@@ -141,13 +141,13 @@ public class SurfacePresetsHalfTest {
         assertFalse(SurfacePresets.matches(preferences, solid, PaneWallPage.WIDGETS));
         // Base is the wall's, so the Look lands on the Workspace as the Terminal page's own
         // surface values: its dock shows Solid's number, Home's dock keeps Clear's.
-        assertEquals(solid.values.get(SurfaceProperty.OPACITY.baseKey),
+        assertEquals(solid.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
             preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
                 TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(clear.values.get(SurfaceProperty.OPACITY.baseKey),
+        assertEquals(clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
             preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
                 TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(clear.values.get(SurfaceProperty.OPACITY.baseKey),
+        assertEquals(clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
             preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
         // Today's callers read the Workspace's stop.
         assertTrue(SurfacePresets.matches(preferences, solid));

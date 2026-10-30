@@ -90,7 +90,7 @@ public class SurfacePresetsGlassTest {
         // Tint is the scheme's ink at the Material blend (35); no Look names the old family.
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME,
             preset("stock").values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
-        assertEquals(35, preset("stock").values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
+        assertEquals(35, preset("stock").values.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
 
         // Leaving Mist for Tint hands rim and motion back.
         SurfacePresets.apply(preferences, preset("frost"));
@@ -192,12 +192,13 @@ public class SurfacePresetsGlassTest {
     private static void assertRecipe(SurfacePresets.Preset preset, int blur, int opacity,
                                      int grain, int bend, int edgeWidth, int edgeLight,
                                      int dispersion, int clarity) {
-        assertEquals(preset.id, blur, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
-        assertEquals(preset.id, opacity, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
-        assertEquals(preset.id, grain, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+        assertEquals(preset.id, com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(blur),
+            preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
+        assertEquals(preset.id, opacity, preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)));
+        assertEquals(preset.id, grain, preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)));
         // Corners and margins are Layout's (2026-10-01).
         assertFalse(preset.id,
-            preset.values.containsKey(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
+            preset.values.containsKey(SurfacePresets.cellKey(null, SurfaceProperty.CORNER_RADIUS)));
         assertFalse(preset.id, preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
         assertFalse(preset.id, preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
         assertEquals(preset.id, bend, preset.values.get(TERMUX_APP.KEY_FANCIER_GLASS_BEND));
@@ -249,7 +250,8 @@ public class SurfacePresetsGlassTest {
         String old = "{\"format_version\":1,\"surface_base_blur\":21,\"surface_material\":\"glass\"}";
         Map<String, Object> look = SurfacePresets.deserialize(old);
         assertNotNull(look);
-        assertEquals(21, look.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(21),
+            look.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, look.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
         assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, look.get(TERMUX_APP.KEY_SURFACE_GLASS_RIM));
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC,

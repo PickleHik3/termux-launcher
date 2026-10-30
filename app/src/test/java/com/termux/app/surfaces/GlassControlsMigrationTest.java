@@ -232,24 +232,25 @@ public class GlassControlsMigrationTest {
         java.util.Map<String, Object> look = SurfacePresets.deserialize("{\"format_version\":4,"
             + "\"surface_glass_tint\":\"scheme\",\"surface_base_tint\":55,"
             + "\"surface_base_blur\":25,\"surface_base_grain\":8,\"status_bar_tint_strength\":20}");
-        assertEquals(0, look.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
-        assertEquals(0, look.get(TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH));
-        assertEquals(25, look.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
-        assertEquals(7, look.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+        assertEquals(0, look.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
+        assertEquals(0, look.get(SurfacePresets.cellKey(SurfaceSlot.STATUS, SurfaceProperty.TINT)));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(25),
+            look.get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
+        assertEquals(7, look.get(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)));
         java.util.Map<String, Object> five = SurfacePresets.deserialize(
             "{\"format_version\":5,\"surface_base_tint\":55,\"surface_base_grain\":8,"
                 + "\"surface_base_blur\":25,\"status_bar_tint_strength\":100}");
         assertEquals("a format 5 look has its Tint scaled", 19,
-            five.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
+            five.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
         assertEquals("cell by cell", GlassLook.TINT_LOOK_PERCENT,
-            five.get(TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH));
-        assertEquals("and nothing else", 8, five.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+            five.get(SurfacePresets.cellKey(SurfaceSlot.STATUS, SurfaceProperty.TINT)));
+        assertEquals("and nothing else", 8, five.get(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)));
         java.util.Map<String, Object> current = SurfacePresets.deserialize(
             "{\"format_version\":6,\"surface_base_tint\":55,\"surface_base_grain\":8,"
                 + "\"surface_base_blur\":25}");
         assertEquals("a format 6 look is read as it is", 55,
-            current.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
-        assertEquals(8, current.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+            current.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
+        assertEquals(8, current.get(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)));
     }
 
     // ------------------------------------------------------------ format 2: the stretched Tint
@@ -268,7 +269,7 @@ public class GlassControlsMigrationTest {
     public void formatOneAmountsAreScaledEverywhereTheyAreStored() throws Exception {
         java.util.LinkedHashMap<String, Object> oldTint = new java.util.LinkedHashMap<>(
             preset("stock").values);
-        oldTint.put(TERMUX_APP.KEY_SURFACE_BASE_TINT, 100);
+        oldTint.put(SurfacePresets.cellKey(null, SurfaceProperty.TINT), 100);
         SurfacePresets.apply(preferences, new SurfacePresets.Preset("stock", 0, oldTint));
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT, 40);
         preferences.setSurfaceCustomPreset("{\"format_version\":5,\"surface_base_tint\":100,"
@@ -524,7 +525,7 @@ public class GlassControlsMigrationTest {
         java.util.Map<String, Object> look = SurfacePresets.deserialize("{\"format_version\":6,"
             + "\"surface_glass_shade\":80,\"surface_base_opacity\":30}");
         assertFalse(look.containsKey(SurfacePresets.RETIRED_SHADE_KEY));
-        assertEquals(30, look.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertEquals(30, look.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)));
 
         store.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 2).commit();
         preferences.setSurfaceCustomPreset("{\"format_version\":6,\"surface_glass_shade\":80,"
