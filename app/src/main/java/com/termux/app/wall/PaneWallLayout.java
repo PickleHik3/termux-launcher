@@ -276,6 +276,11 @@ public final class PaneWallLayout extends ViewGroup {
     @NonNull private PaneWallPage mCurrent = PaneWallPage.TERMINAL;
     /** The binding: the page whose cell each kind's one view stands at. */
     private final Map<PaneWallPage, Integer> mBoundIds = new EnumMap<>(PaneWallPage.class);
+    /**
+     * The kinds whose view has nothing to show yet (the Terminal page with no window): the page
+     * their view is bound to shows its card still on top of it, not live (ADR 0016 section 6).
+     */
+    private final java.util.Set<PaneWallPage> mUnreadyKinds = java.util.EnumSet.noneOf(PaneWallPage.class);
     /** The card still of each page whose cell has needed one, by page id. */
     private final Map<Integer, PageCardView> mCards = new java.util.HashMap<>();
     /**
@@ -607,7 +612,23 @@ public final class PaneWallLayout extends ViewGroup {
         }
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
+        if (view != null && mUnreadyKinds.contains(page)) syncCards();
         applyPagePositions();
+    }
+
+    /**
+     * Whether {@code kind}'s view is ready to show its page (true unless said otherwise): the
+     * Terminal page's view with no window is not, and its cell shows its card still, on top of
+     * the view, until a window arrives and the card gives way.
+     */
+    public void setKindReady(@NonNull PaneWallPage kind, boolean ready) {
+        if (ready ? !mUnreadyKinds.remove(kind) : !mUnreadyKinds.add(kind)) return;
+        syncCards();
+        applyPagePositions();
+    }
+
+    private boolean isReady(@NonNull PaneWallPage kind) {
+        return !mUnreadyKinds.contains(kind);
     }
 
     /** Where the terminal page's panes stand, for the bottom border's glow ({@link PaneEdges}). */
@@ -687,7 +708,9 @@ public final class PaneWallLayout extends ViewGroup {
         List<PaneWallPage> kinds = new ArrayList<>(3);
         for (Cell cell : mCells) if (!kinds.contains(cell.kind)) kinds.add(cell.kind);
         mKinds = Collections.unmodifiableList(kinds);
-        if (mJumpFromId != NO_PAGE && indexOfCell(mJumpFromId) < 0) mJumpFromId = NO_PAGE;
+        // A far jump's stand-off is drawn against the list it was made on: a changed list mid-slide
+        // drops it, and the cells between may come into the rest of the slide.
+        clearJump();
         PaneWallPage was = mCurrent;
         boolean moved = false;
         if (indexOfCell(mCurrentId) < 0) {
@@ -863,7 +886,8 @@ public final class PaneWallLayout extends ViewGroup {
     /** Whether page {@code pageId}'s cell shows its kind's view, live, rather than a still. */
     public boolean isLive(int pageId) {
         PaneWallPage kind = kindOf(pageId);
-        return kind != null && boundPageId(kind) == pageId && mPageViews.get(kind) != null;
+        return kind != null && boundPageId(kind) == pageId && mPageViews.get(kind) != null
+            && isReady(kind);
     }
 
     /** The card still of page {@code pageId}, once its cell has needed one; else null. */
@@ -926,8 +950,9 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * A still for every cell whose kind's view is bound to another page, made the first time it
      * is needed, showing the page's picture when it has one; the stills and pictures of pages
-     * that left go with them. The bound cell of a kind
-     * whose view is not built yet shows nothing, as it always has.
+     * that left go with them. The bound cell of a kind whose view is not ready (the Terminal
+     * page with no window) shows its card too, on top of the view and without a picture. The
+     * bound cell of a kind whose view is not built yet shows nothing, as it always has.
      */
     private void syncCards() {
         java.util.Iterator<Map.Entry<Integer, PageCardView>> it = mCards.entrySet().iterator();
@@ -944,20 +969,35 @@ public final class PaneWallLayout extends ViewGroup {
         for (Cell cell : mCells) ids.add(cell.pageId);
         for (android.graphics.Bitmap dropped : mPictures.retain(ids)) releasePicture(dropped);
         for (Cell cell : mCells) {
+            boolean bound = boundPageId(cell.kind) == cell.pageId;
+            boolean unready = bound && !isReady(cell.kind);
             PageCardView card = mCards.get(cell.pageId);
             if (card != null) {
                 card.setName(cell.name);
-                card.setPicture(mPictures.get(cell.pageId));
+                card.setPicture(unready ? null : mPictures.get(cell.pageId));
+                if (unready) raiseAboveView(card, cell.kind);
                 continue;
             }
-            if (boundPageId(cell.kind) == cell.pageId) continue;
+            if (bound && !unready) continue;
             card = new PageCardView(getContext(), cell.pageId, cell.kind, cell.name);
-            card.setPicture(mPictures.get(cell.pageId));
+            card.setPicture(unready ? null : mPictures.get(cell.pageId));
             card.setVisibility(GONE);
             mCards.put(cell.pageId, card);
-            // Under the kinds' views: a card is only ever seen beside them.
+            // Under the kinds' views: a card is only ever seen beside them, but for the card of
+            // a view not ready, which stands over that view at its cell.
             addView(card, 0);
+            if (unready) raiseAboveView(card, cell.kind);
         }
+    }
+
+    /** Puts {@code card} above {@code kind}'s view in the drawing, when it is under it. */
+    private void raiseAboveView(@NonNull PageCardView card, @NonNull PaneWallPage kind) {
+        View view = mPageViews.get(kind);
+        if (view == null || indexOfChild(view) < 0 || indexOfChild(card) > indexOfChild(view)) {
+            return;
+        }
+        removeView(card);
+        addView(card, indexOfChild(view) + 1);
     }
 
     /**
@@ -965,12 +1005,27 @@ public final class PaneWallLayout extends ViewGroup {
      * cells, but during a far jump only the arriving cell and the one left are in the slide.
      */
     private int cellPosition(int index, int current) {
-        if (mJumpFromId != NO_PAGE) {
+        int jumpFrom = jumpFromId();
+        if (jumpFrom != NO_PAGE) {
             if (index == current) return 0;
-            if (mCells.get(index).pageId == mJumpFromId) return mJumpSide;
+            if (mCells.get(index).pageId == jumpFrom) return mJumpSide;
             return HIDDEN;
         }
         return index - current;
+    }
+
+    /**
+     * The page a far jump left, while its slide is under way: the stand-off belongs to that slide
+     * alone, so at rest (no slide, the wall on its rest) it is {@link #NO_PAGE} whatever was left
+     * behind, and every cell stands at its distance.
+     */
+    private int jumpFromId() {
+        return mSliding || mOffsetPx != 0f ? mJumpFromId : NO_PAGE;
+    }
+
+    /** Drops a far jump's stand-off: the slide it belonged to is over or no longer its own. */
+    private void clearJump() {
+        mJumpFromId = NO_PAGE;
     }
 
     @NonNull
@@ -1256,6 +1311,8 @@ public final class PaneWallLayout extends ViewGroup {
         if (side == 0 || getWidth() <= 0) return;
         stopSlide();
         stopNudge();
+        // The far jump's slide this stops is over: the page now stands off on its own.
+        clearJump();
         mOffsetPx = Integer.signum(side) * (float) getWidth();
         mCrossSlide = true;
         applyPagePositions();
@@ -1292,7 +1349,7 @@ public final class PaneWallLayout extends ViewGroup {
             stopSlide();
             stopNudge();
             if (mJumpFromId != NO_PAGE) {
-                mJumpFromId = NO_PAGE;
+                clearJump();
                 applyPagePositions();
             }
             if (mListener != null) mListener.onWallDragBegin(mCurrent);
@@ -2974,7 +3031,7 @@ public final class PaneWallLayout extends ViewGroup {
             stopSlide();
             mOffsetPx = 0f;
             mCrossSlide = false;
-            mJumpFromId = NO_PAGE;
+            clearJump();
             applyPagePositions();
             // A page still springing up keeps its plank until it lands (finishSink), so its
             // press lies down with the spring rather than snapping flat here.
@@ -3054,7 +3111,7 @@ public final class PaneWallLayout extends ViewGroup {
         // Every other cell shows its card still.
         for (PageCardView card : mCards.values()) {
             int at = indexOfCell(card.pageId());
-            if (at < 0 || boundPageId(card.kind()) == card.pageId()) {
+            if (at < 0 || (boundPageId(card.kind()) == card.pageId() && isReady(card.kind()))) {
                 unpose(card);
                 card.setVisibility(GONE);
                 continue;
@@ -3492,6 +3549,8 @@ public final class PaneWallLayout extends ViewGroup {
         mDrawnDockTop = Float.NaN;
         mSliding = false;
         stopSlide();
+        // The slide stopped here never settles: its stand-off goes with it.
+        clearJump();
         stopNudge();
         // A keyboard the finger or its settle was carrying lands where it was going.
         settleKeyboardRevealNow();

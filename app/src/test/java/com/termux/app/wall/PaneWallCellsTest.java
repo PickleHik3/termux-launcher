@@ -336,4 +336,150 @@ public class PaneWallCellsTest {
         assertEquals(4, wall.currentPageId());
         assertEquals(0f, wall.offsetPx(), 0.5f);
     }
+
+    // ---- the far jump's stand-off never outlives its slide (ADR 0016 §4, #184) -------------
+
+    /** [Home 1][Terminal][Display]: on Display, then the Home key's far jump, mid-slide. */
+    private void farJumpHomeFromDisplayMidSlide() {
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertTrue(wall.goToCell(3, false));
+        wall.setReducedMotion(false);
+        assertTrue(wall.goToCell(1, true));
+        assertTrue(wall.isMoving());
+    }
+
+    /** At rest on Home: the Terminal cell beside it, Display one further, every cell at its distance. */
+    private void assertRestingAtDistances() {
+        assertEquals(1, on());
+        assertEquals(0f, wall.offsetPx(), 0.5f);
+        assertFalse(wall.isMoving());
+        assertEquals(0f, widgets.getTranslationX(), 0.5f);
+        assertEquals(WIDTH, terminal.getTranslationX(), 0.5f);
+        assertEquals(2f * WIDTH, display.getTranslationX(), 0.5f);
+    }
+
+    @Test public void aStandOffLeftBehindAtRestIsIgnored() throws Exception {
+        // The emulator's state: on Home after the jump from Display, the stand-off still set.
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        wall.goToCell(3, false);
+        wall.goToCell(1, false);
+        java.lang.reflect.Field from = PaneWallLayout.class.getDeclaredField("mJumpFromId");
+        from.setAccessible(true);
+        from.setInt(wall, 3);
+        java.lang.reflect.Field side = PaneWallLayout.class.getDeclaredField("mJumpSide");
+        side.setAccessible(true);
+        side.setInt(wall, 1);
+        java.lang.reflect.Method apply = PaneWallLayout.class.getDeclaredMethod("applyPagePositions");
+        apply.setAccessible(true);
+        apply.invoke(wall);
+        assertRestingAtDistances();
+        swipe(-600f);
+        assertEquals(2, on());
+    }
+
+    @Test public void aFarJumpStoodOffBeforeItsSettleDropsItsStandOff() {
+        farJumpHomeFromDisplayMidSlide();
+        wall.standOff(-1);
+        // Off its rest with no slide of its own: the cells stand at their distances.
+        assertEquals(wall.offsetPx() + WIDTH, terminal.getTranslationX(), 0.5f);
+        assertTrue(wall.goToCell(1, true));
+        idle();
+        assertRestingAtDistances();
+        assertTrue(wall.goBy(1, false));
+        assertEquals(2, on());
+    }
+
+    @Test public void aFarJumpCaughtByAFingerAndCancelledRestsAtTheDistances() {
+        farJumpHomeFromDisplayMidSlide();
+        wall.beginPlainDrag();
+        wall.cancelDrag();
+        idle();
+        assertRestingAtDistances();
+        swipe(-600f);
+        assertEquals(2, on());
+    }
+
+    @Test public void aChangedListMidFarJumpDropsTheStandOff() {
+        farJumpHomeFromDisplayMidSlide();
+        host.pages = host.pages.add(WallPages.PageKind.DISPLAY, 3, null).pages;
+        controller.refreshPages();
+        assertEquals(Arrays.asList(1, 2, 3, 4), cellIds());
+        // The cells between come into the rest of the slide.
+        assertEquals(wall.offsetPx() + WIDTH, terminal.getTranslationX(), 0.5f);
+        idle();
+        assertRestingAtDistances();
+        swipe(-600f);
+        assertEquals(2, on());
+    }
+
+    @Test public void aCompletedAnimatedFarJumpRestsAtTheDistances() {
+        farJumpHomeFromDisplayMidSlide();
+        idle();
+        assertRestingAtDistances();
+    }
+
+    @Test public void aReducedMotionFarJumpRestsAtTheDistances() {
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        wall.setReducedMotion(true);
+        assertTrue(wall.goToCell(3, true));
+        assertTrue(wall.goToCell(1, true));
+        assertRestingAtDistances();
+    }
+
+    // ---- the empty Terminal page shows its card (ADR 0016 section 6, #186) -----------------
+
+    @Test public void theEmptyTerminalPageShowsItsCardBeforeAndDuringTheSlideFromHome() {
+        host.hasWindow = false;
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        PageCardView card = wall.cardOf(2);
+        assertNotNull(card);
+        assertFalse(wall.isLive(2));
+        // On top of the terminal host, which has nothing to draw.
+        assertTrue(wall.indexOfChild(card) > wall.indexOfChild(terminal));
+        assertEquals(WIDTH, card.getTranslationX(), 0.5f);
+        wall.setReducedMotion(false);
+        wall.beginPlainDrag();
+        wall.dragTo(-600f);
+        assertEquals(View.VISIBLE, card.getVisibility());
+        assertEquals(WIDTH - 600f, card.getTranslationX(), 0.5f);
+        assertEquals(terminal.getTranslationX(), card.getTranslationX(), 0.5f);
+        wall.endDrag(-3000f);
+        idle();
+        assertEquals(2, on());
+        // No shell could start here: the page keeps its card.
+        assertFalse(wall.isLive(2));
+        assertEquals(View.VISIBLE, card.getVisibility());
+        assertEquals(0f, card.getTranslationX(), 0.5f);
+    }
+
+    @Test public void theTerminalCardGivesWayWhenTheWindowArrives() {
+        host.hasWindow = false;
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertTrue(wall.goToCell(2, false));
+        PageCardView card = wall.cardOf(2);
+        assertNotNull(card);
+        assertEquals(View.VISIBLE, card.getVisibility());
+        host.hasWindow = true;
+        controller.refreshPages();
+        assertTrue(wall.isLive(2));
+        assertEquals(View.GONE, card.getVisibility());
+    }
+
+    @Test public void landingOnTheEmptyTerminalPageStartsOneShellAndTheCardGivesWay() {
+        host.hasWindow = false;
+        host.canStart = true;
+        start(homeTerminalDisplay());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertNotNull(wall.cardOf(2));
+        swipe(-600f);
+        assertEquals(2, on());
+        assertEquals(1, host.shellsStarted);
+        assertTrue(wall.isLive(2));
+        assertEquals(View.GONE, wall.cardOf(2).getVisibility());
+    }
 }

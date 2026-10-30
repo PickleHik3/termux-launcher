@@ -280,6 +280,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         syncHomeCell();
         int before = mWall.currentPageId();
         mWall.setCells(cells(hasWindow));
+        // The empty Terminal page shows its card, not a blank view, until a window arrives.
+        mWall.setKindReady(PaneWallPage.TERMINAL, hasWindow);
         int after = mWall.currentPageId();
         // The bindings follow the list: a bound page that went hands its view to another.
         int home = mWall.boundPageId(PaneWallPage.WIDGETS);
