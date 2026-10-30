@@ -565,6 +565,10 @@ public class EditorCardSheetFitTest {
         }
 
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {
+            // Rim is the card's own word row, built as the editor builds it.
+            if (row == Row.RIM)
+                return com.termux.app.surfaces.rows.SegmentRow.words(mContext, row.iconRes,
+                    mContext.getString(row.labelRes), choices(row), 0, widthPx, index -> {}).root;
             return mDock.view(row, widthPx);
         }
 
@@ -623,6 +627,8 @@ public class EditorCardSheetFitTest {
                     R.string.appearance_form_floating, R.string.appearance_form_split);
                 case THEME: return strings(R.string.appearance_theme_system,
                     R.string.appearance_theme_light, R.string.appearance_theme_dark);
+                case RIM: return strings(R.string.appearance_rim_none,
+                    R.string.appearance_rim_hairline, R.string.appearance_rim_bright);
                 case LOOK: return strings(R.string.termux_surface_preset_minimal,
                     R.string.termux_surface_preset_frost, R.string.termux_surface_preset_stock,
                     R.string.termux_surface_preset_solid, R.string.termux_surface_preset_custom);

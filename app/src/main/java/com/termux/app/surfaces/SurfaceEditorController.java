@@ -2748,12 +2748,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row == Row.RIM) {
                 // Rim's three words beside its name, as the cards' own segment rows stand.
                 Context context = mHost.context();
-                java.util.List<com.termux.app.surfaces.rows.SegmentRow.Segment> words =
-                    new java.util.ArrayList<>();
-                for (String choice : choices(row))
-                    words.add(com.termux.app.surfaces.rows.SegmentRow.Segment.word(choice));
-                mRimRow = com.termux.app.surfaces.rows.SegmentRow.build(context, row.iconRes,
-                    context.getString(row.labelRes), words, value(row), widthPx,
+                mRimRow = com.termux.app.surfaces.rows.SegmentRow.words(context, row.iconRes,
+                    context.getString(row.labelRes), choices(row), value(row), widthPx,
                     index -> onValue(Row.RIM, index, false));
                 return mRimRow.root;
             }

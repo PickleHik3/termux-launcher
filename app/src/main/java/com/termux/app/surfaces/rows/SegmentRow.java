@@ -222,6 +222,17 @@ public final class SegmentRow {
         return row;
     }
 
+    /** A row of word segments ({@link Segment#word}), as {@link #build} lays any row. */
+    @NonNull
+    public static SegmentRow words(@NonNull Context context, @DrawableRes int glyph,
+                                   @NonNull CharSequence title, @NonNull CharSequence[] words,
+                                   int selected, int widthPx, @NonNull OnPick onPick) {
+        List<Segment> segments = new ArrayList<>(words.length);
+        for (CharSequence word : words)
+            segments.add(Segment.word(word));
+        return build(context, glyph, title, segments, selected, widthPx, onPick);
+    }
+
     /** Shows {@code index} chosen without reporting it; out of range leaves the row as it is. */
     public void select(int index) {
         if (index < 0 || index >= buttons.size())
