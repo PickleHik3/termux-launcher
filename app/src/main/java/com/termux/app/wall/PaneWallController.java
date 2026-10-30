@@ -460,9 +460,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * Go to page {@code pageId}'s cell. Its kind's view is bound to it first, so the page arrives
-     * live: the Home frame turned to that page, the display view on that Display page. A Home
-     * page of the run the wall is on is shown by the frame where it stands.
+     * Go to page {@code pageId}'s cell. The slide shows the page as it stands, live or as its
+     * still (picture, else card); the landing binds its kind's view to it ({@link
+     * #onWallCellSettled}), so a slide caught and rested elsewhere leaves every binding as it was
+     * (ADR 0016). A Home page of the run the wall is on is shown by the frame where it stands.
      */
     private boolean goToPage(int pageId, boolean animate) {
         PaneWallPage kind = mWall.kindOf(pageId);
@@ -475,7 +476,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mWall.follow(pageId);
             return true;
         }
-        bindCell(pageId);
         return mWall.goToCell(pageId, animate);
     }
 
@@ -889,8 +889,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * neighbouring cell whatever its kind; {@code home} the home press's page; {@code widgets}
      * the home page when it is a Home page, else the nearest; {@code display} the bound Display
      * page, else the nearest; {@code terminal}/{@code workspace} the Terminal page (ADR 0016
-     * section 5). The target's view is bound before the slide, so it arrives live; a far one
-     * arrives one width from a stand-off (W3). False when the wall has no such page.
+     * section 5). The target arrives as it stands, live or as its still, and its view is bound
+     * when the wall lands; a far one arrives one width from a stand-off (W3). False when the wall
+     * has no such page.
      */
     public boolean goTo(@Nullable String name) {
         WallPages pages = mKnownPages;
@@ -1186,23 +1187,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * A drag now heads {@code steps} cells away: the view of the kind it heads for is bound to
-     * that cell before it comes on screen, so the page arrives live rather than as its card. The
-     * view under the finger is never taken from its cell.
+     * A drag now heads {@code steps} cells away. Nothing is bound here: the cell it heads for
+     * shows its page as it stands, live or as its still, and the landing binds (ADR 0016; ADR
+     * 0015 asks nothing live under the finger), so a drag that springs back changes no binding.
      */
     @Override
     public void onWallDragHeading(@NonNull PaneWallPage page, int steps) {
-        // A step to the next window stays inside the Workspace.
-        if (page == PaneWallPage.TERMINAL && hasInnerPage(PaneWallPage.TERMINAL, steps)) return;
-        int target = mWall.neighbourId(steps);
-        PaneWallPage kind = mWall.kindOf(target);
-        // The view the finger holds is not taken from it: a Display page beside another shows
-        // its still until the landing binds it.
-        if (kind == null || kind == page) return;
-        // The view of the kind the drag heads for goes with it to the cell beside, so the page
-        // arrives live: the Home frame turned to the Home page next to the seam, the display
-        // view on that Display page.
-        if (kind == PaneWallPage.WIDGETS || kind == PaneWallPage.DISPLAY) bindCell(target);
     }
 
     @Override
