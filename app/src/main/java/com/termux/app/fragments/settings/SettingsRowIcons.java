@@ -159,6 +159,7 @@ public final class SettingsRowIcons {
             "app_launcher_sub_lock");
         key(R.drawable.ic_ms_start, "app_launcher_start_in");
         key(R.drawable.ic_ms_home, "use_as");
+        key(R.drawable.ic_ms_tour, "app_launcher_setup_rerun", "app_launcher_setup_cards");
 
         // Dock & drawer, app search
         key(R.drawable.ic_ms_push_pin, "app_launcher_default_buttons", "essential_notification_rules_manage");
@@ -226,6 +227,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_auto_awesome_mosaic, "pane_dwindle_default");
         key(R.drawable.ic_ms_center_focus_strong, "pane_focus_grows");
         key(R.drawable.ic_ms_swipe, "terminal_body_swipe");
+        key(R.drawable.ic_ms_swipe, "status_swipe_two_fingers");
 
         // Terminal fonts
         key(R.drawable.ic_ms_emoji_symbols, "nerd_icons");

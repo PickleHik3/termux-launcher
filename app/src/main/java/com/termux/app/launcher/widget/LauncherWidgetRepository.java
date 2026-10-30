@@ -71,7 +71,62 @@ public final class LauncherWidgetRepository {
     private static final String PREFS = "launcher_widget_repository";
     private static final String KEY_STATE = "state";
 
+    /**
+     * Who owns the Home pages: the ordered Home page ids, and the changes to them. The repository
+     * keys what stands on a page by that id (an index is only its position in this list) and asks
+     * the owner to grow, remove or reorder the pages when its own edits do so. The wall's page
+     * store is the owner in the app; without one the repository keeps a list of its own.
+     */
+    public interface HomePageOwner {
+        /** The Home page ids in order; never empty. */
+        @NonNull List<Integer> homePageIds();
+        /** Appends {@code count} Home pages after the last one; answers their ids in order. */
+        @NonNull List<Integer> addHomePages(int count);
+        /** Removes these Home pages (the owner never removes the last one). */
+        void removeHomePages(@NonNull Collection<Integer> ids);
+        /** Puts the same Home pages in this order. */
+        void reorderHomePages(@NonNull List<Integer> order);
+    }
+
+    /** The owner a repository built without one keeps for itself. */
+    private static final class SelfOwner implements HomePageOwner {
+        private List<Integer> list = new ArrayList<>(Collections.singletonList(1));
+        private int next = 2;
+        @NonNull @Override public List<Integer> homePageIds() { return new ArrayList<>(list); }
+        @NonNull @Override public List<Integer> addHomePages(int count) {
+            ArrayList<Integer> added = new ArrayList<>();
+            for (int i = 0; i < count; i++) added.add(next++);
+            list.addAll(added);
+            return added;
+        }
+        @Override public void removeHomePages(@NonNull Collection<Integer> ids) {
+            ArrayList<Integer> kept = new ArrayList<>(list);
+            kept.removeAll(ids);
+            if (!kept.isEmpty()) list = kept;
+        }
+        @Override public void reorderHomePages(@NonNull List<Integer> order) {
+            if (order.size() == list.size() && list.containsAll(order)) list = new ArrayList<>(order);
+        }
+        void adopt(@NonNull List<Integer> stored) {
+            list = new ArrayList<>(stored);
+            for (Integer id : stored) next = Math.max(next, id + 1);
+        }
+    }
+
     private final Storage storage;
+    @NonNull private final HomePageOwner owner;
+    @Nullable private final SelfOwner selfOwner;
+    /** The Home page ids in order as this repository last saw them: index in, id out. */
+    @NonNull private List<Integer> ids = new ArrayList<>();
+    /** Records of pages the owner no longer lists (a removal that may be undone); page holds the id. */
+    @NonNull private LinkedHashMap<Integer, LauncherWidgetRecord> orphans = new LinkedHashMap<>();
+    /** Set while this repository is itself calling the owner, so the owner's echo is ignored. */
+    private boolean ownerBusy;
+    /** The ids the next commit leaves the pages with, when it removes or reorders them. */
+    @Nullable private List<Integer> plannedIds;
+    /** Ids the owner grew for the commit in flight, taken back if the write fails. */
+    @NonNull private List<Integer> preGrown = new ArrayList<>();
+    private boolean legacyWriteBack;
     private LinkedHashMap<Integer, LauncherWidgetRecord> records = new LinkedHashMap<>();
     @Nullable private WidgetAddTransaction pending;
     @NonNull private WidgetGridDefinition grid = WidgetGridDefinition.DEFAULT;
@@ -92,8 +147,23 @@ public final class LauncherWidgetRepository {
     private boolean readOnlyUnknownVersion;
 
     public LauncherWidgetRepository(@NonNull Storage storage) {
+        this(storage, null);
+    }
+
+    public LauncherWidgetRepository(@NonNull Storage storage, @Nullable HomePageOwner homeOwner) {
         this.storage = storage;
+        this.selfOwner = homeOwner == null ? new SelfOwner() : null;
+        this.owner = homeOwner != null ? homeOwner : selfOwner;
+        ids = new ArrayList<>(owner.homePageIds());
+        if (ids.isEmpty()) ids = new ArrayList<>(owner.addHomePages(1));
+        pageCount = ids.size();
         load(storage.read());
+        if (legacyWriteBack && !migrationWritePending && !readOnlyUnknownVersion) {
+            // An index-keyed wall is written back keyed by id at once: the owner may reorder the
+            // pages before the next edit, and a position would then name the wrong page.
+            storage.write(encode(records, orphans, ids, pending, grid, freshPages, orientation,
+                layouts, rowSnapshot, revision));
+        }
         // An empty grid carries no placements worth preserving: adopt the current default
         // dimensions so a stale persisted grid (e.g. the old 6x4) cannot outlive its widgets.
         if (records.isEmpty() && pending == null
@@ -103,14 +173,126 @@ public final class LauncherWidgetRepository {
     }
 
     @NonNull public static LauncherWidgetRepository create(@NonNull Context context) {
+        return create(context, null);
+    }
+
+    @NonNull public static LauncherWidgetRepository create(@NonNull Context context,
+                                                           @Nullable HomePageOwner homeOwner) {
         SharedPreferences preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         return new LauncherWidgetRepository(new Storage() {
             @Override public String read() { return preferences.getString(KEY_STATE, null); }
             @Override public boolean write(@NonNull String value) {
                 return preferences.edit().putString(KEY_STATE, value).commit();
             }
-        });
+        }, homeOwner);
     }
+
+    /**
+     * The owner's Home pages changed (an Edit pages add, move or removal, an undo): lines the
+     * index view up with the new list by id. What stood on a page that is no longer listed is
+     * kept aside, unseen, until {@link #pageRemoved} says it is gone for good or the page comes
+     * back. Nothing is written; the next commit carries the new order.
+     */
+    public synchronized void onHomePagesChanged() {
+        if (ownerBusy) return;
+        List<Integer> now = owner.homePageIds();
+        if (now.isEmpty() || now.equals(ids)) return;
+        LinkedHashMap<Integer, LauncherWidgetRecord> live = new LinkedHashMap<>();
+        LinkedHashMap<Integer, LauncherWidgetRecord> aside = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : records.values()) {
+            int id = record.page < ids.size() ? ids.get(record.page) : -1;
+            int at = now.indexOf(id);
+            if (at >= 0) live.put(record.appWidgetId, record.withPage(at));
+            else aside.put(record.appWidgetId, record.withPage(Math.max(0, id)));
+        }
+        for (LauncherWidgetRecord record : orphans.values()) {
+            int at = now.indexOf(record.page);
+            if (at >= 0) live.put(record.appWidgetId, record.withPage(at));
+            else aside.put(record.appWidgetId, record);
+        }
+        if (pending != null) {
+            int id = pending.page < ids.size() ? ids.get(pending.page) : -1;
+            int at = now.indexOf(id);
+            pending = at < 0 ? null : pending.withPage(at);
+        }
+        LinkedHashSet<Integer> nextFresh = new LinkedHashSet<>();
+        for (Integer page : freshPages) {
+            int at = page < ids.size() ? now.indexOf(ids.get(page)) : -1;
+            if (at >= 0) nextFresh.add(at);
+        }
+        freshPages = nextFresh;
+        records = live;
+        orphans = aside;
+        ids = new ArrayList<>(now);
+        pageCount = ids.size();
+    }
+
+    /**
+     * The owner dropped Home page {@code id} for good: what stood on it, here and in the shelved
+     * layouts, goes with it. One commit when there was anything.
+     */
+    public synchronized void pageRemoved(int id) {
+        if (ownerBusy || migrationWritePending || readOnlyUnknownVersion) return;
+        boolean changed = false;
+        LinkedHashMap<Integer, LauncherWidgetRecord> keptAside = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : orphans.values()) {
+            if (record.page == id) changed = true; else keptAside.put(record.appWidgetId, record);
+        }
+        LinkedHashMap<String, OrientationLayout> shelf = new LinkedHashMap<>();
+        for (Map.Entry<String, OrientationLayout> entry : layouts.entrySet()) {
+            OrientationLayout cut = withoutPage(entry.getValue(), id);
+            changed |= cut != entry.getValue();
+            shelf.put(entry.getKey(), cut);
+        }
+        RowSnapshot cutSnapshot = rowSnapshot;
+        if (rowSnapshot != null) {
+            OrientationLayout before = withoutPage(rowSnapshot.before, id);
+            OrientationLayout after = withoutPage(rowSnapshot.after, id);
+            if (before != rowSnapshot.before || after != rowSnapshot.after) {
+                cutSnapshot = new RowSnapshot(rowSnapshot.orientation, rowSnapshot.rows, before, after);
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        LinkedHashMap<Integer, LauncherWidgetRecord> was = orphans;
+        orphans = keptAside;
+        if (!commitValidated(records, pending, grid, pageCount, freshPages, orientation, shelf,
+            cutSnapshot, revision + 1)) {
+            orphans = was;
+        }
+    }
+
+    /** The layout without its cells on page {@code id}; the same object when it had none. */
+    @NonNull
+    private static OrientationLayout withoutPage(@NonNull OrientationLayout layout, int id) {
+        boolean any = false;
+        for (Placement placed : layout.cells.values()) any |= placed.page == id;
+        if (!any && (layout.pageIds == null || !layout.pageIds.contains(id))
+            && !layout.freshPages.contains(id)) return layout;
+        LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
+        for (Map.Entry<Integer, Placement> cell : layout.cells.entrySet()) {
+            if (cell.getValue().page != id) cells.put(cell.getKey(), cell.getValue());
+        }
+        List<Integer> pageIds = null;
+        if (layout.pageIds != null) {
+            pageIds = new ArrayList<>(layout.pageIds);
+            pageIds.remove(Integer.valueOf(id));
+        }
+        LinkedHashSet<Integer> fresh = new LinkedHashSet<>(layout.freshPages);
+        fresh.remove(id);
+        return new OrientationLayout(layout.grid, pageIds, fresh, cells);
+    }
+
+    /** The Home page ids in the order the pager shows them. */
+    @NonNull public synchronized List<Integer> pageIds() { return new ArrayList<>(ids); }
+
+    /** The id of the page at {@code index}, or -1 when there is none. */
+    public synchronized int pageIdAt(int index) {
+        return index >= 0 && index < ids.size() ? ids.get(index) : -1;
+    }
+
+    /** Where page {@code id} stands in the pager, or -1 when it is not a Home page now. */
+    public synchronized int indexOfPage(int id) { return ids.indexOf(id); }
 
     @NonNull public synchronized List<LauncherWidgetRecord> records() {
         return Collections.unmodifiableList(new ArrayList<>(records.values()));
@@ -126,6 +308,7 @@ public final class LauncherWidgetRepository {
     public synchronized int allocateBuiltinId() {
         int lowest = 0;
         for (int id : records.keySet()) lowest = Math.min(lowest, id);
+        for (int id : orphans.keySet()) lowest = Math.min(lowest, id);
         for (OrientationLayout layout : layouts.values()) {
             for (int id : layout.cells.keySet()) lowest = Math.min(lowest, id);
         }
@@ -402,11 +585,13 @@ public final class LauncherWidgetRepository {
         int[] pages = { pageCount };
         LinkedHashMap<Integer, LauncherWidgetRecord> relaid = reflow(records, next, pages);
         if (relaid == null) return null;
+        List<Integer> afterIds = idsGrownTo(pages[0]);
         RowSnapshot previous = rowSnapshot != null && rowSnapshot.isUntouched(this)
             ? rowSnapshot : null;
-        OrientationLayout before = previous != null ? previous.before : snapshot();
+        OrientationLayout before = previous != null ? previous.before
+            : layoutOf(records, grid, ids, freshPages);
         int taken = (previous != null ? previous.rows : 0) + rows;
-        OrientationLayout after = layoutOf(relaid, next, pages[0], freshPages);
+        OrientationLayout after = layoutOf(relaid, next, afterIds, freshPages);
         RowSnapshot nextSnapshot = new RowSnapshot(orientation, taken, before, after);
         ArrayList<WidgetReflowReport.Entry> moved = new ArrayList<>();
         for (LauncherWidgetRecord old : records.values()) {
@@ -416,6 +601,7 @@ public final class LauncherWidgetRepository {
                     now.page, now.cell));
             }
         }
+        plannedIds = afterIds;
         if (!commitValidated(relaid, null, next, pages[0], freshPages, orientation, layouts,
             nextSnapshot, revision + 1)) {
             return null;
@@ -444,11 +630,23 @@ public final class LauncherWidgetRepository {
             LinkedHashMap<Integer, LauncherWidgetRecord> replayed = new LinkedHashMap<>();
             for (LauncherWidgetRecord record : records.values()) {
                 Placement placed = before.cells.get(record.appWidgetId);
+                int at = placed == null ? -1 : ids.indexOf(placed.page);
                 replayed.put(record.appWidgetId,
-                    placed == null ? record : record.withPage(placed.page).withCell(placed.cell));
+                    at < 0 ? record : record.withPage(at).withCell(placed.cell));
             }
-            return commitValidated(replayed, null, before.grid, before.pageCount,
-                before.freshPages, orientation, layouts, null, revision + 1);
+            // The pages the shrink added at the end go again; any other page change stands.
+            int count = pageCount;
+            if (before.pageIds != null && before.pageIds.size() <= ids.size()
+                && ids.subList(0, before.pageIds.size()).equals(before.pageIds)) {
+                count = before.pageIds.size();
+            }
+            LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
+            for (Integer id : before.freshPages) {
+                int at = ids.indexOf(id);
+                if (at >= 0 && at < count) fresh.add(at);
+            }
+            return commitValidated(replayed, null, before.grid, count, fresh, orientation, layouts,
+                null, revision + 1);
         }
         int rows = Math.min(WidgetGridDefinition.MAX_ROWS, grid.rows + held.rows);
         WidgetGridDefinition grown = new WidgetGridDefinition(rows, grid.columns);
@@ -538,19 +736,19 @@ public final class LauncherWidgetRepository {
         LinkedHashMap<String, OrientationLayout> shelf = new LinkedHashMap<>(layouts);
         shelf.put(orientation, snapshot());
         OrientationLayout incoming = shelf.remove(key);
-        int[] pages = { incoming == null ? pageCount : Math.max(1, incoming.pageCount) };
+        int[] pages = { pageCount };
         LinkedHashMap<Integer, LauncherWidgetRecord> desired = new LinkedHashMap<>();
         for (LauncherWidgetRecord record : records.values()) {
             Placement placed = incoming == null ? null : incoming.cells.get(record.appWidgetId);
-            LauncherWidgetRecord seeded = placed == null ? record
-                : record.withPage(placed.page).withCell(placed.cell);
+            int at = placed == null ? -1 : ids.indexOf(placed.page);
+            LauncherWidgetRecord seeded = at < 0 ? record
+                : record.withPage(at).withCell(placed.cell);
             desired.put(seeded.appWidgetId, seeded);
             pages[0] = Math.max(pages[0], seeded.page + 1);
         }
         LinkedHashMap<Integer, LauncherWidgetRecord> relaid = reflow(desired, next, pages);
         if (relaid == null) return false;
-        Collection<Integer> fresh = incoming == null ? freshPages : incoming.freshPages;
-        if (!commitValidated(relaid, null, next, pages[0], fresh, key, shelf, revision + 1)) {
+        if (!commitValidated(relaid, null, next, pages[0], freshPages, key, shelf, revision + 1)) {
             return false;
         }
         return true;
@@ -558,17 +756,64 @@ public final class LauncherWidgetRepository {
 
     /** What the orientation on screen looks like right now, for the shelf. */
     private OrientationLayout snapshot() {
-        return layoutOf(records, grid, pageCount, freshPages);
+        return layoutOf(records, grid, null, null);
     }
 
-    private static OrientationLayout layoutOf(@NonNull Map<Integer, LauncherWidgetRecord> values,
-                                              @NonNull WidgetGridDefinition definition, int pages,
-                                              @NonNull Collection<Integer> fresh) {
+    /**
+     * The cells of {@code values} by page id. With {@code pageIds} given the layout also names the
+     * pages it was made against and which of them were fresh ({@code fresh} are indices into it).
+     */
+    private OrientationLayout layoutOf(@NonNull Map<Integer, LauncherWidgetRecord> values,
+                                       @NonNull WidgetGridDefinition definition,
+                                       @Nullable List<Integer> pageIds,
+                                       @Nullable Collection<Integer> fresh) {
         LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
+        List<Integer> named = pageIds == null ? ids : pageIds;
         for (LauncherWidgetRecord record : values.values()) {
-            cells.put(record.appWidgetId, new Placement(record.cell, record.page));
+            int id = record.page < named.size() ? named.get(record.page) : record.page;
+            cells.put(record.appWidgetId, new Placement(record.cell, id));
         }
-        return new OrientationLayout(definition, pages, new LinkedHashSet<>(fresh), cells);
+        LinkedHashSet<Integer> freshIds = new LinkedHashSet<>();
+        if (pageIds != null && fresh != null) {
+            for (Integer page : fresh) if (page >= 0 && page < pageIds.size()) freshIds.add(pageIds.get(page));
+        }
+        return new OrientationLayout(definition,
+            pageIds == null ? null : new ArrayList<>(pageIds), freshIds, cells);
+    }
+
+    /** The page ids with the owner grown, if need be, to {@code count} pages; kept for rollback. */
+    @NonNull
+    private List<Integer> idsGrownTo(int count) {
+        ArrayList<Integer> out = new ArrayList<>(ids);
+        if (count > out.size()) {
+            List<Integer> grown = ownerAdd(count - out.size());
+            preGrown = new ArrayList<>(grown);
+            out.addAll(grown);
+        }
+        return out;
+    }
+
+    /** The fresh pages as ids. */
+    @NonNull
+    private LinkedHashSet<Integer> freshIds() {
+        LinkedHashSet<Integer> out = new LinkedHashSet<>();
+        for (Integer page : freshPages) if (page >= 0 && page < ids.size()) out.add(ids.get(page));
+        return out;
+    }
+
+    @NonNull private List<Integer> ownerAdd(int count) {
+        ownerBusy = true;
+        try { return owner.addHomePages(count); } finally { ownerBusy = false; }
+    }
+
+    private void ownerRemove(@NonNull Collection<Integer> gone) {
+        ownerBusy = true;
+        try { owner.removeHomePages(gone); } finally { ownerBusy = false; }
+    }
+
+    private void ownerReorder(@NonNull List<Integer> order) {
+        ownerBusy = true;
+        try { owner.reorderHomePages(order); } finally { ownerBusy = false; }
     }
 
     /**
@@ -593,12 +838,14 @@ public final class LauncherWidgetRepository {
 
         boolean isUntouched(@NonNull LauncherWidgetRepository live) {
             if (!java.util.Objects.equals(orientation, live.orientation)
-                || !after.grid.equals(live.grid) || after.pageCount != live.pageCount
-                || !after.freshPages.equals(live.freshPages)
+                || !after.grid.equals(live.grid) || after.pageIds == null
+                || !after.pageIds.equals(live.ids)
+                || !after.freshPages.equals(live.freshIds())
                 || after.cells.size() != live.records.size()) return false;
             for (LauncherWidgetRecord record : live.records.values()) {
                 Placement placed = after.cells.get(record.appWidgetId);
-                if (placed == null || placed.page != record.page
+                if (placed == null || record.page >= live.ids.size()
+                    || placed.page != live.ids.get(record.page)
                     || !placed.cell.equals(record.cell)) return false;
             }
             return true;
@@ -615,18 +862,21 @@ public final class LauncherWidgetRepository {
     /**
      * One orientation's shelved layout. The grid is the one its cells were arranged against; it is
      * kept for readers that need to know whether a layout still matches the grid in force, and is
-     * not what {@link #applyOrientation} lays the cells out on — the caller's grid is.
+     * not what {@link #applyOrientation} lays the cells out on — the caller's grid is. Cells name
+     * their page by id. {@code pageIds} and {@code freshPages} (ids) are only held by a row
+     * snapshot, to tell whether the pages changed since; a shelf has neither, since every
+     * orientation shares the Home pages.
      */
     private static final class OrientationLayout {
         @NonNull final WidgetGridDefinition grid;
-        final int pageCount;
+        @Nullable final List<Integer> pageIds;
         @NonNull final LinkedHashSet<Integer> freshPages;
         @NonNull final LinkedHashMap<Integer, Placement> cells;
-        OrientationLayout(@NonNull WidgetGridDefinition grid, int pageCount,
+        OrientationLayout(@NonNull WidgetGridDefinition grid, @Nullable List<Integer> pageIds,
                           @NonNull LinkedHashSet<Integer> freshPages,
                           @NonNull LinkedHashMap<Integer, Placement> cells) {
             this.grid = grid;
-            this.pageCount = Math.max(1, pageCount);
+            this.pageIds = pageIds;
             this.freshPages = freshPages;
             this.cells = cells;
         }
@@ -674,7 +924,7 @@ public final class LauncherWidgetRepository {
      * not held a widget yet. The page a reservation is waiting on counts as held.
      */
     public synchronized boolean trimEmptyPages() {
-        trimEmptyPagesRenumbering();
+        trimEmptyPageIds();
         return !trimFailed;
     }
 
@@ -682,13 +932,11 @@ public final class LauncherWidgetRepository {
     private boolean trimFailed;
 
     /**
-     * {@link #trimEmptyPages()}, answering how it renumbered the pages: each old page's new number,
-     * {@link com.termux.app.launcher.home.HomePageEdits#REMOVED} for a page it took away, for what
-     * else names a page (the floats, the default page). Null when nothing changed, or when the
-     * write failed.
+     * {@link #trimEmptyPages()}, answering which pages it took away: their ids, in order; empty
+     * when nothing changed or the write failed.
      */
-    @Nullable
-    public synchronized int[] trimEmptyPagesRenumbering() {
+    @NonNull
+    public synchronized List<Integer> trimEmptyPageIds() {
         trimFailed = false;
         boolean[] keep = new boolean[pageCount];
         for (LauncherWidgetRecord record : records.values()) {
@@ -703,7 +951,7 @@ public final class LauncherWidgetRepository {
         for (int page = 0; page < pageCount; page++) {
             renumbered[page] = keep[page] ? kept++ : -1;
         }
-        if (kept == pageCount) return null;
+        if (kept == pageCount) return Collections.emptyList();
         // Nothing to keep means nothing to renumber either: one empty page is what is left.
         int target = Math.max(1, kept);
         LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
@@ -718,11 +966,18 @@ public final class LauncherWidgetRepository {
                 nextFresh.add(renumbered[page]);
             }
         }
+        List<Integer> before = new ArrayList<>(ids);
+        if (kept > 0) {
+            ArrayList<Integer> plan = new ArrayList<>();
+            for (int page = 0; page < pageCount; page++) if (keep[page]) plan.add(ids.get(page));
+            plannedIds = plan;
+        }
         if (!commitValidated(next, nextPending, grid, target, nextFresh, revision + 1)) {
             trimFailed = true;
-            return null;
+            return Collections.emptyList();
         }
-        return renumbered;
+        before.removeAll(ids);
+        return before;
     }
 
     /**
@@ -763,6 +1018,9 @@ public final class LauncherWidgetRepository {
             if (fresh == page) continue;
             nextFresh.add(fresh > page ? fresh - 1 : fresh);
         }
+        ArrayList<Integer> plan = new ArrayList<>(ids);
+        plan.remove(page);
+        plannedIds = plan;
         return commitValidated(next, nextPending, grid, pageCount - 1, nextFresh, revision + 1);
     }
 
@@ -785,49 +1043,11 @@ public final class LauncherWidgetRepository {
         for (Integer fresh : freshPages) {
             if (fresh >= 0 && fresh < pageCount) nextFresh.add(mapping[fresh]);
         }
-        // Edit pages acts on both orientations: the shelved one's pages move the same way.
-        return commitValidated(next, nextPending, grid, pageCount, nextFresh, orientation,
-            shelfRenumbered(mapping), revision + 1);
-    }
-
-    /**
-     * Edit pages took a page away from the orientation on screen (its widgets went first, through
-     * their own removals): the shelved orientations' pages are renumbered by the same
-     * {@code mapping}, their cells on the removed page dropped (a widget placed there is laid out
-     * afresh when that orientation comes back). One commit; the live wall is unchanged.
-     */
-    public synchronized boolean renumberShelvedPages(@NonNull int[] mapping) {
-        if (layouts.isEmpty()) return true;
-        return commitValidated(records, pending, grid, pageCount, freshPages, orientation,
-            shelfRenumbered(mapping), revision + 1);
-    }
-
-    /** Every shelved orientation with its pages renumbered by an Edit pages mapping. */
-    @NonNull
-    private LinkedHashMap<String, OrientationLayout> shelfRenumbered(@NonNull int[] mapping) {
-        LinkedHashMap<String, OrientationLayout> next = new LinkedHashMap<>();
-        for (Map.Entry<String, OrientationLayout> entry : layouts.entrySet()) {
-            OrientationLayout layout = entry.getValue();
-            int pages = com.termux.app.launcher.home.HomePageEdits.pageCountAfter(
-                layout.pageCount, mapping);
-            LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
-            for (Map.Entry<Integer, Placement> cell : layout.cells.entrySet()) {
-                int page = com.termux.app.launcher.home.HomePageEdits.renumber(
-                    cell.getValue().page, mapping);
-                if (page < 0) continue;
-                cells.put(cell.getKey(), new Placement(cell.getValue().cell, page));
-                pages = Math.max(pages, page + 1);
-            }
-            LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
-            for (Integer page : layout.freshPages) {
-                int renumbered = com.termux.app.launcher.home.HomePageEdits.renumber(page, mapping);
-                if (renumbered < 0) continue;
-                fresh.add(renumbered);
-                pages = Math.max(pages, renumbered + 1);
-            }
-            next.put(entry.getKey(), new OrientationLayout(layout.grid, pages, fresh, cells));
-        }
-        return next;
+        // The shelved orientations name pages by id, so they follow the move on their own.
+        ArrayList<Integer> order = new ArrayList<>(ids);
+        for (int i = 0; i < pageCount; i++) order.set(mapping[i], ids.get(i));
+        plannedIds = order;
+        return commitValidated(next, nextPending, grid, pageCount, nextFresh, revision + 1);
     }
 
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {
@@ -969,13 +1189,19 @@ public final class LauncherWidgetRepository {
      * @return true when the empty wall was written.
      */
     public synchronized boolean resetToEmptyWall() {
-        return commitValidated(new LinkedHashMap<Integer, LauncherWidgetRecord>(), null, grid, 1,
+        LinkedHashMap<Integer, LauncherWidgetRecord> aside = orphans;
+        orphans = new LinkedHashMap<>();
+        if (commitValidated(new LinkedHashMap<Integer, LauncherWidgetRecord>(), null, grid, 1,
             Collections.<Integer>emptySet(), orientation,
-            new LinkedHashMap<String, OrientationLayout>(), null, revision + 1);
+            new LinkedHashMap<String, OrientationLayout>(), null, revision + 1)) {
+            return true;
+        }
+        orphans = aside;
+        return false;
     }
 
     @NonNull public synchronized String serialize() {
-        return encode(records, pending, grid, pageCount, freshPages, orientation, layouts,
+        return encode(records, orphans, ids, pending, grid, freshPages, orientation, layouts,
             rowSnapshot, revision);
     }
 
@@ -1013,23 +1239,74 @@ public final class LauncherWidgetRepository {
                                     @Nullable String nextOrientation,
                                     @NonNull Map<String, OrientationLayout> nextLayouts,
                                     @Nullable RowSnapshot nextSnapshot, long nextRevision) {
-        if (migrationWritePending || readOnlyUnknownVersion) return false;
-        if (!validatePaged(nextGrid, next, nextPending, nextPageCount)) return false;
+        List<Integer> planned = plannedIds;
+        plannedIds = null;
+        List<Integer> already = preGrown;
+        preGrown = new ArrayList<>();
+        if (migrationWritePending || readOnlyUnknownVersion
+            || !validatePaged(nextGrid, next, nextPending, nextPageCount)) {
+            if (!already.isEmpty()) ownerRemove(already);
+            return false;
+        }
         LinkedHashSet<Integer> fresh = settledFresh(nextFresh, next, nextPageCount);
+        // The page ids after this commit: the plan of a removal or a move, the owner's new pages
+        // for a grown count, else the first pages as they stand.
+        List<Integer> nextIds;
+        List<Integer> grown = new ArrayList<>();
+        if (planned != null && planned.size() == nextPageCount) {
+            nextIds = new ArrayList<>(planned);
+        } else if (nextPageCount > ids.size()) {
+            int want = nextPageCount - ids.size();
+            grown = ownerAdd(want);
+            nextIds = new ArrayList<>(ids);
+            nextIds.addAll(grown);
+            if (grown.size() != want) {
+                ownerRemove(grown);
+                if (!already.isEmpty()) ownerRemove(already);
+                return false;
+            }
+        } else {
+            nextIds = new ArrayList<>(ids.subList(0, nextPageCount));
+        }
+        List<Integer> removed = new ArrayList<>(ids);
+        removed.removeAll(nextIds);
         LinkedHashMap<String, OrientationLayout> shelf = new LinkedHashMap<>(nextLayouts);
         if (nextOrientation != null) shelf.remove(nextOrientation);
-        String encoded = encode(next, nextPending, nextGrid, nextPageCount, fresh, nextOrientation,
-            shelf, nextSnapshot, nextRevision);
-        if (!storage.write(encoded)) return false;
+        // A page leaving takes the shelved cells on it along.
+        for (Integer gone : removed) {
+            for (Map.Entry<String, OrientationLayout> entry : shelf.entrySet()) {
+                entry.setValue(withoutPage(entry.getValue(), gone));
+            }
+        }
+        String encoded = encode(next, orphans, nextIds, nextPending, nextGrid, fresh,
+            nextOrientation, shelf, nextSnapshot, nextRevision);
+        if (!storage.write(encoded)) {
+            List<Integer> back = new ArrayList<>(grown);
+            back.addAll(already);
+            if (!back.isEmpty()) ownerRemove(back);
+            return false;
+        }
         records = new LinkedHashMap<>(next);
         pending = nextPending;
         grid = nextGrid;
-        pageCount = nextPageCount;
+        ids = nextIds;
+        pageCount = nextIds.size();
         freshPages = fresh;
         orientation = nextOrientation;
         layouts = shelf;
         rowSnapshot = nextSnapshot;
         revision = nextRevision;
+        if (!removed.isEmpty()) {
+            ownerRemove(removed);
+        } else {
+            List<Integer> held = owner.homePageIds();
+            if (!held.equals(nextIds) && held.size() == nextIds.size()
+                && held.containsAll(nextIds)) {
+                ownerReorder(nextIds);
+            }
+        }
+        // The owner may have declined part of it; take its list as the truth.
+        onHomePagesChanged();
         return true;
     }
 
@@ -1114,29 +1391,67 @@ public final class LauncherWidgetRepository {
                 return;
             }
             WidgetGridDefinition loadedGrid = decodeGrid(root.getJSONObject("grid"));
-            int loadedPages = Math.max(1, root.optInt("pages", 1));
+            // A payload with the marker names pages by id. One without it names them by position:
+            // the i-th Home page the owner lists, which the owner grows to cover what it names.
+            boolean idKeyed = "id".equals(root.optString("pageKey", ""));
+            if (idKeyed && selfOwner != null) {
+                List<Integer> stored = decodeIdList(root.optJSONArray("pageIds"));
+                if (!stored.isEmpty()) selfOwner.adopt(stored);
+            }
+            if (!idKeyed) {
+                int have = owner.homePageIds().size();
+                int need = pagesNamed(root);
+                if (need > have) owner.addHomePages(need - have);
+            }
+            ids = new ArrayList<>(owner.homePageIds());
+            int loadedPages = ids.size();
             LinkedHashMap<Integer, LauncherWidgetRecord> loaded = decodeRecords(root, true);
             dropRetiredBuiltins(loaded);
             WidgetAddTransaction loadedPending = root.has("pending")
                 ? decodeTransaction(root.getJSONObject("pending"), true, 0, 0) : null;
+            LinkedHashMap<Integer, LauncherWidgetRecord> loadedAside = new LinkedHashMap<>();
+            LinkedHashSet<Integer> loadedFresh = new LinkedHashSet<>();
+            JSONArray freshArray = root.optJSONArray("freshPages");
+            if (idKeyed) {
+                LinkedHashMap<Integer, LauncherWidgetRecord> projected = new LinkedHashMap<>();
+                for (LauncherWidgetRecord record : loaded.values()) {
+                    int at = ids.indexOf(record.page);
+                    if (at >= 0) projected.put(record.appWidgetId, record.withPage(at));
+                    else loadedAside.put(record.appWidgetId, record);
+                }
+                loaded = projected;
+                if (loadedPending != null) {
+                    int at = ids.indexOf(loadedPending.page);
+                    loadedPending = at < 0 ? null : loadedPending.withPage(at);
+                }
+                for (Integer id : decodePages(freshArray)) {
+                    int at = ids.indexOf(id);
+                    if (at >= 0) loadedFresh.add(at);
+                }
+            } else {
+                loadedFresh = decodePages(freshArray);
+                legacyWriteBack = true;
+            }
             if (!validatePaged(loadedGrid, loaded, loadedPending, loadedPages)) {
                 // Refused silently once, and the wall simply looked empty: say so.
                 android.util.Log.e("LauncherWidgets", "stored wall refused: " + loaded.size()
                     + " records on " + loadedPages + " page(s), grid " + loadedGrid);
+                legacyWriteBack = false;
                 return;
             }
             records = loaded;
+            orphans = loadedAside;
             pending = loadedPending;
             grid = loadedGrid;
             pageCount = loadedPages;
             // A save written before hand-added pages existed simply has none of them.
-            freshPages = settledFresh(decodePages(root.optJSONArray("freshPages")), loaded,
-                loadedPages);
+            freshPages = settledFresh(loadedFresh, loaded, loadedPages);
             String loadedOrientation = root.optString("orientation", null);
             orientation = loadedOrientation == null || loadedOrientation.isEmpty()
                 ? null : loadedOrientation;
-            layouts = decodeLayouts(root.optJSONObject("layouts"), orientation);
-            rowSnapshot = decodeRowSnapshot(root.optJSONObject("rowSnapshot"));
+            List<Integer> byPosition = idKeyed ? null : ids;
+            layouts = decodeLayouts(root.optJSONObject("layouts"), orientation, byPosition);
+            rowSnapshot = decodeRowSnapshot(root.optJSONObject("rowSnapshot"), byPosition);
             revision = Math.max(0, root.optLong("revision", 0));
         } catch (JSONException | IllegalArgumentException exception) {
             android.util.Log.e("LauncherWidgets", "stored wall unreadable", exception);
@@ -1155,10 +1470,11 @@ public final class LauncherWidgetRepository {
         records = loaded;
         pending = loadedPending;
         grid = loadedGrid;
-        pageCount = 1;
+        ids = new ArrayList<>(owner.homePageIds());
+        pageCount = ids.size();
         revision = Math.max(0, root.optLong("revision", 0));
-        migrationWritePending = !storage.write(encode(loaded, loadedPending, loadedGrid, 1,
-            Collections.emptySet(), null, Collections.emptyMap(), null, revision));
+        migrationWritePending = !storage.write(encode(loaded, orphans, ids, loadedPending,
+            loadedGrid, Collections.emptySet(), null, Collections.emptyMap(), null, revision));
     }
 
     private void migrateV1(JSONObject root) throws JSONException {
@@ -1187,10 +1503,59 @@ public final class LauncherWidgetRepository {
         records = migrated;
         pending = migratedPending;
         grid = migratedGrid;
-        pageCount = 1;
+        ids = new ArrayList<>(owner.homePageIds());
+        pageCount = ids.size();
         revision = 0;
-        migrationWritePending = !storage.write(encode(migrated, migratedPending, migratedGrid, 1,
-            Collections.emptySet(), null, Collections.emptyMap(), null, 0));
+        migrationWritePending = !storage.write(encode(migrated, orphans, ids, migratedPending,
+            migratedGrid, Collections.emptySet(), null, Collections.emptyMap(), null, 0));
+    }
+
+    @NonNull
+    private static List<Integer> decodeIdList(@Nullable JSONArray array) {
+        ArrayList<Integer> out = new ArrayList<>();
+        for (int i = 0; array != null && i < array.length(); i++) {
+            int id = array.optInt(i, -1);
+            if (id >= 0 && !out.contains(id)) out.add(id);
+        }
+        return out;
+    }
+
+    /** How many pages a position-keyed payload names, anywhere in it. */
+    private static int pagesNamed(@NonNull JSONObject root) {
+        int need = Math.max(1, root.optInt("pages", 1));
+        need = Math.max(need, pageAfter(root.optJSONArray("records")));
+        JSONObject held = root.optJSONObject("pending");
+        if (held != null) need = Math.max(need, held.optInt("page", 0) + 1);
+        JSONObject shelf = root.optJSONObject("layouts");
+        if (shelf != null) {
+            Iterator<String> keys = shelf.keys();
+            while (keys.hasNext()) need = Math.max(need, layoutPages(shelf.optJSONObject(keys.next())));
+        }
+        JSONObject snapshot = root.optJSONObject("rowSnapshot");
+        if (snapshot != null) {
+            need = Math.max(need, layoutPages(snapshot.optJSONObject("before")));
+            need = Math.max(need, layoutPages(snapshot.optJSONObject("after")));
+        }
+        return need;
+    }
+
+    private static int layoutPages(@Nullable JSONObject layout) {
+        if (layout == null) return 0;
+        return Math.max(Math.max(1, layout.optInt("pages", 1)), pageAfter(layout.optJSONArray("cells")));
+    }
+
+    private static int pageAfter(@Nullable JSONArray items) {
+        int out = 0;
+        for (int i = 0; items != null && i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item != null) out = Math.max(out, item.optInt("page", 0) + 1);
+        }
+        return out;
+    }
+
+    private static int idAt(@Nullable List<Integer> byPosition, int position) {
+        if (byPosition == null) return position;
+        return position < byPosition.size() ? byPosition.get(position) : position;
     }
 
     private static LinkedHashSet<Integer> decodePages(@Nullable JSONArray array) {
@@ -1219,14 +1584,33 @@ public final class LauncherWidgetRepository {
         return loaded;
     }
 
-    private static String encode(Map<Integer, LauncherWidgetRecord> values,
-                                 @Nullable WidgetAddTransaction transaction,
-                                 WidgetGridDefinition definition, int pages,
-                                 @NonNull Collection<Integer> fresh,
+    private static String encode(Map<Integer, LauncherWidgetRecord> live,
+                                 @NonNull Map<Integer, LauncherWidgetRecord> aside,
+                                 @NonNull List<Integer> pageIds,
+                                 @Nullable WidgetAddTransaction pendingTransaction,
+                                 WidgetGridDefinition definition,
+                                 @NonNull Collection<Integer> freshIndices,
                                  @Nullable String orientation,
                                  @NonNull Map<String, OrientationLayout> layouts,
                                  @Nullable RowSnapshot snapshot, long revision) {
         try {
+            // Everything is written under its page id; the root says so, so a payload without the
+            // marker is read as positions once (and written back as ids).
+            LinkedHashMap<Integer, LauncherWidgetRecord> values = new LinkedHashMap<>();
+            for (LauncherWidgetRecord record : live.values()) {
+                values.put(record.appWidgetId, record.page < pageIds.size()
+                    ? record.withPage(pageIds.get(record.page)) : record);
+            }
+            values.putAll(aside);
+            WidgetAddTransaction transaction = pendingTransaction != null
+                && pendingTransaction.page < pageIds.size()
+                ? pendingTransaction.withPage(pageIds.get(pendingTransaction.page))
+                : pendingTransaction;
+            LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
+            for (Integer page : freshIndices) {
+                if (page >= 0 && page < pageIds.size()) fresh.add(pageIds.get(page));
+            }
+            int pages = pageIds.size();
             JSONObject root = new JSONObject();
             boolean holdsFolder = holdsFolder(values.values());
             boolean writeKind = holdsFolder || holdsApp(values.values());
@@ -1235,7 +1619,11 @@ public final class LauncherWidgetRepository {
                 : holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
+            root.put("pageKey", "id");
             root.put("pages", Math.max(1, pages));
+            JSONArray idArray = new JSONArray();
+            for (Integer id : pageIds) idArray.put((int) id);
+            root.put("pageIds", idArray);
             // Left out when there are none, so a save from a build without hand-added pages and a
             // save with none of them left are the same payload.
             if (!fresh.isEmpty()) {
@@ -1275,7 +1663,11 @@ public final class LauncherWidgetRepository {
     private static JSONObject encodeLayout(OrientationLayout value) throws JSONException {
         JSONObject out = new JSONObject();
         out.put("grid", encodeGrid(value.grid));
-        out.put("pages", value.pageCount);
+        if (value.pageIds != null) {
+            JSONArray named = new JSONArray();
+            for (Integer id : value.pageIds) named.put((int) id);
+            out.put("pageIds", named);
+        }
         if (!value.freshPages.isEmpty()) {
             JSONArray fresh = new JSONArray();
             for (Integer page : value.freshPages) fresh.put((int) page);
@@ -1297,7 +1689,7 @@ public final class LauncherWidgetRepository {
      */
     @NonNull
     private static LinkedHashMap<String, OrientationLayout> decodeLayouts(
-            @Nullable JSONObject value, @Nullable String active) {
+            @Nullable JSONObject value, @Nullable String active, @Nullable List<Integer> byPosition) {
         LinkedHashMap<String, OrientationLayout> shelf = new LinkedHashMap<>();
         if (value == null) return shelf;
         Iterator<String> keys = value.keys();
@@ -1305,7 +1697,7 @@ public final class LauncherWidgetRepository {
             String key = keys.next();
             if (key.isEmpty() || key.equals(active)) continue;
             try {
-                shelf.put(key, decodeLayout(value.getJSONObject(key)));
+                shelf.put(key, decodeLayout(value.getJSONObject(key), byPosition));
             } catch (JSONException | IllegalArgumentException ignored) {
                 // Drop this orientation's shelf entry; the rest of the payload stands.
             }
@@ -1313,27 +1705,46 @@ public final class LauncherWidgetRepository {
         return shelf;
     }
 
-    private static OrientationLayout decodeLayout(@NonNull JSONObject entry) throws JSONException {
+    /** {@code byPosition} is set for a layout keyed by page position: position i is that list's i-th id. */
+    private static OrientationLayout decodeLayout(@NonNull JSONObject entry,
+                                                  @Nullable List<Integer> byPosition)
+        throws JSONException {
         LinkedHashMap<Integer, Placement> cells = new LinkedHashMap<>();
         JSONArray array = entry.optJSONArray("cells");
         for (int i = 0; array != null && i < array.length(); i++) {
             JSONObject item = array.getJSONObject(i);
             cells.put(item.getInt("id"), new Placement(decodeCell(item.getJSONObject("cell")),
-                Math.max(0, item.optInt("page", 0))));
+                idAt(byPosition, Math.max(0, item.optInt("page", 0)))));
         }
-        return new OrientationLayout(decodeGrid(entry.getJSONObject("grid")),
-            entry.optInt("pages", 1), decodePages(entry.optJSONArray("freshPages")), cells);
+        List<Integer> pageIds = null;
+        JSONArray named = entry.optJSONArray("pageIds");
+        if (named != null) {
+            pageIds = new ArrayList<>();
+            for (int i = 0; i < named.length(); i++) pageIds.add(named.optInt(i, -1));
+        } else if (byPosition != null && entry.has("pages")) {
+            pageIds = new ArrayList<>();
+            int count = Math.max(1, entry.optInt("pages", 1));
+            for (int i = 0; i < count; i++) pageIds.add(idAt(byPosition, i));
+        }
+        LinkedHashSet<Integer> fresh = new LinkedHashSet<>();
+        for (Integer page : decodePages(entry.optJSONArray("freshPages"))) {
+            fresh.add(idAt(byPosition, page));
+        }
+        return new OrientationLayout(decodeGrid(entry.getJSONObject("grid")), pageIds, fresh,
+            cells);
     }
 
     /** An unreadable snapshot is dropped: the wall stands as it is and nothing is replayed. */
     @Nullable
-    private static RowSnapshot decodeRowSnapshot(@Nullable JSONObject value) {
+    private static RowSnapshot decodeRowSnapshot(@Nullable JSONObject value,
+                                                 @Nullable List<Integer> byPosition) {
         if (value == null) return null;
         try {
             String key = value.optString("orientation", null);
             return new RowSnapshot(key == null || key.isEmpty() ? null : key,
-                Math.max(1, value.getInt("rows")), decodeLayout(value.getJSONObject("before")),
-                decodeLayout(value.getJSONObject("after")));
+                Math.max(1, value.getInt("rows")),
+                decodeLayout(value.getJSONObject("before"), byPosition),
+                decodeLayout(value.getJSONObject("after"), byPosition));
         } catch (JSONException | IllegalArgumentException ignored) {
             return null;
         }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Appearance editor's scope chip (ADR 0015 §6): Global | <page name>. -->
+    <string name="editor_scope_for">Applies to</string>
+    <string name="editor_scope_global">Global</string>
+</resources>

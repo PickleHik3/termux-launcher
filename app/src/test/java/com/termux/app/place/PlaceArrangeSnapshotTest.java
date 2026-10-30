@@ -46,7 +46,7 @@ public class PlaceArrangeSnapshotTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("place-arrange-snapshot-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+        places = KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null)));
     }
 
     /** Everything one editor session could write, on the place and orientation it is open on. */

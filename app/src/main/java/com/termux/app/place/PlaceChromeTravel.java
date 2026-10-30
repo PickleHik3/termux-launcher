@@ -148,10 +148,33 @@ public final class PlaceChromeTravel {
         public final boolean dockInPlay;
         /** Whether the two sides of the frame differ in the keyboard: what the rows follow then. */
         final boolean keyboardMoves;
+        /**
+         * The page ids of {@link #from} and {@link #toward} where the frame names them: a frame of
+         * Home's own pager between two Home pages ({@link #homePages}); -1 on a frame of the wall,
+         * which names its sides by kind alone.
+         */
+        public final int fromId;
+        public final int towardId;
+        /**
+         * The side {@link #toward} stands on, seen from {@link #from}: 1 to its right, -1 to its
+         * left, 0 where the frame does not say (every frame of the wall, and a pager at rest).
+         */
+        public final int towardSide;
 
         Frame(@NonNull PaneWallPage from, @NonNull PaneWallPage toward, float fraction,
               float keyboardFraction, float keyboardReveal, float dockReveal, float statusReveal,
               boolean keyboardInPlay, boolean dockInPlay, boolean keyboardMoves) {
+            this(from, toward, fraction, keyboardFraction, keyboardReveal, dockReveal,
+                statusReveal, keyboardInPlay, dockInPlay, keyboardMoves, -1, -1, 0);
+        }
+
+        Frame(@NonNull PaneWallPage from, @NonNull PaneWallPage toward, float fraction,
+              float keyboardFraction, float keyboardReveal, float dockReveal, float statusReveal,
+              boolean keyboardInPlay, boolean dockInPlay, boolean keyboardMoves, int fromId,
+              int towardId, int towardSide) {
+            this.fromId = fromId < 0 ? -1 : fromId;
+            this.towardId = towardId < 0 ? -1 : towardId;
+            this.towardSide = Integer.signum(towardSide);
             this.from = from;
             this.toward = toward;
             this.fraction = fraction;
@@ -166,7 +189,8 @@ public final class PlaceChromeTravel {
         }
 
         @NonNull @Override public String toString() {
-            return "Frame{" + from + "->" + toward + " @" + fraction + ", keyboard=" + keyboardReveal
+            return "Frame{" + from + (fromId < 0 ? "" : "#" + fromId) + "->" + toward
+                + (towardId < 0 ? "" : "#" + towardId) + " @" + fraction + ", keyboard=" + keyboardReveal
                 + ", dock=" + dockReveal + ", status=" + statusReveal + "}";
         }
     }
@@ -245,6 +269,43 @@ public final class PlaceChromeTravel {
                            float offsetPx, float keyboardOffsetPx, int widthPx,
                            @NonNull States states, @Nullable PaneWallPage leaving,
                            @Nullable InnerPages inner) {
+        return frameAt(pages, pages.indexOf(current), current, offsetPx, keyboardOffsetPx,
+            widthPx, states, leaving, inner);
+    }
+
+    /**
+     * The chrome for the wall standing {@code offsetPx} from the rest of its cell
+     * {@code currentIndex}, read off the cells' page kinds ({@code cells}, one entry per cell in
+     * cell order): the dress is the kind of the cell beside, whichever cell of a kind the wall is
+     * on (ADR 0016 section 3), so a slide from the second Home run toward the Terminal page
+     * dresses for the Terminal page all the way. Otherwise as {@link #at(List, PaneWallPage,
+     * float, float, int, States, PaneWallPage, InnerPages)}.
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> cells, int currentIndex, float offsetPx,
+                           float keyboardOffsetPx, int widthPx, @NonNull States states,
+                           @Nullable PaneWallPage leaving, @Nullable InnerPages inner) {
+        return frameAt(cells, currentIndex, cells.get(currentIndex), offsetPx, keyboardOffsetPx,
+            widthPx, states, leaving, inner);
+    }
+
+    /**
+     * {@link #at(List, int, float, float, int, States, PaneWallPage, InnerPages)} with the
+     * keyboard read at {@code offsetPx} too.
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> cells, int currentIndex, float offsetPx,
+                           int widthPx, @NonNull States states, @Nullable PaneWallPage leaving,
+                           @Nullable InnerPages inner) {
+        return at(cells, currentIndex, offsetPx, offsetPx, widthPx, states, leaving, inner);
+    }
+
+    /** The frame for {@code current} standing at entry {@code index} of {@code pages} (-1: none). */
+    @NonNull
+    private static Frame frameAt(@NonNull List<PaneWallPage> pages, int index,
+                                 @NonNull PaneWallPage current, float offsetPx,
+                                 float keyboardOffsetPx, int widthPx, @NonNull States states,
+                                 @Nullable PaneWallPage leaving, @Nullable InnerPages inner) {
         if (widthPx <= 0 || offsetPx == 0f || Float.isNaN(offsetPx)) {
             return rest(current, states.restOf(current));
         }
@@ -259,8 +320,8 @@ public final class PlaceChromeTravel {
         float fraction = position - near;
         // On a line, a step past the outer page clamps back onto it (neighbour stops there), so a
         // drag into the edge's resistance blends the page with itself and nothing moves.
-        PaneWallPage from = PaneWallPolicy.neighbour(pages, current, near);
-        PaneWallPage toward = PaneWallPolicy.neighbour(pages, current, near + 1);
+        PaneWallPage from = PaneWallPolicy.neighbourAt(pages, index, near, current);
+        PaneWallPage toward = PaneWallPolicy.neighbourAt(pages, index, near + 1, current);
         Rest a = states.restOf(from);
         Rest b = toward == from ? a : states.restOf(toward);
         boolean keyboardInPlay = a.keyboardReveal() > 0f || b.keyboardReveal() > 0f;
@@ -294,6 +355,28 @@ public final class PlaceChromeTravel {
             lerp(a.dockReveal(), b.dockReveal(), t),
             lerp(a.statusReveal(), b.statusReveal(), t), keyboardInPlay, dockInPlay,
             keyboardMoves);
+    }
+
+    /**
+     * One frame of Home's own pager, between two Home pages (#173 slice E): page {@code fromId},
+     * the one in front, stands {@code shiftPx} off its rest (positive to the right, the pager's
+     * content shift), and page {@code towardId} comes in from the side the shift opens, a width
+     * away. The wall stands still, so the chrome's state is Home's rest ({@code home}) at both
+     * sides; the fraction across, the page ids and the side are what a crossing between two Home
+     * pages reads ({@link SeamTravel#otherEndProgress}, {@link SeamTravel#endScreenXPx}). A shift
+     * of nothing, or no width, is page {@code fromId} at rest.
+     */
+    @NonNull
+    public static Frame homePages(@NonNull Rest home, int fromId, int towardId, float shiftPx,
+                                  int widthPx) {
+        float fraction = widthPx <= 0 || Float.isNaN(shiftPx) ? 0f
+            : clamp01(Math.abs(shiftPx) / widthPx);
+        // A shift to the right opens the left side, where the page coming in stands.
+        int side = fraction <= 0f ? 0 : shiftPx > 0f ? -1 : 1;
+        return new Frame(PaneWallPage.WIDGETS, PaneWallPage.WIDGETS, fraction,
+            chromeFraction(fraction), home.keyboardReveal(), home.dockReveal(),
+            home.statusReveal(), home.keyboardReveal() > 0f, home.dockReveal() > 0f, false,
+            fromId, towardId, side);
     }
 
     /** The chrome of a place at rest. */

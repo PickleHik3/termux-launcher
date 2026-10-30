@@ -590,6 +590,17 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     }
 
     /**
+     * The ink the pane band decided on for {@link #terminalTextGround()}, weighing both inks
+     * against every pane; null while the terminal is opaque, before a pane is measured, or with
+     * the even-out stage off, when the palette judges the ground itself. The ground is the band's
+     * worst end for this ink, so the palette wears it as decided rather than judging it there.
+     */
+    @androidx.annotation.Nullable
+    default com.termux.app.chrome.ChromeInk.Polarity terminalBandPolarity() {
+        return null;
+    }
+
+    /**
      * What the terminal's default text really stands on, which its contrast floor is held against
      * ({@code TerminalView#setContrastBackdrop}): {@link android.graphics.Color#TRANSPARENT} while
      * the terminal stands on its own opaque background, otherwise {@link #terminalTextGround()}

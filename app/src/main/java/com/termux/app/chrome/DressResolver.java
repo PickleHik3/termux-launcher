@@ -7,8 +7,10 @@ import com.termux.app.dock.DockStyle;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
-import com.termux.app.place.WallHalfShape;
+import com.termux.app.place.WallShape;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.app.wall.WallPages.PageKind;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -41,8 +43,21 @@ public final class DressResolver {
         /** Whether the launcher is in minimal mode. */
         boolean minimal();
 
-        /** Whether Home holds a Home layout of its own (the Home layout switch). */
-        boolean homeLayout();
+        /**
+         * The old Home layout switch. No longer read by the resolver: since version 16 a Home page
+         * wears a page layout of its own ({@link #pageLayout}) or the normal one.
+         */
+        @Deprecated
+        default boolean homeLayout() { return false; }
+
+        /**
+         * The id of the page {@code page} stands for on screen: the Home page in front for {@link
+         * PaneWallPage#WIDGETS}, the Terminal page for a window; -1 where none is known.
+         */
+        default int pageIdOf(@NonNull PaneWallPage page) { return -1; }
+
+        /** Whether page {@code pageId} holds a page layout of its own (ADR 0015 §3). */
+        default boolean pageLayout(int pageId) { return false; }
 
         /** The Dock design picked on one layout, whether or not it is built yet. */
         @NonNull
@@ -56,16 +71,36 @@ public final class DressResolver {
 
         /** One half's Style, Corners and Margin as stored: Home's own, or the Workspace's. */
         @NonNull
-        WallHalfShape shape(boolean home);
+        WallShape shape();
+
+        /** Whether a kind of page shows one element: the page model's per-kind visibility. */
+        boolean shows(@NonNull PageKind kind, @NonNull Element element);
+
+        /**
+         * Whether a page on {@code layout}, of {@code kind}, shows one element: a page layout's own
+         * visibility, in either orientation, else the kind's ({@link #shows}).
+         */
+        default boolean layoutShows(@NonNull LayoutVariant layout, @NonNull PageKind kind,
+                                    @NonNull Element element) {
+            return shows(kind, element);
+        }
     }
 
     /**
-     * What a Home page leaves out, whichever layout it wears: the extra keys are the Workspace's
-     * alone. The status bar is worn on both halves (#90).
+     * What the Layout editor does not offer on the Home layout: the extra keys. Only an offer
+     * ({@link #wornOn}); what a page wears is its kind's visibility ({@link Source#shows}).
      */
-    @NonNull private static final Set<Element> HOME_LEAVES_OUT = EnumSet.of(Element.EXTRA_KEYS);
+    @NonNull private static final Set<Element> HOME_NOT_OFFERED = EnumSet.of(Element.EXTRA_KEYS);
 
-    @NonNull private static final Set<Element> NONE_LEFT_OUT = EnumSet.noneOf(Element.class);
+    /**
+     * The kind of page a wall page carries: the Home pages' row, a Display page, or the
+     * Workspace's terminal windows.
+     */
+    @NonNull
+    public static PageKind kindOf(@NonNull PaneWallPage page) {
+        if (page == PaneWallPage.WIDGETS) return PageKind.HOME;
+        return page == PaneWallPage.DISPLAY ? PageKind.DISPLAY : PageKind.TERMINAL;
+    }
 
     @NonNull private final Source mSource;
 
@@ -93,9 +128,14 @@ public final class DressResolver {
                 return store != null && store.isMinimal();
             }
 
-            @Override public boolean homeLayout() {
+            @Override public int pageIdOf(@NonNull PaneWallPage page) {
                 PlaceLayoutStore store = places.get();
-                return store != null && store.hasHomeLayout();
+                return store != null ? store.shownPageId(page) : -1;
+            }
+
+            @Override public boolean pageLayout(int pageId) {
+                PlaceLayoutStore store = places.get();
+                return store != null && store.hasPageLayout(pageId);
             }
 
             @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
@@ -113,9 +153,22 @@ public final class DressResolver {
                 return store != null && store.forVariant(layout).drawerTile();
             }
 
-            @NonNull @Override public WallHalfShape shape(boolean home) {
+            @NonNull @Override public WallShape shape() {
                 PlaceLayoutStore store = places.get();
-                return store != null ? store.halfShape(home) : WallHalfShape.read(null, home);
+                return store != null ? store.shape() : WallShape.read(null);
+            }
+
+            @Override public boolean shows(@NonNull PageKind kind, @NonNull Element element) {
+                PlaceLayoutStore store = places.get();
+                return store != null ? store.kindShowsAny(kind, element)
+                    : PlaceLayoutStore.kindShowsByDefault(kind, element);
+            }
+
+            @Override public boolean layoutShows(@NonNull LayoutVariant layout,
+                                                 @NonNull PageKind kind, @NonNull Element element) {
+                PlaceLayoutStore store = places.get();
+                if (store == null || !layout.isPage()) return shows(kind, element);
+                return store.forVariant(layout).showsAny(element);
             }
         });
     }
@@ -127,24 +180,60 @@ public final class DressResolver {
      */
     @NonNull
     public Dress dressOf(@NonNull PaneWallPage page) {
-        boolean home = page == PaneWallPage.WIDGETS;
-        LayoutVariant layout = layoutOf(page);
-        return new Dress(layout, home ? HOME_LEAVES_OUT : NONE_LEFT_OUT,
+        return dressOf(layoutOf(page), kindOf(page));
+    }
+
+    /**
+     * What {@code page} wears, named by its id (#173 slice E): the same as {@link
+     * #dressOf(PaneWallPage)} for a page with no id said or for the page in front, and the page's
+     * own for another page of its kind, a Home page beside the one in front included.
+     */
+    @NonNull
+    public Dress dressOf(@NonNull PageRef page) {
+        return dressOf(layoutOf(page), kindOf(page.kind));
+    }
+
+    @NonNull
+    private Dress dressOf(@NonNull LayoutVariant layout, @NonNull PageKind kind) {
+        Set<Element> leftOut = EnumSet.noneOf(Element.class);
+        for (Element element : Element.values()) {
+            if (!mSource.layoutShows(layout, kind, element)) leftOut.add(element);
+        }
+        return new Dress(layout, leftOut,
             DockStyle.effectiveStyle(mSource.dockDesign(layout)), mSource.searchField(layout),
-            mSource.drawerTile(layout), mSource.shape(home && layout == LayoutVariant.HOME));
+            mSource.drawerTile(layout), mSource.shape());
     }
 
     /**
      * The layout the page wears ({@link Dress#layout}), read without the rest of the dress: the
-     * question the stack's sizes ask on every pass. Home's own only while it holds one, else the
-     * normal layout: minimal mode is the windows' alone.
+     * question the stack's sizes ask on every pass. A Home page wears its page layout while it
+     * holds one, else the normal layout: minimal mode is the windows' alone. A window wears the
+     * minimal layout while minimal mode is on, else the Terminal page's own while it holds one,
+     * else the normal one (ADR 0015 §3).
      */
     @NonNull
     public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS) {
-            return mSource.homeLayout() ? LayoutVariant.HOME : LayoutVariant.NORMAL;
-        }
-        return LayoutVariant.of(mSource.minimal());
+        return layoutOf(page, mSource.pageIdOf(page));
+    }
+
+    /**
+     * The layout {@code page} wears, read for its own id rather than for the page of its kind in
+     * front (#173 slice E): a crossing between two Home pages resolves the page it slides toward
+     * while the other is still in front. A page with no id said reads as {@link
+     * #layoutOf(PaneWallPage)}.
+     */
+    @NonNull
+    public LayoutVariant layoutOf(@NonNull PageRef page) {
+        return page.id < 0 ? layoutOf(page.kind) : layoutOf(page.kind, page.id);
+    }
+
+    @NonNull
+    private LayoutVariant layoutOf(@NonNull PaneWallPage page, int id) {
+        boolean home = page == PaneWallPage.WIDGETS;
+        if (!home && mSource.minimal()) return LayoutVariant.MINIMAL;
+        if (id >= 0 && mSource.pageLayout(id))
+            return LayoutVariant.page(id, kindOf(page));
+        return LayoutVariant.NORMAL;
     }
 
     /**
@@ -174,21 +263,20 @@ public final class DressResolver {
     }
 
     /**
-     * Whether {@code page} wears {@code element} ({@link Dress#wears}) on whichever layout it
-     * wears, for a reader that has the page but not the dress: the store's resolve for a page.
+     * Whether {@code page} wears {@code element} ({@link Dress#wears}): its page layout or its kind shows it, as the
+     * store has it now, for a reader that has the page but not the dress.
      */
-    public static boolean wornBy(@NonNull PaneWallPage page, @NonNull Element element) {
-        return page != PaneWallPage.WIDGETS || !HOME_LEAVES_OUT.contains(element);
+    public boolean wears(@NonNull PaneWallPage page, @NonNull Element element) {
+        return mSource.layoutShows(layoutOf(page), kindOf(page), element);
     }
 
     /**
-     * Whether a page on {@code layout} wears {@code element} ({@link Dress#wears}), for a reader
-     * that holds a layout rather than a page: the Layout editor's offers, the store's resolve.
-     * The Home layout is worn only on Home, so it leaves out what Home leaves out; the
-     * Workspace's layouts are offered whole, since a window wears them so.
+     * Whether the Layout editor offers {@code element} on {@code layout}: the Home layout leaves
+     * out the extra keys, the Workspace's layouts are offered whole. An offer only; whether a
+     * page wears an element is its kind's visibility ({@link #wears}).
      */
     public static boolean wornOn(@NonNull LayoutVariant layout, @NonNull Element element) {
-        return layout != LayoutVariant.HOME || !HOME_LEAVES_OUT.contains(element);
+        return !layout.isHomeKind() || !HOME_NOT_OFFERED.contains(element);
     }
 
 }

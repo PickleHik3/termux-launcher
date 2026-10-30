@@ -19,6 +19,13 @@
             app:entryValues="@array/use_as_values"
             app:useSimpleSummaryProvider="true"
             android:defaultValue="home" />
+        <Preference
+            app:key="app_launcher_setup_rerun"
+            app:title="@string/setup_rerun_title"
+            app:summary="@string/setup_rerun_summary" />
+        <Preference
+            app:key="app_launcher_setup_cards"
+            app:title="@string/setup_cards_row_title" />
         <!-- Start in: the page a cold start shows (ADR 0008). -->
         <ListPreference
             app:key="app_launcher_start_in"

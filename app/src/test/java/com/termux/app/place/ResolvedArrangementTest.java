@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.wall.PageRef;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -50,10 +51,13 @@ public class ResolvedArrangementTest {
      * identical (editor-redesign §1).
      */
     private PlaceLayoutStore dressed(LayoutStyle style, DockStyle design) {
-        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        // The Home page holds a page layout of its own (ADR 0015 §3), where the Home layout
+        // stood before version 16.
+        PlaceLayoutStore store = KindFixtures.withHomePageLayout(
+            KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher)));
         launcher.setLayoutStyle(style);
         store.forVariant(LayoutVariant.NORMAL).setDockStyle(design);
-        store.forVariant(LayoutVariant.HOME).setDockStyle(design);
+        store.forVariant(KindFixtures.HOME_PAGE).setDockStyle(design);
         return store;
     }
 
@@ -67,11 +71,11 @@ public class ResolvedArrangementTest {
                         String cell = style + " " + design + (home ? " Home " : " Workspace ")
                             + orientation;
                         ResolvedArrangement a =
-                            ResolvedArrangement.resolve(store, orientation, home);
+                            ResolvedArrangement.resolve(store, orientation, pageOf(home));
 
                         assertEquals(cell, home, a.home());
                         assertEquals(cell, orientation, a.orientation());
-                        LayoutVariant variant = home ? LayoutVariant.HOME : LayoutVariant.NORMAL;
+                        LayoutVariant variant = home ? KindFixtures.HOME_PAGE : LayoutVariant.NORMAL;
                         assertEquals(cell, variant, a.variant());
                         assertEquals(cell, style, a.layoutStyle());
                         assertEquals(cell, style == LayoutStyle.FLOATING, a.floating());
@@ -96,7 +100,7 @@ public class ResolvedArrangementTest {
 
                         assertPredicatesArePlaceChromePolicys(cell, a);
                         assertEquals(cell, a, ResolvedArrangement.resolve(store, orientation,
-                            variant, home, style));
+                            variant, pageOf(home), style));
                     }
                 }
             }
@@ -105,7 +109,7 @@ public class ResolvedArrangementTest {
 
     @Test
     public void theFrameRunsToTheBottomOnlyDockedOffBeads() {
-        PlaceLayout layout = new PlaceLayoutStore(launcher).resolve(PlaceOrientation.PORTRAIT);
+        PlaceLayout layout = KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher)).resolve(PlaceOrientation.PORTRAIT);
         for (DockStyle design : DockStyle.CHOICES) {
             assertFalse(design.toString(), arranged(layout, LayoutStyle.FLOATING, design)
                 .frameRunsToBottom());
@@ -118,13 +122,12 @@ public class ResolvedArrangementTest {
     @Test
     public void aHomeLayoutGivesHomeItsOwnDesignAndLeavesTheWorkspacesAlone() {
         PlaceLayoutStore store = dressed(LayoutStyle.DOCKED, DockStyle.GLASS_TRAY);
-        store.setHomeLayout(true);
-        store.forVariant(LayoutVariant.HOME).setDockStyle(DockStyle.LENS_BEADS);
+        store.forVariant(KindFixtures.HOME_PAGE).setDockStyle(DockStyle.LENS_BEADS);
         ResolvedArrangement home =
-            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, true);
+            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.HOME);
         ResolvedArrangement workspace =
-            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, false);
-        assertEquals(LayoutVariant.HOME, home.variant());
+            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.TERMINAL);
+        assertEquals(KindFixtures.HOME_PAGE, home.variant());
         assertEquals(DockStyle.LENS_BEADS, home.design());
         assertFalse(home.frameRunsToBottom());
         assertFalse("the Home layout has no extra keys", home.extraKeysShown());
@@ -140,9 +143,9 @@ public class ResolvedArrangementTest {
     public void standingAnotherLayoutKeepsTheDressAndAnswersForThatLayout() {
         PlaceLayoutStore store = dressed(LayoutStyle.FLOATING, DockStyle.WALL_STRIP);
         ResolvedArrangement workspace =
-            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, false);
+            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.TERMINAL);
         assertSame(workspace, workspace.standing(workspace.layout()));
-        PlaceLayout seam = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, true)
+        PlaceLayout seam = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.HOME)
             .layout();
         ResolvedArrangement standing = workspace.standing(seam);
         assertSame(seam, standing.layout());
@@ -160,7 +163,7 @@ public class ResolvedArrangementTest {
         store.setSlot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS,
             store.slot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS).withEdge(Edge.RIGHT));
         ResolvedArrangement a =
-            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, false);
+            ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.TERMINAL);
         assertTrue(a.extraKeysShown());
         assertTrue(a.extraKeysColumnShown());
         assertFalse(a.extraKeysRowShown());
@@ -171,7 +174,7 @@ public class ResolvedArrangementTest {
     private static ResolvedArrangement arranged(PlaceLayout layout, LayoutStyle style,
                                                 DockStyle design) {
         return ResolvedArrangement.of(layout, style, design, false, false,
-            PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL, false);
+            PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL, PageRef.TERMINAL);
     }
 
     private static void assertPredicatesArePlaceChromePolicys(String cell, ResolvedArrangement a) {
@@ -189,5 +192,9 @@ public class ResolvedArrangementTest {
         assertEquals(cell, PlaceChromePolicy.extraKeysRowShown(l), a.extraKeysRowShown());
         assertEquals(cell, PlaceChromePolicy.extraKeysColumnShown(l), a.extraKeysColumnShown());
         assertEquals(cell, PlaceChromePolicy.dockShown(l), a.dockShown());
+    }
+
+    private static PageRef pageOf(boolean home) {
+        return home ? PageRef.HOME : PageRef.TERMINAL;
     }
 }

@@ -5,11 +5,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
+import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
 import com.termux.app.place.Element;
 import com.termux.app.surfaces.EditorCard;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -124,17 +124,17 @@ public final class ElementRows {
      * content (the Workspace's terminal, Home's widgets), which has no eye.
      */
     @NonNull
-    public static List<Item> rows(@NonNull WallHalf screen) {
+    public static List<Item> rows(@NonNull PaneWallPage screen) {
         List<Item> out = new ArrayList<>(SHARED);
-        out.add(screen == WallHalf.HOME ? Item.WIDGETS : Item.TERMINAL);
+        out.add(screen == PaneWallPage.WIDGETS ? Item.WIDGETS : Item.TERMINAL);
         return Collections.unmodifiableList(out);
     }
 
     /** The screen card that holds the list: Home's on Home, the Workspace's on the Workspace. */
     @Nullable
-    public static WallHalf screenOf(@NonNull EditorCard card) {
-        if (card == EditorCard.HOME) return WallHalf.HOME;
-        if (card == EditorCard.WORKSPACE) return WallHalf.WORKSPACE;
+    public static PaneWallPage screenOf(@NonNull EditorCard card) {
+        if (card == EditorCard.HOME) return PaneWallPage.WIDGETS;
+        if (card == EditorCard.WORKSPACE) return PaneWallPage.TERMINAL;
         return null;
     }
 }

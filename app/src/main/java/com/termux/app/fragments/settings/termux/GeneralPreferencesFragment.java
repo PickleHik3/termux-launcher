@@ -46,6 +46,30 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
         offerStartIn(com.termux.app.settings.UseAsSetting.read(context));
+        // Run setup again opens the wizard on the launcher, as the tour replay does.
+        Preference rerun = findPreference("app_launcher_setup_rerun");
+        if (rerun != null) rerun.setOnPreferenceClickListener(row -> {
+            startActivity(new android.content.Intent(context, com.termux.app.TermuxActivity.class)
+                .putExtra(com.termux.app.TermuxActivity.EXTRA_RERUN_SETUP, true));
+            if (getActivity() != null) getActivity().finish();
+            return true;
+        });
+        // Setup: the cards left over after the wizard; the count says how many are open.
+        Preference cards = findPreference("app_launcher_setup_cards");
+        if (cards != null) {
+            java.util.List<com.termux.app.setup.SetupCards.Card> all =
+                com.termux.app.setup.SetupCardSystem.cards(context);
+            int open = com.termux.app.setup.SetupCards.openCount(all);
+            cards.setVisible(!all.isEmpty());
+            cards.setSummary(getResources().getQuantityString(
+                R.plurals.setup_cards_row_summary, open, open));
+            cards.setOnPreferenceClickListener(row -> {
+                startActivity(new android.content.Intent(context, com.termux.app.TermuxActivity.class)
+                    .putExtra(com.termux.app.TermuxActivity.EXTRA_SHOW_SETUP_CARDS, true));
+                if (getActivity() != null) getActivity().finish();
+                return true;
+            });
+        }
         Preference setHome = findPreference("app_launcher_set_home");
         // The same chooser the tour's last card offers, so both doors behave the same way.
         if (setHome != null) setHome.setOnPreferenceClickListener(row -> {
@@ -121,7 +145,8 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
         if (prefs == null) return;
-        String shown = useAs.startIn(prefs.getLauncherStartIn());
+        String shown = useAs.startIn(
+            com.termux.app.wall.WallPagesStore.open(context).current().startIn());
         // setValue would write it; the stored Home stays for a return to Home screen. The list's
         // summary reads the value it holds, so it is set without persisting.
         boolean persistent = startIn.isPersistent();

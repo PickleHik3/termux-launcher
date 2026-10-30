@@ -71,6 +71,7 @@ nothing changes at the landing. The keyboard travels with the half that has it o
 or a chip tapped mid-slide retargets from where the wall is. A crossing is over only when the wall
 lands.
 _Avoid_: travel (the code's older word for the same motion), transition, page swipe
+_ADR 0015 (proposed): any slide between two neighbouring pages, not only between the halves._
 
 **Display**, **display window**:
 One X display, shown whole by the embedded X server (`x11-server/`) as a **window** in the
@@ -154,6 +155,7 @@ The launcher half of the wall: the **Home pages**, left of the **Workspace**. It
 and it is where the home press lands. Its chrome is the dock with the pinned-apps row and the A–Z
 index, the launcher status bar it shares with the Workspace, and the keyboard; it has no borders.
 _Avoid_: home screen (as a name for the whole launcher), the widgets place, Widgets page
+_ADR 0015 (proposed): Home stops being a half; a **Home page** is one page kind among three, and the home press lands on the **home page**._
 
 **Home page**:
 One page of **Home**: a grid of widgets, paged by a plain swipe anywhere on it. Pages 2…n lie to the
@@ -169,6 +171,7 @@ a swipe beside it does), resized at its bottom-right corner, minimised into
 its **window chip** in the status bar and docked into the row by the titlebar's Dock. It is what
 Terminal from Home opens. The bar's chips, the drawer and the shortcuts see it like any window.
 _Avoid_: floating terminal (in prose), scratchpad (that is the toggled one), popup
+_ADR 0015 (proposed): becomes a **Float**, which may also hang over a Terminal page window._
 
 **Float chip**:
 Retired 2026-10-21: a minimised **Home float** is a **window chip** in the status bar on both
@@ -249,6 +252,7 @@ One full-screen stop on the **wall**: a **Home page** or a **window**. Appearanc
 every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
 only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
+_ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Base** or detaches its own look values._
 
 **Pane**:
 One terminal view inside a split. Panes have corner tabs but no appearance of their own. A split is resized by dragging the divider, the gap between its panes, and a corner hold only shows the pane's buttons.
@@ -295,6 +299,7 @@ button sets: a Home page, the first terminal window or the display window. It re
 mode's Terminal alone. Under **Use as** Terminal only it offers Terminal and Display, and a stored
 Home reads as the Workspace.
 _Avoid_: default place, start page, usage mode
+_ADR 0015 (proposed): retires into the **home page**._
 
 **Use as**:
 Home screen (the default) or Terminal only, asked on the welcome sheet's first page and kept in
@@ -303,6 +308,7 @@ the Home page off the wall, hides Home's settings, drops Home from Start in and 
 card and both Match rows; the home press lands on the Workspace. Whether the app is the phone's
 home app is a separate choice.
 _Avoid_: usage mode, launcher mode, terminal alone
+_ADR 0015 (proposed): retires as a setting; the welcome sheet's choice only seeds the wall._
 
 **Search field**:
 The field under the dock's apps row that opens the command palette, there when the layout turns it
@@ -355,6 +361,7 @@ past the last Home page reaches the first window, opening a fresh one when the W
 dragging back before the first window returns to the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
+_ADR 0015 (proposed): the wall is one ordered list of pages of any **page kind**, in any order, arranged in Edit pages._
 
 **Window chip**:
 The status bar's chip for one window, the display window or a **Home float**, the same chips in the
@@ -369,6 +376,109 @@ the Workspace alive. A home press on it goes to Home page 1; a home press from a
 to the window that was left. The drawer, the corner tab and the border drag also lead back to Home.
 _Avoid_: usage mode, Terminal place, terminal environment, saved workspace (that is **Saved
 sessions**)
+_ADR 0015 (proposed): renamed the **Terminal page**, one page placed anywhere on the wall; Workspace moves to Avoid._
+
+### Pages (ADR 0015, proposed)
+
+These words come from ADR 0015 (the wall is a list of pages), still a draft on 2026-10-27. Until it
+is accepted the entries above describe the app as built.
+
+**Page kind**:
+What a page is: a **Home page**, the **Terminal page** or a **Display page**. Each kind has its own
+default **Dress**: the dock on Home pages; the status bar and extra keys, dock off, on the others.
+_Avoid_: page type, place
+
+**home page** (the one set as home):
+The one page, of any kind, that a cold start and a home press inside the launcher land on, chosen
+in Edit pages with Set as home. Written lower-case; a **Home page** (capitalised) is the kind. A
+home press from another app returns to the page that was left first.
+_Avoid_: start page, default page, Start in
+
+**Terminal page**:
+The one page (at most one) that holds the sessions: one session's row of windows side by side,
+extended sideways by windows (Ctrl+Alt+C) and vertically by sessions (Ctrl+Alt+Shift+C, swapped in
+place by Ctrl+Alt+Up/Down). It stays on the wall when its last window closes and starts a shell
+when landed on. Named "Terminal" in the UI. Replaces the **Workspace**.
+_Avoid_: Workspace, run, shell (that is what a pane runs)
+
+**Display page**:
+A page showing the one X display, either unbound (the screen as it is) or bound to a Linux app,
+which landing on it raises (and launches). Landing starts the display when it is not running. Any
+number; it takes no Floats and no drops.
+_Avoid_: display window (the retired row window), X11 page
+
+**Float**:
+A session window floating over a Home page or a Terminal page window, with one titlebar and chip.
+A floating pane is lifted into a Float pinned to its window.
+_Avoid_: Home float (the narrower old word), floating pane
+
+**Carry**:
+Moving a held thing (a Float, an app icon, a folder or a widget) across pages: a second finger's
+swipe or a rest at the side edge pages the wall under it. A release where it cannot drop flies it
+back.
+_Avoid_: drag across pages, pick up (that is the first half of a carry)
+
+**Multi-pick**:
+A carry of several items: after one is picked up, taps on more Home items fly them into the held
+stack; the drop lays them out in pick order.
+_Avoid_: multi-select, bulk move
+
+**Page list**:
+The wall's ordered pages and its **home page**, held by one module (`WallPages`, designed
+2026-10-27). Pages have stable ids; what stands on a page is kept by its owner under that id.
+_Avoid_: page order (as a store), wall model
+
+**Stop**:
+One place the wall can land: a page, or one window of the **Terminal page**. The Terminal page
+gives one stop per window of the current session, or one when it has none.
+_Avoid_: page index, position
+
+**Widgets** (the surface):
+The look surface for widget cards on a Home page, following **Base** or detached per page; each
+widget only chooses Card or **Bare**.
+_Avoid_: widget glass (in prose)
+
+**Ground**:
+What is painted between the wallpaper and a page: its wallpaper dim, plus the canvas tint on the
+**Terminal page** when the canvas is not glass. One per page; neighbouring grounds meet in a soft
+seam that travels with the pages. The ink solver reads the ground under a rect.
+_Avoid_: wall ground (the retired single colour), unified background dim
+
+**Cell**:
+The stretch of the **wall** one page takes, in the order Edit pages arranged: every page has one,
+whatever its kind, and the wall pages from cell to cell. A cell shows its page **live** or as a
+**still**.
+_Avoid_: wall slot, place window (the retired list of at most one page per kind around the current
+one), slot
+
+**Live page**:
+The page its kind's one view is drawing right now: the widget grid for one Home page, the row of
+windows for the Terminal page, the X display for one Display page. At most one live page per kind;
+the page the wall stands on is always live once it has landed.
+_Avoid_: bound page (binding is the choice, live is the state), current page (that is the page the
+wall stands on, which may still be a still mid-slide)
+
+**Still**:
+What a cell shows while its page is not live: the page's last picture, else a card with the page's
+name and its kind's icon. A still takes no touch and wears no chrome of its own; the **Dress** is the
+page kind's whether the page is live or still. Landing on a still binds the kind's view to that page
+and the still gives way to the view.
+_Avoid_: stand-in (that is the surface's copy while a live display moves), placeholder, snapshot
+
+**Binding**:
+Which page of a kind the kind's one view draws. A landing re-binds; a far jump by name re-binds to
+the page landed on and never to the pages passed over.
+_Avoid_: bound run, bound slot
+
+**Page override**:
+A look value one page holds instead of the wall's: stored as the surface's key plus `@<page id>`,
+resolved page override → the surface's wall-wide value → **Base**. Reset under the page's scope
+drops it.
+_Avoid_: half value, per-page setting
+
+**Scope chip**:
+The Appearance card's **Global | <page name>** switch: Global writes **Base**, the page's name
+detaches that page's values. "Global" is the UI label; in prose and code say Base.
 
 ### Look and motion
 
@@ -451,6 +561,7 @@ stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Loo
 itself; Custom is never a gate. Home and the Workspace each hold their own Look and own surface
 values, equal until one is edited (ADR 0013); one look covers both orientations.
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
+_ADR 0015 (proposed): looks are held per page, not per half: Base, then each page inherits or detaches (supersedes ADR 0013)._
 
 **Material palette**:
 The colours the launcher takes from the system's Material roles, from the wallpaper or from a colour

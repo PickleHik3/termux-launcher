@@ -1,9 +1,10 @@
 #!/bin/sh
 # Removes exactly the marker blocks apply.sh added to config.toml - the
 # `auto_switch = true` line in [theme], the two palette subtables and the
-# sidebar's rows, each of which carries its own table header when apply.sh had
-# to create it - and restores every pre-existing line apply.sh commented out,
-# including the user's own auto_switch and sidebar rows. Then removes the
+# default sidebar rows, each of which carries its own table header when
+# apply.sh had to create it - and restores every pre-existing line apply.sh
+# commented out: the user's own auto_switch, and the sidebar rows an earlier
+# version of apply.sh commented out (the current one leaves them alone). Then removes the
 # rendered file and asks a running herdr server to reload. Pure POSIX sh/awk,
 # matching apply.sh.
 set -eu

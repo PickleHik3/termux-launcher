@@ -65,7 +65,7 @@ public final class PaneWallPolicy {
     /**
      * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
      * pages first, always there; then the Workspace's windows, only while the current session's
-     * row has one — a terminal window, or the display window ({@link DisplaySlot}). A Home page and
+     * row has one — a terminal window, or the display window (before ADR 0015 A3b). A Home page and
      * a window are each one entry here however many of them there are: the Home pages page inside
      * the widget grid and the windows inside the Workspace's view ({@link WallRow}), and the wall
      * only slides between the stretches.
@@ -80,24 +80,15 @@ public final class PaneWallPolicy {
         return Collections.unmodifiableList(pages);
     }
 
-    /**
-     * Where the wall goes when the page it rests on leaves the row: the nearest page to its left
-     * that is still there: the last window closing lands on Home. A page the old row did not have
-     * hands over to Home.
-     *
-     * @param before the row as it was
-     * @param after  the row as it is now
-     * @param gone   the page the wall rested on, no longer in {@code after}
-     */
+    /** The wall's page kind of a page of the list: Home pages are shown by the widgets' view. */
     @NonNull
-    public static PaneWallPage pageAfterRemoval(@NonNull List<PaneWallPage> before,
-                                                @NonNull List<PaneWallPage> after,
-                                                @NonNull PaneWallPage gone) {
-        for (int i = before.indexOf(gone) - 1; i >= 0; i--) {
-            if (after.contains(before.get(i))) return before.get(i);
+    public static PaneWallPage kindOf(@NonNull WallPages.PageKind kind) {
+        switch (kind) {
+            case HOME: return PaneWallPage.WIDGETS;
+            case DISPLAY: return PaneWallPage.DISPLAY;
+            case TERMINAL:
+            default: return PaneWallPage.TERMINAL;
         }
-        if (after.contains(homePage())) return homePage();
-        return after.isEmpty() ? homePage() : after.get(0);
     }
 
     /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */
@@ -136,24 +127,6 @@ public final class PaneWallPolicy {
     }
 
     /**
-     * Where {@code page} sits relative to {@code current}, in places: negative to the left,
-     * positive to the right, zero for itself. On a ring it is the shorter way round, so on a
-     * three-page wall every other page is exactly one place away.
-     */
-    public static int relativePosition(@NonNull List<PaneWallPage> pages,
-                                       @NonNull PaneWallPage current, @NonNull PaneWallPage page) {
-        int from = pages.indexOf(current);
-        int to = pages.indexOf(page);
-        if (from < 0 || to < 0) return 0;
-        int distance = to - from;
-        if (!isRing(pages)) return distance;
-        int count = pages.size();
-        distance = ((distance % count) + count) % count;
-        if (distance > count / 2) distance -= count;
-        return distance;
-    }
-
-    /**
      * The neighbour {@code steps} places away over the available pages. On a ring the count
      * wraps; on a line it stops at the outer page, which is then returned itself. Missing pages
      * are simply skipped, so a two-page wall has no dead swipe.
@@ -161,8 +134,19 @@ public final class PaneWallPolicy {
     @NonNull
     public static PaneWallPage neighbour(@NonNull List<PaneWallPage> pages,
                                          @NonNull PaneWallPage page, int steps) {
-        int index = pages.indexOf(page);
-        if (index < 0) return page;
+        return neighbourAt(pages, pages.indexOf(page), steps, page);
+    }
+
+    /**
+     * The page kind {@code steps} entries from entry {@code index} of {@code pages}, counted as
+     * {@link #neighbour} counts: a line stops at the outer entry. {@code fallback} when
+     * {@code index} is not in the list. For a list with one entry per cell, where a kind can
+     * stand in several cells and only the index says which one the wall is on.
+     */
+    @NonNull
+    public static PaneWallPage neighbourAt(@NonNull List<PaneWallPage> pages, int index,
+                                           int steps, @NonNull PaneWallPage fallback) {
+        if (index < 0 || index >= pages.size()) return fallback;
         int count = pages.size();
         int target = isRing(pages)
             ? (((index + steps) % count) + count) % count
@@ -181,8 +165,7 @@ public final class PaneWallPolicy {
                                            @NonNull PaneWallPage current) {
         List<PaneWallPage> result = new ArrayList<>(pages.size());
         for (PaneWallPage page : pages) if (page != current) result.add(page);
-        result.sort((a, b) -> Integer.compare(relativePosition(pages, current, a),
-            relativePosition(pages, current, b)));
+        result.sort((a, b) -> Integer.compare(pages.indexOf(a), pages.indexOf(b)));
         return Collections.unmodifiableList(result);
     }
 

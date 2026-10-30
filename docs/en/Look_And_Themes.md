@@ -161,6 +161,14 @@ Pick tools in this list and the launcher writes their theme file whenever the pa
 wires it into the tool's own config. Turning one off puts its config back. Built in: Starship,
 Helix, tmux, bat, Yazi, fzf, lazygit, Neovim and herdr.
 
+Each tool's config stays yours apart from the lines the launcher writes, which sit between
+`# >>> launcher-material >>>` and `# <<< launcher-material <<<` markers. For herdr that is
+`auto_switch` in `[theme]` and the `[theme.custom.dark]` and `[theme.custom.light]` palettes; a
+line of your own with one of those names is commented out with a `# launcher-material:` prefix
+and put back when you turn the tool off. The sidebar rows in `[ui.sidebar.spaces]`,
+`[ui.sidebar.agents]` and `[ui.sidebar.agents.rows_by_agent]` are only defaults: write your own
+row there and the launcher keeps it, content and colours, through every re-theme.
+
 To add your own, make a folder `~/.termux/theme-templates/<id>/` holding a `template.properties`
 manifest, the file to render and its hooks:
 

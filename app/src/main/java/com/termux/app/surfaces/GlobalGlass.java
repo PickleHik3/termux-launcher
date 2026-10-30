@@ -6,7 +6,6 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
@@ -29,16 +28,16 @@ final class GlobalGlass {
      */
     static int write(@NonNull TermuxAppSharedPreferences prefs, @NonNull SurfaceProperty property,
                      int value) {
-        return write(prefs, property, null, value);
+        return write(prefs, property, TermuxAppSharedPreferences.PAGE_ALL, value);
     }
 
     /**
-     * {@link #write(TermuxAppSharedPreferences, SurfaceProperty, int)} for one half (ADR 0013): the
-     * half's base, and only the surfaces standing on that half put back on it. The terminal stands
-     * on the Workspace alone, so Home's shared glass leaves it as it is. A null half writes both.
+     * {@link #write(TermuxAppSharedPreferences, SurfaceProperty, int)} for one page (ADR 0015): the
+     * page's base, and only the surfaces standing on that page put back on it. The terminal stands
+     * on the Workspace alone, so Home's shared glass leaves it as it is. PAGE_ALL writes the wall and every page.
      */
     static int write(@NonNull TermuxAppSharedPreferences prefs, @NonNull SurfaceProperty property,
-                     @Nullable WallHalf half, int value) {
+                     int pageId, int value) {
         int clamped;
         switch (property) {
             case BLUR:
@@ -56,19 +55,19 @@ final class GlobalGlass {
             default:
                 throw new IllegalArgumentException("not a glass property: " + property);
         }
-        boolean workspace = half != WallHalf.HOME;
+        boolean workspace = pageId != TermuxAppSharedPreferences.PAGE_WALL;
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             if (slot == SurfaceSlot.CANVAS && !workspace)
                 continue;
-            prefs.setSurfaceInheriting(slot, property, half, true);
+            prefs.setSurfaceInheriting(slot, property, pageId, true);
         }
         // The keyboard's blur is the one cell whose raw key holds "follow" as -1 outside the
         // link (the rule Blur has always written); a stale number there must not come back. A
         // one-half write leaves it: the other half may still read its own number there.
-        if (property == SurfaceProperty.BLUR && half == null)
+        if (property == SurfaceProperty.BLUR && pageId == TermuxAppSharedPreferences.PAGE_ALL)
             prefs.setInAppKeyboardBlurRadiusRaw(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
-        prefs.setSurfaceBaseValue(property, half, clamped);
-        if (property == SurfaceProperty.OPACITY && half == null) {
+        prefs.setSurfaceBaseValue(property, pageId, clamped);
+        if (property == SurfaceProperty.OPACITY && pageId == TermuxAppSharedPreferences.PAGE_ALL) {
             // The terminal follows the base now; the setter also keeps the copy the wallpaper
             // mode restores from in step, so turning the wallpaper off and on keeps this number.
             prefs.setTerminalBackgroundOpacity(clamped);

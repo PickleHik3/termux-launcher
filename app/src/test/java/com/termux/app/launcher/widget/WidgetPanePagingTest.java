@@ -42,6 +42,25 @@ public class WidgetPanePagingTest {
         assertEquals(0, fixture.controller.currentPage());
     }
 
+    @Test public void aFrameReBoundToAnotherRunTurnsToThatRunsArrivalPage() {
+        Fixture fixture = new Fixture();
+        fixture.controller.menuAddPage();
+        fixture.controller.menuAddPage();
+        fixture.controller.menuAddPage();
+        assertEquals(4, fixture.repository.pageCount());
+        fixture.controller.setHomeRun(0, 1);
+        fixture.controller.setCurrentPage(1);
+        fixture.controller.setHomeRun(2, 3);
+        assertEquals("a run after the one shown arrives on its first page",
+            2, fixture.controller.currentPage());
+        assertEquals(2, fixture.pane.currentPage());
+        fixture.controller.setCurrentPage(3);
+        fixture.controller.setHomeRun(0, 1);
+        assertEquals("a run before it arrives on its last page", 1, fixture.controller.currentPage());
+        fixture.controller.setHomeRun(0, -1);
+        assertEquals("every page holds the page shown", 1, fixture.controller.currentPage());
+    }
+
     @Test public void renderShowsOnlyTheCurrentPagesCellsAndLeavingHomeWaitsOnTheLastPage() {
         Fixture fixture = new Fixture();
         assertEquals(1, fixture.repository.addPage());

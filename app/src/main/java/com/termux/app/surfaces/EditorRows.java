@@ -15,7 +15,6 @@ import com.termux.app.surfaces.cards.TerminalCard;
 import com.termux.app.surfaces.cards.WorkspaceCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -110,11 +109,6 @@ public final class EditorRows {
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
-        /** Home's card: Home takes the Workspace's layout and glass ({@link ScreenMatch}). */
-        MATCH_WORKSPACE(Kind.ACTION, R.string.appearance_row_match_workspace,
-            R.drawable.ic_ms_swap_horiz),
-        /** The Workspace's card: the Workspace takes Home's layout and glass. */
-        MATCH_HOME(Kind.ACTION, R.string.appearance_row_match_home, R.drawable.ic_ms_swap_horiz),
         /** A screen's card to the card both screens share (the palette's). */
         LINK_GLOBAL(Kind.LINK, R.string.appearance_row_global, R.drawable.ic_symbol_palette),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
@@ -346,28 +340,23 @@ public final class EditorRows {
     }
 
     /**
-     * The half a row of {@code card} writes while the frame shows {@code frameHalf}, or null
-     * where it writes one value for the wall (ADR 0013 §4): the per-half glass numbers of the
-     * dock, the status bar and the keyboard, the Look slider and the shared glass the
-     * Appearance card's Frost, Opacity and Tint write, follow the frame; the Home card's Look and glass are
-     * the Home half's whatever the frame shows, and the Workspace card's Look and glass the Workspace
-     * half's; the terminal's numbers (it stands on the Workspace
-     * alone), corners, margins, heights, places, the Dock's style and design, and every app-wide
-     * choice do not.
+     * The page a row of {@code card} writes: {@link TermuxAppSharedPreferences#PAGE_WALL} for the
+     * glass numbers of the dock, the status bar and the keyboard, the Look slider and the shared
+     * glass the screen and Appearance cards' Frost, Opacity and Tint write (a page's own values go
+     * through the editor's scope, ADR 0015 §6); {@link TermuxAppSharedPreferences#PAGE_ALL} where
+     * it writes one value for the wall: the terminal's numbers, corners, margins, heights, places,
+     * the Dock's style and design, and every app-wide choice.
      */
-    @Nullable
-    public static WallHalf halfFor(@NonNull EditorCard card, @NonNull Row row,
-                                   @NonNull WallHalf frameHalf) {
-        if (card == EditorCard.HOME)
-            return row == Row.LOOK || row.property() != null ? WallHalf.HOME : null;
-        if (card == EditorCard.WORKSPACE)
-            return row == Row.LOOK || row.property() != null ? WallHalf.WORKSPACE : null;
-        if (card == EditorCard.APPEARANCE)
-            return row == Row.LOOK || row.property() != null ? frameHalf : null;
+    public static int pageFor(@NonNull EditorCard card, @NonNull Row row) {
+        int none = TermuxAppSharedPreferences.PAGE_ALL;
+        if (card == EditorCard.HOME || card == EditorCard.WORKSPACE || card == EditorCard.APPEARANCE)
+            return row == Row.LOOK || row.property() != null
+                ? TermuxAppSharedPreferences.PAGE_WALL : none;
         SurfaceProperty property = row.property();
         if (card.slot == null || property == null)
-            return null;
-        return TermuxAppSharedPreferences.isPerHalf(card.slot, property) ? frameHalf : null;
+            return none;
+        return TermuxAppSharedPreferences.isPerPage(card.slot, property)
+            ? TermuxAppSharedPreferences.PAGE_WALL : none;
     }
 
     /**

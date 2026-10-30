@@ -17,7 +17,6 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.color.MaterialColors;
 
 import com.termux.R;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 /**
  * The editor bar and the half line over it (appearance-and-settings-rework §7, wireframe 01):
@@ -50,9 +49,6 @@ final class EditorBar {
     private static final int PAD_DP = 4;
     /** The bar stands this far above the navigation inset. */
     static final int FOOT_GAP_DP = 8;
-    /** The half line's dots: 6dp, the shown half's dot 16 × 6; its height is the pose's. */
-    private static final int DOT_DP = 6;
-    private static final int ACTIVE_DOT_DP = 16;
     /**
      * The theme hint stands this far above the half line (so it never covers the half's name), and
      * keeps this far from the screen's sides.
@@ -81,14 +77,9 @@ final class EditorBar {
     /** The half line's height as last set; the hint stands above it. */
     private int mHalfRowPx;
     @NonNull private final LinearLayout mHalfRow;
-    @NonNull private final View mHomeDot;
-    @NonNull private final View mWorkspaceDot;
     @NonNull private final TextView mHalfName;
-    @NonNull private final GradientDrawable mHomeDotShape = new GradientDrawable();
-    @NonNull private final GradientDrawable mWorkspaceDotShape = new GradientDrawable();
     private Listener mListener;
     private boolean mLandscape;
-    private WallHalf mHalf;
 
     EditorBar(@NonNull Context context) {
         mContext = context;
@@ -165,12 +156,6 @@ final class EditorBar {
         mHalfRow.setOrientation(LinearLayout.HORIZONTAL);
         mHalfRow.setGravity(Gravity.CENTER);
         mHalfRow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        mHomeDot = dot(mHomeDotShape);
-        mWorkspaceDot = dot(mWorkspaceDotShape);
-        mHalfRow.addView(mHomeDot);
-        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(dp(4), 1);
-        mHalfRow.addView(new View(context), gap);
-        mHalfRow.addView(mWorkspaceDot);
         mHalfName = new TextView(context);
         EditorViews.textAppearance(mHalfName, com.google.android.material.R.attr.textAppearanceLabelLarge);
         mHalfName.setTextColor(MaterialColors.getColor(context,
@@ -178,12 +163,11 @@ final class EditorBar {
         mHalfName.setSingleLine(true);
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        nameParams.setMarginStart(dp(12));
         mHalfRow.addView(mHalfName, nameParams);
         mHalfRow.setMinimumHeight(dp(EditorFramePose.HALF_ROW_DP));
         mHalfRow.setOnClickListener(v -> { if (mListener != null) mListener.onPageLabel(); });
         setOrientation(false);
-        setHalf(WallHalf.WORKSPACE);
+        setPageName(context.getString(R.string.appearance_half_workspace));
         setDirty(false);
     }
 
@@ -197,7 +181,7 @@ final class EditorBar {
         return mBar;
     }
 
-    /** The two dots and the half's name. */
+    /** The line naming the page the editor shows (ADR 0015 §6: no halves to switch between). */
     @NonNull
     View halfRow() {
         return mHalfRow;
@@ -286,19 +270,8 @@ final class EditorBar {
         return new int[] {0xFF1B1B1F, 0xFFE3E2E6};
     }
 
-    /** The half the frame shows: its dot is the long one, and its name stands beside them. */
-    void setHalf(@NonNull WallHalf half) {
-        if (half == mHalf)
-            return;
-        mHalf = half;
-        boolean home = half == WallHalf.HOME;
-        int on = MaterialColors.getColor(mContext, androidx.appcompat.R.attr.colorPrimary, 0);
-        int off = MaterialColors.getColor(mContext,
-            com.google.android.material.R.attr.colorOutline, 0);
-        paintDot(mHomeDot, mHomeDotShape, home, on, off);
-        paintDot(mWorkspaceDot, mWorkspaceDotShape, !home, on, off);
-        CharSequence name = mContext.getString(home ? R.string.appearance_half_home
-            : R.string.appearance_half_workspace);
+    /** The page the editor shows: its name on the line over the frame. */
+    void setPageName(@NonNull CharSequence name) {
         if (!TextUtils.equals(mHalfName.getText(), name))
             mHalfName.setText(name);
         mHalfRow.setContentDescription(mContext.getString(
@@ -477,27 +450,6 @@ final class EditorBar {
         float room = content.getWidth() / 2f - side - mHint.getWidth() / 2f;
         shift = Math.max(-room, Math.min(room, shift));
         if (mHint.getTranslationX() != shift) mHint.setTranslationX(shift);
-    }
-
-    private void paintDot(@NonNull View dot, @NonNull GradientDrawable shape, boolean active,
-                          int on, int off) {
-        shape.setColor(active ? on : off);
-        ViewGroup.LayoutParams params = dot.getLayoutParams();
-        int width = dp(active ? ACTIVE_DOT_DP : DOT_DP);
-        if (params != null && params.width != width) {
-            params.width = width;
-            dot.setLayoutParams(params);
-        }
-    }
-
-    @NonNull
-    private View dot(@NonNull GradientDrawable shape) {
-        View dot = new View(mContext);
-        shape.setCornerRadius(dp(DOT_DP) / 2f);
-        dot.setBackground(shape);
-        dot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        dot.setLayoutParams(new LinearLayout.LayoutParams(dp(DOT_DP), dp(DOT_DP)));
-        return dot;
     }
 
     @NonNull

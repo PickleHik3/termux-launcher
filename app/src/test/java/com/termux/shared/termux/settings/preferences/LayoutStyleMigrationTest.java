@@ -147,7 +147,7 @@ public class LayoutStyleMigrationTest {
         preferences.migrateSurfaceInheritance();
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
-        assertEquals(27, preferences.getStatusBarBlurRadius());
+        assertEquals(27, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test

@@ -1442,6 +1442,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_BODY_SWIPE = "terminal_body_swipe";
         public static final boolean DEFAULT_TERMINAL_BODY_SWIPE = true;
 
+        /** Whether the status bar's pull and fold from a window's top border need two fingers. */
+        public static final String KEY_STATUS_SWIPE_TWO_FINGERS = "status_swipe_two_fingers";
+        public static final boolean DEFAULT_STATUS_SWIPE_TWO_FINGERS = false;
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 
@@ -1967,6 +1971,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION =
             "first_boot_tour_completed_version";
         public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
+
+        /** The setup wizard version the user has finished or skipped, or 0 for never. */
+        public static final String KEY_SETUP_WIZARD_VERSION = "setup_wizard_version";
+        public static final int DEFAULT_SETUP_WIZARD_VERSION = 0;
 
         /**
          * The version of the run an unfinished tour belongs to, or 0 for one started before the

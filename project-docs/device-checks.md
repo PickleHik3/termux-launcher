@@ -21,6 +21,50 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-30 · ADR 0016 (#183 to #187, feat/wall-cells) · on pong, with Home, a Terminal window and
+  a Display page in the wall: reach the Display page by its key, then press Home: the wall lands on
+  Home; press the Terminal key; swipe left on Home: the Terminal page slides in (not the Display
+  page); from the Display page press the Android home button: Home shows; fling right on the
+  Terminal page's seam to Home: it slides and lands, no rubber-band against a page that exists ·
+  passes when none of those is refused or skips a page · emulator pass of the sweep's repro:
+  https://amal-build.taild9c5dc.ts.net/reports/wall-cells-2026-10-30/ · pong, debug arm64 build.
+- 2026-10-30 · ADR 0016 (#185, #187) · on pong: with two Home runs, go from one to the other by
+  key and by swipe; with two adjacent Display pages, swipe between them · passes when the page that
+  is leaving shows its last picture (a still) while it slides, the arriving page turns live when
+  it lands, and the still wears the same ink as the chrome · emulator pass at the report above.
+- 2026-10-30 · ADR 0016 (#186) · on pong: close every Terminal window, then reach the empty Terminal
+  page by swipe from Home and by its key, and from the other side: the page is a stop, shows its
+  card, and the shell starts on landing, with no over-swipe needed · passes when both sides start
+  one shell and the card gives way to the shell · emulator pass on 7bfccc0f4 (emu3): the card
+  slides in, the shell starts on landing from Home and from the Display key; report above.
+- 2026-10-30 · ADR 0016 (#185) · on pong, on each page kind (Home, Terminal, Display, the empty
+  Terminal page): the extra-keys row shows the go-to keys for the page kinds the wall has, and keys
+  that cannot act on this page go faint · passes when no key is missing for a kind the wall has ·
+  emulator pass at the report above.
+- 2026-10-29 · a11264eec (LorieView lastClipboardTimestamp starts at 0) · on pong: copy a
+  URL in the terminal (terminal-browser, or any selection + the keyboard's copy key) BEFORE the
+  display is started, then start Firefox on the display, tap its address bar and use the
+  keyboard's paste key: the URL appears; also copy in Firefox (Ctrl+C or the copy key) and paste
+  in the terminal · passes when both directions carry the text · emulator pass 2026-10-29 with
+  Mousepad (clip copied before `launcherctl launch mousepad` pasted after the fix, not before).
+- 2026-10-29 · the terminal palette wears the pane band's ink as decided (branch
+  fix/contrast-polarity-flap) · on pong with the blue wallpaper and herdr open: Appearance ›
+  Terminal › Contrast › Harder, Done; reopen the editor, Done again; then leave and return to
+  the launcher: the terminal keeps one ink across all three (the recording of 2026-10-29 showed
+  dark ink at the first Done and pale at the second), the miniature in the editor shows the same
+  ink as the live terminal, and herdr re-themes at most once (its sidebar does not keep swapping
+  between its dark and light palettes); Default and Softer unchanged · passes as
+  MaterialTerminalColorSchemeTest says (2026-10-29) · pong, debug arm64 build of the branch.
+- 2026-10-29 · the herdr theme hook keeps the user's sidebar rows (commit after c496185e3) · on
+  pong: `~/.config/herdr/config.toml` holds the developer's `claude = [["state_icon", "tab"],
+  [{ token = "workspace", fg = "#5fb3b3" }]]` row commented out with `# launcher-material:`;
+  the developer's `~/.termux/theme-templates/herdr/` copy of the old template shadows the
+  shipped one and must go (or be refreshed) first; then toggle the herdr tool in Settings ›
+  Appearance › Tools that follow the terminal colours, or flip light/dark: the `claude` row
+  comes back plain, no `claude` of ours in the marker block, the `[theme.custom.*]` tables and
+  `auto_switch` still spliced, herdr's Claude sidebar shows the project folder in teal and keeps
+  it across a re-theme · passes as `project-docs/verification/test-herdr-theme-hook.sh` says
+  (gawk and busybox, 2026-10-29) · pong, debug arm64 build.
 - 2026-10-29 · the home press follows Start in (commit after 7d753cc0c) · on pong: Edit pages, tap
   the terminal card's home button, leave the overview, swipe to Home page 2, press the Home key:
   the wall lands on the first terminal window (window 2 in front first: the press switches to

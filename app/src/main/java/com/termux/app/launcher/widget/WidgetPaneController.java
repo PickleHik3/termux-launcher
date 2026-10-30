@@ -78,11 +78,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * keyboard, down puts them away (spec §5.1).
          */
         default void onHomePaletteSwipe(boolean up) { }
-        /**
-         * Edit pages moved or removed a page: {@code mapping} is each old page's new number
-         * ({@link com.termux.app.launcher.home.HomePageEdits}), for what else names a page.
-         */
-        default void onHomePagesRenumbered(@NonNull int[] mapping) { }
         /** A double tap on the page's free area (Settings › Home › Gestures). */
         default void onHomeDoubleTap() { }
         /** A two-finger swipe up ({@code up}) or down on the page's free area. */
@@ -479,9 +474,33 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return pane.contentShiftFraction();
     }
 
+    /** Whether the Home page in front is settling, sliding in or back; see WidgetPaneView. */
+    public boolean isHomePageSettling() {
+        return pane.isContentSettling();
+    }
+
+    /** Runs {@code action} once that settle lands or is cut short, or now if none is under way. */
+    public void runWhenHomePageSettles(@NonNull Runnable action) {
+        pane.runWhenContentSettles(action);
+    }
+
     /** Turn Home to page {@code page} (clamped), without the swipe's slide. */
     public void showHomePage(int page) {
         setCurrentPage(page);
+    }
+
+    /**
+     * The run of Home pages the one Home frame pages inside (ADR 0015, A2a), global indexes,
+     * both included; {@code last} below 0 for every page.
+     */
+    public void setHomeRun(int first, int last) {
+        pane.setRun(first, last);
+        // Re-bound to another run, the frame turns to that run's arrival page, the end nearest the
+        // page it showed: it never shows one run's page while bound to another (W5).
+        int lo = Math.max(0, first);
+        int hi = last < 0 ? Integer.MAX_VALUE : Math.max(lo, last);
+        if (currentPage < lo) setCurrentPage(lo);
+        else if (currentPage > hi) setCurrentPage(hi);
     }
 
     /**
@@ -908,34 +927,37 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
-     * Edit pages: page {@code from} moves to {@code to} with everything on it. The page on screen
-     * follows its page, and the host renumbers what else names a page (the floats, the default
-     * page) by the same mapping.
+     * Edit pages: the page with id {@code pageId} moves to position {@code toIndex} with
+     * everything on it. The page on screen follows its page; what else names a page (the floats)
+     * follows the Home pages' order through the wall's page store.
      */
-    public boolean movePage(int from, int to) {
+    public boolean movePage(int pageId, int toIndex) {
         if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
         LauncherWidgetRepository repository = widgets.repository();
+        int from = repository.indexOfPage(pageId);
         int count = repository.pageCount();
-        if (!com.termux.app.launcher.home.HomePageEdits.canMove(count, from, to)
-            || !repository.movePage(from, to)) return false;
-        int[] mapping = com.termux.app.launcher.home.HomePageEdits.moveMapping(count, from, to);
-        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
+        if (from < 0 || !com.termux.app.launcher.home.HomePageEdits.canMove(count, from, toIndex)) {
+            return false;
+        }
+        int viewingId = repository.pageIdAt(currentPage);
+        if (!repository.movePage(from, toIndex)) return false;
+        int viewing = repository.indexOfPage(viewingId);
+        if (viewing >= 0) currentPage = viewing;
         render();
-        host.onHomePagesRenumbered(mapping);
         return true;
     }
 
     /**
-     * Edit pages: page {@code page} goes, and with it every widget, icon and folder on it (the
-     * caller has asked first when it held any); a widget's allocation is given back as its own
-     * removal does. Never the last page. False when the page could not be taken away.
+     * Edit pages: the page with id {@code pageId} goes, and with it every widget, icon and folder
+     * on it (the caller has asked first when it held any); a widget's allocation is given back as
+     * its own removal does. Never the last page. False when the page could not be taken away.
      */
-    public boolean removePage(int page) {
+    public boolean removePage(int pageId) {
         if (refusedWhileLocked(HomeLayoutLock.Edit.EDIT_PAGES)) return false;
         LauncherWidgetRepository repository = widgets.repository();
+        int page = repository.indexOfPage(pageId);
         int count = repository.pageCount();
-        if (!com.termux.app.launcher.home.HomePageEdits.canRemove(count) || page < 0 || page >= count)
-            return false;
+        if (!com.termux.app.launcher.home.HomePageEdits.canRemove(count) || page < 0) return false;
         WidgetAddTransaction waiting = repository.pending();
         if (waiting != null && waiting.page == page) {
             // A widget is on its way to this page (its app's setup is open): it stays.
@@ -944,42 +966,37 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         if (pane.widgetEditActive()) exitEditMode();
         dismissFolderPopup();
+        int viewingId = repository.pageIdAt(currentPage);
+        int viewingWas = currentPage;
         for (LauncherWidgetRecord record : repository.recordsOnPage(page)) {
             if (widgets.removeWidget(record.appWidgetId)
                     == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
-                // Stop where the store refused. What did go has been renumbered for by the trims
-                // its removals ran; the page stays with what is left on it.
+                // Stop where the store refused. What did go has been trimmed with its removals;
+                // the page stays with what is left on it.
                 pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
                 render();
                 return false;
             }
         }
-        int[] mapping = com.termux.app.launcher.home.HomePageEdits.removeMapping(count, page);
         // A page emptied by those removals went with its last widget, and the trim that took it
-        // told the host already; a page added by hand is still there and goes now.
-        if (repository.pageCount() == count) {
-            if (!repository.removePage(page)) {
-                pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
-                render();
-                return false;
-            }
-            host.onHomePagesRenumbered(mapping);
+        // is done; a page added by hand is still there and goes now.
+        int now = repository.indexOfPage(pageId);
+        if (now >= 0 && !repository.removePage(now)) {
+            pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+            render();
+            return false;
         }
-        // Edit pages acts on both orientations: the shelved one loses the same page.
-        repository.renumberShelvedPages(mapping);
-        currentPage = com.termux.app.launcher.home.HomePageEdits.remap(currentPage, mapping);
+        int viewing = repository.indexOfPage(viewingId);
+        // The page on screen keeps its place; when it was the one removed, the page now in its place.
+        currentPage = viewing >= 0 ? viewing : viewingWas;
         clampCurrentPage();
         render();
         return true;
     }
 
-    /**
-     * Takes away every empty page ({@link LauncherWidgetRepository#trimEmptyPages}) and hands the
-     * renumbering on, so the floats and the default page follow their pages.
-     */
+    /** Takes away every empty page ({@link LauncherWidgetRepository#trimEmptyPages}). */
     private void trimPages() {
-        int[] renumbered = widgets.repository().trimEmptyPagesRenumbering();
-        if (renumbered != null) host.onHomePagesRenumbered(renumbered);
+        widgets.repository().trimEmptyPageIds();
     }
 
     /** Edit pages' Add page: an empty page after the last, kept until something lands on it. */
@@ -2374,7 +2391,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             pane.showNotice(pane.getContext().getString(R.string.home_item_restore_failed));
             return;
         }
-        if (result.renumbered != null) host.onHomePagesRenumbered(result.renumbered);
         currentPage = result.record.page;
         render();
     }

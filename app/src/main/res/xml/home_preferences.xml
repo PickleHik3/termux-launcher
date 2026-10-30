@@ -101,6 +101,11 @@
             app:title="@string/settings_terminal_body_swipe_title"
             app:summary="@string/settings_terminal_body_swipe_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="status_swipe_two_fingers"
+            app:title="@string/settings_status_swipe_two_fingers_title"
+            app:summary="@string/settings_status_swipe_two_fingers_summary"
+            android:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="home_widgets" app:title="@string/settings_home_widgets_header">

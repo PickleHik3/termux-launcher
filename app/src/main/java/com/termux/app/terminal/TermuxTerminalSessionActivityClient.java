@@ -1059,14 +1059,18 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // What the text stands on: the palette's own background while the terminal is
                 // opaque, the measured glass ground while it is translucent.
                 int ground = mHost.terminalTextGround();
+                // The pane band's own verdict, when it has one: the ground is its worst end for
+                // that ink, and judging the ink again there flips it (see decidedInk).
+                com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
+                com.termux.app.chrome.ChromeInk.Polarity leaning = decidedInk(band, ground);
                 // The glass floors follow the Debugging switch, read before the build.
                 MaterialTerminalColorScheme.setGlassFloors(mHost.preferences().isGlassEvenOutEnabled());
-                props = MaterialTerminalColorScheme.create(mContext, level, ground,
-                    inkLeaning(ground));
+                props = MaterialTerminalColorScheme.create(mContext, level, ground, leaning,
+                    band != null);
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
                 MaterialTerminalColorScheme.rememberGround(mContext, ground, mTerminalInkPolarity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
-                    mContext, level, ground, mTerminalInkPolarity);
+                    mContext, level, ground, leaning, band != null);
                 mLastColorsFileStamp = Long.MIN_VALUE;
                 // The active roles are built here, on the main thread, from the activity's theme, so
                 // the files describe the same palette the terminal just took. The dark and light
@@ -1277,11 +1281,28 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         }
         int ground = mHost.terminalTextGround();
+        com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
         int signature = MaterialTerminalColorScheme.signature(mContext,
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
-            ground, inkLeaning(ground));
+            ground, decidedInk(band, ground), band != null);
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
+    }
+
+    /**
+     * The ink the palette is built with on {@code ground}: the pane band's verdict ({@code band})
+     * when it has one, else the leaning the glass gives ({@link #inkLeaning}). The band weighs
+     * both inks against every pane's shortfall and hands the palette its worst end for the ink it
+     * chose; asked again on that end alone, the palette sent the ink to the other side, the band
+     * then re-measured for that ink and moved the worst end with it, and on a wallpaper neither
+     * ink reads at the level's target the two flipped each other on every pass (Harder, the
+     * screen recording of 2026-10-29). The signature asks here too, so a verdict that moves
+     * rebuilds the palette and one that stands leaves it alone.
+     */
+    @Nullable
+    private com.termux.app.chrome.ChromeInk.Polarity decidedInk(
+            @Nullable com.termux.app.chrome.ChromeInk.Polarity band, int ground) {
+        return band != null ? band : inkLeaning(ground);
     }
 
     /**

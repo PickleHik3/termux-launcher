@@ -18,7 +18,6 @@ import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -52,13 +51,14 @@ public class EditorCardSwapKeepsEditsTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
+        com.termux.app.look.TerminalPageIdFixture.give(preferences);
         places = new PlaceLayoutStore(preferences);
         places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE, 40);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE,
+        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 40);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.blurForGlass(20));
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE,
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.grainForGlass(20));
     }
 
@@ -69,11 +69,11 @@ public class EditorCardSwapKeepsEditsTest {
         moveStrip(editor, Row.OPACITY, 65);
         assertWorkspaceKept(editor);
 
-        swipe(editor, WallHalf.HOME);
+        swipe(editor, PaneWallPage.WIDGETS);
         assertEquals("the Home card followed the swipe", EditorCard.HOME, editor.shownCard());
         assertWorkspaceKept(editor);
 
-        swipe(editor, WallHalf.WORKSPACE);
+        swipe(editor, PaneWallPage.TERMINAL);
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertWorkspaceKept(editor);
         assertEquals("Frost reads back where it was left", 70, model(editor).value(Row.FROST));
@@ -85,22 +85,23 @@ public class EditorCardSwapKeepsEditsTest {
         SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
-        swipe(editor, WallHalf.HOME);
+        swipe(editor, PaneWallPage.WIDGETS);
         moveStrip(editor, Row.OPACITY, 33);
-        swipe(editor, WallHalf.WORKSPACE);
-        assertWorkspaceKept(editor);
+        swipe(editor, PaneWallPage.TERMINAL);
+        // Base is wall-wide: Home's 33 is the wall's opacity, which the Workspace wears too.
+        assertWorkspaceKept(editor, 33);
         assertEquals("Home's edit is kept too", 33,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
 
         boolean[] done = {false};
         editor.setOnDone(() -> done[0] = true);
         editor.done();
         assertTrue(done[0]);
-        assertEquals(65,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
+        assertEquals("Base is wall-wide: Home's 33 stands", 33,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(GlassControls.blurForGlass(70),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
-        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.HOME));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
     }
 
     @Test
@@ -146,12 +147,16 @@ public class EditorCardSwapKeepsEditsTest {
     // ------------------------------------------------------------------------------- the checks
 
     private void assertWorkspaceKept(SurfaceEditorController editor) {
-        assertEquals(65,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, WallHalf.WORKSPACE));
+        assertWorkspaceKept(editor, 65);
+    }
+
+    private void assertWorkspaceKept(SurfaceEditorController editor, int opacity) {
+        assertEquals(opacity,
+            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(GlassControls.blurForGlass(70),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(GlassControls.grainForGlass(70),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, WallHalf.WORKSPACE));
+            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId()));
         assertTrue("the session is dirty",
             (Boolean) ReflectionHelpers.callInstanceMethod(editor, "isDirty"));
         EditorBar bar = ReflectionHelpers.getField(editor, "mBar");
@@ -185,12 +190,15 @@ public class EditorCardSwapKeepsEditsTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
-    /** The preview swiped to {@code half}: the page swipe's own path. */
-    private static void swipe(SurfaceEditorController editor, WallHalf half) {
-        ReflectionHelpers.callInstanceMethod(editor, "switchHalf",
-            ClassParameter.from(WallHalf.class, half),
-            ClassParameter.from(boolean.class, true),
-            ClassParameter.from(boolean.class, true));
+    /**
+     * The editor shown {@code half}'s page by a door: the page swipe retired with the halves
+     * (ADR 0015 §6), and a door naming the other page is the one path left.
+     */
+    private static void swipe(SurfaceEditorController editor, PaneWallPage half) {
+        ReflectionHelpers.callInstanceMethod(editor, "showPage",
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PaneWallPage.class,
+                half == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL),
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 

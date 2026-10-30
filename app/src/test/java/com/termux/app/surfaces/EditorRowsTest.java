@@ -1,5 +1,7 @@
 package com.termux.app.surfaces;
 
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -9,7 +11,6 @@ import com.termux.app.surfaces.EditorRows.Kind;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.EditorRows.Spec;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.WallHalf;
 
 import org.junit.Test;
 
@@ -115,14 +116,14 @@ public class EditorRowsTest {
             Row.HOME_ICON_SIZE, Row.FOLDERS, Row.NUMERALS, Row.SECTION_OPTIONS,
             Row.GLASS_WIDGETS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS, Row.PAGE_TRANSITION,
             Row.WALLPAPER_SCROLL), EditorRows.tier(EditorCard.HOME, ALL, 2));
-        assertEquals(Arrays.asList(Row.MATCH_WORKSPACE, Row.ELEMENTS, Row.SECTION_MORE,
+        assertEquals(Arrays.asList(Row.ELEMENTS, Row.SECTION_MORE,
             Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
-        for (WallHalf frame : WallHalf.values()) {
+        for (PaneWallPage frame : PaneWallPage.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
-                assertEquals(row + " with the frame on " + frame, WallHalf.HOME,
-                    EditorRows.halfFor(EditorCard.HOME, row, frame));
-            assertNull(EditorRows.halfFor(EditorCard.HOME, Row.HOME_ICON_SIZE, frame));
+                assertEquals(row + " with the frame on " + frame, TermuxAppSharedPreferences.PAGE_WALL,
+                    EditorRows.pageFor(EditorCard.HOME, row));
+            assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.HOME, Row.HOME_ICON_SIZE));
         }
     }
 
@@ -237,20 +238,20 @@ public class EditorRowsTest {
         for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
             EditorCard.KEYBOARD}) {
             for (Row row : new Row[] {Row.OPACITY, Row.TINT, Row.FROST}) {
-                for (WallHalf half : WallHalf.values())
-                    assertEquals(card + " " + row, half, EditorRows.halfFor(card, row, half));
+                for (PaneWallPage half : PaneWallPage.values())
+                    assertEquals(card + " " + row, TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(card, row));
             }
         }
     }
 
     @Test
     public void theTerminalShapesAndPlacesAreOneValueForTheWall() {
-        for (WallHalf half : WallHalf.values()) {
-            assertNull(EditorRows.halfFor(EditorCard.TERMINAL, Row.OPACITY, half));
+        for (PaneWallPage half : PaneWallPage.values()) {
+            assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.TERMINAL, Row.OPACITY));
             for (EditorCard card : EditorCard.values()) {
                 for (Row row : new Row[] {Row.CORNERS, Row.MARGIN, Row.HEIGHT,
                     Row.VISIBLE, Row.STYLE, Row.DESIGN, Row.TEXT_SIZE})
-                    assertNull(card + " " + row, EditorRows.halfFor(card, row, half));
+                    assertEquals(card + " " + row, TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(card, row));
             }
         }
     }
@@ -258,15 +259,12 @@ public class EditorRowsTest {
     @Test
     public void theLookAndTheSharedGlassAreTheFramesHalfAndTheRestOfTheAppearanceCardIsTheWalls() {
         for (Row row : new Row[] {Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT}) {
-            assertEquals(WallHalf.HOME, EditorRows.halfFor(EditorCard.APPEARANCE, row,
-                WallHalf.HOME));
-            assertEquals(WallHalf.WORKSPACE, EditorRows.halfFor(EditorCard.APPEARANCE, row,
-                WallHalf.WORKSPACE));
+            assertEquals(TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(EditorCard.APPEARANCE, row));
+            assertEquals(TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(EditorCard.APPEARANCE, row));
         }
         for (Row row : rowsOf(EditorCard.APPEARANCE, ALL)) {
             if (row != Row.LOOK && row.property() == null)
-                assertNull(row.name(), EditorRows.halfFor(EditorCard.APPEARANCE, row,
-                    WallHalf.HOME));
+                assertEquals(row.name(), TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.APPEARANCE, row));
         }
     }
 

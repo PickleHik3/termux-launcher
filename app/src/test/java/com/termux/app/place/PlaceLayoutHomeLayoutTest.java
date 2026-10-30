@@ -48,7 +48,7 @@ public class PlaceLayoutHomeLayoutTest {
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return KindFixtures.dockOnTheTerminal(new PlaceLayoutStore(launcher));
     }
 
     @Test
@@ -168,17 +168,14 @@ public class PlaceLayoutHomeLayoutTest {
 
     @Test
     public void aPageSaysWhichVariantItIsArrangedBy() {
-        PlaceLayoutStore store = store();
-        assertEquals("every install holds a Home layout (version 14)", LayoutVariant.HOME,
-            store.variantFor(PaneWallPage.WIDGETS));
-        store.setHomeLayout(false);
-        assertEquals("one layout, as a store before version 14 held it", LayoutVariant.NORMAL,
-            store.variantFor(PaneWallPage.WIDGETS));
-        store.setHomeLayout(true);
-        assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
+        PlaceLayoutStore store = KindFixtures.onHomePage(store());
+        assertEquals("a Home page without a page layout wears the shared one (version 16)",
+            LayoutVariant.NORMAL, store.variantFor(PaneWallPage.WIDGETS));
+        store.setPageLayout(KindFixtures.HOME_ID, com.termux.app.wall.WallPages.PageKind.HOME, true);
+        assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.TERMINAL));
         store.setMinimal(true);
-        assertEquals(LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
+        assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
         assertEquals(LayoutVariant.MINIMAL, store.variantFor(PaneWallPage.TERMINAL));
         assertEquals("the Workspace's variant is still what the store stands in",
             LayoutVariant.MINIMAL, store.activeVariant());

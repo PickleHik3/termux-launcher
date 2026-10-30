@@ -7,6 +7,7 @@ import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockMorph;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.terminal.GeometryScheduler;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 
 /**
@@ -155,10 +156,11 @@ public final class Crossing {
 
     // ---- What a crossing holds from begin ----
     @Nullable private PaneWallPage mCommitted;
-    @Nullable private ResolvedArrangement mHome;
-    @Nullable private ResolvedArrangement mWorkspace;
-    @Nullable private DockLayout mHomeRest;
-    @Nullable private DockLayout mWorkspaceRest;
+    /** The ends as the crossing began: the committed page's, and the other's it first reached. */
+    @Nullable private SeamCrossing.Endpoint mHere;
+    @Nullable private SeamCrossing.Endpoint mThere;
+    @Nullable private DockLayout mHereRest;
+    @Nullable private DockLayout mThereRest;
     private int mRevision;
     /** The committed half standing the seam's layout, made once per layout the seam stands. */
     @Nullable private ResolvedArrangement mStanding;
@@ -198,42 +200,38 @@ public final class Crossing {
     // ---- Begin and frame ----
 
     /**
-     * The crossing begins on the first frame that reaches {@code there}'s half: both halves'
-     * arrangements and their docks at rest are held from here to the landing, and the row is told
-     * both rests once. Called again for a frame that reaches another page of the other half, the
-     * seam reads the halves again and everything else stays as it is held (the rests passed are
-     * then not read: {@link #heldRest} answers them).
+     * The crossing begins on the first frame that reaches {@code there}: both ends' arrangements
+     * ({@link SeamCrossing.Endpoint#arrangement}, which a crossing's ends must carry) and their
+     * docks at rest are held from here to the landing, and the row is told both rests once, the
+     * Drawer tile each end's arrangement carries with them. Called again for a frame that reaches
+     * another page of the other half, the seam reads the ends again and everything else stays as
+     * it is held (the rests passed are then not read: {@link #heldRest} answers them).
      *
-     * @param homeRest      Home's dock at rest, as Dock geometry answers it
-     * @param homeTile      whether Home's rows carry the Drawer tile
-     * @param workspaceRest the Workspace's dock at rest
-     * @param workspaceTile whether the Workspace's rows carry the Drawer tile
-     * @param revision      the store revision the arrangements were resolved at
+     * @param hereRest  the committed end's dock at rest, as Dock geometry answers it
+     * @param thereRest the other end's dock at rest
+     * @param revision  the store revision the arrangements were resolved at
      */
-    public void begin(@NonNull SeamCrossing.Half here, @NonNull SeamCrossing.Half there,
-                      @NonNull SeamCrossing.Stage stage,
-                      @NonNull ResolvedArrangement home, @NonNull ResolvedArrangement workspace,
-                      @NonNull DockLayout homeRest, boolean homeTile,
-                      @NonNull DockLayout workspaceRest, boolean workspaceTile, int revision) {
+    public void begin(@NonNull SeamCrossing.Endpoint here, @NonNull SeamCrossing.Endpoint there,
+                      @NonNull SeamCrossing.Stage stage, @NonNull DockLayout hereRest,
+                      @NonNull DockLayout thereRest, int revision) {
         boolean begins = !crossing();
+        if (begins && (here.arrangement == null || there.arrangement == null))
+            throw new IllegalArgumentException("a crossing's ends carry their arrangements");
         mSeam.begin(here, there, stage);
         if (!begins) return;
         // A whole-stack dip pictures the committed half's stack now, before anything of the
         // crossing has touched it (the row's morph below included); a picture that cannot be
         // taken leaves the dip as it was.
         if (mSeam.wantsPicture()) mSeam.pictured(mStack.picture());
-        mCommitted = here.page;
-        mHome = home;
-        mWorkspace = workspace;
-        mHomeRest = homeRest;
-        mWorkspaceRest = workspaceRest;
+        mCommitted = here.page.kind;
+        mHere = here;
+        mThere = there;
+        mHereRest = hereRest;
+        mThereRest = thereRest;
         mRevision = revision;
-        boolean fromHome = here.page == PaneWallPage.WIDGETS;
-        DockLayout leaving = fromHome ? homeRest : workspaceRest;
-        DockLayout arriving = fromHome ? workspaceRest : homeRest;
-        mMorph.between(leaving, fromHome ? homeTile : workspaceTile, arriving,
-            fromHome ? workspaceTile : homeTile);
-        mDock.beginMorph(leaving, arriving);
+        mMorph.between(hereRest, here.arrangement.drawerTile(), thereRest,
+            there.arrangement.drawerTile());
+        mDock.beginMorph(hereRest, thereRest);
     }
 
     /**
@@ -258,8 +256,10 @@ public final class Crossing {
                                       boolean fieldUnderPalette) {
         SeamCrossing.Answers answers = mSeam.frame(frame, wallFrame, dressable, bandEaseRuns,
             fieldUnderPalette);
-        if (mCommitted != null && mMorph.active()) {
-            mMorph.at(mSeam.pictured() ? 1f : SeamTravel.otherHalfProgress(frame, mCommitted));
+        SeamCrossing.Endpoint here = mHere;
+        if (mCommitted != null && here != null && mMorph.active()) {
+            // Read by end, so a frame of Home's pager morphs between two Home pages' rests.
+            mMorph.at(mSeam.pictured() ? 1f : SeamTravel.otherEndProgress(frame, here.page));
             mDock.dress(mMorph);
         }
         return answers;
@@ -298,12 +298,14 @@ public final class Crossing {
     }
 
     /**
-     * The status bar for this frame: drawn where the Workspace's page stands whenever the seam
-     * says it rides ({@link SeamCrossing#rideBar}), else at its rest. Whether it rides.
+     * The status bar for this frame: drawn where the page that carries it stands whenever the
+     * seam says it rides ({@link SeamCrossing#rideBar}), the Workspace's across the seam and the
+     * Home page that wears it between two Home pages ({@link SeamCrossing#barScreenXPx}), else at
+     * its rest. Whether it rides.
      */
     public boolean rideBar(@NonNull Frame frame, boolean hostCanRide, int wallWidthPx) {
         boolean rides = mSeam.rideBar(frame, hostCanRide);
-        mBar.rideX(rides ? SeamTravel.workspaceScreenXPx(frame, wallWidthPx) : 0f);
+        mBar.rideX(rides ? mSeam.barScreenXPx(frame, wallWidthPx) : 0f);
         return rides;
     }
 
@@ -340,8 +342,8 @@ public final class Crossing {
      */
     @NonNull
     public ResolvedArrangement arrangement(@NonNull ResolvedArrangement committed) {
-        ResolvedArrangement held = mCommitted == null ? committed
-            : mCommitted == PaneWallPage.WIDGETS ? mHome : mWorkspace;
+        ResolvedArrangement held = mCommitted == null || mHere == null ? committed
+            : mHere.arrangement;
         if (held == null) held = committed;
         PlaceLayout seam = mSeam.layout();
         if (seam == null) return held;
@@ -353,18 +355,61 @@ public final class Crossing {
     }
 
     /**
-     * {@code home}'s half's arrangement as the crossing holds it, for every chrome reader while
-     * one runs; null while none runs, and the store answers.
+     * {@code page}'s arrangement as the crossing holds it, for every chrome reader while one runs;
+     * null while none runs, and the store answers. {@code page} is the end it names ({@link
+     * #heldEnd}).
      */
     @Nullable
-    public ResolvedArrangement heldArrangement(boolean home) {
-        return home ? mHome : mWorkspace;
+    public ResolvedArrangement heldArrangement(@NonNull PageRef page) {
+        SeamCrossing.Endpoint end = heldEnd(page);
+        return end == null ? null : end.arrangement;
     }
 
-    /** {@code home}'s half's dock at rest as the crossing worked it out; null while none runs. */
+    /**
+     * The committed page a reader asking by {@code kind} alone is answered with while a crossing
+     * runs whose committed end is of that kind: a Home pager that commits to another Home page
+     * mid-settle moves the store's Home page in front, while the chrome still stands in the one
+     * the crossing began on (C6). Null while none runs, or the committed end is of another kind.
+     */
     @Nullable
-    public DockLayout heldRest(boolean home) {
-        return home ? mHomeRest : mWorkspaceRest;
+    public PageRef heldCommittedPage(@NonNull PaneWallPage kind) {
+        SeamCrossing.Endpoint here = mHere;
+        if (mCommitted == null || here == null || here.page.kind != kind) return null;
+        return here.page;
+    }
+
+    /** {@code page}'s dock at rest as the crossing worked it out; null while none runs. */
+    @Nullable
+    public DockLayout heldRest(@NonNull PageRef page) {
+        SeamCrossing.Endpoint end = heldEnd(page);
+        return end == null ? null : end == mHere ? mHereRest : mThereRest;
+    }
+
+    /**
+     * The end {@code page} names while a crossing runs: the end that is that page or whose
+     * arrangement is resolved for it, else the end of its kind (Home's end for any Home page, the
+     * Terminal's for the Terminal page); a page of a kind neither end has is no end, and the
+     * store answers it (a Home ↔ Home crossing holds no Workspace half). Between two pages of
+     * one kind (two Home pages), a page of that kind with no id said names the committed end:
+     * the reader asking by kind alone is asking what the chrome stands in. Null while none runs.
+     */
+    @Nullable
+    private SeamCrossing.Endpoint heldEnd(@NonNull PageRef page) {
+        SeamCrossing.Endpoint here = mHere;
+        SeamCrossing.Endpoint there = mThere;
+        if (here == null || there == null) return null;
+        if (page.id < 0 && here.page.kind == there.page.kind && page.kind == here.page.kind)
+            return here;
+        if (standsFor(here, page)) return here;
+        if (standsFor(there, page)) return there;
+        if (here.page.kind == page.kind) return here;
+        if (there.page.kind == page.kind) return there;
+        return null;
+    }
+
+    private static boolean standsFor(@NonNull SeamCrossing.Endpoint end, @NonNull PageRef page) {
+        return end.page.equals(page)
+            || (end.arrangement != null && end.arrangement.page().equals(page));
     }
 
     // ---- The hold on the content ----
@@ -524,7 +569,7 @@ public final class Crossing {
      * that moved under the slide is the landing's to lay out ({@link Landing#storeMoved}).
      */
     @NonNull
-    public Landing land(@NonNull PaneWallPage landed, int revision) {
+    public Landing land(@NonNull PageRef landed, int revision) {
         // The picture goes in the frame the stack is put back at its rest, whichever half that is.
         if (mSeam.pictured()) mStack.dropPicture();
         Landing landing = releaseInto(mLanding);
@@ -536,15 +581,15 @@ public final class Crossing {
         mBar.rideX(0f);
         mStack.sink(0f);
         mStack.alpha(1f, 1f);
-        DockLayout landedRest = landed == PaneWallPage.WIDGETS ? mHomeRest : mWorkspaceRest;
+        DockLayout landedRest = heldRest(landed);
         boolean morphed = mMorph.active();
         mMorph.clear();
         if (morphed && landedRest != null) mDock.endMorph(landedRest);
         mCommitted = null;
-        mHome = null;
-        mWorkspace = null;
-        mHomeRest = null;
-        mWorkspaceRest = null;
+        mHere = null;
+        mThere = null;
+        mHereRest = null;
+        mThereRest = null;
         mRevision = 0;
         mStanding = null;
         mStandingFrom = null;
@@ -610,8 +655,8 @@ public final class Crossing {
             && mGridHold == null && mRoomArriving == null && mRoomChangePx == 0 && mCoverPx == 0
             && mTerminalPreSizePx == 0
             && Float.isNaN(mFoldShare) && Float.isNaN(mBeadShare) && !mMorph.active()
-            && mCommitted == null && mHome == null && mWorkspace == null
-            && mHomeRest == null && mWorkspaceRest == null && mRevision == 0
+            && mCommitted == null && mHere == null && mThere == null
+            && mHereRest == null && mThereRest == null && mRevision == 0
             && mSeam.layout() == null && mSeam.other() == null && mSeam.stackDressPage() == null;
     }
 

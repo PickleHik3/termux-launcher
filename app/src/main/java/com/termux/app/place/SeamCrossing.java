@@ -6,9 +6,11 @@ import androidx.annotation.Nullable;
 import com.termux.app.chrome.Dress;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.LensBeadGeometry;
+import com.termux.app.look.PageLook;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.SeamTravel.DockPlan;
+import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 
 /**
@@ -39,19 +41,32 @@ import com.termux.app.wall.PaneWallPage;
  */
 public final class SeamCrossing {
 
-    /** One half as a crossing reads it, once, as it begins. */
-    public static final class Half {
-        @NonNull final PaneWallPage page;
+    /**
+     * One end of a crossing, as it reads it once, as it begins: the page (#173, spec #167 E), what
+     * it wears there (its dress, its look and its resolved arrangement) and how its stack stands.
+     * Home and the Workspace's window are the two ends every crossing runs between today; an end
+     * names any page, so a crossing between two others is fed the same way.
+     */
+    public static final class Endpoint {
+        @NonNull final PageRef page;
         @NonNull final Dress dress;
+        /** The page's own Look as it begins; null where the launcher has none to read. */
+        @Nullable final PageLook.Snapshot look;
+        /** The page's resolved arrangement, which {@link Crossing} holds; null for the seam alone. */
+        @Nullable final ResolvedArrangement arrangement;
         @NonNull final PlaceLayout layout;
         @NonNull final SeamDress.StackDress stack;
         final boolean keyboardUp;
         final int restRowsPx;
 
-        private Half(@NonNull PaneWallPage page, @NonNull Dress dress, @NonNull PlaceLayout layout,
-                     @NonNull SeamDress.StackDress stack, boolean keyboardUp, int restRowsPx) {
+        private Endpoint(@NonNull PageRef page, @NonNull Dress dress,
+                         @Nullable PageLook.Snapshot look,
+                         @Nullable ResolvedArrangement arrangement, @NonNull PlaceLayout layout,
+                         @NonNull SeamDress.StackDress stack, boolean keyboardUp, int restRowsPx) {
             this.page = page;
             this.dress = dress;
+            this.look = look;
+            this.arrangement = arrangement;
             this.layout = layout;
             this.stack = stack;
             this.keyboardUp = keyboardUp;
@@ -59,32 +74,67 @@ public final class SeamCrossing {
         }
 
         /**
+         * @param page       the page this end is: its kind and its id, -1 while unknown
          * @param dress      what the page wears ({@code DressResolver.dressOf})
-         * @param layout     the arrangement the page's half stands its chrome in
+         * @param layout     the arrangement the page stands its chrome in
          * @param stack      what the stack wears there: the dress's shape and its layout's sizes
-         * @param keyboardUp whether the half keeps the in-app keyboard up, docked or not: up as it
-         *                   rests for the committed half, wanted on arrival for the other; a
+         * @param keyboardUp whether the page keeps the in-app keyboard up, docked or not: up as it
+         *                   rests for the committed page, wanted on arrival for the other; a
          *                   floating layout's keyboard is a frame of its own and not the stack's
          */
         @NonNull
-        public static Half of(@NonNull PaneWallPage page, @NonNull Dress dress,
-                              @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
-                              boolean keyboardUp) {
-            return new Half(page, dress, layout, stack, keyboardUp, -1);
+        public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
+                                  @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
+                                  boolean keyboardUp) {
+            return new Endpoint(page, dress, null, null, layout, stack, keyboardUp, -1);
         }
 
         /**
-         * @param restRowsPx the dock rows' height as the half's layout lays them out at rest, less
+         * @param restRowsPx the dock rows' height as the page's layout lays them out at rest, less
          *                   the extra keys row itself: each row's own air as its neighbours there
          *                   give it (the A-Z row's chin and crown, the apps row's air alone or
          *                   shared). Negative while unknown, and a fold then reads no difference.
-         * @see #of(PaneWallPage, Dress, PlaceLayout, SeamDress.StackDress, boolean)
+         * @see #of(PageRef, Dress, PlaceLayout, SeamDress.StackDress, boolean)
          */
         @NonNull
-        public static Half of(@NonNull PaneWallPage page, @NonNull Dress dress,
-                              @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
-                              boolean keyboardUp, int restRowsPx) {
-            return new Half(page, dress, layout, stack, keyboardUp, restRowsPx);
+        public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
+                                  @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
+                                  boolean keyboardUp, int restRowsPx) {
+            return new Endpoint(page, dress, null, null, layout, stack, keyboardUp, restRowsPx);
+        }
+
+        /**
+         * The whole end, as {@link Crossing#begin} takes it: the above, with the page's look and
+         * the resolved arrangement the crossing holds for its life.
+         *
+         * @param look        the page's Look ({@code PageLook#of}); null where there is none
+         * @param arrangement the page's resolved arrangement, held from the crossing's begin to
+         *                    its landing
+         * @see #of(PageRef, Dress, PlaceLayout, SeamDress.StackDress, boolean, int)
+         */
+        @NonNull
+        public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
+                                  @Nullable PageLook.Snapshot look,
+                                  @NonNull ResolvedArrangement arrangement,
+                                  @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
+                                  boolean keyboardUp, int restRowsPx) {
+            return new Endpoint(page, dress, look, arrangement, layout, stack, keyboardUp,
+                restRowsPx);
+        }
+
+        @NonNull
+        public PageRef page() {
+            return page;
+        }
+
+        @Nullable
+        public ResolvedArrangement arrangement() {
+            return arrangement;
+        }
+
+        @Nullable
+        public PageLook.Snapshot look() {
+            return look;
         }
     }
 
@@ -103,11 +153,20 @@ public final class SeamCrossing {
         final boolean beadsDrawn;
         @NonNull final FrameGlass frameGlass;
         final boolean splitPanes;
+        /**
+         * Whether the pages slide flat across the screen (Home's Slide page transition): a bar
+         * only one of two Home pages wears rides with its page then, and fades in place under a
+         * transition that turns the pages (Carousel, Depth and the rest), which a flat ride would
+         * not follow.
+         */
+        final boolean pagesSlide;
 
-        private Stage(boolean beadsDrawn, @NonNull FrameGlass frameGlass, boolean splitPanes) {
+        private Stage(boolean beadsDrawn, @NonNull FrameGlass frameGlass, boolean splitPanes,
+                      boolean pagesSlide) {
             this.beadsDrawn = beadsDrawn;
             this.frameGlass = frameGlass;
             this.splitPanes = splitPanes;
+            this.pagesSlide = pagesSlide;
         }
 
         /**
@@ -119,7 +178,17 @@ public final class SeamCrossing {
         @NonNull
         public static Stage of(boolean beadsDrawn, @NonNull FrameGlass frameGlass,
                                boolean splitPanes) {
-            return new Stage(beadsDrawn, frameGlass, splitPanes);
+            return new Stage(beadsDrawn, frameGlass, splitPanes, true);
+        }
+
+        /**
+         * The same, with how the pages move ({@link #pagesSlide}): false under a page transition
+         * that turns them rather than sliding them flat.
+         */
+        @NonNull
+        public static Stage of(boolean beadsDrawn, @NonNull FrameGlass frameGlass,
+                               boolean splitPanes, boolean pagesSlide) {
+            return new Stage(beadsDrawn, frameGlass, splitPanes, pagesSlide);
         }
     }
 
@@ -138,6 +207,7 @@ public final class SeamCrossing {
         boolean moved;
         boolean barRedressed;
         float pictureReveal;
+        float statusFade;
 
         Answers() {
             clear(1f, 0f);
@@ -157,6 +227,17 @@ public final class SeamCrossing {
             moved = false;
             barRedressed = false;
             pictureReveal = Float.NaN;
+            statusFade = Float.NaN;
+        }
+
+        /**
+         * The status bar's alpha on a crossing between two Home pages whose bar fades rather than
+         * rides ({@link Stage#pagesSlide}): the share of the way toward the page that wears it,
+         * laid out over the other from the first frame where that page is arriving. NaN while the
+         * bar does not fade, and the frame's own status reveal stands.
+         */
+        public float statusFade() {
+            return statusFade;
         }
 
         /** How much of the dock rows the stack stands shows: the seam's reveal, else the frame's. */
@@ -285,6 +366,17 @@ public final class SeamCrossing {
         // ---- What a crossing reads once, as it begins ----
 
         @Nullable PaneWallPage committed;
+        /** The two ends as pages: their kinds and their ids (#173 slice E). */
+        @Nullable PageRef committedEnd, otherEnd;
+        /** Whether both ends are pages of one kind: a crossing between two Home pages. */
+        boolean oneKind;
+        /**
+         * Between two Home pages, the end whose layout wears the bar that crosses
+         * ({@link SeamTravel#homeBarWearer}), and whether it fades in place rather than riding
+         * with that page; null where the bar does not cross.
+         */
+        @Nullable PageRef barEnd;
+        boolean barFades;
         /** The other half's page, its layout, and the dock's plan for the crossing. */
         @Nullable PaneWallPage other;
         @Nullable PlaceLayout otherLayout;
@@ -364,11 +456,15 @@ public final class SeamCrossing {
      * halves again for a frame that reaches another page of it; what the frames have laid out
      * stays as it is. Reads and lays out everything the frames will need.
      */
-    public void begin(@NonNull Half committed, @NonNull Half other, @NonNull Stage stage) {
+    public void begin(@NonNull Endpoint committed, @NonNull Endpoint other,
+                      @NonNull Stage stage) {
         PlaceLayout here = committed.layout;
         PlaceLayout there = other.layout;
-        mRun.committed = committed.page;
-        mRun.other = other.page;
+        mRun.committed = committed.page.kind;
+        mRun.other = other.page.kind;
+        mRun.committedEnd = committed.page;
+        mRun.otherEnd = other.page;
+        mRun.oneKind = !SeamTravel.crosses(committed.page.kind, other.page.kind);
         mRun.otherLayout = there;
         // Each half's Dock design, read once here so the frames read no store: one layout gives
         // both halves one design, and then no band eases and no bead melts (#93).
@@ -381,7 +477,7 @@ public final class SeamCrossing {
         // One bar across the wall (#90): where both halves stand it alike, in one shape, it
         // stands still on the crossing instead of riding with the Workspace's page.
         mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS)) && !mRun.shapeDiffers;
-        PlaceLayout workspaceSide = committed.page == PaneWallPage.WIDGETS ? there : here;
+        PlaceLayout workspaceSide = committed.page.isHome() ? there : here;
         mRun.barRides = !mRun.barStill && !workspaceSide.slot(Element.STATUS).hidden;
         // A keyboard in the stack, not one floating in a frame of its own.
         mRun.committedKeyboard = committed.keyboardUp
@@ -394,7 +490,7 @@ public final class SeamCrossing {
         // field keeps the beads, in a capsule of its own under them (#84).
         boolean otherBeads = mRun.otherDesign == DockStyle.LENS_BEADS
             && LensBeadGeometry.rowWearsBeads(there,
-                !stackDressedApart(committed.page) && stage.frameGlass.standsDown(),
+                !stackDressedApart(committed.page.kind) && stage.frameGlass.standsDown(),
                 mRun.otherKeyboard);
         mRun.beadMelt = stage.beadsDrawn != otherBeads;
         mRun.beadsCommitted = stage.beadsDrawn;
@@ -415,9 +511,20 @@ public final class SeamCrossing {
             other.restRowsPx);
         // Only from Home: the Workspace's bar is the one that travels with its page, unless the
         // bar is one across the wall and stands still.
-        mRun.statusMayShow = !mRun.barStill && committed.page == PaneWallPage.WIDGETS
-            && other.page != PaneWallPage.WIDGETS && SeamTravel.statusRides(there)
+        mRun.statusMayShow = !mRun.barStill && committed.page.isHome()
+            && !other.page.isHome() && SeamTravel.statusRides(there)
             && SeamTravel.statusCanArriveOver(here) && stage.splitPanes;
+        if (mRun.oneKind) {
+            // Between two Home pages the bar is Home's own on both: the page that wears it
+            // carries it in or out, riding with that page while the pages slide flat and fading in
+            // place while they turn; toward it, it is laid out over the committed page from the
+            // first frame. Any other difference in the bar changes at the landing.
+            PlaceLayout wearer = SeamTravel.homeBarWearer(here, there);
+            mRun.barEnd = wearer == null ? null : wearer == there ? other.page : committed.page;
+            mRun.barRides = mRun.barEnd != null && stage.pagesSlide;
+            mRun.barFades = mRun.barEnd != null && !stage.pagesSlide;
+            mRun.statusMayShow = mRun.barEnd != null && mRun.barEnd.equals(other.page);
+        }
         boolean dockMayShow = mRun.plan == DockPlan.SLIDE_IN || mRun.plan == DockPlan.FOLD_IN
             || mRun.plan == DockPlan.DIP;
         mRun.dockLayout = dockMayShow ? SeamTravel.withDockOf(here, there) : null;
@@ -466,7 +573,7 @@ public final class SeamCrossing {
      * crossing.
      */
     public boolean barTakesWorkspaceDressFirst() {
-        return mRun.shapeDiffers && mRun.committed == PaneWallPage.WIDGETS;
+        return mRun.shapeDiffers && mRun.committed == PaneWallPage.WIDGETS && !mRun.oneKind;
     }
 
     /**
@@ -497,14 +604,17 @@ public final class SeamCrossing {
         answers.clear(frame.dockReveal, frame.keyboardReveal);
         PaneWallPage committed = mRun.committed;
         PaneWallPage other = mRun.other;
-        if (committed == null || other == null) return answers;
-        float progress = SeamTravel.otherHalfProgress(frame, committed);
+        PageRef committedEnd = mRun.committedEnd;
+        if (committed == null || other == null || committedEnd == null) return answers;
+        // Read by end: a frame of the wall names its sides by kind and reads as by half; a frame
+        // of Home's pager names its pages, and reads the way between two Home pages.
+        float progress = SeamTravel.otherEndProgress(frame, committedEnd);
         // A pictured dip: the stack wears and stands the other half's rows from the crossing's
         // first frame to its landing, whichever way the wall goes, and the picture of the committed
         // half's stack stands in for it; the two cross on the wall's own way.
         boolean pictured = pictured();
         float dressProgress = pictured ? 1f : progress;
-        float travel = pictured ? SeamTravel.otherHalfFraction(wallFrame, committed) : progress;
+        float travel = pictured ? SeamTravel.otherEndFraction(wallFrame, committedEnd) : progress;
         // Which half's dress the stack wears, noting a change for this frame's pass.
         PaneWallPage stackPage = SeamDress.stackPage(committed, other, mRun.plan, dressProgress);
         PaneWallPage dressPage = stackPage == committed ? null : stackPage;
@@ -531,7 +641,7 @@ public final class SeamCrossing {
                 // The beaded half's rows sink below the stack's bottom edge, which cuts them flat:
                 // the beads melt while the chrome still rests and sink as the slab.
                 answers.beadShare = LensBeadGeometry.leavingMeltShare(
-                    SeamTravel.otherHalfFraction(frame, committed), PlaceChromeTravel.LANDING);
+                    SeamTravel.otherEndFraction(frame, committedEnd), PlaceChromeTravel.LANDING);
             } else {
                 float share = clamp01(dressProgress);
                 answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
@@ -541,6 +651,11 @@ public final class SeamCrossing {
         // says; from Home the Workspace's bar is laid out as the slide starts.
         boolean dockShown = SeamTravel.showsOtherDock(mRun.plan, dressProgress);
         boolean statusShown = progress > 0f && mRun.statusMayShow;
+        // A bar only one of two turning Home pages wears fades with the way toward that page.
+        if (mRun.barFades && mRun.barEnd != null) {
+            float share = clamp01(progress);
+            answers.statusFade = mRun.barEnd.equals(committedEnd) ? 1f - share : share;
+        }
         if (dockShown != mRun.dockShown || statusShown != mRun.statusShown || mRun.restylePending) {
             mRun.dockShown = dockShown;
             mRun.statusShown = statusShown;
@@ -588,6 +703,14 @@ public final class SeamCrossing {
      * @param hostCanRide whether the bar's host is laid out, along the top, on a wall
      */
     public boolean rideBar(@NonNull Frame frame, boolean hostCanRide) {
+        if (mRun.oneKind) {
+            // Home's own bar on both ends: it rides with the page that wears it and is dressed
+            // for Home throughout, so its chips are never dressed again.
+            boolean rides = hostCanRide && mRun.other != null && mRun.barRides;
+            mAnswers.barRedressed = false;
+            mRun.barPage = null;
+            return rides;
+        }
         boolean rides = hostCanRide && mRun.other != null && mRun.barRides
             && (frame.from == PaneWallPage.WIDGETS || frame.toward == PaneWallPage.WIDGETS);
         PaneWallPage barPage = null;
@@ -599,6 +722,56 @@ public final class SeamCrossing {
         mAnswers.barRedressed = barPage != mRun.barPage;
         mRun.barPage = barPage;
         return rides;
+    }
+
+    /**
+     * Where the bar is drawn on this frame while it rides ({@link #rideBar}), as an x offset from
+     * its rest: with the Workspace's page across the seam ({@link SeamTravel#workspaceScreenXPx}),
+     * with the Home page that wears it between two Home pages ({@link SeamTravel#endScreenXPx}).
+     */
+    public float barScreenXPx(@NonNull Frame frame, int widthPx) {
+        PageRef barEnd = mRun.barEnd;
+        if (mRun.oneKind && barEnd != null) return SeamTravel.endScreenXPx(frame, barEnd, widthPx);
+        return SeamTravel.workspaceScreenXPx(frame, widthPx);
+    }
+
+    /**
+     * Whether two ends make a crossing (#173 slice E, spec #167 E): pages of the two halves
+     * always do; two Home pages only where their layouts differ in what can morph mid-slide,
+     * the dock's rows ({@link SeamTravel#dockPlan}) or a bar one of them wears
+     * ({@link SeamTravel#homeBarWearer}), and nothing else of their dress differs. Two Home pages
+     * that dress alike are a plain flip; a Dock design, a Search field or a stack dress apart
+     * changes at the landing, as it did before. Asked before {@link #begin}, once per gesture.
+     */
+    public static boolean crosses(@NonNull Endpoint here, @NonNull Endpoint there) {
+        if (SeamTravel.crosses(here.page.kind, there.page.kind)) return true;
+        if (!SeamTravel.crosses(here.page, there.page)) return false;
+        if (here.dress.dockDesign() != there.dress.dockDesign()
+            || here.dress.searchField() != there.dress.searchField()
+            || !here.stack.equals(there.stack)) return false;
+        return SeamTravel.dockPlan(here.layout, there.layout) != DockPlan.NONE
+            || SeamTravel.homeBarWearer(here.layout, there.layout) != null;
+    }
+
+    /** Whether the crossing runs between two pages of one kind: two Home pages. */
+    public boolean oneKind() {
+        return mRun.other != null && mRun.oneKind;
+    }
+
+    /** The other end the crossing was begun for, as a page; null while none runs. */
+    @Nullable
+    public PageRef otherEnd() {
+        return mRun.other == null ? null : mRun.otherEnd;
+    }
+
+    /**
+     * Whether the status bar wears the other half's dress on this frame, the {@code seamTravel}
+     * the bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while the wall slides
+     * across the seam ({@link #sliding}), never on a slide between two Home pages, where the bar
+     * is Home's on both ends.
+     */
+    public boolean barDressedAcross() {
+        return sliding() && !mRun.oneKind;
     }
 
     /**

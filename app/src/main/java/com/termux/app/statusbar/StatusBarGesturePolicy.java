@@ -92,9 +92,19 @@ public final class StatusBarGesturePolicy {
 
     @NonNull private final Down down;
     @NonNull private Claim claim;
+    /** Two-finger mode: a single finger never claims the fold; a second finger arms it. */
+    private final boolean twoFingerOnly;
+    private boolean armed;
+    private float armLocalX;
+    private float armLocalY;
 
     public StatusBarGesturePolicy(@NonNull Down down) {
+        this(down, false);
+    }
+
+    public StatusBarGesturePolicy(@NonNull Down down, boolean twoFingerOnly) {
         this.down = down;
+        this.twoFingerOnly = twoFingerOnly;
         claim = down.eligible() || down.formEligible ? Claim.PENDING : Claim.CHILD_OWNED;
     }
 
@@ -133,13 +143,16 @@ public final class StatusBarGesturePolicy {
     @NonNull
     public Claim move(float localX, float localY) {
         if (claim != Claim.PENDING) return claim;
-        float dx = localX - down.localX;
-        float dy = localY - down.localY;
+        float dx = localX - (armed ? armLocalX : down.localX);
+        float dy = localY - (armed ? armLocalY : down.localY);
         float along = isVertical(down.edge) ? dy : dx;
         float across = acrossAxis(down.edge, dx, dy);
         float aAlong = Math.abs(along);
         float aAcross = Math.abs(across);
-        if (aAcross > down.touchSlop && aAcross > aAlong) {
+        if (twoFingerOnly && !armed) {
+            // One finger is never the bar's: once it has travelled it is the children's.
+            if (Math.max(aAcross, aAlong) > down.touchSlop) claim = Claim.CHILD_OWNED;
+        } else if (aAcross > down.touchSlop && aAcross > aAlong) {
             // One gesture across the bar with two directions: away from the bar's edge opens it,
             // back towards the edge folds it. Both share the same vetoes, so both work along the
             // bar's entire length.
@@ -160,6 +173,23 @@ public final class StatusBarGesturePolicy {
     }
 
     @NonNull public Claim secondPointer() { return latch(Claim.CHILD_OWNED); }
+
+    /**
+     * A second finger landed with the first at this local point. In two-finger mode, while still
+     * pending and the bar's drag is allowed from here, it arms the fold: the next move across the
+     * bar claims it. Otherwise it behaves like {@link #secondPointer()}.
+     */
+    @NonNull public Claim secondPointer(float localX, float localY) {
+        if (twoFingerOnly && claim == Claim.PENDING && down.formEligible) {
+            if (!armed) {
+                armed = true;
+                armLocalX = localX;
+                armLocalY = localY;
+            }
+            return claim;
+        }
+        return secondPointer();
+    }
     @NonNull public Claim nestedScrollStarted() { return latch(Claim.CHILD_OWNED); }
     @NonNull public Claim cancel() { return latch(Claim.CANCELLED); }
 
