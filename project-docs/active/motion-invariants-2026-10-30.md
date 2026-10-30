@@ -73,7 +73,7 @@ Every test of a two-phase number parametrises over them.
 | M1 | the audit as a table in this file; one ticket per pair with two owners | the scout's report |
 | M2 | the motion log switch, tag, ring buffer, launcherctl commands | the landing fix merges (same files) |
 | M3 | the three invariants and the sweep grep | M2 |
-| M4 | the layout fixtures, the parity tests parametrised over them | M1 |
+| M4 | the layout fixtures, the parity tests parametrised over them: delivered 025da0020; pairs 1, 2, 4–8 agree on all five fixtures, pair 3 diverges under a text top inset → #190 | M1 |
 
 ## Owed
 
