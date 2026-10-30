@@ -21,6 +21,14 @@ items superseded by the chrome unification, the widget redesign and the glass ro
 dropped; what follows is what still owes a look.
 
 ## Agent
+- 2026-10-30 · 418a2d7ef, the wallpaper page's Done returns to its card · on pong (also set as
+  phone wallpaper on, Lock same as Home), Appearance › Global › Change wallpaper › Choose photo ›
+  crop › Done: no editor flash before the picker or after the crop; the page shows its progress
+  line while it applies; it ends on the Global card with the new wallpaper and the new accents,
+  never on Home and never back on the Wallpaper page. Also: a photo whose colours match the old
+  one (no relaunch), launcher-only mode, Choose photo then cancel, and the setup wizard's wallpaper
+  card (its Done still closes). Emulator-verified 5/5 runs 2026-10-30; with a relaunch, Home shows
+  for about two frames before the editor reopens.
 - 2026-10-30 · b324fb00f, the status bar's long-press Expand/Compact item · on pong, long-press
   the status bar along the top: a compact bar offers Expand status bar, an expanded one Compact
   status bar, and each lands the bar as the status swipe does and is still that way after a
