@@ -310,6 +310,12 @@ repository-wide formatter: match the surrounding code.
   accreted 326 public methods once; the extraction is what stopped it.
 - Keep geometry and policy **pure and tested** (`DockLayoutPolicy`, `SurfaceEditorPillMetrics`,
   `AzScrubGesture`, `PaneShape`), with the view layer dumb enough to just apply the answer.
+- **One owner per two-phase number.** A number that one phase predicts, pre-rolls or pre-sizes
+  and a later phase settles (the terminal's room under the keyboard, the keyboard's reveal, the
+  dock's lift, a still's size) comes from one pure policy that both phases read, and the two
+  phases share a parity test. Two formulas for one number agree on the layout you tested and
+  diverge on the next phone: the 2026-10-30 landing stutter was a pre-size 96 px short of the
+  settle, masked by the reflow frost. `project-docs/active/motion-invariants-2026-10-30.md`.
 - Comments describe how a thing is used and move when the code moves. Do not annotate every line.
 - Inferred types over ceremony. Do not preserve complexity because it already exists, and do not
   add machinery because it looks architecturally impressive.
