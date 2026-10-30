@@ -886,9 +886,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * Go to a page by name ({@code wall.go}, the extra keys): {@code left}/{@code right} the
-     * neighbouring cell whatever its kind; {@code home} the home press's page; {@code widgets}
-     * the home page when it is a Home page, else the nearest; {@code display} the bound Display
-     * page, else the nearest; {@code terminal}/{@code workspace} the Terminal page (ADR 0016
+     * neighbouring cell whatever its kind; {@code home} and {@code widgets} alike the home
+     * press's Home page while the home page is a Home page, else the nearest Home page; {@code
+     * display} the last used Display page, else the nearest; {@code terminal}/{@code workspace} the Terminal page (ADR 0016
      * section 5). The target arrives as it stands, live or as its still, and its view is bound
      * when the wall lands; a far one arrives one width from a stand-off (W3). False when the wall
      * has no such page.
@@ -909,20 +909,32 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
             case "left": target = pages.leftOf(current); break;
             case "right": target = pages.rightOf(current); break;
-            case "home": {
-                // The home press's page, Start in honoured (W9); else the nearest Home page.
-                int id = homeIdAt(Math.max(0, mHost.homePressPage()));
-                if (id != PaneWallLayout.NO_PAGE) return goToPage(id, true);
-                target = pages.homeTarget(current);
-                break;
+            case "home":
+            case "widgets": {
+                int id = homeKeyPage(pages, current);
+                return id != PaneWallLayout.NO_PAGE && goToPage(id, true);
             }
-            case "widgets": target = pages.homeTarget(current); break;
             case "display": target = pages.displayTarget(current, mLastDisplayPageId); break;
             case "workspace":
             case "terminal": target = pages.terminalTarget(); break;
             default: return false;
         }
         return target != null && goToPage(target.id, true);
+    }
+
+    /**
+     * Where the Home key and {@code wall.widgets} go, one answer for both: while the home page is
+     * a Home page, the home press's Home page (Start in honoured, W9); else the Home page nearest
+     * the current cell (ADR 0016 section 5). {@link PaneWallLayout#NO_PAGE} when there is none.
+     */
+    private int homeKeyPage(@NonNull WallPages pages, int current) {
+        WallPages.Page home = pages.home();
+        if (home != null && home.kind == WallPages.PageKind.HOME) {
+            int id = homeIdAt(Math.max(0, mHost.homePressPage()));
+            if (id != PaneWallLayout.NO_PAGE) return id;
+        }
+        WallPages.Page target = pages.homeTarget(current);
+        return target == null ? PaneWallLayout.NO_PAGE : target.id;
     }
 
     /**
